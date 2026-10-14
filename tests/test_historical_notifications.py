@@ -7,7 +7,11 @@ import sqlite3
 import pytest
 
 from agent_comms.agent_activity import RecordedRecipientActivity, UnavailableRecipientActivity
-from agent_comms.assignment_states import CompletedAssignment, EngagedAssignment
+from agent_comms.assignment_states import (
+    CompletedAssignment,
+    DeliveredAssignment,
+    EngagedAssignment,
+)
 from agent_comms.comms import Comms
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 from agent_comms.historical_views import HistoricalDisplay
@@ -86,6 +90,42 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
                                                 newer_namespace, document=document) == ()
 
 
+def test_context_evidence_rejects_mixed_sql_columns():
+    from agent_comms.notification_assignment import AssignmentContextEvidence
+
+    for values in (("session.jsonl", None), (None, "entry-id")):
+        with pytest.raises(ValueError, match="model-context location is incomplete"):
+            AssignmentContextEvidence.from_columns(*values)
+
+
+def test_response_evidence_rejects_mixed_sql_columns():
+    from agent_comms.notification_assignment import AssignmentResponse
+
+    for values in ((1, None, 2), (None, "message-id", 2), (1, "message-id", None)):
+        with pytest.raises(ValueError, match="response evidence is incomplete"):
+            AssignmentResponse.from_columns(*values)
+
+
+def test_unshown_assignment_resolves_running_turn_as_timed_queue():
+    from agent_comms.notification_assignment import (
+        AssignmentActivityEvidence,
+        NotShownContextEvidence,
+        QueuedProgress,
+        SentProgress,
+        UnansweredResponse,
+    )
+
+    pending = AssignmentActivityEvidence(
+        False, None, NotShownContextEvidence(), UnansweredResponse()
+    ).resolve({}, pending_at_ms=1_000)
+    queued = AssignmentActivityEvidence(
+        False, "running-execution", NotShownContextEvidence(), UnansweredResponse()
+    ).resolve({}, pending_at_ms=1_000)
+
+    assert pending.progress == SentProgress(1_000)
+    assert queued.progress == QueuedProgress(1_000)
+
+
 def test_recorded_assignment_schema_refusal_is_read_only(archived_notification):
     _old, live, source, messages, _root_id = archived_notification
     database = Path(source.root) / "coordination.sqlite3"
@@ -102,15 +142,16 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.log.read_delivery_cohort(root_id, messages[0].seq).audience.recipients
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
-    from agent_comms.notification_assignment import AssignmentActivity, ShownToModelProgress
+    from agent_comms.notification_assignment import (
+        AssignmentActivity,
+        ShownToModelProgress,
+        UnansweredResponse,
+    )
 
     activity = AssignmentActivity(
         triage_inflight=False,
-        current_execution_id=None,
         context_progress=ShownToModelProgress(1),
-        response_seq=None,
-        response_message_id=None,
-        response_received_at_ms=None,
+        response=UnansweredResponse(),
     )
     with pytest.raises(TypeError, match="activity"):
         assignment.notification(
@@ -139,26 +180,34 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     recipient, = old.bus.log.read_delivery_cohort(
         root_id, messages[0].seq
     ).audience.recipients
+    from agent_comms.message_reference import MessageReference
     from agent_comms.notification_assignment import (
+        AnsweredResponse,
         AssignmentActivity,
-        NotShownProgress,
+        QueuedProgress,
         RemovedContextProgress,
+        SentProgress,
         ShownToModelProgress,
+        UnansweredResponse,
     )
 
     sent_activity = AssignmentActivity(
         triage_inflight=False,
-        current_execution_id=None,
-        context_progress=NotShownProgress(),
-        response_seq=None,
-        response_message_id=None,
-        response_received_at_ms=None,
+        context_progress=SentProgress(1_000),
+        response=UnansweredResponse(),
     )
     engagement = EngagedAssignment.build(FullWake(), "durable-execution", "sender")
     sent = engagement.notification(
         recipient,
         observation=RecordedRecipientActivity(),
         activity=sent_activity,
+        updated_at_ms=1_000,
+    )
+    queued_activity = replace(sent_activity, context_progress=QueuedProgress(1_000))
+    queued = FullWake().initial_state().build_preengagement(FullWake()).notification(
+        recipient,
+        observation=RecordedRecipientActivity(),
+        activity=queued_activity,
         updated_at_ms=1_000,
     )
     read_activity = replace(sent_activity, context_progress=ShownToModelProgress(2_000))
@@ -170,9 +219,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     )
     answered_activity = replace(
         read_activity,
-        response_seq=99,
-        response_message_id="durable-reply",
-        response_received_at_ms=3_000,
+        response=AnsweredResponse(MessageReference(99, "durable-reply"), 3_000),
     )
     answered = CompletedAssignment.build(
         FullWake(), "durable-execution", "sender"
@@ -183,6 +230,21 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         updated_at_ms=3_000,
     )
 
+    delivered = DeliveredAssignment.build(FullWake(), None, None).notification(
+        recipient,
+        observation=RecordedRecipientActivity(),
+        activity=sent_activity,
+        updated_at_ms=2_000,
+    )
+    delivered_answer = DeliveredAssignment.build(FullWake(), None, None).notification(
+        recipient,
+        observation=RecordedRecipientActivity(),
+        activity=replace(
+            sent_activity,
+            response=AnsweredResponse(MessageReference(99, "durable-reply"), 3_000),
+        ),
+        updated_at_ms=2_000,
+    )
     removed_activity = replace(read_activity, context_progress=RemovedContextProgress())
     removed = engagement.notification(
         recipient,
@@ -197,21 +259,57 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         observation=RecordedRecipientActivity(),
         activity=replace(
             removed_activity,
-            response_seq=99,
-            response_message_id="durable-reply",
-            response_received_at_ms=3_000,
+            response=AnsweredResponse(MessageReference(99, "durable-reply"), 3_000),
         ),
         updated_at_ms=3_000,
     )
 
-    assert sent.state == "Sent" and sent.read_at_ms is None
+    assert sent.state.startswith("Sent ") and sent.read_at_ms is None
+    assert queued.state.startswith("Queued ") and queued.read_at_ms is None
     assert read.state.startswith("Read ") and read.read_at_ms == 2_000
     assert answered.state.startswith("Answered ") and answered.answered_at_ms == 3_000
+    assert delivered.state.startswith("Read ") and delivered.read_at_ms == 2_000
+    assert delivered_answer.state.startswith("Answered ")
+    assert delivered_answer.reply_reference == MessageReference(99, "durable-reply")
     assert removed.state == "Removed"
     assert removed.detail == "Recipient session removed"
     assert removed_answer.state.startswith("Answered ")
     assert removed_answer.detail == "Recipient session removed"
     assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
+
+
+def test_delivered_assignment_uses_its_recorded_conversation_response(
+    archived_notification,
+):
+    from agent_comms.assignment_states import DeferredAssignment
+    from agent_comms.coordination_cohort import accept_delivery_cohort
+    from agent_comms.coordinator import Coordination
+
+    old, _live, _source, messages, root_id = archived_notification
+    original = messages[0]
+    with Coordination(str(old.root / "coordination.sqlite3")) as store:
+        assignment, = accept_delivery_cohort(
+            old.bus, root_id, original.seq, store
+        ).value.assignments
+        paused = store.assignments.transition_preengagement(
+            assignment.assignment_id,
+            DeferredAssignment,
+            expected_revision=assignment.revision,
+        ).value
+        store.assignments.transition_preengagement(
+            assignment.assignment_id,
+            DeliveredAssignment,
+            expected_revision=paused.revision,
+        )
+    response = old.messaging.send_message("agent", "sender", "recorded reply")
+
+    notification, = old.views.message_notifications_for_references(
+        (original.reference,)
+    )[original.seq, original.message_id]
+
+    assert notification.state.startswith("Answered ")
+    assert notification.reply_reference == response.reference
+    assert notification.answered_at_ms == int(response.timestamp * 1000)
 
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):

@@ -235,6 +235,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             {
                 "type": "message",
                 "id": entry_id,
+                "timestamp": "2026-09-26T00:00:00.000Z",
                 "message": {
                     "role": "user",
                     "inputId": input_id,
@@ -452,20 +453,18 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[1].created_at)
         assignment = sealed_cohort_assignments(store, lookup)[0]
-    sent_outcome = MessageNotification(
+    notification = MessageNotification(
         initial.audience.recipients[0], "Read", "",
         message=initial.message, changed=True,
     )
+    sent_outcome = notification.sent_outcome()
+    assert sent_outcome is not None
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(
         ((initial, assignment),), people[1], sent_outcomes=(sent_outcome,)
     ),)).text
     assert 'recent_sent_outcomes: [{"source_seq":' in frame
     assert '"state":"Read"' in frame
-    with pytest.raises(ValueError, match="changed authored-message outcomes"):
-        SelectedWakeSegment.capture(
-            ((initial, assignment),), people[1],
-            sent_outcomes=(replace(sent_outcome, changed=False),),
-        )
+    assert replace(notification, changed=False).sent_outcome() is None
 
 
 async def test_removed_sent_session_is_context_not_a_model_start_blocker(
@@ -482,10 +481,12 @@ async def test_removed_sent_session_is_context_not_a_model_start_blocker(
             initial.audience.recipients[0], "Sent", "", message=initial.message, changed=True
         )
     )
+    removed_outcome = removed.sent_outcome()
+    assert removed_outcome is not None
     monkeypatch.setattr(
         SelectedParticipant,
         "capture_sent_outcomes",
-        lambda _comms, _name: (removed,),
+        lambda _comms, _name: (removed_outcome,),
     )
     runner, calls = _fake_model()
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)

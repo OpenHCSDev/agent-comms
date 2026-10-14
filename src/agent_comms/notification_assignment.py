@@ -13,8 +13,9 @@ from .coordination_schema import COORDINATION_SCHEMA_VERSION
 from .audience_manifest import FrozenRecipient
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.publications import PublicationReceipts
+from .field_codec import FieldCodec
 from .message_reference import MessageReference
-from .typed_table import SQLiteUserVersion, TypedRow
+from .typed_table import BooleanStorage, SQLiteUserVersion, TypedRow, sql_literal
 
 if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
@@ -43,11 +44,14 @@ class AssignmentProgress(DeclaredFamily, affix="Progress"):
     ) -> MessageNotification: ...
 
 
-class NotShownProgress(AssignmentProgress):
+@dataclass(frozen=True)
+class SentProgress(AssignmentProgress):
+    sent_at_ms: int
+
     def selected_notification(self, notification, *, busy):
         return replace(
             notification,
-            state="Sent",
+            state=notification.receipt_state("Sent", self.sent_at_ms),
             detail="",
             busy=busy,
             priority=notification.priority if busy else 3,
@@ -76,8 +80,19 @@ class NotShownProgress(AssignmentProgress):
 
 
 @dataclass(frozen=True)
+class QueuedProgress(SentProgress):
+    def selected_notification(self, notification, *, busy):
+        return replace(
+            notification,
+            state=notification.receipt_state("Queued", self.sent_at_ms),
+            detail="",
+            busy=False,
+        )
+
+
+@dataclass(frozen=True)
 class ShownToModelProgress(AssignmentProgress):
-    read_at_ms: int | None
+    read_at_ms: int
 
     def selected_notification(self, notification, *, busy):
         return replace(
@@ -178,73 +193,206 @@ class AssignmentContext:
         return result
 
 
+class AssignmentContextEvidence(DeclaredFamily, affix="ContextEvidence"):
+    @classmethod
+    def from_columns(
+        cls, session_file: object, session_entry_id: object
+    ) -> AssignmentContextEvidence:
+        session_file = FieldCodec.decode(str | None, session_file)
+        session_entry_id = FieldCodec.decode(str | None, session_entry_id)
+        if session_file is None and session_entry_id is None:
+            return NotShownContextEvidence()
+        if session_file is None or session_entry_id is None:
+            raise ValueError("Recorded model-context location is incomplete")
+        return ShownContextEvidence(session_file, session_entry_id)
+
+    @abstractmethod
+    def contexts(self) -> tuple[AssignmentContext, ...]: ...
+
+    @abstractmethod
+    def progress(
+        self,
+        recorded: dict[AssignmentContext, AssignmentProgress],
+        *,
+        pending_at_ms: int,
+        queued: bool,
+    ) -> AssignmentProgress: ...
+
+
+class NotShownContextEvidence(AssignmentContextEvidence):
+    def contexts(self):
+        return ()
+
+    def progress(self, recorded, *, pending_at_ms, queued):
+        progress = QueuedProgress if queued else SentProgress
+        return progress(pending_at_ms)
+
+
 @dataclass(frozen=True)
-class AssignmentActivityEvidence(TypedRow):
-    triage_inflight: bool
-    current_execution_id: str | None
-    context_session_file: str | None
-    context_session_entry_id: str | None
-    response_seq: int | None
-    response_message_id: str | None
-    response_received_at_ms: int | None
+class ShownContextEvidence(AssignmentContextEvidence):
+    session_file: str
+    session_entry_id: str
 
     @property
-    def context(self) -> AssignmentContext | None:
-        values = self.context_session_file, self.context_session_entry_id
-        if values == (None, None):
-            return None
-        if None in values:
-            raise ValueError("Recorded model-context location is incomplete")
-        session_file, session_entry_id = values
-        return AssignmentContext(session_file, session_entry_id)
+    def context(self) -> AssignmentContext:
+        return AssignmentContext(self.session_file, self.session_entry_id)
 
-    def resolve(self, recorded_progress: dict[AssignmentContext, AssignmentProgress]):
-        context = self.context
-        return AssignmentActivity(
-            triage_inflight=self.triage_inflight,
-            current_execution_id=self.current_execution_id,
-            context_progress=(
-                recorded_progress[context] if context is not None else NotShownProgress()
-            ),
-            response_seq=self.response_seq,
-            response_message_id=self.response_message_id,
-            response_received_at_ms=self.response_received_at_ms,
+    def contexts(self):
+        return (self.context,)
+
+    def progress(self, recorded, *, pending_at_ms, queued):
+        return recorded[self.context]
+
+
+class AssignmentResponse(DeclaredFamily, affix="Response"):
+    def recorded(self, message) -> AssignmentResponse:
+        return self
+
+    @classmethod
+    def from_columns(
+        cls, seq: object, message_id: object, received_at_ms: object
+    ) -> AssignmentResponse:
+        seq = FieldCodec.decode(int | None, seq)
+        message_id = FieldCodec.decode(str | None, message_id)
+        received_at_ms = FieldCodec.decode(int | None, received_at_ms)
+        if seq is None and message_id is None and received_at_ms is None:
+            return UnansweredResponse()
+        if seq is None or message_id is None or received_at_ms is None:
+            raise ValueError("Published response evidence is incomplete")
+        return AnsweredResponse(MessageReference(seq, message_id), received_at_ms)
+
+    @abstractmethod
+    def completed_notification(
+        self, progress: AssignmentProgress, notification: MessageNotification
+    ) -> MessageNotification: ...
+
+    @abstractmethod
+    def delivered_notification(
+        self, notification: MessageNotification, delivered_at_ms: int
+    ) -> MessageNotification: ...
+
+
+class UnansweredResponse(AssignmentResponse):
+    def recorded(self, message):
+        return AnsweredResponse(
+            message.reference, int(message.timestamp * 1000)
+        )
+
+    def completed_notification(self, progress, notification):
+        return progress.read_notification(notification)
+
+    def delivered_notification(self, notification, delivered_at_ms):
+        return replace(
+            notification,
+            state=notification.receipt_state("Read", delivered_at_ms),
+            detail="",
+            busy=False,
+            read_at_ms=delivered_at_ms,
+        )
+
+
+@dataclass(frozen=True)
+class AnsweredResponse(AssignmentResponse):
+    reference: MessageReference
+    received_at_ms: int
+
+    def completed_notification(self, progress, notification):
+        return progress.answered_notification(
+            notification, self.reference, self.received_at_ms
+        )
+
+    def delivered_notification(self, notification, delivered_at_ms):
+        return replace(
+            notification,
+            state=notification.receipt_state("Answered", self.received_at_ms),
+            detail="",
+            busy=False,
+            reply_reference=self.reference,
+            read_at_ms=delivered_at_ms,
+            answered_at_ms=self.received_at_ms,
         )
 
 
 @dataclass(frozen=True)
 class AssignmentActivity:
     triage_inflight: bool
-    current_execution_id: str | None
     context_progress: AssignmentProgress
-    response_seq: int | None
-    response_message_id: str | None
-    response_received_at_ms: int | None
+    response: AssignmentResponse
 
     @property
     def progress(self) -> AssignmentProgress:
         return self.context_progress
 
     def pending_notification(self, notification, queued_at_ms):
-        """Project custody behind the recipient's canonical unresolved execution."""
-        if self.current_execution_id is None:
-            return notification
-        return replace(
-            notification,
-            state=notification.receipt_state("Queued", queued_at_ms),
-            detail="",
-            busy=False,
+        return self.progress.selected_notification(notification, busy=False)
+
+    def completed_notification(self, notification):
+        return self.response.completed_notification(self.progress, notification)
+
+    def delivered_notification(self, notification, delivered_at_ms):
+        return self.response.delivered_notification(notification, delivered_at_ms)
+
+    def recorded_response(self, message):
+        return replace(self, response=self.response.recorded(message))
+
+
+@dataclass(frozen=True)
+class AssignmentActivityEvidence(TypedRow):
+    """Independent context and response facts decoded once from one SQL row."""
+
+    triage_inflight: bool
+    current_execution_id: str | None
+    context: AssignmentContextEvidence
+    response: AssignmentResponse
+
+    @classmethod
+    def columns(cls) -> tuple[str, ...]:
+        return (
+            "triage_inflight",
+            "current_execution_id",
+            "context_session_file",
+            "context_session_entry_id",
+            "response_seq",
+            "response_message_id",
+            "response_received_at_ms",
         )
 
-    @property
-    def response_reference(self) -> MessageReference | None:
-        values = self.response_seq, self.response_message_id
-        if values == (None, None):
-            return None
-        if None in values:
-            raise ValueError("Published response reference is incomplete")
-        response_seq, response_message_id = values
-        return MessageReference(response_seq, response_message_id)
+    @classmethod
+    def _decode_row(cls, row, positions) -> AssignmentActivityEvidence:
+        def column(name):
+            return row[positions[name]]
+
+        return cls(
+            BooleanStorage.from_sql(column("triage_inflight")),
+            FieldCodec.decode(str | None, column("current_execution_id")),
+            AssignmentContextEvidence.from_columns(
+                column("context_session_file"), column("context_session_entry_id")
+            ),
+            AssignmentResponse.from_columns(
+                column("response_seq"),
+                column("response_message_id"),
+                column("response_received_at_ms"),
+            ),
+        )
+
+    def contexts(self) -> tuple[AssignmentContext, ...]:
+        return self.context.contexts()
+
+    def resolve(
+        self,
+        recorded: dict[AssignmentContext, AssignmentProgress],
+        *,
+        pending_at_ms: int,
+    ) -> AssignmentActivity:
+        return AssignmentActivity(
+            self.triage_inflight,
+            self.context.progress(
+                recorded,
+                pending_at_ms=pending_at_ms,
+                queued=self.current_execution_id is not None,
+            ),
+            self.response,
+        )
 
 class NotificationSource(DeclaredFamily, affix="NotificationSource"):
     """Original frozen delivery or handling receipt, never an execution authority."""
@@ -292,9 +440,71 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        """SQLite may publish original recipient changes only in its WAL."""
+        """SQLite and the certified bus own assignment and delivered-response changes."""
         database = cls.database_path(root)
-        return database, database.with_name(database.name + "-wal")
+        bus = root / "bus.jsonl"
+        return (
+            database,
+            database.with_name(database.name + "-wal"),
+            bus,
+            bus.with_name("bus_meta.json"),
+            bus.with_name("private_bus_checkpoint.sqlite3"),
+        )
+
+    @classmethod
+    def _recorded_conversation_responses(
+        cls, root: Path, rows: tuple[NotificationAssignment, ...]
+    ) -> tuple[NotificationAssignment, ...]:
+        eligible = tuple(
+            row for row in rows if row.assignment.lifecycle.records_conversation_response
+        )
+        if not eligible:
+            return rows
+        from .presentation import MessageNotification
+        from .wire_log import WireLog
+
+        bus = WireLog(root / "bus.jsonl")
+        originals = {
+            original.message.reference: original
+            for original in bus.deliveries_for_references(
+                tuple(row.assignment.source for row in eligible)
+            )
+        }
+        candidates = {}
+        for lookup in {row.assignment.recipient_lookup for row in eligible}:
+            after_seq = min(
+                row.assignment.wire_seq
+                for row in eligible
+                if row.assignment.recipient_lookup == lookup
+            )
+            candidates[lookup] = tuple(
+                bus.conversation_sources(
+                    lookup,
+                    "w.seq>? AND w.sender_lookup=?",
+                    (after_seq, lookup),
+                    limit=MessageNotification.window_limit,
+                    ascending=True,
+                )
+            )
+        resolved = []
+        for row in rows:
+            original = originals.get(row.assignment.source)
+            response = (
+                row.assignment.lifecycle.recorded_response(
+                    original,
+                    candidates[row.assignment.recipient_lookup],
+                    row.assignment.recipient_lookup,
+                    row.assignment.updated_at_ms,
+                )
+                if original is not None
+                else None
+            )
+            resolved.append(
+                replace(row, activity=row.activity.recorded_response(response))
+                if response is not None
+                else row
+            )
+        return tuple(resolved)
 
     @classmethod
     def select(
@@ -308,6 +518,7 @@ class NotificationAssignment(NotificationSource):
     ):
         from .coordination_database import CoordinationStore
         from .coordination_tables.executions import CurrentExecutions
+        from .native_input_record import TriageNativeExecution
         from .native_runtime_input import NativeRuntimeInput
         from .recovery_projection import _preflight
 
@@ -324,18 +535,20 @@ class NotificationAssignment(NotificationSource):
                 raise ValueError("Channel notification status has an unsupported schema")
             columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
             membership = NativeRuntimeInput.source_membership_sql()
+            triage_stage = sql_literal(TriageNativeExecution)
             context = (
                 f"SELECT n.{{column}} FROM {NativeRuntimeInput.declared_name} n "
                 f"JOIN ({membership}) member ON member.input_id=n.input_id "
                 "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
-                "ORDER BY CASE n.stage WHEN 'triage' THEN 0 ELSE 1 END,member.ordinal,n.input_id LIMIT 1"
+                f"ORDER BY CASE n.stage WHEN {triage_stage} THEN 0 ELSE 1 END,"
+                "member.ordinal,n.input_id LIMIT 1"
             )
             rows = WakeAssignment.joined(
                 connection.execute(
                     f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
                     f"JOIN ({membership}) member ON member.input_id=n.input_id "
                     "WHERE member.assignment_id=w.assignment_id "
-                    "AND n.stage='triage' AND n.session_entry_id IS NULL) "
+                    f"AND n.stage={triage_stage} AND n.session_entry_id IS NULL) "
                     "AS triage_inflight, pointer.execution_id AS current_execution_id, "
                     f"({context.format(column='session_file')}) AS context_session_file, "
                     f"({context.format(column='session_entry_id')}) AS context_session_entry_id, "
@@ -353,14 +566,19 @@ class NotificationAssignment(NotificationSource):
                 AssignmentActivityEvidence,
             )
         contexts = {
-            context for _, activity in rows
-            if (context := activity.context) is not None
+            context for _, activity in rows for context in activity.contexts()
         }
         recorded_progress = AssignmentContext.recorded_progress(contexts)
-        return tuple(
-            cls(assignment, activity.resolve(recorded_progress))
+        resolved = tuple(
+            cls(
+                assignment,
+                activity.resolve(
+                    recorded_progress, pending_at_ms=assignment.updated_at_ms
+                ),
+            )
             for assignment, activity in rows
         )
+        return cls._recorded_conversation_responses(root, resolved)
 
     @property
     def recipient(self) -> FrozenRecipient:

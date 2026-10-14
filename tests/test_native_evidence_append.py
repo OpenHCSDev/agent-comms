@@ -59,6 +59,13 @@ def test_recorded_time_projection_decodes_only_selected_entries(tmp_path, monkey
     assert decoded == ["sid", "entry"]
 
 
+def test_missing_selected_context_entry_is_not_an_undated_read(tmp_path):
+    session = _evidence(tmp_path)
+    with NativeEntry.open_evidence(session) as evidence:
+        with pytest.raises(ValueError, match="context entries are absent"):
+            evidence.recorded_times({"absent-entry"})
+
+
 def test_unchanged_verified_revision_reads_no_bytes(tmp_path, monkeypatch):
     session = _evidence(tmp_path)
     with PrivateEvidenceRead.open(session) as source:

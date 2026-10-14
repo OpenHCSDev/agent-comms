@@ -28,7 +28,7 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_attestation import ObservedAttestation
 from .private_registry_guard import _require_no_private_owner_rename
 from .participant_store import ParticipantSnapshot
-from .presentation import MessageNotification
+from .presentation import MessageNotification, SentMessageOutcome
 from .turn_phase import PreparingPhase, TurnPhase
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 
@@ -43,7 +43,7 @@ class SelectedParticipant(MroDispatch):
     identity: ParticipantOwner
     lookup: str
     batch: SelectedSourceBatch
-    sent_outcomes: tuple[MessageNotification, ...]
+    sent_outcomes: tuple[SentMessageOutcome, ...]
     provider: str
     model: str
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
@@ -170,15 +170,19 @@ class SelectedParticipant(MroDispatch):
     @staticmethod
     def capture_sent_outcomes(
         comms: Comms, name: str
-    ) -> tuple[MessageNotification, ...]:
-        outcomes = MessageNotification.recent_sent(
+    ) -> tuple[SentMessageOutcome, ...]:
+        notifications = MessageNotification.recent_sent(
             comms.root,
             comms.registry,
             comms.bus.log,
             name,
             limit=MessageNotification.window_limit,
         )
-        return tuple(outcome for outcome in outcomes if outcome.changed)
+        return tuple(
+            outcome
+            for notification in notifications
+            if (outcome := notification.sent_outcome()) is not None
+        )
 
     @staticmethod
     def prepare(
