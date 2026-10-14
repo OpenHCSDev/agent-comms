@@ -1,7 +1,7 @@
 import pytest
 
 from agent_comms import MentionQuery
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
@@ -13,7 +13,7 @@ from agent_comms.wake import derive_exact_reply_target
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(tmp_path)
     for name in ("alpha", "beta"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     message = comms.messaging.send_user_message(
@@ -24,7 +24,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert [message.body[item.start : item.end] for item in message.mentions] == ["@alpha", "@beta"]
     assert [item.message_id for item in comms.bus.inbox("alpha")] == [message.message_id]
     assert [item.message_id for item in comms.bus.inbox("beta")] == [message.message_id]
-    assert wire(tmp_path).views.channel_history("#team")[0].mentions == message.mentions
+    assert Comms(tmp_path).views.channel_history("#team")[0].mentions == message.mentions
     assert Message.from_wire(message.to_wire()) == message
     scheduled = ScheduledTurn.incoming(message)
     assert derive_exact_reply_target(scheduled.origin) == "#team"
@@ -35,7 +35,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
 
 
 def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(tmp_path)
     comms.registry.declare(Thread("alpha", frozenset({"team"}), str(tmp_path)))
     comms.registry.rename("alpha", "renamed")
     message = comms.messaging.send_user_message(
@@ -49,7 +49,7 @@ def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_p
 
 
 def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collective(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(tmp_path)
     for name in ("alpha", "beta"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
 
@@ -158,7 +158,7 @@ def test_completion_uses_the_model_syntax_at_the_cursor():
 def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     from agent_comms.messages import AlertKind, InfoKind
 
-    comms = wire(tmp_path)
+    comms = Comms(tmp_path)
     for name in ("sender", "owner"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
@@ -200,10 +200,9 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
         invoke_tool(comms, "comms_model", {"model": "openrouter/own", "service_tier": "fast"})
 
 
-def test_dismiss_reports_mentions_and_advances_only_own_cursor(tmp_path, monkeypatch):
+def test_dismiss_reports_mentions_and_advances_only_own_cursor(comms, tmp_path, monkeypatch):
     from agent_comms import invoke_tool
 
-    comms = wire(tmp_path)
     for name in ("alpha", "beta"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))
@@ -215,7 +214,7 @@ def test_dismiss_reports_mentions_and_advances_only_own_cursor(tmp_path, monkeyp
         "thread": "beta",
         "target": "#team",
         "acknowledged": 1,
-        "mentioned": ("alpha",),
+        "mentioned": ["alpha"],
         "dismissed": True,
     }
     # beta no longer sees the ping; alpha's delivery is untouched.
@@ -228,7 +227,7 @@ def test_dismiss_requires_a_target(tmp_path, monkeypatch):
 
     from agent_comms import invoke_tool
 
-    comms = wire(tmp_path)
+    comms = Comms(tmp_path)
     comms.registry.declare(Thread("beta", frozenset({"team"}), str(tmp_path)))
     monkeypatch.setenv("PI_AGENT_ID", "beta")
     with pytest.raises(ValueError, match="channel target"):
@@ -236,7 +235,7 @@ def test_dismiss_requires_a_target(tmp_path, monkeypatch):
 
 
 def test_committed_channel_mention_follows_recipient_renames_without_expanding_audience(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(tmp_path)
     for name, tags in [("alpha", {"team"}), ("observer", {"team"}), ("outsider", set())]:
         comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
     message = comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))

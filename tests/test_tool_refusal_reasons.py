@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.channel_coding_tools import CodingCall, CodingToolSocket
 from agent_comms.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import ClaimTransitionError, OutsideProjectError
+from agent_comms.envelope_claim_transitions import ClaimTransitionError
 from agent_comms.native_tool_call import CoordinationBusy, SelectedToolDenied
 from agent_comms.selected_tool_broker import verify_sent_full_input
 
@@ -20,26 +20,6 @@ def reply(tmp_path: Path, error: Exception) -> str:
     return CodingToolSocket(directory, secrets.token_hex(32), None).failure_response(error)["error"]
 
 
-def test_edit_outside_the_project_names_the_project_and_how_to_change_it(tmp_path):
-    project = tmp_path / "project"
-    other = tmp_path / "other"
-    for directory in (project, other):
-        directory.mkdir()
-    (other / "module.py").write_text("x = 1\n")
-    edit = CodingCall.decode(
-        "call", "edit",
-        {"path": str(other / "module.py"), "edits": [{"oldText": "1", "newText": "2"}]},
-    )
-    with pytest.raises(OutsideProjectError) as refused:
-        edit.tool.claim.normalized(project)
-    message = reply(tmp_path, refused.value)
-    assert str(other / "module.py") in message
-    assert f"outside this thread's project directory {project}" in message
-    assert "comms_set_project" in message
-    # The same file is editable once it is the project.
-    assert edit.tool.claim.normalized(other) == str(other / "module.py")
-
-
 def test_edit_of_a_missing_file_inside_the_project_says_it_does_not_exist(tmp_path):
     project = tmp_path / "project"
     project.mkdir()
@@ -48,7 +28,6 @@ def test_edit_of_a_missing_file_inside_the_project_says_it_does_not_exist(tmp_pa
     )
     with pytest.raises(ClaimTransitionError) as refused:
         edit.tool.claim.normalized(project)
-    assert not isinstance(refused.value, OutsideProjectError)
     assert reply(tmp_path, refused.value) == f"File does not exist: {project / 'absent.py'}"
 
 

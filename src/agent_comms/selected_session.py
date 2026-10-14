@@ -51,6 +51,9 @@ class SelectedSession:
 
         return PendingAttestation()
 
+    def tracked_attestation(self, current):
+        return current
+
     def startup_admission(self, launch, root, boundary, *,
                           measurements: PublicationMeasurements | None = None):
         from .native_startup import NativeStartupAdmission
@@ -166,7 +169,7 @@ class SelectedSession:
             if thinking_level is not None:
                 return FirstSelectedSession(directory,
                     identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
-            return SavedSelectedSession(directory,
+            return EnrolledSelectedSession(directory,
                 identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
 
         return await Coordination.run_worker(acquire)
@@ -189,6 +192,11 @@ class SavedSelectedSession(SelectedSession):
         from .native_attestation import PendingAttestation
 
         return PendingAttestation(self.identity)
+
+    def tracked_attestation(self, current):
+        from .native_attestation import KnownSessionAttestation
+
+        return KnownSessionAttestation(self.identity)
 
     def require_launch_header(self) -> None:
         if self.custody is not None:
@@ -213,9 +221,17 @@ class SavedSelectedSession(SelectedSession):
 
 
 @dataclass(frozen=True)
-class FirstSelectedSession(SavedSelectedSession):
+class EnrolledSelectedSession(SavedSelectedSession):
+    """A newly created source must publish its first native identity observation."""
+
     creation: FreshPrivateSession = field(kw_only=True)
 
+    def tracked_attestation(self, current):
+        return current
+
+
+@dataclass(frozen=True)
+class FirstSelectedSession(EnrolledSelectedSession):
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()
 
