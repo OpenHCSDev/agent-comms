@@ -12,6 +12,7 @@ from agent_comms.coordination_response import prepare_fenced_response, publish_f
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.threads import Thread
+from agent_comms.wake_policy import BoundedTriageWake
 from test_coordination_response import _ready
 
 
@@ -64,7 +65,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
             required_through_seq=response.seq,
         )
         assert [entry.source_seq for entry in page.entries] == [response.seq]
-        assert page.entries[0].wake_mode == "bounded_triage"
+        assert page.entries[0].wake_mode is BoundedTriageWake
         # Repeating the publisher/recipient poll does not duplicate the row or K.
         publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         await _accept_visible_deliveries(
@@ -237,7 +238,7 @@ def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path)
             recipient = delivery.audience.recipients[0].recipient_lookup
             _, certified, more = source.addressed_page(
                 case.bus.log, AddressedPage.capture(lookup=recipient))
-            assert certified == (delivery,)
+            assert tuple(certified) == (delivery,)
             assert not more
     finally:
         case.close()
@@ -247,6 +248,7 @@ def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path)
     import json
 
     from agent_comms.bus_publication import DuplicateWireKeyError
+    from agent_comms.errors import StoredHistoryUnreadable
 
     case = _ready(tmp_path, direct=True)
     try:
@@ -259,8 +261,9 @@ def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path)
         raw = '{"seq":' + str(row["seq"]) + ',' + json.dumps(row)[1:] + '\n'
         case.bus.log.path.write_text(raw)
         before = case.bus.log.path.read_bytes()
-        with pytest.raises(DuplicateWireKeyError, match="Duplicate bus object key"):
+        with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as raised:
             case.bus.log.full_history()
+        assert isinstance(raised.value.__cause__, DuplicateWireKeyError)
         assert case.bus.log.path.read_bytes() == before
     finally:
         case.close()
