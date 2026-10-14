@@ -93,7 +93,9 @@ class ProgressWatchdog:
         self.input_wait = OwnedWait(self.input_timeout)
 
     def compacted(self, input_started: bool) -> None:
-        if not input_started and self.input_wait is not None:
+        if input_started:
+            return
+        if self.input_wait:
             self.input_wait.restart()
 
     def tick(self) -> None:
@@ -101,7 +103,7 @@ class ProgressWatchdog:
 
     def progress(self) -> None:
         self.last_model_progress = self.now
-        if self.model_wait is not None:
+        if self.model_wait:
             self.model_wait.restart()
 
     async def observe(
@@ -124,23 +126,33 @@ class ProgressWatchdog:
     def transition(self, event: PiEvent, active_tools: set[str]) -> None:
         self.phase = event.observed_phase(self.phase.on(event, active_tools))
 
+    def input_wait_for(self, session: TurnSession) -> OwnedWait | None:
+        if not self.input_wait:
+            return None
+        if not session.admission.awaiting_start:
+            return None
+        if self.phase.pauses_input_clock:
+            return None
+        return self.input_wait
+
+    def model_wait_for(self, session: TurnSession) -> OwnedWait | None:
+        if not self.model_wait:
+            return None
+        if session.stats.requested:
+            return None
+        if session.active_tools:
+            return None
+        if self.phase.model_wait(self.model_wait_timeout) is None:
+            return None
+        return self.model_wait
+
     def owned_wait(self, session: TurnSession) -> OwnedWait | None:
         if session.awaiting_native_attestation:
             return self.preflight_wait
-        if (
-            self.input_wait is not None
-            and session.admission.awaiting_start
-            and not self.phase.pauses_input_clock
-        ):
-            return self.input_wait
-        if (
-            self.model_wait is not None
-            and not session.stats.requested
-            and not session.active_tools
-            and self.phase.model_wait(self.model_wait_timeout) is not None
-        ):
-            return self.model_wait
-        return None
+        return self.input_wait_for(session) or self.model_wait_for(session)
+
+    def model_wait_elapsed(self) -> float:
+        return self.model_wait.elapsed if self.model_wait else 0.0
 
     def read_timeout(
         self, session: TurnSession, owned_timeout: float | None = None
@@ -201,7 +213,7 @@ class ProgressWatchdog:
         try:
             with (
                 owned_wait.charge(self.clock)
-                if owned_wait is not None
+                if owned_wait
                 else nullcontext()
             ) as owned_timeout:
                 done, _ = await asyncio.wait(
@@ -238,19 +250,15 @@ class ProgressWatchdog:
         if session.awaiting_native_attestation:
             reason, phase = "native_preflight_timeout", "await_get_state"
             elapsed = self.preflight_wait.elapsed
-        elif (
-            self.input_wait is not None
-            and session.admission.awaiting_start
-            and not self.phase.pauses_input_clock
-        ):
+        elif input_wait := self.input_wait_for(session):
             reason, phase = "input_start_timeout", "await_input"
-            elapsed = self.input_wait.elapsed
+            elapsed = input_wait.elapsed
         else:
             stalled = self.phase.stalled(self.prompt_accepted)
             reason, phase = stalled.stall_reason, stalled.declared_name
             elapsed = (
-                self.model_wait.elapsed
-                if self.model_wait is not None
+                self.model_wait_elapsed()
+                if self.model_wait
                 else self.clock() - self.last_model_progress
             )
         return TimeoutError(
@@ -283,11 +291,7 @@ class ProgressWatchdog:
             await session.native.proc.stop()
             session.finished = True
             return
-        if (
-            self.input_wait is not None
-            and session.admission.awaiting_start
-            and (not self.phase.pauses_input_clock)
-        ):
+        if self.input_wait_for(session):
             session.output.record_failure(
                 failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
             )
@@ -297,9 +301,7 @@ class ProgressWatchdog:
         if session.stats.requested:
             session.finished = True
             return
-        elapsed_ms = round(
-            (self.model_wait.elapsed if self.model_wait is not None else 0.0) * 1000
-        )
+        elapsed_ms = round(self.model_wait_elapsed() * 1000)
         stalled_phase = self.phase.stalled(self.prompt_accepted)
         reason_code = stalled_phase.stall_reason
         if self.prompt_accepted:
@@ -310,9 +312,7 @@ class ProgressWatchdog:
         await session.abort_stalled_rpc()
         for input_id in session.started_during_abort:
             yield events.InputStarted(id=input_id)
-        failed_elapsed_ms = round(
-            (self.model_wait.elapsed if self.model_wait is not None else 0.0) * 1000
-        )
+        failed_elapsed_ms = round(self.model_wait_elapsed() * 1000)
         yield self.state("failed", reason_code, failed_elapsed_ms, phase=phases.ShutdownPhase())
         session.output.record_failure(
             failures.ModelStalled(
