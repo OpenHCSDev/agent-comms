@@ -32,9 +32,9 @@ from agent_comms.coordinator import Coordination
 
 from .bus_publication import stable_thread_lookup
 from .child_process import ProcessIdentity
-from .cohort_schema import CohortDeliveryReceipts
+from .cohort_schema import CohortDeliveryReceipts, assert_cohort_schema
 from .comms import Comms
-from .coordination_cohort import accept_delivery_cohort, sealed_cohort_sequences
+from .coordination_cohort import accept_delivery_cohort
 from .envelope_claim_transitions import ExistingFileClaim
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
@@ -87,13 +87,25 @@ async def _accept_visible_deliveries(
     infer a cohort from an ordinary public message or its body.
     """
     def accept(resource: Coordination) -> int:
-        sealed = sealed_cohort_sequences(resource, root_id)
+        with bus.log.locked():
+            marker = bus.log._private_marker_unlocked()
+            if marker.root_id != root_id:
+                raise IdentityConflict("private initial wire root changed")
+            admitted_after = max(after_seq, marker.admission_after_seq)
+        with resource.session.read():
+            assert_cohort_schema(resource.session._connection)
+            sealed = CohortDeliveryReceipts.sealed_sequences_after(
+                resource.session._connection,
+                wire_root_id=root_id,
+                recipient_lookup=lookup,
+                after_seq=admitted_after,
+            )
         with bus.log.certified_read() as source:
             _require_no_private_owner_rename(bus.log.path.parent)
             marker = bus.log._private_marker_unlocked()
             if marker.root_id != root_id:
                 raise IdentityConflict("private initial wire root changed")
-            admitted_after = max(after_seq, marker.admission_after_seq)
+            admitted_after = max(admitted_after, marker.admission_after_seq)
             addressed = source.addressed_sequences(bus.log, lookup, admitted_after)
             # Progress comes from every addressed original in the fixed source
             # cut, including already sealed/historical recipient rows.
