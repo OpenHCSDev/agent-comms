@@ -216,8 +216,8 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
             "sql": Column(
                 generated=(
                     "CASE\n"
-                    "       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE "
-                    "'active' END"
+                    "       WHEN phase IN ({failed_attempt_names}) THEN 'attempt_failed'\n"
+                    "       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE 'active' END"
                 )
             ),
         },

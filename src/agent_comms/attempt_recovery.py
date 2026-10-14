@@ -396,9 +396,11 @@ class RecoveryMonitorCapability:
             )
             unresolved = bool(snapshot.publication_intents)
             if (attempt.lifecycle.backend_done or evidence.backend_done) and not unresolved:
-                from .attempt_states import AttemptFailedAttempt
+                from .attempt_states import AttemptFailedAttempt, UnknownOutcomeAttempt
 
-                outcome = AttemptFailedAttempt(unknown=evidence.unknown_effects)
+                outcome = (
+                    UnknownOutcomeAttempt() if evidence.unknown_effects else AttemptFailedAttempt()
+                )
                 store.snapshots.get(execution_id).settle(
                     store.session, outcome, evidence.reason_code, boundary
                 )

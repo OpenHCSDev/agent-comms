@@ -126,6 +126,10 @@ class TerminalAttempt(AttemptState):
         return cls()
 
 
+def _failed_outcomes() -> tuple[type[AttemptState], ...]:
+    return AttemptFailedAttempt, UnknownOutcomeAttempt
+
+
 class PromptStartingAttempt(LiveAttempt):
     allows_tool_admission = True
     starting = True
@@ -133,7 +137,7 @@ class PromptStartingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            *_failed_outcomes(),
             PromptAcceptedAttempt,
             ProviderUnavailableAttempt,
         )
@@ -146,7 +150,7 @@ class PromptAcceptedAttempt(LiveAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            *_failed_outcomes(),
             ModelRunningAttempt,
             ModelStalledAttempt,
         )
@@ -166,7 +170,7 @@ class ModelRunningAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            *_failed_outcomes(),
             CompactionAttempt,
             ModelStalledAttempt,
             ProviderUnavailableAttempt,
@@ -182,7 +186,7 @@ class ToolRunningAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            *_failed_outcomes(),
             ModelRunningAttempt,
             SettlingAttempt,
         )
@@ -193,7 +197,7 @@ class CompactionAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            *_failed_outcomes(),
             ModelRunningAttempt,
             ModelStalledAttempt,
         )
@@ -216,7 +220,7 @@ class SettlingAttempt(ContextualAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            *_failed_outcomes(),
             SucceededAttempt,
         )
 
@@ -226,7 +230,7 @@ class ModelStalledAttempt(LiveAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            *_failed_outcomes(),
         )
 
 
@@ -234,7 +238,7 @@ class AbortingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            *_failed_outcomes(),
             RetryingAttempt,
         )
 
@@ -243,7 +247,7 @@ class RetryingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            *_failed_outcomes(),
             ModelRunningAttempt,
             ModelStalledAttempt,
             PromptStartingAttempt,
@@ -255,7 +259,7 @@ class ProviderUnavailableAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            *_failed_outcomes(),
             RetryingAttempt,
         )
 
@@ -280,17 +284,10 @@ class SucceededAttempt(TerminalAttempt):
         return ()
 
 
-@dataclass(frozen=True)
 class AttemptFailedAttempt(TerminalAttempt):
-    unknown: bool = False
-
     @property
     def release_wording(self) -> str:
-        return (
-            "Released files after a turn with unknown outcome; read them before editing"
-            if self.unknown
-            else "Released files after a failed turn"
-        )
+        return "Released files after a failed turn"
 
     def disposition(self, snapshot, attempt):
         from .execution_states import DeferredExecution, FailedExecution
@@ -305,3 +302,9 @@ class AttemptFailedAttempt(TerminalAttempt):
     @classmethod
     def successors(cls):
         return ()
+
+
+class UnknownOutcomeAttempt(AttemptFailedAttempt):
+    @property
+    def release_wording(self) -> str:
+        return "Released files after a turn with unknown outcome; read them before editing"

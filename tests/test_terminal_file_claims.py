@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.attempt_states import AttemptFailedAttempt
+from agent_comms.attempt_states import AttemptFailedAttempt, UnknownOutcomeAttempt
 from agent_comms.claim_admission import publish_selected_resource_claim
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
@@ -39,7 +39,8 @@ def test_terminal_outcomes_release_exact_claims(monkeypatch, outcome):
                 outcome=AttemptFailedAttempt(),
             ).value
         assert terminal.attempt.lifecycle.failed and not terminal.is_current
-        assert terminal.attempt.lifecycle.unknown is (outcome == "unknown")
+        expected_outcome = UnknownOutcomeAttempt if outcome == "unknown" else AttemptFailedAttempt
+        assert type(terminal.attempt.lifecycle) is expected_outcome
         assert dict(comms.bus.log.claim_projection()) == {}
         notice = comms.views.full_history()[-1]
         release = notice.claim_transition.releases[0]

@@ -238,10 +238,10 @@ class AttemptStore:
                     progress=False,
                     reason_code="native_unknown",
                 )
-            from .attempt_states import AttemptFailedAttempt
+            from .attempt_states import UnknownOutcomeAttempt
 
             self.snapshots.get(fence.execution_id).settle(
-                self.session, AttemptFailedAttempt(unknown=True), "native_unknown", acquired
+                self.session, UnknownOutcomeAttempt(), "native_unknown", acquired
             )
             return Applied(self.snapshots.get(fence.execution_id))
 
