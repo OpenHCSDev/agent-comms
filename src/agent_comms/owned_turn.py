@@ -62,6 +62,10 @@ class OwnedTurn:
     def backend(self):
         return self.runner.backend_for(self.session_id, self.thread)
 
+    @property
+    def reply_targets(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(origin.exact_reply_target for origin in self.origins))
+
     async def attach_native_session(self, session_file):
         """Publish through the owner returned by this original begin operation."""
         self.registry_owner = await Coordination.run_worker(partial(
@@ -76,7 +80,6 @@ class OwnedTurn:
         thread_name: str,
         task: str,
         *,
-        reply_targets: tuple[str, ...] = (),
         origins: tuple[Message, ...] = (),
         images: tuple[Any, ...] = (),
         original_keys: tuple[str, ...] = (),
@@ -91,7 +94,6 @@ class OwnedTurn:
         self.session_id = session_id
         self.thread_name = thread_name
         self.task = task
-        self.reply_targets = reply_targets
         self.origins = origins
         self.images = images
         self.original_keys = original_keys
@@ -234,7 +236,8 @@ class OwnedTurn:
                     instruction=instruction,
                 )
             )
-        if self.reply_targets:
+        response_targets = batch.native_reply_targets or self.reply_targets
+        if response_targets:
             instruction = InstructionFile.read("reply-route.md")
             self.context = self.context.prepend(
                 ReplyRouteSegment(
@@ -243,7 +246,7 @@ class OwnedTurn:
                         OwnerProvenance(self.thread.incarnation, self.turn_id),
                     ),
                     instruction=instruction,
-                    targets=self.reply_targets,
+                    targets=response_targets,
                 )
             )
 
