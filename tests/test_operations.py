@@ -30,15 +30,18 @@ class TestMessaging:
 
     def test_ack_clears_inbox(self, wired):
         wired.messaging.send("PR111", "fixer", "hello")
-        assert wired.messaging.acknowledge("fixer") == 1
+        messages = wired.bus.inbox("fixer")
+        references = tuple(message.reference for message in messages)
+        assert wired.messaging.acknowledge("fixer", references) == 1
         assert wired.bus.pending_count("fixer") == 0
-        assert wired.messaging.acknowledge("fixer") == 0
+        assert wired.messaging.acknowledge("fixer", references) == 0
 
     def test_scoped_ack_only_clears_selected_conversation(self, wired):
         wired.messaging.send("PR111", "fixer", "direct")
         wired.messaging.send("PR111", "#all", "global")
 
-        assert wired.messaging.acknowledge("fixer", "PR111") == 1
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+        assert wired.messaging.acknowledge("fixer", references) == 1
         assert wired.bus.pending_count("fixer", "PR111") == 0
         assert wired.bus.pending_count("fixer", "#all") == 1
         assert wired.bus.pending_count("fixer") == 1
@@ -47,7 +50,8 @@ class TestMessaging:
         wired.messaging.send("PR111", "fixer", "direct")
         wired.messaging.send("PR111", "#all", "global")
 
-        assert wired.messaging.acknowledge("fixer", "#all") == 1
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", "#all"))
+        assert wired.messaging.acknowledge("fixer", references) == 1
         assert wired.bus.pending_count("fixer", "#all") == 0
         assert wired.bus.pending_count("fixer", "PR111") == 1
         assert wired.bus.pending_count("fixer") == 1
@@ -64,7 +68,8 @@ class TestMessaging:
         wired.messaging.send("PR111", "#all", "global")
 
         assert wired.bus.pending_counts("fixer") == {"PR111": 2, "#all": 1}
-        wired.messaging.acknowledge("fixer", "PR111")
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+        wired.messaging.acknowledge("fixer", references)
         assert wired.bus.pending_counts("fixer") == {"#all": 1}
 
     def test_shared_history_page_contract(self, wired):
@@ -264,7 +269,8 @@ class TestThreadOps:
 
     def test_rename_self_preserves_routing_history_and_state(self, wired, monkeypatch):
         wired.messaging.send("fixer", "PR111", "before rename")
-        assert wired.messaging.acknowledge("PR111", "fixer") == 1
+        references = tuple(message.reference for message in wired.bus.inbox("PR111", "fixer"))
+        assert wired.messaging.acknowledge("PR111", references) == 1
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
         wired.agents.set_agent_info("PR111", model="test/model")
         wired.ledger.merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")

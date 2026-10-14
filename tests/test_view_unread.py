@@ -17,7 +17,8 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
     comms.registry.declare(Thread("sender", frozenset({"ci"}), str(tmp_path)))
     comms.registry.declare(Thread("receiver", frozenset({"ci", "docs"}), str(tmp_path)))
     comms.messaging.send("sender", "#ci", "first")
-    comms.messaging.acknowledge("receiver")
+    messages = comms.bus.inbox("receiver")
+    comms.messaging.acknowledge("receiver", tuple(message.reference for message in messages))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 1
     comms.views.mark_channel_view_read("#ci", worktree=str(tmp_path))
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0

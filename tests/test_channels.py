@@ -434,7 +434,8 @@ def test_pending_cache_observes_external_changes_without_rescanning(tmp_path):
     assert [m.body for m in comms.bus.inbox("b") if m.membership is None] == ["one"]
     other.channels.update_tags("a", add=frozenset({"api"}))
     assert [m.body for m in comms.bus.inbox("a") if m.membership is None] == ["one"]
-    other.messaging.acknowledge("a")
+    messages = other.bus.inbox("a")
+    other.messaging.acknowledge("a", tuple(message.reference for message in messages))
     assert comms.bus.pending_count("a") == 0
     other.messaging.send("other", "#api", "two")
     assert comms.bus.pending_count("a") == 1
