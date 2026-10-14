@@ -44,6 +44,7 @@ from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersio
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
 from .native_arguments import NativeArguments
+from .pi_vocabulary import ServiceTier
 from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, ThreadDeleted
@@ -733,10 +734,11 @@ class UserSendCliCommand(CliCommand, declared_name="user-send"):
 
 @dataclass(frozen=True, kw_only=True)
 class ConfigureCliCommand(CliCommand, declared_name="configure"):
-    help = "Set a stopped thread's model or thinking level for its next start"
+    help = "Set a stopped thread's model, thinking level, or service tier for its next start"
     name: str = option("--name")
     model: str | None = option("--model", default=None)
     thinking: str | None = option("--thinking", default=None)
+    service_tier: ServiceTier | None = option("--service-tier", default=None)
 
     def apply(self, ctx: Comms) -> Any:
         import asyncio
@@ -751,10 +753,10 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             raise RelationViolationError(
                 f"{thread.name} is running; change its settings through its session")
         level = ThinkingLevel.decode(self.thinking).declared_name if self.thinking is not None else None
-        candidate = replace(
-            thread,
-            model=thread.model if self.model is None else self.model.strip(),
-            thinking_level=thread.thinking_level if level is None else level,
+        candidate = thread.with_model_configuration(
+            model=self.model,
+            thinking_level=level,
+            service_tier=self.service_tier,
         )
         catalogs = ConfigOptions(
             NativeArguments.configured_binary(),
@@ -766,9 +768,14 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             thread,
             model=candidate.model,
             thinking_level=ThinkingLevel.optional_name(candidate.thinking_level),
+            service_tier=candidate.service_tier,
         )
-        return {"configured": updated.name, "model": updated.model,
-                "thinking_level": ThinkingLevel.optional_name(updated.thinking_level)}
+        return {
+            "configured": updated.name,
+            "model": updated.model,
+            "thinking_level": ThinkingLevel.optional_name(updated.thinking_level),
+            "service_tier": updated.service_tier.value,
+        }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -944,7 +951,12 @@ class AckCliCommand(CliCommand):
     thread: str = option("--thread")
 
     def apply(self, ctx: Comms) -> Any:
-        return {"acknowledged": ctx.messaging.acknowledge(self.thread)}
+        messages = ctx.bus.inbox(self.thread)
+        return {
+            "acknowledged": ctx.messaging.acknowledge(
+                self.thread, tuple(message.reference for message in messages)
+            )
+        }
 
 
 @dataclass(frozen=True, kw_only=True)

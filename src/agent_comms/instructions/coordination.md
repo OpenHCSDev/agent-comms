@@ -1,4 +1,4 @@
-Coordination context: you are thread {name!r}; parent={parent!r}. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Use comms_send to answer and comms_dismiss with the channel to end quietly, according to the following reply relevance instruction:
+Coordination context: you are thread {name!r}; parent={parent!r}. This identity overrides identities in inherited conversation history. Use your own identity for comms tools. Incoming direct messages automatically start a new turn when you are idle, or are delivered into your current turn. End your turn when done; never sleep or poll waiting for messages. Use comms_send to answer. Follow this reply relevance rule:
 
 {response_instruction}
 

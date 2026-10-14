@@ -93,14 +93,14 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
                                  for message in comms.bus.channel_history('#team')))
     pending_source = next(message for message in comms.bus.channel_history('#team')
                           if message.body == 'NEW_PRIVATE_INDEPENDENT_PENDING_CHANNEL')
-    await until(pilot, lambda: any('Waiting for recovery' in str(item.title)
+    await until(pilot, lambda: any('Not read yet' in str(item.title)
                                  for item in channel.query(MessageNotifications)))
     notification = next(item for item in channel.query(MessageNotifications)
-                        if 'Waiting for recovery' in str(item.title))
+                        if 'Not read yet' in str(item.title))
     notification.scroll_visible(animate=False, immediate=True)
     await pilot.pause()
     assert await pilot.click(notification.query_one('CollapsibleTitle'))
-    await until(pilot, lambda: 'Waiting for recovery' in screen_paint(app))
+    await until(pilot, lambda: 'Not read yet' in screen_paint(app))
     assert notification in app.screen._compositor.visible_widgets
     channel_frame = screen_paint(app)
     (evidence/'channel-recovery.txt').write_text(channel_frame)
@@ -117,7 +117,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     (evidence/'dm-recovery.txt').write_text(dm_frame)
     (evidence/'dm-recovery.svg').write_text(app.export_screenshot())
     await click_tab(app, pilot, channel_tab)
-    await until(pilot, lambda: 'Waiting for recovery' in screen_paint(app))
+    await until(pilot, lambda: 'Not read yet' in screen_paint(app))
     with closing(sqlite3.connect((comms.root/'coordination.sqlite3').as_uri()+'?mode=ro',uri=True)) as db:
         assert NativeRuntimeInput.one(db,input_id=retained_input.input_id) == retained_input
         rows = WakeAssignment.select(db)
@@ -130,7 +130,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     result = {'elapsed_seconds':perf_counter()-started, 'localhost_provider_posts':len(requests),
         'ui_driver':'Textual App.run_test/Pilot', 'external_terminal_entrypoint_verified':False,
         'ordinary_first_reply_visible':True, 'actual_native_provider_failure':True,
-        'same_open_ui_channel_waiting_recovery_visible':True,
+        'same_open_ui_channel_not_read_visible':True,
         'same_owner_dm_waiting_recovery_title':str(details.title),
         'actual_click_return_preserved_recovery':True,
         'failed_original_native_input_unchanged':retained_input.input_id,

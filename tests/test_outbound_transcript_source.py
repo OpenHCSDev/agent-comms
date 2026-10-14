@@ -143,7 +143,7 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize('direct', [False, True])
-def test_saved_notification_uses_exact_owner_drain_readiness(tmp_path, direct):  # noqa: F811
+def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct):  # noqa: F811
     from dataclasses import replace
     from agent_comms.activity import StoppedDrainDiagnostic
 
@@ -153,8 +153,8 @@ def test_saved_notification_uses_exact_owner_drain_readiness(tmp_path, direct): 
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     notice = next(item for item in comms.views.recent_notifications('sender')
                   if item.recipient=='beta')
-    assert notice.state=='Waiting for recovery'
-    assert diagnostic.summary in notice.detail
+    assert notice.state=='Sent'
+    assert notice.detail == ''
     assert notice.message.reference==initial.message.reference
     assert not notice.busy
     # A diagnostic from another owner generation cannot block a current
@@ -164,7 +164,7 @@ def test_saved_notification_uses_exact_owner_drain_readiness(tmp_path, direct): 
     comms.agents.activity.emit(replace(activity,diagnostic=foreign))
     current = next(item for item in comms.views.recent_notifications('sender')
                    if item.recipient=='beta')
-    assert current.state=='Pending'
+    assert current.state=='Sent'
 
 
 def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):  # noqa: F811
@@ -182,7 +182,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     wire_before = comms.bus.log.path.read_bytes()
     notices = comms.views.message_notifications((message,))[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
-    assert beta.state=='Waiting for recovery' and diagnostic.summary in beta.detail
+    assert beta.state=='Sent' and beta.detail == ''
     assert beta.recipient_identity.recipient_lookup==stable_thread_lookup(
         comms.registry.require('beta').created_at)
     with Coordination(str(root/'coordination.sqlite3')) as store:
@@ -194,6 +194,20 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     comms.registry.rename('beta','renamed')
     renamed = comms.views.message_notifications((message,))[message.seq,message.message_id]
     assert {item.recipient_identity for item in renamed}=={item.recipient_identity for item in notices}
+
+
+def test_capture_page_window_names_zero_and_nonzero_sent_windows(tmp_path):  # noqa: F811
+    from agent_comms.transcripts import TranscriptSourceWindow
+
+    _path, _root_id, comms, initial, _people = _root(tmp_path)
+    ordinary = comms.transcripts.capture_page_window("sender")
+    assert isinstance(ordinary, TranscriptSourceWindow)
+    assert ordinary.sent_sources == ()
+    with_sent = comms.transcripts.capture_page_window("sender", sent_source_limit=5)
+    assert isinstance(with_sent, TranscriptSourceWindow)
+    assert [source.message.reference for source in with_sent.sent_sources] == [
+        initial.message.reference
+    ]
 
 
 def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp_path):  # noqa: F811
@@ -281,7 +295,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     lookup = stable_thread_lookup(target.created_at)
     receipts = comms.views.recent_notifications("sender")
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
-    assert beta.message.reference == message.reference and beta.state == "Pending"
+    assert beta.message.reference == message.reference and beta.state == "Sent"
     assignments = NotificationAssignment.select(
         root, "w.wire_seq=? AND w.recipient_lookup=?", (message.seq, lookup)
     )
@@ -338,7 +352,8 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     target_outcome = next(
         item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
     )
-    assert target_outcome.state == "Checked — no response"
+    assert target_outcome.state.startswith("Read ")
+    assert target_outcome.detail == ""
 
 
 def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa: F811

@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
-from agent_comms import selected_turn
+from agent_comms import coordination_response
 from agent_comms.historical_native_inputs import FullHistoricalNativeInput, TriageHistoricalNativeInput
 from agent_comms.selected_triage import IgnoreSelectedTriage, FullSelectedTriage
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
@@ -101,6 +101,8 @@ def _root(
     dist.mkdir(exist_ok=True)
     extension = Path(__file__).parents[1] / "src/agent_comms/channel_coding_tools.mjs"
     (dist / extension.name).write_bytes(extension.read_bytes())
+    import_fence = Path(__file__).parents[1] / "stack/native-import-fence.mjs"
+    (dist / "agent-comms-import-fence.mjs").write_bytes(import_fence.read_bytes())
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
@@ -146,6 +148,9 @@ def _root(
             )
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         assert accepted.value.member_count == len(initial.audience.recipients)
+    # The global fixture deliberately disables background candidate workers.
+    # Tests that consume selected awareness own their deterministic projection.
+    assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
     return root, root_id, comms, initial, people
 
 
@@ -175,8 +180,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         if selected is not None:
             assert selected.path == session_file
             selected.verify_prewrite()
-            # Fake only Pi's exact two initial metadata appends. This is NOT
-            # a CLI runtime receipt, provider call, or descendant proof.
+            # Fake Pi's exact two startup metadata appends before raw send.
             model_id = "f0f0f001"
             for entry in (
                 {
@@ -277,18 +281,12 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         # The original selected stage owns this control's response grammar.
         # Relevance guidance can mention triage inside a FULL prompt too.
         from agent_comms.private_send_stage import TriageNativeSend
-        from agent_comms.field_codec import FieldCodec
-        from agent_comms.messages import Message, InfoKind
 
         admission = _kwargs["prompt_send_boundary"]
         if isinstance(admission.stage, TriageNativeSend):
             reply = json.dumps({"decision": decision})
         else:
-            targets = tuple(dict.fromkeys(row.lifecycle.exact_target for row in admission.stage.assignments))
-            reply = json.dumps(FieldCodec.encode(tuple(
-                Message(admission.owner.thread.name, target, "42", InfoKind, timestamp=0)
-                for target in targets
-            )))
+            reply = "42"
         observer = _kwargs.get("observe_event")
         if observer is not None:
             from agent_comms.pi_events import PiEvent
@@ -354,8 +352,8 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
     assert tuple(receipt.exact_target for receipt in beta.publications) == ("#team",) and beta.publications
     assert len(beta_calls) == 2
     assert WakePolicy.relevance_instruction().content in beta_calls[0][1]
-    assert "expected: this is yours" in beta_calls[1][1]
-    assert '"target":"#team"' in beta_calls[1][1]
+    assert '"expectation":"this is yours; answer the original committed message"' in beta_calls[1][1]
+    assert "delivered automatically to #team" in beta_calls[1][1]
     assert f'"source_seq":{initial.message.seq}' in beta_calls[1][1]
     assert "This frame is a read-only projection, not file-write permission" in beta_calls[1][1]
     response = comms.views.channel_history("#team")[-1]
@@ -442,9 +440,32 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(((initial, assignment),), people[1]),)).text
     assert f'"source_seq":{initial.message.seq}' in frame
     assert '"wake_mode":"bounded_triage"' in frame
-    assert initial.message.body not in frame
+    assert f'"body":{json.dumps(initial.message.body)}' in frame
     assert "No response obligation exists until triage engages" in frame
     assert len(comms.views.channel_history("#team")) == 1
+
+
+def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> None:
+    from agent_comms.presentation import MessageNotification
+
+    root, _root_id, _comms, initial, people = _root(tmp_path)
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        lookup = stable_thread_lookup(people[1].created_at)
+        assignment = sealed_cohort_assignments(store, lookup)[0]
+    sent_outcome = MessageNotification(
+        initial.audience.recipients[0], "Read", "",
+        message=initial.message, changed=True,
+    )
+    frame = TurnContext.render_segments((SelectedWakeSegment.capture(
+        ((initial, assignment),), people[1], sent_outcomes=(sent_outcome,)
+    ),)).text
+    assert 'recent_sent_outcomes: [{"source_seq":' in frame
+    assert '"state":"Read"' in frame
+    with pytest.raises(ValueError, match="changed authored-message outcomes"):
+        SelectedWakeSegment.capture(
+            ((initial, assignment),), people[1],
+            sent_outcomes=(replace(sent_outcome, changed=False),),
+        )
 
 
 async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch) -> None:
@@ -459,9 +480,9 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
         receipt.exact_target for receipt in outcome.publications
     ) == ("sender",)
     assert len(calls) == 1  # direct FULL, no separate triage invocation
-    assert "expected: this is yours" in calls[0][1]
+    assert '"expectation":"this is yours; answer the original committed message"' in calls[0][1]
     assert '"audience":"direct"' in calls[0][1]
-    assert '"target":"sender"' in calls[0][1]
+    assert "delivered automatically to sender" in calls[0][1]
     assert "you owe a response" in calls[0][1]
     with Coordination(str(root / "coordination.sqlite3")) as store:
         one = read_historical_native_inputs(
@@ -489,6 +510,7 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
         owner_name="beta",
         native_package=tmp_path,
         fresh_private_enrollment=True,
+        selected_thinking_level="high",
     ).run()
     assert result is not None and result.disposition is CompletedAssignment
     fresh = result.fresh_session
@@ -497,7 +519,7 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
         people[2].created_at
     )
     fresh.verify_saved_identity()
-    assert len(fresh.path.read_text().splitlines()) == 2
+    assert len(fresh.path.read_text().splitlines()) == 6
 
 
 async def test_explicit_selected_first_source_is_fenced_before_fake_raw_send(
@@ -894,11 +916,21 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     saved.write_text(json.dumps({"type": "session", "id": "isolated-session"}) + "\n")
     saved.chmod(0o600)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
-    base, calls = _fake_model(fail_on=1)
+    monkeypatch.setattr(
+        "agent_comms.selected_session.SessionIdentityHelper.locate",
+        lambda _package, session_file: NativeSessionIdentity("isolated-session", session_file),
+    )
+    _base, calls = _fake_model(fail_on=1)
 
     async def renamed(*args, **kwargs):
+        identity = kwargs["session"].identity
         saved.rename(moved)
-        return await base(*args, **kwargs)
+
+        def admitted():
+            with kwargs["prompt_send_boundary"](identity):
+                pytest.fail("renamed selected source reached raw-send admission")
+
+        await asyncio.to_thread(admitted)
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", renamed)
     with pytest.raises(IdentityConflict, match="exact saved session"):
@@ -947,7 +979,7 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
-                "SELECT count(*) FROM native_runtime_input WHERE session_id IS NULL"
+                "SELECT count(*) FROM native_runtime_input WHERE session_id='isolated-session'"
             ).fetchone()[0]
             == 1
         )
@@ -998,7 +1030,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(
             "JOIN native_runtime_input i ON i.input_id=m.input_id "
             "WHERE c.recipient='alpha'"
         ).fetchone()
-        assert tuple(row) == ("deferred", None)
+        assert tuple(row) == ("deferred", "isolated-session")
 
 
 async def test_forged_dto_without_private_evidence_cannot_mark_context(
@@ -1007,11 +1039,11 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(
     root, root_id, comms, _initial, _ = _root(tmp_path)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
 
-    async def forged(_package, *, input_id, session_dir, **_kw):
+    async def forged(_package, *, input_id, session, **_kw):
         return NativeTurnResult(
             '{"decision":"IGNORE"}',
             NativeContextProof(
-                input_id, "fake", "fake", 1, "f" * 64, session_dir / "nonexistent.jsonl"
+                input_id, "fake", "fake", 1, "f" * 64, session.directory / "nonexistent.jsonl"
             ),
         )
 
@@ -1043,10 +1075,10 @@ async def test_session_file_registration_during_native_triage_keeps_owner(
         return result
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", register_session)
-    outcome = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
-    ).run()
-    assert outcome is not None and outcome.disposition is IgnoredAssignment
+    with pytest.raises(StaleFence, match="native session changed"):
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+        ).run()
     assert len(calls) == 1
 
 
@@ -1064,12 +1096,12 @@ async def test_session_file_registration_during_native_full_turn_keeps_response(
         return result
 
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", register_session)
-    outcome = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-    ).run()
-    assert outcome is not None and outcome.publications
+    with pytest.raises(StaleFence, match="native session changed"):
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+        ).run()
     assert len(calls) == 1
-    assert len(comms.bus.dm_history("sender", "beta")) == 2
+    assert len(comms.bus.dm_history("sender", "beta")) == 1
 
 
 async def test_project_change_during_native_full_turn_denies_response(
@@ -1159,7 +1191,7 @@ async def test_ambiguous_triage_is_not_a_synthetic_ignore_or_full(
             ).fetchone()[0]
             == 1
         )
-        claim = store.assignments.get(failed.assignment_id)
+        claim = store.assignments.get(failed.assignment_ids[0])
         assert type(claim.lifecycle) is FailedAssignment
         rejected = read_historical_native_inputs(
             store, wire_root_id=root_id, recipient_lookup=claim.recipient_lookup,
@@ -1363,13 +1395,13 @@ async def test_owner_stop_before_response_boundary_never_appends(
     method = (
         "prepare_fenced_response" if stop_stage == "before_intent" else "publish_fenced_response"
     )
-    original = getattr(selected_turn, method)
+    original = getattr(coordination_response, method)
 
     def stopped_before_boundary(*args, **kwargs):
         comms.registry.unregister("beta")  # Direct registry writer does NOT hold wire lock.
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(selected_turn, method, stopped_before_boundary)
+    monkeypatch.setattr(coordination_response, method, stopped_before_boundary)
     with pytest.raises(StaleFence, match="stopped or changed"):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
@@ -1414,14 +1446,14 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
 
     monkeypatch.setattr(Publisher, "_publish_keyed_response_unlocked", blocking_append)
     try:
-        result = await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-        ).run()
+        with pytest.raises(StaleFence, match="stopped or changed"):
+            await SelectedExecution(
+                root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+            ).run()
     finally:
         for worker in workers:
             worker.join(timeout=4)
     assert workers and all(not worker.is_alive() for worker in workers)
-    assert result is not None and result.disposition is CompletedAssignment
     assert stopped.is_set() and not comms.registry.status("beta").active
     assert len(comms.bus.dm_history("sender", "beta")) == 2
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -1439,9 +1471,9 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
     original = (
-        selected_turn.prepare_fenced_response
+        coordination_response.prepare_fenced_response
         if boundary == "before_tx1"
-        else selected_turn.publish_fenced_response
+        else coordination_response.publish_fenced_response
     )
 
     def revoke(*args, **kwargs):
@@ -1455,7 +1487,7 @@ async def test_revoked_turn_never_prepares_or_appends_a_response(
         return original(*args, **kwargs)
 
     monkeypatch.setattr(
-        selected_turn,
+        coordination_response,
         "prepare_fenced_response" if boundary == "before_tx1" else "publish_fenced_response",
         revoke,
     )
@@ -1542,7 +1574,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
             if boundary == "before_tx1_forged"
             else "publish_fenced_response"
         )
-        publish = getattr(selected_turn, method)
+        publish = getattr(coordination_response, method)
 
         def revoke_after_tx1(*args, **kwargs):
             revoked_generation = kwargs["owner_witness"].admission_generation
@@ -1558,7 +1590,7 @@ async def test_saved_stopped_turn_cannot_regain_owner_authority(
                 )
             return publish(*args, **kwargs)
 
-        monkeypatch.setattr(selected_turn, method, revoke_after_tx1)
+        monkeypatch.setattr(coordination_response, method, revoke_after_tx1)
         with pytest.raises(StaleFence, match="turn stopped or changed|turn witness is invalid"):
             await SelectedExecution(
                 root=root,
@@ -1648,7 +1680,7 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
         row = store.session._connection.execute(
             "SELECT stage,session_id FROM native_runtime_input"
         ).fetchone()
-        assert tuple(row) == ("full", None)
+        assert tuple(row) == ("full", "isolated-session")
         assert (
             store.session._connection.execute("SELECT state FROM obligations").fetchone()[0]
             == "failed"
@@ -1777,7 +1809,8 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
 
     async def failed(package, **kwargs):
         result = await fake(package, **kwargs)
-        if "bounded triage" in kwargs["prompt"]:
+        from agent_comms.private_send_stage import TriageNativeSend
+        if isinstance(kwargs["prompt_send_boundary"].stage, TriageNativeSend):
             return result
         raise NativePiTerminalFailure(
             "Codex error: The usage limit has been reached",
@@ -1792,7 +1825,9 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
             root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
         ).run()
     notice = comms.views.full_history()[-1]
-    assert notice.notice and notice.type.value == "alert"
+    from agent_comms.messages import AlertKind
+
+    assert notice.notice and notice.type is AlertKind
     assert notice.target == ("sender" if direct else "#team")
     assert "The usage limit has been reached" in notice.body
     assert "No automatic retry" in notice.body
@@ -1861,7 +1896,7 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
         assert context["current_goal"]["text"] == "Restore channel subscribers"
         assert context["current_goal"]["progress"] == "Routing fixed"
         assert context["original_assignment"].startswith("Bootstrap:")
-        assert "an old bootstrap instruction to wait for a task does not exclude" in prompt
+        assert "A prior task assignment, bootstrap instruction to wait" in prompt
 
 
 async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, monkeypatch):

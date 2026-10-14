@@ -36,7 +36,7 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, jo
         assert comms.transcripts.capture_page_read("worker").read().events[0].declared_name == "context"
 
 
-def test_native_append_and_fork_source_change_revoke_prior_read(tmp_path):
+def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(tmp_path):
     comms = wire(tmp_path / "wire")
     parent = tmp_path / "parent.jsonl"
     parent.write_text(json.dumps({"type": "message", "message": {
@@ -50,8 +50,12 @@ def test_native_append_and_fork_source_change_revoke_prior_read(tmp_path):
         output.write(json.dumps({"type": "message", "message": {
             "role": "assistant", "content": [{"type": "text", "text": "later answer"}],
         }}) + "\n")
-    with pytest.raises(StaleRevision):
-        captured.read()
+    assert not captured.current()
+    assert captured.content_current()
+    captured_answers = [
+        event.text for event in captured.read().events if event.declared_name == "assistant"
+    ]
+    assert captured_answers == ["parent answer"]
     fresh = comms.transcripts.capture_page_read("child")
     assert any(event.text == "later answer" for event in fresh.read().events)
     child = tmp_path / "child.jsonl"
@@ -62,6 +66,52 @@ def test_native_append_and_fork_source_change_revoke_prior_read(tmp_path):
     with pytest.raises(StaleRevision):
         fresh.read()
     assert [event.text for event in comms.transcripts.capture_page_read("child").read().events] == ["child answer"]
+
+
+def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
+    comms = wire(tmp_path / "wire")
+    path = tmp_path / "native.jsonl"
+    original = json.dumps({"type": "message", "message": {
+        "role": "assistant", "content": [{"type": "text", "text": "first answer"}],
+    }}) + "\n"
+    replacement = original.replace("first answer", "other answer")
+    assert len(replacement) == len(original)
+    path.write_text(original)
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
+    captured = comms.transcripts.capture_page_read("worker")
+
+    path.write_text(replacement)
+
+    assert not captured.content_current()
+    with pytest.raises(StaleRevision):
+        captured.read()
+
+
+def test_native_growth_during_page_preparation_keeps_the_captured_cut(tmp_path, monkeypatch):
+    comms = wire(tmp_path / "wire")
+    path = tmp_path / "native.jsonl"
+    path.write_text(json.dumps({"type": "message", "message": {
+        "role": "assistant", "content": [{"type": "text", "text": "captured answer"}],
+    }}) + "\n")
+    comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
+    captured = comms.transcripts.capture_page_read("worker")
+    prepare = comms.transcripts.thread_transcript_page
+
+    def append_after_page(*args, **kwargs):
+        page = prepare(*args, **kwargs)
+        with path.open("a") as output:
+            output.write(json.dumps({"type": "message", "message": {
+                "role": "assistant", "content": [{"type": "text", "text": "later answer"}],
+            }}) + "\n")
+        return page
+
+    monkeypatch.setattr(comms.transcripts, "thread_transcript_page", append_after_page)
+    assert [event.text for event in captured.read().events] == ["captured answer"]
+    assert captured.content_current()
+    assert [
+        event.text
+        for event in comms.transcripts.capture_page_read("worker").read().events
+    ] == ["captured answer", "later answer"]
 
 
 def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):

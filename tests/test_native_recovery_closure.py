@@ -106,6 +106,27 @@ async function toolThenCodexRefusals() {{
         {{type:'native_retry_end',success:true,attempt:3}}]);
     return {{tries:4,retries:3,answer:answer.content[0].text}};
 }}
+async function thinkingOnlyThenAnswer() {{
+    const events=[]; const owner=prepare(events);
+    const disconnected={{role:'assistant',content:[{{type:'thinking',thinking:'private only'}}],
+        stopReason:'error',errorMessage:'WebSocket closed 1000'}};
+    assert.equal(isRetryableAssistantError(disconnected),true);
+    owner.agent.state.messages.push(disconnected);
+    owner.run.observe({{type:'message_start',message:{{role:'assistant',content:[]}}}},claims);
+    owner.run.observe({{type:'message_update',assistantMessageEvent:{{
+        type:'thinking_delta',delta:'private only'}}}},claims);
+    owner.run.observe({{type:'message_end',message:disconnected}},claims);
+    assert.equal(await owner.run.recover(disconnected),true);
+    const answer={{role:'assistant',content:[{{type:'text',text:'visible answer'}}],stopReason:'stop'}};
+    finished(owner,events,answer);
+    owner.run.close();
+    assert.deepEqual(events.filter(e=>e.type==='native_retry_start'),[{{
+        type:'native_retry_start',attempt:1,maxAttempts:3,delayMs:1000,
+        errorMessage:'WebSocket closed 1000'}}]);
+    assert.deepEqual(events.filter(e=>e.type==='native_retry_end'),[
+        {{type:'native_retry_end',success:true,attempt:1}}]);
+    return {{answer:answer.content[0].text,retries:1}};
+}}
 async function retiredDuringBackoff() {{
     const events=[]; const owner=prepare(events);
     owner.agent.state.messages.push(refused);
@@ -118,10 +139,11 @@ async function retiredDuringBackoff() {{
         {{type:'native_retry_end',success:false,attempt:0}}]);
     assert.equal(owner.agent.state.messages.length,1);
 }}
-const [events,,,,proof] = await Promise.all([
+const [events,,,,proof,noOutput] = await Promise.all([
     differentTerminal(), answered(), exhausted(), retiredDuringBackoff(), toolThenCodexRefusals(),
+    thinkingOnlyThenAnswer(),
 ]);
-console.log(JSON.stringify({{events,proof}}));
+console.log(JSON.stringify({{events,proof,noOutput}}));
 """
     process = await asyncio.create_subprocess_exec(
         "node", "--input-type=module", "-e", program,
@@ -144,7 +166,8 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
     assert result["proof"] == {
         "tries": 4, "retries": 3, "answer": "recovered after tools",
     }
-    print(json.dumps(result["proof"], sort_keys=True))
+    assert result["noOutput"] == {"answer": "visible answer", "retries": 1}
+    print(json.dumps({"refusal": result["proof"], "no_output": result["noOutput"]}, sort_keys=True))
     stub = _stub_with(tmp_path, [*records, *_settled_records()])
     agent = canonical_agent(wired, agent_bin="pi", agent_args=[], runtime_enabled=True)
     original_stream = backend.stream_agent_events

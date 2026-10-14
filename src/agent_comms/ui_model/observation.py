@@ -23,7 +23,7 @@ import signal
 import sys
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from contextlib import contextmanager
 from pathlib import Path
@@ -315,19 +315,82 @@ class ObserveSidebar(InterestRequest):
     def apply(self, interest: Interest) -> Interest:
         return replace(interest, sidebar=self)
 
-    def answer(
-        self, comms: Comms, revision: WireRevision
+    def _answer(
+        self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str
     ) -> SidebarObserved | SidebarUnreadable | None:
         from agent_comms.ui_model.sidebar import SidebarModel
 
         try:
-            snapshot = comms.views.viewer_snapshot(
-                self.worktree, show_stopped=self.show_stopped, show_archived=self.show_archived)
+            snapshot = read(
+                subject, show_stopped=self.show_stopped, show_archived=self.show_archived)
             return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
         except UnreadableHistory.DEFERRED_READS:
             return None  # No new snapshot; keep the original interest for the next observation.
         except StoredHistoryUnreadable as error:
             return SidebarUnreadable(revision, self, UnreadableHistory.capture(error))
+
+    def roster(
+        self, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        viewer = comms.messaging.user_identity(self.worktree).name
+        return self._answer(revision, comms.views.presentation.roster, viewer)
+
+    def answer(
+        self, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        return self._answer(revision, comms.views.viewer_snapshot, self.worktree)
+
+
+class SidebarReadStage(ABC):
+    @property
+    @abstractmethod
+    def yields_to_loop(self) -> bool: ...
+
+    @abstractmethod
+    def read(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None: ...
+
+    def next(self) -> SidebarReadStage:
+        return self
+
+
+class RosterSidebarRead(SidebarReadStage):
+    @property
+    def yields_to_loop(self) -> bool:
+        return True
+
+    def read(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        return request.roster(comms, revision)
+
+    def next(self) -> SidebarReadStage:
+        return CompleteSidebarRead()
+
+
+class CompleteSidebarRead(SidebarReadStage):
+    @property
+    def yields_to_loop(self) -> bool:
+        return False
+
+    def read(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        return request.answer(comms, revision)
+
+
+@dataclass(frozen=True)
+class SidebarReading:
+    request: ObserveSidebar
+    stage: SidebarReadStage
+
+
+@dataclass(frozen=True)
+class SidebarSent:
+    request: ObserveSidebar
+    expiry_period: int
+    stage: type[SidebarReadStage]
 
 
 @dataclass(frozen=True)
@@ -418,18 +481,33 @@ class RevisionObserved(Observed):
 
 
 @dataclass(frozen=True)
-class SidebarObserved(Observed):
+class SidebarResult(Observed):
     request: ObserveSidebar
-    snapshot: CoordinationSnapshot
-    derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]
+
+    @abstractmethod
+    def finish_read(self, service: ObservationService, stage: SidebarReadStage) -> None: ...
 
 
 @dataclass(frozen=True)
-class SidebarUnreadable(Observed):
+class SidebarObserved(SidebarResult):
+    snapshot: CoordinationSnapshot
+    derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]
+
+    def finish_read(self, service: ObservationService, stage: SidebarReadStage) -> None:
+        service.sidebar_read = SidebarReading(self.request, stage.next())
+        if stage.yields_to_loop:
+            service.observe_due = True
+            service.changed.set()
+
+
+@dataclass(frozen=True)
+class SidebarUnreadable(SidebarResult):
     """The requested sidebar could not be read; no stale snapshot is offered."""
 
-    request: ObserveSidebar
     error: UnreadableHistory
+
+    def finish_read(self, service: ObservationService, stage: SidebarReadStage) -> None:
+        service.sidebar_read = SidebarReading(self.request, stage)
 
 
 @dataclass(frozen=True)
@@ -484,7 +562,8 @@ class ObservationService:
         self.interest = Interest()
         self.changed = asyncio.Event()
         self.revision: WireRevision | None = None
-        self.sent_sidebar: tuple[ObserveSidebar, int] | None = None
+        self.sent_sidebar: SidebarSent | None = None
+        self.sidebar_read: SidebarReading | None = None
         self.sent_threads: frozenset[str] | None = None
         self.checked_views: tuple[ObserveViews, WireRevision] | None = None
         self.retry_threads = False
@@ -528,12 +607,19 @@ class ObservationService:
             self.connection.send(RevisionObserved(revision))
         sidebar = self.interest.sidebar
         if sidebar is not None:
-            key = (sidebar, revision.expiry_tick // EXPIRY_PERIOD)
+            reading = self.sidebar_read
+            stage = (
+                reading.stage
+                if reading is not None and reading.request == sidebar
+                else RosterSidebarRead()
+            )
+            key = SidebarSent(sidebar, revision.expiry_tick // EXPIRY_PERIOD, type(stage))
             if stores or key != self.sent_sidebar:
-                result = sidebar.answer(self.comms, revision)
+                result = stage.read(sidebar, self.comms, revision)
                 if result is not None:
                     self.connection.send(result)
                     self.sent_sidebar = key
+                    result.finish_read(self, stage)
         threads = self.interest.threads
         if threads and (stores or threads != self.sent_threads or self.retry_threads):
             presentations, unavailable, busy = {}, {}, set()

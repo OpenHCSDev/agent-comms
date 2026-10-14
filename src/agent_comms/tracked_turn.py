@@ -452,6 +452,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         )
 
     async def attest(self) -> None:
+        self.native.attestation = self.launch.session.tracked_attestation(
+            self.native.attestation
+        )
+        if self.native.attestation.observed:
+            identity = self.native.attestation.require_identity()
+            self.active_session_file = self.launch.session.attest(identity)
+            return
         request = self.native.attestation.request
         with self.startup.measurements.operation("get_state_send"):
             await self.send(request)
@@ -586,6 +593,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             # Its output, not the retained refusal from the prior request, owns
             # this tracked turn's terminal result.
             self.request_retried()
+        else:
+            self.fail_terminal(event.final_error or "Provider request failed")
 
     def request_retried(self) -> None:
         super().request_retried()

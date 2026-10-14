@@ -10,9 +10,10 @@ import pytest
 
 from agent_comms import pi_commands as commands
 from agent_comms.backend import TurnSession
-from agent_comms.native_attestation import ObservedAttestation
+from agent_comms.native_attestation import KnownSessionAttestation, ObservedAttestation
 from agent_comms.native_pi import NativePiRpcLaunch
-from agent_comms.pi_payloads import StateData
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.pi_payloads import SessionStatsData, StateData
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_stats import StatsRequest
 from agent_comms.pi_native_backend import PersistentPiSession
@@ -59,6 +60,29 @@ def test_new_command_capabilities_guard_identity_without_backend_dispatch_edits(
     # Even a failed mutating response cannot prove the session stayed unchanged.
     record = response(InspectionFork, "selected", "/selected.jsonl")
     assert record.command.invalidates_identity(record, session)
+
+
+@pytest.mark.parametrize(
+    ("command", "data", "invalid"),
+    [
+        (commands.GetState, StateData(session_id="saved", session_file="/saved.jsonl"), False),
+        (commands.GetState, StateData(session_id="foreign", session_file="/saved.jsonl"), True),
+        (commands.GetSessionStats, SessionStatsData(session_file="/saved.jsonl"), False),
+        (commands.GetSessionStats, SessionStatsData(session_file="/foreign.jsonl"), True),
+    ],
+)
+def test_known_session_attestation_rejects_complete_and_partial_snapshot_conflicts(
+    command, data, invalid
+):
+    session = SimpleNamespace(
+        native=SimpleNamespace(
+            attestation=KnownSessionAttestation(
+                NativeSessionIdentity("saved", "/saved.jsonl")
+            )
+        )
+    )
+    response = SimpleNamespace(success=True, data=data)
+    assert command.invalidates_identity(response, session) is invalid
 
 
 def test_backend_response_switches_and_stats_correlation_replica_stay_deleted():

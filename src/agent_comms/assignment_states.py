@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
@@ -60,19 +60,20 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def require_completion(self) -> Engagement:
         raise IdentityConflict("wake assignment is not completed")
 
-    notification_state: ClassVar[str] = "Pending"
-    notification_detail: ClassVar[str] = "Awaiting a recorded notification outcome."
+    notification_state: ClassVar[str] = "Sent"
+    notification_detail: ClassVar[str] = ""
     notification_priority: ClassVar[int] = 3
     notification_busy: ClassVar[bool] = False
+    notification_changed: ClassVar[bool] = False
 
     def notification(
         self,
         recipient,
         *,
         observation: RecipientActivity,
+        activity=None,
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
-        blocked_by_prior: bool = False,
     ):
         from .presentation import MessageNotification
 
@@ -82,6 +83,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
             self.notification_detail,
             self.notification_priority,
             self.notification_busy,
+            changed=self.notification_changed,
         )
 
     terminal: ClassVar[bool] = False
@@ -176,16 +178,25 @@ class PassiveAssignment(AssignmentState):
 
 
 class PendingNotification:
-    """Pending relevance/full execution consumes the owner's drain readiness.
+    """Pending relevance/full execution membership, not another display state."""
 
-    Both notification and sealed work selection derive this membership from
-    the same declarations; settled history belongs to neither operation.
-    """
-
-    def notification(self, recipient, *, observation, updated_at_ms=0,
-                     triage_inflight=False, blocked_by_prior=False):
-        ordinary = super().notification(recipient, observation=observation)
-        return observation.pending_notification(ordinary, blocked_by_prior=blocked_by_prior)
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity=None,
+        updated_at_ms=0,
+        triage_inflight=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return (
+            notification
+            if activity is None
+            else activity.pending_notification(notification, updated_at_ms)
+        )
 
 
 class TriagePendingAssignment(PendingNotification, AssignmentState):
@@ -194,8 +205,8 @@ class TriagePendingAssignment(PendingNotification, AssignmentState):
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
         return self.mode.triage_expectation(), "No response obligation exists until triage engages."
 
-    notification_state = "Pending"
-    notification_detail = "Queued for a bounded relevance check; not yet checked."
+    notification_state = "Sent"
+    notification_detail = ""
 
     triage_pending = True
     preengagement_target = True
@@ -211,8 +222,8 @@ class TriagePendingAssignment(PendingNotification, AssignmentState):
 
 
 class FullPendingAssignment(PendingNotification, AssignmentState):
-    notification_state = "Pending"
-    notification_detail = "Queued for an agent response; not yet started."
+    notification_state = "Sent"
+    notification_detail = ""
 
     full_pending = True
     preengagement_target = True
@@ -228,9 +239,31 @@ class FullPendingAssignment(PendingNotification, AssignmentState):
 
 
 class IgnoredAssignment(AssignmentState):
+    notification_changed = True
+
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        read_at_ms = activity.read_at_ms or updated_at_ms
+        return replace(
+            notification,
+            state=notification.receipt_state("Read", read_at_ms),
+            detail="",
+            read_at_ms=read_at_ms,
+        )
+
     notification_priority = 2
-    notification_state = "Checked — no response"
-    notification_detail = "The agent checked this message and chose not to respond."
+    notification_state = "Read"
+    notification_detail = ""
 
     terminal = True
     preengagement_target = True
@@ -295,7 +328,21 @@ class AssignmentDecision:
 
 @dataclass(frozen=True)
 class BoundAssignment(AssignmentDecision, AssignmentState):
+    notification_changed = True
     decision: Engagement
+
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+    ):
+        return super().notification(
+            recipient, observation=observation, activity=activity
+        )
 
     @classmethod
     def binding_expression(cls) -> str:
@@ -307,6 +354,22 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
 
 
 class EngagedAssignment(BoundAssignment):
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return observation.selected_response(
+            notification, updated_at_ms, activity.progress, activity.read_at_ms
+        )
+
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         from .wake import derive_exact_reply_target
 
@@ -331,21 +394,8 @@ class EngagedAssignment(BoundAssignment):
     def require_engagement(self) -> Engagement:
         return self.decision
 
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        updated_at_ms=0,
-        triage_inflight=False,
-        blocked_by_prior=False,
-    ):
-        return observation.selected_response(
-            super().notification(recipient, observation=observation), updated_at_ms
-        )
-
-    notification_state = "Responding…"
-    notification_detail = "The agent chose to respond; work is in progress."
+    notification_state = "Sent"
+    notification_detail = ""
     notification_priority = 1
     notification_busy = True
 
@@ -357,11 +407,44 @@ class EngagedAssignment(BoundAssignment):
 
 
 class CompletedAssignment(BoundAssignment):
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        reference = activity.response_reference
+        if reference is None:
+            return replace(
+                notification,
+                state=notification.receipt_state("Read", activity.read_at_ms),
+                detail="",
+                priority=2,
+                busy=False,
+                read_at_ms=activity.read_at_ms,
+            )
+        return replace(
+            notification,
+            state=notification.receipt_state(
+                "Answered", activity.response_received_at_ms
+            ),
+            detail="",
+            reply_reference=reference,
+            read_at_ms=activity.read_at_ms,
+            answered_at_ms=activity.response_received_at_ms,
+        )
+
     def require_completion(self) -> Engagement:
         return self.decision
 
     notification_priority = 2
-    notification_state = "Responded"
+    notification_state = "Answered"
     notification_detail = "The response workflow completed."
 
     terminal = True
@@ -374,6 +457,7 @@ class CompletedAssignment(BoundAssignment):
 
 @dataclass(frozen=True)
 class InterruptedAssignment(AssignmentDecision, AssignmentState):
+    notification_changed = True
     decision: PendingDecision | Engagement
     preengagement_target = True
 
@@ -390,31 +474,19 @@ class DeferredAssignment(InterruptedAssignment):
         recipient,
         *,
         observation,
+        activity,
         updated_at_ms=0,
         triage_inflight=False,
-        blocked_by_prior=False,
     ):
-        from .presentation import MessageNotification
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return observation.selected_response(
+            notification, updated_at_ms, activity.progress, activity.read_at_ms
+        )
 
-        if observation.turn_started_by(updated_at_ms) and triage_inflight:
-            return MessageNotification(
-                recipient,
-                "Checking relevance…",
-                "Checking relevance before deciding whether to respond.",
-                priority=0,
-                busy=True,
-            )
-        if triage_inflight:
-            return MessageNotification(
-                recipient,
-                "Outcome uncertain",
-                "The check was attempted but no decision was confirmed. "
-                "Do not automatically retry.",
-            )
-        return super().notification(recipient, observation=observation)
-
-    notification_state = "Paused"
-    notification_detail = "Processing was deferred; this is not a successful receipt."
+    notification_state = "Interrupted before read"
+    notification_detail = ""
 
     deferred = True
     engageable = True
@@ -444,10 +516,31 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
     """
 
     decision: PendingDecision
+    notification_changed = True
+
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return replace(
+            notification,
+            state=notification.receipt_state("Read", updated_at_ms),
+            detail="",
+            busy=False,
+            read_at_ms=updated_at_ms,
+        )
 
     notification_priority = 2
-    notification_state = "Delivered"
-    notification_detail = "Delivered into the agent's running turn."
+    notification_state = "Read"
+    notification_detail = ""
 
     terminal = True
     preengagement_target = True
@@ -466,6 +559,20 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
 
 
 class FailedAssignment(InterruptedAssignment):
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return replace(notification, state="Failed", detail="")
+
     def rejected_triage_history(self, execution, **source):
         """A proved rejected result is delivered source, never an IGNORE decision."""
         from .historical_native_inputs import FailedTriageHistoricalNativeInput
@@ -473,7 +580,7 @@ class FailedAssignment(InterruptedAssignment):
         return FailedTriageHistoricalNativeInput(execution=execution, **source)
 
     notification_state = "Failed"
-    notification_detail = "Notification processing failed; inspect the agent error before retrying."
+    notification_detail = ""
 
     terminal = True
     failed = True

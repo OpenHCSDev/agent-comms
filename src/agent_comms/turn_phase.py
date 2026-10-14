@@ -20,6 +20,14 @@ class StallExempt:
         return self
 
 
+class LabeledActivity:
+    """A distinct operation includes its phase label in activity presentation."""
+
+    @property
+    def activity_detail(self) -> str:
+        return self.summary
+
+
 @dataclass(frozen=True)
 class TurnPhase(DeclaredFamily, affix="Phase"):
     """One phase owns watchdog behavior and its public control projection.
@@ -41,11 +49,18 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     holds_refusal_reports: ClassVar[bool] = False
     activity_state: ClassVar[ActivityState] = ActivityState.THINKING
     label: ClassVar[str] = "Waiting for model"
-    has_response_output: ClassVar[bool] = False
 
     @property
     def summary(self) -> str:
         return self.detail or self.label
+
+    @property
+    def activity_detail(self) -> str:
+        return self.detail
+
+    def project_activity(self, activity):
+        """Display this phase while preserving the acquired drain readiness."""
+        return replace(activity, state=self.activity_state, detail=self.activity_detail)
 
     def model_wait(self, backstop: float | None) -> float | None:
         """Core's no-event backstop for this phase; None where nothing bounds it here."""
@@ -98,7 +113,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         return ModelWaitPhase()
 
     def response_output(self) -> TurnPhase:
-        return ResponseOutputPhase()
+        """Response deltas are progress evidence, not a persisted control phase."""
+        return self
 
     def stalled(self, accepted: bool) -> TurnPhase:
         return self if accepted else PromptAcceptancePhase()
@@ -130,7 +146,7 @@ class IdlePhase(TurnPhase):
     label = "Ready"
 
 
-class CancellingPhase(TurnPhase):
+class CancellingPhase(LabeledActivity, TurnPhase):
     accepts_followup = False
     keeps_project_resume = False
     label = "Cancelling"
@@ -139,7 +155,7 @@ class CancellingPhase(TurnPhase):
     def observed(self, phase: TurnPhase) -> TurnPhase:
         return self
 
-class ShutdownPhase(TurnPhase):
+class ShutdownPhase(LabeledActivity, TurnPhase):
     """Native shutdown cannot admit follow-ups or resume model activity."""
 
     accepts_followup = False
@@ -151,7 +167,7 @@ class ShutdownPhase(TurnPhase):
         return self
 
 
-class PublishingPhase(TurnPhase):
+class PublishingPhase(LabeledActivity, TurnPhase):
     accepts_followup = False
     label = "Finishing turn"
     can_cancel = False
@@ -165,19 +181,13 @@ class ModelWaitPhase(TurnPhase):
         return self
 
 
-class ResponseOutputPhase(ModelWaitPhase):
-    """The current turn has emitted assistant text or started a tool."""
-
-    has_response_output = True
-
-
-class SettlingStatsPhase(TurnPhase):
+class SettlingStatsPhase(LabeledActivity, TurnPhase):
     accepts_followup = False
     label = "Finishing native statistics"
 
 
 @dataclass(frozen=True)
-class CompactionPhase(StallExempt, Excursion):
+class CompactionPhase(LabeledActivity, StallExempt, Excursion):
     resume: TurnPhase = field(default_factory=ModelWaitPhase)
 
     @classmethod
@@ -217,7 +227,7 @@ class CompactionPhase(StallExempt, Excursion):
         return self.resume
 
 
-class ProviderRetryPhase(StallExempt, Excursion):
+class ProviderRetryPhase(LabeledActivity, StallExempt, Excursion):
     @classmethod
     def starts(cls, event: pi.PiEvent) -> bool:
         from . import pi_events as pi
@@ -233,7 +243,7 @@ class ProviderRetryPhase(StallExempt, Excursion):
     holds_refusal_reports = True
 
 
-class SummarizationRetryPhase(StallExempt, Excursion):
+class SummarizationRetryPhase(LabeledActivity, StallExempt, Excursion):
     @classmethod
     def starts(cls, event: pi.PiEvent) -> bool:
         from . import pi_events as pi
@@ -247,11 +257,10 @@ class SummarizationRetryPhase(StallExempt, Excursion):
 
 
 @dataclass(frozen=True)
-class ToolRunningPhase(Excursion):
+class ToolRunningPhase(LabeledActivity, Excursion):
     tools: tuple[tuple[str, str], ...] = ()
     activity_state = ActivityState.WORKING
     label = "Running tool"
-    has_response_output = True
 
     @property
     def summary(self) -> str:
@@ -263,7 +272,7 @@ class ToolRunningPhase(Excursion):
 
     def tool_ended(self, tool_id: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)
-        return replace(self, tools=retained) if retained else ResponseOutputPhase()
+        return replace(self, tools=retained) if retained else ModelWaitPhase()
     def may_finish(self, active_tools: set[str]) -> bool:
         return not active_tools
 

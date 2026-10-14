@@ -24,12 +24,12 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.config_options import ModelConfigOption
 from agent_comms.field_codec import FieldCodec
+from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiUnavailable
-from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
@@ -60,12 +60,11 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
         owner.on_connect(updates)
 
         async def refused_preflight(self):
-            # Inject refusal at the original prepared-session boundary after
-            # authentic SDK source/identity acquisition. No child, witness or
-            # capability response is fabricated by the caller.
+            # Inject refusal at the prompt's current capability-preflight
+            # boundary after authentic SDK source/identity acquisition.
             raise NativePiUnavailable("native preflight refused before prompt")
 
-        monkeypatch.setattr(NativeSessionPreparation, "input_ready", refused_preflight)
+        monkeypatch.setattr(backend.TurnSession, "input_ready", refused_preflight)
         with pytest.raises(RequestError) as caught:
             await owner.prompt(session, [TextContentBlock(type="text", text="test")])
         assert isinstance(caught.value.__cause__, NativePiUnavailable)
@@ -261,6 +260,15 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native
             (assignment,) = await Coordination.run_worker(assignments)
             assert assignment.wire_seq == message.seq
             assert type(assignment.lifecycle) is DeliveredAssignment
+            sender_view = comms.views.thread_presentation("sender")
+            assert sender_view is not None
+            sent_read = next(
+                outcome for outcome in sender_view.sent_notifications
+                if outcome.message.reference == message.reference
+            )
+            assert sent_read.state.startswith("Read ")
+            assert sent_read.read_at_ms == assignment.updated_at_ms
+            assert sent_read.changed
             # One turn, two inputs: the prompt and the message, each sent once.
             assert native.provider.posts == 2
             taken = native.saved_inputs()[-1]
@@ -276,6 +284,108 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native
             held.set()
             turn.cancel()
             await asyncio.gather(turn, return_exceptions=True)
+
+
+async def test_waiting_message_is_drained_when_following_input_opens(
+    native_backend, monkeypatch,
+):
+    native = native_backend
+    await native.author_history()
+    native.provider.tool_call = (
+        "bash", {"command": "sleep 2; printf slow-tool-done"},
+    )
+    opened, open_release = asyncio.Event(), asyncio.Event()
+    started, started_release = asyncio.Event(), asyncio.Event()
+    original_open = OwnerFollowingInputs.open
+    original_started = OwnerFollowingInputs.started
+
+    async def delayed_open(following, tracked):
+        opened.set()
+        await open_release.wait()
+        await original_open(following, tracked)
+
+    async def delayed_started(following, input_id):
+        started.set()
+        await started_release.wait()
+        await original_started(following, input_id)
+
+    monkeypatch.setattr(OwnerFollowingInputs, "open", delayed_open)
+    monkeypatch.setattr(OwnerFollowingInputs, "started", delayed_started)
+    async with native.open_owner(
+        runtime_enabled=True, auto_wake=True, native_options=("--tools", "bash"),
+    ) as (owner, session):
+        comms = owner._comms
+        receiver = await Coordination.run_worker(partial(comms.registry.require, session))
+        lookup = stable_thread_lookup(receiver.created_at)
+
+        def prepare():
+            comms.registry.register(
+                Thread(
+                    name="sender", tags=frozenset(), worktree=str(native.project),
+                    created_at=61002.0,
+                )
+            )
+            with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                install_private_cohort_schema(store)
+                store.participants.register(lookup, session, session, committed=True)
+
+        await Coordination.run_worker(prepare)
+        initial = await Coordination.run_worker(partial(
+            Comms(native.root, private_initial_writes=True).messaging.send_message,
+            "sender", session, "first",
+        ))
+        try:
+            await asyncio.wait_for(opened.wait(), 30)
+            # Pi has recorded the tool call and is inside its deliberately slow
+            # implementation while Core still has not opened following input.
+            await wait_for(lambda: b'"id":"local-tool-once"' in native.session.read_bytes())
+            message = await Coordination.run_worker(partial(
+                Comms(native.root, private_initial_writes=True).messaging.send_message,
+                "sender", session, "deliver as soon as following input opens",
+            ))
+            await wait_for(lambda: session in owner.inputs._idle_private_revisions)
+            key = message.seq, message.message_id
+            pending, = comms.views.message_notifications([message])[key]
+            assert pending.state == "Sent" and not pending.busy
+            open_release.set()
+            await asyncio.wait_for(started.wait(), 30)
+            in_flight, = comms.views.message_notifications([message])[key]
+            assert in_flight.state == "Sent"
+            assert in_flight.read_at_ms is None
+            started_release.set()
+            # Opening is the retry trigger; no second bus append or observation
+            # tick is needed to reserve the waiting input.
+            await wait_for(lambda: any(
+                "deliver as soon as following input opens" in (row.sent_text or "")
+                for row in owner.inputs.dispositions.read().rows.values()
+            ))
+            await wait_for(lambda: not owner.turns.turn_state(session).busy)
+
+            with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                assignments = sealed_cohort_assignments(store, lookup)
+            assert [assignment.wire_seq for assignment in assignments] == [
+                initial.seq, message.seq,
+            ]
+            assert type(assignments[-1].lifecycle) is DeliveredAssignment
+            read, = comms.views.message_notifications([message])[key]
+            assert read.state.startswith("Read ") and not read.busy
+            assert read.read_at_ms == assignments[-1].updated_at_ms
+            assert native.provider.posts == 2
+            rows = [json.loads(line) for line in native.session.read_text().splitlines()]
+            tool_result = next(
+                index for index, row in enumerate(rows)
+                if row.get("type") == "message"
+                and row["message"].get("role") == "toolResult"
+                and row["message"].get("toolCallId") == "local-tool-once"
+            )
+            following = next(
+                index for index, row in enumerate(rows)
+                if "deliver as soon as following input opens" in json.dumps(row)
+            )
+            assert tool_result < following
+        finally:
+            open_release.set()
+            started_release.set()
 
 
 async def test_waiting_messages_and_a_model_change_reach_the_next_model_call_together(
@@ -342,7 +452,7 @@ async def test_hard_exit_after_owner_acceptance_preserves_unknown_without_replay
     saved = native.session.read_bytes()
     code = """import asyncio, os, sys
 from pathlib import Path
-sys.path.insert(0,sys.argv[4])
+sys.path[:0] = [sys.argv[4], sys.argv[5]]
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import NativeBackendFixture
 from agent_comms.comms import Comms
@@ -360,7 +470,7 @@ asyncio.run(main())
 """
     result = await BoundedRun.run(
         (sys.executable, "-c", code, str(native.root), str(native.project),
-         str(native.session), str(Path(__file__).parent)),
+         str(native.session), str(Path(__file__).parent), str(Path(__file__).parents[1] / "src")),
         timeout=15, cwd=native.project,
     )
     assert result.outcome == ExitedOutcome(17), result.stderr.decode()
@@ -424,10 +534,25 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             await wait_for(lambda: native.provider.posts == 1)
             reply_turn = owner.inputs.wake_tasks[session]
             known = len(owner.inputs.dispositions.read().rows)
+            assert native.provider.requests[0]["model"] == "fixture"
+            elsewhere = Comms(native.root, private_initial_writes=True)
+
+            def store_change():
+                thread = elsewhere.registry.require(session)
+                elsewhere.threads.set_thread_configuration(
+                    thread, model="response-local/fixture-second",
+                    thinking_level=thread.thinking_level,
+                )
+
+            await Coordination.run_worker(store_change)
             second = comms.messaging.send_message("sender", session, "the yaml one, I mean")
             native.provider.response_gate = None
-            # The owner's own observation hands the second message to the running turn.
-            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == known + 1)
+            # One observer feeds settings and accepted messages through the running-turn inbox.
+            await wait_for(
+                lambda: len(owner.inputs.dispositions.read().rows) == known + 1
+                and owner.sessions.config.settings_in_use[session].model
+                == "response-local/fixture-second"
+            )
             held.set()
             await asyncio.wait_for(reply_turn, 30)
 
@@ -443,6 +568,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             assert states[first.seq] is not DeliveredAssignment
             # One turn took both: the second went in at the next model call, sent once.
             assert native.provider.posts == 2
+            assert native.provider.requests[1]["model"] == "fixture-second"
             assert "the yaml one, I mean" in json.dumps(native.provider.requests[1]["messages"])
             assert "the yaml one, I mean" not in json.dumps(native.provider.requests[0]["messages"])
             assert len({row.turn_id for row in owner.inputs.dispositions.read().rows.values()}) == 1

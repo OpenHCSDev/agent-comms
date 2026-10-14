@@ -6,12 +6,27 @@ umask 077
 unset NODE_OPTIONS NODE_PATH NODE_COMPILE_CACHE
 export NODE_DISABLE_COMPILE_CACHE=1
 update_pins=false
-if [[ $# -eq 1 && "$1" == --update-pins ]]; then
-    update_pins=true
-elif [[ $# -ne 0 ]]; then
-    printf 'Usage: prepare-pi-native [--update-pins]\n' >&2
-    exit 1
-fi
+publish_root=
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --update-pins)
+            update_pins=true
+            shift
+            ;;
+        --publish)
+            [[ $# -ge 2 && -z "$publish_root" ]] || {
+                printf 'Usage: prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT]\n' >&2
+                exit 1
+            }
+            publish_root=$2
+            shift 2
+            ;;
+        *)
+            printf 'Usage: prepare-pi-native [--update-pins] [--publish DEPLOYMENT_ROOT]\n' >&2
+            exit 1
+            ;;
+    esac
+done
 
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_root=$(cd -- "$stack_root/.." && pwd)
@@ -27,9 +42,40 @@ verify() (
         python3 "$repo_root/src/agent_comms/native_package.py" "$PWD"
 )
 
+publish() {
+    local prepared=$1 deployment deployment_package deployment_stage
+    if [[ -z "$publish_root" ]]; then
+        printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
+        return
+    fi
+    mkdir -p -- "$publish_root"
+    publish_root=$(cd -- "$publish_root" && pwd -P)
+    deployment="$publish_root/native-current-$build_id"
+    deployment_package="$deployment/node_modules/@earendil-works/pi-coding-agent"
+    if [[ -e "$deployment" ]]; then
+        verify "$deployment"
+        python3 "$repo_root/src/agent_comms/native_package.py" \
+            --install-sources "$deployment_package" "$repo_root"
+    else
+        deployment_stage=$(mktemp -d "$publish_root/.native-current-$build_id.stage.XXXXXXXX")
+        trap 'rm -rf -- "$deployment_stage"' RETURN
+        mkdir -p -- "$deployment_stage/node_modules/@earendil-works"
+        cp -a --reflink=auto -- "$prepared/node_modules/@earendil-works/pi-coding-agent" \
+            "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
+        verify "$deployment_stage"
+        python3 "$repo_root/src/agent_comms/native_package.py" \
+            --install-sources \
+            "$deployment_stage/node_modules/@earendil-works/pi-coding-agent" "$repo_root"
+        mv -- "$deployment_stage" "$deployment"
+        trap - RETURN
+    fi
+    printf 'PI_NATIVE_DEPLOYMENT=%s\n' "$deployment"
+    printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
+}
+
 if [[ "$update_pins" == false && -e "$target" ]]; then
     if verify "$target"; then
-        printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
+        publish "$target"
         exit 0
     fi
     printf 'Existing native Pi copy differs from the pinned build: %s\n' "$target" >&2
@@ -74,7 +120,7 @@ cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
 python3 "$stack_root/patch-native-compaction-brief.py" "$native_package/$session"
 python3 "$stack_root/patch-native-compaction-wip.py" "$native_package/$session"
-python3 "$stack_root/patch-native-compaction-cap.py" "$native_package/$compaction"
+python3 "$stack_root/patch-native-compaction-cap.py" "$native_package"
 python3 "$stack_root/patch-native-turn-context.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 python3 "$stack_root/patch-native-file-artifact.py" \
@@ -95,6 +141,7 @@ if [[ "$update_pins" == true ]]; then
 fi
 verify "$stage"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
@@ -102,8 +149,8 @@ node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$rpc"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
 if [[ -e "$target" ]]; then
     verify "$target"
-    printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
+    publish "$target"
     exit 0
 fi
 mv -- "$stage" "$target"
-printf 'PI_NATIVE_BIN=%s/bin/pi-native\n' "$stack_root"
+publish "$target"

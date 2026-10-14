@@ -13,7 +13,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .thread_provenance import ThreadProvenance
 from .thread_execution import ThreadExecution, NativeThreadExecution
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
 from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
@@ -50,6 +50,10 @@ class Thread(ThreadProvenance):
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     thinking_level: type[ThinkingLevel] | None = field(
         default=None, metadata={"registration_inheritance": InheritMissing}
+    )
+    service_tier: ServiceTier = field(
+        default=ServiceTier.PRIORITY, kw_only=True,
+        metadata={"registration_inheritance": InheritPrevious},
     )
     goal: Goal | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
@@ -126,6 +130,7 @@ class Thread(ThreadProvenance):
             "AGENT_COMMS_ROOT": str(root),
             "PI_PARENT_ID": self.parent or "",
             "AGENT_COMMS_MANAGED": "1",
+            SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
             "PI_WORKTREE": worktree,
             **project.environment(root),
         }
@@ -166,9 +171,30 @@ class Thread(ThreadProvenance):
         if self.thinking_level is not None:
             object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
 
+    def require_original_model_configuration(self, original: Thread) -> None:
+        changed = any((
+            self.incarnation != original.incarnation,
+            self.worktree != original.worktree,
+            self.model != original.model,
+            self.thinking_level != original.thinking_level,
+            self.service_tier != original.service_tier,
+        ))
+        if changed:
+            raise RelationViolationError("Thread configuration changed before publication")
+
+    def with_model_configuration(
+        self, *, model: str | None = None, thinking_level: str | None = None,
+        service_tier: ServiceTier | None = None,
+    ) -> Thread:
+        return replace(
+            self,
+            model=self.model if model is None else model.strip(),
+            thinking_level=self.thinking_level if thinking_level is None else thinking_level,
+            service_tier=self.service_tier if service_tier is None else service_tier,
+        )
 
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: str | None
+        self, *, model: str | None, thinking_level: str | None,
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
