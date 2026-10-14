@@ -3195,8 +3195,8 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
             (["t", "t"], ["stop"], "unrecognized_followup_input"),
             (["t"], [], "assistant_final_stop_missing"),
             (["t"], ["toolUse"], "assistant_final_stop_missing"),
-            (["t"], ["error"], "model_request_failed"),
-            (["t"], ["aborted"], "model_request_failed"),
+            (["t"], ["error"], "assistant_final_stop_missing"),
+            (["t"], ["aborted"], "assistant_final_stop_missing"),
             (["t"], ["toolUse", "stop"], None),
         ],
     )

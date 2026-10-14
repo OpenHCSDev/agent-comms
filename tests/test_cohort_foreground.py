@@ -15,6 +15,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms import claim_admission
 from agent_comms import cohort_foreground as foreground
 from agent_comms import cohort_send
 from agent_comms import coordinated_runtime as runtime
@@ -227,6 +228,14 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         _patch_package_acquisition(monkeypatch)
         monkeypatch.setattr(TrackedTurnSession, "execute", _fake_pi(calls))
+        published_resources: list[Path] = []
+        publish_claim = claim_admission.publish_selected_resource_claim
+
+        def capture_claim(comms, store, admission, owner_name, resource_path):
+            published_resources.append(resource_path.resource)
+            return publish_claim(comms, store, admission, owner_name, resource_path)
+
+        monkeypatch.setattr(claim_admission, "publish_selected_resource_claim", capture_claim)
 
         def ready(thread: Thread) -> None:
             assert resource.read_bytes() == b"before\n"
@@ -243,10 +252,11 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
             wait_seconds=0,
             ready=ready,
             selected_existing_file_write=SelectedExistingFileWrite(
-                ExistingFileClaim(Path(resource)), b"after selected claim\n"
+                ExistingFileClaim(Path("module.py")), b"after selected claim\n"
             ),
         )
         assert result is not None and result.publications
+        assert published_resources == [resource]
         assert len(calls) == 1 and resource.read_bytes() == b"after selected claim\n"
         # Successful publication releases the exact selected file claim.
         assert Comms(root).bus.log.claim_projection().get(str(resource)) is None
@@ -646,7 +656,8 @@ raise SystemExit(f.main(sys.argv[1:]))
             assert json.loads(sender.stdout)["wire_seq"] == 1
             out, err = child.communicate(timeout=12)
             assert child.returncode == 0, (out, err)
-            assert json.loads(out.strip())["publications"]
+            response = json.loads(out.strip())
+            assert response["publications"], (response, err)
             assert comms.registry.status("beta") == StoppedThreadStatus()
             assert comms.views.dm_history("sender", "beta")[-1].body == "42"
         finally:
