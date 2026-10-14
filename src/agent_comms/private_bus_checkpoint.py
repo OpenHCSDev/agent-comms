@@ -295,6 +295,22 @@ class CertifiedSourceRead:
             ordered.append(row)
         return self.capture_sources(tuple(ordered))
 
+    def replies(self, references) -> Iterator[CommittedDelivery]:
+        """Capture the deliveries that name any of these originals as answered.
+
+        The index selects by sequence only; each decoded reply still carries
+        its own reference, and its consumer checks it against the original.
+        """
+        marks = ",".join("?" for _ in references)
+        self.require_current()
+        rows = DeliverySources.read(self.connection.execute(
+            f"SELECT w.* FROM {DeliverySources.declared_name} w "
+            f"JOIN {Replies.declared_name} r ON r.seq=w.seq "
+            f"WHERE r.answered_seq IN ({marks}) ORDER BY w.seq",
+            tuple(reference.seq for reference in references),
+        ))
+        return self.capture_sources(tuple(rows))
+
     def delivery(self, seq: int) -> CommittedDelivery:
         """Resolve an exact source sequence through this original opened proof."""
         self.require_current()
@@ -686,6 +702,14 @@ class RecordedContextManifestSources(
 @dataclass(frozen=True)
 class Addressed(CheckpointTable, TypedTable):
     lookup: str = field(metadata={"sql": Column(primary_key=True)})
+    seq: int = field(metadata={"sql": Column(True, references=(DeliverySources, "seq"))})
+
+
+@dataclass(frozen=True)
+class Replies(CheckpointTable, TypedTable):
+    """A committed delivery that names an earlier message as the one it answers."""
+
+    answered_seq: int = field(metadata={"sql": Column(primary_key=True)})
     seq: int = field(metadata={"sql": Column(True, references=(DeliverySources, "seq"))})
 
 

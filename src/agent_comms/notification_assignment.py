@@ -376,33 +376,21 @@ class NotificationAssignment(NotificationSource):
         )
         if not eligible:
             return rows
-        from .presentation import MessageNotification
         from .wire_log import WireLog
 
-        bus = WireLog(root / "bus.jsonl")
         originals = {original.message.reference: original for original in sources}
-        candidates = {}
-        for lookup in {row.assignment.recipient_lookup for row in eligible}:
-            after_seq = min(
-                row.assignment.wire_seq
-                for row in eligible
-                if row.assignment.recipient_lookup == lookup
-            )
-            candidates[lookup] = tuple(
-                bus.conversation_sources(
-                    lookup,
-                    "w.seq>? AND w.sender_lookup=?",
-                    (after_seq, lookup),
-                    limit=MessageNotification.window_limit,
-                    ascending=True,
-                )
-            )
+        with WireLog(root / "bus.jsonl").certified_read() as source:
+            # Capture under the lock; decoding runs after it is released.
+            captured = source.replies(tuple({row.assignment.source for row in eligible}))
+        replies: dict[MessageReference, list[CommittedDelivery]] = {}
+        for reply in captured:
+            replies.setdefault(reply.message.reply_reference, []).append(reply)
         resolved = []
         for row in rows:
             if row.assignment.lifecycle.records_conversation_response:
                 response = row.assignment.lifecycle.recorded_response(
                     originals[row.assignment.source],
-                    candidates[row.assignment.recipient_lookup],
+                    replies.get(row.assignment.source, ()),
                     row.assignment.recipient_lookup,
                 )
                 if response is not None:
@@ -433,16 +421,16 @@ class NotificationAssignment(NotificationSource):
             raise ValueError("Channel notification status has an unsupported schema")
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
         triage_stage = sql_literal(TriageNativeExecution)
-        selected = f"w.wire_seq IN ({','.join('?' for _ in sources)})"
-        sequences = tuple(source.message.seq for source in sources)
-        # The membership relation has no assignment index; build it once for
-        # the selected assignments instead of once per row and per column.
+        # The window's assignments and their native-input membership are each
+        # selected once; membership has no assignment index, so it is built
+        # for these assignments only, not once per row and per column.
         rows = WakeAssignment.joined(
             connection.execute(
-                "WITH member AS MATERIALIZED (SELECT m.input_id,m.assignment_id,m.ordinal "
+                f"WITH w AS MATERIALIZED (SELECT * FROM {WakeAssignment.declared_name} "
+                f"WHERE wire_seq IN ({','.join('?' for _ in sources)})), "
+                "member AS MATERIALIZED (SELECT m.input_id,m.assignment_id,m.ordinal "
                 f"FROM ({NativeRuntimeInput.source_membership_sql()}) m "
-                f"WHERE m.assignment_id IN (SELECT w.assignment_id "
-                f"FROM {WakeAssignment.declared_name} w WHERE {selected})) "
+                "WHERE m.assignment_id IN (SELECT assignment_id FROM w)) "
                 f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
                 "JOIN member ON member.input_id=n.input_id "
                 "WHERE member.assignment_id=w.assignment_id "
@@ -455,13 +443,13 @@ class NotificationAssignment(NotificationSource):
                 "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms, "
                 "p.seq AS response_seq, p.message_id AS response_message_id, "
                 "p.received_at_ms AS response_received_at_ms "
-                f"FROM {WakeAssignment.declared_name} w "
+                "FROM w "
                 f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
                 "ON pointer.owner_lookup=w.recipient_lookup "
                 f"LEFT JOIN {PublicationReceipts.declared_name} p "
                 "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target "
-                f"WHERE {selected} ORDER BY w.wire_seq DESC,w.recipient",
-                sequences + sequences,
+                "ORDER BY w.wire_seq DESC,w.recipient",
+                tuple(source.message.seq for source in sources),
             ),
             AssignmentActivityEvidence,
         )
