@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import os
 import sqlite3
 import sys
@@ -41,6 +42,19 @@ def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def _maintain_in_process(root: str, start, results) -> None:
+    """One independent runtime connection maintaining the shared WAL."""
+    start.wait()
+    try:
+        complete = WakeCandidateIndex(Comms(Path(root)).bus).maintain(
+            max_rows=256, max_bytes=8 * 1024 * 1024
+        )
+    except BaseException as error:
+        results.put(("error", type(error).__name__, str(error)))
+    else:
+        results.put(("ok", complete))
+
+
 def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
@@ -59,6 +73,45 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     root_id = comms.messaging.initialize_private_initial_protocol()
     lookup = {name: stable_thread_lookup(identity) for name, identity in created.items()}
     return comms, root_id, lookup
+
+
+def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) -> None:
+    comms, _root_id, _lookup = _private(tmp_path)
+    index = WakeCandidateIndex(comms.bus)
+    comms.messaging.send_initial_cohort("sender", "#team", "initial")
+    assert index.maintain(rebuild=True)
+    for number in range(128):
+        comms.messaging.send_initial_cohort(
+            "sender", "#team", f"{number:04d} " + "x" * 4096
+        )
+    expected_seq = comms.bus.log.latest_sequence()
+    context = multiprocessing.get_context("spawn")
+    start, results = context.Event(), context.Queue()
+    processes = [
+        context.Process(
+            target=_maintain_in_process,
+            args=(str(comms.root), start, results),
+        )
+        for _ in range(2)
+    ]
+    for process in processes:
+        process.start()
+    start.set()
+    for process in processes:
+        process.join(timeout=15)
+        assert process.exitcode == 0
+    outcomes = [results.get(timeout=2) for _ in processes]
+    assert all(outcome[0] == "ok" for outcome in outcomes), outcomes
+    with sqlite3.connect(index.path) as db:
+        checkpoint = db.execute(
+            "SELECT last_seq FROM candidate_checkpoint WHERE singleton=1"
+        ).fetchone()
+        count, distinct_count = db.execute(
+            "SELECT count(*), count(DISTINCT source_seq || ':' || recipient_lookup) "
+            "FROM candidate"
+        ).fetchone()
+    assert checkpoint == (expected_seq,)
+    assert count == distinct_count
 
 
 def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(

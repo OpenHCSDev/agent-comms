@@ -59,7 +59,7 @@ from agent_comms.coordination_tables.publications import (
     canonical_publication_key,
 )
 from agent_comms.coordination_tables.recovery import ACPClientConnectivity, OwnerConnectivity
-from agent_comms.coordinator import Coordination
+from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -79,43 +79,57 @@ def db_path(tmp_path: Path) -> Path:
     return tmp_path / "coordination.sqlite3"
 
 
-def store(path: Path) -> Coordination:
-    return Coordination(str(path), clock_ms=lambda: 1_000)
+def store(path: Path) -> StandaloneCoordination:
+    return StandaloneCoordination(str(path), clock_ms=lambda: 1_000)
 
 
 def ready(
     path: Path, *, origin: ExecutionOrigin = ExecutionOrigin.WIRE, max_attempts: int = 2
-) -> Coordination:
+) -> StandaloneCoordination:
+    from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+    from agent_comms.bus_publication import CommittedDelivery, decisions_digest, decisions_wire
+    from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
+    from agent_comms.selected_source_batch import SelectedSource
+    from agent_comms.wake import WakeDecision
+
     db = store(path)
+    sources = ()
     assert isinstance(db.participants.register("owner", "Owner", "thread", committed=True), Applied)
     if origin is ExecutionOrigin.WIRE:
+        original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
         db.assignments.accept(
             WakeAssignment(
                 assignment_id="claim",
                 recipient="Owner",
                 recipient_lookup="owner",
                 wire_seq=1,
-                message_id="message",
+                message_id=original.message_id,
                 audience=MessageAudience.DIRECT,
                 accepted_at_ms=1_000,
                 updated_at_ms=1_000,
                 lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
             )
         )
+        audience = freeze_audience(original, (FrozenRecipient("owner", "Owner"),),
+                                   "0" * 64, sender_lookup="sender", sender_name="owner")
+        decisions = (WakeDecision("owner", MessageAudience.DIRECT, FullWake()),)
+        delivery = CommittedDelivery("0" * 32, original, audience, decisions,
+                                     decisions_digest(decisions_wire(decisions)), "ordinary",
+                                     RESOLVER_VERSION, POLICY_VERSION)
+        sources = (SelectedSource("claim", db.assignments, delivery),)
     db.executions.create(
         "exec",
         origin,
         "owner",
         "thread",
         max_attempts,
-        assignment_ids=("claim",) if origin is ExecutionOrigin.WIRE else (),
-        exact_target="owner" if origin is ExecutionOrigin.WIRE else None,
+        sources=sources,
     )
     db.executions.mark_pending("exec", expected_revision=1)
     return db
 
 
-def started(db: Coordination) -> tuple[str, object]:
+def started(db: StandaloneCoordination) -> tuple[str, object]:
     token = prepare_fence_token()
     result = db.attempts.start(
         AttemptStart(
@@ -132,7 +146,7 @@ def started(db: Coordination) -> tuple[str, object]:
     return token, result.value.fence
 
 
-def final_evidence(db: Coordination, fence: object, pointer_revision: int = 1) -> object:
+def final_evidence(db: StandaloneCoordination, fence: object, pointer_revision: int = 1) -> object:
     from agent_comms.owner_fence import OwnerFence
 
     assert isinstance(fence, OwnerFence)
@@ -156,7 +170,7 @@ def _concurrent_registration(
     path: str, gate: multiprocessing.Event, output: multiprocessing.Queue
 ) -> None:
     try:
-        with Coordination(path, clock_ms=lambda: 1_000) as db:
+        with StandaloneCoordination(path, clock_ms=lambda: 1_000) as db:
             gate.wait(timeout=5)
             result = db.participants.register("owner", "Owner", "thread", committed=True)
             output.put(type(result).__name__)
@@ -184,7 +198,7 @@ def _concurrent_start(
     path: str, token: str, gate: multiprocessing.Event, output: multiprocessing.Queue
 ) -> None:
     try:
-        with Coordination(path, clock_ms=lambda: 1_000) as db:
+        with StandaloneCoordination(path, clock_ms=lambda: 1_000) as db:
             gate.wait(timeout=5)
             result = db.attempts.start(
                 AttemptStart(
@@ -531,8 +545,8 @@ def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: P
         assert not observed.is_current and not observed.can_retry
 
 
-def test_nonpublication_silent_atomic_settlement(db_path: Path) -> None:
-    with ready(db_path) as db:
+def test_nonpublication_claimless_atomic_settlement(db_path: Path) -> None:
+    with ready(db_path, origin=ExecutionOrigin.ACP) as db:
         _, fence = started(db)
         fence = final_evidence(db, fence)
         settled = db.attempts.settle_nonpublication(
@@ -541,9 +555,8 @@ def test_nonpublication_silent_atomic_settlement(db_path: Path) -> None:
         assert type(settled.value.execution.lifecycle) is CompletedExecution
         assert settled.value.attempt is not None
         assert type(settled.value.attempt.lifecycle) is SucceededAttempt
-        assert settled.value.obligation is not None
-        assert settled.value.obligation.lifecycle.declared_name == "silent"
-        assert type(settled.value.assignments[0].lifecycle) is CompletedAssignment
+        assert settled.value.obligations == ()
+        assert settled.value.assignments == ()
         assert not settled.value.is_current
         assert settled.value.pointer_revision == 2
     with store(db_path) as reopened:
@@ -1405,8 +1418,8 @@ def test_concurrent_registration_one_writer_one_replay(db_path: Path) -> None:
 def _read_while_other_store_commits(
     path: Path,
     first_table: str,
-    read: Callable[[Coordination], object],
-    write: Callable[[Coordination], None],
+    read: Callable[[StandaloneCoordination], object],
+    write: Callable[[StandaloneCoordination], None],
 ) -> object:
     """Hold a reader after its first SELECT while a second connection tries COMMIT."""
     first_read = threading.Event()
@@ -1415,7 +1428,7 @@ def _read_while_other_store_commits(
     writer_done = threading.Event()
     errors: list[BaseException] = []
 
-    class PausedReader(Coordination):
+    class PausedReader(StandaloneCoordination):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             paused = False

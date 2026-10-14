@@ -11,7 +11,7 @@ from typing import Self, TypeVar
 from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
 from .child_process import join_retirement
-from .coordination_session import CoordinationSession
+from .coordination_session import CoordinationSession, NativeCoordinationSession
 from .execution_store import ExecutionStore
 from .participant_store import ParticipantStore
 from .private_runtime_schema import PrivateRuntimeSchema
@@ -22,6 +22,8 @@ Result = TypeVar("Result")
 
 
 class Coordination:
+    session_type = NativeCoordinationSession
+
     @staticmethod
     async def run_worker(operation: Callable[[], Result]) -> Result:
         """Join an owned blocking operation before its enclosing custody exits.
@@ -60,7 +62,7 @@ class Coordination:
     def __init__(
         self, path: str, *, clock_ms: Callable[[], int] | None = None, lock_timeout: float = 5.0
     ):
-        self.session = CoordinationSession(path, clock_ms=clock_ms, lock_timeout=lock_timeout)
+        self.session = self.session_type(path, clock_ms=clock_ms, lock_timeout=lock_timeout)
         self.participants = ParticipantStore(self.session)
         self.assignments = AssignmentStore(self.session)
         self.snapshots = RecoveryReader(self.session, self.participants, self.assignments)
@@ -88,3 +90,9 @@ class Coordination:
 
     def __exit__(self, *_exc: object) -> None:
         self.close()
+
+
+class StandaloneCoordination(Coordination):
+    """SQL-only consumers explicitly select the standalone session capability."""
+
+    session_type = CoordinationSession

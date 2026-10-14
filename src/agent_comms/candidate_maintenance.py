@@ -20,6 +20,14 @@ _guard = threading.Lock()
 _pending: dict[Path, tuple[MessageBus, int]] = {}
 
 
+class CandidateMaintenanceFailed(RuntimeError):  # noqa: N818 - named worker failure
+    """One optional index drain failed; a later append may start a fresh drain."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        super().__init__(f"Candidate maintenance failed for {root}")
+
+
 def schedule_candidate_catchup(bus: MessageBus, committed_seq: int) -> None:
     """A bounded memory-only signal; never wait for WAL or a wire lock here."""
     if type(bus) is not MessageBus or type(committed_seq) is not int or committed_seq <= 0:
@@ -73,11 +81,13 @@ def _drain_candidate(root: Path) -> None:
                         return
             elif not result.more_source_bytes:
                 return
-    except Exception:
-        # The worker thread has no caller: record the defect with its traceback
-        # and let the thread fail through threading.excepthook.
-        _LOG.exception("Candidate maintenance failed")
-        raise
+    except Exception as error:
+        # The worker thread has no caller. Publish one named failure through the
+        # log and threading.excepthook; finally retires this process-local drain
+        # so a later append can start a fresh one.
+        failure = CandidateMaintenanceFailed(root)
+        _LOG.exception("%s", failure)
+        raise failure from error
     finally:
         with _guard:
             _pending.pop(root, None)

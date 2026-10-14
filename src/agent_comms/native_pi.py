@@ -692,9 +692,7 @@ class PrivateEvidenceRead:
     def _open_stream(cls, path):
         stream = None
         try:
-            stream = os.fdopen(
-                os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb", buffering=0
-            )
+            stream = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
             PrivateFileRole.require(os.fstat(stream.fileno()))
             return stream
         except (OSError, ValueError) as error:
@@ -735,15 +733,9 @@ class PrivateEvidenceRead:
                 raise NativeEvidencePrefixChanged(
                     "Native Pi evidence verified prefix was truncated"
                 )
-            self.stream.seek(self.size)
             digest = self.prefix.copy_digest()
-            remaining = info.st_size - self.size
             last = b""
-            while remaining:
-                raw = self.stream.read(min(remaining, 128 * 1024))
-                if not raw:
-                    raise NativePiUnavailable("Native Pi evidence file is incomplete")
-                remaining -= len(raw)
+            for raw in self._pread_chunks(self.size, info.st_size):
                 digest.update(raw)
                 last = raw[-1:]
             if info.st_size > self.size and last != b"\n":
@@ -758,26 +750,50 @@ class PrivateEvidenceRead:
                 "Native Pi evidence file is unavailable or not private"
             ) from error
 
+    def _pread_chunks(self, start, stop):
+        """Read a pinned byte range without touching buffered decode state."""
+        descriptor = self.stream.fileno()
+        while start < stop:
+            raw = os.pread(descriptor, min(stop - start, 128 * 1024), start)
+            if not raw:
+                raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
+            start += len(raw)
+            yield raw
+
     def _decode_captured(self, size):
-        """Decode one verified physical row at a time up to the captured size."""
+        """Decode through a fresh buffer over the pinned descriptor each time."""
         try:
-            self.stream.seek(self.size)
+            descriptor = os.dup(self.stream.fileno())
         except (OSError, ValueError) as error:
             raise NativePiUnavailable(
                 "Native Pi evidence file is unavailable or not private"
             ) from error
-        remaining = size - self.size
-        while remaining:
+        try:
+            decoder = os.fdopen(descriptor, "rb")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        try:
             try:
-                raw = self.stream.readline(remaining)
+                decoder.seek(self.size)
             except (OSError, ValueError) as error:
                 raise NativePiUnavailable(
                     "Native Pi evidence file is unavailable or not private"
                 ) from error
-            if not raw or not raw.endswith(b"\n"):
-                raise NativePiUnavailable("Native Pi evidence file is incomplete")
-            remaining -= len(raw)
-            yield self._decode_row(raw)
+            remaining = size - self.size
+            while remaining:
+                try:
+                    raw = decoder.readline(remaining)
+                except (OSError, ValueError) as error:
+                    raise NativePiUnavailable(
+                        "Native Pi evidence file is unavailable or not private"
+                    ) from error
+                if not raw or not raw.endswith(b"\n"):
+                    raise NativePiUnavailable("Native Pi evidence file is incomplete")
+                remaining -= len(raw)
+                yield self._decode_row(raw)
+        finally:
+            decoder.close()
 
     @staticmethod
     def _decode_row(raw):
@@ -822,23 +838,17 @@ class PrivateEvidenceRead:
     def verify_snapshot(self, size, expected_digest):
         """Validate the captured prefix after decoding, allowing later appends.
 
-        Rehash the captured range once from the pinned unbuffered descriptor.
-        Later appends do not change those bytes; a later observation rechecks
-        them again before exposing more rows.
+        Rehash the captured range once from the pinned descriptor without
+        disturbing buffered decoding. Later appends do not change those bytes;
+        a later observation rechecks them again before exposing more rows.
         """
         before = os.fstat(self.stream.fileno())
         PrivateFileRole.require(before)
         revision = self._observe_revision_after(FileRevision.from_stat(before))
         if revision.identity != self.identity or revision.size < size:
             raise NativeEvidencePrefixChanged("Native Pi evidence snapshot source changed")
-        self.stream.seek(0)
         digest = hashlib.sha256()
-        remaining = size
-        while remaining:
-            raw = self.stream.read(min(remaining, 128 * 1024))
-            if not raw:
-                raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
-            remaining -= len(raw)
+        for raw in self._pread_chunks(0, size):
             digest.update(raw)
         if digest.digest() != expected_digest:
             raise NativeEvidencePrefixChanged("Native Pi evidence original prefix changed")
