@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Type
 
@@ -15,6 +14,7 @@ if TYPE_CHECKING:
 from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
+from .owner_launch import RestartEnvironment
 from .messages import InfoKind, Message, MessageKind
 from .change_report import ChangeReport
 from .channel_targets import is_channel_target
@@ -105,8 +105,9 @@ class Messaging:
         from .input_disposition import InputDispositions
 
         snapshot = self.registry.snapshot()
-        executing = os.environ.get("AGENT_COMMS_THREAD")
-        if executing is None or snapshot.canonical_name(executing) != owner.name:
+        if not RestartEnvironment.called_by(
+            owner.name, canonicalize=snapshot.canonical_name
+        ):
             return None
         inputs = InputDispositions(self.root / InputDispositions.filename).read()
         with self.bus.log.certified_read() as source:
