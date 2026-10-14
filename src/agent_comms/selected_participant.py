@@ -216,7 +216,7 @@ class SelectedParticipant(MroDispatch):
             pending = pending_sealed_assignments(
                 store, lookup, thread.name, after_seq=after_seq
             )
-            sent_read = NotificationAssignment.capture_window(
+            sent_read = NotificationAssignment.capture(
                 store.session._connection, sent_sources
             )
         if pending:
