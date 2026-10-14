@@ -56,7 +56,8 @@ async def test_real_saved_native_failure_then_distinct_fresh_input(native_backen
         native.provider.status = 503
         with pytest.raises(RequestError):
             await agent.prompt(session_id, [TextContentBlock(type='text', text='isolated failed input')])
-        assert native.provider.posts == 1
+        failed_posts = native.provider.posts
+        assert failed_posts == 4  # One request plus Pi's three declared provider retries.
         comms = agent._comms
         owner = comms.registry.snapshot().owner_identity(session_id)
         # The warning is the original observer's retained diagnostic. Its presence
@@ -66,7 +67,7 @@ async def test_real_saved_native_failure_then_distinct_fresh_input(native_backen
         native.provider.status = 200
         native.provider.text = 'Distinct fresh native reply.'
         fresh = await agent.prompt(session_id, [TextContentBlock(type='text', text='isolated fresh input')])
-        assert native.provider.posts == 2
+        assert native.provider.posts == failed_posts + 1
         saved = [message['content'] for message in native.saved_inputs()]
         assert sum('isolated failed input' in str(content) for content in saved) == 1
         assert sum('isolated fresh input' in str(content) for content in saved) == 1

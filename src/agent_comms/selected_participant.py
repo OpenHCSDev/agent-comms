@@ -185,6 +185,9 @@ class SelectedParticipant(MroDispatch):
         owner = RegistryOwner(thread=thread, admission_generation=generation)
         owner.require_registry(comms.registry)
         lookup = stable_thread_lookup(thread.created_at)
+        LiveResponseOwner(
+            thread=thread, admission_generation=generation
+        ).resolve_retained(store, bus)
         participant = store.participants.get(lookup)
         identity = ParticipantOwner(thread, participant.participant_generation)
         with store.session.read():
