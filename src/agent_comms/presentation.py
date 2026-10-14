@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, replace
+from datetime import datetime
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -62,10 +63,23 @@ class MessageNotification:
     displayed_to: tuple[ThreadIncarnation, ...] = ()
     reply_reference: MessageReference | None = None
     read_at_ms: int | None = None
+    answered_at_ms: int | None = None
 
     @property
     def recipient(self) -> str:
         return self.recipient_identity.canonical_thread
+
+    @staticmethod
+    def receipt_state(label: str, timestamp_ms: int | None) -> str:
+        """Format a required durable receipt in the viewer's local time."""
+        if timestamp_ms is None:
+            raise ValueError(f"{label} notification requires a durable receipt time")
+        recorded = datetime.fromtimestamp(timestamp_ms / 1000).astimezone()
+        now = datetime.now().astimezone()
+        when = recorded.strftime("%H:%M")
+        if recorded.date() != now.date():
+            when = recorded.strftime("%b %d %H:%M").replace(" 0", " ")
+        return f"{label} {when}"
 
     @classmethod
     def window(
