@@ -151,10 +151,13 @@ class QueuedInput:
     @staticmethod
     def remaining_capacity(inputs: InputDrain, session_id: str) -> int:
         """How many follow-ups the current locked transaction may still place."""
-        document = inputs.dispositions.read()
+        sources = tuple(inputs.following_sources.get(session_id, {}).values())
+        document = inputs.dispositions.rows(tuple(
+            key for source in sources for key in source.keys
+        ))
         return 32 - sum(
             not document.all_started(source.keys)
-            for source in inputs.following_sources.get(session_id, {}).values()
+            for source in sources
         )
 
     @classmethod
@@ -228,7 +231,7 @@ class QueuedInput:
                 snapshot = inputs.comms.registry.snapshot()
                 canonical = snapshot.canonical_name(name)
                 self.require_handoff(
-                    snapshot, canonical, inputs.dispositions.read().lookup(self.key), self.input_id,
+                    snapshot, canonical, inputs.dispositions.lookup(self.key), self.input_id,
                 )
         except RelationViolationError as error:
             raise InputHandoffRefused(str(error)) from error
@@ -333,7 +336,10 @@ class DeliveredInput(QueuedInput):
         canonical = snapshot.canonical_name(name)
         owner = snapshot.threads[canonical]
         context = QueuedInputContext.capture(owner, snapshot.admission_identity(canonical))
-        document = inputs.dispositions.read()
+        keys = tuple(
+            InputDispositions.bus_key(source.message, owner) for source, _assignment in pending
+        )
+        document = inputs.dispositions.rows(keys)
         reserved = []
         for source, assignment in pending:
             message = source.message
@@ -393,7 +399,7 @@ class DeliveredInput(QueuedInput):
             snapshot = inputs.comms.registry.snapshot()
             owner = snapshot.require(inputs.sessions.require(session_id))
             lookup = stable_thread_lookup(owner.created_at)
-            document = inputs.dispositions.read()
+            document = inputs.dispositions.unresolved_for(owner.name)
             live_keys = {
                 item.key for item in inputs.queued_inputs.get(session_id, {}).values()
             }

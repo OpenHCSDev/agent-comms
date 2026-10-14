@@ -185,7 +185,7 @@ class OwnedTurn:
                 self.original_keys = (*self.original_keys, *(row.key for row in originals))
                 document = self.runner.inputs.dispositions.record_originals(*originals)
         else:
-            document = self.runner.inputs.dispositions.read()
+            document = self.runner.inputs.dispositions.rows(self.original_keys)
         batch = InputBatch.capture(
             self.origins,
             self.original_keys,

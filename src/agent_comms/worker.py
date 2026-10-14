@@ -63,7 +63,7 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
             with _store_lock(agent._comms._wire_lock_path):
                 snapshot = agent._comms.registry.snapshot()
                 owner = snapshot.threads[name]
-                row = agent.inputs.dispositions.read().rows[key]
+                row = agent.inputs.dispositions.lookup(key)
                 if not row.queued_for(
                     owner.incarnation, snapshot.admission_generations[name], row.source_text
                 ):

@@ -225,6 +225,12 @@ class InputDispositions:
         placeholders = ",".join("?" for _ in keys)
         return self._select(f"key IN ({placeholders})", keys)
 
+    def lookup(self, key: str) -> InputAttempt:
+        return self.rows((key,)).lookup(key)
+
+    def unresolved_for(self, owner: str) -> InputDocument:
+        return self._select("owner = ? AND unresolved = 1", (owner,))
+
     @contextmanager
     def reading(self):
         yield self.read()
