@@ -500,7 +500,7 @@ async def test_removed_sent_session_is_context_not_a_model_start_blocker(
     assert '"detail":"Recipient session removed"' in calls[0][1]
 
 
-async def test_unavailable_sent_outcomes_do_not_block_model_start(
+async def test_unavailable_sent_outcomes_propagate_before_model_start(
     tmp_path: Path, monkeypatch,
 ) -> None:
     from agent_comms.native_pi import NativePiUnavailable
@@ -516,12 +516,13 @@ async def test_unavailable_sent_outcomes_do_not_block_model_start(
     runner, calls = _fake_model()
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
 
-    outcome = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-    ).run()
+    with pytest.raises(NativePiUnavailable, match="optional sent outcome unavailable"):
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta",
+            native_package=tmp_path, opt_in=True,
+        ).run()
 
-    assert outcome is not None
-    assert len(calls) == 1
+    assert calls == []
 
 
 async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch) -> None:

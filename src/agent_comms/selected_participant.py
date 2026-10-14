@@ -14,7 +14,7 @@ from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _receipt_matches, pending_sealed_assignments
-from .coordination_errors import CoordinationError, IdentityConflict, StaleFence
+from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, _assert_response_schema
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
@@ -24,7 +24,6 @@ from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
 from .native_attestation import ObservedAttestation
 from .native_input_owner import ParticipantOwner, RegistryOwner
-from .native_pi import NativePiUnavailable
 from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
@@ -33,7 +32,6 @@ from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
 from .turn_phase import PreparingPhase, TurnPhase
-from .wake_candidate_index import ProjectionUnavailableError
 
 
 @dataclass
@@ -156,18 +154,9 @@ class SelectedParticipant(MroDispatch):
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""
-        try:
-            outcomes = MessageNotification.for_sources(
-                comms.root, comms.registry, owner, sources, assignment_read=assignment_read,
-            )
-        except (
-            CoordinationError,
-            NativePiUnavailable,
-            ProjectionUnavailableError,
-            RelationViolationError,
-            OSError,
-        ):
-            return ()
+        outcomes = MessageNotification.for_sources(
+            comms.root, comms.registry, owner, sources, assignment_read=assignment_read,
+        )
         return tuple(outcome for outcome in outcomes if outcome.changed)
 
     @staticmethod

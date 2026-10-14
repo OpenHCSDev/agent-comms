@@ -383,6 +383,48 @@ class NotificationAssignment(NotificationSource):
         )
 
     @classmethod
+    def read(
+        cls,
+        root: Path,
+        predicate: str,
+        parameters: tuple,
+        *,
+        limit: int = 0,
+        ascending: bool = False,
+    ) -> NotificationAssignmentRead:
+        """Capture assignment evidence through the single observing connection owner."""
+        from .coordination_database import CoordinationStore
+        from .recovery_projection import _preflight
+
+        database = cls.database_path(root)
+        failure = _preflight(database)
+        if failure == "missing":
+            return NotificationAssignmentRead(())
+        if failure:
+            raise ValueError(f"Channel notification status unavailable: {failure}")
+        with CoordinationStore.observing(database, lock_timeout=0.05) as connection:
+            return cls.capture(
+                connection, predicate, parameters, limit=limit, ascending=ascending
+            )
+
+    @classmethod
+    def read_window(
+        cls, root: Path, sources: Sequence[CommittedDelivery]
+    ) -> NotificationAssignmentRead:
+        from .presentation import MessageNotification
+
+        if len(sources) > MessageNotification.window_limit:
+            raise ValueError("Notification reads require a bounded visible message window")
+        if not sources:
+            return NotificationAssignmentRead(())
+        placeholders = ",".join("?" for _ in sources)
+        return cls.read(
+            root,
+            f"w.wire_seq IN ({placeholders})",
+            tuple(source.message.seq for source in sources),
+        )
+
+    @classmethod
     def select(
         cls,
         root: Path,
@@ -391,21 +433,10 @@ class NotificationAssignment(NotificationSource):
         *,
         limit: int = 0,
         ascending: bool = False,
-    ):
-        from .coordination_database import CoordinationStore
-        from .recovery_projection import _preflight
-
-        database = cls.database_path(root)
-        failure = _preflight(database)
-        if failure == "missing":
-            return ()
-        if failure:
-            raise ValueError(f"Channel notification status unavailable: {failure}")
-        with CoordinationStore.observing(database, lock_timeout=0.05) as connection:
-            captured = cls.capture(
-                connection, predicate, parameters, limit=limit, ascending=ascending
-            )
-        return captured.resolve()
+    ) -> tuple[NotificationAssignment, ...]:
+        return cls.read(
+            root, predicate, parameters, limit=limit, ascending=ascending
+        ).resolve()
 
     @property
     def recipient(self) -> FrozenRecipient:

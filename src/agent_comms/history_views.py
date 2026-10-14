@@ -38,6 +38,7 @@ from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHi
 from .message_bus import MessageBus
 from .message_page import MessagePage
 from .message_reference import MessageReference
+from .notification_assignment import NotificationAssignment
 from .messages import Message
 from .messaging import Messaging
 from .presentation import (
@@ -344,14 +345,16 @@ class HistoryViews:
         owner = captured.read.identity.thread
         if not owner.incarnation.current(snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
+        assignment_read = NotificationAssignment.read_window(
+            self.root, (*captured.sources, *captured.sent_sources))
         return replace(
             view.presentation,
             notifications=MessageNotification.for_sources(
-                self.root, self.registry, owner, captured.sources
-            ),
+                self.root, self.registry, owner, captured.sources,
+                assignment_read=assignment_read),
             sent_notifications=MessageNotification.for_sources(
-                self.root, self.registry, owner, captured.sent_sources
-            ),
+                self.root, self.registry, owner, captured.sent_sources,
+                assignment_read=assignment_read),
             read_identity=captured.read.identity,
         )
 
