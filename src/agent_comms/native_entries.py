@@ -254,7 +254,14 @@ class NativeEvidenceRead:
         self.entries = ()
 
     def observe(self):
-        from .native_pi import NativePiUnavailable, _private_session_dir
+        return self._observe(reverified=False)
+
+    def _observe(self, *, reverified: bool):
+        from .native_pi import (
+            NativeEvidencePrefixChanged,
+            NativePiUnavailable,
+            _private_session_dir,
+        )
 
         try:
             _private_session_dir(self.source.path.parent)
@@ -264,6 +271,16 @@ class NativeEvidenceRead:
                 raise ValueError("Native Pi session header is invalid")
             entries[0].require_header()
             _private_session_dir(self.source.path.parent)
+        except NativeEvidencePrefixChanged:
+            if reverified:
+                self.close()
+                raise
+            # Replacement, truncation or a changed prior hash enters the
+            # source owner's named unverified state. Reopen once and decode
+            # from byte zero; no stale entry or offset survives the transition.
+            self.entries = ()
+            self.source.reverify_from_start()
+            return self._observe(reverified=True)
         except NativePiUnavailable:
             self.close()
             raise
