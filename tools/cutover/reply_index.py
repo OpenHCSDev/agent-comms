@@ -31,7 +31,9 @@ def rebuild(root: Path, backup: Path) -> None:
             backup.mkdir(parents=True, exist_ok=False, mode=0o700)
             shutil.copy2(bus.metadata_path, backup / bus.metadata_path.name)
             marker = bus.read_metadata_unlocked()
-            sidecar.rename(backup / sidecar.name)
+            # The backup lives on another filesystem than the bus root.
+            shutil.copy2(sidecar, backup / sidecar.name)
+            sidecar.unlink()
             bus.write_metadata_unlocked(replace(marker, checkpoint_version=None, checkpoint_seal=None))
             install_private_bus_checkpoint(bus, _bus_locked=True)
         finally:
