@@ -15,14 +15,22 @@ from agent_comms import agent_events as ae, backend
 from agent_comms.pi_native_backend import PersistentPiSession
 from compaction_loopback import LoopbackProvider
 
-OVERLOADED = "Our servers are currently overloaded. Please try again later."
+CODEX_RETRYABLE = (
+    "Codex error: An error occurred while processing your request. You can retry your request, "
+    "or contact us through our help center at help.openai.com if the error persists."
+)
 
 
 @pytest.mark.asyncio
-async def test_actual_native_refusal_preserves_saved_history(tmp_path, monkeypatch):
+async def test_actual_native_refusal_after_tool_preserves_saved_history(tmp_path, monkeypatch):
+    marker = tmp_path / "read-once.txt"
+    marker.write_text("tool completed before provider refusal")
+    tool_reply = LoopbackProvider(status=200)
+    tool_reply.tool_call = ("read", {"path": str(marker)})
     replies = deque([
         LoopbackProvider(status=200, text="saved history before recovery"),
-        *(LoopbackProvider(status=503, error_message=OVERLOADED) for _ in range(3)),
+        tool_reply,
+        *(LoopbackProvider(status=503, error_message=CODEX_RETRYABLE) for _ in range(3)),
         LoopbackProvider(status=200, text="answered after three refusals"),
     ])
     received = []
@@ -80,14 +88,15 @@ async def test_actual_native_refusal_preserves_saved_history(tmp_path, monkeypat
             saved = next(event.session_file for event in seed
                          if isinstance(event, ae.AgentInfo) and event.session_file)
             original = Path(saved).read_bytes()
-            recovered = await turn("New input receiving three empty refusals")
+            recovered = await turn("Read the marker, then survive three empty refusals")
             assert isinstance(recovered[-1], ae.Done) and recovered[-1].ok, recovered
             assert recovered[-1].text == "answered after three refusals"
             assert not any(isinstance(event, ae.Error) for event in recovered)
+            assert len([event for event in recovered if isinstance(event, ae.ToolStart)]) == 1
             assert [event.attempt.attempt for event in recovered
                     if isinstance(event, ae.TurnState) and event.state == "retrying"] == [1, 2, 3]
             assert Path(saved).read_bytes().startswith(original)
-            assert not replies and len(received) == 5
+            assert not replies and len(received) == 6
             assert all(reply.posts == 1 for reply in received)
             journal = [json.loads(line) for line in Path(saved).read_text().splitlines()]
             users = [row["message"] for row in journal
