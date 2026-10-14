@@ -81,78 +81,41 @@ def test_source_change_during_original_read(tmp_path, monkeypatch, phase, paddin
         thread = threading.Thread(target=writer)
         thread.start()
         try:
-            if change == "append" and phase != "capture":
-                assert len(tuple(source.rows())) == 2
-                assert source.size == len(original)
-                assert tuple(source.rows())[0]["id"] == "concurrent-append"
-            else:
-                # Chunked capture cannot distinguish an append from a prefix
-                # rewrite before unread chunks, so revision growth there fails
-                # closed. Growth after capture is rehashed and admitted.
+            changed_before_hash = phase == "hash_before" and change in {
+                "prefix_and_append", "truncate",
+            }
+            if phase == "capture" or changed_before_hash:
                 with pytest.raises(NativePiUnavailable):
                     tuple(source.rows())
                 assert source.stream.closed
+            else:
+                assert len(tuple(source.rows())) == 2
+                assert source.size == len(original)
+                if change == "append":
+                    assert tuple(source.rows())[0]["id"] == "concurrent-append"
+                elif change == "rewrite":
+                    assert tuple(source.rows()) == ()  # same bytes are unchanged evidence
+                else:
+                    # A mutation after this observation is fenced by the next
+                    # observation, not by a racy final stat.
+                    with pytest.raises(NativePiUnavailable):
+                        tuple(source.rows())
         finally:
             entered.set()
             thread.join(5)
         assert not thread.is_alive() and not failures
 
 
-def test_consecutive_appends_rehash_only_the_captured_prefix(tmp_path, monkeypatch):
+def test_append_during_decoding_is_read_on_the_next_observation(tmp_path):
     session = _evidence(tmp_path)
     original = session.read_bytes()
     with PrivateEvidenceRead.open(session) as source:
-        real_read = source.stream.read
-        reads = []
-        passes = 0
-
-        def reading(size):
-            nonlocal passes
-            start = source.stream.tell()
-            data = real_read(size)
-            if size > 1:
-                if start == 0:
-                    passes += 1
-                reads.append((start, size))
-                # Two consecutive hashing passes see growth after reading their
-                # last byte. Neither can certify the old digest at the new revision.
-                if passes in (2, 3) and source.stream.tell() == len(original):
-                    append_to(session)
-            return data
-
-        monkeypatch.setattr(source.stream, "read", reading)
-        assert len(tuple(source.rows())) == 2
-        assert reads == [(0, len(original))] * 4  # capture + three bounded passes
+        rows = source.rows()
+        first = next(rows)
+        append_to(session)
+        assert len((first, *rows)) == 2
         assert source.size == len(original)
-        assert len(tuple(source.rows())) == 2  # later bytes decoded only now
-
-
-def test_continuous_append_exhausts_owned_prefix_verification_resource(tmp_path, monkeypatch):
-    session = _evidence(tmp_path)
-    original = session.read_bytes()
-    with PrivateEvidenceRead.open(session) as source:
-        real_read = source.stream.read
-        reads = 0
-        passes = 0
-
-        def reading(size):
-            nonlocal reads, passes
-            start = source.stream.tell()
-            data = real_read(size)
-            if size > 1:
-                reads += 1
-                if start == 0:
-                    passes += 1
-                if passes > 1 and source.stream.tell() == len(original):
-                    append_to(session)
-            return data
-
-        monkeypatch.setattr(source.stream, "read", reading)
-        with pytest.raises(NativePiUnavailable, match="did not become stable"):
-            tuple(source.rows())
-        assert reads == 1 + source.prefix_verification_attempts
-        assert source.stream.closed
-        assert session.read_bytes().startswith(original)
+        assert tuple(source.rows())[0]["id"] == "concurrent-append"
 
 
 async def test_actual_saved_native_tool_start_uses_prefix_reader(native_backend, monkeypatch):

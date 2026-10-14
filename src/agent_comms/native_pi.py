@@ -654,8 +654,6 @@ class PrivateEvidenceRead:
     checks both the descriptor and named revision across the observation.
     """
 
-    prefix_verification_attempts = 3
-
     def __init__(self, path, stream):
         self.path, self.stream = path, stream
         self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
@@ -754,33 +752,26 @@ class PrivateEvidenceRead:
     def verify_snapshot(self, size, expected_digest):
         """Validate the captured prefix after decoding, allowing later appends.
 
-        Growth is not proof of an append: a writer may also change bytes after
-        the final read. Rehash the same captured range after growth, accepting
-        only a matching digest read under one unchanged private-file revision.
-        Later bytes remain for the next observation; no rows are decoded again.
+        Rehash the captured range once from the pinned unbuffered descriptor.
+        Later appends do not change those bytes; a later observation rechecks
+        them again before exposing more rows.
         """
         before = os.fstat(self.stream.fileno())
         PrivateFileRole.require(before)
-        revision = FileRevision.from_stat(before)
+        revision = self._observe_revision_after(FileRevision.from_stat(before))
         if revision.identity != self.identity or revision.size < size:
             raise NativePiUnavailable("Native Pi evidence snapshot source changed")
-        for _attempt in range(self.prefix_verification_attempts):
-            self.stream.seek(0)
-            digest = hashlib.sha256()
-            remaining = size
-            while remaining:
-                raw = self.stream.read(min(remaining, 128 * 1024))
-                if not raw:
-                    raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
-                remaining -= len(raw)
-                digest.update(raw)
-            if digest.digest() != expected_digest:
-                raise NativePiUnavailable("Native Pi evidence original prefix changed")
-            observed = self._observe_revision_after(revision)
-            if observed == revision:
-                return
-            revision = observed
-        raise NativePiUnavailable("Native Pi evidence prefix did not become stable")
+        self.stream.seek(0)
+        digest = hashlib.sha256()
+        remaining = size
+        while remaining:
+            raw = self.stream.read(min(remaining, 128 * 1024))
+            if not raw:
+                raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
+            remaining -= len(raw)
+            digest.update(raw)
+        if digest.digest() != expected_digest:
+            raise NativePiUnavailable("Native Pi evidence original prefix changed")
 
     def _observe_revision_after(self, revision):
         """Check original private inode and monotonic growth, not byte integrity.
