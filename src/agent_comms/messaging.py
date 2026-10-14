@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Type
 
@@ -16,6 +17,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
 from .messages import InfoKind, Message, MessageKind
 from .change_report import ChangeReport
+from .channel_targets import is_channel_target
 from .store_files import _store_lock
 from .thread_identity import ThreadRole
 from .threads import Thread
@@ -75,8 +77,14 @@ class Messaging:
                     "Human messages require the explicit user-message operation."
                 )
             message = Message(
-                sender=owner.name, target=target, body=body, type=type,
-                notice=notice, task=task, report=report,
+                sender=owner.name,
+                target=target,
+                body=body,
+                type=type,
+                notice=notice,
+                task=task,
+                report=report,
+                reply_reference=self._active_reply_reference(owner, target),
             )
             if claims or releases:
                 committed = self.bus.publisher.publish_claim_envelope(
@@ -89,6 +97,30 @@ class Messaging:
             else:
                 committed = self.bus.publisher.publish_ordinary(message)
         return committed
+
+    def _active_reply_reference(self, owner: Thread, target: str) -> MessageReference | None:
+        lease = owner.turn_lease
+        if lease is None:
+            return None
+        from .input_disposition import InputDispositions
+
+        snapshot = self.registry.snapshot()
+        executing = os.environ.get("AGENT_COMMS_THREAD")
+        if executing is None or snapshot.canonical_name(executing) != owner.name:
+            return None
+        inputs = InputDispositions(self.root / InputDispositions.filename).read()
+        with self.bus.log.certified_read() as source:
+            references = inputs.active_reply_references(
+                lease, source.marker.root_id, snapshot
+            )
+            originals = tuple(source.references(references))
+        canonical_target = target if is_channel_target(target) else snapshot.canonical_name(target)
+        matching = tuple(
+            original.message.reference
+            for original in originals
+            if original.message.exact_reply_target == canonical_target
+        )
+        return matching[-1] if matching else None
 
     def initialize_private_initial_protocol(self) -> str:
         """Initialize the private protocol on a fresh owner-only root."""

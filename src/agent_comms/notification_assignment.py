@@ -517,7 +517,6 @@ class NotificationAssignment(NotificationSource):
                     originals[row.assignment.source],
                     candidates[row.assignment.recipient_lookup],
                     row.assignment.recipient_lookup,
-                    row.assignment.updated_at_ms,
                 )
                 if response is not None:
                     row = replace(row, activity=row.activity.recorded_response(response))
