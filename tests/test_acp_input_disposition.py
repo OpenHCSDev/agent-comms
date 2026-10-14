@@ -24,6 +24,7 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.config_options import ModelConfigOption
 from agent_comms.field_codec import FieldCodec
+from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
@@ -276,6 +277,88 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native
             held.set()
             turn.cancel()
             await asyncio.gather(turn, return_exceptions=True)
+
+
+async def test_waiting_message_is_drained_when_following_input_opens(
+    native_backend, monkeypatch,
+):
+    native = native_backend
+    await native.author_history()
+    native.provider.tool_call = (
+        "bash", {"command": "sleep 2; printf slow-tool-done"},
+    )
+    opened, release = asyncio.Event(), asyncio.Event()
+    original_open = OwnerFollowingInputs.open
+
+    async def delayed_open(following, tracked):
+        opened.set()
+        await release.wait()
+        await original_open(following, tracked)
+
+    monkeypatch.setattr(OwnerFollowingInputs, "open", delayed_open)
+    async with native.open_owner(
+        runtime_enabled=True, auto_wake=True, native_options=("--tools", "bash"),
+    ) as (owner, session):
+        comms = owner._comms
+        receiver = await Coordination.run_worker(partial(comms.registry.require, session))
+        lookup = stable_thread_lookup(receiver.created_at)
+
+        def prepare():
+            comms.registry.register(
+                Thread(
+                    name="sender", tags=frozenset(), worktree=str(native.project),
+                    created_at=61002.0,
+                )
+            )
+            with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                install_private_cohort_schema(store)
+                store.participants.register(lookup, session, session, committed=True)
+
+        await Coordination.run_worker(prepare)
+        initial = await Coordination.run_worker(partial(
+            Comms(native.root, private_initial_writes=True).messaging.send_message,
+            "sender", session, "first",
+        ))
+        try:
+            await asyncio.wait_for(opened.wait(), 30)
+            # Pi has recorded the tool call and is inside its deliberately slow
+            # implementation while Core still has not opened following input.
+            await wait_for(lambda: b'"id":"local-tool-once"' in native.session.read_bytes())
+            message = await Coordination.run_worker(partial(
+                Comms(native.root, private_initial_writes=True).messaging.send_message,
+                "sender", session, "deliver as soon as following input opens",
+            ))
+            await wait_for(lambda: session in owner.inputs._idle_private_revisions)
+            release.set()
+            # Opening is the retry trigger; no second bus append or observation
+            # tick is needed to reserve the waiting input.
+            await wait_for(lambda: any(
+                "deliver as soon as following input opens" in (row.sent_text or "")
+                for row in owner.inputs.dispositions.read().rows.values()
+            ))
+            await wait_for(lambda: not owner.turns.turn_state(session).busy)
+
+            with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                assignments = sealed_cohort_assignments(store, lookup)
+            assert [assignment.wire_seq for assignment in assignments] == [
+                initial.seq, message.seq,
+            ]
+            assert type(assignments[-1].lifecycle) is DeliveredAssignment
+            assert native.provider.posts == 2
+            rows = [json.loads(line) for line in native.session.read_text().splitlines()]
+            tool_result = next(
+                index for index, row in enumerate(rows)
+                if row.get("type") == "message"
+                and row["message"].get("role") == "toolResult"
+                and row["message"].get("toolCallId") == "local-tool-once"
+            )
+            following = next(
+                index for index, row in enumerate(rows)
+                if "deliver as soon as following input opens" in json.dumps(row)
+            )
+            assert tool_result < following
+        finally:
+            release.set()
 
 
 async def test_waiting_messages_and_a_model_change_reach_the_next_model_call_together(
