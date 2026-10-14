@@ -267,7 +267,7 @@ class AssignedTranscriptSource:
 
         lookup = stable_thread_lookup(self.recipient.created_at)
         for fragment in fragments:
-            selected = tuple((record, reader.input_for(record)) for record in fragment)
+            selected = tuple(zip(fragment, reader.inputs_within(fragment), strict=True))
             with TranscriptRead.publication_source(self.root) as db:
                 # Missing coordination remains detached native history. Do not
                 # introduce header failures where no SQL source was selected.

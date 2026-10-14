@@ -179,8 +179,44 @@ class NativeTranscript:
                 return None
         return None
 
+    def inputs_within(self, records: tuple[NativeRecord, ...]):
+        """Resolve display ancestry from the already bounded page fragment.
+
+        Thread opening must not turn a page boundary into a walk toward the
+        beginning of an arbitrarily large session. A fragment contains each
+        decoded parent it may lend to its records; ancestry outside that
+        fragment remains detached until that earlier page is read.
+        """
+        entries = {
+            record.entry.id: record.entry
+            for record in records
+            if record.entry is not None and record.entry.id is not None
+        }
+        resolved = {}
+
+        def resolve(entry):
+            if entry.input_boundary:
+                return entry
+            if entry.id in resolved:
+                return resolved[entry.id]
+            trail = []
+            while not entry.input_boundary:
+                if entry.id in resolved:
+                    entry = resolved[entry.id]
+                    break
+                trail.append(entry.id)
+                entry = entries.get(entry.parent_id)
+                if entry is None:
+                    break
+            boundary = entry if entry is not None and entry.input_boundary else None
+            for identity in trail:
+                resolved[identity] = boundary
+            return boundary
+
+        return tuple(resolve(record.entry) if record.entry is not None else None for record in records)
+
     def input_for(self, record: NativeRecord):
-        """The native record and its parent chain own the original input."""
+        """The native publication record and its parent chain own its input proof."""
         if record.entry is None:
             return None
         return record.entry if record.entry.input_boundary else self.input_ancestor(record)

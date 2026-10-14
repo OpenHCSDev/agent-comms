@@ -92,6 +92,26 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
     assert len(decoded) == 5 and forward.events == latest.events
 
 
+def test_display_ancestry_is_resolved_only_within_the_bounded_fragment(tmp_path, monkeypatch):
+    path = tmp_path / "session.jsonl"
+    path.write_bytes(
+        encoded({
+            "type": "message", "id": "input",
+            "message": {"role": "user", "content": [{"type": "text", "text": "ask"}]},
+        })
+        + encoded({
+            "type": "message", "id": "answer", "parentId": "input",
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "answer"}]},
+        })
+    )
+    reader = NativeTranscript(path)
+    records = tuple(reader.forward(0, path.stat().st_size))
+    monkeypatch.setattr(NativeTranscript, "reverse", lambda *_: pytest.fail("walked before page"))
+
+    assert reader.inputs_within(records) == (records[0].entry, records[0].entry)
+    assert reader.inputs_within(records[1:]) == (None,)
+
+
 def test_malformed_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     path = tmp_path / "session.jsonl"
     extension = {"type": "plugin-note", "custom": {"future": True}}
