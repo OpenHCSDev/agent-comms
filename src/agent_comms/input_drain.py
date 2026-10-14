@@ -28,6 +28,7 @@ from .coordination_errors import CoordinationError, IdentityConflict
 from .drain_failures import drain_failures
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
+from .bus_projection import BusFileRevision
 from .bus_publication import stable_thread_lookup
 from .cursor_owner import CursorOwner
 from .child_process import join_retirement
@@ -47,6 +48,8 @@ from .store_files import _async_store_lock, _store_lock, file_revision
 from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
+from .wire_log import OpenedWireSnapshot
+from .wire_metadata import WireMetadata
 from .wire_watch import WatchSource, WireWatch
 from .goal_presentation import GoalExecutionState
 from .goal_waits import GoalWaits
@@ -147,6 +150,7 @@ class SettledTick:
     revision: TickRevision
     entry: RegistryEntry
     admission_after_seq: int | None = None
+    through_seq: int = 0
 
 
 class InputObservation:
@@ -199,6 +203,33 @@ class InputObservation:
         if session_id in self.effects.turns.turn_tasks:
             return False
         return session_id not in self.backend_inboxes
+
+    def _appended_rows_for_owner(
+        self, settled: SettledTick, revision: TickRevision, lookup: str,
+    ) -> tuple[WireMetadata, bool]:
+        """Read only bytes appended since this owner's settled observation."""
+        previous_info, current_info = settled.revision.bus[0], revision.bus[0]
+        if previous_info is None or current_info is None:
+            raise RelationViolationError("Wire tail has no stable file revision")
+        log = self.comms.bus.log
+        metadata = log._private_marker_unlocked()
+        if file_revision(log.metadata_path) != revision.bus[1]:
+            raise RelationViolationError("Wire marker changed after tick capture")
+        with log.path.open("rb") as stream:
+            current = BusFileRevision.capture(stream)
+            if current != BusFileRevision(*current_info):
+                raise RelationViolationError("Wire changed after tick capture")
+            opened = OpenedWireSnapshot(metadata, metadata.last_seq, stream, current)
+            records = opened.appended_records(
+                BusFileRevision(*previous_info), settled.through_seq,
+            )
+        addressed = any(
+            recipient.recipient_lookup == lookup
+            for record in records
+            for delivery in record.deliveries()
+            for recipient in delivery.audience.recipients
+        )
+        return metadata, addressed
 
 
 class InputDrain(InputObservation):
@@ -429,7 +460,9 @@ class InputDrain(InputObservation):
                     and revision.coordination == settled.revision.coordination
                 )
                 if idle and shared_unchanged:
-                    settled = SettledTick(revision, entry, settled.admission_after_seq)
+                    settled = SettledTick(
+                        revision, entry, settled.admission_after_seq, settled.through_seq,
+                    )
                     continue
                 if idle and not shared_unchanged:
                     # Only shared stores grew (every publisher's appends change
@@ -479,7 +512,9 @@ class InputDrain(InputObservation):
                         ))
                         if not current.executing and self._quiescent(session_id):
                             marker = await Coordination.run_worker(self._bus_marker)
-                            settled = SettledTick(revision, entry, marker.admission_after_seq)
+                            settled = SettledTick(
+                                revision, entry, marker.admission_after_seq, marker.last_seq,
+                            )
                         elif self._repeat_observation_ready(session_id, drained):
                             # The first empty private observation may advance its
                             # own durable cursor. Re-read that transition now;
@@ -498,24 +533,6 @@ class InputDrain(InputObservation):
     def _bus_marker(self):
         return self.comms.bus.log._private_marker_unlocked()
 
-    def _addressed_rows_for_owner(self, lookup: str) -> tuple:
-        """Read the sealed address record under the canonical bus lock.
-
-        The sealed checkpoint owns which appended rows address which recipient:
-        the publisher writes its address rows with each append and reseals it
-        to the current marker. Anything the owner has not admitted appears
-        here until this owner drains it.
-        """
-        from .private_bus_checkpoint import addressed_source_pointers_unlocked
-
-        # A bounded wait on the canonical bus lock: this runs in the tick's
-        # worker thread, like the drain's own bus reads.
-        with self.comms.bus.log.locked():
-            marker = self.comms.bus.log._private_marker_unlocked()
-            return marker, addressed_source_pointers_unlocked(
-                self.comms.bus.log, marker, lookup, limit=1,
-            )
-
     async def _shared_changes_concern_other_owners(
         self, session_id: str, settled: SettledTick, revision: TickRevision,
         entry: RegistryEntry,
@@ -532,13 +549,15 @@ class InputDrain(InputObservation):
         never means 'not mine'.
         """
         try:
-            marker, rows = await Coordination.run_worker(partial(
-                self._addressed_rows_for_owner,
+            marker, addressed = await Coordination.run_worker(partial(
+                self._appended_rows_for_owner,
+                settled,
+                revision,
                 stable_thread_lookup(entry.thread.created_at),
             ))
             if marker.admission_after_seq != settled.admission_after_seq:
                 return None
-            if rows:
+            if addressed:
                 return None
             if revision.coordination != settled.revision.coordination:
                 if not await self._own_coordination_unchanged(session_id, entry):
@@ -552,7 +571,9 @@ class InputDrain(InputObservation):
             RelationViolationError,
         ):
             return None
-        return SettledTick(revision, entry, marker.admission_after_seq)
+        return SettledTick(
+            revision, entry, marker.admission_after_seq, marker.last_seq,
+        )
 
     def _private_observation_revision(
         self, session_id: str, root_id: str, wire: tuple, entry: RegistryEntry,

@@ -100,6 +100,30 @@ class OpenedWireSnapshot:
         except (TypeError, ValueError) as error:
             raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
 
+    def appended_records(
+        self, previous: BusFileRevision, previous_sequence: int,
+    ) -> tuple[WireRecord, ...]:
+        """Decode only bytes appended to the same opened source inode."""
+        if self.stream is None or self.revision is None:
+            raise RelationViolationError("Wire tail has no opened source")
+        if previous.inode != self.revision.inode or previous.size > self.revision.size:
+            raise RelationViolationError("Wire tail does not extend the settled source")
+        self.stream.seek(previous.size)
+        scan = WireScan(self.metadata, previous_sequence=previous_sequence)
+        records = []
+        while self.stream.tell() < self.boundary:
+            raw = self.stream.readline(
+                min(scan.max_row_bytes + 1, self.boundary - self.stream.tell())
+            )
+            if not raw:
+                break
+            records.append(scan.read(raw))
+        if scan.previous_sequence != self.metadata.last_seq:
+            raise RelationViolationError("Wire tail does not reach its marker")
+        if BusFileRevision.capture(self.stream) != self.revision:
+            raise RelationViolationError("Wire tail changed while it was read")
+        return tuple(records)
+
     def public_records(self, offset: int = 0, *, before_offset: int | None = None
                        ) -> Iterator[tuple[Message, int]]:
         if self.stream is None:
