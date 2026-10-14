@@ -394,8 +394,7 @@ class OwnerLifecycle:
                 )
         env.update(
             {
-                "PI_AGENT_ID": thread.name,
-                "AGENT_COMMS_THREAD": thread.name,
+                RestartEnvironment.owner_key: thread.name,
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,

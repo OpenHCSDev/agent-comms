@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 
 from .native_arguments import NativeArguments
+from .owner_launch import RestartEnvironment
 
 
 def run_login(provider: str = "") -> int:
@@ -13,12 +14,11 @@ def run_login(provider: str = "") -> int:
         raise ValueError("Invalid provider identifier")
     env = os.environ.copy()
     for key in (
-        "PI_AGENT_ID",
         "PI_PARENT_ID",
         "PI_TASK",
         "PI_PROMPT",
         "PI_WORKTREE",
-        "AGENT_COMMS_THREAD",
+        RestartEnvironment.owner_key,
         "AGENT_COMMS_MANAGED",
         "AGENT_COMMS_PROJECT_SOCKET",
         "AGENT_COMMS_PROJECT_REQUEST",

@@ -27,6 +27,7 @@ from .goal_actions import (
 from .goal_states import ActiveGoal
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
+from .owner_launch import RestartEnvironment
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
@@ -129,12 +130,7 @@ class ToolRequest(Command, DeclaredFamily, affix="Tool"):
 
 
 def _executing_thread() -> str:
-    import os
-
-    name = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-    if not name:
-        raise ValueError("Goal updates require an executing thread identity.")
-    return name
+    return RestartEnvironment.calling_thread()
 
 
 def _tag_set(value: str) -> frozenset[str]:

@@ -44,7 +44,7 @@ class TestToolCatalog:
     def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms, monkeypatch):
         monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
-        with pytest.raises(ValueError, match="identity"):
+        with pytest.raises(ValueError, match="AGENT_COMMS_THREAD"):
             invoke_tool(comms, "comms_collaborations", {})
         with pytest.raises(
             ValueError,

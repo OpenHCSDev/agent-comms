@@ -536,13 +536,13 @@ class TestPollAndWire:
         assert "ledger" in snap
 
     def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
-        monkeypatch.setenv("PI_AGENT_ID", "fixer")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
         snap = wired.views.poll()
         assert snap["thread"]["name"] == "fixer"
 
     def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):
-        monkeypatch.setenv("PI_AGENT_ID", "me")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
         thread = comms.threads.adopt_current()
         assert thread.name == "me"

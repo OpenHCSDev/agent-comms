@@ -19,7 +19,7 @@ async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
 
 
 def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
-    monkeypatch.setenv("PI_AGENT_ID", "must-not-be-adopted")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "must-not-be-adopted")
     monkeypatch.setenv("AGENT_COMMS_MANAGED", "1")
     monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "pi-custom")
     captured = {}
@@ -34,7 +34,7 @@ def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
     assert "--no-session" in captured["args"] and "--no-tools" in captured["args"]
     assert "--mode" not in captured["args"] and "--print" not in captured["args"]
     assert captured["env"]["AGENT_COMMS_LOGIN_PROVIDER"] == "openai-codex"
-    assert "PI_AGENT_ID" not in captured["env"]
+    assert "AGENT_COMMS_THREAD" not in captured["env"]
     assert "AGENT_COMMS_MANAGED" not in captured["env"]
     with pytest.raises(ValueError):
         run_login("invalid\ncommand")

@@ -174,19 +174,18 @@ class TestPresence:
         assert rows["PR112"]["tags"] == ["docs"]
 
 
-class TestCurrentThreadEnvFallback:
+class TestCurrentThreadEnvironment:
     def test_agent_comms_thread_env(self, monkeypatch, tmp_path):
-        monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
         monkeypatch.chdir(tmp_path)
         from agent_comms.threads import current_thread
 
         assert current_thread().name == "me"
 
-    def test_pi_agent_id_wins(self, monkeypatch, tmp_path):
+    def test_pi_agent_id_is_not_an_owner_identity(self, monkeypatch, tmp_path):
         monkeypatch.setenv("PI_AGENT_ID", "pi-thread")
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "fallback")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
         monkeypatch.chdir(tmp_path)
         from agent_comms.threads import current_thread
 
-        assert current_thread().name == "pi-thread"
+        assert current_thread().name == "owner"
