@@ -450,6 +450,10 @@ class ContextUsage:
     used: int
     size: int
 
+    @property
+    def label(self) -> str:
+        return f"{self.used:,}/{self.size:,} tokens ({self.used / self.size * 100:.1f}%)"
+
 
 @dataclass(frozen=True)
 class CoordinationChangedUpdate(AgentCommsUpdate):
