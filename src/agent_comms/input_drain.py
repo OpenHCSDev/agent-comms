@@ -517,10 +517,7 @@ class InputDrain(InputObservation):
                         and session_id not in self.effects.turns.turn_tasks
                         and session_id not in self.backend_inboxes
                     ):
-                        await Coordination.run_worker(partial(
-                            self.comms.agents.set_drain_diagnostic, thread, owner, None,
-                        ))
-                        if not current.executing and self._quiescent(session_id):
+                        if self._quiescent(session_id):
                             marker = await Coordination.run_worker(self._bus_marker)
                             settled = SettledTick(
                                 revision, entry, marker.admission_after_seq, marker.last_seq,
@@ -536,9 +533,15 @@ class InputDrain(InputObservation):
                             watcher.notify()
 
     async def drain_inbox(self, session_id: str) -> int:
-        """Push undelivered messages to the client; returns count pushed."""
+        """Push undelivered messages and retire an older failure on success."""
         async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
-            return await self.drain_owned_inbox(session_id)
+            owner = (await self._own_entry(session_id)).entry.owner_identity
+            count = await self.drain_owned_inbox(session_id)
+            await Coordination.run_worker(partial(
+                self.comms.agents.set_drain_diagnostic,
+                self.sessions.require(session_id), owner, None,
+            ))
+            return count
 
     def _bus_marker(self):
         return self.comms.bus.log._private_marker_unlocked()
@@ -696,9 +699,6 @@ class InputDrain(InputObservation):
     @property
     def background_wakes_disabled(self) -> bool:
         return not self.auto_wake or not self.sessions.runtime_enabled
-
-    async def drain_count(self, session_id: str) -> int:
-        return await self.drain_inbox(session_id)
 
     async def accept_followup(
         self,

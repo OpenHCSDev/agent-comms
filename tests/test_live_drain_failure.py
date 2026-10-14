@@ -46,12 +46,17 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
             db.execute(f'DROP TABLE "{CohortSchemaMeta.declared_name}"')
     try:
         agent.inputs.ensure_live_drain("beta")
-        await until(lambda: owner_view(comms).activity.diagnostic is not None)
+        await until(lambda: "beta" in agent.inputs._observation_watchers)
+        agent.inputs.wake_observer("beta")
+        await until(
+            lambda: owner_view(comms).activity.readiness.source_diagnostic() is not None
+        )
         failed = owner_view(comms)
-        assert isinstance(failed.activity.diagnostic, UnavailableDrainDiagnostic)
+        diagnostic = failed.activity.readiness.source_diagnostic()
+        assert isinstance(diagnostic, UnavailableDrainDiagnostic)
         assert failed.presentation.attention and not failed.presentation.busy
         assert "Inbox unavailable" in failed.presentation.summary
-        assert failed.activity.diagnostic.error_type in failed.presentation.summary
+        assert diagnostic.error_type in failed.presentation.summary
         assert "Ready" not in failed.presentation.summary
         # Repeated retries must neither flood the log nor repair the broken schema.
         log = comms.root / "activity.jsonl"
@@ -66,20 +71,43 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
                 is None
             )
         # Age and an unrelated turn may not turn this persistent failure into Ready.
-        comms.agents.activity.emit(replace(failed.activity, timestamp=time.time() - 1000))
+        comms.agents.activity.emit(
+            replace(failed.activity.source_event(), timestamp=time.time() - 1000)
+        )
         assert owner_view(comms).presentation.attention
         lease = comms.agents.begin_turn("beta", "ordinary-unrelated-turn").turn_lease
         comms.agents.finish_turn(lease)
         assert owner_view(comms).presentation.attention
         # An explicit operator restores the actual current schema; readers do no repair.
         os.replace(saved, path)
-        await until(lambda: owner_view(comms).activity.diagnostic is None)
+        await until(
+            lambda: owner_view(comms).activity.readiness.source_diagnostic() is None
+        )
         assert owner_view(comms).presentation.summary == "Ready"
         assert not owner_view(comms).presentation.attention
         recovered = log.read_bytes()
         await asyncio.sleep(1.3)
         assert log.read_bytes() == recovered
     finally:
+        await agent.shutdown()
+
+
+async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
+    comms, agent, _ = _session(tmp_path)
+    owner = comms.registry.snapshot().owner_identity("beta")
+    diagnostic = UnavailableDrainDiagnostic(
+        owner, "OSError", "past drain failed", recorded_at=time.time()
+    )
+    assert comms.agents.set_drain_diagnostic("beta", owner, diagnostic)
+    lease = comms.agents.begin_turn("beta", "later-successful-turn").turn_lease
+    try:
+        await agent.inputs.drain_inbox("beta")
+        current = owner_view(comms)
+        assert current.activity.readiness.source_diagnostic() is None
+        assert current.thread.executing
+        assert current.presentation.busy and not current.presentation.attention
+    finally:
+        comms.agents.finish_turn(lease)
         await agent.shutdown()
 
 
@@ -95,11 +123,14 @@ async def test_unexpected_drain_failure_is_visible_and_propagates(tmp_path, monk
         task = agent.inputs.drain_tasks["beta"]
         with pytest.raises(TypeError, match="unexpected drain implementation failure"):
             await task
-        assert isinstance(owner_view(comms).activity.diagnostic, StoppedDrainDiagnostic)
+        assert isinstance(
+            owner_view(comms).activity.readiness.source_diagnostic(),
+            StoppedDrainDiagnostic,
+        )
         assert "Drain stopped" in owner_view(comms).presentation.summary
         # A replacement owner cannot inherit the predecessor's failure.
         thread = comms.registry.require("beta")
         comms.registry.register(thread, new_owner=True)
-        assert owner_view(comms).activity.diagnostic is None
+        assert owner_view(comms).activity.readiness.source_diagnostic() is None
     finally:
         await agent.shutdown()
