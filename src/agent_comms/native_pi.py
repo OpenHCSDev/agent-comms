@@ -706,7 +706,13 @@ class VerifiedNativeEvidencePrefix:
     def prepare(
         self, source: PrivateEvidenceRead, revision: FileRevision
     ) -> FileRevision:
-        if revision == self.revision or revision.size > self.size:
+        if revision == self.revision:
+            return revision
+        if revision.size < self.revision.size:
+            raise NativeEvidencePrefixChanged(
+                "Native Pi evidence observed revision was truncated"
+            )
+        if revision.size > self.revision.size:
             # A private Pi session has append-only growth. The full-prefix hash
             # additionally detected a same-inode rewrite combined with growth,
             # but only by rereading every old byte. Pinned identity/revision
