@@ -11,12 +11,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import sqlite3
 import threading
 import time
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
@@ -89,6 +90,7 @@ class OptionalAwarenessProjection:
     """
 
     index: WakeCandidateIndex
+    registry: Registration = field(kw_only=True)
     after_seq: int
     through_seq: int
     expected_participant_generation: int
@@ -105,13 +107,15 @@ class OptionalAwarenessProjection:
         cls,
         index: WakeCandidateIndex,
         *,
+        registry: Registration,
         through_seq: int,
         generation: int,
         admission_generation: int,
     ) -> OptionalAwarenessProjection:
-        with index.bus.log.locked():
-            after_seq = index.bus.log._private_marker_unlocked().admission_after_seq
-        return cls(index, after_seq, through_seq, generation, admission_generation)
+        with index.log.locked():
+            after_seq = index.log._private_marker_unlocked().admission_after_seq
+        return cls(index, after_seq, through_seq, generation, admission_generation,
+                   registry=registry)
 
     @staticmethod
     def _deliver(
@@ -198,6 +202,12 @@ class OptionalAwarenessProjection:
         ) as error:
             # Busy, stale, changed-owner and pending-rename are this read's
             # named unavailable states. Anything else is a defect and raises.
+            # Keep the original cause/SQLite notes in owner diagnostics instead
+            # of reducing every read failure to the delivered class name.
+            logging.getLogger(__name__).warning(
+                "Optional awareness read failed (candidate index %s)",
+                self.index.path, exc_info=True,
+            )
             return OmittedAwareness.capture(type(error).__name__)
 
     def _build(
@@ -222,7 +232,7 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("selected source changed")
         if not self.after_seq < initial.message.seq <= self.through_seq:
             raise ProjectionUnavailableError("selected source is outside the captured window")
-        _require_no_private_owner_rename(self.index.bus.log.path.parent)
+        _require_no_private_owner_rename(self.index.log.path.parent)
         # Each selected row must now carry immutable same-transaction owner
         # generation provenance. An incomplete join omits the whole read.
         root_id = initial.wire_root_id
@@ -237,7 +247,7 @@ class OptionalAwarenessProjection:
         if page.has_more:
             raise ProjectionUnavailableError("binding candidate decisions exceed the row budget")
 
-        path = self.index.bus.log.path.with_name("coordination.sqlite3")
+        path = self.index.log.path.with_name("coordination.sqlite3")
         with CoordinationStore.observing(path, lock_timeout=0.05) as db:
             self._verify_schema_and_owner(db, initial, assignment, owner)
             decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)
@@ -301,8 +311,8 @@ class OptionalAwarenessProjection:
         return result
 
     def _verify_live_inclusion(self, path: os.PathLike[str], lookup: str, owner: Thread) -> None:
-        _require_no_private_owner_rename(self.index.bus.log.path.parent)
-        registry = Registration(self.index.bus._registry.store.path)
+        _require_no_private_owner_rename(self.index.log.path.parent)
+        registry = self.registry
         with _store_lock(registry.store.path, blocking=False):
             snapshot = registry.store._read_unlocked().snapshot()
             RegistryOwner(
@@ -322,7 +332,7 @@ class OptionalAwarenessProjection:
             )
             if rows != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]:
                 raise ProjectionUnavailableError("current participant generation changed")
-        _require_no_private_owner_rename(self.index.bus.log.path.parent)
+        _require_no_private_owner_rename(self.index.log.path.parent)
 
     def _verify_schema_and_owner(
         self,

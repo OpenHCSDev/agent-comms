@@ -543,7 +543,8 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
             witness = replace(witness, thread=replace(witness.thread, created_at=witness.thread.created_at + 1))
         with pytest.raises(StaleFence):
             prepare_fenced_response(
-                case.store, case.bus, case.fence, "must not publish", owner_witness=witness
+                case.store, case.bus, case.fence, "must not publish",
+                exact_target=case.reply_target, owner_witness=witness
             )
         assert case.bus.log.latest_sequence() == case.origin_seq
         assert ResponseObligation.response_record(case.store.snapshots.get("exec").publication_intents, case.reply_target) is None

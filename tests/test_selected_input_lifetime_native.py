@@ -57,7 +57,7 @@ class SelectedNativeJourney:
         self.replies.append(LoopbackProvider(status=200, text=text))
 
     def execution(self):
-        WakeCandidateIndex(self.comms.bus).maintain(rebuild=True)
+        WakeCandidateIndex(self.comms.bus.log).maintain(rebuild=True)
         return SelectedExecution(
             root=self.root,
             wire_root_id=self.root_id,
