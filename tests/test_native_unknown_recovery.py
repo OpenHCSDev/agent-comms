@@ -265,9 +265,9 @@ print(json.dumps({"type":"response", "id":request["id"],
 
     original_failure = DurableTurn.fail_unknown
 
-    def after_reap(self):
+    def after_reap(self, boundary):
         assert len(processes) == 1 and processes[0].returncode is not None
-        return original_failure(self)
+        return original_failure(self, boundary)
 
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda path: path)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda path: Path("/bin/true"))

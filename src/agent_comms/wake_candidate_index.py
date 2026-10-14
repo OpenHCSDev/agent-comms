@@ -33,7 +33,8 @@ from .wake import NoWakeDecision, WakeDecision
 from .wake_policy import WakePolicy
 
 _MAX_ROW = 8 * 1024 * 1024
-_TIMEOUT = 0.05  # Busy readers/writers must not stall a wake for seconds.
+_TIMEOUT = 0.05  # Read-only projection queries must not stall a wake for seconds.
+_MAINTENANCE_BUSY_MS = 1_000  # One bounded replay transaction may hold the writer.
 
 
 class ProjectionUnavailableError(RuntimeError):
@@ -165,14 +166,14 @@ class WakeCandidateIndex:
             db = sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, timeout=_TIMEOUT)
             db.execute("PRAGMA query_only=ON")
         else:
-            db = sqlite3.connect(path, timeout=_TIMEOUT)
+            db = sqlite3.connect(path, timeout=_MAINTENANCE_BUSY_MS / 1_000)
             if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode=WAL")) != [
                 SQLiteJournalMode("wal")
             ]:
                 db.close()
                 raise ProjectionUnavailableError("candidate index requires WAL")
             db.execute("PRAGMA synchronous=FULL")
-        db.execute("PRAGMA busy_timeout=50")
+        db.execute(f"PRAGMA busy_timeout={_TIMEOUT * 1_000 if readonly else _MAINTENANCE_BUSY_MS:g}")
         return db
 
     @staticmethod
@@ -215,12 +216,13 @@ class WakeCandidateIndex:
         root_id: str,
         *,
         rebuild: bool,
+        bootstrap_new: bool = False,
     ) -> CandidateCheckpoint:
         """Check the committed source identity and its bounded prefix fingerprint."""
         checkpoint = CandidateCheckpoint.one(db, singleton=1)
-        if checkpoint is None and not rebuild:
+        if checkpoint is None and not (rebuild or bootstrap_new):
             raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
-        if rebuild:
+        if rebuild or checkpoint is None:
             return CandidateCheckpoint(1, 3, root_id, stat.st_dev, stat.st_ino, 0, "", 0)
         checkpoint.require_source(stream, stat, root_id)
         return checkpoint
@@ -319,36 +321,34 @@ class WakeCandidateIndex:
         *,
         rebuild: bool,
     ) -> None:
-        """Replace derived rows and checkpoint together, or expose neither."""
-        with db:
-            if rebuild:
-                db.execute(f'DELETE FROM "{Candidate.declared_name}"')
-                db.execute(f'DELETE FROM "{CandidateResponseKey.declared_name}"')
-            for row in batch.recipients:
-                row.insert(db)
-            try:
-                for row in batch.response_keys:
-                    row.insert(db)
-            except sqlite3.IntegrityError as error:
-                raise ProjectionUnavailableError(
-                    "duplicate private response publication key"
-                ) from error
-            CandidateCheckpoint(
-                1,
-                3,
-                root_id,
-                stat.st_dev,
-                stat.st_ino,
-                batch.next_offset,
-                tail,
-                batch.last_seq,
-            ).upsert(db)
+        """Replace derived rows and checkpoint inside the caller's transaction."""
+        if rebuild:
+            db.execute(f'DELETE FROM "{Candidate.declared_name}"')
+            db.execute(f'DELETE FROM "{CandidateResponseKey.declared_name}"')
+        for row in batch.recipients:
+            row.insert(db)
+        for row in batch.response_keys:
+            if CandidateResponseKey.one(db, publication_key=row.publication_key) is not None:
+                raise ProjectionUnavailableError("duplicate private response publication key")
+            row.insert(db)
+        CandidateCheckpoint(
+            1,
+            3,
+            root_id,
+            stat.st_dev,
+            stat.st_ino,
+            batch.next_offset,
+            tail,
+            batch.last_seq,
+        ).upsert(db)
 
     def maintain(
-        self, *, rebuild: bool = False, max_rows: int = 64, max_bytes: int = 256 * 1024
+        self, *, rebuild: bool = False, bootstrap_new: bool = False,
+        max_rows: int = 64, max_bytes: int = 256 * 1024,
     ) -> bool:
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
+        bootstrap_new = FieldCodec.decode(bool, bootstrap_new)
         try:
             marker = self.bus.log._private_marker_unlocked()
             root_id = marker.root_id
@@ -358,20 +358,27 @@ class WakeCandidateIndex:
                     # Rebuild replays current-format projections only; old schemas
                     # require the explicit store reset outside runtime code.
                     self._schema(db, create=True)
-                    checkpoint = self._checkpoint_start(
-                        db, stream, stat, root_id, rebuild=rebuild
-                    )
-                    offset, last_seq = checkpoint.byte_offset, checkpoint.last_seq
-                    batch = self._replay_prefix(
-                        stream,
-                        offset,
-                        last_seq,
-                        root_id,
-                        max_rows=max_rows,
-                        max_bytes=max_bytes,
-                    )
-                    after, tail = self._source_end(stream, batch.next_offset)
-                    self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
+                    db.execute("BEGIN IMMEDIATE")
+                    try:
+                        checkpoint = self._checkpoint_start(
+                            db, stream, stat, root_id,
+                            rebuild=rebuild, bootstrap_new=bootstrap_new,
+                        )
+                        offset, last_seq = checkpoint.byte_offset, checkpoint.last_seq
+                        batch = self._replay_prefix(
+                            stream,
+                            offset,
+                            last_seq,
+                            root_id,
+                            max_rows=max_rows,
+                            max_bytes=max_bytes,
+                        )
+                        after, tail = self._source_end(stream, batch.next_offset)
+                        self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
+                        db.commit()
+                    except BaseException:
+                        db.rollback()
+                        raise
                     return batch.next_offset == after.st_size
         except (
             OSError,
@@ -453,19 +460,25 @@ class WakeCandidateIndex:
         if self.bus.log._private_marker_unlocked().root_id != hint.root_id:
             raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
         prior_bytes = 0
-        if self.path.exists():
+        if bootstrap_new:
+            # Existence is not initialization: another process may have created
+            # the WAL but not committed its first checkpoint. BEGIN IMMEDIATE in
+            # maintain serializes that decision against the stored row.
+            more_source_bytes = not self.maintain(
+                bootstrap_new=True, max_rows=max_rows, max_bytes=max_bytes
+            )
+        else:
+            if not self.path.exists():
+                raise ProjectionRebuildRequiredError(
+                    "candidate index needs explicit initial build"
+                )
             prior = self._verified_checkpoint(hint.root_id)
             prior_bytes = prior.byte_offset
             if prior.last_seq >= hint.through_seq:
                 return CandidateCatchUp(prior.last_seq, True, False)
-            rebuild = False
-        elif bootstrap_new:
-            rebuild = True
-        else:
-            raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
-        more_source_bytes = not self.maintain(
-            rebuild=rebuild, max_rows=max_rows, max_bytes=max_bytes
-        )
+            more_source_bytes = not self.maintain(
+                max_rows=max_rows, max_bytes=max_bytes
+            )
         checkpoint = self._verified_checkpoint(hint.root_id)
         if checkpoint.byte_offset <= prior_bytes and more_source_bytes:
             # The checkpoint row owns the byte position: a batch that consumed

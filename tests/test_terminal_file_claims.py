@@ -49,8 +49,8 @@ def test_terminal_outcomes_release_exact_claims(monkeypatch, outcome):
         current = comms.bus.log.claim_projection()[str(resource)]
         assert current.generation != claim.generation
         before = (comms.root / "bus.jsonl").read_bytes()
-        with store.session.settlement():
-            terminal.release_resources(store.session)
+        with store.session.settlement() as boundary:
+            terminal.release_resources(boundary)
         assert (comms.root / "bus.jsonl").read_bytes() == before
         assert comms.bus.log.claim_projection()[str(resource)] == current
         assert later.claim_transition.generation == current.generation

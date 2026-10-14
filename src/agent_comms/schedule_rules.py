@@ -49,9 +49,10 @@ class ProjectResumeCheck(OwnerTurnScheduleCheck):
         except ReservationViolationError:
             return
         if entry.status.running and entry.thread.owes_project_resume:
-            inputs.pending_turns.setdefault(session_id, []).append(
-                ScheduledTurn.resuming_in_project(entry.thread.worktree)
-            )
+            resume = ScheduledTurn.resuming_in_project(entry.thread.worktree)
+            pending = inputs.pending_turns.setdefault(session_id, [])
+            if resume not in pending:
+                pending.append(resume)
             WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
 
 
@@ -171,6 +172,9 @@ class SelectedWakeCheck(SessionScheduleCheck):
                         inputs._idle_private_revisions[session_id] = before
             finally:
                 inputs.wake_tasks.pop(session_id, None)
+                # A selected wake can finish the turn which made a project
+                # resume due; start the queued resume after this wake retires.
+                WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
             if result is not None:
                 # Messages this turn could not take are still pending.
                 await inputs.drain_inbox(session_id)
@@ -201,7 +205,7 @@ class NativeInboxOwnerTurnRule(ReservationRule):
 
 
 class PendingWakeScheduleRule(ReservationRule):
-    check_type = SessionScheduleCheck
+    check_type = (WakeScheduleCheck, SelectedWakeCheck)
     explanation = "A previously scheduled wake has not finished."
 
     def violated(self, check):

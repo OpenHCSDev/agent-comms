@@ -18,7 +18,7 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
@@ -646,8 +646,47 @@ def _read_private_file(path: Path):
         yield from evidence.rows()
 
 
+def _read_private_header(path: Path):
+    """Decode only row one while the source owner verifies every captured byte."""
+    with PrivateEvidenceRead.open(path) as evidence:
+        return evidence.header()
+
+
+class NativeEvidencePrefixChanged(NativePiUnavailable):
+    """The retained verified prefix must be reacquired from byte zero."""
+
+
+class NativeEvidenceDigest(Protocol):
+    def copy(self) -> NativeEvidenceDigest: ...
+
+    def update(self, value: bytes) -> None: ...
+
+    def digest(self) -> bytes: ...
+
+
+class UnverifiedNativeEvidencePrefix:
+    """Named start state: no byte from the currently opened inode is trusted."""
+
+    size = 0
+
+    @staticmethod
+    def copy_digest():
+        return hashlib.sha256()
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedNativeEvidencePrefix:
+    """The sole retained position and hash state for one opened native source."""
+
+    size: int
+    digest: NativeEvidenceDigest
+
+    def copy_digest(self):
+        return self.digest.copy()
+
+
 class PrivateEvidenceRead:
-    """Pinned private source with a verified original byte prefix.
+    """Pinned private source with one owned verified-prefix state.
 
     Resource custody lasts until close. Appending cannot invalidate earlier
     decoded bytes unnoticed: each read hashes the whole original prefix and
@@ -657,24 +696,42 @@ class PrivateEvidenceRead:
     def __init__(self, path, stream):
         self.path, self.stream = path, stream
         self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
-        self.size = 0
-        self.digest = hashlib.sha256()
+        self.prefix = UnverifiedNativeEvidencePrefix()
+
+    @property
+    def size(self) -> int:
+        return self.prefix.size
+
+    @classmethod
+    def _open_stream(cls, path):
+        stream = None
+        try:
+            stream = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
+            PrivateFileRole.require(os.fstat(stream.fileno()))
+            return stream
+        except (OSError, ValueError) as error:
+            if stream is not None:
+                stream.close()
+            raise NativePiUnavailable("Native Pi evidence file is unavailable") from error
 
     @classmethod
     @contextmanager
     def open(cls, path):
-        with ExitStack() as custody:
-            try:
-                stream = custody.enter_context(
-                    os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb", buffering=0)
-                )
-                source = cls(path, stream)
-            except OSError as error:
-                raise NativePiUnavailable("Native Pi evidence file is unavailable") from error
+        source = cls(path, cls._open_stream(path))
+        try:
             yield source
+        finally:
+            source.close()
 
     def close(self):
         self.stream.close()
+
+    def reverify_from_start(self) -> None:
+        """Enter the named unverified state on the current canonical inode."""
+        self.close()
+        self.stream = self._open_stream(self.path)
+        self.identity = FileIdentity.from_stat(os.fstat(self.stream.fileno()))
+        self.prefix = UnverifiedNativeEvidencePrefix()
 
     def _capture_append(self):
         """Verify and hash original bytes without retaining the complete prefix."""
@@ -683,46 +740,74 @@ class PrivateEvidenceRead:
             PrivateFileRole.require(info)
             revision = FileRevision.from_stat(info)
             if revision.identity != self.identity:
-                raise NativePiUnavailable("Native Pi evidence inode changed")
-            if not info.st_size or info.st_size < self.size:
-                raise NativePiUnavailable("Native Pi evidence file is empty or truncated")
-            self.stream.seek(self.size)
-            digest = self.digest.copy()
-            remaining = info.st_size - self.size
+                raise NativeEvidencePrefixChanged("Native Pi evidence inode changed")
+            if not info.st_size:
+                raise NativePiUnavailable("Native Pi evidence file is empty")
+            if info.st_size < self.size:
+                raise NativeEvidencePrefixChanged(
+                    "Native Pi evidence verified prefix was truncated"
+                )
+            digest = self.prefix.copy_digest()
             last = b""
-            while remaining:
-                raw = self.stream.read(min(remaining, 128 * 1024))
-                if not raw:
-                    raise NativePiUnavailable("Native Pi evidence file is incomplete")
-                remaining -= len(raw)
+            for raw in self._pread_chunks(self.size, info.st_size):
                 digest.update(raw)
                 last = raw[-1:]
             if info.st_size > self.size and last != b"\n":
                 raise NativePiUnavailable("Native Pi evidence file is incomplete")
             if self._observe_revision_after(revision) != revision:
-                raise NativePiUnavailable("Native Pi evidence changed during observation")
+                raise NativeEvidencePrefixChanged(
+                    "Native Pi evidence source changed during observation"
+                )
             return info.st_size, digest
         except (OSError, ValueError) as error:
-            raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
+            raise NativePiUnavailable(
+                "Native Pi evidence file is unavailable or not private"
+            ) from error
+
+    def _pread_chunks(self, start, stop):
+        """Read a pinned byte range without touching buffered decode state."""
+        descriptor = self.stream.fileno()
+        while start < stop:
+            raw = os.pread(descriptor, min(stop - start, 128 * 1024), start)
+            if not raw:
+                raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
+            start += len(raw)
+            yield raw
 
     def _decode_captured(self, size):
-        """Decode one verified physical row at a time up to the captured size."""
+        """Decode through a fresh buffer over the pinned descriptor each time."""
         try:
-            self.stream.seek(self.size)
+            descriptor = os.dup(self.stream.fileno())
         except (OSError, ValueError) as error:
-            raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
-        remaining = size - self.size
-        while remaining:
+            raise NativePiUnavailable(
+                "Native Pi evidence file is unavailable or not private"
+            ) from error
+        try:
+            decoder = os.fdopen(descriptor, "rb")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        try:
             try:
-                raw = self.stream.readline(remaining)
+                decoder.seek(self.size)
             except (OSError, ValueError) as error:
                 raise NativePiUnavailable(
                     "Native Pi evidence file is unavailable or not private"
                 ) from error
-            if not raw or not raw.endswith(b"\n"):
-                raise NativePiUnavailable("Native Pi evidence file is incomplete")
-            remaining -= len(raw)
-            yield self._decode_row(raw)
+            remaining = size - self.size
+            while remaining:
+                try:
+                    raw = decoder.readline(remaining)
+                except (OSError, ValueError) as error:
+                    raise NativePiUnavailable(
+                        "Native Pi evidence file is unavailable or not private"
+                    ) from error
+                if not raw or not raw.endswith(b"\n"):
+                    raise NativePiUnavailable("Native Pi evidence file is incomplete")
+                remaining -= len(raw)
+                yield self._decode_row(raw)
+        finally:
+            decoder.close()
 
     @staticmethod
     def _decode_row(raw):
@@ -734,17 +819,50 @@ class PrivateEvidenceRead:
             raise NativePiUnavailable("Native Pi evidence row has wrong type")
         return row
 
-    def rows(self):
+    def header(self):
+        """Return row one after verifying the complete captured byte prefix."""
         try:
             size, digest = self._capture_append()
+            self.stream.seek(0)
+            raw = self.stream.readline(size)
+            if not raw or not raw.endswith(b"\n"):
+                raise NativePiUnavailable("Native Pi evidence header is incomplete")
+            header = self._decode_row(raw)
+            self._commit_snapshot(size, digest)
+            return header
+        except BaseException:
+            self.close()
+            raise
+
+    def _commit_snapshot(self, size, digest) -> None:
+        try:
+            self.verify_snapshot(size, digest.digest())
+        except (OSError, ValueError) as error:
+            raise NativePiUnavailable(
+                "Native Pi evidence file is unavailable or not private"
+            ) from error
+        self.prefix = VerifiedNativeEvidencePrefix(size, digest)
+
+    def rows(self):
+        try:
+            previous_size = self.size
+            if previous_size:
+                try:
+                    self.verify_snapshot(previous_size, self.prefix.digest.digest())
+                except (OSError, ValueError) as error:
+                    raise NativePiUnavailable(
+                        "Native Pi evidence file is unavailable or not private"
+                    ) from error
+            size, digest = self._capture_append()
+            if size == previous_size:
+                # The existing hash just proved this unchanged prefix and the
+                # capture rechecked its named revision; no row needs decoding.
+                self.prefix = VerifiedNativeEvidencePrefix(size, digest)
+                return
             # Acquisition verifies the fixed revision first. Decode then holds
             # only one physical row; final verification rejects any later change.
             yield from self._decode_captured(size)
-            try:
-                self.verify_snapshot(size, digest.digest())
-            except (OSError, ValueError) as error:
-                raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
-            self.size, self.digest = size, digest
+            self._commit_snapshot(size, digest)
         except BaseException:
             self.close()
             raise
@@ -752,26 +870,20 @@ class PrivateEvidenceRead:
     def verify_snapshot(self, size, expected_digest):
         """Validate the captured prefix after decoding, allowing later appends.
 
-        Rehash the captured range once from the pinned unbuffered descriptor.
-        Later appends do not change those bytes; a later observation rechecks
-        them again before exposing more rows.
+        Rehash the captured range once from the pinned descriptor without
+        disturbing buffered decoding. Later appends do not change those bytes;
+        a later observation rechecks them again before exposing more rows.
         """
         before = os.fstat(self.stream.fileno())
         PrivateFileRole.require(before)
         revision = self._observe_revision_after(FileRevision.from_stat(before))
         if revision.identity != self.identity or revision.size < size:
-            raise NativePiUnavailable("Native Pi evidence snapshot source changed")
-        self.stream.seek(0)
+            raise NativeEvidencePrefixChanged("Native Pi evidence snapshot source changed")
         digest = hashlib.sha256()
-        remaining = size
-        while remaining:
-            raw = self.stream.read(min(remaining, 128 * 1024))
-            if not raw:
-                raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
-            remaining -= len(raw)
+        for raw in self._pread_chunks(0, size):
             digest.update(raw)
         if digest.digest() != expected_digest:
-            raise NativePiUnavailable("Native Pi evidence original prefix changed")
+            raise NativeEvidencePrefixChanged("Native Pi evidence original prefix changed")
 
     def _observe_revision_after(self, revision):
         """Check original private inode and monotonic growth, not byte integrity.
@@ -786,7 +898,9 @@ class PrivateEvidenceRead:
             if observed.identity != self.identity or (
                 observed != revision and observed.size <= revision.size
             ):
-                raise NativePiUnavailable("Native Pi evidence source changed without growth")
+                raise NativeEvidencePrefixChanged(
+                    "Native Pi evidence source changed without growth"
+                )
             revision = observed
         return revision
 

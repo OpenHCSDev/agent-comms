@@ -1,12 +1,19 @@
 """Original private prefix verification permits append, not changed evidence."""
 
 import asyncio
+import hashlib
+import io
 import json
+import os
 import threading
 
 import pytest
 
-from agent_comms.native_pi import NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.native_pi import (
+    NativePiUnavailable,
+    PrivateEvidenceRead,
+    VerifiedNativeEvidencePrefix,
+)
 from test_native_pi import _evidence
 from test_backend_native_lifecycle import native_backend
 
@@ -53,31 +60,28 @@ def test_source_change_during_original_read(tmp_path, monkeypatch, phase, paddin
             finished.set()
 
     with PrivateEvidenceRead.open(session) as source:
-        real_read = source.stream.read
+        real_pread = os.pread
         passes = 0
 
-        def reading(size):
+        def reading(fd, size, offset):
             nonlocal passes
-            start = source.stream.tell()
-            # FileIO.readline() reads individual bytes while decoding rows.
-            # Count only PrivateEvidenceRead's bounded capture/hash chunks.
-            if size > 1 and start == 0:
+            if fd == source.stream.fileno() and offset == 0:
                 passes += 1
-            if passes == 2 and start == 0 and phase == "hash_before":
+            if passes == 2 and offset == 0 and phase == "hash_before":
                 entered.set()
                 assert finished.wait(5)
-            data = real_read(size)
+            data = real_pread(fd, size, offset)
             # The shepherd's case: mutate after bytes from the observed
             # revision were returned, including a multi-chunk prefix.
             if (passes == 1 and phase == "capture" or
-                    passes > 1 and phase == "hash_after") and size > 1 and (
-                    source.stream.tell() == len(original) and not entered.is_set()
+                    passes > 1 and phase == "hash_after") and (
+                    offset + len(data) == len(original) and not entered.is_set()
             ):
                 entered.set()
                 assert finished.wait(5)
             return data
 
-        monkeypatch.setattr(source.stream, "read", reading)
+        monkeypatch.setattr(os, "pread", reading)
         thread = threading.Thread(target=writer)
         thread.start()
         try:
@@ -104,6 +108,25 @@ def test_source_change_during_original_read(tmp_path, monkeypatch, phase, paddin
             entered.set()
             thread.join(5)
         assert not thread.is_alive() and not failures
+
+
+def test_decode_uses_buffered_reader(tmp_path):
+    session = _evidence(tmp_path)
+    with PrivateEvidenceRead.open(session) as source:
+        assert isinstance(source.stream, io.BufferedReader)
+        assert len(tuple(source.rows())) == 2
+
+
+def test_next_decode_cannot_reuse_prefetched_bytes(tmp_path):
+    session = _evidence(tmp_path)
+    first, old, new = b'{"id":"first"}\n', b'{"id":"old"}\n', b'{"id":"new"}\n'
+    session.write_bytes(first + old)
+    with PrivateEvidenceRead.open(session) as source:
+        assert tuple(source._decode_captured(len(first)))[0]["id"] == "first"
+        with session.open("r+b", buffering=0) as writer:
+            os.pwrite(writer.fileno(), new, len(first))
+        source.prefix = VerifiedNativeEvidencePrefix(len(first), hashlib.sha256(first))
+        assert tuple(source._decode_captured(len(first + new)))[0]["id"] == "new"
 
 
 def test_append_during_decoding_is_read_on_the_next_observation(tmp_path):

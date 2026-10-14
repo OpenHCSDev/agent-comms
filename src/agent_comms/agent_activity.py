@@ -113,6 +113,19 @@ class LiveRecipientActivity(RecipientActivity):
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return self.thread.turn_started_by(updated_at_ms)
 
+    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
+        notification = super().selected_response(notification, updated_at_ms)
+        if (
+            self.turn_started_by(updated_at_ms)
+            and self.thread.turn_state.phase.has_response_output
+        ):
+            return replace(
+                notification,
+                state="Read - working",
+                detail="The agent read this message and has started its response.",
+            )
+        return notification
+
     def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
         from .presentation import MessageNotification
 
