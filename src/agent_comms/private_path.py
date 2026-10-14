@@ -44,6 +44,24 @@ class FileRevision:
             observed.st_mtime_ns, observed.st_ctime_ns,
         )
 
+    @classmethod
+    def capture(cls, path: Path) -> FileRevision | None:
+        try:
+            return cls.from_stat(path.stat())
+        except FileNotFoundError:
+            return None
+
+    def holds_cut(self, current: FileRevision, cut: int) -> bool:
+        """Whether current still contains this append-only captured byte cut."""
+        return (
+            self.identity == current.identity
+            and current.size >= cut
+            and (
+                current.size > self.size
+                or (current.mtime_ns, current.ctime_ns) == (self.mtime_ns, self.ctime_ns)
+            )
+        )
+
 
 class FilesystemRole(DeclaredFamily, affix="Role"):
     @classmethod
