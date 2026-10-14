@@ -195,7 +195,7 @@ def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operati
             assert tuple(source.rows())[0]["id"] == "new"
         else:
             session.write_bytes(session.read_bytes().replace(b"separate", b"changed!"))
-            with pytest.raises(NativePiUnavailable, match="prefix changed"):
+            with pytest.raises(NativePiUnavailable, match="changed"):
                 tuple(rows)
             assert source.stream.closed
 

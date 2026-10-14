@@ -673,24 +673,65 @@ class UnverifiedNativeEvidencePrefix:
     def copy_digest():
         return hashlib.sha256()
 
+    @staticmethod
+    def prepare(source: PrivateEvidenceRead, revision: FileRevision) -> FileRevision:
+        return revision
+
+    @staticmethod
+    def commit(
+        source: PrivateEvidenceRead,
+        size: int,
+        digest: NativeEvidenceDigest,
+        revision: FileRevision,
+    ) -> FileRevision:
+        observed = source._observe_revision_after(revision)
+        return (
+            observed
+            if observed == revision
+            else source.verify_snapshot(size, digest.digest())
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class VerifiedNativeEvidencePrefix:
-    """The sole retained position and hash state for one opened native source."""
+    """The sole retained position, hash, and observed revision for one source."""
 
     size: int
     digest: NativeEvidenceDigest
+    revision: FileRevision
 
     def copy_digest(self):
         return self.digest.copy()
+
+    def prepare(
+        self, source: PrivateEvidenceRead, revision: FileRevision
+    ) -> FileRevision:
+        if revision == self.revision or revision.size > self.size:
+            # A private Pi session has append-only growth. The full-prefix hash
+            # additionally detected a same-inode rewrite combined with growth,
+            # but only by rereading every old byte. Pinned identity/revision
+            # still reject replacement, truncation, and non-growth mutation;
+            # the running digest extends across the bytes added here.
+            return revision
+        return source.verify_snapshot(self.size, self.digest.digest())
+
+    @staticmethod
+    def commit(
+        source: PrivateEvidenceRead,
+        size: int,
+        digest: NativeEvidenceDigest,
+        revision: FileRevision,
+    ) -> FileRevision:
+        return source._observe_revision_after(revision)
 
 
 class PrivateEvidenceRead:
     """Pinned private source with one owned verified-prefix state.
 
-    Resource custody lasts until close. Appending cannot invalidate earlier
-    decoded bytes unnoticed: each read hashes the whole original prefix and
-    checks both the descriptor and named revision across the observation.
+    Resource custody lasts until close. Initial acquisition verifies the full
+    prefix. Later observations trust an unchanged pinned revision and extend
+    its running digest only across appended bytes; non-growth revision changes
+    reverify the retained prefix before it can be reused.
     """
 
     def __init__(self, path, stream):
@@ -747,6 +788,7 @@ class PrivateEvidenceRead:
                 raise NativeEvidencePrefixChanged(
                     "Native Pi evidence verified prefix was truncated"
                 )
+            revision = self.prefix.prepare(self, revision)
             digest = self.prefix.copy_digest()
             last = b""
             for raw in self._pread_chunks(self.size, info.st_size):
@@ -758,7 +800,7 @@ class PrivateEvidenceRead:
                 raise NativeEvidencePrefixChanged(
                     "Native Pi evidence source changed during observation"
                 )
-            return info.st_size, digest
+            return info.st_size, digest, revision
         except (OSError, ValueError) as error:
             raise NativePiUnavailable(
                 "Native Pi evidence file is unavailable or not private"
@@ -822,47 +864,41 @@ class PrivateEvidenceRead:
     def header(self):
         """Return row one after verifying the complete captured byte prefix."""
         try:
-            size, digest = self._capture_append()
+            size, digest, revision = self._capture_append()
             self.stream.seek(0)
             raw = self.stream.readline(size)
             if not raw or not raw.endswith(b"\n"):
                 raise NativePiUnavailable("Native Pi evidence header is incomplete")
             header = self._decode_row(raw)
-            self._commit_snapshot(size, digest)
+            self._commit_snapshot(size, digest, revision)
             return header
         except BaseException:
             self.close()
             raise
 
-    def _commit_snapshot(self, size, digest) -> None:
+    def _commit_snapshot(self, size, digest, revision) -> None:
         try:
-            self.verify_snapshot(size, digest.digest())
+            observed = self.prefix.commit(self, size, digest, revision)
         except (OSError, ValueError) as error:
             raise NativePiUnavailable(
                 "Native Pi evidence file is unavailable or not private"
             ) from error
-        self.prefix = VerifiedNativeEvidencePrefix(size, digest)
+        self.prefix = VerifiedNativeEvidencePrefix(size, digest, observed)
 
     def rows(self):
         try:
             previous_size = self.size
-            if previous_size:
-                try:
-                    self.verify_snapshot(previous_size, self.prefix.digest.digest())
-                except (OSError, ValueError) as error:
-                    raise NativePiUnavailable(
-                        "Native Pi evidence file is unavailable or not private"
-                    ) from error
-            size, digest = self._capture_append()
+            size, digest, revision = self._capture_append()
             if size == previous_size:
-                # The existing hash just proved this unchanged prefix and the
-                # capture rechecked its named revision; no row needs decoding.
-                self.prefix = VerifiedNativeEvidencePrefix(size, digest)
+                # The pinned revision is unchanged, or a suspicious non-growth
+                # change just passed full verification. No row needs decoding.
+                self.prefix = VerifiedNativeEvidencePrefix(size, digest, revision)
                 return
-            # Acquisition verifies the fixed revision first. Decode then holds
-            # only one physical row; final verification rejects any later change.
+            # Decode only the captured append. Initial acquisition rehashes its
+            # complete prefix once before trust; retained prefixes extend their
+            # digest after a final pinned-revision check.
             yield from self._decode_captured(size)
-            self._commit_snapshot(size, digest)
+            self._commit_snapshot(size, digest, revision)
         except BaseException:
             self.close()
             raise
@@ -882,8 +918,10 @@ class PrivateEvidenceRead:
         digest = hashlib.sha256()
         for raw in self._pread_chunks(0, size):
             digest.update(raw)
+        revision = self._observe_revision_after(revision)
         if digest.digest() != expected_digest:
             raise NativeEvidencePrefixChanged("Native Pi evidence original prefix changed")
+        return revision
 
     def _observe_revision_after(self, revision):
         """Check original private inode and monotonic growth, not byte integrity.
