@@ -52,6 +52,12 @@ from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
 
 
+def _notify_candidates(log: WireLog, through_bytes: int) -> None:
+    from .candidate_maintenance import schedule_candidate_catchup
+
+    schedule_candidate_catchup(log, through_bytes)
+
+
 @dataclass(frozen=True)
 class OpenedWireSnapshot:
     """One original descriptor and fixed cut, owned until the reader exits.
@@ -496,12 +502,7 @@ class WireLog:
                 raise RelationViolationError(
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
-        release.callback(self._notify_candidates, through_bytes)
-
-    def _notify_candidates(self, through_bytes: int) -> None:
-        from .candidate_maintenance import schedule_candidate_catchup
-
-        schedule_candidate_catchup(self, through_bytes)
+        release.callback(_notify_candidates, self, through_bytes)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
         """Bus-owned attestation of a committed initial row; no live re-routing."""

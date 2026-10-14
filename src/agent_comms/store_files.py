@@ -91,14 +91,14 @@ class StoreLock:
 
     descriptor: int
     source: CertifiedSourceRead | None
-    _releases: ClassVar[ContextVar[StoreLockRelease | None]] = ContextVar(
-        "store_lock_release", default=None
+    _releases: ClassVar[ContextVar[StoreLockRelease]] = ContextVar(
+        "store_lock_release", default=StoreLockRelease(active=False)
     )
 
     @classmethod
     def current_release(cls) -> StoreLockRelease:
         scope = cls._releases.get()
-        if scope is None or not scope.active:
+        if not scope.active:
             raise RelationViolationError("Store append requires an active lock release scope.")
         return scope
 
@@ -107,7 +107,7 @@ class StoreLock:
         """Carry only the active lock lifetime into joined work."""
         context = Context()
         scope = cls._releases.get()
-        if scope is not None and scope.active:
+        if scope.active:
             context.run(cls._releases.set, scope)
         return context
 
@@ -121,7 +121,7 @@ class StoreLock:
         locks. A stale inherited value therefore starts an independent scope.
         """
         current = cls._releases.get()
-        if current is not None and current.active:
+        if current.active:
             yield current
             return
         scope = StoreLockRelease()
