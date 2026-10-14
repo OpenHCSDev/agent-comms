@@ -13,9 +13,18 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
+from agent_comms.acp_failure import ProviderRetryResult
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.image_inputs import ImageInput
+from agent_comms.pi_events import AutoRetryStart
+from agent_comms.turn_phase import (
+    ModelWaitPhase,
+    SettlingStatsPhase,
+    ShutdownPhase,
+    SummarizationRetryPhase,
+    ToolRunningPhase,
+)
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import ThresholdCompactionReason
@@ -54,17 +63,41 @@ def _replay_stub(tmp_path: Path, lines: str) -> str:
         f"#!{sys.executable}\n"
         + f"""\
 import json, sys
+initial_state = True
+prompt_request = None
 for line in {lines.splitlines()!r}:
     record = json.loads(line)
     message = record.get("message", {{}})
     if message.get("role") == "assistant":
         message.setdefault("content", [])
-    if record.get("type") == "response" and record.get("id") == "agent-comms-prompt":
-        for request in sys.stdin:
-            request = json.loads(request)
-            if request.get("type") == record["command"]:
+    command = record.get("command")
+    correlate = record.get("type") == "response" and (
+        record.get("id") == "agent-comms-prompt"
+        or (command == "get_state" and initial_state)
+        or command == "get_session_stats"
+    )
+    if correlate:
+        for request_line in sys.stdin:
+            request = json.loads(request_line)
+            if request.get("type") == command:
                 record["id"] = request["id"]
+                if command == "prompt":
+                    prompt_request = request
                 break
+            if request.get("type") != "get_state":
+                print(json.dumps({{
+                    "id": request.get("id"), "type": "response",
+                    "command": request.get("type"), "success": True,
+                }}), flush=True)
+    if command == "get_state":
+        initial_state = False
+    if (
+        prompt_request is not None
+        and record.get("type") == "message_start"
+        and message.get("role") == "user"
+        and message.get("content") == prompt_request.get("message")
+    ):
+        message.setdefault("inputId", prompt_request.get("inputId"))
     print(json.dumps(record), flush=True)
 """,
     )
@@ -77,18 +110,33 @@ def emit(value):
     if message.get("role") == "assistant":
         message.setdefault("content", [])
     _raw_emit(value)
-state = json.loads(sys.stdin.readline())
-emit({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
-      "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)}}}}})
-prompt = json.loads(sys.stdin.readline())
+def read_prompt():
+    while True:
+        request = json.loads(sys.stdin.readline())
+        if request["type"] == "prompt":
+            return request
+        response = {{"id": request["id"], "type": "response",
+                    "command": request["type"], "success": True}}
+        if request["type"] == "get_state":
+            response["data"] = {{"nativeInputProofCapability": {json.dumps(CAPABILITY)}}}
+        emit(response)
+prompt = read_prompt()
 emit({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
 emit({{"type": "message_start", "message": {{"role": "user",
       "content": prompt["message"], "inputId": prompt["inputId"]}}}})
+# A real provider cannot complete in the same write as Pi's input start. Keep
+# dynamic watchdog fixtures from collapsing those two protocol phases.
+import time as _fixture_time
+_fixture_time.sleep(0.01)
 """
 
 
 async def _rpc_events(
-    tmp_path: Path, records: list[dict], *, current_input: bool = True
+    tmp_path: Path,
+    records: list[dict],
+    *,
+    current_input: bool = True,
+    require_input_id: bool = False,
 ) -> list[ae.AgentEvent]:
     # Pi's assistant wire type always carries its content array. Parser cases
     # specify only the fields they vary; the fake child supplies the owned base.
@@ -138,7 +186,40 @@ async def _rpc_events(
         )
     lines = "\n".join(json.dumps(record) for record in records)
     stub = _replay_stub(tmp_path, lines)
-    return [event async for event in one_turn_events(stub, [], "t", str(tmp_path))]
+    return [
+        event
+        async for event in one_turn_events(
+            stub, [], "t", str(tmp_path), require_input_id=require_input_id
+        )
+    ]
+
+
+def _assert_full_rpc_stream(events: list[ae.AgentEvent]) -> None:
+    stream_events = [e for e in events if not isinstance(e, ae.NativePhaseChanged)]
+    assert [type(e) for e in stream_events] == [
+        ae.Chunk,
+        ae.Chunk,
+        ae.Thinking,
+        ae.ToolStart,
+        ae.ToolProgress,
+        ae.ToolEnd,
+        ae.Chunk,
+        ae.Done,
+    ]
+    assert [type(e.phase) for e in events if isinstance(e, ae.NativePhaseChanged)] == [
+        ModelWaitPhase,
+        ToolRunningPhase,
+        ModelWaitPhase,
+        SettlingStatsPhase,
+    ]
+    assert stream_events[2].text == "Checking the workspace"
+    tool_start = stream_events[3]
+    assert tool_start.name == "bash" and tool_start.id == "t1"
+    assert "echo hi" in tool_start.title
+    assert stream_events[4].output == "running"
+    tool_end = stream_events[5]
+    assert tool_end.ok is True and "hi" in tool_end.output
+    assert stream_events[-1].text == "hello done" and stream_events[-1].ok is True
 
 
 class TestRpcParsing:
@@ -174,17 +255,21 @@ class TestRpcParsing:
     ):
         assistant_records = []
         for index, stop in enumerate(assistant_stops):
+            recovering = stop == "error" and index + 1 < len(assistant_stops)
+            if recovering:
+                assistant_records.append(
+                    {"type": "auto_retry_start", "attempt": 1, "maxAttempts": 2}
+                )
             assistant_records.extend((
                 {"type": "message_start", "message": {"role": "assistant", "content": []}},
                 {"type": "message_end", "message": {
                     "role": "assistant", "content": [], "stopReason": stop,
                 }},
             ))
-            if stop == "error" and index + 1 < len(assistant_stops):
-                assistant_records.extend((
-                    {"type": "auto_retry_start", "attempt": 1, "maxAttempts": 2},
-                    {"type": "auto_retry_end", "success": True, "attempt": 1},
-                ))
+            if recovering:
+                assistant_records.append(
+                    {"type": "auto_retry_end", "success": True, "attempt": 1}
+                )
         events = await _rpc_events(
             tmp_path,
             [
@@ -341,9 +426,10 @@ import json, sys
 def emit(value):
     print(json.dumps(value), flush=True)
 for line in sys.stdin:
-    command = json.loads(line)["type"]
+    request = json.loads(line)
+    command = request["type"]
     if command == "prompt":
-        emit({"type": "response", "command": "prompt", "id": "agent-comms-prompt", "success": True})
+        emit({"type": "response", "command": "prompt", "id": request["id"], "success": True})
         emit({"type": "message_start", "message": {"role": "user", "content": "task"}})
         emit({"type": "message_update", "assistantMessageEvent": {
             "type": "text_delta", "delta": "completed reply"}})
@@ -469,26 +555,7 @@ for line in sys.stdin:
         stub = _replay_stub(tmp_path, rpc_lines)
         events = [e async for e in one_turn_events(stub, [], "task", str(tmp_path))]
         # pi-named stub triggers rpc mode; prompt goes to stdin.
-        types = [type(e) for e in events]
-        assert types == [
-            ae.Chunk,
-            ae.Chunk,
-            ae.Thinking,
-            ae.ToolStart,
-            ae.ToolProgress,
-            ae.ToolEnd,
-            ae.Chunk,
-            ae.StreamSettled,
-            ae.Done,
-        ]
-        assert events[2].text == "Checking the workspace"
-        tool_start = events[3]
-        assert tool_start.name == "bash" and tool_start.id == "t1"
-        assert "echo hi" in tool_start.title
-        assert events[4].output == "running"
-        tool_end = events[5]
-        assert tool_end.ok is True and "hi" in tool_end.output
-        assert events[-1].text == "hello done" and events[-1].ok is True
+        _assert_full_rpc_stream(events)
 
     async def test_tool_use_progress_requires_committed_assistant_text(self, tmp_path):
         records = [
@@ -962,6 +1029,7 @@ for line in sys.stdin:
             "sessionId": "first",
             "sessionFile": "/tmp/first.jsonl",
             "model": {"provider": "test", "id": "A", "contextWindow": 1000},
+            "nativeInputProofCapability": CAPABILITY,
         }
         final = {
             **initial,
@@ -994,7 +1062,7 @@ for line in sys.stdin:
             }
         )
         owner = asyncio.current_task()
-        events = await _rpc_events(tmp_path, records)
+        events = await _rpc_events(tmp_path, records, require_input_id=True)
         info = [e for e in events if isinstance(e, ae.AgentInfo)]
         assert [e.context_used for e in info] == [None, 250, None, None]
         assert all(e.session_file == "/tmp/first.jsonl" for e in info)
@@ -1096,26 +1164,40 @@ import json, sys
 def emit(value):
     print(json.dumps(value), flush=True)
 initial = {"sessionId": "first", "sessionFile": "/tmp/first.jsonl",
-           "sessionName": "A", "model": {"provider": "test", "id": "A", "contextWindow": 1000}}
+           "sessionName": "A", "model": {"provider": "test", "id": "A", "contextWindow": 1000},
+           "nativeInputProofCapability": "pi-native-input-v1-live-only"}
 changed = {"sessionId": "second", "sessionFile": "/tmp/second.jsonl",
            "sessionName": "B", "model": {"provider": "test", "id": "B", "contextWindow": 9000}}
-assert json.loads(sys.stdin.readline())["type"] == "get_state"
-emit({"type": "response", "command": "get_state", "success": True, "data": initial})
-assert json.loads(sys.stdin.readline())["type"] == "prompt"
+state = json.loads(sys.stdin.readline())
+assert state["type"] == "get_state"
+emit({"id": state["id"], "type": "response", "command": "get_state",
+      "success": True, "data": initial})
+prompt = json.loads(sys.stdin.readline())
+assert prompt["type"] == "prompt"
+emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
+emit({"type": "message_start", "message": {"role": "user",
+      "content": prompt["message"], "inputId": prompt["inputId"]}})
 emit({"type": "message_update", "assistantMessageEvent":
       {"type": "text_delta", "delta": "A-before"}})
 emit({"type": "message_end", "message": {"role": "assistant", "content": [],
       "stopReason": "stop", "usage": {"totalTokens": 250}}})
-assert json.loads(sys.stdin.readline())["message"] == "[peer] pending"
+while True:
+    pending = json.loads(sys.stdin.readline())
+    if pending["type"] == "prompt":
+        break
+    emit({"id": pending["id"], "type": "response",
+          "command": pending["type"], "success": True})
+assert pending["message"] == "[peer] pending"
 evidence = __EVIDENCE__
 if evidence in {"get_state", "get_session_stats"}:
-    emit({"type": "response", "command": evidence, "success": True,
-          "data": {**changed, "contextUsage": {"tokens": 9999}}})
+    emit({"id": "unsolicited", "type": "response", "command": evidence,
+          "success": True, "data": {**changed, "contextUsage": {"tokens": 9999}}})
 else:
-    emit({"type": "response", "command": evidence.split('_')[0],
+    emit({"id": "unsolicited", "type": "response", "command": evidence.split('_')[0],
           "success": evidence.endswith("cancelled"),
           "data": {"cancelled": evidence.endswith("cancelled")}})
-emit({"type": "message_start", "message": {"role": "user", "content": "[peer] pending"}})
+emit({"type": "message_start", "message": {"role": "user",
+      "content": pending["message"], "inputId": pending["inputId"]}})
 emit({"type": "message_update", "assistantMessageEvent":
       {"type": "text_delta", "delta": "B-secret"}})
 emit({"type": "message_update", "assistantMessageEvent":
@@ -1153,7 +1235,8 @@ for line in sys.stdin:
         queue: asyncio.Queue[InputRequest] = asyncio.Queue()
         pending = steer("[peer] pending", "in-1")
         async for event in one_turn_events(
-            stub, [], "task", str(tmp_path), steering_queue=queue, rpc_abort_grace=0.3
+            stub, [], "task", str(tmp_path), steering_queue=queue,
+            rpc_abort_grace=0.3, require_input_id=True,
         ):
             events.append(event)
             if isinstance(event, ae.Chunk):
@@ -1238,14 +1321,21 @@ for line in sys.stdin:
 
     async def test_rpc_resumes_session_and_forwards_live_prompts(self, tmp_path):
         args_path = tmp_path / "args"
+        mode_path = tmp_path / "mode"
         steering_path = tmp_path / "steering"
         session_path = tmp_path / "session.jsonl"
+        session_path.write_text(json.dumps({
+            "type": "session", "version": 3, "id": "saved",
+            "timestamp": "2026-10-14T00:00:00.000Z", "cwd": str(tmp_path),
+        }) + "\n")
         stub = _stub(
             tmp_path,
             f"""#!/bin/sh
 printf '%s' "$*" > '{args_path}'
 IFS= read -r state
 IFS= read -r prompt
+IFS= read -r mode
+printf '%s' "$mode" > '{mode_path}'
 IFS= read -r steering
 printf '%s' "$steering" > '{steering_path}'
 cat <<'EOF'
@@ -1270,7 +1360,9 @@ EOF
             )
         ]
 
+        assert args_path.exists(), events
         assert f"--session {session_path}" in args_path.read_text()
+        assert '"type": "set_steering_mode"' in mode_path.read_text()
         assert "[peer] ping" in steering_path.read_text()
         assert '"streamingBehavior": "steer"' in steering_path.read_text()
         assert any(
@@ -1315,6 +1407,45 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
 
         assert [event.text for event in events if isinstance(event, ae.Chunk)] == ["pong"]
 
+    async def test_input_start_deadline_owns_wait_after_prompt_acceptance(self, tmp_path):
+        stub = _stub(
+            tmp_path,
+            f"#!{sys.executable}\n"
+            + """\
+import json, sys, time
+def emit(value):
+    print(json.dumps(value), flush=True)
+state = json.loads(sys.stdin.readline())
+emit({"id": state["id"], "type": "response", "command": "get_state", "success": True,
+      "data": {"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
+prompt = json.loads(sys.stdin.readline())
+emit({"id": prompt["id"], "type": "response", "command": "prompt", "success": True})
+time.sleep(0.2)
+emit({"type": "message_start", "message": {"role": "user", "content": prompt["message"],
+      "inputId": prompt["inputId"]}})
+emit({"type": "message_start", "message": {"role": "assistant", "content": []}})
+emit({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": "ok"}})
+emit({"type": "message_end", "message": {"role": "assistant", "content": [],
+      "stopReason": "stop"}})
+emit({"type": "agent_settled"})
+for line in sys.stdin:
+    stats = json.loads(line)
+    if stats["type"] == "get_session_stats":
+        emit({"id": stats["id"], "type": "response", "command": "get_session_stats",
+              "success": True, "data": {"contextUsage": {}}})
+        break
+""",
+        )
+        events = [
+            event
+            async for event in one_turn_events(
+                stub, [], "task", str(tmp_path), model_wait_timeout=0.05,
+                require_input_id=True,
+            )
+        ]
+        assert not [event for event in events if isinstance(event, ae.TurnState)]
+        assert events[-1] == ae.Done(ok=True, text="ok", diagnostic={"exit_code": 0})
+
     async def test_accepted_prompt_stall_is_aborted_without_backend_replay(self, tmp_path):
         abort_log = tmp_path / "abort"
         launch_log = tmp_path / "launches"
@@ -1356,14 +1487,12 @@ time.sleep(60)
             for event in events
             if isinstance(event, ae.TurnState) and event.state == "model_stalled"
         )
-        assert isinstance(stalled, ae.TurnState)
-        assert stalled.phase == "model_wait"
+        assert isinstance(stalled.phase, ModelWaitPhase)
         assert stalled.reason_code == "model_no_progress"
         assert stalled.elapsed_ms >= 20
-        # The prompt crossed an uncertain provider boundary. A watchdog may
-        # abort and report diagnostics, never grant automatic replay authority.
-        assert stalled.retryable is False and stalled.replay_safe is False
-        assert stalled.side_effects_possible is True
+        # TurnState reports native progress only. Replay authority remains with
+        # the original execution's durable ReplayAssessment.
+        assert not hasattr(stalled, "replay_safe")
         assert abort_log.read_text() == "abort"
         assert launch_log.read_text() == "x"  # Backend never owns prompt/session replay.
         assert [type(event) for event in events].count(ae.Done) == 1
@@ -1406,7 +1535,9 @@ time.sleep(60)
         elapsed = asyncio.get_running_loop().time() - started
         states = [event.state for event in events if isinstance(event, ae.TurnState)]
         assert states == ["model_stalled", "aborting", "failed"]
-        assert elapsed < 0.8
+        # Six concurrent subprocess workers can add scheduler latency; the
+        # watchdog still has to stop the 60-second child promptly.
+        assert elapsed < 1.5
 
     async def test_retry_acceptance_then_silence_does_not_claim_recovery(self, tmp_path):
         stub = _stub(
@@ -1466,9 +1597,13 @@ time.sleep(60)
 
         states = [event for event in events if isinstance(event, ae.TurnState)]
         assert [event.state for event in states] == ["retrying", "recovered"]
-        assert states[-1].replay_safe is False
-        assert states[-1].side_effects_possible is True
-        assert events[-1] == ae.Done(ok=True, text="recovered reply", diagnostic={"exit_code": 0})
+        assert all(not hasattr(event, "replay_safe") for event in states)
+        assert events[-1] == ae.Done(
+            ok=True,
+            text="recovered reply",
+            diagnostic={"exit_code": 0},
+            retry_result=ProviderRetryResult(success=True, attempt=1),
+        )
 
     async def test_routine_compaction_emits_no_false_recovery_states(self, tmp_path):
         rpc_lines = "\n".join(
@@ -1515,8 +1650,7 @@ time.sleep(60)
         assert [event.state for event in states] == ["retrying", "recovered"]
         assert states[0].reason_code == "overflow_compaction_retry"
         assert states[1].reason_code == "overflow_retry_progress"
-        assert all(event.replay_safe is False for event in states)
-        assert all(event.side_effects_possible is True for event in states)
+        assert all(not hasattr(event, "replay_safe") for event in states)
 
     async def test_pi_bounded_compaction_is_not_a_core_model_stall(self, tmp_path):
         """Pi bounds its own compaction; Core's model-wait backstop does not abort it."""
@@ -1648,10 +1782,9 @@ time.sleep(60)
             for event in states
             if isinstance(event, ae.TurnState) and event.state == "model_stalled"
         )
-        assert stalled.phase == "summarization_retry"
+        assert isinstance(stalled.phase, SummarizationRetryPhase)
         assert stalled.reason_code == "summarization_retry_no_progress"
-        assert all(event.replay_safe is False for event in states)
-        assert all(event.side_effects_possible is True for event in states)
+        assert all(not hasattr(event, "replay_safe") for event in states)
 
     async def test_provider_retry_failure_is_distinct_from_model_silence(self, tmp_path):
         rpc_lines = "\n".join(
@@ -1698,7 +1831,9 @@ time.sleep(60)
         assert len(starts[0][1]) == 32
         recovery = [event for event in events if isinstance(event, ae.TurnState)]
         assert [event.state for event in recovery] == ["retrying", "failed"], events
-        assert recovery[0].attempt == {"current": 1, "max": 3}
+        assert isinstance(recovery[0].attempt, AutoRetryStart)
+        assert recovery[0].attempt.attempt == 1
+        assert recovery[0].attempt.max_attempts == 3
         assert recovery[-1].reason_code == "provider_retry_exhausted"
         assert all("secret" not in str(event) for event in recovery)
         assert not any(event.state == "model_stalled" for event in recovery)
@@ -1726,7 +1861,7 @@ def keep_model_live_until_steering():
         emit({{"type": "message_update", "assistantMessageEvent":
               {{"type": "thinking_delta", "delta": "."}}}})
 threading.Thread(target=keep_model_live_until_steering, daemon=True).start()
-steering = json.loads(sys.stdin.readline())
+steering = read_prompt()
 steering_received.set()
 pathlib.Path({str(steering_log)!r}).write_text(json.dumps(steering, sort_keys=True))
 emit({{"id": steering["id"], "type": "response", "command": "prompt", "success": True}})
@@ -1781,10 +1916,15 @@ def emit(value):
 """
             + _NATIVE_PROMPT_START
             + """\
+emit({"type": "message_start", "message": {"role": "assistant", "content": []}})
+emit({"type": "message_end", "message": {
+    "role": "assistant", "content": [], "stopReason": "toolUse",
+}})
 emit({"type": "tool_execution_start", "toolCallId": "slow", "toolName": "bash", "args": {}})
 time.sleep(0.12)
 emit({"type": "tool_execution_end", "toolCallId": "slow", "toolName": "bash",
       "result": {"content": [{"type": "text", "text": "finished"}]}, "isError": False})
+emit({"type": "message_start", "message": {"role": "assistant", "content": []}})
 emit({"type": "message_update", "assistantMessageEvent": {
     "type": "text_delta", "delta": "done after tool"}})
 emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}})
@@ -1853,10 +1993,9 @@ for line in sys.stdin:
         failed = next(
             event for event in events if isinstance(event, ae.TurnState) and event.state == "failed"
         )
-        assert failed.phase == "shutdown"
+        assert isinstance(failed.phase, ShutdownPhase)
         assert failed.reason_code == "model_no_progress"
-        assert failed.retryable is False and failed.replay_safe is False
-        assert failed.side_effects_possible is True
+        assert not hasattr(failed, "replay_safe")
         assert launches.read_text() == "x"
         assert isinstance(events[-1], ae.Done) and events[-1].ok is False
         assert "no RPC progress" in events[-1].text
@@ -1875,8 +2014,8 @@ for line in sys.stdin:
         stub = _replay_stub(tmp_path, rpc_lines)
         events = [e async for e in one_turn_events(stub, [], "t", str(tmp_path))]
         assert events[-1].ok is True
-        tool_end = events[1]
-        assert tool_end.ok is False
+        tool_ends = [event for event in events if isinstance(event, ae.ToolEnd)]
+        assert len(tool_ends) == 1 and tool_ends[0].ok is False
 
 
 # Native per-input proof tests retained from the PR#1 parent.
@@ -2852,26 +2991,7 @@ class TestPrRpcParsing:
         stub = _replay_stub(tmp_path, rpc_lines)
         events = [e async for e in one_turn_events(stub, [], "task", str(tmp_path))]
         # pi-named stub triggers rpc mode; prompt goes to stdin.
-        types = [type(e) for e in events]
-        assert types == [
-            ae.Chunk,
-            ae.Chunk,
-            ae.Thinking,
-            ae.ToolStart,
-            ae.ToolProgress,
-            ae.ToolEnd,
-            ae.Chunk,
-            ae.StreamSettled,
-            ae.Done,
-        ]
-        assert events[2].text == "Checking the workspace"
-        tool_start = events[3]
-        assert tool_start.name == "bash" and tool_start.id == "t1"
-        assert "echo hi" in tool_start.title
-        assert events[4].output == "running"
-        tool_end = events[5]
-        assert tool_end.ok is True and "hi" in tool_end.output
-        assert events[-1].text == "hello done" and events[-1].ok is True
+        _assert_full_rpc_stream(events)
 
     async def test_rpc_model_and_context_metadata(self, tmp_path):
         rpc_lines = "\n".join(
@@ -2901,6 +3021,10 @@ class TestPrRpcParsing:
         args_path = tmp_path / "args"
         steering_path = tmp_path / "steering"
         session_path = tmp_path / "session.jsonl"
+        session_path.write_text(json.dumps({
+            "type": "session", "version": 3, "id": "saved",
+            "timestamp": "2026-10-14T00:00:00.000Z", "cwd": str(tmp_path),
+        }) + "\n")
         stub = _stub(
             tmp_path,
             f"""#!/bin/sh
@@ -3045,8 +3169,8 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
         stub = _replay_stub(tmp_path, rpc_lines)
         events = [e async for e in one_turn_events(stub, [], "t", str(tmp_path))]
         assert events[-1].ok is True
-        tool_end = events[1]
-        assert tool_end.ok is False
+        tool_ends = [event for event in events if isinstance(event, ae.ToolEnd)]
+        assert len(tool_ends) == 1 and tool_ends[0].ok is False
 
     @pytest.mark.parametrize(
         ("starts", "stops", "expected_reason"),

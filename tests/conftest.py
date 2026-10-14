@@ -84,8 +84,11 @@ def native_rpc_fixture(monkeypatch):
             (command, *args),
             Path(worktree),
             env,
-            SelectedSession.for_launch(Path(worktree),
-                Path(session_file) if session_file is not None else None, Path(worktree)),
+            SelectedSession.for_launch(
+                Path(worktree),
+                Path(session_file) if session_file is not None else None,
+                Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
+            ),
             Path(worktree),
             configuration=RestartEnvironment.inherit(env),
         )
