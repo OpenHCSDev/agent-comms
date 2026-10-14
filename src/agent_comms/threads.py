@@ -170,7 +170,6 @@ class Thread(ThreadProvenance):
             raise ValueError("Thread model cannot be empty.")
         if self.thinking_level is not None:
             object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
-        object.__setattr__(self, "service_tier", FieldCodec.decode(ServiceTier, self.service_tier))
 
     def require_original_model_configuration(self, original: Thread) -> None:
         changed = any((
@@ -185,7 +184,7 @@ class Thread(ThreadProvenance):
 
     def with_model_configuration(
         self, *, model: str | None = None, thinking_level: str | None = None,
-        service_tier: str | ServiceTier | None = None,
+        service_tier: ServiceTier | None = None,
     ) -> Thread:
         return replace(
             self,
