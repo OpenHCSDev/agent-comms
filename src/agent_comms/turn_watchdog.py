@@ -1,72 +1,177 @@
-"""Turn progress, bounded waits and retry diagnostics owned by one watchdog."""
+"""Declaration-owned turn waits, progress budgets and retry diagnostics."""
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable
-from contextlib import contextmanager, nullcontext, suppress
-from dataclasses import dataclass, field
+from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from . import agent_events as events
 from . import turn_failure as failures
 from . import turn_phase as phases
+from .declared_family import DeclaredFamily
 from .diagnostics import FailureReason
 from .native_startup import NATIVE_STARTUP_POLICY
 
 if TYPE_CHECKING:
     from .backend import TurnSession
-    from .pi_events import PiEvent
-    from .pi_events import RetryAttemptEvent
+    from .pi_events import PiEvent, RetryAttemptEvent
 
 
-@dataclass
-class OwnedWait:
-    """A budget charged only while its owner is actually awaiting progress."""
+class TurnWait(DeclaredFamily, affix="Wait"):
+    """Own the wait's budget, charging, diagnostic and terminal behaviour."""
 
-    budget: float
-    remaining: float = field(init=False)
-    elapsed: float = field(init=False, default=0.0)
-    _started_at: float | None = field(init=False, default=None)
+    reason: ClassVar[str]
+    phase: ClassVar[str]
 
-    def __post_init__(self) -> None:
-        self.remaining = self.budget
+    def __init__(self, budget: float = 0.0):
+        self.budget = budget
+        self.elapsed = 0.0
+
+    def restart(self) -> None:
+        self.elapsed = 0.0
+
+    def timeout(self) -> float | None:
+        return max(0.0, self.budget - self.elapsed)
 
     @contextmanager
     def charge(self, clock: Callable[[], float]):
-        if self._started_at is not None:
-            raise RuntimeError("wait budget is already active")
-        self._started_at = clock()
+        started_at = clock()
+        remaining = max(0.0, self.budget - self.elapsed)
         try:
-            yield self.remaining
+            yield
         finally:
-            assert self._started_at is not None
-            charged = min(self.remaining, max(0.0, clock() - self._started_at))
-            self.remaining -= charged
-            self.elapsed += charged
-            self._started_at = None
+            self.elapsed += min(remaining, max(0.0, clock() - started_at))
 
-    def restart(self) -> None:
-        if self._started_at is not None:
-            raise RuntimeError("active wait budget cannot restart")
-        self.remaining = self.budget
-        self.elapsed = 0.0
+    def failure_context(self, session: TurnSession) -> tuple[str, str]:
+        return self.reason, self.phase
+
+    def expired(self, session: TurnSession) -> TimeoutError:
+        reason, phase = self.failure_context(session)
+        return TimeoutError(
+            f"{reason}: phase={phase}; no progress for "
+            f"{self.elapsed:.3f}s; input_started={session.started_input}"
+        )
+
+    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.finished = True
+        if False:
+            yield
+
+
+class PreflightWait(TurnWait):
+    reason = "native_preflight_timeout"
+    phase = "await_get_state"
+
+    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        watchdog = session.watchdog
+        elapsed_ms = round((watchdog.clock() - watchdog.launch_started_at) * 1000)
+        wait_ms = round(self.elapsed * 1000)
+        budget_ms = round(self.budget * 1000)
+        session.output.preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
+        session.output.diagnostic = {
+            "elapsed_ms": elapsed_ms,
+            "wait_ms": wait_ms,
+            "spawn_ms": watchdog.spawn_ms,
+            "budget_ms": budget_ms,
+        }
+        if watchdog.session_bytes is not None:
+            session.output.diagnostic["session_bytes"] = watchdog.session_bytes
+        session_size = watchdog.session_bytes if watchdog.session_bytes is not None else "unknown"
+        session.output.record_failure(
+            failures.InputIdUnavailable(
+                "Pi native input-ID capability preflight timed out "
+                f"(phase={self.phase}, elapsed_ms={elapsed_ms}, "
+                f"wait_ms={wait_ms}, budget_ms={budget_ms}, "
+                f"spawn_ms={watchdog.spawn_ms}, session_bytes={session_size})."
+            )
+        )
+        await session.native.proc.stop()
+        async for event in super().expire(session):
+            yield event
+
+
+class InputStartWait(TurnWait):
+    reason = "input_start_timeout"
+    phase = "await_input"
+
+    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.output.record_failure(
+            failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
+        )
+        await session.native.proc.stop()
+        async for event in super().expire(session):
+            yield event
+
+
+class ModelWait(TurnWait):
+    def failure_context(self, session: TurnSession) -> tuple[str, str]:
+        watchdog = session.watchdog
+        stalled = watchdog.phase.stalled(watchdog.prompt_accepted)
+        return stalled.stall_reason, stalled.declared_name
+
+    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        watchdog = session.watchdog
+        elapsed_ms = round(self.elapsed * 1000)
+        stalled_phase = watchdog.phase.stalled(watchdog.prompt_accepted)
+        reason_code = stalled_phase.stall_reason
+        if watchdog.prompt_accepted:
+            yield watchdog.state("model_stalled", reason_code, elapsed_ms, phase=stalled_phase)
+        yield watchdog.state("aborting", reason_code, elapsed_ms, phase=phases.ShutdownPhase())
+        await session.abort_stalled_rpc()
+        for input_id in session.started_during_abort:
+            yield events.InputStarted(id=input_id)
+        yield watchdog.state("failed", reason_code, elapsed_ms, phase=phases.ShutdownPhase())
+        session.output.record_failure(
+            failures.ModelStalled(
+                f"Model produced no RPC progress for {self.budget:g} seconds."
+                if watchdog.prompt_accepted
+                else f"Pi did not accept the prompt within {self.budget:g} seconds."
+            )
+        )
+        async for event in super().expire(session):
+            yield event
+
+
+class UnchargedWait:
+    """Polling and unbounded operations do not consume a progress budget."""
+
+    @contextmanager
+    def charge(self, clock: Callable[[], float]):
+        yield
+
+
+class PollWait(UnchargedWait, TurnWait):
+    reason = "session_stats_timeout"
+    phase = "await_stats"
+
+    def timeout(self) -> float:
+        return 5.0
+
+
+class UnboundedWait(UnchargedWait, TurnWait):
+    reason = "unbounded_wait_interrupted"
+    phase = "unbounded"
+
+    def timeout(self) -> None:
+        return None
 
 
 class ProgressWatchdog:
-    """Own clocks and observed progress; never grant input or replay authority."""
+    """Select a declared wait once; never grant input or replay authority."""
 
     def __init__(
         self, model_wait_timeout: float | None, input_timeout: float, preflight_timeout: float
     ):
-        self.model_wait_timeout = model_wait_timeout
-        self.input_timeout = input_timeout
-        self.preflight_timeout = preflight_timeout
-        self.input_wait: OwnedWait | None = None
+        self.preflight_wait = PreflightWait(preflight_timeout)
+        self.input_wait = InputStartWait(input_timeout)
         self.model_wait = (
-            OwnedWait(model_wait_timeout) if model_wait_timeout is not None else None
+            ModelWait(model_wait_timeout) if model_wait_timeout is not None else UnboundedWait()
         )
+        self.poll_wait = PollWait()
+        self.unbounded_wait = UnboundedWait()
         self.prompt_accepted = False
         self.phase: phases.TurnPhase = phases.PromptAcceptancePhase()
         self.retry_recovery_pending = False
@@ -84,18 +189,17 @@ class ProgressWatchdog:
         self.spawn_ms = 0 if reused else round((self.clock() - self.launch_started_at) * 1000)
 
     def reading(self) -> None:
-        self.preflight_wait = OwnedWait(NATIVE_STARTUP_POLICY.readiness_timeout(
-            self.session_bytes, base_seconds=self.preflight_timeout
-        ))
+        self.preflight_wait.budget = NATIVE_STARTUP_POLICY.readiness_timeout(
+            self.session_bytes, base_seconds=self.preflight_wait.budget
+        )
+        self.preflight_wait.restart()
         self.now = self.last_model_progress = self.clock()
 
     def await_input(self) -> None:
-        self.input_wait = OwnedWait(self.input_timeout)
+        self.input_wait.restart()
 
     def compacted(self, input_started: bool) -> None:
-        if input_started:
-            return
-        if self.input_wait:
+        if not input_started:
             self.input_wait.restart()
 
     def tick(self) -> None:
@@ -103,8 +207,7 @@ class ProgressWatchdog:
 
     def progress(self) -> None:
         self.last_model_progress = self.now
-        if self.model_wait:
-            self.model_wait.restart()
+        self.model_wait.restart()
 
     async def observe(
         self, event: PiEvent, session: TurnSession
@@ -126,58 +229,18 @@ class ProgressWatchdog:
     def transition(self, event: PiEvent, active_tools: set[str]) -> None:
         self.phase = event.observed_phase(self.phase.on(event, active_tools))
 
-    def input_wait_for(self, session: TurnSession) -> OwnedWait | None:
-        if not self.input_wait:
-            return None
-        if not session.admission.awaiting_start:
-            return None
-        if self.phase.pauses_input_clock:
-            return None
-        return self.input_wait
-
-    def model_wait_for(self, session: TurnSession) -> OwnedWait | None:
-        if not self.model_wait:
-            return None
-        if session.stats.requested:
-            return None
-        if session.active_tools:
-            return None
-        if self.phase.model_wait(self.model_wait_timeout) is None:
-            return None
-        return self.model_wait
-
-    def owned_wait(self, session: TurnSession) -> OwnedWait | None:
+    def wait_for(self, session: TurnSession) -> TurnWait:
         if session.awaiting_native_attestation:
             return self.preflight_wait
-        return self.input_wait_for(session) or self.model_wait_for(session)
-
-    def model_wait_elapsed(self) -> float:
-        return self.model_wait.elapsed if self.model_wait else 0.0
-
-    def read_timeout(
-        self, session: TurnSession, owned_timeout: float | None = None
-    ) -> float | None:
-        if session.awaiting_native_attestation:
-            timeout: float | None = (
-                self.preflight_wait.remaining if owned_timeout is None else owned_timeout
-            )
-        elif session.stats.requested:
-            timeout = 5.0
-        elif session.admission.awaiting_start:
-            # Prompt acceptance is not model work. Until Pi publishes the
-            # matching user start, the dedicated input-start budget owns the
-            # wait and a short model lease must not race the pipe reader.
-            if self.phase.pauses_input_clock:
-                timeout = None
-            else:
-                assert owned_timeout is not None
-                timeout = owned_timeout
-        elif session.active_tools or self.phase.model_wait(self.model_wait_timeout) is None:
-            timeout = None
-        else:
-            assert owned_timeout is not None
-            timeout = owned_timeout
-        return timeout
+        if session.stats.requested:
+            return self.poll_wait
+        if session.admission.awaiting_start:
+            return self.unbounded_wait if self.phase.pauses_input_clock else self.input_wait
+        if session.active_tools:
+            return self.unbounded_wait
+        if self.phase.model_wait(self.model_wait.timeout()) is None:
+            return self.unbounded_wait
+        return self.model_wait
 
     def state(
         self,
@@ -209,27 +272,19 @@ class ProgressWatchdog:
         tasks = {read_task, reject_task}
         if finish_task is not None:
             tasks.add(finish_task)
-        owned_wait = self.owned_wait(session)
+        wait = self.wait_for(session)
         try:
-            with (
-                owned_wait.charge(self.clock)
-                if owned_wait
-                else nullcontext()
-            ) as owned_timeout:
+            with wait.charge(self.clock):
                 done, _ = await asyncio.wait(
-                    tasks,
-                    timeout=self.read_timeout(session, owned_timeout),
-                    return_when=asyncio.FIRST_COMPLETED,
+                    tasks, timeout=wait.timeout(), return_when=asyncio.FIRST_COMPLETED
                 )
             if not done:
-                # A busy owner loop can resume its deadline before the pipe
-                # reader's already-ready continuation. Settle queued callbacks
-                # before cancelling that read; this grants no additional wait
-                # budget and leaves attestation with its existing owner.
+                # Let an already-ready pipe continuation retire before expiry;
+                # this does not grant another provider wait or admission.
                 await asyncio.sleep(0)
                 done = {task for task in tasks if task.done()}
             if not done:
-                raise self.expired_wait(session)
+                raise wait.expired(session)
             if read_task in done:
                 return read_task.result()
             if finish_task is not None and finish_task in done:
@@ -245,81 +300,6 @@ class ProgressWatchdog:
                     pending.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    def expired_wait(self, session: TurnSession) -> TimeoutError:
-        """Describe the expired operation using the existing lifecycle clocks."""
-        if session.awaiting_native_attestation:
-            reason, phase = "native_preflight_timeout", "await_get_state"
-            elapsed = self.preflight_wait.elapsed
-        elif input_wait := self.input_wait_for(session):
-            reason, phase = "input_start_timeout", "await_input"
-            elapsed = input_wait.elapsed
-        else:
-            stalled = self.phase.stalled(self.prompt_accepted)
-            reason, phase = stalled.stall_reason, stalled.declared_name
-            elapsed = (
-                self.model_wait_elapsed()
-                if self.model_wait
-                else self.clock() - self.last_model_progress
-            )
-        return TimeoutError(
-            f"{reason}: phase={phase}; no progress for "
-            f"{elapsed:.3f}s; input_started={session.started_input}"
-        )
-
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if session.awaiting_native_attestation:
-            elapsed_ms = round((self.clock() - self.launch_started_at) * 1000)
-            wait_ms = round(self.preflight_wait.elapsed * 1000)
-            session.output.preflight_failure = FailureReason.PREFLIGHT_TIMEOUT
-            session.output.diagnostic = {
-                "elapsed_ms": elapsed_ms,
-                "wait_ms": wait_ms,
-                "spawn_ms": self.spawn_ms,
-                "budget_ms": round(self.preflight_wait.budget * 1000),
-            }
-            if self.session_bytes is not None:
-                session.output.diagnostic["session_bytes"] = self.session_bytes
-            session_size = self.session_bytes if self.session_bytes is not None else "unknown"
-            session.output.record_failure(
-                failures.InputIdUnavailable(
-                    "Pi native input-ID capability preflight timed out "
-                    f"(phase=await_get_state, elapsed_ms={elapsed_ms}, "
-                    f"wait_ms={wait_ms}, budget_ms={round(self.preflight_wait.budget * 1000)}, "
-                    f"spawn_ms={self.spawn_ms}, session_bytes={session_size})."
-                )
-            )
-            await session.native.proc.stop()
-            session.finished = True
-            return
-        if self.input_wait_for(session):
-            session.output.record_failure(
-                failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
-            )
-            await session.native.proc.stop()
-            session.finished = True
-            return
-        if session.stats.requested:
-            session.finished = True
-            return
-        elapsed_ms = round(self.model_wait_elapsed() * 1000)
-        stalled_phase = self.phase.stalled(self.prompt_accepted)
-        reason_code = stalled_phase.stall_reason
-        if self.prompt_accepted:
-            yield self.state(
-                "model_stalled", reason_code, elapsed_ms, phase=stalled_phase
-            )
-        yield self.state("aborting", reason_code, elapsed_ms, phase=phases.ShutdownPhase())
-        await session.abort_stalled_rpc()
-        for input_id in session.started_during_abort:
-            yield events.InputStarted(id=input_id)
-        failed_elapsed_ms = round(self.model_wait_elapsed() * 1000)
-        yield self.state("failed", reason_code, failed_elapsed_ms, phase=phases.ShutdownPhase())
-        session.output.record_failure(
-            failures.ModelStalled(
-                f"Model produced no RPC progress for {self.model_wait_timeout:g} seconds."
-                if self.prompt_accepted
-                else f"Pi did not accept the prompt within {self.model_wait_timeout:g} seconds."
-            )
-        )
-        session.finished = True
-        return
+        async for event in self.wait_for(session).expire(session):
+            yield event

@@ -631,8 +631,29 @@ raise SystemExit(f.main(sys.argv[1:]))
             ready = json.loads(child.stdout.readline())
             assert ready == {"ready": True, "name": "beta", "pid": child.pid}
             assert comms.registry.require("beta").pid == child.pid
-            sent = comms.messaging.send_initial_cohort("sender", "beta", "Compute 17+25")
-            assert sent.seq == 1
+            sender = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "agent_comms.cohort_send",
+                    "--root",
+                    str(root),
+                    "--wire-root-id",
+                    root_id,
+                    "--from",
+                    "sender",
+                    "--to",
+                    "beta",
+                    "--body",
+                    "Compute 17+25",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=True,
+                env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")},
+            )
+            assert json.loads(sender.stdout)["wire_seq"] == 1
             out, err = child.communicate(timeout=12)
             assert child.returncode == 0, (out, err)
             response = json.loads(out.strip())

@@ -453,9 +453,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 ) from error
         else:
             self.write(command, payload)
-        await asyncio.wait_for(
-            self.native.proc.stdin.drain(), timeout=self.watchdog.read_timeout(self)
-        )
+        wait = self.watchdog.wait_for(self)
+        with wait.charge(self.watchdog.clock):
+            await asyncio.wait_for(self.native.proc.stdin.drain(), timeout=wait.timeout())
 
     async def attest(self) -> None:
         self.native.attestation = self.launch.session.tracked_attestation(
