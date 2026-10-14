@@ -266,6 +266,7 @@ async def test_actual_saved_eof_preserves_unknown_and_never_replays(journey):
 
 @pytest.mark.parametrize("direct", [False])
 async def test_actual_fresh_enrollment_retains_coverage_across_triage(journey):
+    (journey.root / "runtime").mkdir(mode=0o700, exist_ok=True)
     journey.text('{"decision":"FULL"}')
     journey.text("FRESH_TRIAGE_FULL_COMPLETED")
     result = await SelectedExecution(

@@ -126,6 +126,16 @@ class KnownSessionAttestation(NativeAttestation):
     def admits_extension_input(self, inputs) -> bool:
         return inputs.permits_admission
 
+    def conflicts(self, data) -> bool:
+        """Reject every reported component that differs from the known identity."""
+        return any(
+            observed is not None and observed != expected
+            for expected, observed in (
+                (self.identity.session_id, data.session_id),
+                (self.identity.session_file, data.session_file),
+            )
+        )
+
 
 @dataclass
 class ObservedAttestation(NativeAttestation):
