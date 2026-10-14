@@ -450,7 +450,8 @@ class TurnRunner:
     def current_turn_update(self, session_id: str):
         return TurnTranscriptUpdate(state=self.turn_state(session_id))
 
-    async def replay_turn_state(self, session_id: str, client: Any = None) -> None:
+    async def publish_turn_state(self, session_id: str, client: Any = None) -> None:
+        """Publish the registry owner's current turn to this open session."""
         update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
         await self.effects._emit_event(session_id, update, client=client)
 
@@ -508,9 +509,14 @@ class TurnRunner:
                 await following.pass_on_unread(self)
                 return result
             finally:
-                await self.inputs.finish_turn_inputs(session_id, inbox)
-                if self.turn_tasks.get(session_id) is task:
-                    self.turn_tasks.pop(session_id, None)
+                try:
+                    await self.inputs.finish_turn_inputs(session_id, inbox)
+                finally:
+                    if self.turn_tasks.get(session_id) is task:
+                        self.turn_tasks.pop(session_id, None)
+                    # SelectedParticipant closed the registry lease while unwinding
+                    # execution. Publish that canonical end on success and failure.
+                    await self.publish_turn_state(session_id)
 
     async def run_agent_turn(
         self,

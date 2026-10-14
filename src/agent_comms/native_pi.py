@@ -692,7 +692,9 @@ class PrivateEvidenceRead:
     def _open_stream(cls, path):
         stream = None
         try:
-            stream = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
+            stream = os.fdopen(
+                os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb", buffering=0
+            )
             PrivateFileRole.require(os.fstat(stream.fileno()))
             return stream
         except (OSError, ValueError) as error:
@@ -746,12 +748,10 @@ class PrivateEvidenceRead:
                 last = raw[-1:]
             if info.st_size > self.size and last != b"\n":
                 raise NativePiUnavailable("Native Pi evidence file is incomplete")
-            for observed in (os.fstat(self.stream.fileno()), self.path.lstat()):
-                PrivateFileRole.require(observed)
-                if revision != FileRevision.from_stat(observed):
-                    raise NativeEvidencePrefixChanged(
-                        "Native Pi evidence source changed during observation"
-                    )
+            if self._observe_revision_after(revision) != revision:
+                raise NativeEvidencePrefixChanged(
+                    "Native Pi evidence source changed during observation"
+                )
             return info.st_size, digest
         except (OSError, ValueError) as error:
             raise NativePiUnavailable(
@@ -822,13 +822,13 @@ class PrivateEvidenceRead:
     def verify_snapshot(self, size, expected_digest):
         """Validate the captured prefix after decoding, allowing later appends.
 
-        The current revision must stay fixed during this short hash read. It
-        need not equal the older capture revision: native appends during typed
-        decoding are legitimate, while altered captured bytes are refused.
+        Rehash the captured range once from the pinned unbuffered descriptor.
+        Later appends do not change those bytes; a later observation rechecks
+        them again before exposing more rows.
         """
         before = os.fstat(self.stream.fileno())
         PrivateFileRole.require(before)
-        revision = FileRevision.from_stat(before)
+        revision = self._observe_revision_after(FileRevision.from_stat(before))
         if revision.identity != self.identity or revision.size < size:
             raise NativeEvidencePrefixChanged("Native Pi evidence snapshot source changed")
         self.stream.seek(0)
@@ -842,12 +842,25 @@ class PrivateEvidenceRead:
             digest.update(raw)
         if digest.digest() != expected_digest:
             raise NativeEvidencePrefixChanged("Native Pi evidence original prefix changed")
-        for observed in (os.fstat(self.stream.fileno()), self.path.lstat()):
-            PrivateFileRole.require(observed)
-            if revision != FileRevision.from_stat(observed):
+
+    def _observe_revision_after(self, revision):
+        """Check original private inode and monotonic growth, not byte integrity.
+
+        Return the last observation so hashing cannot accept a digest from an
+        earlier revision. Each observation also fences the next: growth seen on
+        the descriptor cannot be hidden by shrinking the named file back.
+        """
+        for info in (os.fstat(self.stream.fileno()), self.path.lstat()):
+            PrivateFileRole.require(info)
+            observed = FileRevision.from_stat(info)
+            if observed.identity != self.identity or (
+                observed != revision and observed.size <= revision.size
+            ):
                 raise NativeEvidencePrefixChanged(
-                    "Native Pi evidence changed during snapshot verification"
+                    "Native Pi evidence source changed without growth"
                 )
+            revision = observed
+        return revision
 
 
 def _trusted_package(package: Path) -> Path:
