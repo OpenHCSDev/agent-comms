@@ -169,7 +169,7 @@ class DMDisplayBasis:
             bus_identity = bus.reads.bus_identity(bus.log.path)
         # Native admission uses this same wire lock. Page preparation and the
         # older-unread scan use opened source boundaries, outside admission.
-        page = bus.display_page(
+        page = bus.conversation_page(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         )
         older_unread = False

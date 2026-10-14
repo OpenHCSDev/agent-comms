@@ -334,7 +334,7 @@ class RecoverySnapshot:
         The caller retains wire/bus/registry exclusion through terminal commit.
         """
         from .envelope_claim_transitions import ClaimRelease, project_verified_transitions
-        from .messages import InfoKind, Message
+        from .messages import ClaimNoticeKind, Message
         from itertools import groupby
 
         bus, bus_lock, registry = boundary.bus, boundary.bus_lock, boundary.registry
@@ -378,7 +378,7 @@ class RecoverySnapshot:
             for offset in range(0, len(recorded), 32):
                 bus.publisher.publish_claim_envelope(
                     Message(owner.name, target,
-                            "Terminal attempt file claims released", InfoKind, notice=True),
+                            "Terminal attempt file claims released", ClaimNoticeKind, notice=True),
                     worktree=Path(owner.worktree), incarnation=incarnation,
                     releases=tuple(ClaimRelease(claim.resource, claim.generation)
                                    for claim in recorded[offset:offset + 32]),

@@ -12,7 +12,7 @@ from .bus_route_counts import ActorSeen, BusRouteCounts, PendingRoute
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
-from .message_page import MessagePage, MessagePageRequest
+from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
@@ -491,6 +491,20 @@ class MessageBus:
     ) -> MessagePage:
         """Browse a captured presentation scope, not a delivery/history authority."""
         return MessagePageRequest.capture(
+            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
+        ).read(self.log)
+
+    def conversation_page(
+        self,
+        scope: MessageDisplayScope,
+        *,
+        before: int | None = None,
+        after: int | None = None,
+        limit: int = 100,
+        max_bytes: int = 256 * 1024,
+    ) -> MessagePage:
+        """Present only records whose declaring kind is conversation content."""
+        return ConversationMessagePageRequest.capture(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         ).read(self.log)
 

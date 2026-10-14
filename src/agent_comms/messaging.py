@@ -65,6 +65,7 @@ class Messaging:
         report: ChangeReport | None = None,
     ) -> Message:
         """Return one committed envelope, including optional guarded claims."""
+        type.require_sendable()
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
@@ -104,6 +105,7 @@ class Messaging:
         notice: bool = False,
     ) -> Message:
         """Test-gated full-N send. No automatic SQL acceptance or live wake."""
+        type.require_sendable()
         with _store_lock(self._wire_lock_path):
             if sender not in self.registry or not self.registry.require(sender).role.executable:
                 raise RelationViolationError("Initial sender must be a registered executable.")

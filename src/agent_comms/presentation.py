@@ -20,7 +20,7 @@ from .display_order import ChannelSort
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
-from .message_page import MessagePage, MessagePageRequest
+from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope
@@ -447,7 +447,7 @@ class BusPresentation:
                     scope = basis.scope(target)
             # Identity capture does not grant custody over page preparation. Both
             # DM and channel pages borrow the same original reader and source cut.
-            page = MessagePageRequest.capture(
+            page = ConversationMessagePageRequest.capture(
                 scope, before=before, after=after, limit=limit, max_bytes=max_bytes
             ).read_opened(self.bus.log, marker, source, stream, records)
             if viewer is not None:

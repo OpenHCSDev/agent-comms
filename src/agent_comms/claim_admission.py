@@ -31,7 +31,7 @@ from .envelope_claim_transitions import (
     project_verified_transitions,
 )
 from .errors import RelationViolationError
-from .messages import InfoKind, Message
+from .messages import ClaimNoticeKind, Message
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import StoreLock, _store_lock
@@ -206,7 +206,7 @@ def publish_selected_resource_claim(
         if target == owner.name:
             target = BuiltinChannel.ALL.value
         committed = bus.publisher.publish_claim_envelope(
-            Message(owner.name, target, "Resource claim admitted", InfoKind, notice=True),
+            Message(owner.name, target, "Resource claim admitted", ClaimNoticeKind, notice=True),
             worktree=Path(owner.worktree),
             incarnation=str(owner.created_at),
             claims=[resource_path],
