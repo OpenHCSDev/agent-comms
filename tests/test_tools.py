@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from agent_comms.threads import Thread
@@ -44,7 +46,12 @@ class TestToolCatalog:
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
         with pytest.raises(ValueError, match="identity"):
             invoke_tool(comms, "comms_collaborations", {})
-        with pytest.raises(ValueError, match="Value does not match"):
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "Invalid comms_collaboration arguments: Unknown RelationshipEdit name: 'start'"
+            ),
+        ):
             invoke_tool(comms, "comms_collaboration", {"action": "start", "peer": "b"})
         with pytest.raises(ValueError, match="Unknown fields"):
             invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b", "owner": "c"})
@@ -88,7 +95,10 @@ class TestToolCatalog:
         assert comms.bus.pending_count("b") == 0
 
     def test_arguments_are_validated_before_dispatch(self, comms):
-        with pytest.raises(ValueError, match="missing.*name"):
+        with pytest.raises(
+            ValueError,
+            match=re.escape("Invalid comms_stop arguments: Missing required fields for CommsStopTool: name"),
+        ):
             invoke_tool(comms, "comms_stop", {})
         with pytest.raises(ValueError, match="Unknown fields"):
             invoke_tool(comms, "comms_stop", {"name": "a", "force": True})
