@@ -65,7 +65,7 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     owner: OwnerIdentity
     error_type: str
     reason: str
-    recorded_at: float = field(default_factory=time.time, compare=False)
+    recorded_at: float = field(compare=False)
 
     @property
     @abstractmethod

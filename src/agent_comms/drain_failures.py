@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+import time
 from contextlib import asynccontextmanager
 from functools import partial
 from collections.abc import Awaitable, Callable
@@ -34,7 +35,8 @@ async def drain_failures(
         try:
             await Coordination.run_worker(partial(
                 comms.agents.set_drain_diagnostic, thread, owner,
-                kind(owner, type(error).__name__, str(error)), source_error=error,
+                kind(owner, type(error).__name__, str(error), recorded_at=time.time()),
+                source_error=error,
             ))
         finally:
             await retry()
@@ -54,7 +56,9 @@ async def drain_failures(
     except Exception as error:
         await Coordination.run_worker(partial(
             comms.agents.set_drain_diagnostic, thread, owner,
-            StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
+            StoppedDrainDiagnostic(
+                owner, type(error).__name__, str(error), recorded_at=time.time()
+            ),
             source_error=error,
         ))
         raise
