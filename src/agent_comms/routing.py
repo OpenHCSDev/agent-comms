@@ -7,8 +7,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .channel_targets import BuiltinChannel, is_channel_target
-from .messages import Message
 from .message_reference import MessageReference
+from .messages import Message
+from .private_path import FileRevision
 from .field_codec import FieldCodec
 from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
 
@@ -229,6 +230,6 @@ class DeliveryScope(MessageDisplayScope):
 
 @dataclass(frozen=True, slots=True)
 class PendingCounts:
-    revision: tuple[tuple[int, int, int, int] | None, ...]
+    revision: tuple[FileRevision | None, ...]
     delivery: DeliveryScope
     counts: Mapping[str, int]

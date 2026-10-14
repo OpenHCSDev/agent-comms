@@ -32,7 +32,6 @@ from .turn_lease import TurnLeaseFence
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_receipts import AssignedSourceCursor, AssignedSourceIdentity
-from .store_files import file_revision
 from .coordination_errors import StaleRevision, TranscriptChanged
 
 _LOG = logging.getLogger(__name__)
@@ -109,15 +108,15 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     session_file: str
     native_revision: FileRevision | None = field(metadata={"content_exclude": True})
     route_revision: TranscriptRouteRevision
-    bus_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
-    coordination_revision: tuple[int, int, int, int] | None = field(
+    bus_revision: FileRevision | None = field(metadata={"content_exclude": True})
+    coordination_revision: FileRevision | None = field(
         metadata={"content_exclude": True}
     )
-    coordination_journal_revision: tuple[int, int, int, int] | None = field(
+    coordination_journal_revision: FileRevision | None = field(
         metadata={"content_exclude": True}
     )
     reply_revision: PublishedReplyRevision
-    read_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
+    read_revision: FileRevision | None = field(metadata={"content_exclude": True})
     receipt_frontier: AssignedSourceCursor
     before: TranscriptCursor | None
     after: TranscriptCursor | None
@@ -161,7 +160,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     def content_bus(self):
         # The certified frozen membership frontier owns relevant appends.
         # Keep inode custody: replacing the source is never an unrelated append.
-        return self.bus_revision[0] if self.bus_revision is not None else None
+        return self.bus_revision.identity if self.bus_revision is not None else None
 
     @property
     def content_identity(self) -> bytes:
@@ -409,9 +408,9 @@ class Transcripts:
                 session_file,
                 FileRevision.capture(Path(session_file)) if session_file else None,
                 routes.revision(),
-                file_revision(log.path),
-                file_revision(root / "coordination.sqlite3"),
-                file_revision(root / "coordination.sqlite3-wal"),
+                FileRevision.capture(log.path),
+                FileRevision.capture(root / "coordination.sqlite3"),
+                FileRevision.capture(root / "coordination.sqlite3-wal"),
                 (
                     NativeRuntimeInput.publication_revision(
                         root,
@@ -421,7 +420,7 @@ class Transcripts:
                     if session_file and Path(session_file).is_file()
                     else PublishedReplyRevision(0, 0)
                 ),
-                file_revision(root / self.bus.reads.path.name),
+                FileRevision.capture(root / self.bus.reads.path.name),
                 captured.cursor,
                 before,
                 after,

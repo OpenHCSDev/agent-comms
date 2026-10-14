@@ -593,9 +593,9 @@ class ObservationService:
                          for path in paths(value) if path.parent == self.comms.root)
 
     async def watch(self) -> None:
-        from agent_comms.wire_watch import WatchSource, WireWatch
+        from agent_comms.wire_watch import ModifiedWatchSource, WireWatch
 
-        source = WatchSource(self.comms.root, self.store_names(), modified=True)
+        source = ModifiedWatchSource(self.comms.root, self.store_names())
         async for _ in WireWatch.observations(source):
             self.observe_due = True
             self.changed.set()
