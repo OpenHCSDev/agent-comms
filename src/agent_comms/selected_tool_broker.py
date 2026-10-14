@@ -48,7 +48,7 @@ _MAX_CONTENT = 128 * 1024
 _MAX_REQUEST = _MAX_CONTENT + 8192
 _CALL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
 _TOKEN = re.compile(r"[0-9a-f]{64}\Z")
-_TOOL_SOURCE_SHA = "361bce4704c6830b4212894b005d9a191262e37c49e15b396afb2936ffd1a845"
+_TOOL_SOURCE_SHA = "136695f78d636886725c22c1bd7373d1f18d1b6001f4192d3afe9ec3a1ba102b"
 
 _LOG = logging.getLogger(__name__)
 
