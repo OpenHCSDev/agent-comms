@@ -218,7 +218,6 @@ def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monk
     from agent_comms.bus_projection import BusAppendIndex
 
     wired.messaging.send_message("PR111", "#base", "checkpoint lock scope")
-    wired.views.viewer_snapshot("/lock-scope-viewer")
     reads, checks = [], []
     read = BusAppendIndex._read
     accepts = AppendCheckpoint.accepts
@@ -242,6 +241,17 @@ def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monk
     monkeypatch.setattr(AppendCheckpoint, "accepts", observed_accepts)
     wired.views.viewer_snapshot("/lock-scope-viewer")
     assert reads and checks
+    # Later cuts start from the checkpoint each index holds; only a write
+    # still reads the saved file, to keep another process's farther prefix.
+    prepared = []
+    prepare = BusAppendIndex.prepare
+    monkeypatch.setattr(BusAppendIndex, "_read", read)
+    monkeypatch.setattr(
+        BusAppendIndex, "prepare", lambda index: prepared.append(index._held) or prepare(index)
+    )
+    wired.messaging.send_message("PR111", "#base", "later row")
+    wired.views.viewer_snapshot("/lock-scope-viewer")
+    assert prepared and None not in prepared
 
 
 def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix(wired):

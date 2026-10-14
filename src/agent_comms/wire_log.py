@@ -88,6 +88,7 @@ class OpenedWireSnapshot:
         """Keep a computed exact-cut value with this existing source resource."""
         if record.source != self.revision:
             raise ValueError("Computed append checkpoint belongs to another source cut")
+        index.hold(record)
         self._append_checkpoints[index] = record
 
     @property

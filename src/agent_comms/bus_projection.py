@@ -63,6 +63,9 @@ class BusAppendIndex(Generic[Checkpoint]):
 
     def __init__(self, bus_path: Path, path: Path):
         self.bus_path, self.path = bus_path, path
+        # The checkpoint this process last accepted or computed. The saved file
+        # is read only until there is one; it serves a cold start, not each cut.
+        self._held: Checkpoint | None = None
 
     def _read(self) -> Checkpoint | None:
         try:
@@ -77,8 +80,12 @@ class BusAppendIndex(Generic[Checkpoint]):
             return None  # Damaged disposable index: rebuilt from the bus.
 
     def prepare(self) -> Checkpoint | None:
-        """Read a candidate before the bus cut is captured and its lock is taken."""
-        return self._read()
+        """A candidate before the bus cut is captured and its lock is taken."""
+        return self._held if self._held is not None else self._read()
+
+    def hold(self, record: Checkpoint) -> None:
+        """Keep an exact-cut checkpoint as the next cut's candidate."""
+        self._held = record
 
     def capture(
         self, prepared: Checkpoint | None, stream: BinaryIO | None,
@@ -86,9 +93,8 @@ class BusAppendIndex(Generic[Checkpoint]):
     ) -> Checkpoint | None:
         if prepared is None or stream is None or revision is None:
             return None
-        if prepared.accepts(revision, stream):
-            return prepared
-        return None
+        self._held = prepared if prepared.accepts(revision, stream) else None
+        return self._held
 
     def write(self, record: Checkpoint, *, fsync_parent: bool = False) -> None:
         payload = record.signed_payload()
