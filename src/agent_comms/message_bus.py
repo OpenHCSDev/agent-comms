@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_activity_index import BusActivityIndex, ChannelActivity
+from .bus_projection import BusAppendIndex, ProjectionRead
 from .bus_route_counts import ActorSeen, BusRouteCounts, PendingRoute
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
@@ -158,8 +159,11 @@ class MessageBus:
         with self.log._opened_wire_snapshot(need_sequence=False) as source:
             unread = self._from_route_index(
                 source, snapshot, {delivery.actor: delivery},
-                lambda index, requests: index.unseen_deliveries(requests, seen),
+                lambda index, connection, requests: index.unseen_deliveries(
+                    connection, requests, seen
+                ),
             )
+            unread = unread.resolve(lambda _behind: None)
             if unread is None:
                 return [
                     item.message
@@ -286,43 +290,50 @@ class MessageBus:
         self, source: OpenedWireSnapshot, snapshot: RegistrySnapshot,
         deliveries: Mapping[str, DeliveryScope], read,
     ):
-        """Answer ``read(index, requests)`` from the route index synced to this cut.
-
-        ``requests`` are the routes currently delivered to these actors. None
-        means the index cannot cover the cut, and the caller reads the log.
-        """
+        """Read committed route rows and retain their typed source coverage."""
         recipients = self._route_recipients(snapshot, deliveries)
 
-        def decode(record):
-            # The root id is the marker's: a bus never written has no marker
-            # and no records, so it is read only to decode one.
-            return DeliveryMessage.from_wire(record, root_id=source.metadata.root_id)
+        index = BusRouteCounts(self.log.path)
+
+        def committed(connection):
+            requests = []
+            for route in index.routes(connection):
+                for actor in recipients(route.target):
+                    since = deliveries[actor].minimum_timestamp(
+                        route.sender, route.target, route.sender_lookup, snapshot
+                    )
+                    if since is not None:
+                        requests.append(PendingRoute(
+                            actor, route.target, route.sender, route.sender_lookup, since,
+                        ))
+            return read(index, connection, requests)
 
         try:
-            with BusRouteCounts(self.log.path) as index:
-                if not index.sync(source.stream, source.revision, decode):
-                    return None
-                requests = []
-                for route in index.routes():
-                    for actor in recipients(route.target):
-                        since = deliveries[actor].minimum_timestamp(
-                            route.sender, route.target, route.sender_lookup, snapshot
-                        )
-                        if since is not None:
-                            requests.append(PendingRoute(
-                                actor, route.target, route.sender, route.sender_lookup, since,
-                            ))
-                return read(index, requests)
+            return index.read(source.stream, source.revision, committed, [])
         except (OSError, sqlite3.DatabaseError):
-            # A disposable index outage still uses exactly the same identity filter.
-            return None
+            return ProjectionRead(index.coverage(0, source.boundary), [])
 
-    def _scanned_deliveries(self, source: OpenedWireSnapshot):
-        """Every delivery in this cut, decoded from the log itself."""
-        if source.stream is not None:
+    def _scanned_deliveries(self, source: OpenedWireSnapshot, *, after: int = 0):
+        """Deliveries in one uncovered original suffix, decoded outside index custody."""
+        if source.stream is None:
+            return iter(())
+        if after == 0:
             source.stream.seek(0)
-        records = self.log._snapshot_records(source.metadata, source.stream, source.boundary)
-        return (item for record in records for item in record.delivery_messages())
+            records = self.log._snapshot_records(
+                source.metadata, source.stream, source.boundary
+            )
+            return (item for record in records for item in record.delivery_messages())
+        segment = BusAppendIndex.capture_segment(
+            source.stream,
+            after=after,
+            size=source.boundary,
+            max_bytes=source.boundary - after,
+        )
+        return (
+            item
+            for record in segment.records
+            for item in DeliveryMessage.from_wire(record, root_id=source.metadata.root_id)
+        )
 
     def _pending_counts(
         self, source: OpenedWireSnapshot, snapshot: RegistrySnapshot,
@@ -336,21 +347,25 @@ class MessageBus:
                 conversation = deliveries[actor].conversation(sender, target)
                 counts[actor][conversation] = counts[actor].get(conversation, 0) + count
 
-        rows = self._from_route_index(
+        projected = self._from_route_index(
             source, snapshot, deliveries,
-            lambda index, requests: index.unseen_counts(
-                requests, [ActorSeen(actor, sequences) for actor, sequences in seen.items()]
+            lambda index, connection, requests: index.unseen_counts(
+                connection,
+                requests,
+                [ActorSeen(actor, sequences) for actor, sequences in seen.items()],
             ),
         )
-        if rows is not None:
-            for row in rows:
-                add(row.actor, row.sender, row.target, row.count)
-        else:
-            for item in self._scanned_deliveries(source):
+        for row in projected.committed:
+            add(row.actor, row.sender, row.target, row.count)
+
+        def add_uncovered(behind):
+            for item in self._scanned_deliveries(source, after=behind.through):
                 message = item.message
                 for actor in recipients(message.target):
                     if deliveries[actor].current(item, snapshot) and message.seq not in seen[actor]:
                         add(actor, message.sender, message.target, 1)
+
+        projected.resolve(add_uncovered)
         return counts
 
     def mark_delivered(

@@ -1,26 +1,30 @@
-"""Disposable, declaration-owned route counts over the canonical bus.
-
-The bus owns timestamps and publication identities. This index stores their
-projections, advances across complete appended rows, and is reset at migration.
-"""
+"""Disposable route counts advanced by the append owner and read from committed WAL."""
 
 from __future__ import annotations
 
 import json
 import os
 import sqlite3
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
-from contextlib import ExitStack
+from contextlib import closing
 from dataclasses import dataclass, field, replace
-from hashlib import sha256
 from pathlib import Path
-from typing import BinaryIO, ClassVar
+from typing import BinaryIO, ClassVar, TypeVar
 
-from .private_path import FileRevision
+from .bus_projection import (
+    AppendCheckpoint,
+    AppendSegment,
+    BusAppendIndex,
+    ProjectionCoverage,
+    ProjectionRead,
+    SQLiteProjection,
+)
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .store_files import _store_lock
+from .private_path import FileRevision
 from .routing import DeliveryMessage
+from .store_files import _store_lock
 from .typed_table import Column, Index, TypedRow, TypedTable
 
 
@@ -84,136 +88,217 @@ class UnseenDelivery(TypedRow):
     target: str
 
 
-class BusRouteCounts:
-    def __init__(self, bus_path: Path):
-        self.bus_path = bus_path
-        self.path = bus_path.with_name("bus_route_counts.sqlite3")
+class RouteCheckpoint(ABC):
+    """Typed captured checkpoint state used by replay and compare-before-commit."""
 
-    def __enter__(self) -> BusRouteCounts:
-        # Readers of this disposable projection share only its own resource,
-        # never the canonical publication lock. Sync and queries see one index
-        # revision even when another reader captures a later original bus cut.
-        with ExitStack() as resources:
-            resources.enter_context(_store_lock(self.path))
-            fresh = not self.path.exists()
-            self.connection = sqlite3.connect(self.path, timeout=30)
-            resources.callback(self.connection.close)
-            self.connection.execute("PRAGMA synchronous=FULL")
-            self.connection.execute("BEGIN IMMEDIATE")
-            if fresh:
-                for owner in TypedTable.members_with(RouteTable):
-                    owner.create(self.connection)
-            self._resources = resources.pop_all()
+    @property
+    @abstractmethod
+    def through(self) -> int:
+        """Committed source byte boundary."""
+
+    @abstractmethod
+    def validate(self, source: BinaryIO, size: int) -> RouteCheckpoint:
+        """Return this checkpoint or the initial state from tail evidence alone."""
+
+    @abstractmethod
+    def committed(self, connection: sqlite3.Connection, query, empty):
+        """Return rows supported by this checkpoint state."""
+
+    @abstractmethod
+    def reset(self, connection: sqlite3.Connection) -> None:
+        """Prepare tables for committing rows derived after this state."""
+
+
+@dataclass(frozen=True)
+class InitialRouteCheckpoint(RouteCheckpoint):
+    @property
+    def through(self) -> int:
+        return 0
+
+    def validate(self, source: BinaryIO, size: int) -> RouteCheckpoint:
         return self
 
-    def __exit__(self, error_type, _error, _traceback) -> None:
+    def committed(self, connection: sqlite3.Connection, query, empty):
+        del connection, query
+        return empty
+
+    def reset(self, connection: sqlite3.Connection) -> None:
+        for owner in TypedTable.members_with(RouteTable):
+            connection.execute(f'DELETE FROM "{owner.declared_name}"')
+
+
+@dataclass(frozen=True)
+class StoredRouteCheckpoint(RouteCheckpoint):
+    row: RouteSourceRow
+
+    @property
+    def through(self) -> int:
+        revision = self.row.revision
+        return revision.size if revision is not None else 0
+
+    def validate(self, source: BinaryIO, size: int) -> RouteCheckpoint:
+        del size
+        through = self.through
+        if through == 0 and self.row.tail_digest is None:
+            return self
+        if self.row.tail_digest == AppendCheckpoint.fingerprint(source, through):
+            return self
+        return InitialRouteCheckpoint()
+
+    def committed(self, connection: sqlite3.Connection, query, empty):
+        del empty
+        return query(connection)
+
+    def reset(self, connection: sqlite3.Connection) -> None:
+        del connection
+
+
+@dataclass(frozen=True)
+class RouteReplay:
+    expected: RouteCheckpoint
+    base: RouteCheckpoint
+    segment: AppendSegment
+    revision: FileRevision | None
+    rows: tuple[RouteEntryRow, ...]
+    totals: tuple[tuple[tuple[str, str, str], int, float], ...]
+
+
+ReadValue = TypeVar("ReadValue")
+
+
+class BusRouteCounts(SQLiteProjection, BusAppendIndex[AppendCheckpoint]):
+    """Route projection writer plus nonblocking committed WAL reader."""
+
+    replay_bytes = 4 * 1024 * 1024
+
+    def __init__(self, bus_path: Path):
+        BusAppendIndex.__init__(self, bus_path, bus_path.with_name("bus_route_counts.sqlite3"))
+
+    @property
+    def sqlite_tables(self) -> tuple[type, ...]:
+        return TypedTable.members_with(RouteTable)
+
+    def initialize_projection(self, connection: sqlite3.Connection) -> None:
+        # Touch the state page during one-time WAL creation; no sentinel row persists.
+        RouteSourceRow(1, None, None).insert(connection)
+        connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
+
+    @staticmethod
+    def _checkpoint(connection: sqlite3.Connection) -> RouteCheckpoint:
+        rows = RouteSourceRow.select(connection)
+        if rows and rows[0].revision is not None:
+            return StoredRouteCheckpoint(rows[0])
+        return InitialRouteCheckpoint()
+
+    def prepare(self) -> None:
+        """The append owner creates the WAL before scheduling projection replay."""
+        self.initialize_sqlite()
+
+    def read(
+        self,
+        source: BinaryIO | None,
+        revision: FileRevision | None,
+        query: Callable[[sqlite3.Connection], ReadValue],
+        empty: ReadValue,
+    ) -> ProjectionRead[ReadValue]:
+        """Read committed rows immediately and report their typed source coverage."""
+        size = revision.size if revision is not None else 0
+        if not self.path.exists():
+            return ProjectionRead(self.coverage(0, size), empty)
         try:
-            if error_type is None:
-                self.connection.commit()
-            else:
-                self.connection.rollback()
-        finally:
-            self._resources.close()
+            with self.sqlite_reader() as connection:
+                checkpoint = self._checkpoint(connection)
+                # Validation hashes the recorded tail even when this borrowed
+                # cut is older than the projection. Append preserves it;
+                # replacement or truncation does not.
+                if source is not None:
+                    checkpoint = checkpoint.validate(source, size)
+                committed = checkpoint.committed(connection, query, empty)
+        except sqlite3.DatabaseError:
+            return ProjectionRead(self.coverage(0, size), empty)
+        return ProjectionRead(self.coverage(checkpoint.through, size), committed)
+
+    @staticmethod
+    def replay(
+        expected: RouteCheckpoint,
+        base: RouteCheckpoint,
+        segment: AppendSegment,
+        revision: FileRevision | None,
+        decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
+    ) -> RouteReplay:
+        """Project already-decoded source rows without a projection lock."""
+        rows = []
+        totals: dict[tuple[str, str, str], tuple[int, float]] = {}
+        for record in segment.records:
+            for delivery in decode(record):
+                message = delivery.message
+                row = RouteEntryRow(
+                    message.seq, message.target, message.sender,
+                    delivery.sender_lookup, message.timestamp,
+                )
+                rows.append(row)
+                key = row.target, row.sender, row.sender_lookup
+                count, oldest = totals.get(key, (0, row.timestamp))
+                totals[key] = count + 1, min(oldest, row.timestamp)
+        return RouteReplay(
+            expected,
+            base,
+            segment,
+            replace(revision, size=segment.through) if revision is not None else None,
+            tuple(rows),
+            tuple((key, count, oldest) for key, (count, oldest) in totals.items()),
+        )
+
+    def commit(self, replay: RouteReplay) -> ProjectionCoverage:
+        """Verify one constant-size checkpoint, then commit an already-decoded batch."""
+        with closing(sqlite3.connect(self.path, timeout=30)) as connection:
+            connection.setconfig(sqlite3.SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE, True)
+            connection.execute("PRAGMA synchronous=NORMAL")
+            with _store_lock(self.path):
+                connection.execute("BEGIN IMMEDIATE")
+                current = self._checkpoint(connection)
+                if current != replay.expected:
+                    connection.rollback()
+                    return self.coverage(current.through, replay.segment.size)
+                replay.base.reset(connection)
+                for row in replay.rows:
+                    row.insert(connection)
+                for (target, sender, sender_lookup), count, oldest in replay.totals:
+                    connection.execute(
+                        f'INSERT INTO "{RouteTotalRow.declared_name}" '
+                        '(target,sender,sender_lookup,total,oldest) VALUES (?,?,?,?,?) '
+                        'ON CONFLICT(target,sender,sender_lookup) DO UPDATE SET '
+                        'total=total+excluded.total, oldest=min(oldest,excluded.oldest)',
+                        (target, sender, sender_lookup, count, oldest),
+                    )
+                connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
+                RouteSourceRow(1, replay.revision, replay.segment.tail).insert(connection)
+                connection.commit()
+        return replay.segment.coverage
 
     def sync(
         self, source: BinaryIO | None, revision: FileRevision | None,
         decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
-    ) -> bool:
-        """Decode only appended rows; a replaced source rebuilds the projection.
-
-        Another reader can index a later cut of the same file between this
-        reader's opened cut and its sync. The recorded revision then answers
-        this cut once its digest verifies against the file's bytes; a rewritten
-        or truncated source fails that digest and rebuilds.
-        """
-        size, tail_digest = 0, None
-        if source is not None:
-            opened = FileRevision.from_stat(os.fstat(source.fileno()))
-            if not revision.holds_cut(opened, revision.size):
-                raise RelationViolationError("Route projection source changed before its captured read")
-            size = revision.size
-            if size:
-                source.seek(size - 1)
-                if source.read(1) != b"\n":
-                    return False
-            source.seek(max(0, size - 4096))
-            tail_digest = sha256(source.read(size - source.tell())).hexdigest()
-        records = RouteSourceRow.select(self.connection)
-        recorded = records[0] if records else None
-        rebuild = recorded is None
-        if recorded is not None:
-            rebuild = (
-                (recorded.revision.identity if recorded.revision else None)
-                != (revision.identity if revision else None)
-                or source is None
-                or size == recorded.revision.size
-                and recorded.revision != revision
-            )
-        offset = 0 if rebuild else recorded.revision.size
-        if not rebuild and offset:
-            source.seek(max(0, offset - 4096))
-            previous_tail = source.read(offset - max(0, offset - 4096))
-            if sha256(previous_tail).hexdigest() != recorded.tail_digest:
-                rebuild, offset = True, 0
-            elif size < offset:
-                # Another reader indexed a later cut of this same file after
-                # this cut was opened, so the recorded offset is ahead of this
-                # cut. Its digest just verified against this inode's bytes:
-                # the append-only writer (wire_log._append_private_unlocked,
-                # os.O_APPEND) leaves them unchanged, so the recorded revision
-                # answers this cut without decoding. A truncated or rewritten
-                # source loses those bytes and rebuilt above instead.
-                return True
-        if not rebuild and offset == size:
-            return True
-        totals: dict[tuple[str, str, str], RouteTotalRow] = {}
-        if rebuild:
-            for owner in TypedTable.members_with(RouteTable):
-                self.connection.execute(f'DELETE FROM "{owner.declared_name}"')
-        if source is not None:
-            source.seek(offset)
-            while source.tell() < size:
-                raw = source.readline(size - source.tell())
-                if not raw.endswith(b"\n"):
-                    raise RelationViolationError("Route projection source has an incomplete original row")
-                if not raw.strip():
-                    continue
-                for delivery in decode(json.loads(raw)):
-                    message = delivery.message
-                    row = RouteEntryRow(
-                        message.seq,
-                        message.target,
-                        message.sender,
-                        delivery.sender_lookup,
-                        message.timestamp,
-                    )
-                    row.insert(self.connection)
-                    key = row.target, row.sender, row.sender_lookup
-                    if key not in totals:
-                        prior = RouteTotalRow.select(
-                            self.connection,
-                            where="target=? AND sender=? AND sender_lookup=?",
-                            parameters=key,
-                        )
-                        totals[key] = (
-                            prior[0] if prior else RouteTotalRow(*key, 0, row.timestamp)
-                        )
-                    current = totals[key]
-                    totals[key] = replace(
-                        current,
-                        total=current.total + 1,
-                        oldest=min(current.oldest, row.timestamp),
-                    )
-        for key, total in totals.items():
-            self.connection.execute(
-                f'DELETE FROM "{RouteTotalRow.declared_name}" '
-                "WHERE target=? AND sender=? AND sender_lookup=?",
-                key,
-            )
-            total.insert(self.connection)
-        self.connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
-        RouteSourceRow(1, revision, tail_digest).insert(self.connection)
-        return True
+    ) -> ProjectionCoverage:
+        """Capture and decode a bounded segment, then enter the short commit lock."""
+        size = revision.size if revision is not None else 0
+        self.initialize_sqlite()
+        with self.sqlite_reader() as connection:
+            expected = self._checkpoint(connection)
+        if source is None:
+            return self.coverage(expected.through, size)
+        opened = FileRevision.from_stat(os.fstat(source.fileno()))
+        if (
+            revision is None
+            or revision.identity != opened.identity
+            or opened.size < size
+        ):
+            raise RelationViolationError("Route projection source changed before its captured read")
+        base = expected.validate(source, size)
+        segment = self.capture_segment(
+            source, after=base.through, size=size, max_bytes=self.replay_bytes
+        )
+        return self.commit(self.replay(expected, base, segment, revision, decode))
 
     _requests = """requests AS (
                 SELECT json_extract(value, '$.actor') AS actor,
@@ -223,22 +308,18 @@ class BusRouteCounts:
                        json_extract(value, '$.since') AS since FROM json_each(?)
             )"""
 
-    def routes(self) -> list[RouteTotalRow]:
-        return RouteTotalRow.select(self.connection)
+    @staticmethod
+    def routes(connection: sqlite3.Connection) -> list[RouteTotalRow]:
+        return RouteTotalRow.select(connection)
 
+    @classmethod
     def unseen_counts(
-        self, requests: list[PendingRoute], seen: list[ActorSeen]
+        cls, connection: sqlite3.Connection,
+        requests: list[PendingRoute], seen: list[ActorSeen],
     ) -> list[RouteUnread]:
-        """One bulk query: route totals minus exact seen membership.
-
-        Common routes use prefix totals, without walking historical rows. A
-        birth crossing a route uses its covering timestamp index; timestamps
-        need not be monotonic. Seen sequences use the primary-key index once
-        per actor, not once per historical message or conversation.
-        """
         return RouteUnread.read(
-            self.connection.execute(
-                f'''WITH {self._requests}, painted AS (
+            connection.execute(
+                f'''WITH {cls._requests}, painted AS (
                 SELECT json_extract(owner.value, '$.actor') AS actor,
                        row.target, row.sender, row.sender_lookup, row.timestamp
                 FROM json_each(?) AS owner, json_each(owner.value, '$.sequences') AS seen
@@ -262,16 +343,14 @@ class BusRouteCounts:
             )
         )
 
+    @classmethod
     def unseen_deliveries(
-        self, requests: list[PendingRoute], seen: frozenset[int]
+        cls, connection: sqlite3.Connection,
+        requests: list[PendingRoute], seen: frozenset[int],
     ) -> list[UnseenDelivery]:
-        """One actor's unread deliveries on its routes, oldest first, without bodies.
-
-        The same route rows as ``unseen_counts``, listed instead of counted.
-        """
         return UnseenDelivery.read(
-            self.connection.execute(
-                f'''WITH {self._requests}
+            connection.execute(
+                f'''WITH {cls._requests}
             SELECT row.seq, row.target
             FROM requests AS request JOIN "{RouteEntryRow.declared_name}" AS row
                 ON row.target=request.target AND row.sender=request.sender

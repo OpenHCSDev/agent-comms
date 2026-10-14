@@ -8,12 +8,27 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.bus_display_index import BusDisplayIndex
+from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
+from agent_comms.routing import DeliveryMessage
 from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import ObservationService, ObserveSidebar, SidebarObserved
 from agent_comms.ui_model.unread import IndexingUnread
+
+
+def advance_routes(comms):
+    index = BusRouteCounts(comms.bus.log.path)
+    with comms.bus.log._opened_wire_snapshot(need_sequence=False) as source:
+        while not index.sync(
+            source.stream,
+            source.revision,
+            lambda record: DeliveryMessage.from_wire(
+                record, root_id=source.metadata.root_id
+            ),
+        ).complete():
+            pass
 
 
 @pytest.mark.parametrize("indexed", [True, False])
@@ -63,7 +78,7 @@ def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path):
     modified = bus_path.stat().st_mtime_ns
     bus_path.write_bytes(original)
     os.utime(bus_path, ns=(modified + 1_000_000_000, modified + 1_000_000_000))
-    bus_path.with_name("bus_route_counts.sqlite3").unlink()
+    bus_path.with_name("bus_route_counts.sqlite3").unlink(missing_ok=True)
 
     def projection_bytes():
         paths = [
@@ -130,6 +145,7 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     for number in range(100):
         comms.messaging.send("bob", "#team", f"message {number}")
+    advance_routes(comms)
     expected = comms.views.viewer_snapshot(str(tmp_path))
     assert expected.channel_unread["#team"] == 100
 
@@ -181,6 +197,7 @@ def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
     messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
                 for n in range(100)]
     viewer = comms.messaging.user_identity(str(tmp_path)).name
+    advance_routes(comms)
     before = comms.views.viewer_snapshot(str(tmp_path))
     # The real page owner builds the already-existing disposable offset index.
     page = comms.views.presentation.channel_page("#team", viewer=viewer)
@@ -208,6 +225,7 @@ def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
     messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
                 for n in range(10)]
     viewer = comms.messaging.user_identity(str(tmp_path)).name
+    advance_routes(comms)
     before = comms.views.viewer_snapshot(str(tmp_path))
     comms.bus.reads.mark_displayed(
         viewer, comms.bus.reads.capture(viewer, (messages[3],),
@@ -254,7 +272,6 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
-    bus_path = comms.bus.log.path
     appended = []
     original = comms.bus.log._opened_wire_snapshot
 
@@ -276,8 +293,6 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
     import sqlite3
     from collections import Counter
 
-    from agent_comms.bus_route_counts import BusRouteCounts
-
     comms = wire(tmp_path)
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset(), str(tmp_path / "bob")))
@@ -287,6 +302,7 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
         for number in range(6)
     ]
     comms.messaging.send_user_message("bob", "own outgoing message", worktree=str(tmp_path))
+    advance_routes(comms)
     comms.views.viewer_snapshot(str(tmp_path))
     comms.bus.reads.mark_displayed(
         viewer,
@@ -306,7 +322,9 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         assert wire(tmp_path).bus.pending_counts(viewer) == expected
         assert decode.call_count == 0
-    with patch.object(BusRouteCounts, "sync", side_effect=sqlite3.DatabaseError("unavailable")):
+    with patch.object(
+        BusRouteCounts, "read", side_effect=sqlite3.DatabaseError("unavailable")
+    ):
         assert wire(tmp_path).bus.pending_counts(viewer) == expected
 
 

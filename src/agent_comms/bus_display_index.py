@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .bus_projection import AppendCheckpoint, BusAppendIndex
+from .bus_projection import AppendCheckpoint, BusAppendIndex, JsonCheckpointProjection
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope
 from .read_ledger import ReadLedger
@@ -109,7 +109,9 @@ class DisplayCheckpoint(AppendCheckpoint):
         return metrics
 
 
-class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
+class BusDisplayIndex(
+    JsonCheckpointProjection[DisplayCheckpoint], BusAppendIndex[DisplayCheckpoint]
+):
     record_type = DisplayCheckpoint
 
     def __init__(self, bus_path: Path, viewer: str):

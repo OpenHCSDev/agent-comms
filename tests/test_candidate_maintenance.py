@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms import candidate_maintenance as maintenance
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.store_files import _store_lock
@@ -56,7 +57,9 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
             _SCHEDULE,
         )
         indexed = threading.Event()
+        routes_indexed = threading.Event()
         original = WakeCandidateIndex.catch_up_committed_append
+        original_routes = BusRouteCounts.sync
 
         def observe(self, hint, **kwargs):
             result = original(self, hint, **kwargs)
@@ -64,9 +67,17 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
                 indexed.set()
             return result
 
+        def observe_routes(self, *args, **kwargs):
+            result = original_routes(self, *args, **kwargs)
+            if result.complete():
+                routes_indexed.set()
+            return result
+
         monkeypatch.setattr(WakeCandidateIndex, "catch_up_committed_append", observe)
+        monkeypatch.setattr(BusRouteCounts, "sync", observe_routes)
         message = comms.messaging.send_message("sender", "beta", "selected original")
         assert indexed.wait(timeout=5), "deferred checkpoint did not catch up"
+        assert routes_indexed.wait(timeout=5), "route projection did not catch up"
         page = WakeCandidateIndex(comms.bus.log).page(
             root_id=root_id,
             recipient_lookup=stable_thread_lookup(comms.registry.require("beta").created_at),

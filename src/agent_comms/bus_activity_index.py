@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from .bus_projection import AppendCheckpoint, BusAppendIndex
+from .bus_projection import AppendCheckpoint, BusAppendIndex, JsonCheckpointProjection
 from .private_path import FileRevision
 from .errors import RelationViolationError
 
@@ -35,7 +35,9 @@ class ActivityCheckpoint(AppendCheckpoint):
         return (self.source, self.offset) == (revision, revision.size)
 
 
-class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
+class BusActivityIndex(
+    JsonCheckpointProjection[ActivityCheckpoint], BusAppendIndex[ActivityCheckpoint]
+):
     record_type = ActivityCheckpoint
 
     def __init__(self, bus_path: Path):

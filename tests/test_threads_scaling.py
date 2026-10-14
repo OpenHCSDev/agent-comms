@@ -10,12 +10,27 @@ import pytest
 
 from agent_comms.bus_activity_index import ActivityCheckpoint, BusActivityIndex
 from agent_comms.bus_projection import AppendCheckpoint
-from agent_comms.private_path import FileRevision
+from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.threads import Thread
 from agent_comms.messages import Message
+from agent_comms.private_path import FileRevision
+from agent_comms.routing import DeliveryMessage
+from agent_comms.threads import Thread
+
+
+def _advance_routes(wired):
+    index = BusRouteCounts(wired.bus.log.path)
+    with wired.bus.log._opened_wire_snapshot(need_sequence=False) as source:
+        while not index.sync(
+            source.stream,
+            source.revision,
+            lambda record: DeliveryMessage.from_wire(
+                record, root_id=source.metadata.root_id
+            ),
+        ).complete():
+            pass
 
 
 def _expected(wired, *, active_only: bool = False) -> dict[str, int]:
@@ -43,6 +58,7 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     assert _listed(wired) == _expected(wired)
     wired.owners.stop("third")
     assert _listed(wired, active_only=True) == _expected(wired, active_only=True)
+    _advance_routes(wired)
 
     # A fresh CLI process uses the durable projection without parsing history.
     fresh = wire(wired.root)
@@ -62,6 +78,7 @@ def test_reopened_listing_does_not_parse_unchanged_bus_history(wired, monkeypatc
     for index in range(100):
         wired.messaging.send("PR111", "fixer", f"message {index}")
     assert _listed(wired)["fixer"] == 100
+    _advance_routes(wired)
 
     fresh = wire(wired.root)
     parsed = []
@@ -215,12 +232,13 @@ def test_display_index_registers_once_and_only_view_snapshots_capture_indexes(wi
 @pytest.mark.skipif(os.name != "posix", reason="POSIX file-lock observation")
 def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monkeypatch):
     import fcntl
-    from agent_comms.bus_projection import BusAppendIndex
+
+    from agent_comms.bus_projection import JsonCheckpointProjection
 
     wired.messaging.send_message("PR111", "#base", "checkpoint lock scope")
     wired.views.viewer_snapshot("/lock-scope-viewer")
     reads, checks = [], []
-    read = BusAppendIndex._read
+    read = JsonCheckpointProjection._read
     accepts = AppendCheckpoint.accepts
 
     def unlocked():
@@ -238,7 +256,7 @@ def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monk
         checks.append(record.offset)
         return accepts(record, revision, stream)
 
-    monkeypatch.setattr(BusAppendIndex, "_read", observed_read)
+    monkeypatch.setattr(JsonCheckpointProjection, "_read", observed_read)
     monkeypatch.setattr(AppendCheckpoint, "accepts", observed_accepts)
     wired.views.viewer_snapshot("/lock-scope-viewer")
     assert reads and checks
