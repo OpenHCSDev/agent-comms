@@ -72,6 +72,7 @@ class ThreadPresentation:
     summary: str
     busy: bool = False
     notifications: tuple[MessageNotification, ...] = ()
+    sent_notifications: tuple[MessageNotification, ...] = ()
     attention: bool = False
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
     read_identity: TranscriptReadIdentity | None = None

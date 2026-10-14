@@ -42,7 +42,9 @@ from agent_comms.message_bus import MessageBus
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.registration import Registration
+from agent_comms.selected_participant import SelectedParticipant
 from agent_comms.selected_source_batch import SelectedSource
+from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wake import derive_exact_reply_target
@@ -368,6 +370,93 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
         case.close()
 
 
+def test_fresh_selection_completes_saved_reply_before_admitting_new_assignment(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case = _ready(tmp_path)
+    try:
+        intent = prepare_fenced_response(
+            case.store, case.bus, case.fence, "saved reply",
+            exact_target=case.reply_target, owner_witness=case.witness,
+        ).value
+        append = case.bus.publisher._publish_keyed_response_unlocked
+
+        def saved_then_lost(frozen, *, conversation, registry_snapshot=None):
+            append(frozen, conversation=conversation, registry_snapshot=registry_snapshot)
+            raise OSError("lost acknowledgement after saved reply")
+
+        monkeypatch.setattr(
+            case.bus.publisher, "_publish_keyed_response_unlocked", saved_then_lost
+        )
+        with pytest.raises(OSError, match="lost acknowledgement"):
+            publish_fenced_response(
+                case.store, case.bus, case.fence,
+                exact_target=case.reply_target, owner_witness=case.witness,
+            )
+        assert case.bus.log.read_keyed_response(intent) is not None
+        monkeypatch.undo()
+        case.comms.agents.finish_turn(case.witness.thread.require_turn_lease())
+        fresh = case.comms.messaging.send_initial_cohort(
+            "sender", "#team", "Distinct fresh work"
+        )
+        accepted = accept_delivery_cohort(case.comms.bus, case.root_id, fresh.seq, case.store)
+        fresh_assignment = accepted.value.assignments[0]
+        install_native_runtime_schema(case.store)
+
+        _owner, participant, pending = SelectedParticipant.prepare(
+            case.comms, case.bus, case.store, case.root_id, "owner", case.origin_seq
+        )
+
+        settled = case.store.snapshots.get("exec")
+        assert type(settled.require_wire_response(case.reply_target).lifecycle) is PublishedResponse
+        assert participant.pointer.execution_id is None
+        assert tuple(row.assignment_id for row in pending) == (fresh_assignment.assignment_id,)
+        assert case.comms.bus.log.latest_sequence() == fresh.seq
+    finally:
+        case.close()
+
+
+def test_fresh_selection_refuses_missing_saved_reply_without_resend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case = _ready(tmp_path)
+    try:
+        intent = prepare_fenced_response(
+            case.store, case.bus, case.fence, "missing saved reply",
+            exact_target=case.reply_target, owner_witness=case.witness,
+        ).value
+
+        def lost_before_append(_intent, *, conversation, registry_snapshot=None):
+            raise OSError("reply was never saved")
+
+        monkeypatch.setattr(
+            case.bus.publisher, "_publish_keyed_response_unlocked", lost_before_append
+        )
+        with pytest.raises(OSError, match="never saved"):
+            publish_fenced_response(
+                case.store, case.bus, case.fence,
+                exact_target=case.reply_target, owner_witness=case.witness,
+            )
+        assert case.bus.log.read_keyed_response(intent) is None
+        monkeypatch.undo()
+        case.comms.agents.finish_turn(case.witness.thread.require_turn_lease())
+        fresh = case.comms.messaging.send_initial_cohort(
+            "sender", "#team", "Fresh work must remain blocked"
+        )
+        accept_delivery_cohort(case.comms.bus, case.root_id, fresh.seq, case.store)
+        install_native_runtime_schema(case.store)
+
+        with pytest.raises(PublicationUncertain, match="no keyed bus receipt; no resend"):
+            SelectedParticipant.prepare(
+                case.comms, case.bus, case.store, case.root_id, "owner", case.origin_seq
+            )
+        assert case.bus.log.read_keyed_response(intent) is None
+        assert case.comms.bus.log.latest_sequence() == fresh.seq
+        assert case.store.snapshots.get("exec").publication_receipts == ()
+    finally:
+        case.close()
+
+
 def test_stale_owner_and_conflicting_payload_cannot_publish(tmp_path: Path) -> None:
     case = _ready(tmp_path)
     try:
@@ -544,7 +633,7 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
         with pytest.raises(StaleFence):
             prepare_fenced_response(
                 case.store, case.bus, case.fence, "must not publish",
-                exact_target=case.reply_target, owner_witness=witness
+                exact_target=case.reply_target, owner_witness=witness,
             )
         assert case.bus.log.latest_sequence() == case.origin_seq
         assert ResponseObligation.response_record(case.store.snapshots.get("exec").publication_intents, case.reply_target) is None

@@ -29,7 +29,6 @@ from .thread_owned_state import ThreadOwnedState
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
-    from .presentation import MessageNotification
     from .threads import Thread
 
 
@@ -123,9 +122,6 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def source_diagnostic(self) -> DrainDiagnostic | None: ...
 
     @abstractmethod
-    def pending_notification(self, notification: MessageNotification) -> MessageNotification: ...
-
-    @abstractmethod
     def presentation(self, ordinary: ThreadPresentation, *, busy: bool) -> ThreadPresentation: ...
 
     def require_available(self) -> None:
@@ -136,9 +132,6 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
 class ReadyDrainReadiness(DrainReadiness):
     def source_diagnostic(self):
         return None
-
-    def pending_notification(self, notification: MessageNotification) -> MessageNotification:
-        return notification
 
     def presentation(self, ordinary, *, busy):
         return ordinary
@@ -166,11 +159,6 @@ class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
 
 
 class UnavailableDrainReadiness(DiagnosticDrainReadiness):
-    def pending_notification(self, notification: MessageNotification) -> MessageNotification:
-        return replace(notification, state="Waiting for recovery",
-            detail=f"{self.diagnostic.summary}. This message is saved and has not started.",
-            priority=4, busy=False)
-
     def require_available(self):
         raise RelationViolationError(self.diagnostic.summary)
 

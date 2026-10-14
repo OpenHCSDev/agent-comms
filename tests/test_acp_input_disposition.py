@@ -260,6 +260,15 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native
             (assignment,) = await Coordination.run_worker(assignments)
             assert assignment.wire_seq == message.seq
             assert type(assignment.lifecycle) is DeliveredAssignment
+            sender_view = comms.views.thread_presentation("sender")
+            assert sender_view is not None
+            sent_read = next(
+                outcome for outcome in sender_view.sent_notifications
+                if outcome.message.reference == message.reference
+            )
+            assert sent_read.state.startswith("Read ")
+            assert sent_read.read_at_ms == assignment.updated_at_ms
+            assert sent_read.changed
             # One turn, two inputs: the prompt and the message, each sent once.
             assert native.provider.posts == 2
             taken = native.saved_inputs()[-1]
@@ -337,7 +346,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             await wait_for(lambda: session in owner.inputs._idle_private_revisions)
             key = message.seq, message.message_id
             pending, = comms.views.message_notifications([message])[key]
-            assert pending.state == "Pending" and not pending.busy
+            assert pending.state == "Sent" and not pending.busy
             open_release.set()
             await asyncio.wait_for(started.wait(), 30)
             in_flight, = comms.views.message_notifications([message])[key]
@@ -359,7 +368,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             ]
             assert type(assignments[-1].lifecycle) is DeliveredAssignment
             read, = comms.views.message_notifications([message])[key]
-            assert read.state == "Read — no reply" and not read.busy
+            assert read.state.startswith("Read ") and not read.busy
             assert read.read_at_ms == assignments[-1].updated_at_ms
             assert native.provider.posts == 2
             rows = [json.loads(line) for line in native.session.read_text().splitlines()]
@@ -525,10 +534,25 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             await wait_for(lambda: native.provider.posts == 1)
             reply_turn = owner.inputs.wake_tasks[session]
             known = len(owner.inputs.dispositions.read().rows)
+            assert native.provider.requests[0]["model"] == "fixture"
+            elsewhere = Comms(native.root, private_initial_writes=True)
+
+            def store_change():
+                thread = elsewhere.registry.require(session)
+                elsewhere.threads.set_thread_configuration(
+                    thread, model="response-local/fixture-second",
+                    thinking_level=thread.thinking_level,
+                )
+
+            await Coordination.run_worker(store_change)
             second = comms.messaging.send_message("sender", session, "the yaml one, I mean")
             native.provider.response_gate = None
-            # The owner's own observation hands the second message to the running turn.
-            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == known + 1)
+            # One observer feeds settings and accepted messages through the running-turn inbox.
+            await wait_for(
+                lambda: len(owner.inputs.dispositions.read().rows) == known + 1
+                and owner.sessions.config.settings_in_use[session].model
+                == "response-local/fixture-second"
+            )
             held.set()
             await asyncio.wait_for(reply_turn, 30)
 
@@ -544,6 +568,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             assert states[first.seq] is not DeliveredAssignment
             # One turn took both: the second went in at the next model call, sent once.
             assert native.provider.posts == 2
+            assert native.provider.requests[1]["model"] == "fixture-second"
             assert "the yaml one, I mean" in json.dumps(native.provider.requests[1]["messages"])
             assert "the yaml one, I mean" not in json.dumps(native.provider.requests[0]["messages"])
             assert len({row.turn_id for row in owner.inputs.dispositions.read().rows.values()}) == 1

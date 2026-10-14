@@ -588,13 +588,21 @@ class CommsGoalHistoryTool(ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsThreadsTool(ToolRequest):
     label = "Comms Threads"
-    description = "List agent threads on the coordination wire with status and pending counts."
+    description = (
+        "List agent threads with status and pending counts, plus this caller's "
+        "recent sent-message delivery outcomes."
+    )
     active_only: bool = tool_field("Exclude stopped threads", default=False)
 
     def apply(self, comms: Comms) -> JsonObject:
         from .cli_commands import ThreadsCliCommand
 
-        return ThreadsCliCommand(active_only=self.active_only).apply(comms)
+        result = ThreadsCliCommand(active_only=self.active_only).apply(comms)
+        presentation = comms.views.thread_presentation(_executing_thread())
+        sent_notifications = (
+            list(presentation.sent_notifications) if presentation is not None else []
+        )
+        return {**result, "sent_notifications": sent_notifications}
 
 
 @dataclass(frozen=True, kw_only=True)
