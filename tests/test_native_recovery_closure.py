@@ -108,16 +108,21 @@ async function toolThenCodexRefusals() {{
 }}
 async function thinkingOnlyThenAnswer() {{
     const events=[]; const owner=prepare(events);
-    const empty={{role:'assistant',content:[{{type:'thinking',thinking:'private only'}}],
-        stopReason:'stop'}};
-    finished(owner,events,empty);
-    assert.equal(await owner.run.recover(empty),true);
+    const disconnected={{role:'assistant',content:[{{type:'thinking',thinking:'private only'}}],
+        stopReason:'error',errorMessage:'WebSocket closed 1000'}};
+    assert.equal(isRetryableAssistantError(disconnected),true);
+    owner.agent.state.messages.push(disconnected);
+    owner.run.observe({{type:'message_start',message:{{role:'assistant',content:[]}}}},claims);
+    owner.run.observe({{type:'message_update',assistantMessageEvent:{{
+        type:'thinking_delta',delta:'private only'}}}},claims);
+    owner.run.observe({{type:'message_end',message:disconnected}},claims);
+    assert.equal(await owner.run.recover(disconnected),true);
     const answer={{role:'assistant',content:[{{type:'text',text:'visible answer'}}],stopReason:'stop'}};
     finished(owner,events,answer);
     owner.run.close();
     assert.deepEqual(events.filter(e=>e.type==='native_retry_start'),[{{
         type:'native_retry_start',attempt:1,maxAttempts:3,delayMs:1000,
-        errorMessage:'Provider returned no authoritative response'}}]);
+        errorMessage:'WebSocket closed 1000'}}]);
     assert.deepEqual(events.filter(e=>e.type==='native_retry_end'),[
         {{type:'native_retry_end',success:true,attempt:1}}]);
     return {{answer:answer.content[0].text,retries:1}};
