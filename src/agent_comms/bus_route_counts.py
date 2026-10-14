@@ -121,11 +121,14 @@ class BusRouteCounts:
         self.path = bus_path.with_name("bus_route_counts.sqlite3")
 
     def __enter__(self) -> BusRouteCounts:
-        """Open one committed WAL snapshot without taking the writer lock."""
+        """Open one committed WAL snapshot without taking the writer lock.
+
+        A WAL reader still meets SQLite's own short busy windows (checkpoint,
+        WAL reset, recovery after the last connection closed); it waits them
+        out through SQLite's busy handler instead of failing the read.
+        """
         self._initialize()
-        self.connection = sqlite3.connect(
-            self.path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0
-        )
+        self.connection = sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro", uri=True)
         self.connection.execute("PRAGMA query_only=ON")
         self.connection.execute("BEGIN")
         return self
@@ -182,9 +185,7 @@ class BusRouteCounts:
     def _initialize(self) -> None:
         """The writer alone creates the WAL store; no source bytes are decoded here."""
         if self.path.exists():
-            with closing(sqlite3.connect(
-                self.path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0
-            )) as current:
+            with closing(sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro", uri=True)) as current:
                 table = current.execute(
                     f"SELECT 1 FROM sqlite_master WHERE type='table' "
                     f"AND name='{RouteSourceRow.declared_name}'"
