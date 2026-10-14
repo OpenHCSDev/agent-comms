@@ -141,6 +141,35 @@ class ContextManifestWireObservation(WireObservation):
 
 
 @dataclass(frozen=True)
+class ContextEntryManifestWireObservation(WireObservation):
+    """Transcript entry manifests recorded independently of turn membership."""
+
+    entries: tuple["ContextEntryManifest", ...]
+
+    def context_manifests(self):
+        return ()
+
+    def checkpoint_rows(self, offset: int, length: int):
+        return ()
+
+
+@dataclass(frozen=True)
+class RecordedContextManifestWireObservation(WireObservation):
+    """One turn context referencing independently recorded transcript entries."""
+
+    manifest: "RecordedContextManifest"
+
+    def __post_init__(self):
+        self.manifest.turn.require_recorded()
+
+    def context_manifests(self):
+        return ()
+
+    def checkpoint_rows(self, offset: int, length: int):
+        return ()
+
+
+@dataclass(frozen=True)
 class ObservationWireRecord(WireRecord):
     observation: WireObservation
 
@@ -203,6 +232,6 @@ class WireScan:
             raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
 
 
-from .turn_context import ContextManifest
+from .turn_context import ContextEntryManifest, ContextManifest, RecordedContextManifest
 from .delivery_policy import KeyedResponseReceipt
 from .messages import Message

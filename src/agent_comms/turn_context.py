@@ -327,6 +327,45 @@ class SegmentManifest:
         return bool(parts) and all(part.public_text_recorded for part in parts)
 
 
+@dataclass(frozen=True)
+class ContextEntryReference:
+    """One native journal entry whose manifest is recorded independently."""
+
+    identity: NativeSessionIdentity
+    entry_id: str
+
+    @classmethod
+    def from_manifest(cls, manifest: SegmentManifest) -> ContextEntryReference:
+        entries = manifest.journal_entries()
+        if len(entries) != 1:
+            raise ValueError("A context entry manifest must name exactly one journal entry")
+        return cls(manifest.native_identity(), entries[0])
+
+
+@dataclass(frozen=True)
+class ContextEntryManifest:
+    """The one recorded manifest for a native transcript entry."""
+
+    reference: ContextEntryReference
+    manifest: SegmentManifest
+
+    def __post_init__(self) -> None:
+        if self.reference != ContextEntryReference.from_manifest(self.manifest):
+            raise ValueError("Context entry reference differs from its manifest")
+
+
+@dataclass(frozen=True)
+class RecordedSegmentManifest:
+    """A turn segment with transcript contributors held by entry reference."""
+
+    manifest: SegmentManifest
+    entries: tuple[ContextEntryReference, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.entries and self.manifest.contributors:
+            raise ValueError("Recorded segment cannot inline and reference contributors")
+
+
 @dataclass(frozen=True, kw_only=True)
 class ContextSegment(
     DeclaredFamily, affix="Segment", discovery_package="agent_comms.context_segments"
@@ -952,6 +991,17 @@ class ContextManifest:
             "removed": [FieldCodec.encode(s) for s in previous.segments if s not in self.segments],
             "added": [FieldCodec.encode(s) for s in self.segments if s not in previous.segments],
         }
+
+
+@dataclass(frozen=True)
+class RecordedContextManifest:
+    """One turn's context identity and references to separately recorded entries."""
+
+    thread: ThreadIncarnation
+    turn: ContextTurn
+    segments: tuple[RecordedSegmentManifest, ...]
+    counter: str
+    request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
 
 
 @dataclass(frozen=True)
