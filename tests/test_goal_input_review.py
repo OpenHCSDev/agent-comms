@@ -62,7 +62,8 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
         report.invoke(comms, args)
     before = ledger.path.read_bytes()
-    comms.messaging.acknowledge("worker")
+    messages = comms.bus.inbox("worker")
+    comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))
     result = inbox.invoke(comms, {"thread": "worker", "goal_id": goal.id, "wait_for": ["parent"]})
     assert result["messages"] == []  # Display ACK is not handling evidence.
     review = result["standby_review"]

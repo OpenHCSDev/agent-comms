@@ -118,7 +118,8 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
         assert isinstance(failure, NativeInputDrainDiagnostic)
         assert failure.error_type == "NativePiUnavailable" and "died" in failure.reason
         assert len(calls) == 1
-        comms.messaging.acknowledge("alpha")
+        messages = comms.bus.inbox("alpha")
+        comms.messaging.acknowledge("alpha", tuple(message.reference for message in messages))
         assert await owner.inputs.drain_inbox("alpha") == 0
         assert len(calls) == 1 and not owner.inputs.pending_turns
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:

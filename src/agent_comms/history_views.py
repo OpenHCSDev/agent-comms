@@ -457,7 +457,8 @@ class HistoryViews:
             checkpoint = self.transcripts.transcript_checkpoint(thread.name)
             if checkpoint.session_file and Path(checkpoint.session_file).is_file():
                 self.transcript_reads.mark_read(viewer, checkpoint.session_file, checkpoint.offset)
-            self.bus.mark_delivered(viewer, thread.name)
+            messages = self.bus.inbox(viewer, thread.name)
+            self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 
     def revision_paths(self) -> dict[str, Path | tuple[Path, ...]]:
         """The stores a view derives from, by WireRevision part: what to stat and to watch."""

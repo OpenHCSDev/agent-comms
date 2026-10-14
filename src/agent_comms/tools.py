@@ -807,7 +807,9 @@ class CommsInboxTool(ToolRequest):
             if goal_id and wait_for
             else None
         )
-        messages = [message.to_wire() for message in comms.bus.inbox(thread)]
+        inbox = comms.bus.inbox(thread)
+        messages = [message.to_wire() for message in inbox]
+        references = tuple(message.reference for message in inbox)
         unresolved = comms.goals.unresolved_inputs(thread)
         response: JsonObject = {
             "messages": messages,
@@ -822,7 +824,9 @@ class CommsInboxTool(ToolRequest):
             return _bounded_inbox_response(
                 messages, unresolved, review, str(result_file), ack=self.ack
             )
-        response["acknowledged"] = comms.messaging.acknowledge(thread) if self.ack else 0
+        response["acknowledged"] = (
+            comms.messaging.acknowledge(thread, references) if self.ack else 0
+        )
         return response
 
 
@@ -1005,7 +1009,9 @@ class CommsDismissTool(ToolRequest):
                 break
         else:
             mentioned = (name,)
-        acknowledged = comms.messaging.acknowledge(name, target)
+        acknowledged = comms.messaging.acknowledge(
+            name, tuple(message.reference for message in bus_messages)
+        )
         return {
             "thread": name,
             "target": target,
@@ -1028,8 +1034,10 @@ class CommsAckTool(ToolRequest):
     )
 
     def apply(self, comms: Comms) -> JsonObject:
-        target = self.target
-        acknowledged = comms.messaging.acknowledge(self.thread, target)
+        messages = comms.bus.inbox(self.thread, self.target)
+        acknowledged = comms.messaging.acknowledge(
+            self.thread, tuple(message.reference for message in messages)
+        )
         return {"acknowledged": acknowledged}
 
 
