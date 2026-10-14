@@ -214,6 +214,11 @@ class SavedSelectedSession(SelectedSession):
 
     def admit(self, actual: NativeSessionIdentity, runtime_revision) -> Path:
         self.identity.require_same_session(actual)
+        try:
+            if self.path.resolve(strict=True) != self.path or not self.path.is_file():
+                raise IdentityConflict("native admission requires the exact saved session")
+        except OSError as error:
+            raise IdentityConflict("native admission requires the exact saved session") from error
         return self.path
 
     def require_context(self, context) -> None:
