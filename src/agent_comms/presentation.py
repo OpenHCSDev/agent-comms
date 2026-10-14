@@ -53,6 +53,21 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
+class SentMessageOutcome:
+    """A changed authored message outcome admitted once for prompt context."""
+
+    message: Message
+    recipient_identity: FrozenRecipient
+    state: str
+    detail: str
+    reply_reference: MessageReference | None = None
+
+    @property
+    def recipient(self) -> str:
+        return self.recipient_identity.canonical_thread
+
+
+@dataclass(frozen=True, slots=True)
 class MessageNotification:
     """Read-only display of one recipient's durable assignment decision."""
 
@@ -72,6 +87,17 @@ class MessageNotification:
     @property
     def recipient(self) -> str:
         return self.recipient_identity.canonical_thread
+
+    def sent_outcome(self) -> SentMessageOutcome | None:
+        if not self.changed or self.message is None:
+            return None
+        return SentMessageOutcome(
+            self.message,
+            self.recipient_identity,
+            self.state,
+            self.detail,
+            self.reply_reference,
+        )
 
     @staticmethod
     def receipt_state(label: str, timestamp_ms: int | None) -> str:
@@ -197,7 +223,7 @@ class MessageNotification:
         result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}
         if not keys:
             return {}
-        rows = assignment_read.resolve()
+        rows = assignment_read.resolve(root)
         reads = ReadLedger(root / ReadLedger.filename)
         document = reads.read()
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):

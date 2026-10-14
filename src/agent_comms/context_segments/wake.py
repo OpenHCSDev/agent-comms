@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import FieldCodec
-from agent_comms.presentation import MessageNotification
+from agent_comms.presentation import SentMessageOutcome
 
 from ..bus_publication import CommittedDelivery
 from ..threads import Thread
@@ -35,7 +35,7 @@ class SelectedWakeSegment(InstructionSegment):
     owner: Thread
     obligations: tuple[ResponseObligation, ...]
     relevance: InstructionFile
-    sent_outcomes: tuple[MessageNotification, ...]
+    sent_outcomes: tuple[SentMessageOutcome, ...]
 
     sent_limit = 5
 
@@ -46,19 +46,13 @@ class SelectedWakeSegment(InstructionSegment):
         sent_outcomes = tuple(sent_outcomes)
         if len(sent_outcomes) > cls.sent_limit:
             raise ValueError("Selected wake sent outcomes exceed their bounded window")
-        sent_messages = []
-        for outcome in sent_outcomes:
-            changed, message = outcome.changed, outcome.message
-            if not changed or message is None:
-                raise ValueError("Selected wake requires changed authored-message outcomes")
-            sent_messages.append(message)
         return cls(
             provenance=(
                 instruction.source,
                 relevance.source,
                 OwnerProvenance(owner.incarnation, NextContextTurn().source_revision(owner)),
                 *(WireProvenance(initial.message.reference) for initial, _ in sources),
-                *(WireProvenance(message.reference) for message in sent_messages),
+                *(WireProvenance(outcome.message.reference) for outcome in sent_outcomes),
             ),
             instruction=instruction,
             sources=tuple(sources),
@@ -112,8 +106,6 @@ class SelectedWakeSegment(InstructionSegment):
         sent_values = []
         for outcome in self.sent_outcomes:
             message, reference = outcome.message, outcome.reply_reference
-            if message is None:
-                raise ValueError("Selected wake outcome lost its authored message")
             sent_values.append({
                 "source_seq": message.seq,
                 "target": message.target,

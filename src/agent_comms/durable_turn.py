@@ -25,6 +25,7 @@ from .coordination_tables.attempts import ReplayAssessments, ReplayFact
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
+from .turn_failure import TurnFailure
 from .turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase
 
 
@@ -148,7 +149,7 @@ class DurableTurn(MroDispatch):
             boundary=boundary,
         ).value
 
-    def fail_terminal(self):
+    def fail_terminal(self, failure: TurnFailure):
         """Settle the corroborated failed input after its native child is reaped."""
         final = self.attempts.advance(
             self.fence,
@@ -163,4 +164,5 @@ class DurableTurn(MroDispatch):
             expected_pointer_revision=final.snapshot.pointer_revision,
             outcome=AttemptFailedAttempt(),
             reason_code="native_terminal_failure",
+            failure=failure,
         ).value

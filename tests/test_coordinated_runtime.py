@@ -235,6 +235,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             {
                 "type": "message",
                 "id": entry_id,
+                "timestamp": "2026-09-26T00:00:00.000Z",
                 "message": {
                     "role": "user",
                     "inputId": input_id,
@@ -452,20 +453,18 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[1].created_at)
         assignment = sealed_cohort_assignments(store, lookup)[0]
-    sent_outcome = MessageNotification(
+    notification = MessageNotification(
         initial.audience.recipients[0], "Read", "",
         message=initial.message, changed=True,
     )
+    sent_outcome = notification.sent_outcome()
+    assert sent_outcome is not None
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(
         ((initial, assignment),), people[1], sent_outcomes=(sent_outcome,)
     ),)).text
     assert 'recent_sent_outcomes: [{"source_seq":' in frame
     assert '"state":"Read"' in frame
-    with pytest.raises(ValueError, match="changed authored-message outcomes"):
-        SelectedWakeSegment.capture(
-            ((initial, assignment),), people[1],
-            sent_outcomes=(replace(sent_outcome, changed=False),),
-        )
+    assert replace(notification, changed=False).sent_outcome() is None
 
 
 async def test_removed_sent_session_is_context_not_a_model_start_blocker(
@@ -482,10 +481,12 @@ async def test_removed_sent_session_is_context_not_a_model_start_blocker(
             initial.audience.recipients[0], "Sent", "", message=initial.message, changed=True
         )
     )
+    removed_outcome = removed.sent_outcome()
+    assert removed_outcome is not None
     monkeypatch.setattr(
         SelectedParticipant,
         "capture_sent_outcomes",
-        lambda _comms, _owner, _sources, _assignment_read: (removed,),
+        lambda _comms, _owner, _sources, _assignment_read: (removed_outcome,),
     )
     runner, calls = _fake_model()
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
@@ -1860,6 +1861,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     tmp_path, monkeypatch, direct
 ):
     from agent_comms.native_pi import NativePiTerminalFailure
+    from agent_comms.turn_failure import ModelRequestFailed
 
     root, root_id, comms, initial, people = _root(tmp_path, direct=direct)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
@@ -1875,6 +1877,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
             result.context,
             kwargs["provider"],
             kwargs["model"],
+            ModelRequestFailed("Codex error: The usage limit has been reached"),
         )
 
     monkeypatch.setattr(TrackedTurnSession, "execute", failed)
@@ -1916,6 +1919,74 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     ).run()
     assert result.disposition is CompletedAssignment
     assert len(calls) == before + 1
+
+
+@pytest.mark.parametrize("direct", [True, False])
+async def test_transient_provider_failure_retries_two_attempts_then_completes(
+    tmp_path, monkeypatch, direct
+):
+    from agent_comms.native_pi import NativePiTerminalFailure
+    from agent_comms.turn_failure import ProviderRetryExhausted, ProviderTransportFailed
+
+    root, root_id, comms, initial, people = _root(tmp_path, direct=direct)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="FULL")
+    full_attempts = []
+    delays = []
+
+    async def no_wait(delay):
+        delays.append(delay)
+
+    async def transient(package, **kwargs):
+        result = await fake(package, **kwargs)
+        from agent_comms.private_send_stage import TriageNativeSend
+
+        if isinstance(kwargs["prompt_send_boundary"].stage, TriageNativeSend):
+            return result
+        full_attempts.append(result.context.input_id)
+        if len(full_attempts) <= 2:
+            detail = "controlled transient provider failure"
+            raise NativePiTerminalFailure(
+                detail,
+                result.context,
+                kwargs["provider"],
+                kwargs["model"],
+                (
+                    ProviderRetryExhausted(detail)
+                    if len(full_attempts) == 1
+                    else ProviderTransportFailed(detail)
+                ),
+            )
+        return result
+
+    monkeypatch.setattr("agent_comms.private_send_stage.asyncio.sleep", no_wait)
+    monkeypatch.setattr(TrackedTurnSession, "execute", transient)
+    result = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    ).run()
+
+    assert result is not None and result.disposition is CompletedAssignment
+    assert delays == [1, 2]
+    assert len(calls) == 3 + (not direct)
+    assert len(full_attempts) == 3 and len(set(full_attempts)) == 3
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        lookup = stable_thread_lookup(people[2].created_at)
+        assignment = sealed_cohort_assignments(store, lookup)[0]
+        assert assignment.source == initial.message.reference
+        snapshot = store.snapshots.get(assignment.lifecycle.execution_id)
+        assert snapshot.execution.max_attempts == 3
+        assert snapshot.attempt is not None and snapshot.attempt.attempt_ordinal == 3
+        attempts = store.session._connection.execute(
+            "SELECT attempt_ordinal FROM attempts WHERE execution_id=? ORDER BY attempt_ordinal",
+            (snapshot.execution.execution_id,),
+        ).fetchall()
+        assert [row[0] for row in attempts] == [1, 2, 3]
+        native_inputs = store.session._connection.execute(
+            "SELECT attempt_ordinal FROM native_runtime_input WHERE execution_id=? "
+            "ORDER BY attempt_ordinal",
+            (snapshot.execution.execution_id,),
+        ).fetchall()
+        assert [row[0] for row in native_inputs] == [1, 2, 3]
 
 
 async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monkeypatch):

@@ -16,6 +16,7 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _receipt_matches, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, _assert_response_schema
+from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -27,7 +28,7 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
-from .presentation import MessageNotification
+from .presentation import MessageNotification, SentMessageOutcome
 from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
@@ -44,7 +45,7 @@ class SelectedParticipant(MroDispatch):
     identity: ParticipantOwner
     lookup: str
     batch: SelectedSourceBatch
-    sent_outcomes: tuple[MessageNotification, ...]
+    sent_outcomes: tuple[SentMessageOutcome, ...]
     provider: str
     model: str
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
@@ -69,6 +70,19 @@ class SelectedParticipant(MroDispatch):
         self.owner = await Coordination.run_worker(partial(
             self.comms.registry.attach_native_session, self.owner, identity.session_file
         ))
+
+    def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:
+        """Acquire the strictly newer coordinator owner required by a retry."""
+        if snapshot.execution.lifecycle.retry:
+            participant = self.store.participants.advance_generation(
+                self.lookup,
+                self.owner.thread.name,
+                expected_generation=self.identity.generation,
+            ).value
+            self.identity = ParticipantOwner(
+                self.owner.thread, participant.participant_generation
+            )
+        self.require_current(self.store)
 
     def require_current(self, resource: Coordination) -> None:
         self.owner.require_registry(self.comms.registry)
@@ -152,12 +166,16 @@ class SelectedParticipant(MroDispatch):
     def capture_sent_outcomes(
         comms: Comms, owner: Thread, sources: Sequence[CommittedDelivery],
         assignment_read: NotificationAssignmentRead,
-    ) -> tuple[MessageNotification, ...]:
+    ) -> tuple[SentMessageOutcome, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""
-        outcomes = MessageNotification.for_sources(
+        notifications = MessageNotification.for_sources(
             comms.root, comms.registry, owner, sources, assignment_read=assignment_read,
         )
-        return tuple(outcome for outcome in outcomes if outcome.changed)
+        return tuple(
+            outcome
+            for notification in notifications
+            if (outcome := notification.sent_outcome()) is not None
+        )
 
     @staticmethod
     def prepare(
