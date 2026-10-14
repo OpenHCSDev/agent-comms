@@ -17,6 +17,7 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _receipt_matches, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, _assert_response_schema
+from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -27,7 +28,7 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_attestation import ObservedAttestation
 from .private_registry_guard import _require_no_private_owner_rename
 from .participant_store import ParticipantSnapshot
-from .presentation import MessageNotification
+from .presentation import MessageNotification, SentMessageOutcome
 from .turn_phase import PreparingPhase, TurnPhase
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 
@@ -42,7 +43,7 @@ class SelectedParticipant(MroDispatch):
     identity: ParticipantOwner
     lookup: str
     batch: SelectedSourceBatch
-    sent_outcomes: tuple[MessageNotification, ...]
+    sent_outcomes: tuple[SentMessageOutcome, ...]
     provider: str
     model: str
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
@@ -67,6 +68,19 @@ class SelectedParticipant(MroDispatch):
         self.owner = await Coordination.run_worker(partial(
             self.comms.registry.attach_native_session, self.owner, identity.session_file
         ))
+
+    def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:
+        """Acquire the strictly newer coordinator owner required by a retry."""
+        if snapshot.execution.lifecycle.retry:
+            participant = self.store.participants.advance_generation(
+                self.lookup,
+                self.owner.thread.name,
+                expected_generation=self.identity.generation,
+            ).value
+            self.identity = ParticipantOwner(
+                self.owner.thread, participant.participant_generation
+            )
+        self.require_current(self.store)
 
     def require_current(self, resource: Coordination) -> None:
         self.owner.require_registry(self.comms.registry)
@@ -117,14 +131,18 @@ class SelectedParticipant(MroDispatch):
             return
         identity = ParticipantOwner(owner.thread, participant.participant_generation)
         provider, model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
+        # Authored outcomes are optional prompt context, not a started turn.
+        # Capture their bounded source cut before acquiring the live turn lease:
+        # projection failure is then the drain's named unavailable state instead
+        # of a succession of Preparing turns which never reach native Pi.
+        sent_outcomes = await Coordination.run_worker(
+            lambda: cls.capture_sent_outcomes(comms, name)
+        )
         lease = cls.lease(comms, owner)
         try:
             leased = await Coordination.run_worker(lambda: next(lease))
             sources = await cls.sources(bus, store, root_id, pending, identity)
             batch = SelectedSourceBatch.first_route(sources)
-            sent_outcomes = await Coordination.run_worker(
-                lambda: cls.capture_sent_outcomes(comms, name)
-            )
             selected = cls(
                 comms,
                 bus,
@@ -152,14 +170,18 @@ class SelectedParticipant(MroDispatch):
     @staticmethod
     def capture_sent_outcomes(
         comms: Comms, name: str
-    ) -> tuple[MessageNotification, ...]:
-        presentation = comms.views.thread_presentation(
-            name, sent_source_limit=MessageNotification.window_limit
+    ) -> tuple[SentMessageOutcome, ...]:
+        notifications = MessageNotification.recent_sent(
+            comms.root,
+            comms.registry,
+            comms.bus.log,
+            name,
+            limit=MessageNotification.window_limit,
         )
-        if presentation is None:
-            return ()
         return tuple(
-            outcome for outcome in presentation.sent_notifications if outcome.changed
+            outcome
+            for notification in notifications
+            if (outcome := notification.sent_outcome()) is not None
         )
 
     @staticmethod

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import dataclass
+from typing import ClassVar
 
 from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
@@ -95,6 +96,8 @@ class SelectedPrompt:
 class SelectedAttempt:
     """An engaged attempt always has its full native stage and evolving fence."""
 
+    max_attempts: ClassVar[int] = 3
+
     participant: SelectedParticipant
     stage: FullNativeSend
     token: str
@@ -103,7 +106,7 @@ class SelectedAttempt:
     @classmethod
     def engage(cls, participant: SelectedParticipant,
                snapshot: RecoverySnapshot) -> SelectedAttempt:
-        participant.require_current(participant.store)
+        participant.prepare_attempt(snapshot)
         store = participant.store
         assignment_ids = participant.batch.assignment_ids
         execution_id = participant.batch.execution_id
@@ -115,10 +118,11 @@ class SelectedAttempt:
                 expected_revision=snapshot.execution.revision,
             ).value
         token = prepare_fence_token()
+        attempt_ordinal = (snapshot.execution.lifecycle.current_attempt_ordinal or 0) + 1
         started = store.attempts.start(
             AttemptStart(
                 execution_id,
-                1,
+                attempt_ordinal,
                 participant.owner.thread.name,
                 participant.identity.generation,
                 token,
@@ -246,7 +250,8 @@ class SelectedConsideration:
             participant.require_current(participant.store)
             created = participant.store.executions.create(
                 participant.batch.execution_id, ExecutionOrigin.WIRE,
-                participant.lookup, participant.owner.thread.name, 1,
+                participant.lookup, participant.owner.thread.name,
+                SelectedAttempt.max_attempts,
                 sources=participant.batch.sources,
             ).value
             attempt = SelectedAttempt.engage(participant, created)

@@ -41,6 +41,19 @@ class PendingDecision:
 
 @dataclass(frozen=True)
 class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
+    @classmethod
+    def selection_predicate(cls, capability: type, alias: str) -> str:
+        states = ",".join(
+            sql_literal(member) for member in cls.members_with(capability)
+        )
+        return capability.extend_selection(
+            f"{alias}.disposition IN ({states})", alias
+        )
+
+    @classmethod
+    def extend_selection(cls, predicate: str, alias: str) -> str:
+        return predicate
+
     def rejected_triage_history(self, execution, **source):
         raise ValueError("Recorded triage lacks a decision or a terminal failed claim")
 
@@ -65,6 +78,10 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     notification_priority: ClassVar[int] = 3
     notification_busy: ClassVar[bool] = False
     notification_changed: ClassVar[bool] = False
+    records_conversation_response: ClassVar[bool] = False
+
+    def recorded_response(self, original, candidates, recipient_lookup, delivered_at_ms):
+        return None
 
     def notification(
         self,
@@ -180,6 +197,17 @@ class PassiveAssignment(AssignmentState):
 class PendingNotification:
     """Pending relevance/full execution membership, not another display state."""
 
+    @classmethod
+    def extend_selection(cls, predicate: str, alias: str) -> str:
+        # A bound deferred claim was settled with replay proof and remains the
+        # original source of its next execution attempt. Unbound UNKNOWN input
+        # never enters this selection.
+        deferred = sql_literal(DeferredAssignment)
+        return (
+            f"({predicate} OR ({alias}.disposition={deferred} "
+            f"AND {alias}.execution_id IS NOT NULL))"
+        )
+
     def notification(
         self,
         recipient,
@@ -253,13 +281,7 @@ class IgnoredAssignment(AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        read_at_ms = activity.read_at_ms or updated_at_ms
-        return replace(
-            notification,
-            state=notification.receipt_state("Read", read_at_ms),
-            detail="",
-            read_at_ms=read_at_ms,
-        )
+        return activity.progress.read_notification(notification)
 
     notification_priority = 2
     notification_state = "Read"
@@ -367,7 +389,7 @@ class EngagedAssignment(BoundAssignment):
             recipient, observation=observation, activity=activity
         )
         return observation.selected_response(
-            notification, updated_at_ms, activity.progress, activity.read_at_ms
+            notification, updated_at_ms, activity.progress
         )
 
     def wake_frame(self, source, obligation) -> tuple[str, str]:
@@ -417,26 +439,7 @@ class CompletedAssignment(BoundAssignment):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        reference = activity.response_reference
-        if reference is None:
-            return replace(
-                notification,
-                state=notification.receipt_state("Read", activity.read_at_ms),
-                detail="",
-                priority=2,
-                busy=False,
-                read_at_ms=activity.read_at_ms,
-            )
-        return replace(
-            notification,
-            state=notification.receipt_state(
-                "Answered", activity.response_received_at_ms
-            ),
-            detail="",
-            reply_reference=reference,
-            read_at_ms=activity.read_at_ms,
-            answered_at_ms=activity.response_received_at_ms,
-        )
+        return activity.completed_notification(notification)
 
     def require_completion(self) -> Engagement:
         return self.decision
@@ -467,6 +470,11 @@ class InterruptedAssignment(AssignmentDecision, AssignmentState):
 
 
 class DeferredAssignment(InterruptedAssignment):
+    def requires_selected_triage(self) -> bool:
+        if self.execution_id is not None:
+            return False
+        return super().requires_selected_triage()
+
     def notification(
         self,
         recipient,
@@ -480,7 +488,7 @@ class DeferredAssignment(InterruptedAssignment):
             recipient, observation=observation, activity=activity
         )
         return observation.selected_response(
-            notification, updated_at_ms, activity.progress, activity.read_at_ms
+            notification, updated_at_ms, activity.progress
         )
 
     notification_state = "Interrupted before read"
@@ -515,6 +523,20 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
 
     decision: PendingDecision
     notification_changed = True
+    records_conversation_response = True
+
+    def recorded_response(self, original, candidates, recipient_lookup, delivered_at_ms):
+        target = original.message.exact_reply_target
+        return next(
+            (
+                candidate.message
+                for candidate in candidates
+                if candidate.audience.sender_lookup == recipient_lookup
+                and candidate.message.target == target
+                and candidate.message.timestamp * 1000 >= delivered_at_ms
+            ),
+            None,
+        )
 
     def notification(
         self,
@@ -528,13 +550,7 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return replace(
-            notification,
-            state=notification.receipt_state("Read", updated_at_ms),
-            detail="",
-            busy=False,
-            read_at_ms=updated_at_ms,
-        )
+        return activity.delivered_notification(notification, updated_at_ms)
 
     notification_priority = 2
     notification_state = "Read"

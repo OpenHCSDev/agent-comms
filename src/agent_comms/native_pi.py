@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from .selected_tool_broker import NativeToolMode
     from .fresh_private_session import FreshPrivateSession
     from .selected_session import SelectedSession
+    from .turn_failure import TurnFailure
 
 CAPABILITY = "pi-native-input-v1-live-only"
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -333,11 +334,15 @@ class NativeContextProof(NativeContextRecord):
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
 
-    def __init__(self, detail: str, context: NativeContextProof, provider: str, model: str):
+    def __init__(
+        self, detail: str, context: NativeContextProof, provider: str, model: str,
+        failure: TurnFailure,
+    ):
         super().__init__(f"Native Pi assistant did not finish successfully: {detail}")
         self.context = context
         self.provider = provider
         self.model = model
+        self.failure = failure
         # Provider text may contain arbitrary response bodies. Only complete
         # known short errors may be broadcast into a shared channel.
         match = re.fullmatch(
@@ -437,7 +442,7 @@ class NativePiRpcLaunch:
         else:
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         allowed = (
-            Path(sys.executable).with_name("pi-comms-native").resolve(),
+            Path(NativeArguments.owner_launcher()).resolve(),
             stack_launcher.resolve(),
             (package / "dist" / "cli.js").resolve(),
         )
@@ -656,6 +661,10 @@ class NativeEvidencePrefixChanged(NativePiUnavailable):
     """The retained verified prefix must be reacquired from byte zero."""
 
 
+class NativeEvidenceRemoved(NativePiUnavailable):
+    """The recorded recipient session no longer exists at its owned path."""
+
+
 class NativeEvidenceDigest(Protocol):
     def copy(self) -> NativeEvidenceDigest: ...
 
@@ -756,6 +765,10 @@ class PrivateEvidenceRead:
             stream = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
             PrivateFileRole.require(os.fstat(stream.fileno()))
             return stream
+        except FileNotFoundError as error:
+            if stream is not None:
+                stream.close()
+            raise NativeEvidenceRemoved("Native Pi evidence session was removed") from error
         except (OSError, ValueError) as error:
             if stream is not None:
                 stream.close()

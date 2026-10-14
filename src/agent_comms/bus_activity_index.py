@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
-from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision
+from .bus_projection import AppendCheckpoint, BusAppendIndex
+from .private_path import FileRevision
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
@@ -30,7 +31,7 @@ class ActivityCheckpoint(AppendCheckpoint):
     def snapshot(self) -> ActivitySnapshot:
         return self.channels, self.sent
 
-    def current_for(self, revision: BusFileRevision) -> bool:
+    def current_for(self, revision: FileRevision) -> bool:
         return (self.source, self.offset) == (revision, revision.size)
 
 

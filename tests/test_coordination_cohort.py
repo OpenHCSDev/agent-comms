@@ -40,7 +40,7 @@ from agent_comms.exporting import (
     FullLimit,
     JsonlFormat,
 )
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import InfoKind, Message
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
@@ -97,7 +97,8 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     message = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
     raw = json.loads((tmp_path / "comms" / "bus.jsonl").read_text())
     assert (tmp_path / "comms" / "bus.jsonl").stat().st_mode & 0o777 == 0o600
-    assert set(raw[PRIVATE_WIRE_FIELD]) == {"version", "initial"}
+    assert set(raw[PRIVATE_WIRE_FIELD]) == {"kind", "version", "initial"}
+    assert raw[PRIVATE_WIRE_FIELD]["kind"] == "initial"
     assert raw["seq"] == message.seq and raw["id"] == message.message_id
     assert all(PRIVATE_WIRE_FIELD not in item.to_wire() for item in comms.bus.log.full_history())
     assert [item.seq for item in comms.bus.full_history_page(max_bytes=32).messages] == [
@@ -308,11 +309,18 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
     case = _ready(tmp_path, direct=True)
     try:
         intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", owner_witness=case.witness
+            case.store, case.bus, case.fence, "reply",
+            exact_target=case.reply_target, owner_witness=case.witness,
         ).value
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(
+            case.store, case.bus, case.fence,
+            exact_target=case.reply_target, owner_witness=case.witness,
+        )
         first = case.bus.log.read_keyed_response(intent)
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(
+            case.store, case.bus, case.fence,
+            exact_target=case.reply_target, owner_witness=case.witness,
+        )
         assert case.bus.log.read_keyed_response(intent) == first
         assert [m.seq for m in case.bus.log.full_history()] == [case.origin_seq, first.seq]
         delivery = case.bus.log.read_delivery_cohort(case.root_id, first.seq)

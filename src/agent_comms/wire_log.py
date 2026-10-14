@@ -25,12 +25,7 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
-from .bus_projection import (
-    AppendCheckpoint,
-    BusAppendIndex,
-    BusFileRevision,
-    Checkpoint,
-)
+from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
     project_verified_transitions,
@@ -40,6 +35,7 @@ from .errors import (
 )
 from .field_codec import FieldCodec
 from .messages import Message
+from .private_path import FileRevision
 from .store_files import (
     StoreLock,
     StoreLockContention,
@@ -70,7 +66,7 @@ class OpenedWireSnapshot:
     metadata: WireMetadata
     through: int
     stream: BinaryIO | None
-    revision: BusFileRevision | None
+    revision: FileRevision | None
     _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | None] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
@@ -107,13 +103,12 @@ class OpenedWireSnapshot:
         except (TypeError, ValueError) as error:
             raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
 
-    def appended_records(
-        self, previous: BusFileRevision, previous_sequence: int,
-    ) -> tuple[WireRecord, ...]:
+    def appended_records(self, previous: FileRevision,
+                         previous_sequence: int) -> tuple[WireRecord, ...]:
         """Decode only bytes appended to the same opened source inode."""
         if self.stream is None or self.revision is None:
             raise RelationViolationError("Wire tail has no opened source")
-        if previous.inode != self.revision.inode or previous.size > self.revision.size:
+        if previous.identity != self.revision.identity or previous.size > self.revision.size:
             raise RelationViolationError("Wire tail does not extend the settled source")
         self.stream.seek(previous.size)
         scan = WireScan(self.metadata, previous_sequence=previous_sequence)
@@ -127,7 +122,7 @@ class OpenedWireSnapshot:
             records.append(scan.read(raw))
         if scan.previous_sequence != self.metadata.last_seq:
             raise RelationViolationError("Wire tail does not reach its marker")
-        if BusFileRevision.capture(self.stream) != self.revision:
+        if FileRevision.from_file(self.stream) != self.revision:
             raise RelationViolationError("Wire tail changed while it was read")
         return tuple(records)
 
@@ -633,7 +628,7 @@ class WireLog:
                 boundary = stream.seek(0, 2) if stream is not None else 0
                 if stream is not None:
                     stream.seek(0)
-                revision = BusFileRevision.capture(stream) if stream is not None else None
+                revision = FileRevision.from_file(stream) if stream is not None else None
                 snapshot_type = OpenedWireSnapshot
                 if lock.source is not None:
                     source = lock.certified_read()
@@ -643,7 +638,7 @@ class WireLog:
                     source.require_open_prefix()
                     # Bind the separate retained descriptor to the exact admitted
                     # inode/revision while original physical custody is held.
-                    if (stream is None or revision != BusFileRevision.capture(source.stream)
+                    if (stream is None or revision != FileRevision.from_file(source.stream)
                             or os.fstat(stream.fileno()).st_dev != source.witness.device
                             or boundary != source.witness.offset):
                         raise RelationViolationError("Opened read differs from its certified source cut")

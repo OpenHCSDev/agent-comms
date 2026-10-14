@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_errors import IdentityConflict
+from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_acquisition_progress, record_request_progress
 from .maintenance_barrier import MaintenanceBarrier
@@ -175,9 +175,14 @@ class PrivateSendAdmission:
                 )
             except NativePiTerminalFailure as error:
                 self.verify(store, error.context)
-                self.stage.fail_terminal(
-                    store, self.participant, self.input_id, self.token_digest, error.context
+                settlement = self.stage.fail_terminal(
+                    store, self.participant, self.input_id, self.token_digest,
+                    error.context, error.failure,
                 )
+                try:
+                    await self.stage.continue_after_failure(settlement, error.failure)
+                except RetryScheduled as retry:
+                    raise retry from error
                 raise
             finally:
                 lease = self.owner.thread.turn_lease

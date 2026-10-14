@@ -50,6 +50,10 @@ class RecoveryBlocked(CoordinationError):  # noqa: N818 - nominal outcome name
     """A dead attempt lacks authoritative backend-final evidence."""
 
 
+class RetryScheduled(CoordinationError):  # noqa: N818 - nominal outcome name
+    """The settled execution is durably eligible for its next selected attempt."""
+
+
 class ResponseAdmissionBlocked(RecoveryBlocked):
     """Response publication lacks final evidence or its exact retained route."""
 

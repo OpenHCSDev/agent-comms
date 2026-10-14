@@ -667,7 +667,9 @@ class CommsSendTool(ToolRequest):
     sender: str = tool_field("Sender thread name", wire_name="from")
     target: str = tool_field("Target thread name or channel", wire_name="to")
     body: str = tool_field("Message text")
-    type: Type[MessageKind] = tool_field("Message kind", default=InfoKind)
+    type: Type[MessageKind] = tool_field(
+        "Message kind", default=InfoKind, choices=MessageKind.sendable_names
+    )
     report: ChangeReport | None = tool_field(
         "Change report fields; required for the change-report kind", default=None
     )

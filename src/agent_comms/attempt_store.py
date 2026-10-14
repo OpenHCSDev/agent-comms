@@ -13,7 +13,6 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import (
     IdentityConflict,
-    IntegrityViolationError,
     PublicationUncertain,
     StaleFence,
     StaleRevision,
@@ -33,6 +32,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.obligation_states import PendingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.participant_store import ParticipantStore
+from agent_comms.turn_failure import TurnFailure
 from agent_comms.recovery_reader import RecoveryReader
 from agent_comms.recovery_states import RecoveryCondition
 
@@ -88,11 +88,6 @@ class AttemptStore:
     def _resume_retry(self, snapshot: RecoverySnapshot, request: AttemptStart) -> None:
         """Revoke prior replay proof and reengage coupled response/claim state atomically."""
         db, execution = self.session._connection, snapshot.execution
-        if request.attempt_ordinal > 1:
-            # Replay safety is execution-scoped in v2, not bound to the new
-            # attempt.  Monotonically revoke the previous attempt's proof;
-            # a further automatic retry needs a separately versioned schema.
-            ReplayAssessments.revoke_for_retry(db, request.execution_id)
         for obligation in snapshot.obligations:
             if obligation.lifecycle.deferred:
                 ResponseObligation.update(
@@ -311,6 +306,7 @@ class AttemptStore:
         expected_pointer_revision: int,
         outcome: TerminalAttempt,
         reason_code: str | None = None,
+        failure: TurnFailure | None = None,
     ) -> Applied[RecoverySnapshot]:
         if not isinstance(outcome, TerminalAttempt):
             raise ValueError("settlement requires a terminal attempt outcome")
@@ -319,5 +315,10 @@ class AttemptStore:
             snapshot, _ = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
+            if failure is not None:
+                failure.prepare_execution_retry(
+                    self.session._connection, fence.execution_id
+                )
+                snapshot, _ = self.require_fence(fence)
             snapshot.settle(self.session, outcome, reason_code, acquired)
             return Applied(self.snapshots.get(fence.execution_id))

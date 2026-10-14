@@ -10,7 +10,6 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import agent_events as events
 from .declared_family import DeclaredFamily
-from .acp_failure import ProviderRetryResult
 from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
@@ -28,6 +27,7 @@ from .pi_payloads import (
     PiResponseData,
     PiToolResult,
     PiUsage,
+    ProviderRetryOutcome,
 )
 
 if TYPE_CHECKING:
@@ -59,6 +59,8 @@ class PiEvent(PiPayload, DeclaredFamily):
             return FieldCodec.encode(CompactionReason.from_external(value))
         if target is PiToolResult:
             return PiToolResult.normalize_wire(value)
+        if target is ProviderRetryOutcome:
+            return ProviderRetryOutcome.normalize_wire(record)
         return super().normalize_field(target, key, value, record)
 
     @classmethod
@@ -222,23 +224,31 @@ class ModelRequestProgress(PiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class AutoRetryEnd(PiEvent, ProviderRetryResult):
-    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.output.retry_result = self.for_failure(session.output.redact)
-        session.watchdog.progress()
-        if self.success:
-            session.output.error_message = None
-        else:
-            session.watchdog.retry_recovery_pending = False
-            for event in self.exhausted(session):
-                yield event
-            yield session.watchdog.state(
-                "failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()
-            )
+class AutoRetryEnd(PiEvent):
+    outcome: ProviderRetryOutcome = field(metadata={"wire_name": "success"})
+    attempt: int
 
+    def __post_init__(self) -> None:
+        if self.attempt < 0:
+            raise ValueError("Native retry count must be nonnegative")
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.output.retry_result = self.outcome.result(
+            self.attempt, session.output.redact
+        )
+        session.watchdog.progress()
+        for event in self.outcome.apply(self, session):
+            yield event
 
     def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
         return (session.output.error("Provider retry attempts were exhausted."),)
+
+    def to_wire(self):
+        return {
+            "type": self.wire_kind(),
+            "attempt": self.attempt,
+            **self.outcome.retry_wire(),
+        }
 
 
 class NativeRetryEnd(AutoRetryEnd):
@@ -247,10 +257,8 @@ class NativeRetryEnd(AutoRetryEnd):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         async for event in super().apply(session):
             yield event
-        if self.success:
-            yield session.watchdog.state(
-                "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
-            )
+        for event in self.outcome.recovery_events(session):
+            yield event
 
     def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
         return ()

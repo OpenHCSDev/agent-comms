@@ -13,15 +13,15 @@ from typing import TYPE_CHECKING
 from weakref import WeakValueDictionary
 
 from .native_entries import NativeEntry
+from .private_path import FileRevision
 from .read_ledger import ReadLedger
-from .store_files import file_revision
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
 
 if TYPE_CHECKING:
     from .threads import Thread
 
-_INDEX_VERSION = 3
+_INDEX_VERSION = 4
 
 
 class ReplyIndexTable:
@@ -30,7 +30,7 @@ class ReplyIndexTable:
 
 @dataclass(frozen=True)
 class ReplyIndex(ReplyIndexTable, TypedTable):
-    revision: tuple[int, int, int, int] | None = None
+    revision: FileRevision | None = None
     through: int = 0
     total: int = 0
     source: str = field(default="", metadata={"sql": Column(primary_key=True, check="source<>''")})
@@ -121,9 +121,9 @@ class TranscriptReadState(ThreadOwnedState):
             connection.close()
 
     def _database(self) -> sqlite3.Connection:
-        revision = file_revision(self._index_path)
+        revision = FileRevision.capture(self._index_path)
         if self._connection is not None and (
-            revision is None or revision[0] != self._database_inode
+            revision is None or revision.identity.inode != self._database_inode
         ):
             self._connection.close()
             self._connection = None
@@ -173,7 +173,7 @@ class TranscriptReadState(ThreadOwnedState):
 
     def _index(self, source: str, budget: IndexSlice) -> ReplyIndex:
         path = Path(source)
-        revision = file_revision(path) if source else None
+        revision = FileRevision.capture(path) if source else None
         if revision is None:
             return ReplyIndex(complete=True)
         database = self._database()
@@ -193,9 +193,9 @@ class TranscriptReadState(ThreadOwnedState):
                 return cached
             append = (
                 cached.revision is not None
-                and cached.revision[0] == revision[0]
-                and revision[1] > cached.revision[1]
-                and cached.through <= cached.revision[1]
+                and cached.revision.identity == revision.identity
+                and revision.size > cached.revision.size
+                and cached.through <= cached.revision.size
             )
             resume = unchanged or append
             through, total = (cached.through, cached.total) if resume else (0, 0)
@@ -207,12 +207,12 @@ class TranscriptReadState(ThreadOwnedState):
                 stream.seek(through)
                 # Give other sources a turn even when this session is enormous.
                 for _ in range(256):
-                    if through == revision[1]:
+                    if through == revision.size:
                         complete = True
                         break
                     if not budget.available:
                         break
-                    raw = stream.readline(revision[1] - through)
+                    raw = stream.readline(revision.size - through)
                     budget.consumed(len(raw))
                     if not raw.endswith(b"\n"):
                         complete = True  # Retry the writer's tail only after a revision change.
@@ -224,7 +224,7 @@ class TranscriptReadState(ThreadOwnedState):
                     if record.unread_reply:
                         total += 1
                         TranscriptReply(source, through, total).insert(database)
-            complete = complete or through == revision[1]
+            complete = complete or through == revision.size
             index = ReplyIndex(revision, through, total, source, complete)
             index.upsert(database)
         return index
@@ -276,8 +276,10 @@ class TranscriptReadState(ThreadOwnedState):
             if index.revision is None:
                 result[name] = 0
                 continue
-            seen = self.reads.transcript_seen(viewer, source, index.revision[0], document=document)
-            if seen > index.revision[1]:
+            seen = self.reads.transcript_seen(
+                viewer, source, index.revision.identity.inode, document=document
+            )
+            if seen > index.revision.size:
                 seen = 0  # Only truncation invalidates a cursor beyond the indexed prefix.
             replies = TranscriptReply.read(
                 self._database().execute(
@@ -292,10 +294,12 @@ class TranscriptReadState(ThreadOwnedState):
         return TranscriptUnread(result, frozenset(pending))
 
     def mark_read(self, viewer: str, source: str, through: int) -> None:
-        revision = file_revision(Path(source)) if source else None
-        if revision is None or not 0 <= through <= revision[1]:
+        revision = FileRevision.capture(Path(source)) if source else None
+        if revision is None or not 0 <= through <= revision.size:
             raise ValueError("Transcript changed; refresh before marking it read.")
-        self.reads.mark_transcript(viewer, source, revision[0], through, revision[1])
+        self.reads.mark_transcript(
+            viewer, source, revision.identity.inode, through, revision.size
+        )
 
 
 _shared_lock = RLock()

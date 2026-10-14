@@ -20,13 +20,14 @@ from .display_order import ChannelSort
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
-from .message_page import MessagePage, MessagePageRequest
+from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
-from .store_files import StoreRevision, _store_lock
+from .private_path import FileRevision
+from .store_files import _store_lock
 from .thread_presentation import ThreadPresentation, ThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus
 from .thread_identity import ThreadIncarnation
@@ -50,6 +51,21 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
+class SentMessageOutcome:
+    """A changed authored message outcome admitted once for prompt context."""
+
+    message: Message
+    recipient_identity: FrozenRecipient
+    state: str
+    detail: str
+    reply_reference: MessageReference | None = None
+
+    @property
+    def recipient(self) -> str:
+        return self.recipient_identity.canonical_thread
+
+
+@dataclass(frozen=True, slots=True)
 class MessageNotification:
     """Read-only display of one recipient's durable assignment decision."""
 
@@ -69,6 +85,17 @@ class MessageNotification:
     @property
     def recipient(self) -> str:
         return self.recipient_identity.canonical_thread
+
+    def sent_outcome(self) -> SentMessageOutcome | None:
+        if not self.changed or self.message is None:
+            return None
+        return SentMessageOutcome(
+            self.message,
+            self.recipient_identity,
+            self.state,
+            self.detail,
+            self.reply_reference,
+        )
 
     @staticmethod
     def receipt_state(label: str, timestamp_ms: int | None) -> str:
@@ -257,6 +284,21 @@ class MessageNotification:
         return cls.for_sources(root, registry, owner, sources)
 
     @classmethod
+    def recent_sent(
+        cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
+    ) -> tuple[MessageNotification, ...]:
+        """Project one sender's bounded outcome cut without preparing its transcript."""
+        if not 1 <= limit <= cls.window_limit:
+            raise ValueError("Sent notification limit must fit one bounded window")
+        owner = registry.require(name)
+        from .transcript_receipts import AssignedTranscriptSource
+
+        captured = AssignedTranscriptSource.for_thread(root, owner, log).window(
+            limit=0, sent_limit=limit
+        )
+        return cls.for_sources(root, registry, owner, captured.sent_sources)
+
+    @classmethod
     def for_sources(
         cls, root: Path, registry: Registration, owner: Thread, sources: Sequence[CommittedDelivery]
     ) -> tuple[MessageNotification, ...]:
@@ -432,7 +474,7 @@ class BusPresentation:
                     scope = basis.scope(target)
             # Identity capture does not grant custody over page preparation. Both
             # DM and channel pages borrow the same original reader and source cut.
-            page = MessagePageRequest.capture(
+            page = ConversationMessagePageRequest.capture(
                 scope, before=before, after=after, limit=limit, max_bytes=max_bytes
             ).read_opened(self.bus.log, marker, source, stream, records)
             if viewer is not None:
@@ -768,16 +810,16 @@ class CoordinationSnapshot:
 class WireRevision:
     """One observation of every Comms store a view derives from, by name."""
 
-    registry: StoreRevision
-    catalog: StoreRevision
-    bus_log: StoreRevision
-    history: StoreRevision
-    activity: StoreRevision
-    runtime_info: StoreRevision
-    reads: StoreRevision
-    goal_waits: StoreRevision
-    relationships: StoreRevision
-    notifications: tuple[StoreRevision, ...]
+    registry: FileRevision | None
+    catalog: FileRevision | None
+    bus_log: FileRevision | None
+    history: FileRevision | None
+    activity: FileRevision | None
+    runtime_info: FileRevision | None
+    reads: FileRevision | None
+    goal_waits: FileRevision | None
+    relationships: FileRevision | None
+    notifications: tuple[FileRevision | None, ...]
     expiry_tick: int
 
     def registrations_changed_since(self, earlier: WireRevision) -> bool:

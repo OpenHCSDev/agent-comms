@@ -570,12 +570,12 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif isinstance(scalar, type) and issubclass(scalar, Enum):
                 options["choices"] = [kind.value for kind in scalar]
             elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
-                options["choices"] = scalar.names()
+                options.setdefault("choices", scalar.names())
             elif (
                 get_origin(scalar) is type and get_args(scalar)
                 and issubclass(get_args(scalar)[0], DeclaredFamily)
             ):
-                options["choices"] = get_args(scalar)[0].names()
+                options.setdefault("choices", get_args(scalar)[0].names())
             if metadata["parser_default"] is not MISSING:
                 options["default"] = metadata["parser_default"]
             elif metadata["parser_default_factory"] is not MISSING:
@@ -703,7 +703,9 @@ class SendCliCommand(CliCommand):
     sender: str = option("--from")
     target: str = option("--to")
     body: str = option("--body")
-    type: Type[MessageKind] = option("--type", default=InfoKind)
+    type: Type[MessageKind] = option(
+        "--type", default=InfoKind, choices=MessageKind.sendable_names()
+    )
     report: dict[str, Any] | None = option(
         "--report", help="Change report fields as a JSON object", default=None,
         normalize=_report_fields,
