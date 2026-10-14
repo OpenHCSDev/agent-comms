@@ -45,6 +45,7 @@ from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .selected_session import SelectedSession
 from .turn_context import InputContributionCoordinates
+from .turn_failure import TurnFailure
 
 
 if TYPE_CHECKING:
@@ -102,8 +103,8 @@ class TrackedTerminal(ABC):
     def later_input(self, parts: list[str]) -> TrackedTerminal:
         return PendingTrackedTerminal()
 
-    def raise_failure(self, proof, provider, model) -> None:
-        pass
+    def raise_if_failed(self, proof, provider, model, output) -> None:
+        return None
 
     def require_failed(self) -> None:
         raise ValueError("Saved assistant message did not end its turn as a failure")
@@ -170,8 +171,13 @@ class FailedTrackedTerminal(TrackedTerminal):
     def tool_round(self):
         return self
 
-    def raise_failure(self, proof, provider, model):
-        raise NativePiTerminalFailure(self.text, proof, provider, model)
+    def raise_if_failed(self, proof, provider, model, output) -> None:
+        self.raise_failure(proof, provider, model, output.declared_failure)
+
+    def raise_failure(
+        self, proof, provider, model, failure: TurnFailure
+    ) -> None:
+        raise NativePiTerminalFailure(self.text, proof, provider, model, failure)
 
     def later_input(self, parts):
         return self
@@ -588,13 +594,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.NativeRetryEnd)
     async def native_retry_finished(self, event: pi.NativeRetryEnd) -> None:
-        if event.success:
-            # Native emits success when the recovered request first produces.
-            # Its output, not the retained refusal from the prior request, owns
-            # this tracked turn's terminal result.
-            self.request_retried()
-        else:
-            self.fail_terminal(event.final_error or "Provider request failed")
+        event.outcome.finish_tracked(self)
 
     def request_retried(self) -> None:
         super().request_retried()
@@ -638,7 +638,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         with self.startup.measurements.operation("native_terminal_result"):
             with self.startup.measurements.operation("native_terminal_proof"):
                 proof = await self.context_proof()
-            self.terminal.raise_failure(proof, self.provider, self.model)
+            self.terminal.raise_if_failed(
+                proof, self.provider, self.model, self.output
+            )
             if self.tool_socket is not None:
                 self.tool_socket.assert_complete()
             response = self.terminal.require_response(self.text_parts)

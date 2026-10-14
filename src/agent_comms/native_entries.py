@@ -166,7 +166,7 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
 
     @property
     def recorded_at(self) -> datetime | None:
-        """Pi's external ISO8601 time, decoded once; missing or invalid time is undated."""
+        """Pi's external ISO8601 time, decoded once for tolerant transcript display."""
         if self.timestamp is None:
             return None
         try:
@@ -175,6 +175,13 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
         except (ValueError, OverflowError):
             return None
         return recorded if recorded.utcoffset() is not None else None
+
+    def require_recorded_at(self) -> datetime:
+        """Strict evidence entries follow Pi's required timestamp contract."""
+        recorded = self.recorded_at
+        if recorded is None:
+            raise ValueError("Native Pi session evidence entry has no valid timestamp")
+        return recorded
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         """Project one journal clock onto every display part without inventing time.
@@ -262,17 +269,15 @@ class NativeEvidenceRead:
         """Decode the captured cut, optionally projecting only selected entries."""
         return self._observe(reverified=False, entry_ids=entry_ids)
 
-    def recorded_times(self, entry_ids: set[str]) -> dict[str, int | None]:
-        """Read selected context clocks through the canonical evidence decoder."""
+    def recorded_times(self, entry_ids: set[str]) -> dict[str, int]:
+        """Read every selected context clock through the strict evidence decoder."""
         _, entries = self.observe(entry_ids)
         by_id = dict(item for entry in entries for item in entry.identified())
+        missing = entry_ids.difference(by_id)
+        if missing:
+            raise ValueError(f"Native Pi context entries are absent: {sorted(missing)!r}")
         return {
-            entry_id: (
-                int(recorded.timestamp() * 1000)
-                if (entry := by_id.get(entry_id)) is not None
-                and (recorded := entry.recorded_at) is not None
-                else None
-            )
+            entry_id: int(by_id[entry_id].require_recorded_at().timestamp() * 1000)
             for entry_id in entry_ids
         }
 

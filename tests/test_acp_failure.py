@@ -110,12 +110,53 @@ def test_provider_array_order_and_unknown_json_text_survive():
     assert ACPFailure.from_error(-32603, "RPC refused", unknown).detail == unknown
 
 
+def test_declared_provider_retry_exhaustion_owns_execution_retry_classification():
+    from agent_comms.acp_failure import ProviderRetryResult
+    from agent_comms.turn_failure import ModelRequestFailed, ProviderRetryExhausted
+    from agent_comms.turn_output import TurnOutput
+
+    ordinary = TurnOutput(failure=ModelRequestFailed("quota"))
+    assert type(ordinary.declared_failure) is ModelRequestFailed
+
+    transient = TurnOutput(
+        failure=ModelRequestFailed("opaque provider failure"),
+        retry_result=ProviderRetryResult(
+            success=False, attempt=3, final_error="opaque provider failure"
+        ),
+    )
+    assert type(transient.declared_failure) is ProviderRetryExhausted
+
+    from agent_comms.pi_payloads import PiDiagnostic
+    from agent_comms.turn_failure import ProviderTransportFailed
+
+    transport = PiDiagnostic.from_wire({
+        "type": "provider_transport_failure",
+        "error": {"name": "WebSocketClose", "message": "closed", "code": "1000"},
+        "details": {
+            "configuredTransport": "websocket",
+            "phase": "before_message_stream_start",
+            "eventsEmitted": False,
+            "requestBytes": 123,
+        },
+    })
+    classified = ModelRequestFailed.from_diagnostics(
+        "opaque transport close", (transport,)
+    )
+    assert type(classified) is ProviderTransportFailed
+
+
 @pytest.mark.parametrize("failure_type", [RequestACPFailure, ProviderConnectionFailure, ProviderQuotaFailure])
 def test_every_failure_action_uses_native_retry_end_not_text_claims(failure_type):
     from agent_comms.pi_events import NativeRetryEnd
     from agent_comms.field_codec import FieldCodec
-    result = NativeRetryEnd(success=False, attempt=3, final_error="429 provider rate limit")
-    failure = failure_type(-32603, "final error", retry_result=result.for_failure(lambda text: text))
+    event = NativeRetryEnd.from_wire({
+        "type": "native_retry_end",
+        "success": False,
+        "attempt": 3,
+        "finalError": "429 provider rate limit",
+    })
+    result = event.outcome.result(event.attempt, lambda text: text)
+    failure = failure_type(-32603, "final error", retry_result=result)
     assert "Provider request retries: 3." in failure.action
     assert "429 provider rate limit" in failure.action
     assert "not retried" not in failure.feedback

@@ -16,7 +16,11 @@ from .pi_vocabulary import ThinkingLevel
 from .agent_events import CompactionEvent
 from .pi_native_backend import PersistentPiSession
 from .comms import Comms
-from .coordination_errors import IdentityConflict, PublicationActivationBlocked
+from .coordination_errors import (
+    IdentityConflict,
+    PublicationActivationBlocked,
+    RetryScheduled,
+)
 from .coordinator import Coordination
 from .following_inputs import FollowingInputs
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
@@ -144,21 +148,27 @@ class SelectedExecution:
         await Coordination.run_worker(self.validate)
         comms = Comms(self.root)
         with Coordination(str(self.root / "coordination.sqlite3")) as store:
-            async with SelectedParticipant.select(
-                comms,
-                store,
-                self.wire_root_id,
-                self.owner_name,
-                self.after_seq,
-                on_compaction=on_compaction,
-            ) as participant:
-                if participant is None:
-                    return None
-                session = await SelectedSession.prepare(
-                    participant,
-                    self.session_file,
-                    self.fresh_private_enrollment,
-                    self.selected_thinking_level,
-                    self,
-                )
-                return await SelectedConsideration(participant).run(self, session)
+            while True:
+                async with SelectedParticipant.select(
+                    comms,
+                    store,
+                    self.wire_root_id,
+                    self.owner_name,
+                    self.after_seq,
+                    on_compaction=on_compaction,
+                ) as participant:
+                    if participant is None:
+                        return None
+                    session = await SelectedSession.prepare(
+                        participant,
+                        self.session_file,
+                        self.fresh_private_enrollment,
+                        self.selected_thinking_level,
+                        self,
+                    )
+                    try:
+                        return await SelectedConsideration(participant).run(self, session)
+                    except RetryScheduled:
+                        # Leaving the selection closes this turn lease. The next
+                        # iteration acquires the newer generation required by retry.
+                        continue

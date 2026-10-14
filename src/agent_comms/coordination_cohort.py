@@ -33,7 +33,6 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.message_bus import MessageBus
-from agent_comms.typed_table import sql_literal
 from agent_comms.wake import NoWakeDecision, WakeDecision
 
 _LOG = logging.getLogger(__name__)
@@ -365,10 +364,7 @@ def sealed_cohort_assignments(
     with store.session.read():
         db = store.session._connection
         assert_cohort_schema(db)
-        states = ",".join(
-            sql_literal(member)
-            for member in AssignmentState.members_with(state_capability)
-        )
+        selected_states = AssignmentState.selection_predicate(state_capability, "c")
         return tuple(
             WakeAssignment.read(
                 db.execute(
@@ -379,7 +375,7 @@ def sealed_cohort_assignments(
                     "JOIN cohort_delivery_receipts d ON d.wire_root_id=m.wire_root_id "
                     "AND d.wire_seq=m.wire_seq AND d.claim_id=c.assignment_id AND d.kind='selected' "
                     "WHERE c.recipient_lookup=? AND c.wire_seq>? "
-                    f"AND c.disposition IN ({states}) "
+                    f"AND {selected_states} "
                     "ORDER BY c.wire_seq,c.assignment_id LIMIT ?",
                     (recipient_lookup, after_seq, limit),
                 )

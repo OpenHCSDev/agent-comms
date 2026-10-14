@@ -120,10 +120,12 @@ def test_agent_sent_dm_includes_independent_human_read(tmp_path):
     from types import SimpleNamespace
     from agent_comms.selected_turn import SelectedPrompt
 
+    sent_outcome = outcome.sent_outcome()
+    assert sent_outcome is not None
     selected = SelectedPrompt(SimpleNamespace(
         comms=comms,
         owner=SimpleNamespace(thread=comms.registry.require("alice")),
-        sent_outcomes=(outcome,),
+        sent_outcomes=(sent_outcome,),
     ))
     assert [item.message.reference for item in selected.sent_outcomes()] == [message.reference]
 
