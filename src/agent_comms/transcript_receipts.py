@@ -243,11 +243,12 @@ class AssignedTranscriptSource:
     def native_records(self, fragments, routes, reader):
         """Native ancestry precedes one atomic SQL read per bounded fragment."""
         from .native_runtime_input import NativeRuntimeInput
+        from .transcripts import TranscriptRead
 
         lookup = stable_thread_lookup(self.recipient.created_at)
         for fragment in fragments:
             selected = tuple((record, reader.input_for(record)) for record in fragment)
-            with NativeRuntimeInput._publication_read(self.root) as db:
+            with TranscriptRead.publication_source(self.root) as db:
                 # Missing coordination remains detached native history. Do not
                 # introduce header failures where no SQL source was selected.
                 session_id = (reader.session_id
