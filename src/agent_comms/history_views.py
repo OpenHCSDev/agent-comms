@@ -91,7 +91,7 @@ class HistoryViews:
         self.goals = goals
         self.ledger = ledger
         self._wire_lock_path = root / "wire"
-        self.presentation = BusPresentation(bus, registry, channels.catalog)
+        self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
         self.transcript_reads = transcript_read_state(bus.reads.path)
 
     def message_notifications(self, messages: Sequence[Message]):
@@ -394,7 +394,7 @@ class HistoryViews:
             captured_viewer,
             {view.thread.name: view.thread.session_file or "" for view in snapshot.threads},
         )
-        return replace(snapshot, thread_unread=unread.counts, thread_unread_pending=unread.pending)
+        return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge only the native transcript boundary actually displayed."""

@@ -20,6 +20,8 @@ from native_backend_fixture import native_backend_fixture
 async def native_backend(tmp_path_factory, monkeypatch):
     if not os.environ.get("PI_COMPACTION_TEST_PACKAGE"):
         pytest.skip("Set PI_COMPACTION_TEST_PACKAGE to the immutable native bundle")
+    monkeypatch.delenv("PI_AGENT_ID", raising=False)
+    monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     # Native originals belong to the persistent run, even when a consuming
     # module supplies a separate auto-deleting sealed-bus tmp_path fixture.
     async with native_backend_fixture(tmp_path_factory.mktemp("saved-native-owner")) as owner:
