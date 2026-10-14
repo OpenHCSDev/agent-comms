@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import logging
 import os
 import sqlite3
 import threading
@@ -202,12 +201,6 @@ class OptionalAwarenessProjection:
         ) as error:
             # Busy, stale, changed-owner and pending-rename are this read's
             # named unavailable states. Anything else is a defect and raises.
-            # Keep the original cause/SQLite notes in owner diagnostics instead
-            # of reducing every read failure to the delivered class name.
-            logging.getLogger(__name__).warning(
-                "Optional awareness read failed (candidate index %s)",
-                self.index.path, exc_info=True,
-            )
             return OmittedAwareness.capture(type(error).__name__)
 
     def _build(

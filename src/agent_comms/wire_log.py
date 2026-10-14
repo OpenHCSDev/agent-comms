@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import math
 import os
 import stat
@@ -500,15 +499,9 @@ class WireLog:
         release.callback(self._notify_candidates, through_bytes)
 
     def _notify_candidates(self, through_bytes: int) -> None:
-        """A known append cannot become a failed send when optional work fails."""
-        try:
-            from .candidate_maintenance import schedule_candidate_catchup
+        from .candidate_maintenance import schedule_candidate_catchup
 
-            schedule_candidate_catchup(self, through_bytes)
-        except Exception:
-            logging.getLogger(__name__).exception(
-                "Candidate notification failed for %s", self.path
-            )
+        schedule_candidate_catchup(self, through_bytes)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
         """Bus-owned attestation of a committed initial row; no live re-routing."""

@@ -78,7 +78,7 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
         assert page.entries[0].wake_mode is FullWake
 
 
-def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send(
+def test_notification_runs_after_wire_and_bus_locks_and_scheduler_defect_raises(
     monkeypatch, tmp_path
 ) -> None:
     with TemporaryDirectory(
@@ -104,10 +104,11 @@ def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send
         monkeypatch.setattr(
             "agent_comms.candidate_maintenance.schedule_candidate_catchup", observe
         )
-        # Even an unexpected scheduler error after the durable bus commit
-        # cannot report the original send as failed or invite a retry.
-        committed = comms.messaging.send_message("sender", "beta", "still committed")
-        assert committed.seq == 1 and comms.bus.log.latest_sequence() == 1
+        with pytest.raises(OSError, match="synthetic derived projection failure"):
+            comms.messaging.send_message("sender", "beta", "still committed")
+        # The scheduler defect is visible only after physical lock release; the
+        # durable append exists and its caller must treat the outcome as unknown.
+        assert comms.bus.log.latest_sequence() == 1
 
 
 def test_failed_drain_is_named_and_retires_pending_state(monkeypatch, tmp_path, caplog) -> None:

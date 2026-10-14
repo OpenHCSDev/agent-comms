@@ -272,20 +272,3 @@ def test_retiring_worker_does_not_delete_successor_notification(tmp_path, monkey
         assert index._verified_checkpoint(root_id).last_seq == 2
     finally:
         store.close()
-
-
-def test_omission_logs_original_read_error_and_index_path(tmp_path, monkeypatch, caplog):
-    comms, store, index, root_id = _root(tmp_path, recipients=1)
-    try:
-        initial, assignment = _accepted(comms, store, root_id, "member000", "first")
-        owner = _owner(comms, "member000")
-        assert index.maintain(rebuild=True)
-        later = comms.messaging.send_initial_cohort("sender", "member000", "later")
-        omitted = _projection(index, store, owner, 0, later.seq)(initial, assignment, owner)
-        assert not omitted.complete
-        (record,) = [r for r in caplog.records if r.name.endswith("optional_awareness_projection")]
-        assert str(index.path) in record.getMessage()
-        assert str(record.exc_info[1]) == "candidate projection is stale or unrelated"
-        assert "Optional awareness omitted (ProjectionUnavailableError)" in omitted.segments(16384)[0].text()
-    finally:
-        store.close()

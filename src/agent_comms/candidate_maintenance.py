@@ -39,8 +39,7 @@ def schedule_candidate_catchup(log: WireLog, through_bytes: int) -> None:
             _pending[root] = (current[0], max(current[1], through_bytes))
             return
         if len(_pending) >= _MAX_ACTIVE_ROOTS:
-            _LOG.warning("Candidate notification omitted: maintenance root budget exceeded")
-            return
+            raise CandidateMaintenanceFailed(root)
         _pending[root] = (log, through_bytes)
         try:
             threading.Thread(
