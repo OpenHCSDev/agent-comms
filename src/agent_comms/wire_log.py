@@ -307,17 +307,37 @@ class WireLog:
             return [message for record in records for message in record.messages()]
 
     def record_context(self, manifest) -> None:
-        """Append the original context projection through its sealed writer.
+        """Record new transcript entries once, then this turn's references."""
+        from .turn_context import RecordedContextManifest
+        from .wire_record import (
+            ContextEntryManifestWireObservation,
+            ObservationWireRecord,
+            RecordedContextManifestWireObservation,
+        )
 
-        Journal-backed values remain source references. Only nonrecoverable
-        public contributions are retained in this observation.
-        """
-        from .wire_record import ContextManifestWireObservation, ObservationWireRecord
-
-        with self.locked():
+        recorded, entries = RecordedContextManifest.capture(manifest)
+        with self.locked() as lock:
             marker = self._private_marker_unlocked()
-            record = ObservationWireRecord(ContextManifestWireObservation(manifest))
-            self._append_private_unlocked(marker, record.to_wire())
+            source = lock.certified_read()
+            known = source.context_entry_references()
+            new_entries = tuple(
+                entry
+                for entry in entries
+                if (entry.reference.identity.session_file, entry.reference.entry_id) not in known
+            )
+            if new_entries:
+                self._append_private_unlocked(
+                    marker,
+                    ObservationWireRecord(
+                        ContextEntryManifestWireObservation(new_entries)
+                    ).to_wire(),
+                )
+            self._append_private_unlocked(
+                marker,
+                ObservationWireRecord(
+                    RecordedContextManifestWireObservation(recorded)
+                ).to_wire(),
+            )
 
     def context_manifests(self, name: str, registry):
         return tuple(resource.value for resource in self.context_manifest_resources(name, registry))

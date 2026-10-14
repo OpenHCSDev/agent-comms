@@ -285,7 +285,8 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
 
 def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path):
     from agent_comms.wire_log import WireLog, OpenedWireSnapshot
-    from agent_comms.wire_record import ObservationWireRecord, ContextManifestWireObservation
+    from agent_comms.turn_context import RecordedContextManifest
+    from agent_comms.wire_record import ObservationWireRecord, RecordedContextManifestWireObservation
     from test_turn_context_wire import manifest
 
     tmp_path.chmod(0o700)
@@ -293,7 +294,8 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path):
     from agent_comms.wire_metadata import WireMetadata
     log.write_metadata_unlocked(WireMetadata(writer_protocol_version=1, wire_root_id='0' * 32))
     owner = Thread('author', frozenset(), str(tmp_path), created_at=17003.0)
-    row = ObservationWireRecord(ContextManifestWireObservation(manifest(owner)))
+    recorded, _entries = RecordedContextManifest.capture(manifest(owner))
+    row = ObservationWireRecord(RecordedContextManifestWireObservation(recorded))
     log.path.write_text(json.dumps(row.to_wire()) + '\n')
     log.path.chmod(0o600)
     with log._opened_wire_snapshot(need_sequence=False) as source:
