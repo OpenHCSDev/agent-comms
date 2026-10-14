@@ -9,9 +9,10 @@ from pathlib import Path
 import pytest
 
 from agent_comms import agent_events as ae
-from agent_comms import backend, cohort_foreground, native_pi
+from agent_comms import backend, cohort_foreground, native_pi, pi_events
 from agent_comms.acp_extension import RequestFailedUpdate
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.tracked_turn import PendingTrackedTerminal, TrackedTurnSession
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
@@ -121,6 +122,20 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
         assert current.id == observed['goal'].id and current.state.active
     finally:
         await agent.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_exhausted_empty_responses_become_typed_provider_failure():
+    reason = "Provider returned no authoritative response"
+    turn = object.__new__(TrackedTurnSession)
+    turn.terminal = PendingTrackedTerminal()
+    await turn.native_retry_finished(
+        pi_events.NativeRetryEnd(success=False, attempt=3, final_error=reason)
+    )
+
+    with pytest.raises(native_pi.NativePiTerminalFailure) as caught:
+        turn.terminal.raise_failure(None, "provider", "model")
+    assert reason in str(caught.value)
 
 
 @pytest.mark.asyncio

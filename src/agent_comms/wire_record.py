@@ -80,6 +80,12 @@ class WireRecord(ABC):
     def context_manifests(self):
         return ()
 
+    def context_entries(self):
+        return ()
+
+    def recorded_context_manifests(self):
+        return ()
+
     @abstractmethod
     def sequence_after(self, previous: int) -> int: ...
 
@@ -120,24 +126,60 @@ class WireObservation(DeclaredFamily, affix="WireObservation"):
     @abstractmethod
     def context_manifests(self): ...
 
+    def context_entries(self):
+        return ()
+
+    def recorded_context_manifests(self):
+        return ()
+
     @abstractmethod
     def checkpoint_rows(self, offset: int, length: int): ...
 
 
 @dataclass(frozen=True)
-class ContextManifestWireObservation(WireObservation):
-    manifest: "ContextManifest"
+class ContextEntryManifestWireObservation(WireObservation):
+    """Transcript entry manifests recorded independently of turn membership."""
+
+    entries: tuple["ContextEntryManifest", ...]
+
+    def context_manifests(self):
+        return ()
+
+    def context_entries(self):
+        return self.entries
+
+    def checkpoint_rows(self, offset: int, length: int):
+        from .private_bus_checkpoint import ContextEntrySources
+
+        return tuple(
+            ContextEntrySources.for_entry(entry, offset=offset, length=length)
+            for entry in self.entries
+        )
+
+
+@dataclass(frozen=True)
+class RecordedContextManifestWireObservation(WireObservation):
+    """One turn context referencing independently recorded transcript entries."""
+
+    manifest: "RecordedContextManifest"
 
     def __post_init__(self):
         self.manifest.turn.require_recorded()
 
     def context_manifests(self):
+        return ()
+
+    def recorded_context_manifests(self):
         return (self.manifest,)
 
     def checkpoint_rows(self, offset: int, length: int):
-        from .private_bus_checkpoint import ContextManifestSources
+        from .private_bus_checkpoint import RecordedContextManifestSources
 
-        return (ContextManifestSources(self.manifest.thread, offset=offset, length=length),)
+        return (
+            RecordedContextManifestSources(
+                self.manifest.thread, offset=offset, length=length
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -146,6 +188,12 @@ class ObservationWireRecord(WireRecord):
 
     def context_manifests(self):
         return self.observation.context_manifests()
+
+    def context_entries(self):
+        return self.observation.context_entries()
+
+    def recorded_context_manifests(self):
+        return self.observation.recorded_context_manifests()
 
     def sequence_after(self, previous: int) -> int:
         return previous
@@ -203,6 +251,6 @@ class WireScan:
             raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
 
 
-from .turn_context import ContextManifest
+from .turn_context import ContextEntryManifest, RecordedContextManifest
 from .delivery_policy import KeyedResponseReceipt
 from .messages import Message

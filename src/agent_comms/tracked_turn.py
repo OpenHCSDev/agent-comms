@@ -586,6 +586,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             # Its output, not the retained refusal from the prior request, owns
             # this tracked turn's terminal result.
             self.request_retried()
+        else:
+            self.fail_terminal(event.final_error or "Provider request failed")
 
     def request_retried(self) -> None:
         super().request_retried()
