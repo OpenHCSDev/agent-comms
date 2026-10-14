@@ -319,12 +319,10 @@ class WireLog:
         with self.locked() as lock:
             marker = self._private_marker_unlocked()
             source = lock.certified_read()
-            known = source.context_entry_references()
-            new_entries = tuple(
-                entry
-                for entry in entries
-                if (entry.reference.identity.session_file, entry.reference.entry_id) not in known
+            known = source.context_entry_references(
+                tuple(entry.reference for entry in entries)
             )
+            new_entries = tuple(entry for entry in entries if entry.reference not in known)
             if new_entries:
                 self._append_private_unlocked(
                     marker,

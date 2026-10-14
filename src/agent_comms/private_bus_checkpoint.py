@@ -379,13 +379,33 @@ class CertifiedSourceRead:
             for fact in message.retained_task_facts()
         )
 
-    def context_entry_references(self):
-        """Every independently recorded entry identity in this certified cut."""
+    def context_entry_rows(self, references):
+        """Look up only the candidate entry identities for this turn."""
+        requested = tuple(dict.fromkeys(references))
+        rows = []
+        for start in range(0, len(requested), 200):
+            batch = requested[start:start + 200]
+            where = "(session_id,session_file,entry_id) IN (" + ",".join(
+                "(?,?,?)" for _ in batch
+            ) + ")"
+            parameters = tuple(
+                value
+                for reference in batch
+                for value in (
+                    reference.identity.session_id,
+                    reference.identity.session_file,
+                    reference.entry_id,
+                )
+            )
+            rows.extend(ContextEntrySources.select(
+                self.connection, where=where, parameters=parameters
+            ))
+        return tuple(rows)
+
+    def context_entry_references(self, references):
+        """Candidate entry identities already recorded in this certified cut."""
         self.require_current()
-        return frozenset(
-            (row.session_file, row.entry_id)
-            for row in ContextEntrySources.select(self.connection)
-        )
+        return frozenset(row.reference for row in self.context_entry_rows(references))
 
     def indexed_context_resources(self, incarnation: ThreadIncarnation, snapshot, *, previous=()):
         """Resolve compact turn records through entry manifests recorded once."""
@@ -414,15 +434,7 @@ class CertifiedSourceRead:
             for segment in resource.value.segments
             for reference in segment.entries
         }
-        session_files = tuple({reference.identity.session_file for reference in references})
-        entry_rows = (
-            tuple(ContextEntrySources.select(
-                self.connection,
-                where="session_file IN (" + ",".join("?" for _ in session_files) + ")",
-                parameters=session_files,
-            ))
-            if session_files else ()
-        )
+        entry_rows = self.context_entry_rows(references)
         entries = {}
         geometries = {(row.offset, row.length): row for row in entry_rows}
         for row in geometries.values():
@@ -546,6 +558,7 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
 
 @dataclass(frozen=True)
 class ContextEntrySources(WireSourcePointer["ContextEntryManifest"], CheckpointTable, TypedTable):
+    session_id: str = field(metadata={"sql": Column(primary_key=True)})
     session_file: str = field(metadata={"sql": Column(primary_key=True)})
     entry_id: str = field(metadata={"sql": Column(primary_key=True)})
 
@@ -553,6 +566,7 @@ class ContextEntrySources(WireSourcePointer["ContextEntryManifest"], CheckpointT
     def for_entry(cls, entry, *, offset: int, length: int):
         reference = entry.reference
         return cls(
+            reference.identity.session_id,
             reference.identity.session_file,
             reference.entry_id,
             offset=offset,
@@ -564,18 +578,16 @@ class ContextEntrySources(WireSourcePointer["ContextEntryManifest"], CheckpointT
         from .native_session_reopen import NativeSessionIdentity
         from .turn_context import ContextEntryReference
 
-        # The turn reference supplies/validates the session ID when decoding.
-        return self.session_file, self.entry_id
+        return ContextEntryReference(
+            NativeSessionIdentity(self.session_id, self.session_file), self.entry_id
+        )
 
     def decode_bytes(self, raw: bytes, root_id: str):
         from .wire_record import WireRecord
 
         record = WireRecord.from_wire(json.loads(raw), root_id)
         entries = record.context_entries()
-        matches = tuple(
-            entry for entry in entries
-            if (entry.reference.identity.session_file, entry.reference.entry_id) == self.reference
-        )
+        matches = tuple(entry for entry in entries if entry.reference == self.reference)
         if len(matches) != 1:
             raise RelationViolationError("Context entry pointer differs from original observation")
         return matches[0]
