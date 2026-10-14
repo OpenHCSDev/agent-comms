@@ -23,7 +23,7 @@ from .messages import Message
 from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
-from .external_transcript import ExternalTranscript
+from .external_transcript import ExternalDraftRow, ExternalTranscript
 from .native_transcript import NativeTranscript, RecordsCut
 from .private_path import FileRevision
 from .bus_publication import CommittedDelivery
@@ -335,6 +335,18 @@ class TranscriptRead:
             raise StaleRevision("Transcript read inputs changed during preparation")
         return page
 
+    def current_draft(self) -> ExternalDraftRow | None:
+        """Read current text beside this page, before its finished cut changes."""
+        identity = self.identity
+        draft = self.owner._page_source(
+            identity.requested_name, identity.through, identity.historical_source
+        ).records.current_draft()
+        current = self.current_identity()
+        if (identity.records_cut != current.records_cut
+                or not identity.same_content(current)):
+            raise StaleRevision("Transcript finished while reading its current draft")
+        return draft
+
 
 @dataclass(frozen=True, slots=True)
 class TranscriptSourceWindow:
@@ -441,6 +453,10 @@ class Transcripts:
         if page.session_file:
             raise ValueError(f"@{name} reads a native session; a CLI cannot publish its transcript")
         return page.records
+
+    def thread_draft(self, name: str) -> ExternalDraftRow | None:
+        """The canonical source's current output, separate from paged history."""
+        return self._page_source(name, None, None).records.current_draft()
 
     def _page_source(self, name, through, historical_source):
         member = (LiveTranscriptReadIdentity if historical_source is None

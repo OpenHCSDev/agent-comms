@@ -119,6 +119,10 @@ class NativeTranscript:
     def __init__(self, path: Path):
         self.path = path
 
+    def current_draft(self) -> None:
+        """Native in-progress output belongs to the ACP stream."""
+        return None
+
     def imported_sources(self):
         """Read original metadata before conversation, including native configuration.
 

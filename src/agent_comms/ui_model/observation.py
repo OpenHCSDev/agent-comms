@@ -251,7 +251,7 @@ class ReadTranscript(ReadRequest):
                     raise StaleRevision("Published transcript belongs to another recorded source")
                 read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
             # The read checks its witness before and after preparing the page.
-            return TranscriptSnapshotUpdate(read.read(), read.identity)
+            return TranscriptSnapshotUpdate.from_read(read)
         except StoredHistoryUnreadable as error:
             raise UnreadableHistory.capture(error) from error
 

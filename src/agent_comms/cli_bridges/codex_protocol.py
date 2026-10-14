@@ -25,7 +25,7 @@ from agent_comms.transcript_events import (
 
 
 from .shared import (
-    ActiveItem, FinishedItem, RegisteredWireMeta, TranscriptUpdate,
+    ActiveItem, DraftItem, FinishedItem, RegisteredWireMeta, TranscriptUpdate,
     TurnEnded, TurnStarted, WireModel,
 )
 
@@ -696,6 +696,8 @@ class TurnFinished(TranscriptNotification):
     def apply(self, stream: ItemStream) -> TranscriptUpdate:
         for key in [key for key in stream.started if key[0] == self.turn.id]:
             del stream.started[key]
+            stream.drafts.pop(key, None)
+            stream.summary_indices.pop(key, None)
         return TurnEnded(self.turn.id)
 
 
@@ -719,23 +721,65 @@ class Completed(ItemNotification):
     completedAtMs: int
 
     def apply(self, stream: ItemStream) -> TranscriptUpdate:
-        # A completed notification carries the whole item; deltas are not needed.
+        # Completion is authoritative, including after joining mid-item.
+        key = self.turnId, self.item.id
+        stream.drafts.pop(key, None)
+        stream.summary_indices.pop(key, None)
         return ItemEntry(turnId=self.turnId, item=self.item,
                          startedAtMs=stream.started.pop((self.turnId, self.item.id), None),
                          completedAtMs=self.completedAtMs).publication()
 
 
+class TextDelta(ItemNotification, ABC):
+    itemId: str
+    delta: str
+    transcript_type: ClassVar[type[TranscriptEvent]]
+
+    def append(self, stream: ItemStream, key: tuple[str, str]) -> str:
+        return stream.drafts.get(key, '') + self.delta
+
+    def apply(self, stream: ItemStream) -> DraftItem | None:
+        key = self.turnId, self.itemId
+        if key not in stream.started:
+            # A suffix received after attaching is not the whole draft.
+            return None
+        text = stream.drafts[key] = self.append(stream, key)
+        return DraftItem(self.turnId, self.itemId, (
+            self.transcript_type(text, timestamp=stream.started[key] / 1000),))
+
+
+class AssistantDelta(TextDelta):
+    method = 'item/agentMessage/delta'
+    transcript_type = AssistantTranscript
+
+
+class ReasoningDelta(TextDelta):
+    method = 'item/reasoning/summaryTextDelta'
+    transcript_type = ThinkingTranscript
+    summaryIndex: int = Field(ge=0)
+
+    def append(self, stream: ItemStream, key: tuple[str, str]) -> str:
+        text = stream.drafts.get(key, '')
+        previous = stream.summary_indices.get(key)
+        if previous is not None and previous != self.summaryIndex and text:
+            text += '\n\n'
+        stream.summary_indices[key] = self.summaryIndex
+        return text + self.delta
+
+
 class ItemStream:
-    """When each item in progress started; finished items arrive whole."""
+    """Drafts begun on this subscription; completed items always arrive whole."""
 
     def __init__(self, thread: str):
         self.thread = thread
         self.started: dict[tuple[str, str], int] = {}
+        self.drafts: dict[tuple[str, str], str] = {}
+        self.summary_indices: dict[tuple[str, str], int] = {}
 
     def receive(self, notification: RpcNotification) -> TranscriptUpdate | None:
         declarations = TranscriptNotification.__registry_config__.registry_dict
         if notification.method not in declarations:
-            # Deltas, usage, account, raw/private reasoning and other control
+            # Usage, account, raw/private reasoning and other control
             # events are not transcript content. Known methods declare a type.
             return None
         event = declarations[notification.method].model_validate(notification.params)

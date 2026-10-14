@@ -62,3 +62,44 @@ def test_attaching_reports_the_status_codex_gives_its_thread():
 
     assert resumed({"type": "active", "activeFlags": []}).thread.status.update("t9") == TurnStarted("t9")
     assert resumed({"type": "idle"}).thread.status.update("t9") == TurnEnded("t9")
+
+
+def test_deltas_require_start_and_finish_retires_the_assembly():
+    from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
+    from agent_comms.cli_bridges.shared import DraftItem
+    from agent_comms.transcript_events import AssistantTranscript
+
+    stream = ItemStream("th")
+
+    def receive(method, **params):
+        return stream.receive(RpcNotification(method=method, params={"threadId": "th", "turnId": "t", **params}))
+
+    assert receive("item/agentMessage/delta", itemId="a", delta="suffix") is None
+    receive("item/started", item={"type": "agentMessage", "id": "a", "text": ""}, startedAtMs=1000)
+    receive("item/agentMessage/delta", itemId="a", delta="Hello")
+    assert receive("item/agentMessage/delta", itemId="a", delta=" world") == DraftItem(
+        "t", "a", (AssistantTranscript("Hello world", timestamp=1.0),))
+    complete = receive("item/completed", item={"type": "agentMessage", "id": "a", "text": "Hello world!"},
+                       completedAtMs=2000)
+    assert complete.events[0].text == "Hello world!"
+    assert not stream.drafts
+    assert receive("item/agentMessage/delta", itemId="a", delta="late") is None
+    receive("item/started", item={"type": "reasoning", "id": "r", "summary": []}, startedAtMs=3000)
+    receive("item/reasoning/summaryTextDelta", itemId="r", summaryIndex=0, delta="One")
+    draft = receive("item/reasoning/summaryTextDelta", itemId="r", summaryIndex=1, delta="Two")
+    assert draft.events[0].text == "One\n\nTwo"
+    receive("turn/completed", turn={"id": "t"})
+    assert not stream.drafts and not stream.started and not stream.summary_indices
+
+
+def test_coalescing_preserves_completion_and_unrelated_updates():
+    from agent_comms.cli_bridges.shared import DraftItem, FinishedItem, TranscriptUpdate, TurnEnded
+    from agent_comms.transcript_events import AssistantTranscript
+
+    first = DraftItem("t", "a", (AssistantTranscript("H"),))
+    newer = DraftItem("t", "a", (AssistantTranscript("Hello"),))
+    other = DraftItem("t", "b", (AssistantTranscript("Other"),))
+    final = FinishedItem("t", "a", (AssistantTranscript("Hello!"),))
+    end = TurnEnded("t")
+    assert TranscriptUpdate.coalesced([first, other, newer]) == [other, newer]
+    assert TranscriptUpdate.coalesced([first, other, newer, final, end]) == [other, final, end]

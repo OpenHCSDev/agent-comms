@@ -37,6 +37,16 @@ class ExternalItemRow(TypedTable):
 
 
 @dataclass(frozen=True)
+class ExternalDraftRow(TypedTable):
+    """The current CLI item, replaced as it grows and retired at completion."""
+
+    thread: str = field(metadata={"sql": Column(primary_key=True)})
+    turn_id: str
+    item_id: str
+    events: tuple[TranscriptEvent, ...]
+
+
+@dataclass(frozen=True)
 class ExternalRecord:
     """An item at its page position, in the shape the page merge consumes."""
 
@@ -77,7 +87,7 @@ class ExternalTranscript(TypedStore):
     root: Path
     incarnation: ThreadIncarnation
     filename: ClassVar[str] = "external_transcripts.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow,)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalDraftRow)
     # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
 
@@ -93,13 +103,33 @@ class ExternalTranscript(TypedStore):
     def finish(self, *, turn_id: str, item_id: str,
                events: tuple[TranscriptEvent, ...]) -> None:
         """Append a finished item once; an item with no presentation adds nothing."""
-        if not events:
-            return
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
         with self.transaction(write=True) as connection:
-            if ExternalItemRow.one(connection, **key) is None:
+            if events and ExternalItemRow.one(connection, **key) is None:
                 ExternalItemRow(seq=self._cut(connection).offset + 1, events=events,
                                 **key).insert(connection)
+            connection.execute(
+                f'DELETE FROM "{ExternalDraftRow.declared_name}" '
+                'WHERE thread = ? AND turn_id = ? AND item_id = ?',
+                (self.lookup, turn_id, item_id))
+
+    def draft(self, *, turn_id: str, item_id: str,
+              events: tuple[TranscriptEvent, ...]) -> None:
+        with self.transaction(write=True) as connection:
+            ExternalDraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
+
+    def end_turn(self) -> None:
+        if not self.path.exists():
+            return
+        with self.transaction(write=True) as connection:
+            connection.execute(f'DELETE FROM "{ExternalDraftRow.declared_name}" WHERE thread = ?',
+                               (self.lookup,))
+
+    def current_draft(self) -> ExternalDraftRow | None:
+        if not self.path.exists():
+            return None
+        with self.transaction(write=False) as connection:
+            return ExternalDraftRow.one(connection, thread=self.lookup)
 
     def _cut(self, connection) -> ExternalCut:
         return ExternalCut(*connection.execute(

@@ -69,6 +69,16 @@ class TranscriptUpdate(ABC):
     @abstractmethod
     def publish(self, output: ThreadOutput) -> None: ...
 
+    def retain_before(self, later: set[tuple[str, str]]) -> bool:
+        """Whether this update still needs publication before later updates."""
+        return True
+
+    @staticmethod
+    def coalesced(updates: list[TranscriptUpdate]) -> list[TranscriptUpdate]:
+        later: set[tuple[str, str]] = set()
+        kept = [update for update in reversed(updates) if update.retain_before(later)]
+        return list(reversed(kept))
+
 
 @dataclass(frozen=True)
 class TurnStarted(TranscriptUpdate):
@@ -79,6 +89,7 @@ class TurnStarted(TranscriptUpdate):
 @dataclass(frozen=True)
 class TurnEnded(TranscriptUpdate):
     def publish(self, output: ThreadOutput) -> None:
+        output.transcript.end_turn()
         output.status(ActivityState.IDLE)
 
 
@@ -101,6 +112,26 @@ class FinishedItem(TranscriptUpdate):
 
     def publish(self, output: ThreadOutput) -> None:
         output.transcript.finish(turn_id=self.turn_id, item_id=self.item_id, events=self.events)
+
+    def retain_before(self, later: set[tuple[str, str]]) -> bool:
+        later.add((self.turn_id, self.item_id))
+        return True
+
+
+@dataclass(frozen=True)
+class DraftItem(TranscriptUpdate):
+    """Current text, superseded by a newer draft or the same item's completion."""
+    item_id: str
+    events: tuple[TranscriptEvent, ...]
+
+    def publish(self, output: ThreadOutput) -> None:
+        output.transcript.draft(turn_id=self.turn_id, item_id=self.item_id, events=self.events)
+
+    def retain_before(self, later: set[tuple[str, str]]) -> bool:
+        key = self.turn_id, self.item_id
+        keep = key not in later
+        later.add(key)
+        return keep
 
 @dataclass
 class Options:
@@ -381,9 +412,29 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
         comms = Comms(Path(self.binding.root))
         output = ThreadOutput(
             await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
-        # Each CLI's transcript begins with the turn state its own source reports.
-        async for update in self.transcript():
-            await asyncio.to_thread(update.publish, output)
+        # This subscription can assemble only items whose start it receives.
+        # A prefix from the previous subscription cannot stand for that stream.
+        await asyncio.to_thread(output.transcript.end_turn)
+        # Each CLI reports its own initial state. Disk writes never stop the
+        # event reader from receiving a newer whole draft of the same item.
+        queue: asyncio.Queue[TranscriptUpdate | None] = asyncio.Queue()
+
+        async def read() -> None:
+            async for update in self.transcript():
+                queue.put_nowait(update)
+            queue.put_nowait(None)
+
+        async with asyncio.TaskGroup() as tasks:
+            tasks.create_task(read())
+            ended = False
+            while not ended:
+                pending = [await queue.get()]
+                while not queue.empty():
+                    pending.append(queue.get_nowait())
+                ended = pending[-1] is None
+                updates = pending[:-1] if ended else pending
+                for update in TranscriptUpdate.coalesced(updates):
+                    await asyncio.to_thread(update.publish, output)
 
 class LineMonitorBridge(CliBridge[Options]):
     """Harnesses whose monitor injects each stdout line as a notification."""
