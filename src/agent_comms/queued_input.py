@@ -43,7 +43,29 @@ if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
     from .registry_document import RegistrySnapshot
     from .input_drain import InputDrain
+    from .turn_context import RenderedInput
     from .turn_runner import TurnRunner
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PreparedDeliveryItem:
+    """One pending bus message rendered and reserved-ready, read by field."""
+
+    key: str
+    row: ReservedInput
+    rendered: RenderedInput
+    message: Message
+    assignment: WakeAssignment
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class PreparedDelivery:
+    """A delivery batch decided under no lock; custody comes later per item."""
+
+    owner: Thread
+    context: QueuedInputContext
+    snapshot: RegistrySnapshot
+    items: tuple[PreparedDeliveryItem, ...]
 
 
 class InputHandoffRefused(RelationViolationError):
@@ -334,7 +356,7 @@ class DeliveredInput(QueuedInput):
         name: str,
         root_id: str,
         pending: tuple[tuple[CommittedDelivery, WakeAssignment], ...],
-    ) -> tuple[Thread, Any, Any, tuple[tuple[str, ReservedInput, Any, Message, WakeAssignment], ...]]:
+    ) -> PreparedDelivery:
         """Synchronous preparation outside the wire lock: no reservation yet."""
         from .context_segments.wake import DeliveredMessageSegment
         from .routing import ScheduledTurn
@@ -345,7 +367,7 @@ class DeliveredInput(QueuedInput):
         owner = snapshot.threads[canonical]
         context = QueuedInputContext.capture(owner, snapshot.admission_identity(canonical))
         document = inputs.dispositions.read()
-        prepared = []
+        items = []
         for source, assignment in pending:
             message = source.message
             key = InputDispositions.bus_key(message, owner)
@@ -360,8 +382,11 @@ class DeliveredInput(QueuedInput):
                 ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                 origin=WireInputOrigin(root_id, message.reference),
             )
-            prepared.append((key, row, rendered, message, assignment))
-        return owner, context, snapshot, tuple(prepared)
+            items.append(PreparedDeliveryItem(
+                key=key, row=row, rendered=rendered, message=message, assignment=assignment,
+            ))
+        return PreparedDelivery(owner=owner, context=context, snapshot=snapshot,
+                                items=tuple(items))
 
     @classmethod
     def _decide_consume_unlocked(cls, inputs: InputDrain, session_id: str, inbox, item: Self,
@@ -415,27 +440,29 @@ class DeliveredInput(QueuedInput):
         # Preparation reads registry/dispositions without wire custody and never
         # holds a lock across an await. Reservation takes the wire lock only
         # for synchronous file work; coordination transitions run outside it.
-        delivery_owner, context, snapshot, prepared = await Coordination.run_worker(
+        prepared = await Coordination.run_worker(
             partial(cls._prepared_pending, inputs, owner.name, root_id, pending)
         )
-        for key, row, rendered, message, assignment in prepared:
+        for prepared_item in prepared.items:
             custody = ExitStack()
             try:
                 paused = await Coordination.run_async(
                     store_path,
-                    lambda store, assignment=assignment: store.assignments.transition_preengagement(
-                        assignment.assignment_id, DeferredAssignment,
-                        expected_revision=assignment.revision,
+                    lambda store, item=prepared_item: store.assignments.transition_preengagement(
+                        item.assignment.assignment_id, DeferredAssignment,
+                        expected_revision=item.assignment.revision,
                     ).value,
                 )
             except Exception:
                 continue
+            row = prepared_item.row
             item = cls(
-                text=row.source_text, echo=False, context=context,
-                input_id=ACPInputIdText.new(), prompt=rendered.text,
-                bus_key=key, message=message, assignment=paused,
+                text=row.source_text, echo=False, context=prepared.context,
+                input_id=ACPInputIdText.new(), prompt=prepared_item.rendered.text,
+                bus_key=prepared_item.key, message=prepared_item.message, assignment=paused,
             )
-            content = InputContent(text=rendered.text, contributions=rendered.contributions)
+            content = InputContent(text=prepared_item.rendered.text,
+                                   contributions=prepared_item.rendered.contributions)
             try:
                 async with _async_store_lock(inputs.comms._wire_lock_path):
                     cls._decide_consume_unlocked(inputs, session_id, inbox, item, content, row, custody)
