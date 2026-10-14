@@ -51,3 +51,14 @@ def test_codex_stream_reports_activity_and_finishes_items():
         == ActiveItem("t1", "r1", ActivityState.THINKING, "")
     assert receive("item/completed", turnId="t1", item=thinking, completedAtMs=4000).events == ()
     assert receive("turn/completed", turn={"id": "t1", "status": "completed"}) == TurnEnded("t1")
+
+
+def test_attaching_reports_the_status_codex_gives_its_thread():
+    from agent_comms.cli_bridges.codex_protocol import ResumedThread
+    from agent_comms.cli_bridges.shared import TurnEnded, TurnStarted
+
+    def resumed(status):
+        return ResumedThread.model_validate({"thread": {"id": "th", "status": status}})
+
+    assert resumed({"type": "active", "activeFlags": []}).thread.status.update("t9") == TurnStarted("t9")
+    assert resumed({"type": "idle"}).thread.status.update("t9") == TurnEnded("t9")

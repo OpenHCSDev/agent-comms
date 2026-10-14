@@ -196,6 +196,43 @@ class ResumeThread(RequestParams):
     excludeTurns: bool = True
 
 
+class ThreadStatus(TaggedWire, ABC):
+    """What Codex says its thread is doing; the bridge reports it on attaching."""
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
+    )
+
+    def update(self, turn_id: str) -> TranscriptUpdate:
+        return TurnEnded(turn_id)
+
+
+class NotLoadedStatus(ThreadStatus):
+    wire_tag = 'notLoaded'
+
+
+class IdleStatus(ThreadStatus):
+    wire_tag = 'idle'
+
+
+class SystemErrorStatus(ThreadStatus):
+    wire_tag = 'systemError'
+
+
+class ActiveStatus(ThreadStatus):
+    wire_tag = 'active'
+
+    def update(self, turn_id: str) -> TranscriptUpdate:
+        return TurnStarted(turn_id)
+
+
+class ResumedThreadState(WireModel):
+    status: ThreadStatus.declared_union()
+
+
+class ResumedThread(WireModel):
+    thread: ResumedThreadState
+
+
 Params = TypeVar('Params', bound=RequestParams)
 
 

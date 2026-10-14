@@ -381,8 +381,7 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
         comms = Comms(Path(self.binding.root))
         output = ThreadOutput(
             await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
-        # A new watch has seen no turn; one already running reports itself.
-        await asyncio.to_thread(output.status, ActivityState.IDLE)
+        # Each CLI's transcript begins with the turn state its own source reports.
         async for update in self.transcript():
             await asyncio.to_thread(update.publish, output)
 

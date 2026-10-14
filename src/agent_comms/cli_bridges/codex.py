@@ -13,11 +13,11 @@ from uuid import uuid4
 import aiohttp
 from pydantic import JsonValue
 from agent_comms.messages import Message
-from .shared import TranscriptBridge, Options, Outcome, SendResult, TranscriptUpdate, TurnStarted, shared_parser, parse_options, run_bridge
+from .shared import TranscriptBridge, Options, Outcome, SendResult, TranscriptUpdate, shared_parser, parse_options, run_bridge
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcFailure, RpcNotification, RpcSuccess, TextInput,
-    ToolOutput, RequestParams, ResumeThread, ItemsList, ItemsPage, ItemStream, BusInput,
+    ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
 )
 
 
@@ -93,7 +93,8 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
 
     async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
         async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
-            await codex.call(ResumeThread(threadId=self.binding.thread))
+            resumed = ResumedThread.model_validate(
+                await codex.call(ResumeThread(threadId=self.binding.thread)))
             page = ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.binding.thread)))
             # Seed only completed snapshots. An active item's deltas must be
             # assembled from its actual start, not appended to an overlapping
@@ -101,10 +102,9 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
             for entry in reversed(page.data):
                 if entry.completed:
                     yield entry.publication()
-            # Interrupted turns leave unfinished items behind; only the newest
-            # item can belong to a turn still running when the watch began.
-            if page.data and not page.data[0].completed:
-                yield TurnStarted(page.data[0].turnId)
+            # Codex's own thread status says whether its newest turn still runs.
+            if page.data:
+                yield resumed.thread.status.update(page.data[0].turnId)
             stream = ItemStream(self.binding.thread)
             buffered = tuple(codex.pending)
             codex.pending.clear()
