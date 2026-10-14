@@ -66,6 +66,7 @@ def _schema_context():
         obligation_edges=_sql_edges(ResponseState, "json_extract({row}.lifecycle, '$.kind')"),
         terminal_attempt_names=_sql_members(AttemptState, lambda member: member.terminal),
         failed_attempt_phases=_sql_members(AttemptState, lambda member: member.failed),
+        retry_attempt_phases=_sql_members(AttemptState, lambda member: member.retry_predecessor),
         engaged_execution_names=_sql_members(
             ExecutionState, lambda member: member.assignment_state().engaged
         ),

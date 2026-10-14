@@ -25,6 +25,7 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     allows_tool_admission: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
     failed: ClassVar[bool] = False
+    retry_predecessor: ClassVar[bool] = False
     starting: ClassVar[bool] = False
     running: ClassVar[bool] = False
     settling: ClassVar[bool] = False
@@ -291,6 +292,8 @@ class UnsuccessfulTerminal(TerminalAttempt):
 
 
 class AttemptFailedAttempt(UnsuccessfulTerminal):
+    retry_predecessor = True
+
     @property
     def release_wording(self) -> str:
         return "Released files after a failed turn"
