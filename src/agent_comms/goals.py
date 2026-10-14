@@ -168,7 +168,12 @@ class GoalRevision:
     def __post_init__(self) -> None:
         if not FieldCodec.decode(str, self.id):
             raise ValueError("Goal revision requires identity")
-        revision = FieldCodec.decode(int, self.revision)
+        try:
+            revision = FieldCodec.decode(int, self.revision)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Goal revision must be an exact nonnegative 63-bit integer."
+            ) from error
         if not 0 <= revision < 1 << 63:
             raise ValueError("Goal revision must be an exact nonnegative 63-bit integer.")
 

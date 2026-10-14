@@ -59,7 +59,12 @@ def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_pa
         with pytest.raises(ValueError) as refusal:
             comms.channels.delete_tag('cohort', disposition=disposition)
         assert str(refusal.value) == disposition.confirmation('cohort')
-        with pytest.raises(RelationViolationError, match='stopped|Stop a running'):
+        refusal_text = (
+            'no longer stopped'
+            if isinstance(disposition, ArchiveThreadsTagDisposition)
+            else 'still has a live process; stop it first'
+        )
+        with pytest.raises(RelationViolationError, match=refusal_text):
             comms.channels.delete_tag('cohort', disposition=disposition, confirmed=True)
         assert comms.registry.snapshot() == original
         assert comms.channels.catalog.read() == catalog
@@ -103,7 +108,12 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
     assert 'remove' not in catalog.all_tags(comms.registry.all_threads())
     assert '#remove' not in catalog.preferences
     assert catalog.pinned_threads('#keep') == {'multi'}
-    assert {name: (tmp_path / (name + '.jsonl')).read_bytes() for name in saved} == saved
+    assert not (tmp_path / 'single.jsonl').exists()
+    assert not (tmp_path / 'archived.jsonl').exists()
+    assert {
+        name: (tmp_path / (name + '.jsonl')).read_bytes()
+        for name in ('multi', 'active', 'untouched')
+    } == {name: saved[name] for name in ('multi', 'active', 'untouched')}
 
 
 def test_exclusive_tag_deletion_never_deletes_a_stopped_owner_that_is_still_alive(tmp_path):
