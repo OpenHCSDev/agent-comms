@@ -230,7 +230,7 @@ class WireScan:
     max_row_bytes = 8 * 1024 * 1024
 
     def read(self, line: bytes) -> WireRecord:
-        from .bus_publication import DuplicateWireKeyError, unique_wire_object
+        from .bus_publication import unique_wire_object
 
         if len(line) > self.max_row_bytes:
             raise RelationViolationError("Oversized private bus row.")
@@ -245,7 +245,7 @@ class WireScan:
             record.record_key(self.seen_keys)
             self.previous_sequence = record.sequence_after(self.previous_sequence)
             return record
-        except (RelationViolationError, DuplicateWireKeyError):
+        except RelationViolationError:
             raise
         except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as error:
             raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
