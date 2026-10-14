@@ -247,8 +247,8 @@ class AssignedTranscriptSource:
         sent_request = ConversationSourceWindowRequest(
             "w.sender_lookup=?", (lookup,), sent_limit, False
         )
-        conversation, sent = self.log.conversation_source_windows(
-            lookup, (conversation_request, sent_request)
+        conversation, sent = conversation_request.capture_many(
+            self.log, lookup, (conversation_request, sent_request)
         )
         rows = conversation.sources
         cursor = AssignedSourceCursor(

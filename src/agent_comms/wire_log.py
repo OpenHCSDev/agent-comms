@@ -217,6 +217,19 @@ class ConversationSourceWindowRequest:
         )
         return ConversationSourceWindow(self, tuple(rows))
 
+    @classmethod
+    def capture_many(
+        cls,
+        log: WireLog,
+        lookup: str,
+        requests: tuple[ConversationSourceWindowRequest, ...],
+    ) -> tuple[ConversationSourceWindow, ...]:
+        """Capture all requests from the same certified wire cut."""
+        if not log.path.exists():
+            return tuple(ConversationSourceWindow(request, ()) for request in requests)
+        with log.certified_read() as source:
+            return tuple(request.capture(source, lookup) for request in requests)
+
 
 @dataclass(frozen=True, slots=True)
 class ConversationSourceWindow:
@@ -304,21 +317,7 @@ class WireLog:
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Read an original window through its existing canonical barrier."""
         request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending)
-        return self.conversation_source_windows(lookup, (request,))[0].sources
-
-    def conversation_source_windows(
-        self, lookup: str, requests: tuple[ConversationSourceWindowRequest, ...]
-    ) -> tuple[ConversationSourceWindow, ...]:
-        """Read named original windows through one canonical barrier."""
-        with _store_lock(self.path) as lock:
-            if not self.path.exists():
-                return tuple(ConversationSourceWindow(request, ()) for request in requests)
-            marker = self._private_marker_unlocked()
-            source = lock.certified_read()
-            source.require_marker(marker)
-            windows = tuple(request.capture(source, lookup) for request in requests)
-            source.require_current()
-        return windows
+        return request.capture_many(self, lookup, (request,))[0].sources
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.
