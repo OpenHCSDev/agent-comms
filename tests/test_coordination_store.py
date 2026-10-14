@@ -1075,12 +1075,16 @@ def test_monitor_requires_owner_loss_separate_from_child_exit(
     with ready(db_path) as db:
         _, fence = started(db)
         monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
-        for evidence, owner_loss in (
-            (monitor_evidence(True), None),
-            (monitor_evidence(True, subprocess_dead=False), object.__new__(VerifiedOwnerLoss)),
-            (monitor_evidence(True), object.__new__(VerifiedOwnerLoss)),
+        for evidence, owner_loss, error in (
+            (monitor_evidence(True), None, RecoveryBlocked),
+            (
+                monitor_evidence(True, subprocess_dead=False),
+                object.__new__(VerifiedOwnerLoss),
+                RecoveryBlocked,
+            ),
+            (monitor_evidence(True), object.__new__(VerifiedOwnerLoss), AttributeError),
         ):
-            with pytest.raises(RecoveryBlocked):
+            with pytest.raises(error):
                 monitor.terminalize_dead_attempt(
                     "exec",
                     1,
@@ -1106,7 +1110,7 @@ def test_monitor_production_verifier_remains_closed(db_path: Path) -> None:
         with pytest.raises(RecoveryBlocked):
             VerifiedOwnerLoss(execution_id="exec")
         monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
-        with pytest.raises(RecoveryBlocked):
+        with pytest.raises(AttributeError):
             monitor.terminalize_dead_attempt(
                 "exec",
                 1,

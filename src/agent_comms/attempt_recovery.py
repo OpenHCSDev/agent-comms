@@ -114,14 +114,17 @@ class VerifiedOwnerLoss:
                 object.__setattr__(proof, "_active", False)
 
 
+    def issued_for(self, store: Coordination) -> bool:
+        """Whether this live proof was issued while excluding this store's owner."""
+        return self._issuer is _OWNER_LOSS_ISSUER and self._active and self._store is store
+
     def owns(self, store: Coordination, attempt: AttemptRecord) -> bool:
         """Only this acquired, unexpired observer attests the original attempt."""
-        try:
-            if self._issuer is not _OWNER_LOSS_ISSUER or not self._active or self._store is not store:
-                return False
-            return self.attempt.authority == attempt.authority and self.attempt.owner_identity == attempt.owner_identity
-        except AttributeError:
-            return False  # Uninitialized objects have no acquired issuer/custody.
+        return (
+            self.issued_for(store)
+            and self.attempt.authority == attempt.authority
+            and self.attempt.owner_identity == attempt.owner_identity
+        )
 
     def require_native_exit(self) -> None:
         """Inspect the original launch resources while owner exclusion is held.
@@ -354,9 +357,7 @@ class RecoveryMonitorCapability:
         replay_facts = ReplayFact(replay_facts)
         if (
             not isinstance(owner_loss, VerifiedOwnerLoss)
-            or getattr(owner_loss, "_issuer", None) is not _OWNER_LOSS_ISSUER
-            or not getattr(owner_loss, "_active", False)
-            or getattr(owner_loss, "_store", None) is not store
+            or not owner_loss.issued_for(store)
         ):
             raise RecoveryBlocked("monitor requires an observed release of this exact owner")
         with store.session.settlement(owner_loss.boundary) as boundary:
