@@ -132,7 +132,6 @@ class AssignmentActivityEvidence(TypedRow):
         return AssignmentActivity(
             triage_inflight=self.triage_inflight,
             current_execution_id=self.current_execution_id,
-            model_context=context is not None,
             read_at_ms=recorded_times.get(context) if context is not None else None,
             response_seq=self.response_seq,
             response_message_id=self.response_message_id,
@@ -144,7 +143,6 @@ class AssignmentActivityEvidence(TypedRow):
 class AssignmentActivity:
     triage_inflight: bool
     current_execution_id: str | None
-    model_context: bool
     read_at_ms: int | None
     response_seq: int | None
     response_message_id: str | None
@@ -152,7 +150,7 @@ class AssignmentActivity:
 
     @property
     def progress(self) -> AssignmentProgress:
-        return ShownToModelProgress() if self.model_context else NotShownProgress()
+        return ShownToModelProgress() if self.read_at_ms is not None else NotShownProgress()
 
     def pending_notification(self, notification, queued_at_ms):
         """Project custody behind the recipient's canonical unresolved execution."""

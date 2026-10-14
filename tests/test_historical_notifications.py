@@ -107,7 +107,6 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     activity = AssignmentActivity(
         triage_inflight=False,
         current_execution_id=None,
-        model_context=True,
         read_at_ms=1,
         response_seq=None,
         response_message_id=None,
@@ -145,7 +144,6 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     sent_activity = AssignmentActivity(
         triage_inflight=False,
         current_execution_id=None,
-        model_context=False,
         read_at_ms=None,
         response_seq=None,
         response_message_id=None,
@@ -158,7 +156,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         activity=sent_activity,
         updated_at_ms=1_000,
     )
-    read_activity = replace(sent_activity, model_context=True, read_at_ms=2_000)
+    read_activity = replace(sent_activity, read_at_ms=2_000)
     read = engagement.notification(
         recipient,
         observation=RecordedRecipientActivity(),
