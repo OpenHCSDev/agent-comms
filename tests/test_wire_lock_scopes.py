@@ -13,11 +13,20 @@ can never process the awaited result: permanent self-deadlock.
 
 import ast
 import asyncio
-import tempfile
-import time
+from contextlib import ExitStack
 from pathlib import Path
+from types import MethodType, SimpleNamespace
 
-from agent_comms.store_files import _async_store_lock, _store_lock
+import pytest
+from acp import RequestError
+
+from agent_comms.agent_backend import InputContent
+from agent_comms.input_attempt import ACPInputIdText, ReservedInput
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_origin import UnattributedInputOrigin
+from agent_comms.input_drain import InputDrain
+from agent_comms.queued_input import DeliveredInput, QueuedInput
+from agent_comms.store_files import _async_store_lock
 
 SCOPED = ("src/agent_comms/queued_input.py", "src/agent_comms/input_drain.py")
 
@@ -46,29 +55,77 @@ def test_no_wire_lock_scope_spans_an_await():
     assert not violations, f"wire lock held across await: {violations}"
 
 
-def test_waiter_admitted_while_holder_awaits_outside_lock(tmp_path):
-    """The fixed pattern: sync work under custody, awaits after release."""
+def _harness(tmp_path):
+    """Real dispositions and lock; plain-dict harnesses exactly as InputDrain holds them."""
     wire = tmp_path / "wire"
     wire.write_text("{}")
-    admitted = []
+    inputs = SimpleNamespace(
+        dispositions=InputDispositions(tmp_path / "input_dispositions.json"),
+        following_sources={},
+        queued_inputs={},
+        backend_inboxes={},
+        comms=SimpleNamespace(_wire_lock_path=wire),
+    )
+    inputs.require_inbox = MethodType(InputDrain.require_inbox, inputs)
+    return inputs, wire
 
-    async def holder():
-        async with _async_store_lock(wire):
-            pass
-        await asyncio.sleep(1)
+
+def _fill(inputs, session_id, count):
+    for index in range(count):
+        key = f"base-{index}"
+        row = ReservedInput(key, None, "owner", 1, "owner", f"text {index}",
+                            origin=UnattributedInputOrigin())
+        custody = ExitStack()
+        inputs.dispositions.reserve_originals(row, custody=custody)
+        custody.pop_all()
+        custody.close()
+        inputs.following_sources.setdefault(session_id, {})[f"base-id-{index}"] = (
+            SimpleNamespace(keys=(key,))
+        )
+
+
+def _delivered_item():
+    return QueuedInput(
+        text="delivered", echo=False,
+        context=SimpleNamespace(active_goal_id=None),
+        input_id=ACPInputIdText.new(), prompt="delivered",
+    )
+
+
+def _row_for(item):
+    return ReservedInput(item.key, None, "owner", 1, "owner", item.text,
+                         origin=UnattributedInputOrigin())
+
+
+def test_last_slot_has_exactly_one_winner_on_production_paths(tmp_path):
+    """Shepherd's interleaving against production code: one slot left, two
+    contenders race the real locked decide-and-consume; exactly one places."""
+    inputs, wire = _harness(tmp_path)
+    session_id = "session"
+    inbox = asyncio.Queue()
+    inputs.backend_inboxes[session_id] = inbox
+    _fill(inputs, session_id, 31)
+    assert QueuedInput._remaining(inputs, session_id, inputs.dispositions.read()) == 1
+
+    async def contender():
+        item, content = _delivered_item(), InputContent(text="delivered")
+        row, custody = _row_for(item), ExitStack()
+        try:
+            async with _async_store_lock(wire):
+                DeliveredInput._decide_consume_unlocked(
+                    inputs, session_id, inbox, item, content, row, custody)
+        except RequestError:
+            await asyncio.to_thread(custody.close)
+            return None
+        custody.pop_all()
+        custody.close()
+        return item
 
     async def main():
-        task = asyncio.create_task(holder())
-        await asyncio.sleep(0.2)
-        deadline = time.monotonic() + 2.0
-        while time.monotonic() < deadline:
-            try:
-                with _store_lock(wire, blocking=False):
-                    admitted.append(True)
-                    break
-            except BlockingIOError:
-                await asyncio.sleep(0.05)
-        await task
+        return await asyncio.gather(contender(), contender())
 
-    asyncio.run(main())
-    assert admitted == [True]
+    winners = [item for item in asyncio.run(main()) if item is not None]
+    assert len(winners) == 1
+    assert QueuedInput._remaining(inputs, session_id, inputs.dispositions.read()) == 0
+    assert len(inputs.dispositions.read().rows) == 32
+    assert inbox.qsize() == 1

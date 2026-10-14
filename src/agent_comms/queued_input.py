@@ -169,12 +169,6 @@ class QueuedInput:
         return cls._remaining(inputs, session_id, document)
 
     @classmethod
-    async def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
-        """Follow-ups cannot exceed the original live awaiting-start allowance."""
-        if await cls.capacity(inputs, session_id) <= 0:
-            cls._refuse_over_capacity()
-
-    @classmethod
     def require_capacity_unlocked(cls, inputs: InputDrain, session_id: str) -> None:
         """Recheck synchronously under wire custody; the pre-check can race."""
         if cls._remaining(inputs, session_id, inputs.dispositions.read()) <= 0:
@@ -193,13 +187,12 @@ class QueuedInput:
         The consumer transfers this original ExitStack only after binding its
         live input, or into its existing longer turn-acquisition lifetime.
         """
-        await cls.require_capacity(inputs, session_id)
         async with _async_store_lock(inputs.comms._wire_lock_path), AsyncExitStack() as rollback:
             custody = ExitStack()
             rollback.push_async_callback(Coordination.run_worker, custody.close)
-            # No await while holding the wire lock. The pre-check above is an
-            # advisory fast path; the binding recheck runs under custody, so
-            # two concurrent reservations cannot both pass a stale count.
+            # No await while holding the wire lock. The capacity check runs
+            # once, here under custody: a pre-check outside could both pass a
+            # stale count and refuse a freed slot, so it owns nothing.
             cls.require_capacity_unlocked(inputs, session_id)
             item, owner, row = cls.capture(
                 inputs, name, text=text, prompt=prompt, echo=echo,
@@ -371,6 +364,22 @@ class DeliveredInput(QueuedInput):
         return owner, context, snapshot, tuple(prepared)
 
     @classmethod
+    def _decide_consume_unlocked(cls, inputs: InputDrain, session_id: str, inbox, item: Self,
+                                 content, row: ReservedInput, custody: ExitStack) -> None:
+        """Decide and consume one delivered slot atomically under wire custody.
+
+        Synchronous: capacity recheck, disposition reservation and inbox
+        placement share one acquisition, so a concurrent follow-up cannot take
+        the last slot between them. Raises RequestError when full and
+        RelationViolationError when the row is already owned, both without any
+        mutation by this call; InputHandoffRefused means the row was reserved
+        and the caller must settle it.
+        """
+        cls.require_capacity_unlocked(inputs, session_id)
+        inputs.dispositions.reserve_originals(row, custody=custody)
+        item.place(inputs, session_id, inbox, content)
+
+    @classmethod
     async def deliver_pending(
         cls, inputs: InputDrain, session_id: str, owner: Thread, bus: MessageBus, root_id: str, after_seq: int,
     ) -> None:
@@ -409,15 +418,8 @@ class DeliveredInput(QueuedInput):
         delivery_owner, context, snapshot, prepared = await Coordination.run_worker(
             partial(cls._prepared_pending, inputs, owner.name, root_id, pending)
         )
-        reserved: list[tuple[Self, Any]] = []
         for key, row, rendered, message, assignment in prepared:
             custody = ExitStack()
-            try:
-                async with _async_store_lock(inputs.comms._wire_lock_path):
-                    inputs.dispositions.reserve_originals(row, custody=custody)
-            except RelationViolationError:
-                await Coordination.run_worker(custody.close)
-                continue
             try:
                 paused = await Coordination.run_async(
                     store_path,
@@ -427,27 +429,29 @@ class DeliveredInput(QueuedInput):
                     ).value,
                 )
             except Exception:
+                continue
+            item = cls(
+                text=row.source_text, echo=False, context=context,
+                input_id=ACPInputIdText.new(), prompt=rendered.text,
+                bus_key=key, message=message, assignment=paused,
+            )
+            content = InputContent(text=rendered.text, contributions=rendered.contributions)
+            try:
+                async with _async_store_lock(inputs.comms._wire_lock_path):
+                    cls._decide_consume_unlocked(inputs, session_id, inbox, item, content, row, custody)
+            except InputHandoffRefused:
+                # The inbox died after the row was reserved: full cleanup.
                 await Coordination.run_worker(custody.close)
+                await item.not_started(inputs)
+                continue
+            except (RequestError, RelationViolationError):
+                # Slot full or row already owned: the row is untouched by us,
+                # so only the paused assignment returns to pending.
+                await Coordination.run_worker(custody.close)
+                await item.settle(inputs, item.assignment.lifecycle.mode.initial_state())
                 continue
             custody.pop_all()
             custody.close()
-            reserved.append((
-                cls(
-                    text=row.source_text, echo=False, context=context,
-                    input_id=ACPInputIdText.new(), prompt=rendered.text,
-                    bus_key=key, message=message, assignment=paused,
-                ),
-                InputContent(text=rendered.text, contributions=rendered.contributions),
-            ))
-        unplaced: tuple[Self, ...] = ()
-        for index, (item, content) in enumerate(reserved):
-            try:
-                item.place(inputs, session_id, inbox, content)
-            except InputHandoffRefused:
-                unplaced = tuple(item for item, _ in reserved[index:])
-                break
-        for item in unplaced:
-            await item.not_started(inputs)
 
     async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
         raise InputHandoffRefused("A bus message its turn never took wakes its owner instead")
