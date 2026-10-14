@@ -599,10 +599,10 @@ class CommsThreadsTool(ToolRequest):
 
         result = ThreadsCliCommand(active_only=self.active_only).apply(comms)
         presentation = comms.views.thread_presentation(_executing_thread())
-        result["sent_notifications"] = (
+        sent_notifications = (
             list(presentation.sent_notifications) if presentation is not None else []
         )
-        return result
+        return {**result, "sent_notifications": sent_notifications}
 
 
 @dataclass(frozen=True, kw_only=True)
