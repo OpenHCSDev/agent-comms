@@ -154,11 +154,13 @@ class WireChangeWatch(WireWatch):
         self.changed.set()
 
     def _schedule_changed(self) -> None:
-        if self._pending_change is not None:
-            self._pending_change.cancel()
-        self._pending_change = self.loop.call_later(
-            self.event_settle_seconds, self._publish_changed
-        )
+        # Settle one bounded burst from its first relevant change. Moving the
+        # deadline on every shared-store write can starve an addressed owner
+        # indefinitely while other owners keep publishing.
+        if self._pending_change is None:
+            self._pending_change = self.loop.call_later(
+                self.event_settle_seconds, self._publish_changed
+            )
 
     def _publish_changed(self) -> None:
         self._pending_change = None
