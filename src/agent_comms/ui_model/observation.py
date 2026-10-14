@@ -315,19 +315,56 @@ class ObserveSidebar(InterestRequest):
     def apply(self, interest: Interest) -> Interest:
         return replace(interest, sidebar=self)
 
-    def answer(
-        self, comms: Comms, revision: WireRevision
+    def _answer(
+        self, comms: Comms, revision: WireRevision, read
     ) -> SidebarObserved | SidebarUnreadable | None:
         from agent_comms.ui_model.sidebar import SidebarModel
 
         try:
-            snapshot = comms.views.viewer_snapshot(
+            snapshot = read(
                 self.worktree, show_stopped=self.show_stopped, show_archived=self.show_archived)
             return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
         except UnreadableHistory.DEFERRED_READS:
             return None  # No new snapshot; keep the original interest for the next observation.
         except StoredHistoryUnreadable as error:
             return SidebarUnreadable(revision, self, UnreadableHistory.capture(error))
+
+    def roster(
+        self, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        return self._answer(comms, revision, comms.views.viewer_roster)
+
+    def answer(
+        self, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        return self._answer(comms, revision, comms.views.viewer_snapshot)
+
+
+class SidebarReadStage(ABC):
+    @abstractmethod
+    def read(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None: ...
+
+    def next(self) -> SidebarReadStage:
+        return self
+
+
+class RosterSidebarRead(SidebarReadStage):
+    def read(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        return request.roster(comms, revision)
+
+    def next(self) -> SidebarReadStage:
+        return CompleteSidebarRead()
+
+
+class CompleteSidebarRead(SidebarReadStage):
+    def read(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        return request.answer(comms, revision)
 
 
 @dataclass(frozen=True)
@@ -484,7 +521,8 @@ class ObservationService:
         self.interest = Interest()
         self.changed = asyncio.Event()
         self.revision: WireRevision | None = None
-        self.sent_sidebar: tuple[ObserveSidebar, int] | None = None
+        self.sent_sidebar: tuple[ObserveSidebar, int, type[SidebarReadStage]] | None = None
+        self.sidebar_read: tuple[ObserveSidebar, SidebarReadStage] | None = None
         self.sent_threads: frozenset[str] | None = None
         self.checked_views: tuple[ObserveViews, WireRevision] | None = None
         self.retry_threads = False
@@ -528,12 +566,25 @@ class ObservationService:
             self.connection.send(RevisionObserved(revision))
         sidebar = self.interest.sidebar
         if sidebar is not None:
-            key = (sidebar, revision.expiry_tick // EXPIRY_PERIOD)
+            reading = self.sidebar_read
+            stage = (
+                reading[1]
+                if reading is not None and reading[0] == sidebar
+                else RosterSidebarRead()
+            )
+            key = (sidebar, revision.expiry_tick // EXPIRY_PERIOD, type(stage))
             if stores or key != self.sent_sidebar:
-                result = sidebar.answer(self.comms, revision)
+                result = stage.read(sidebar, self.comms, revision)
                 if result is not None:
                     self.connection.send(result)
                     self.sent_sidebar = key
+                    next_stage = stage.next()
+                    self.sidebar_read = (sidebar, next_stage)
+                    if next_stage is not stage and isinstance(result, SidebarObserved):
+                        # The lightweight rows are already available to the UI process.
+                        # Return to the event loop before advancing whole-bus indexes.
+                        self.observe_due = True
+                        self.changed.set()
         threads = self.interest.threads
         if threads and (stores or threads != self.sent_threads or self.retry_threads):
             presentations, unavailable, busy = {}, {}, set()

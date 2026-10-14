@@ -8,10 +8,12 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.bus_display_index import BusDisplayIndex
-from agent_comms.errors import RelationViolationError
 from agent_comms.comms import wire
-from agent_comms.messages import Message, InfoKind
+from agent_comms.errors import RelationViolationError
+from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
+from agent_comms.ui_model.observation import ObservationService, ObserveSidebar, SidebarObserved
+from agent_comms.ui_model.unread import IndexingUnread
 
 
 @pytest.mark.parametrize("indexed", [True, False])
@@ -45,6 +47,58 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     latest = comms.views.viewer_snapshot(str(tmp_path))
     assert latest.unread == {"renamed-bob": 1}
     assert "renamed-bob" in latest.last_sent and "bob" not in latest.last_sent
+
+
+def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path):
+    comms = wire(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path))
+    comms.registry.register(viewer)
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    comms.messaging.send_message("bob", viewer.name, "direct")
+    comms.messaging.send_message("bob", "#team", "channel")
+    expected = comms.views.viewer_snapshot(str(tmp_path))
+
+    bus_path = comms.bus.log.path
+    original = bus_path.read_bytes()
+    modified = bus_path.stat().st_mtime_ns
+    bus_path.write_bytes(original)
+    os.utime(bus_path, ns=(modified + 1_000_000_000, modified + 1_000_000_000))
+    bus_path.with_name("bus_route_counts.sqlite3").unlink()
+
+    def projection_bytes():
+        paths = [
+            comms.bus.log.path.with_name("bus_activity_latest.json"),
+            comms.bus.log.path.with_name("bus_route_counts.sqlite3"),
+            *comms.bus.log.path.parent.glob("bus_display_*.json"),
+        ]
+        return {path.name: path.read_bytes() for path in paths if path.exists()}
+
+    before = projection_bytes()
+
+    class Results:
+        def __init__(self):
+            self.values = []
+
+        def send(self, value):
+            self.values.append(value)
+
+    results = Results()
+    service = ObservationService(comms, results)
+    request = ObserveSidebar(str(tmp_path), True, False)
+    service.interest = request.apply(service.interest)
+
+    service.observe()
+
+    first = next(result for result in results.values if isinstance(result, SidebarObserved))
+    assert first.snapshot.unread_pending >= {"bob", "#team"}
+    assert isinstance(first.derived[0]["#team"].unread, IndexingUnread)
+    assert projection_bytes() == before
+
+    service.observe()
+
+    second = [result for result in results.values if isinstance(result, SidebarObserved)][-1]
+    assert second.snapshot == expected
+    assert second.snapshot.unread_pending == frozenset()
 
 
 def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
