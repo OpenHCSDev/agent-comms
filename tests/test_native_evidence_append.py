@@ -27,6 +27,16 @@ def append_to(path):
         stream.write(APPEND)
 
 
+def test_removed_context_source_is_a_named_progress_state(tmp_path):
+    from agent_comms.notification_assignment import AssignmentContext, RemovedContextProgress
+
+    sessions = tmp_path / "sessions"
+    sessions.mkdir(mode=0o700)
+    context = AssignmentContext(str(sessions / "removed.jsonl"), "entry")
+    progress = AssignmentContext.recorded_progress((context,))
+    assert type(progress[context]) is RemovedContextProgress
+
+
 def test_recorded_time_projection_decodes_only_selected_entries(tmp_path, monkeypatch):
     session = _evidence(tmp_path)
     rows = [json.loads(line) for line in session.read_text().splitlines()]
