@@ -27,8 +27,8 @@ class NothingProduced extends NativeRunState {
         // One decision constructs the state for this refusal. Retryable and
         // terminal states then own disjoint behavior without checking a flag.
         if (!this.owner.tracked) return this;
-        if (!this.owner.retryable(message)) return this.terminal(message);
-        const reason = message.errorMessage || 'Provider request failed';
+        const reason = this.owner.retryReason(message);
+        if (reason === undefined) return this.terminal(message);
         return (this.attempt < RecoveryBudget.attempts
             ? new RefusedNothingProduced(this.owner, this.attempt, reason)
             : new FailedProviderRequest(this.owner, this.attempt, reason)
@@ -149,6 +149,11 @@ export class NativeTurnRun {
     }
     get tracked() { return this.inputs.size > 0; }
     get retrying() { return this.state.retrying; }
+    retryReason(message) {
+        if (this.retryable(message)) return message.errorMessage || 'Provider request failed';
+        if (message.stopReason === 'stop') return 'Provider returned no authoritative response';
+        return undefined;
+    }
     include(messages, claims) {
         for (const message of messages) {
             if (message.role === 'user' && claims.has(message.inputId)) this.inputs.add(message.inputId);
@@ -169,7 +174,7 @@ export class NativeTurnRun {
         }
         if (event.type === 'message_end' && event.message.role === 'assistant') {
             const content = event.message.content;
-            if (content.some(block => block.type === 'toolCall' || block.text?.length || block.thinking?.length)) {
+            if (content.some(block => block.type === 'toolCall' || block.text?.length)) {
                 this.state = this.state.produced();
             }
             this.state = this.state.finished(event.message);
