@@ -142,6 +142,10 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     def require_entry_id(self) -> str:
         return self.source_coordinates.original_id
 
+    def identified(self):
+        """Yield this entry's stable key only when the external entry supplied one."""
+        return ((self.id, self),) if self.id else ()
+
     @property
     def source_coordinates(self):
         return self

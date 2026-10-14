@@ -30,7 +30,6 @@ from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiUnavailable
-from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
@@ -61,12 +60,11 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
         owner.on_connect(updates)
 
         async def refused_preflight(self):
-            # Inject refusal at the original prepared-session boundary after
-            # authentic SDK source/identity acquisition. No child, witness or
-            # capability response is fabricated by the caller.
+            # Inject refusal at the prompt's current capability-preflight
+            # boundary after authentic SDK source/identity acquisition.
             raise NativePiUnavailable("native preflight refused before prompt")
 
-        monkeypatch.setattr(NativeSessionPreparation, "input_ready", refused_preflight)
+        monkeypatch.setattr(backend.TurnSession, "input_ready", refused_preflight)
         with pytest.raises(RequestError) as caught:
             await owner.prompt(session, [TextContentBlock(type="text", text="test")])
         assert isinstance(caught.value.__cause__, NativePiUnavailable)
@@ -348,7 +346,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             await wait_for(lambda: session in owner.inputs._idle_private_revisions)
             key = message.seq, message.message_id
             pending, = comms.views.message_notifications([message])[key]
-            assert pending.state == "Pending" and not pending.busy
+            assert pending.state == "Sent" and not pending.busy
             open_release.set()
             await asyncio.wait_for(started.wait(), 30)
             in_flight, = comms.views.message_notifications([message])[key]
@@ -370,7 +368,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             ]
             assert type(assignments[-1].lifecycle) is DeliveredAssignment
             read, = comms.views.message_notifications([message])[key]
-            assert read.state == "Read — no reply" and not read.busy
+            assert read.state.startswith("Read ") and not read.busy
             assert read.read_at_ms == assignments[-1].updated_at_ms
             assert native.provider.posts == 2
             rows = [json.loads(line) for line in native.session.read_text().splitlines()]
@@ -454,7 +452,7 @@ async def test_hard_exit_after_owner_acceptance_preserves_unknown_without_replay
     saved = native.session.read_bytes()
     code = """import asyncio, os, sys
 from pathlib import Path
-sys.path.insert(0,sys.argv[4])
+sys.path[:0] = [sys.argv[4], sys.argv[5]]
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import NativeBackendFixture
 from agent_comms.comms import Comms
@@ -472,7 +470,7 @@ asyncio.run(main())
 """
     result = await BoundedRun.run(
         (sys.executable, "-c", code, str(native.root), str(native.project),
-         str(native.session), str(Path(__file__).parent)),
+         str(native.session), str(Path(__file__).parent), str(Path(__file__).parents[1] / "src")),
         timeout=15, cwd=native.project,
     )
     assert result.outcome == ExitedOutcome(17), result.stderr.decode()

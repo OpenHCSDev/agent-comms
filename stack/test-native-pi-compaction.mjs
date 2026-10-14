@@ -8,7 +8,7 @@ import {join,resolve} from 'node:path';
 import {randomBytes} from 'node:crypto';
 
 const mode=process.argv[2] ?? 'threshold';
-assert.ok(['threshold','overflow','manual','wip','cap'].includes(mode));
+assert.ok(['threshold','overflow','manual','wip','cap','oversized'].includes(mode));
 const pkg=process.env.PI_COMPACTION_TEST_PACKAGE;
 assert.ok(pkg,'Prepared native package required');
 const artifacts=resolve('.artifacts');mkdirSync(artifacts,{recursive:true,mode:0o700});
@@ -29,7 +29,10 @@ const server=createServer(async(request,response)=>{
     const payload=JSON.parse(body);
     const text=JSON.stringify(payload.messages);
     const summary=text.includes('<conversation>');
-    requests.push({summary,text});
+    const inputChars=payload.messages.reduce((total,message)=>total+
+        (typeof message.content==='string' ? message.content.length :
+            message.content.reduce((chars,block)=>chars+(block.text?.length??0),0)),0);
+    requests.push({summary,text,inputChars});
     if(summary){
         response.writeHead(200,{'content-type':'text/event-stream'});
         return response.end(chunk('SUMMARY_FIXTURE',500));
@@ -60,7 +63,14 @@ try {
     const runtime=await pi.ModelRuntime.create({authPath:join(root,'auth.json'),modelsPath:join(root,'models.json'),modelsStorePath:join(root,'models-store.json')});
     await runtime.setRuntimeApiKey('compaction-local','local-only');
     const model=runtime.getModel('compaction-local','pi-compaction');
-    const settings=pi.SettingsManager.inMemory({compaction:{enabled:true,reserveTokens:16384,keepRecentTokens:2000},retry:{enabled:false}});
+    const settings=pi.SettingsManager.inMemory({compaction:{enabled:mode!=='cap',reserveTokens:16384,keepRecentTokens:2000},retry:{enabled:false}});
+    if(mode==='cap'){
+        const budget=settings.getCompactionSettings();
+        assert.equal(settings.getCompactionEnabled(),true,'the Core budget cannot be disabled per thread');
+        assert.equal(budget.retainedContextTokens,300000,'the payload budget owns the one global threshold');
+        assert.equal(pi.shouldCompact(300000,1000000,budget),false,'the exact threshold still fits');
+        assert.equal(pi.shouldCompact(300001,1000000,budget),true,'one token over the threshold compacts');
+    }
     const loader=new pi.DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:settings,noExtensions:true,noSkills:true,noPromptTemplates:true});
     await loader.reload();
     const sessions=join(root,'sessions');mkdirSync(sessions,{mode:0o700});
@@ -71,7 +81,8 @@ try {
     const used=(mode==='threshold'||mode==='wip') ? 90000 : (mode==='cap' ? 250000 : 30000);
     const statedLines='Now: adding an event class\nUncommitted: stack/patch test edits\nNext: run the focused tests';
     for(let turn=0;turn<4;turn++){
-        manager.appendMessage({role:'user',content:`OLD_FACT_${turn} `+'old history '.repeat(1500),timestamp:2*turn+1});
+        const historyRepeats=mode==='oversized' ? 25000 : 1500;
+        manager.appendMessage({role:'user',content:`OLD_FACT_${turn} `+'old history '.repeat(historyRepeats),timestamp:2*turn+1});
         const stated=mode==='wip' && turn===1
             ? [{type:'text',text:`Working.\n${statedLines}`}]
             : [{type:'text',text:`old answer ${turn}`}];
@@ -99,8 +110,8 @@ try {
         await session.prompt('UNDER_CAP',{inputId:randomBytes(16).toString('hex')});
         assert.equal(compactions().length,0,'context under the declared cap does not compact');
         assert.ok(!requests.at(-1).text.includes('SUMMARY_FIXTURE'),'the request used the full session');
-        // The second reply's own usage crosses the declared cap (still far
-        // below the window); the cap compacts right after that response.
+        // The second reply's own usage crosses the retained-context threshold
+        // (still far below the model window); Pi compacts after that response.
         await session.prompt('OVER_CAP',{inputId:randomBytes(16).toString('hex')});
         assert.equal(compactions().length,1,'the declared cap compacts right after the crossing response');
         assert.ok(compactions()[0].summary.trimEnd().endsWith('SUMMARY_FIXTURE'),'the generated summary follows whatever the cap carries');
@@ -108,13 +119,14 @@ try {
         await session.prompt('RESUME',{inputId:randomBytes(16).toString('hex')});
         assert.ok(requests.at(-1).text.includes('SUMMARY_FIXTURE'),'the next request resumed from the compaction summary');
         assert.ok(!requests.at(-1).text.includes('OLD_FACT_0'),'summarized history left the context');
-    } else if(mode==='manual'){
+    } else if(mode==='manual'||mode==='oversized'){
         result=await session.compact('USER_FOCUS');
-        assert.equal(requests.length,1);
+        if(mode==='manual') assert.equal(requests.length,1);
         assert.ok(requests[0].summary);
         assert.ok(requests[0].text.includes('Additional focus: TASK_BRIEF_FIXTURE\\n\\nUSER_FOCUS'),'brief precedes typed instructions');
         assert.equal(compactions().length,1);
-        assert.equal(result.summary.startsWith('SUMMARY_FIXTURE'),true);
+        if(mode==='manual') assert.equal(result.summary.startsWith('SUMMARY_FIXTURE'),true);
+        else assert.ok(result.summary.includes('SUMMARY_FIXTURE'));
         await session.prompt('AFTER_MANUAL',{inputId});
     } else {
         await session.prompt('TRACKED_INPUT',{inputId});
@@ -122,7 +134,16 @@ try {
     const prompts=requests.filter(request=>!request.summary);
     const summaries=requests.filter(request=>request.summary);
     if(mode!=='cap') assert.equal(compactions().length,1,'Pi wrote exactly one compaction entry');
-    assert.equal(summaries.length,1,'one summary request');
+    if(mode==='oversized'){
+        assert.ok(summaries.length>1,'an oversized history is summarized through bounded updates');
+        const inputLimit=(model.contextWindow-settings.getCompactionSettings().reserveTokens)*4;
+        assert.ok(summaries.every(request=>request.inputChars<=inputLimit),
+            'every summarizer payload fits the same model-safe retained-context budget');
+        assert.ok(summaries.slice(1).every(request=>request.text.includes('<previous-summary>')),
+            'each later chunk updates the preceding summary');
+    } else {
+        assert.equal(summaries.length,1,'one summary request');
+    }
     assert.ok(summaries[0].text.includes('Additional focus: TASK_BRIEF_FIXTURE'),'task brief reaches the summary');
     if(mode==='wip'){
         const carried=compactions()[0].summary;
@@ -140,7 +161,7 @@ try {
     const committed=events.filter(event=>event.type==='context_committed' && event.inputId===inputId);
     const compactionEnds=events.filter(event=>event.type==='compaction_end');
     assert.equal(compactionEnds.length,1);
-    if(mode==='manual') assert.equal(compactionEnds[0].reason,'manual');
+    if(mode==='manual'||mode==='oversized') assert.equal(compactionEnds[0].reason,'manual');
     if(mode==='threshold'){
         assert.equal(prompts.length,1,'compacted before the tracked input was sent; nothing resent');
         assert.equal(compactionEnds[0].reason,'threshold');

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from abc import abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -40,9 +39,6 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return False
 
-    @abstractmethod
-    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification: ...
-
     def after_inbox_read(self, notification, source, reads, document, snapshot):
         return notification
 
@@ -56,36 +52,16 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
         notification: MessageNotification,
         updated_at_ms: int,
         progress: AssignmentProgress,
+        read_at_ms: int | None,
     ) -> MessageNotification:
-        return progress.notification(
-            notification, running=self.turn_started_by(updated_at_ms)
-        )
-
-    def delivered_response(
-        self, notification: MessageNotification, updated_at_ms: int
-    ) -> MessageNotification:
-        return replace(
-            notification,
-            state="Read — no reply",
-            detail="The message entered a turn that has ended without a linked reply.",
+        return progress.selected_notification(
+            notification, read_at_ms, busy=self.turn_started_by(updated_at_ms)
         )
 
 
 @dataclass(frozen=True)
 class RecordedRecipientActivity(RecipientActivity):
     """Durable history supplies no current process, readiness or inbox check."""
-
-    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
-        return notification
-
-    def selected_response(
-        self,
-        notification: MessageNotification,
-        updated_at_ms: int,
-        progress: AssignmentProgress,
-    ) -> MessageNotification:
-        return replace(notification, state="Response selected", busy=False, priority=3,
-            detail="The recorded assignment selected a response; completion is not recorded.")
 
     def displayed_recipient(self, notification, source, reads, document, snapshot):
         return reads.historical_displayed_recipient(
@@ -97,30 +73,24 @@ class RecordedRecipientActivity(RecipientActivity):
 class ExternalRecipientActivity(RecipientActivity):
     incarnation: ThreadIncarnation
 
-    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
-        from .presentation import MessageNotification
-
-        return MessageNotification(notification.recipient_identity, "Waiting for agent",
-            "External CLI participant checks its inbox; no native prompt transport is attached.",
-            priority=4)
-
     def after_inbox_read(self, notification, source, reads, document, snapshot):
         if self.incarnation.current(snapshot) and source.message.seq in reads.seen_sequences(
             self.incarnation.name, snapshot, document=document
         ):
-            return replace(notification, state="Checked by CLI",
-                           detail="The external participant acknowledged this original inbox message.",
-                           priority=2, busy=False, changed=True)
+            return replace(
+                notification,
+                state="Acknowledged",
+                detail="",
+                priority=2,
+                busy=False,
+                changed=True,
+            )
         return notification
 
 
 @dataclass(frozen=True)
 class UnavailableRecipientActivity(RecipientActivity):
-    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
-        from .presentation import MessageNotification
-
-        return MessageNotification(notification.recipient_identity, "Waiting for agent",
-            "Agent is stopped; this message has not been checked.", priority=4)
+    pass
 
 
 @dataclass(frozen=True)
@@ -130,31 +100,6 @@ class LiveRecipientActivity(RecipientActivity):
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return self.thread.turn_started_by(updated_at_ms)
-
-    def delivered_response(
-        self, notification: MessageNotification, updated_at_ms: int
-    ) -> MessageNotification:
-        if self.turn_started_by(updated_at_ms):
-            return replace(
-                notification,
-                state="Read — current turn",
-                detail="The message entered the agent's current turn; no linked reply exists yet.",
-                busy=True,
-                priority=1,
-            )
-        return super().delivered_response(notification, updated_at_ms)
-
-    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
-        from .presentation import MessageNotification
-
-        if blocked_by_prior:
-            notification = MessageNotification(notification.recipient_identity,
-                "Queued behind current turn" if self.thread.executing else "Blocked by earlier turn",
-                "The agent is finishing an earlier turn; this message has not started."
-                if self.thread.executing else "An earlier turn has an unresolved outcome. This message "
-                "is saved and has not started; the earlier turn needs recovery, not a resend.")
-        return self.activity.readiness.pending_notification(notification)
-
 
 class AgentActivity:
     def __init__(self, root: Path, registry: Registration):
