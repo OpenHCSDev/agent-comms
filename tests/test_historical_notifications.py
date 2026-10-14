@@ -107,7 +107,6 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
 
     activity = AssignmentActivity(
         triage_inflight=False,
-        current_execution_id=None,
         model_context=True,
         read_at_ms=None,
         response_seq=None,

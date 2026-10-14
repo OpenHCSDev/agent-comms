@@ -12,7 +12,6 @@ from .declared_family import DeclaredFamily
 from .coordination_schema import COORDINATION_SCHEMA_VERSION
 from .audience_manifest import FrozenRecipient
 from .coordination_tables.assignments import WakeAssignment
-from .coordination_tables.executions import CurrentExecutions
 from .coordination_tables.publications import PublicationReceipts
 from .message_reference import MessageReference
 from .typed_table import SQLiteUserVersion, TypedRow
@@ -103,7 +102,6 @@ class AssignmentContext:
 @dataclass(frozen=True)
 class AssignmentActivityEvidence(TypedRow):
     triage_inflight: bool
-    current_execution_id: str | None
     context_session_file: str | None
     context_session_entry_id: str | None
     response_seq: int | None
@@ -122,7 +120,6 @@ class AssignmentActivityEvidence(TypedRow):
         context = self.context
         return AssignmentActivity(
             triage_inflight=self.triage_inflight,
-            current_execution_id=self.current_execution_id,
             model_context=context is not None,
             read_at_ms=recorded_times.get(context) if context is not None else None,
             response_seq=self.response_seq,
@@ -134,7 +131,6 @@ class AssignmentActivityEvidence(TypedRow):
 @dataclass(frozen=True)
 class AssignmentActivity:
     triage_inflight: bool
-    current_execution_id: str | None
     model_context: bool
     read_at_ms: int | None
     response_seq: int | None
@@ -152,13 +148,6 @@ class AssignmentActivity:
         if self.response_seq is None or self.response_message_id is None:
             raise ValueError("Published response reference is incomplete")
         return MessageReference(self.response_seq, self.response_message_id)
-
-    def blocks(self, assignment: WakeAssignment) -> bool:
-        return (
-            self.current_execution_id is not None
-            and self.current_execution_id != assignment.lifecycle.execution_id
-        )
-
 
 class NotificationSource(DeclaredFamily, affix="NotificationSource"):
     """Original frozen delivery or handling receipt, never an execution authority."""
@@ -249,14 +238,12 @@ class NotificationAssignment(NotificationSource):
                     f"JOIN ({membership}) member ON member.input_id=n.input_id "
                     "WHERE member.assignment_id=w.assignment_id "
                     "AND n.stage='triage' AND n.session_entry_id IS NULL) "
-                    "AS triage_inflight, c.execution_id AS current_execution_id, "
+                    "AS triage_inflight, "
                     f"({context.format(column='session_file')}) AS context_session_file, "
                     f"({context.format(column='session_entry_id')}) AS context_session_entry_id, "
                     "p.seq AS response_seq, p.message_id AS response_message_id, "
                     "p.received_at_ms AS response_received_at_ms "
                     f"FROM {WakeAssignment.declared_name} w "
-                    f"LEFT JOIN {CurrentExecutions.declared_name} c "
-                    "ON c.owner_lookup=w.recipient_lookup "
                     f"LEFT JOIN {PublicationReceipts.declared_name} p "
                     "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target "
                     f"WHERE {predicate} ORDER BY w.wire_seq {'ASC' if ascending else 'DESC'},w.recipient"
@@ -283,5 +270,4 @@ class NotificationAssignment(NotificationSource):
             activity=self.activity,
             updated_at_ms=self.assignment.updated_at_ms,
             triage_inflight=self.activity.triage_inflight,
-            blocked_by_prior=self.activity.blocks(self.assignment),
         )

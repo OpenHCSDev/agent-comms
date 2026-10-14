@@ -8,10 +8,8 @@ from agent_comms.activity import (
     NativeInputDrainReadiness, ObservedActivity, ReadyDrainReadiness,
     StoppedDrainDiagnostic, UnavailableDrainDiagnostic, UnavailableDrainReadiness,
 )
-from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.presentation import MessageNotification
 from agent_comms.thread_identity import OwnerIdentity, ThreadIncarnation
 
 
@@ -23,8 +21,6 @@ def test_native_warning_keeps_fresh_notifications_and_active_paint_available():
     ready = acquired.readiness
     assert isinstance(ready, (NativeInputDrainReadiness, ReadyDrainReadiness))
     ready.require_available()
-    notice = MessageNotification(FrozenRecipient('recipient', 'receiver'), 'Pending', 'fresh message')
-    assert ready.pending_notification(notice) is notice
     assert acquired.source_event().diagnostic is diagnostic
     assert FieldCodec.decode(DrainReadiness, FieldCodec.encode(ready)) == ready
     busy = replace(acquired, state=ActivityState.THINKING, detail='Handling fresh input')
@@ -38,14 +34,12 @@ def test_native_warning_keeps_fresh_notifications_and_active_paint_available():
 
 
 @pytest.mark.parametrize('kind', [UnavailableDrainDiagnostic, StoppedDrainDiagnostic])
-def test_real_inbox_failures_still_refuse_and_hold_saved_notifications(kind):
+def test_real_inbox_failures_refuse_without_owning_message_labels(kind):
     owner = OwnerIdentity(ThreadIncarnation('receiver', 1.0), 2)
     ready = DrainReadiness.acquire(kind(owner, 'OSError', 'real read failure'), owner)
     assert isinstance(ready, UnavailableDrainReadiness)
     with pytest.raises(RelationViolationError, match='real read failure'):
         ready.require_available()
-    notice = MessageNotification(FrozenRecipient('recipient', 'receiver'), 'Pending', 'fresh message')
-    assert ready.pending_notification(notice).state == 'Waiting for recovery'
     assert ready.presentation(Activity('receiver', ActivityState.IDLE).presentation('receiver'), busy=False).attention
 
 

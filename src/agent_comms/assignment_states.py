@@ -177,18 +177,11 @@ class PassiveAssignment(AssignmentState):
 
 
 class PendingNotification:
-    """Pending relevance/full execution consumes the owner's drain readiness.
+    """Pending relevance/full execution membership, not another display state.
 
-    Both notification and sealed work selection derive this membership from
-    the same declarations; settled history belongs to neither operation.
+    Sealed work selection derives this membership from the declarations;
+    presentation remains the lifecycle's plain ``Not read yet`` fact.
     """
-
-    def notification(self, recipient, *, observation, activity=None, updated_at_ms=0,
-                     triage_inflight=False, blocked_by_prior=False):
-        ordinary = super().notification(
-            recipient, observation=observation, activity=activity
-        )
-        return observation.pending_notification(ordinary, blocked_by_prior=blocked_by_prior)
 
 
 class TriagePendingAssignment(PendingNotification, AssignmentState):

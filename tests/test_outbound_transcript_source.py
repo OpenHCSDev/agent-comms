@@ -143,7 +143,7 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
 
 
 @pytest.mark.parametrize('direct', [False, True])
-def test_saved_notification_uses_exact_owner_drain_readiness(tmp_path, direct):  # noqa: F811
+def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct):  # noqa: F811
     from dataclasses import replace
     from agent_comms.activity import StoppedDrainDiagnostic
 
@@ -153,8 +153,8 @@ def test_saved_notification_uses_exact_owner_drain_readiness(tmp_path, direct): 
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     notice = next(item for item in comms.views.recent_notifications('sender')
                   if item.recipient=='beta')
-    assert notice.state=='Waiting for recovery'
-    assert diagnostic.summary in notice.detail
+    assert notice.state=='Not read yet'
+    assert notice.detail == ''
     assert notice.message.reference==initial.message.reference
     assert not notice.busy
     # A diagnostic from another owner generation cannot block a current
@@ -182,7 +182,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     wire_before = comms.bus.log.path.read_bytes()
     notices = comms.views.message_notifications((message,))[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
-    assert beta.state=='Waiting for recovery' and diagnostic.summary in beta.detail
+    assert beta.state=='Not read yet' and beta.detail == ''
     assert beta.recipient_identity.recipient_lookup==stable_thread_lookup(
         comms.registry.require('beta').created_at)
     with Coordination(str(root/'coordination.sqlite3')) as store:
