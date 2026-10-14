@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -24,7 +25,9 @@ INPUT_ID = "a" * 32
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool socket requires SO_PEERCRED")
 @pytest.mark.asyncio
-@pytest.mark.parametrize("variant", ["success", "tamper", "denied", "badproof", "forged_terminal"])
+@pytest.mark.parametrize(
+    "variant", ["success", "tamper", "denied", "badproof", "forged_terminal", "cancel"]
+)
 async def test_fake_rpc_tool_event_and_terminal_gate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str
 ) -> None:
@@ -33,7 +36,7 @@ async def test_fake_rpc_tool_event_and_terminal_gate(
     (tmp_path / "dist/selected_claimed_write.mjs").write_bytes(
         Path(broker.__file__).with_name("selected_claimed_write.mjs").read_bytes()
     )
-    fake.write_text(child_writer_imports() + """import json, os, socket, sys
+    fake.write_text(child_writer_imports() + """import json, os, socket, sys, time
 from pathlib import Path
 session_dir = Path(sys.argv[1]); variant = sys.argv[2]
 file = session_dir / 'test.jsonl'
@@ -52,6 +55,8 @@ os.chmod(file,0o600); os.chmod(str(file)+'.input-proof',0o600)
 send({'type':'response','id':command['id'],'command':'prompt','success':True})
 send({'type':'input_committed','sessionId':'sid','inputId':iid,'sessionEntryId':'entry'})
 send({**proof, 'llmContextDigest':'d'*64} if variant == 'badproof' else proof)
+if variant == 'cancel':
+    time.sleep(60)
 args = {'resource':'notes.txt','contents':'new contents'}
 call = {'type':'toolCall','id':'call_1','name':'selected_claimed_write','arguments':args}
 send({'type':'message_end','message':{'role':'assistant','stopReason':'toolUse','content':[call]}})
@@ -102,6 +107,18 @@ send({'type':'agent_settled'})
         else:
             record_selected_terminal(tmp_path / "sessions", INPUT_ID, request.call_id)
 
+    release_retirement = asyncio.Event()
+    retirement_started = asyncio.Event()
+    original_retirement = TrackedTurnSession.retain_or_close
+
+    if variant == "cancel":
+        async def delayed_retirement(self):
+            retirement_started.set()
+            await release_retirement.wait()
+            await original_retirement(self)
+
+        monkeypatch.setattr(TrackedTurnSession, "retain_or_close", delayed_retirement)
+
     operation = TrackedTurnSession.execute(
         tmp_path,
         input_id=INPUT_ID,
@@ -111,7 +128,19 @@ send({'type':'agent_settled'})
         selected_tool_mode=SelectedToolMode(owner_action),
         model_wait_timeout=15,
     )
-    if variant == "success":
+    if variant == "cancel":
+        task = asyncio.create_task(operation)
+        socket_path = tmp_path / "sessions" / "s"
+        async with asyncio.timeout(5):
+            while not socket_path.exists():
+                await asyncio.sleep(0.01)
+            task.cancel()
+            await retirement_started.wait()
+        assert not socket_path.exists()
+        release_retirement.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    elif variant == "success":
         result = await operation
         assert result.text == "Done"
         assert result.selected_tool_call_id == "call_1"
