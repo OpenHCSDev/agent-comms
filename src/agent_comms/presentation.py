@@ -22,10 +22,10 @@ from .mentions import MentionCandidate
 from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
 from .messages import Message
+from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
-from .private_path import FileRevision
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import (
