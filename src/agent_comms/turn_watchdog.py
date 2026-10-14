@@ -92,7 +92,7 @@ class ProgressWatchdog:
             timeout: float | None = max(0.0, self.preflight_deadline - self.clock())
         elif session.stats.requested:
             timeout = 5.0
-        elif not session.started_input:
+        elif session.awaiting_input_start:
             # Prompt acceptance is not model work. Until Pi publishes the
             # matching user start, the dedicated input-start deadline owns the
             # wait and a short model lease must not race the pipe reader.
@@ -103,7 +103,7 @@ class ProgressWatchdog:
             timeout = max(0.0, self.last_model_progress + wait - self.clock())
         if (
             self.prompt_start_deadline is not None
-            and not session.started_input
+            and session.awaiting_input_start
             and not self.phase.pauses_input_clock
         ):
             start_wait = max(0.0, self.prompt_start_deadline - self.clock())
@@ -175,7 +175,7 @@ class ProgressWatchdog:
             started = self.preflight_wait_started_at
         elif (
             self.prompt_start_deadline is not None
-            and not session.started_input
+            and session.awaiting_input_start
             and not self.phase.pauses_input_clock
         ):
             reason, phase = "input_start_timeout", "await_input"
@@ -216,7 +216,7 @@ class ProgressWatchdog:
             return
         if (
             self.prompt_start_deadline is not None
-            and (not session.started_input)
+            and session.awaiting_input_start
             and (not self.phase.pauses_input_clock)
         ):
             session.output.record_failure(
