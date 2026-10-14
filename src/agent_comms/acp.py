@@ -416,6 +416,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 self, session_id, SelectedWritePlans(self._comms, wire_root_id)
             ),
             verified_launcher=self._verify_native_package_once,
+            source_reads=self.cursors.delivery(session_id).source_reads,
             **(
                 {"selected_tool_intent": self._private_selected_tool_intent}
                 if self._private_selected_tool_intent is not None

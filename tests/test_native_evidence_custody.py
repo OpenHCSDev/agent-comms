@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.fresh_private_session import FreshPrivateSession
 from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
 from native_proof_cases import write_proof_rows
@@ -83,11 +84,25 @@ def test_retained_input_source_decodes_only_verified_append(tmp_path, monkeypatc
         return original(raw)
 
     monkeypatch.setattr(PrivateEvidenceRead, "_decode_row", staticmethod(counted))
-    with NativeEntry.open_input_evidence(session) as evidence:
-        evidence.observe()
-        assert len(decoded) == 2
-        evidence.observe()
-        assert len(decoded) == 2
+    with NativeEvidenceScope() as scope:
+        evidence = scope.for_source(session)
+        barrier, failures = threading.Barrier(2), []
+
+        def consume(launch):
+            try:
+                barrier.wait()
+                (FreshPrivateSession.require_launch_header(session, None, evidence)
+                 if launch else evidence.observe())
+            except BaseException as error:
+                failures.append(error)
+
+        threads = [threading.Thread(target=consume, args=(launch,)) for launch in (False, True)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(5)
+        assert not failures and all(not thread.is_alive() for thread in threads)
+        assert len(decoded) == 2  # Cursor proof and launch header consume one decode.
         with session.open("a") as output:
             output.write(
                 json.dumps({"type": "compaction", "id": "new", "summary": "append"}) + "\n"

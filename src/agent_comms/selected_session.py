@@ -20,6 +20,7 @@ from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAct
 
 if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
+    from .native_entries import NativeInputEvidenceRead
     from .pi_native_backend import PersistentPiSession
     from .selected_participant import SelectedParticipant
 
@@ -36,6 +37,9 @@ class SelectedSession:
     # The owner's native custody for this source. Custody only; it never takes
     # part in the launch key.
     custody: PersistentPiSession | None = field(default=None, kw_only=True, compare=False, repr=False)
+    evidence: NativeInputEvidenceRead | None = field(
+        default=None, kw_only=True, compare=False, repr=False
+    )
 
     @property
     def path(self) -> Path | None:
@@ -97,7 +101,7 @@ class SelectedSession:
         self.require_context(context)
         return SavedSelectedSession(self.directory,
             identity=NativeSessionIdentity(context.session_id, str(context.session_file)),
-            creation=self.creation, custody=self.custody)
+            creation=self.creation, custody=self.custody, evidence=self.evidence)
 
     @classmethod
     def for_launch(cls, directory: Path, path: Path | None, package: Path) -> SelectedSession:
@@ -135,14 +139,20 @@ class SelectedSession:
                     return cls(directory)
                 # The owner's idle child already attested this exact saved source
                 # and the file is unchanged since; no helper re-reads its history.
-                retained = execution.retained_source(Path(selected).absolute())
+                selected_path = Path(selected).absolute()
+                evidence = execution.source_evidence(selected_path)
+                retained = execution.retained_source(selected_path)
                 if retained is not None:
-                    return SavedSelectedSession(directory, identity=retained.identity,
-                                                custody=execution.pi_session)
-                return SavedSelectedSession(directory, custody=execution.pi_session,
-                                            identity=SessionIdentityHelper.locate(
-                    execution.native_package, str(Path(selected).absolute()),
-                ))
+                    return SavedSelectedSession(
+                        directory, identity=retained.identity, custody=execution.pi_session,
+                        evidence=evidence,
+                    )
+                return SavedSelectedSession(
+                    directory, custody=execution.pi_session, evidence=evidence,
+                    identity=SessionIdentityHelper.locate(
+                        execution.native_package, str(selected_path),
+                    ),
+                )
             # Original wire→bus→registry→store→journal order spans exclusive file
             # creation, fsync and enrollment. No historical-file coverage inference.
             with (
@@ -198,7 +208,7 @@ class SavedSelectedSession(SelectedSession):
                 retained = None
             if retained is not None and retained.identity.same_session(self.identity):
                 return  # Its live child read this header at launch; the file has not changed since.
-        FreshPrivateSession.require_launch_header(self.path, None)
+        FreshPrivateSession.require_launch_header(self.path, None, self.evidence)
 
     def attest(self, identity: NativeSessionIdentity) -> Path:
         self.identity.require_same_session(identity)
@@ -238,7 +248,9 @@ class FirstSelectedSession(SavedSelectedSession):
 
     def require_launch_header(self) -> None:
         self.creation.verify_selected_startup()
-        FreshPrivateSession.require_launch_header(self.path, self.creation.selected_thinking_level)
+        FreshPrivateSession.require_launch_header(
+            self.path, self.creation.selected_thinking_level, self.evidence
+        )
 
     def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
         # Original selected-source first-start isolation is a distinct leaf

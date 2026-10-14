@@ -11,6 +11,7 @@ import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .pi_vocabulary import ThinkingLevel
 from .agent_events import CompactionEvent
@@ -27,6 +28,9 @@ from .selected_session import SelectedSession
 from .selected_tool_broker import SelectedToolIntent
 from .selected_turn import SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
+
+if TYPE_CHECKING:
+    from .native_entries import NativeEvidenceScope, NativeInputEvidenceRead
 
 
 @dataclass(kw_only=True)
@@ -46,6 +50,7 @@ class SelectedExecution:
     # The worker verifies its pinned package once (packages never change in
     # place) and hands every run that one verified launcher, only when needed.
     verified_launcher: Callable[[], Callable[..., NativePiRpcLaunch]] | None = None
+    source_reads: NativeEvidenceScope | None = field(default=None, repr=False, compare=False)
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
     # The thread's Pi session child. A foreground execution owns its own; a
     # worker runs this execution on its thread backend's child (run(pi_session=...)).
@@ -69,6 +74,10 @@ class SelectedExecution:
         if self._tracked_factory is None:
             raise IdentityConflict("Selected launch precedes its execution package acquisition")
         return self._tracked_factory(**options)
+
+    def source_evidence(self, session_file: Path) -> NativeInputEvidenceRead | None:
+        """Borrow this execution's connection-owned decoded source, when supplied."""
+        return self.source_reads.for_source(session_file) if self.source_reads is not None else None
 
     def retained_source(self, session_file: Path):
         """The owner's idle child on this saved source with this package, if still current."""

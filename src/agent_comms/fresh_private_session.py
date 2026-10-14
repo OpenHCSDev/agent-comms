@@ -35,10 +35,10 @@ from .native_pi import (
     NativePiUnavailable,
     _durable_private_session_dir,
     _fsync_directory,
-    _read_private_file,
 )
 
 if TYPE_CHECKING:
+    from .native_entries import NativeEvidenceRead
     from .pi_payloads import StateData
 
 
@@ -303,23 +303,26 @@ class FreshPrivateSession:
                 raise NativePiUnavailable(f"{rule.declared_name}: {rule.explanation}")
 
     @staticmethod
-    def require_launch_header(path: Path, selected_thinking_level: str | None) -> None:
+    def require_launch_header(
+        path: Path,
+        selected_thinking_level: str | None,
+        evidence: NativeEvidenceRead | None = None,
+    ) -> None:
         """A saved marker can deny reopen; it cannot recreate first-start authority."""
-        rows = _read_private_file(path)
+        from .native_entries import NativeEvidenceRead
+
         try:
-            header = NativeEntry.from_evidence(next(rows))
-            if not isinstance(header, SessionEntry):
-                raise ValueError("Native source lacks a session header")
-            header.require_header()
-            for _ in rows:
-                pass  # Exhaust revision validation without retaining historical bodies.
-            expected = (
-                SelectedFreshMarker(1, selected_thinking_level)
-                if selected_thinking_level is not None
-                else None
-            )
-            if header.selected_fresh != expected:
-                raise ValueError("Selected fresh source lacks its exact first-start token")
+            with NativeEvidenceRead.borrow(path, evidence) as reader:
+                header, _entries = reader.observe()
+                if not isinstance(header, SessionEntry):
+                    raise ValueError("Native source lacks a session header")
+                expected = (
+                    SelectedFreshMarker(1, selected_thinking_level)
+                    if selected_thinking_level is not None
+                    else None
+                )
+                if header.selected_fresh != expected:
+                    raise ValueError("Selected fresh source lacks its exact first-start token")
         except (StopIteration, ValueError, TypeError, KeyError) as error:
             raise NativePiUnavailable(
                 "Selected fresh source cannot reopen without exact first-start token"

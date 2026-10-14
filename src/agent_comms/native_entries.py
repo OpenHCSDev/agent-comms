@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from contextlib import ExitStack, contextmanager
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
@@ -207,6 +208,7 @@ class NativeEvidenceRead:
     def __init__(self, source):
         self.source = source
         self.entries: tuple[NativeEntry, ...] = ()
+        self._observation_lock = threading.Lock()
 
     def require_path(self, session_file):
         from .native_pi import NativePiUnavailable
@@ -254,7 +256,8 @@ class NativeEvidenceRead:
         self.entries = ()
 
     def observe(self):
-        return self._observe(reverified=False)
+        with self._observation_lock:
+            return self._observe(reverified=False)
 
     def _observe(self, *, reverified: bool):
         from .native_pi import (
@@ -321,6 +324,7 @@ class NativeEvidenceScope(ExitStack):
     def __init__(self) -> None:
         super().__init__()
         self.readers: dict[Path, NativeInputEvidenceRead] = {}
+        self._source_lock = threading.Lock()
 
     @classmethod
     @contextmanager
@@ -338,10 +342,11 @@ class NativeEvidenceScope(ExitStack):
 
     def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()
-        if path not in self.readers:
-            self.close()
-            self.readers[path] = self.enter_context(NativeInputEvidenceRead.open(path))
-        return self.readers[path]
+        with self._source_lock:
+            if path not in self.readers:
+                self.close()
+                self.readers[path] = self.enter_context(NativeInputEvidenceRead.open(path))
+            return self.readers[path]
 
     def close(self) -> None:
         try:
