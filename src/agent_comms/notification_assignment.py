@@ -310,17 +310,19 @@ class AssignmentActivityEvidence(TypedRow):
 
     @classmethod
     def _decode_row(cls, row, positions) -> AssignmentActivityEvidence:
+        def column(name):
+            return row[positions[name]]
+
         return cls(
-            BooleanStorage.from_sql(row[positions["triage_inflight"]]),
-            FieldCodec.decode(str | None, row[positions["current_execution_id"]]),
+            BooleanStorage.from_sql(column("triage_inflight")),
+            FieldCodec.decode(str | None, column("current_execution_id")),
             AssignmentContextEvidence.from_columns(
-                row[positions["context_session_file"]],
-                row[positions["context_session_entry_id"]],
+                column("context_session_file"), column("context_session_entry_id")
             ),
             AssignmentResponse.from_columns(
-                row[positions["response_seq"]],
-                row[positions["response_message_id"]],
-                row[positions["response_received_at_ms"]],
+                column("response_seq"),
+                column("response_message_id"),
+                column("response_received_at_ms"),
             ),
         )
 
