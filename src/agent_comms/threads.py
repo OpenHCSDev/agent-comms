@@ -173,13 +173,14 @@ class Thread(ThreadProvenance):
         object.__setattr__(self, "service_tier", FieldCodec.decode(ServiceTier, self.service_tier))
 
     def require_original_model_configuration(self, original: Thread) -> None:
-        if (
-            self.incarnation != original.incarnation
-            or self.worktree != original.worktree
-            or self.model != original.model
-            or self.thinking_level != original.thinking_level
-            or self.service_tier != original.service_tier
-        ):
+        changed = any((
+            self.incarnation != original.incarnation,
+            self.worktree != original.worktree,
+            self.model != original.model,
+            self.thinking_level != original.thinking_level,
+            self.service_tier != original.service_tier,
+        ))
+        if changed:
             raise RelationViolationError("Thread configuration changed before publication")
 
     def with_model_configuration(
