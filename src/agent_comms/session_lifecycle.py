@@ -24,10 +24,8 @@ from acp.schema import (
     TerminalAuthMethod,
 )
 
-from .pi_vocabulary import ThinkingLevel
 from . import agent_events as events
 from .acp_extension import (
-    ContextUsage,
     CoordinationChangedUpdate,
     GoalChangedUpdate,
     encode_updates,
@@ -40,7 +38,6 @@ from .config_options import SessionConfigOptions
 from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
-from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .registry_document import RegistrySnapshot
 from .transcript_updates import TranscriptReplay
@@ -323,27 +320,8 @@ class SessionLifecycle:
         self, thread_name: str,
     ) -> tuple[CoordinationChangedUpdate, GoalChangedUpdate]:
         """Capture original store projections before loop/client effects consume them."""
-        thread = self.comms.registry.require(thread_name)
         goal, execution = self.comms.goals.goal_snapshot(thread_name)
-        info = self.comms.agents.agent_info_of(thread_name)
-        usage = (
-            ContextUsage(info.context_used, info.context_size)
-            if info is not None and info.context_used is not None and info.context_size
-            else None
-        )
-        return (
-            CoordinationChangedUpdate(
-                ThreadIncarnation(thread.name, thread.created_at),
-                str(self.comms.root.resolve()),
-                os.getpid(),
-                thread.worktree,
-                thread.model,
-                ThinkingLevel.optional_name(thread.thinking_level),
-                thread.title or thread.name,
-                usage,
-            ),
-            GoalChangedUpdate(goal, execution),
-        )
+        return self.comms.configuration.answer(thread_name), GoalChangedUpdate(goal, execution)
 
     async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
         configuration = await Coordination.run_worker(partial(

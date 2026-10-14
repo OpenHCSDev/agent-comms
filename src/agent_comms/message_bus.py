@@ -13,6 +13,7 @@ from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
 from .message_page import MessagePage, MessagePageRequest
+from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
     ChannelDisplayScope,
@@ -350,10 +351,17 @@ class MessageBus:
                         add(actor, message.sender, message.target, 1)
         return counts
 
-    def mark_delivered(self, name: str, target: str | None = None) -> int:
-        """Mark unread messages delivered and return the count without retaining them."""
+    def mark_delivered(
+        self, name: str, references: Sequence[MessageReference]
+    ) -> int:
+        """Mark only the named unread messages delivered and return their count."""
+        requested = frozenset(references)
         snapshot = self._registry.snapshot()
-        messages = self.inbox(name, target, snapshot=snapshot)
+        messages = tuple(
+            message
+            for message in self.inbox(name, snapshot=snapshot)
+            if message.reference in requested
+        )
         basis = self.reads.capture(name, messages, snapshot, self.log.path)
         self.reads.mark_displayed(basis.viewer, basis)
         return len(messages)
