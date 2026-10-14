@@ -188,10 +188,12 @@ class MessageBus:
         Closing before the next read leaves the last message unread.
         """
         from contextlib import aclosing
-        from .wire_watch import WireWatch
+        from .wire_watch import WatchSource, WireWatch
 
         reader = self._registry.require(name).incarnation
-        async with aclosing(WireWatch.observations(self.log.path.parent)) as changes:
+        async with aclosing(
+            WireWatch.observations(WatchSource.wire(self.log.path.parent))
+        ) as changes:
             async for _ in changes:
                 snapshot = self._registry.snapshot()
                 if not reader.current(snapshot):

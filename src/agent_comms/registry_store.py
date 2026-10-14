@@ -105,8 +105,10 @@ class RegistryStore(LockedStore[RegistryDocument]):
             if entry is not None and entry.revision == revision:
                 return entry.document
             raw = json.loads(self.path.read_text())
-            document = RegistryDocument.from_wire(
-                raw, None if entry is None else (entry.raw, entry.document))
+            if entry is None:
+                document = RegistryDocument.from_wire(raw)
+            else:
+                document = RegistryDocument.from_wire(raw, (entry.raw, entry.document))
             self.cache.entry = RegistryRevision(revision, document, raw)
             return document
 

@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Type
 
 from .active_route import guard_original_root_write
-from .candidate_maintenance import schedule_candidate_catchup
 from .registration import Registration
 
 if TYPE_CHECKING:
@@ -88,10 +87,6 @@ class Messaging:
                 )
             else:
                 committed = self.bus.publisher.publish_ordinary(message)
-        # Pure memory notification and daemon scheduling occur only AFTER the
-        # canonical wire/bus publication locks are released. The scheduler owns
-        # its own worker-unavailable state; anything it raises is a defect.
-        schedule_candidate_catchup(self.bus, committed.seq)
         return committed
 
     def initialize_private_initial_protocol(self) -> str:
@@ -115,7 +110,6 @@ class Messaging:
             committed = self.bus.publisher.publish_initial_cohort(
                 Message(sender=sender, target=target, body=body, type=type, notice=notice)
             )
-        schedule_candidate_catchup(self.bus, committed.seq)
         return committed
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
@@ -152,8 +146,7 @@ class Messaging:
         # remains held through the actual bus publication on an old root.
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             user = self._user_identity_under_wire_lock(worktree)
-            committed = self._publish_user_under_wire_lock(user, target, body, task)
-        return self._notify_user_commit(committed)
+            return self._publish_user_under_wire_lock(user, target, body, task)
 
     def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: str,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
@@ -184,10 +177,9 @@ class Messaging:
             task = declaration(scope=scope.select_human(owner), subject=subject,
                                source_user=user.incarnation, recipient=owner.incarnation,
                                change=change, **declaration_options)
-            committed = self._publish_user_under_wire_lock(
+            return self._publish_user_under_wire_lock(
                 user, owner.name, "Pinned constraint from its original source",
                 task, notice=True)
-        return self._notify_user_commit(committed)
 
     def _publish_user_under_wire_lock(self, user, target, body, task, *, notice=False):
         from .bus_publication import HumanOrigin
@@ -196,12 +188,6 @@ class Messaging:
             Message(user.name, target, body, InfoKind, task=task, notice=notice),
             _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
-
-    def _notify_user_commit(self, committed):
-        # No notification runs on UNKNOWN; the scheduler owns its own
-        # worker-unavailable state, so anything it raises is a defect.
-        schedule_candidate_catchup(self.bus, committed.seq)
-        return committed
 
     def acknowledge(
         self, name: str, references: Sequence[MessageReference]

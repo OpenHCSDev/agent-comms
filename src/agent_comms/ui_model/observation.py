@@ -21,6 +21,7 @@ import multiprocessing
 import os
 import signal
 import sys
+import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
@@ -34,7 +35,7 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     StaleRevision,
 )
-from agent_comms.errors import StoredHistoryUnreadable
+from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 
 if TYPE_CHECKING:
     from multiprocessing.connection import Connection
@@ -156,7 +157,7 @@ class ReadRequest(AwaitedRead):
             return ReadAnswered(self.request_id, self.read(comms))
         except CoordinationReadUnavailable:
             return ReadBusy(self.request_id)
-        except (UnreadableHistory, StaleRevision) as error:
+        except (RelationViolationError, UnreadableHistory, StaleRevision) as error:
             return self.refused(error)
 
 
@@ -592,9 +593,10 @@ class ObservationService:
                          for path in paths(value) if path.parent == self.comms.root)
 
     async def watch(self) -> None:
-        from agent_comms.wire_watch import WireWatch
+        from agent_comms.wire_watch import WatchSource, WireWatch
 
-        async for _ in WireWatch.observations(self.comms.root, self.store_names(), modified=True):
+        source = WatchSource(self.comms.root, self.store_names(), modified=True)
+        async for _ in WireWatch.observations(source):
             self.observe_due = True
             self.changed.set()
 
@@ -642,10 +644,19 @@ class ObservationService:
                 self.connection.send(ViewsRetired(revision, retired))
             self.checked_views = (views, revision)
 
+    async def expire(self) -> None:
+        """Time-based sidebar state belongs to the sidebar observer, not file watching."""
+        while not self.closed:
+            now = time.time()
+            await asyncio.sleep(EXPIRY_PERIOD - now % EXPIRY_PERIOD)
+            self.observe_due = True
+            self.changed.set()
+
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
         loop.add_reader(self.connection.fileno(), self.receive)
         watching = asyncio.create_task(self.watch())
+        expiring = asyncio.create_task(self.expire())
         try:
             while not self.closed:
                 await self.changed.wait()
@@ -669,6 +680,7 @@ class ObservationService:
                     self.observe()
         finally:
             watching.cancel()
+            expiring.cancel()
             for asking in self.owner_reads.values():
                 asking.cancel()
             loop.remove_reader(self.connection.fileno())

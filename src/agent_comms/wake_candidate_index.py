@@ -27,7 +27,7 @@ from .checkpoint_seals import PrefixSource
 from .field_codec import FieldCodec
 from .wire_metadata import WireRootIdText
 from .errors import RelationViolationError
-from .message_bus import MessageBus
+from .wire_log import WireLog
 from .typed_table import Column, Index, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 from .wake import NoWakeDecision, WakeDecision
 from .wake_policy import WakePolicy
@@ -107,15 +107,15 @@ class CommittedAppendHint:
     """Untrusted scheduling hint, never a sealed claim or native input receipt."""
 
     root_id: Annotated[str, WireRootIdText]
-    through_seq: int
+    through_bytes: int
 
     def __post_init__(self) -> None:
-        if self.through_seq <= 0:
-            raise ValueError("exact append hint requires a positive original sequence")
+        if self.through_bytes <= 0:
+            raise ValueError("exact append hint requires a positive original byte position")
 
     @classmethod
-    def capture(cls, root_id: str, through_seq: int):
-        return FieldCodec.decode(cls, {"root_id": root_id, "through_seq": through_seq})
+    def capture(cls, root_id: str, through_bytes: int):
+        return FieldCodec.decode(cls, {"root_id": root_id, "through_bytes": through_bytes})
 
     def validated(self):
         return FieldCodec.decode(type(self), FieldCodec.encode(self))
@@ -125,7 +125,7 @@ class CommittedAppendHint:
 class CandidateCatchUp:
     """One bounded derived-index maintenance result, not delivery authority."""
 
-    checkpoint_seq: int
+    checkpoint_bytes: int
     caught_up: bool
     more_source_bytes: bool
 
@@ -154,11 +154,11 @@ class WakeCandidateIndex:
     exact page is NOT evidence of a sealed claim or a model-accepted input.
     """
 
-    def __init__(self, bus: MessageBus):
-        if type(bus) is not MessageBus or bus.log.path.name != "bus.jsonl":
-            raise TypeError("candidate index requires the canonical bus")
-        self.bus = bus
-        self.path = bus.log.path.with_name("wake_candidates.sqlite3")
+    def __init__(self, log: WireLog):
+        if type(log) is not WireLog or log.path.name != "bus.jsonl":
+            raise TypeError("candidate index requires the canonical wire log")
+        self.log = log
+        self.path = log.path.with_name("wake_candidates.sqlite3")
 
     @staticmethod
     def _connect(path: Path, *, readonly: bool) -> sqlite3.Connection:
@@ -306,7 +306,7 @@ class WakeCandidateIndex:
     def _source_end(self, stream: Any, next_offset: int) -> tuple[os.stat_result, str]:
         """Reject path replacement before committing an index checkpoint."""
         after = os.fstat(stream.fileno())
-        current_path = self.bus.log.path.stat()
+        current_path = self.log.path.stat()
         if (after.st_dev, after.st_ino) != (current_path.st_dev, current_path.st_ino):
             raise ProjectionRebuildRequiredError("candidate bus was replaced")
         return after, AppendCheckpoint.fingerprint(stream, next_offset)
@@ -350,9 +350,9 @@ class WakeCandidateIndex:
         self._validate_limits(max_rows, max_bytes)
         bootstrap_new = FieldCodec.decode(bool, bootstrap_new)
         try:
-            marker = self.bus.log._private_marker_unlocked()
+            marker = self.log._private_marker_unlocked()
             root_id = marker.root_id
-            with self.bus.log.path.open("rb") as stream:
+            with self.log.path.open("rb") as stream:
                 stat = os.fstat(stream.fileno())
                 with closing(self._connect(self.path, readonly=False)) as db:
                     # Rebuild replays current-format projections only; old schemas
@@ -394,7 +394,7 @@ class WakeCandidateIndex:
                 raise
             raise ProjectionUnavailableError("candidate index maintenance unavailable") from error
 
-    def notify_committed_append(self, *, root_id: str, through_seq: int) -> CommittedAppendHint:
+    def notify_committed_append(self, *, root_id: str, through_bytes: int) -> CommittedAppendHint:
         """Create a post-commit hint without touching the bus or WAL.
 
         The publisher must call this only AFTER a durable private bus commit and
@@ -403,21 +403,22 @@ class WakeCandidateIndex:
         publication critical path would delay original delivery. Hints are
         volatile: losing one in a crash leaves the index stale/unavailable, and
         a later hint or explicit maintenance can catch up from the checkpoint.
-        No hint proves that its claimed sequence actually committed.
+        Byte positions also cover observations which do not allocate sequences.
+        No hint proves that its claimed source prefix actually committed.
         """
-        return CommittedAppendHint.capture(root_id, through_seq)
+        return CommittedAppendHint.capture(root_id, through_bytes)
 
 
     def _verified_checkpoint(self, root_id: str) -> CandidateCheckpoint:
         """Check one WAL checkpoint row against its bounded source prefix-tail witness."""
         try:
-            marker = self.bus.log._private_marker_unlocked()
+            marker = self.log._private_marker_unlocked()
             if marker.root_id != root_id:
                 raise ProjectionRebuildRequiredError("candidate private root changed")
             with closing(self._connect(self.path, readonly=True)) as db:
                 self._schema(db, create=False)
                 db.execute("BEGIN")
-                with self.bus.log.path.open("rb") as stream:
+                with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
                     checkpoint = self._checkpoint_start(db, stream, stat, root_id, rebuild=False)
                     self._source_end(stream, checkpoint.byte_offset)
@@ -457,7 +458,7 @@ class WakeCandidateIndex:
         hint = hint.validated()
         bootstrap_new = FieldCodec.decode(bool, bootstrap_new)
         self._validate_limits(max_rows, max_bytes)
-        if self.bus.log._private_marker_unlocked().root_id != hint.root_id:
+        if self.log._private_marker_unlocked().root_id != hint.root_id:
             raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
         prior_bytes = 0
         if bootstrap_new:
@@ -474,8 +475,8 @@ class WakeCandidateIndex:
                 )
             prior = self._verified_checkpoint(hint.root_id)
             prior_bytes = prior.byte_offset
-            if prior.last_seq >= hint.through_seq:
-                return CandidateCatchUp(prior.last_seq, True, False)
+            if prior.byte_offset >= hint.through_bytes:
+                return CandidateCatchUp(prior.byte_offset, True, False)
             more_source_bytes = not self.maintain(
                 max_rows=max_rows, max_bytes=max_bytes
             )
@@ -488,12 +489,12 @@ class WakeCandidateIndex:
             raise ProjectionUnavailableError(
                 "candidate batch consumed no source bytes while source bytes remain"
             )
-        if checkpoint.last_seq < hint.through_seq and not more_source_bytes:
+        if checkpoint.byte_offset < hint.through_bytes and not more_source_bytes:
             raise ProjectionUnavailableError(
-                "candidate notification exceeds verified bus high-water"
+                "candidate notification exceeds verified source bytes"
             )
         return CandidateCatchUp(
-            checkpoint.last_seq, checkpoint.last_seq >= hint.through_seq, more_source_bytes
+            checkpoint.byte_offset, checkpoint.byte_offset >= hint.through_bytes, more_source_bytes
         )
 
     def page(
@@ -525,7 +526,7 @@ class WakeCandidateIndex:
                     or checkpoint.last_seq < request.required_through_seq
                 ):
                     raise ProjectionUnavailableError("candidate projection is stale or unrelated")
-                with self.bus.log.path.open("rb") as stream:
+                with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
                     if stat.st_size:
                         stream.seek(-1, os.SEEK_END)

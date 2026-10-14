@@ -6,6 +6,7 @@ import asyncio
 import sqlite3
 from contextlib import asynccontextmanager
 from functools import partial
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from acp import RequestError
@@ -21,14 +22,22 @@ if TYPE_CHECKING:
 
 
 @asynccontextmanager
-async def drain_failures(comms: Comms, thread: str, owner: OwnerIdentity):
-    """Record the failure on the owner's thread; only an unexpected error ends the drain."""
+async def drain_failures(
+    comms: Comms,
+    thread: str,
+    owner: OwnerIdentity,
+    retry: Callable[[], Awaitable[None]],
+):
+    """Record a recoverable failure and wake the existing observer to try again."""
 
     async def record(kind, error) -> None:
-        await Coordination.run_worker(partial(
-            comms.agents.set_drain_diagnostic, thread, owner,
-            kind(owner, type(error).__name__, str(error)), source_error=error,
-        ))
+        try:
+            await Coordination.run_worker(partial(
+                comms.agents.set_drain_diagnostic, thread, owner,
+                kind(owner, type(error).__name__, str(error)), source_error=error,
+            ))
+        finally:
+            await retry()
 
     try:
         yield
@@ -43,5 +52,9 @@ async def drain_failures(comms: Comms, thread: str, owner: OwnerIdentity):
     except (OSError, ValueError, sqlite3.Error, CoordinationError, RequestError) as error:
         await record(UnavailableDrainDiagnostic, error)
     except Exception as error:
-        await record(StoppedDrainDiagnostic, error)
+        await Coordination.run_worker(partial(
+            comms.agents.set_drain_diagnostic, thread, owner,
+            StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
+            source_error=error,
+        ))
         raise

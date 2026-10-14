@@ -17,6 +17,7 @@ from .participant_store import ParticipantStore
 from .private_runtime_schema import PrivateRuntimeSchema
 from .recovery_reader import RecoveryReader
 from .working_memory_annotations import WorkingMemoryAnnotations
+from .store_files import StoreLock
 
 Result = TypeVar("Result")
 
@@ -32,7 +33,9 @@ class Coordination:
         scheduling seam also supports registry-only acquisition/retirement;
         those operations must not depend on opening a coordinator connection.
         """
-        pending = asyncio.get_running_loop().run_in_executor(None, operation)
+        pending = asyncio.get_running_loop().run_in_executor(
+            None, StoreLock.worker_context().run, operation
+        )
         return await join_retirement(pending)
 
     @classmethod

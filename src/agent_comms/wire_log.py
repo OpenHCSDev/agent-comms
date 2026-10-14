@@ -18,6 +18,7 @@ from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
 
+from .audience_manifest import MAX_WIRE_SEQ
 from .bus_publication import (
     CommittedDelivery,
     has_private_wire_fields,
@@ -50,6 +51,12 @@ from .store_files import (
 )
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
+
+
+def _notify_candidates(log: WireLog, through_bytes: int) -> None:
+    from .candidate_maintenance import schedule_candidate_catchup
+
+    schedule_candidate_catchup(log, through_bytes)
 
 
 @dataclass(frozen=True)
@@ -99,6 +106,30 @@ class OpenedWireSnapshot:
             return WireRecord.public_from_wire(record).messages()
         except (TypeError, ValueError) as error:
             raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
+
+    def appended_records(
+        self, previous: BusFileRevision, previous_sequence: int,
+    ) -> tuple[WireRecord, ...]:
+        """Decode only bytes appended to the same opened source inode."""
+        if self.stream is None or self.revision is None:
+            raise RelationViolationError("Wire tail has no opened source")
+        if previous.inode != self.revision.inode or previous.size > self.revision.size:
+            raise RelationViolationError("Wire tail does not extend the settled source")
+        self.stream.seek(previous.size)
+        scan = WireScan(self.metadata, previous_sequence=previous_sequence)
+        records = []
+        while self.stream.tell() < self.boundary:
+            raw = self.stream.readline(
+                min(scan.max_row_bytes + 1, self.boundary - self.stream.tell())
+            )
+            if not raw:
+                break
+            records.append(scan.read(raw))
+        if scan.previous_sequence != self.metadata.last_seq:
+            raise RelationViolationError("Wire tail does not reach its marker")
+        if BusFileRevision.capture(self.stream) != self.revision:
+            raise RelationViolationError("Wire tail changed while it was read")
+        return tuple(records)
 
     def public_records(self, offset: int = 0, *, before_offset: int | None = None
                        ) -> Iterator[tuple[Message, int]]:
@@ -486,6 +517,7 @@ class WireLog:
 
         A failed append or bus parent sync leaves the outcome UNKNOWN.
         """
+        StoreLock.current_release().require_active()
         metadata.access.require_append()
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         if len(encoded) > 8 * 1024 * 1024:
@@ -529,11 +561,10 @@ class WireLog:
                 raise RelationViolationError(
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
+        StoreLock.current_release().callback(_notify_candidates, self, self.path.stat().st_size)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
         """Bus-owned attestation of a committed initial row; no live re-routing."""
-        from .audience_manifest import MAX_WIRE_SEQ
-
         if type(wire_seq) is not int or not 0 < wire_seq <= MAX_WIRE_SEQ:
             raise ValueError("wire_seq must be a positive SQLite-range integer.")
         with self.certified_read() as source:

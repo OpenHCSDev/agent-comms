@@ -566,8 +566,9 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
 async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     tmp_path, monkeypatch
 ) -> None:
-    """The sealed address record answers the wake before any row is decoded."""
+    """A foreign append decodes only bytes after the owner's settled offset."""
     from agent_comms import input_drain
+    from agent_comms.wire_log import OpenedWireSnapshot
 
     comms, agent, _root_id = _session(tmp_path)
     comms.registry.declare(
@@ -597,7 +598,15 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     async def no_catalog(session_id):
         pass
 
+    tails = []
+    appended_records = OpenedWireSnapshot.appended_records
+
+    def measured_tail(self, previous, previous_sequence):
+        tails.append(self.boundary - previous.size)
+        return appended_records(self, previous, previous_sequence)
+
     monkeypatch.setattr(input_drain.WireWatch, "observations", staticmethod(observations))
+    monkeypatch.setattr(OpenedWireSnapshot, "appended_records", measured_tail)
     monkeypatch.setattr(agent.inputs, "drain_inbox", counted)
     monkeypatch.setattr(agent.sessions.config, "sync_thread", no_catalog)
     observer = asyncio.create_task(agent.inputs.observe("beta"))
@@ -614,6 +623,10 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
         comms.messaging.send_message("sender", "gamma", "for gamma")
         await tick()  # only shared stores grew, and none of it addresses beta
         assert len(drains) == settled, "another agent's bus append woke an idle owner"
+        comms.messaging.send_message("sender", "gamma", "another for gamma")
+        await tick()
+        assert len(drains) == settled
+        assert tails and tails[-1] < comms.bus.log.path.stat().st_size
         comms.messaging.send_message("sender", "beta", "for beta")
         await tick()  # the address record has an unadmitted row for beta: full tick
         assert len(drains) == settled + 1, "a delivered row for the owner did not wake it"
