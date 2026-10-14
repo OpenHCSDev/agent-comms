@@ -112,6 +112,7 @@ class OwnerFollowingInputs(FollowingInputs):
 
     async def started(self, input_id: str) -> None:
         await self.inputs.input_started(self.session_id, input_id, self.scope)
+        await self.ready(self.inputs, self.session_id)
 
     async def refused(self, input_id: str | None) -> None:
         await self.inputs.input_refused(self.session_id, input_id)
