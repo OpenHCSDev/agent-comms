@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import AsyncIterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -156,26 +155,23 @@ class MessageBus:
         selection = delivery.selection(target, snapshot, self._channels.read())
         seen = self.reads.seen_sequences(delivery.actor, snapshot)
         with self.log._opened_wire_snapshot(need_sequence=False) as source:
-            unread = self._from_route_index(
+            rows, appended = self._from_route_index(
                 source, snapshot, {delivery.actor: delivery},
                 lambda index, requests: index.unseen_deliveries(requests, seen),
             )
-            if unread is None:
-                return [
-                    item.message
-                    for item in self._scanned_deliveries(source)
-                    if delivery.current(item, snapshot)
-                    and selection.includes(item.message)
-                    and item.message.seq not in seen
-                ]
+            unread = [(row.seq, row.target) for row in rows] + [
+                (item.message.seq, item.message.target)
+                for item in appended
+                if delivery.current(item, snapshot) and item.message.seq not in seen
+            ]
             if not unread:
                 return []
             listed = ListedDeliveries(
                 selection,
-                frozenset(row.seq for row in unread),
-                frozenset(row.target for row in unread),
+                frozenset(seq for seq, _target in unread),
+                frozenset(target for _seq, target in unread),
             )
-            page = MessagePageRequest.every(listed, after=unread[0].seq - 1).read_opened(
+            page = MessagePageRequest.every(listed, after=min(listed.sequences) - 1).read_opened(
                 self.log, source.metadata, source.revision, source.stream,
                 source.public_records(),
             )
@@ -286,43 +282,33 @@ class MessageBus:
         self, source: OpenedWireSnapshot, snapshot: RegistrySnapshot,
         deliveries: Mapping[str, DeliveryScope], read,
     ):
-        """Answer ``read(index, requests)`` from the route index synced to this cut.
+        """Answer ``read(index, requests)`` from the committed route index.
 
-        ``requests`` are the routes currently delivered to these actors. None
-        means the index cannot cover the cut, and the caller reads the log.
+        ``requests`` are the routes currently delivered to these actors. The
+        reader first commits a bounded remainder when the projection lock is
+        free; rows still past the committed position (another writer held the
+        lock) come back decoded beside the answer under the same delivery rule.
         """
         recipients = self._route_recipients(snapshot, deliveries)
 
         def decode(record):
-            # The root id is the marker's: a bus never written has no marker
-            # and no records, so it is read only to decode one.
             return DeliveryMessage.from_wire(record, root_id=source.metadata.root_id)
 
-        try:
-            with BusRouteCounts(self.log.path) as index:
-                if not index.sync(source.stream, source.revision, decode):
-                    return None
-                requests = []
-                for route in index.routes():
-                    for actor in recipients(route.target):
-                        since = deliveries[actor].minimum_timestamp(
-                            route.sender, route.target, route.sender_lookup, snapshot
-                        )
-                        if since is not None:
-                            requests.append(PendingRoute(
-                                actor, route.target, route.sender, route.sender_lookup, since,
-                            ))
-                return read(index, requests)
-        except (OSError, sqlite3.DatabaseError):
-            # A disposable index outage still uses exactly the same identity filter.
-            return None
-
-    def _scanned_deliveries(self, source: OpenedWireSnapshot):
-        """Every delivery in this cut, decoded from the log itself."""
-        if source.stream is not None:
-            source.stream.seek(0)
-        records = self.log._snapshot_records(source.metadata, source.stream, source.boundary)
-        return (item for record in records for item in record.delivery_messages())
+        routes = BusRouteCounts(self.log.path)
+        routes.sync(source.stream, source.revision, decode, blocking=False)
+        with routes as index:
+            appended = index.appended(source.stream, source.revision, decode)
+            requests = []
+            for route in index.routes():
+                for actor in recipients(route.target):
+                    since = deliveries[actor].minimum_timestamp(
+                        route.sender, route.target, route.sender_lookup, snapshot
+                    )
+                    if since is not None:
+                        requests.append(PendingRoute(
+                            actor, route.target, route.sender, route.sender_lookup, since,
+                        ))
+            return read(index, requests), appended
 
     def _pending_counts(
         self, source: OpenedWireSnapshot, snapshot: RegistrySnapshot,
@@ -336,21 +322,19 @@ class MessageBus:
                 conversation = deliveries[actor].conversation(sender, target)
                 counts[actor][conversation] = counts[actor].get(conversation, 0) + count
 
-        rows = self._from_route_index(
+        rows, appended = self._from_route_index(
             source, snapshot, deliveries,
             lambda index, requests: index.unseen_counts(
                 requests, [ActorSeen(actor, sequences) for actor, sequences in seen.items()]
             ),
         )
-        if rows is not None:
-            for row in rows:
-                add(row.actor, row.sender, row.target, row.count)
-        else:
-            for item in self._scanned_deliveries(source):
-                message = item.message
-                for actor in recipients(message.target):
-                    if deliveries[actor].current(item, snapshot) and message.seq not in seen[actor]:
-                        add(actor, message.sender, message.target, 1)
+        for row in rows:
+            add(row.actor, row.sender, row.target, row.count)
+        for item in appended:
+            message = item.message
+            for actor in recipients(message.target):
+                if deliveries[actor].current(item, snapshot) and message.seq not in seen[actor]:
+                    add(actor, message.sender, message.target, 1)
         return counts
 
     def mark_delivered(
