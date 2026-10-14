@@ -316,7 +316,6 @@ class SessionLifecycle:
         await Coordination.run_worker(partial(
             self.comms.threads.initialize_native_configuration,
             thread_name, model=event.model, thinking_level=event.thinking_level,
-            max_output_tokens=event.max_output_tokens,
         ))
         await self.config.publish_configuration(session_id, thread_name)
 

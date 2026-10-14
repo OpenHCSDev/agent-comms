@@ -328,7 +328,6 @@ class SessionConfigOptions(ConfigOptions):
         await Coordination.run_worker(partial(
             self.comms.threads.set_thread_configuration,
             thread, model=model, thinking_level=level,
-            max_output_tokens=state.model.max_tokens,
         ))
 
     @staticmethod

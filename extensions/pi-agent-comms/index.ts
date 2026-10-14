@@ -10,6 +10,10 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 const CLI = "agent-comms";
+const SERVICE_TIER_CAPABLE_APIS = new Set([
+	"openai-responses",
+	"openai-codex-responses",
+]);
 
 interface ToolDeclaration {
 	name: string;
@@ -53,30 +57,19 @@ export default function (pi: ExtensionAPI) {
 	const task = process.env.PI_TASK || "";
 	const managed = process.env.AGENT_COMMS_MANAGED === "1";
 	const serviceTier = process.env.AGENT_COMMS_SERVICE_TIER;
-	if (serviceTier !== undefined && serviceTier !== "priority") {
+	if (serviceTier !== undefined && serviceTier !== "standard" && serviceTier !== "priority") {
 		throw new Error(`Unsupported agent-comms service tier: ${serviceTier}`);
 	}
-	pi.on("before_provider_request", (event, ctx) => {
-		if (typeof event.payload !== "object" || event.payload === null || Array.isArray(event.payload)) {
-			return;
-		}
-		const request = { ...event.payload } as Record<string, unknown>;
-		let changed = false;
-		if (serviceTier && ["openai", "openai-codex"].includes(ctx.model?.provider ?? "")) {
-			request.service_tier = serviceTier;
-			changed = true;
-		}
-		const maxOutputTokens = ctx.model?.maxTokens;
-		if (typeof maxOutputTokens === "number" && maxOutputTokens > 0) {
-			for (const field of ["max_tokens", "max_completion_tokens", "max_output_tokens"]) {
-				if (field in request) {
-					request[field] = maxOutputTokens;
-					changed = true;
-				}
+	if (serviceTier === "priority") {
+		pi.on("before_provider_request", (event, ctx) => {
+			if (typeof event.payload !== "object" || event.payload === null || Array.isArray(event.payload)) {
+				ctx.abort();
+				throw new TypeError("Provider request payload must be an object");
 			}
-		}
-		return changed ? request : undefined;
-	});
+			if (!ctx.model || !SERVICE_TIER_CAPABLE_APIS.has(ctx.model.api)) return;
+			return { ...event.payload, service_tier: serviceTier };
+		});
+	}
 	const activity = (state: string, detail = "") => {
 		if (!forkThread) return;
 		try {
