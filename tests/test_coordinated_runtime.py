@@ -146,6 +146,9 @@ def _root(
             )
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
         assert accepted.value.member_count == len(initial.audience.recipients)
+    # The global fixture deliberately disables background candidate workers.
+    # Tests that consume selected awareness own their deterministic projection.
+    assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
     return root, root_id, comms, initial, people
 
 
@@ -459,9 +462,9 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
         receipt.exact_target for receipt in outcome.publications
     ) == ("sender",)
     assert len(calls) == 1  # direct FULL, no separate triage invocation
-    assert "expected: this is yours" in calls[0][1]
+    assert '"expectation":"this is yours; answer the original committed message"' in calls[0][1]
     assert '"audience":"direct"' in calls[0][1]
-    assert '"target":"sender"' in calls[0][1]
+    assert "delivered automatically to sender" in calls[0][1]
     assert "you owe a response" in calls[0][1]
     with Coordination(str(root / "coordination.sqlite3")) as store:
         one = read_historical_native_inputs(
