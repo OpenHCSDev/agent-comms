@@ -7,7 +7,6 @@ send-admission and live-context authority. Installation never resets them.
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Literal
@@ -124,27 +123,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             raise IdentityConflict("Native input execution columns conflict with their stage") from error
 
     @classmethod
-    @contextmanager
-    def _publication_read(cls, root):
-        from .coordination_database import CoordinationStore
-        from .coordinated_runtime_schema import assert_native_runtime_schema
-        from .coordination_response import _assert_response_schema
-        from .errors import RelationViolationError
-        from .recovery_projection import _preflight
-
-        database = root / "coordination.sqlite3"
-        failure = _preflight(database)
-        if failure == "missing":
-            yield None
-            return
-        if failure:
-            raise RelationViolationError("Native reply source has an invalid coordinator")
-        with CoordinationStore.observing(database, lock_timeout=0.05) as db:
-            assert_native_runtime_schema(db)
-            _assert_response_schema(db)
-            yield db
-
-    @classmethod
     def for_native_user(cls, db, reader, user, *, session_id):
         """The original admitted native file/input owns stage and publication.
 
@@ -193,7 +171,9 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         from .coordination_tables.executions import ExecutionRecord
         from .coordination_tables.responses import ResponseObligation
 
-        with cls._publication_read(root) as db:
+        from .transcripts import TranscriptRead
+
+        with TranscriptRead.publication_source(root) as db:
             if db is None:
                 return PublishedReplyRevision(0, 0)
             return PublishedReplyRevision.read(

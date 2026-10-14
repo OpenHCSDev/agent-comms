@@ -59,9 +59,9 @@ class ThreadStatusModel:
                    summary=tuple(summary))
 
     @classmethod
-    def unavailable(cls, name: str) -> ThreadStatusModel:
-        return cls(name, True, ("Agent status unavailable",), False, True,
-                   available=False, summary=("Status unavailable",))
+    def unavailable(cls, name: str, reason: str = "Agent status unavailable") -> ThreadStatusModel:
+        return cls(name, True, (reason,), False, True,
+                   available=False, summary=(reason.partition("\n")[0],))
 
 
 class OpenThreadStatus:
@@ -78,7 +78,8 @@ class OpenThreadStatus:
         """
         rows = {name: ThreadStatusModel.known(name, presentation)
                 for name, presentation in result.presentations.items()}
-        rows.update((name, ThreadStatusModel.unavailable(name)) for name in result.unavailable)
+        rows.update((name, ThreadStatusModel.unavailable(name, str(error)))
+                    for name, error in result.unavailable.items())
         rows.update((name, self.rows.rows.get(name) or ThreadStatusModel.unavailable(name))
                     for name in result.busy)
         self.rows.replace(rows)
