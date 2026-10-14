@@ -60,7 +60,10 @@ class CallObservation(ABC):  # noqa: B024 - shared rejection; leaves override va
     def require_executing(self) -> None:
         raise SelectedToolDenied("Native tool is not executing; outcome may be UNKNOWN")
 
-    def finish(self, call: NativeToolCall, is_error: bool, directory: Path, input_id: str) -> None:
+    def finish(
+        self, call: NativeToolCall, is_error: bool, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
         raise SelectedToolDenied("Native tool terminal is missing or repeated")
 
     def assert_complete(self) -> None:
@@ -84,11 +87,14 @@ class ExecutingCall(CallObservation):
     def require_executing(self) -> None:
         pass
 
-    def finish(self, call: NativeToolCall, is_error: bool, directory: Path, input_id: str) -> None:
+    def finish(
+        self, call: NativeToolCall, is_error: bool, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
         # A failed terminal fsync cannot be retried or converted to a completed
         # error by a subsequent event. The live receipt must succeed exactly once.
         call.observation = UncertainCall()
-        call.admission.finish(call, is_error, directory, input_id)
+        call.admission.finish(call, is_error, directory, input_id, round_number)
         call.observation = CompletedCall()
 
 
@@ -107,7 +113,10 @@ class CallAdmission(ABC):  # noqa: B024 - shared rejection; leaves override vali
     def consume(self, call: NativeToolCall, action: Callable[[], None]) -> None:
         raise SelectedToolDenied("Native tool request was already consumed; outcome may be UNKNOWN")
 
-    def finish(self, call: NativeToolCall, is_error: bool, directory: Path, input_id: str) -> None:
+    def finish(
+        self, call: NativeToolCall, is_error: bool, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
         raise SelectedToolDenied("Native tool ran without owner admission")
 
 
@@ -120,12 +129,18 @@ class AwaitingAdmission(CallAdmission):
 
 
 class AdmittedCall(CallAdmission):
-    def finish(self, call: NativeToolCall, is_error: bool, directory: Path, input_id: str) -> None:
-        call.commit_terminal(is_error, directory, input_id)
+    def finish(
+        self, call: NativeToolCall, is_error: bool, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
+        call.commit_terminal(is_error, directory, input_id, round_number)
 
 
 class UncertainAdmission(CallAdmission):
-    def finish(self, call: NativeToolCall, is_error: bool, directory: Path, input_id: str) -> None:
+    def finish(
+        self, call: NativeToolCall, is_error: bool, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
         if not is_error:
             raise SelectedToolDenied("Native tool succeeded without owner admission")
         call.admission_failed()
@@ -178,10 +193,13 @@ class NativeToolCall(ABC):
             self.started.set()  # Wake other waiters; they must fail state validation.
             raise
 
-    def finish(self, name: str, is_error: bool | None, directory: Path, input_id: str) -> None:
+    def finish(
+        self, name: str, is_error: bool | None, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
         if name != self.name or type(is_error) is not bool:
             raise SelectedToolDenied("Native tool terminal identity/result changed")
-        self.observation.finish(self, is_error, directory, input_id)
+        self.observation.finish(self, is_error, directory, input_id, round_number)
 
     @property
     def complete(self) -> bool:
@@ -191,7 +209,9 @@ class NativeToolCall(ABC):
         self.observation.assert_complete()
 
     @abstractmethod
-    def commit_terminal(self, is_error: bool, directory: Path, input_id: str) -> None: ...
+    def commit_terminal(
+        self, is_error: bool, directory: Path, input_id: str, round_number: int
+    ) -> None: ...
 
     @abstractmethod
     def admission_failed(self) -> None: ...

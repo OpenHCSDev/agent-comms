@@ -157,7 +157,9 @@ class SelectedToolRequest(NativeToolCall):
     def name(self) -> str:
         return "selected_claimed_write"
 
-    def commit_terminal(self, is_error: bool, directory: Path, input_id: str) -> None:
+    def commit_terminal(
+        self, is_error: bool, directory: Path, input_id: str, round_number: int
+    ) -> None:
         if is_error:
             raise SelectedToolDenied("Native Pi selected tool did not finish successfully")
         verify_selected_terminal(directory, input_id, self.call_id)
@@ -413,34 +415,26 @@ class NativeToolCallTable(Generic[Call]):
 
     def __init__(self) -> None:
         self._calls: dict[ToolCallIdentity, Call] = {}
-        self._current_round = 0
-        self._round_announced = False
+        self.rounds: list[NativeToolRound[Call]] = []
 
     def __bool__(self) -> bool:
         return bool(self._calls)
-
-    @property
-    def round_announced(self) -> bool:
-        return self._round_announced
 
     def decode_round(
         self,
         content: tuple[PiContent, ...],
         decode_call: Callable[[object, object, object], Call],
     ) -> NativeToolRound[Call]:
-        if self._round_announced:
-            current = (
-                call for identity, call in self._calls.items()
-                if identity.round_number == self._current_round
+        round = NativeToolRound.decode(len(self.rounds), content, decode_call)
+        if self.rounds and not all(call.complete for call in self.rounds[-1].declared):
+            raise SelectedToolDenied(
+                "Native tool round was announced again before its calls completed"
             )
-            if not all(call.complete for call in current):
-                raise SelectedToolDenied(
-                    "Native tool round was announced again before its calls completed"
-                )
-        number = self._current_round + int(self._round_announced)
-        return NativeToolRound.decode(number, content, decode_call)
+        return round
 
     def announce(self, round: NativeToolRound[Call]) -> None:
+        if round.number != len(self.rounds):
+            raise SelectedToolDenied("Native tool round sequence changed")
         identities = tuple(ToolCallIdentity(round.number, call.call_id) for call in round.declared)
         declared = set(identities)
         pending = {
@@ -458,22 +452,35 @@ class NativeToolCallTable(Generic[Call]):
             else:
                 resolved.append(candidate)
         self._calls.update(zip(identities, resolved, strict=True))
-        self._current_round = round.number
-        self._round_announced = True
-        for call in resolved:
+        announced = NativeToolRound(round.number, tuple(resolved))
+        for call in announced.declared:
             call.announce()
+        self.rounds.append(announced)
 
-    def call_for(self, candidate: Call) -> Call:
-        identity = ToolCallIdentity(self._current_round, candidate.call_id)
+    def call_for(self, candidate: Call) -> tuple[ToolCallIdentity, Call]:
+        if self.rounds:
+            current_identity = ToolCallIdentity(self.rounds[-1].number, candidate.call_id)
+            current = self._calls.get(current_identity)
+            if current is not None and not current.complete:
+                current.correlate(candidate)
+                return current_identity, current
+        identity = ToolCallIdentity(len(self.rounds), candidate.call_id)
         existing = self._calls.get(identity)
         if existing is not None:
             existing.correlate(candidate)
-            return existing
+            return identity, existing
         self._calls[identity] = candidate
-        return candidate
+        return identity, candidate
 
-    def current(self, call_id: str) -> Call | None:
-        return self._calls.get(ToolCallIdentity(self._current_round, call_id))
+    def require_current(
+        self, call_id: str, missing_message: str
+    ) -> tuple[ToolCallIdentity, Call]:
+        if self.rounds:
+            identity = ToolCallIdentity(self.rounds[-1].number, call_id)
+            call = self._calls.get(identity)
+            if call is not None:
+                return identity, call
+        raise SelectedToolDenied(missing_message)
 
     def require(self, round_number: int, call_id: str) -> Call:
         return self._calls[ToolCallIdentity(round_number, call_id)]
@@ -483,7 +490,10 @@ class NativeToolCallTable(Generic[Call]):
 
     @property
     def first_call_id(self) -> str | None:
-        return next((identity.call_id for identity in self._calls), None)
+        """The selected call, or None when a selected-mode turn used no tool."""
+        if not self.rounds:
+            return None
+        return self.rounds[0].declared[0].call_id
 
 
 class OwnerToolSocket(ABC, Generic[Call]):
@@ -512,7 +522,7 @@ class OwnerToolSocket(ABC, Generic[Call]):
     def decode_request(self, raw: bytes) -> Call: ...
 
     @abstractmethod
-    def admit(self, call: Call) -> None: ...
+    def admit(self, round_number: int, call: Call) -> None: ...
 
     def validate_round(self, round: NativeToolRound[Call]) -> None:
         """Apply policy-specific limits after full decode and before any state transition."""
@@ -524,17 +534,20 @@ class OwnerToolSocket(ABC, Generic[Call]):
 
     def tool_started(self, event: ToolExecutionStart) -> None:
         candidate = self.decode_call(event.tool_call_id, event.tool_name, event.args)
-        call = self.calls.current(candidate.call_id)
-        if call is None:
-            raise SelectedToolDenied("Native tool start has no declared call")
+        _, call = self.calls.require_current(
+            candidate.call_id, "Native tool start has no declared call"
+        )
         call.correlate(candidate)
         call.start()
 
     def tool_finished(self, event: ToolExecutionEnd, input_id: str) -> None:
-        call = self.calls.current(event.tool_call_id)
-        if call is None:
-            raise SelectedToolDenied("Native tool terminal has no declared call")
-        call.finish(event.tool_name, event.is_error, self.path.parent, input_id)
+        identity, call = self.calls.require_current(
+            event.tool_call_id, "Native tool terminal has no declared call"
+        )
+        call.finish(
+            event.tool_name, event.is_error, self.path.parent, input_id,
+            identity.round_number,
+        )
 
     def assert_complete(self) -> None:
         for call in self.calls.values():
@@ -551,8 +564,8 @@ class OwnerToolSocket(ABC, Generic[Call]):
         return None
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
-        call = self.calls.call_for(self.decode_request(raw))
-        await call.authorize(lambda: self.admit(call))
+        identity, call = self.calls.call_for(self.decode_request(raw))
+        await call.authorize(lambda: self.admit(identity.round_number, call))
         return {"ok": True}
 
     def failure_response(self, error: Exception) -> dict[str, object]:
@@ -650,7 +663,7 @@ class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
         self.action = action
 
     def validate_round(self, round: NativeToolRound[SelectedToolRequest]) -> None:
-        if len(round.declared) != 1 or self.calls.round_announced:
+        if len(round.declared) != 1 or self.calls.rounds:
             raise SelectedToolDenied("Native Pi returned more than one selected call")
 
     def decode_call(self, call_id: object, name: object, arguments: object) -> SelectedToolRequest:
@@ -675,7 +688,7 @@ class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
             raise SelectedToolDenied("Invalid selected tool request") from error
         return envelope.authenticate(self.token)
 
-    def admit(self, call: SelectedToolRequest) -> None:
+    def admit(self, round_number: int, call: SelectedToolRequest) -> None:
         self.action(call)
 
     @property

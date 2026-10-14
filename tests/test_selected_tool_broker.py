@@ -34,7 +34,7 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
     class Owner:
         input_id = secrets.token_hex(16)
 
-        def admit(self, call) -> None:
+        def admit(self, round_number, call) -> None:
             pass
 
     tmp_path.chmod(0o700)
@@ -53,27 +53,43 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
     }).encode() + b"\n"
     await socket.handle_request(request)
     first = socket.calls.require(0, "reused")
-    slot = first.slot(owner.input_id)
+    slot = first.slot(owner.input_id, 0)
     broker.consume_selected_slot(tmp_path, slot, slot)
     socket.tool_finished(
         ToolExecutionEnd(tool_call_id="reused", tool_name="read", is_error=False),
         owner.input_id,
     )
 
-    socket.announce((
-        ToolCallContent(id="reused", name="read", arguments={"path": "two"}),
-    ))
+    second_arguments = {"path": "two"}
+    second_request = json.dumps({
+        "token": socket.token,
+        "call_id": "reused",
+        "name": "read",
+        "arguments": second_arguments,
+    }).encode() + b"\n"
+    pending = asyncio.create_task(socket.handle_request(second_request))
+    await asyncio.sleep(0)
     second = socket.calls.require(1, "reused")
+    assert not pending.done()
 
+    socket.announce((
+        ToolCallContent(id="reused", name="read", arguments=second_arguments),
+    ))
+    socket.tool_started(
+        ToolExecutionStart(tool_call_id="reused", tool_name="read", args=second_arguments)
+    )
+
+    assert await pending == {"ok": True}
     assert first is not second
-    assert socket.calls.current("reused") is second
+    assert socket.calls.require(1, "reused") is second
+    assert first.slot(owner.input_id, 0) != second.slot(owner.input_id, 1)
 
 
 def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(tmp_path: Path) -> None:
     class Owner:
         input_id = secrets.token_hex(16)
 
-        def admit(self, call) -> None:
+        def admit(self, round_number, call) -> None:
             raise AssertionError("invalid round must not admit a call")
 
     socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())
