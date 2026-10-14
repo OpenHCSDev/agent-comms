@@ -11,7 +11,6 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
-from .activity import ActivityState
 from .acp_failure import (
     FailureSource, UnrecordedFailureSource, NativeTurnOutcome, ProviderRetryResult,
     UnresolvedNativeTurnOutcome, SuccessfulNativeTurnOutcome, FailedNativeTurnOutcome,
@@ -112,20 +111,6 @@ class ThinkingChanged(SettingChangeResult):
     pass
 
 
-class ActivityEvent(AgentEvent):
-    """An observation whose declaration supplies a shared activity reaction."""
-
-    @property
-    @abstractmethod
-    def activity_state(self) -> ActivityState:
-        pass
-
-    @property
-    @abstractmethod
-    def activity_detail(self) -> str:
-        pass
-
-
 @dataclass(frozen=True)
 class ToolEvent(AgentEvent):
     id: str
@@ -133,18 +118,10 @@ class ToolEvent(AgentEvent):
 
 
 @dataclass(frozen=True)
-class ToolStart(ToolEvent, ActivityEvent):
+class ToolStart(ToolEvent):
     title: str = ""
     args: dict[str, Any] | None = None
     kind: str = "other"
-
-    @property
-    def activity_state(self) -> ActivityState:
-        return ActivityState.WORKING
-
-    @property
-    def activity_detail(self) -> str:
-        return self.title
 
 
 @dataclass(frozen=True)

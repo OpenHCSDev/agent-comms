@@ -101,6 +101,11 @@ class TurnState:
     def activity(self) -> str:
         return self.phase.summary
 
+    def project_activity(self, activity):
+        """Display the current phase while preserving the acquired drain readiness."""
+        phase = self.phase
+        return replace(activity, state=phase.activity_state, detail=phase.activity_detail)
+
 
 @dataclass(frozen=True, slots=True)
 class TurnFence:
