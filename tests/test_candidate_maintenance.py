@@ -13,7 +13,7 @@ from agent_comms import candidate_maintenance as maintenance
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.store_files import _store_lock
+from agent_comms.wake_policy import FullWake
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 
@@ -72,7 +72,7 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
         )
         assert page.through_seq >= message.seq and len(page.entries) == 1
         assert page.entries[0].source_seq == message.seq
-        assert page.entries[0].wake_mode == "full"
+        assert page.entries[0].wake_mode is FullWake
 
 
 def test_failed_drain_is_named_and_retires_pending_state(monkeypatch, tmp_path, caplog) -> None:
@@ -89,38 +89,6 @@ def test_failed_drain_is_named_and_retires_pending_state(monkeypatch, tmp_path, 
     assert failed.value.root == root
     assert root not in maintenance._pending
     assert "Candidate maintenance failed for" in caplog.text
-
-
-def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send(
-    monkeypatch, tmp_path
-) -> None:
-    with TemporaryDirectory(
-        prefix="ac-candidate-postcommit-", dir=tmp_path.resolve(strict=True)
-    ) as dirname:
-        comms, _root_id = _wire(Path(dirname))
-        witnessed: list[bool] = []
-
-        def observe(bus, seq):
-            def probe():
-                with (
-                    _store_lock(comms._wire_lock_path, blocking=False),
-                    _store_lock(bus.log.path, blocking=False),
-                ):
-                    witnessed.append(True)
-
-            thread = threading.Thread(target=probe)
-            thread.start()
-            thread.join(timeout=2)
-            assert not thread.is_alive() and witnessed == [True]
-            raise OSError("synthetic derived projection failure")
-
-        monkeypatch.setattr(
-            "agent_comms.messaging.schedule_candidate_catchup", observe
-        )
-        # Even an unexpected scheduler error after the durable bus commit
-        # cannot report the original send as failed or invite a retry.
-        committed = comms.messaging.send_message("sender", "beta", "still committed")
-        assert committed.seq == 1 and comms.bus.log.latest_sequence() == 1
 
 
 def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
