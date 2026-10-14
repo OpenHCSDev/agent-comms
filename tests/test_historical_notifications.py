@@ -1,7 +1,6 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
 from dataclasses import replace
-from datetime import datetime, timedelta
 from pathlib import Path
 import sqlite3
 
@@ -133,18 +132,6 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     )
     assert live.state == "Read" and not live.busy
     assert live.detail == ""
-
-
-def test_notification_state_formats_only_durable_receipt_time():
-    from agent_comms.presentation import MessageNotification
-
-    now = datetime.now().astimezone()
-    today = now.replace(hour=1, minute=2, second=0, microsecond=0)
-    previous = today - timedelta(days=2)
-    assert MessageNotification.state_at("Read", int(today.timestamp() * 1000)) == "Read 01:02"
-    expected = previous.strftime("Read %b %d %H:%M").replace(" 0", " ")
-    assert MessageNotification.state_at("Read", int(previous.timestamp() * 1000)) == expected
-    assert MessageNotification.state_at("Read", None) == "Read"
 
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):

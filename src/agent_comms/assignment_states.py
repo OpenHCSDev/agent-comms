@@ -237,12 +237,11 @@ class IgnoredAssignment(AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        checked_at_ms = activity.read_at_ms if activity.model_context else updated_at_ms
         return replace(
             notification,
-            state=notification.state_at("Checked", checked_at_ms),
+            state="Checked",
             detail="",
-            read_at_ms=checked_at_ms,
+            read_at_ms=activity.read_at_ms,
         )
 
     notification_priority = 2
@@ -409,7 +408,7 @@ class CompletedAssignment(BoundAssignment):
         if reference is None:
             return replace(
                 notification,
-                state=notification.state_at("Read", activity.read_at_ms) + " — no reply",
+                state="Read",
                 detail="",
                 priority=2,
                 busy=False,
@@ -417,10 +416,11 @@ class CompletedAssignment(BoundAssignment):
             )
         return replace(
             notification,
-            state=notification.state_at("Answered", activity.response_received_at_ms),
+            state="Answered",
             detail="",
             reply_reference=reference,
             read_at_ms=activity.read_at_ms,
+            answered_at_ms=activity.response_received_at_ms,
         )
 
     def require_completion(self) -> Engagement:
@@ -519,12 +519,8 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return replace(
-            notification,
-            state=notification.state_at("Read", updated_at_ms),
-            detail="",
-            busy=False,
-            read_at_ms=updated_at_ms,
+        return activity.progress.selected_notification(
+            notification, activity.read_at_ms, busy=False
         )
 
     notification_priority = 2
@@ -561,11 +557,7 @@ class FailedAssignment(InterruptedAssignment):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return replace(
-            notification,
-            state=notification.state_at("Failed", updated_at_ms),
-            detail="",
-        )
+        return replace(notification, state="Failed", detail="")
 
     def rejected_triage_history(self, execution, **source):
         """A proved rejected result is delivered source, never an IGNORE decision."""

@@ -99,8 +99,9 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
         assert (len(alpha_calls), len(beta_calls)) == before
         outcomes = comms.views.message_notifications([first])[(first.seq, first.message_id)]
         by_recipient = {row.recipient: row for row in outcomes}
-        assert by_recipient["alpha"].state.startswith("Checked")
-        assert by_recipient["beta"].state.startswith("Answered ")
+        assert by_recipient["alpha"].state == "Checked"
+        assert by_recipient["beta"].state == "Answered"
+        assert by_recipient["beta"].answered_at_ms is not None
         assert all(row.detail == "" and not row.busy for row in outcomes)
 
 

@@ -55,7 +55,7 @@ class ShownToModelProgress(AssignmentProgress):
     def selected_notification(self, notification, read_at_ms, *, busy):
         return replace(
             notification,
-            state=notification.state_at("Read", read_at_ms),
+            state="Read",
             detail="",
             busy=busy,
             read_at_ms=read_at_ms,
@@ -64,7 +64,7 @@ class ShownToModelProgress(AssignmentProgress):
     def interrupted_notification(self, notification, read_at_ms):
         return replace(
             notification,
-            state=notification.state_at("Read", read_at_ms) + " — interrupted",
+            state="Read",
             detail="",
             busy=False,
             priority=3,
@@ -112,11 +112,13 @@ class AssignmentActivityEvidence(TypedRow):
 
     @property
     def context(self) -> AssignmentContext | None:
-        if self.context_session_file is None and self.context_session_entry_id is None:
+        values = self.context_session_file, self.context_session_entry_id
+        if values == (None, None):
             return None
-        if self.context_session_file is None or self.context_session_entry_id is None:
+        if None in values:
             raise ValueError("Recorded model-context location is incomplete")
-        return AssignmentContext(self.context_session_file, self.context_session_entry_id)
+        session_file, session_entry_id = values
+        return AssignmentContext(session_file, session_entry_id)
 
     def resolve(self, recorded_times: dict[AssignmentContext, int | None]):
         context = self.context
@@ -145,11 +147,13 @@ class AssignmentActivity:
 
     @property
     def response_reference(self) -> MessageReference | None:
-        if self.response_seq is None and self.response_message_id is None:
+        values = self.response_seq, self.response_message_id
+        if values == (None, None):
             return None
-        if self.response_seq is None or self.response_message_id is None:
+        if None in values:
             raise ValueError("Published response reference is incomplete")
-        return MessageReference(self.response_seq, self.response_message_id)
+        response_seq, response_message_id = values
+        return MessageReference(response_seq, response_message_id)
 
 class NotificationSource(DeclaredFamily, affix="NotificationSource"):
     """Original frozen delivery or handling receipt, never an execution authority."""
