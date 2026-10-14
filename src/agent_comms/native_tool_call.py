@@ -19,6 +19,13 @@ class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcom
     """A rejected request, including duplicate or uncertain prior consumption."""
 
 
+class DuplicateToolCallIdentity(SelectedToolDenied):
+    """One assistant tool round declared the same provider call identity twice."""
+
+    def __init__(self, call_id: str) -> None:
+        super().__init__(f"Native tool round repeats call identity {call_id!r}")
+
+
 class CoordinationBusy(SelectedToolDenied):
     """The coordination database stayed busy; the call was not checked and nothing changed."""
 
@@ -42,6 +49,7 @@ class ToolStartNotSeen(SelectedToolDenied):
 
 class CallObservation(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
     executing = False
+    complete = False
 
     def announce(self, call: NativeToolCall) -> None:
         raise SelectedToolDenied("Native tool call announcement was repeated or invalid")
@@ -85,6 +93,8 @@ class ExecutingCall(CallObservation):
 
 
 class CompletedCall(CallObservation):
+    complete = True
+
     def assert_complete(self) -> None:
         pass
 
@@ -172,6 +182,10 @@ class NativeToolCall(ABC):
         if name != self.name or type(is_error) is not bool:
             raise SelectedToolDenied("Native tool terminal identity/result changed")
         self.observation.finish(self, is_error, directory, input_id)
+
+    @property
+    def complete(self) -> bool:
+        return self.observation.complete
 
     def assert_complete(self) -> None:
         self.observation.assert_complete()
