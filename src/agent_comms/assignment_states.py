@@ -74,7 +74,6 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
         activity=None,
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
-        blocked_by_prior: bool = False,
     ):
         from .presentation import MessageNotification
 
@@ -179,11 +178,25 @@ class PassiveAssignment(AssignmentState):
 
 
 class PendingNotification:
-    """Pending relevance/full execution membership, not another display state.
+    """Pending relevance/full execution membership, not another display state."""
 
-    Sealed work selection derives this membership from the declarations;
-    presentation remains the lifecycle's plain ``Sent`` fact.
-    """
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity=None,
+        updated_at_ms=0,
+        triage_inflight=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return (
+            notification
+            if activity is None
+            else activity.pending_notification(notification, updated_at_ms)
+        )
 
 
 class TriagePendingAssignment(PendingNotification, AssignmentState):
@@ -236,7 +249,6 @@ class IgnoredAssignment(AssignmentState):
         activity,
         updated_at_ms=0,
         triage_inflight=False,
-        blocked_by_prior=False,
     ):
         notification = super().notification(
             recipient, observation=observation, activity=activity
@@ -327,7 +339,6 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
         activity,
         updated_at_ms=0,
         triage_inflight=False,
-        blocked_by_prior=False,
     ):
         return super().notification(
             recipient, observation=observation, activity=activity
@@ -351,7 +362,6 @@ class EngagedAssignment(BoundAssignment):
         activity,
         updated_at_ms=0,
         triage_inflight=False,
-        blocked_by_prior=False,
     ):
         notification = super().notification(
             recipient, observation=observation, activity=activity
@@ -361,14 +371,12 @@ class EngagedAssignment(BoundAssignment):
         )
 
     def wake_frame(self, source, obligation) -> tuple[str, str]:
-        from .wake import derive_exact_reply_target
-
         if obligation is None:
             raise IdentityConflict("full wake frame requires the current response obligation")
         obligation.lifecycle.require_preparation()
         if (obligation.execution_id, obligation.exact_target) != (
             self.decision.execution_id,
-            derive_exact_reply_target(source),
+            source.exact_reply_target,
         ):
             raise IdentityConflict("full wake frame requires the current response obligation")
         return self.mode.full_expectation(), "you owe a response: " + json.dumps(
@@ -405,7 +413,6 @@ class CompletedAssignment(BoundAssignment):
         activity,
         updated_at_ms=0,
         triage_inflight=False,
-        blocked_by_prior=False,
     ):
         notification = super().notification(
             recipient, observation=observation, activity=activity
@@ -468,7 +475,6 @@ class DeferredAssignment(InterruptedAssignment):
         activity,
         updated_at_ms=0,
         triage_inflight=False,
-        blocked_by_prior=False,
     ):
         notification = super().notification(
             recipient, observation=observation, activity=activity
@@ -518,7 +524,6 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         activity,
         updated_at_ms=0,
         triage_inflight=False,
-        blocked_by_prior=False,
     ):
         notification = super().notification(
             recipient, observation=observation, activity=activity
@@ -560,7 +565,6 @@ class FailedAssignment(InterruptedAssignment):
         activity,
         updated_at_ms=0,
         triage_inflight=False,
-        blocked_by_prior=False,
     ):
         notification = super().notification(
             recipient, observation=observation, activity=activity

@@ -28,6 +28,12 @@ class InputBatch(ABC):
         return "\n\n".join(row.source_text for row in self.originals)
 
     @property
+    def native_reply_targets(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(
+            target for row in self.originals if (target := row.origin.reply_target)
+        ))
+
+    @property
     @abstractmethod
     def admits_multiple(self) -> bool: ...
 

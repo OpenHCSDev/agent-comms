@@ -101,6 +101,26 @@ def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
     assert not (comms.root / "tool-output").exists()
 
 
+def test_message_arriving_between_inbox_read_and_ack_remains_unread(
+    inbox_comms, monkeypatch
+):
+    comms = inbox_comms
+    first = comms.messaging.send_message("a", "b", "shown")
+    acknowledge = comms.messaging.acknowledge
+
+    def append_then_acknowledge(name, references):
+        comms.messaging.send("a", "b", "arrived after read")
+        return acknowledge(name, references)
+
+    monkeypatch.setattr(comms.messaging, "acknowledge", append_then_acknowledge)
+    result = invoke_tool(comms, "comms_inbox", {"thread": "b"})
+
+    assert result["messages"] == [first.to_wire()]
+    assert result["acknowledged"] == 1
+    remaining = invoke_tool(comms, "comms_inbox", {"thread": "b", "ack": False})
+    assert [message["text"] for message in remaining["messages"]] == ["arrived after read"]
+
+
 def test_publication_failure_precedes_ack(inbox_comms, monkeypatch):
     comms = inbox_comms
     ledger = seed_unknown(comms, 1, "body" * 20_000)

@@ -11,6 +11,7 @@ import pytest
 from agent_comms.bus_activity_index import ActivityCheckpoint, BusActivityIndex
 from agent_comms.bus_projection import AppendCheckpoint, BusFileRevision
 from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.messages import Message
@@ -33,9 +34,11 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     wired.messaging.send("fixer", "#base", "tagged")
     wired.messaging.send("third", "#all", "global from third")
     assert _listed(wired) == _expected(wired)
-    assert wired.messaging.acknowledge("fixer", "PR111") == 1
+    references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+    assert wired.messaging.acknowledge("fixer", references) == 1
     assert _listed(wired) == _expected(wired)
-    wired.messaging.acknowledge("PR111")
+    messages = wired.bus.inbox("PR111")
+    wired.messaging.acknowledge("PR111", tuple(message.reference for message in messages))
     assert _listed(wired) == _expected(wired)
     wired.owners.stop("third")
     assert _listed(wired, active_only=True) == _expected(wired, active_only=True)
@@ -266,19 +269,14 @@ def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix
     assert saved.offset == latest.offset
 
 
-def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(wired):
+def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacement(wired):
     wired.messaging.send("PR111", "#base", "first")
     wired.messaging.send("fixer", "#base", "second")
     assert set(wired.views.coordination_snapshot().last_sent) == {"PR111", "fixer"}
-    bus_path = wired.bus.log.path
-    replacement = bus_path.with_name("replacement.jsonl")
-    replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
-    os.replace(replacement, bus_path)
-    assert set(wire(wired.root).views.coordination_snapshot().last_sent) == {"fixer"}
 
     checkpoint = wired.root / "bus_activity_latest.json"
     checkpoint.write_text("{damaged")
-    assert set(wire(wired.root).views.coordination_snapshot().last_sent) == {"fixer"}
+    assert set(wire(wired.root).views.coordination_snapshot().last_sent) == {"PR111", "fixer"}
 
     # A valid JSON file can also lose projection values after local damage.
     # The bus is still authoritative when the checkpoint shape survives.
@@ -290,8 +288,16 @@ def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(w
     assert reopened.views.coordination_snapshot().last_sent["fixer"] > 0.0
     assert reopened.bus.channel_activity()["#base"].last_message > 0.0
 
+    bus_path = wired.bus.log.path
+    replacement = bus_path.with_name("replacement.jsonl")
+    replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
+    os.chmod(replacement, 0o600)
+    os.replace(replacement, bus_path)
+    with pytest.raises(RelationViolationError, match="Private bus"):
+        wire(wired.root).views.coordination_snapshot()
 
-def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):
+
+def test_route_projection_refuses_atomic_bus_replacement(wired):
     wired.messaging.send("PR111", "fixer", "first")
     wired.messaging.send("PR111", "fixer", "second")
     assert _listed(wired)["fixer"] == 2
@@ -299,11 +305,13 @@ def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):
     rows = bus_path.read_bytes().splitlines(keepends=True)
     replacement = bus_path.with_name("replacement.jsonl")
     replacement.write_bytes(rows[1])
+    os.chmod(replacement, 0o600)
     os.replace(replacement, bus_path)
-    assert _listed(wire(wired.root))["fixer"] == 1
+    with pytest.raises(RelationViolationError, match="Private bus"):
+        _listed(wire(wired.root))
 
 
-def test_route_projection_detects_rewrite_before_append(wired):
+def test_route_projection_refuses_rewrite_before_append(wired):
     wired.registry.declare(Thread(name="third", tags=frozenset(), worktree="/tmp/third"))
     wired.messaging.send("PR111", "fixer", "first")
     assert _listed(wired)["fixer"] == 1
@@ -311,10 +319,10 @@ def test_route_projection_detects_rewrite_before_append(wired):
     row = json.loads(bus_path.read_text())
     row["to"] = "third"
     bus_path.write_text(json.dumps(row) + "\n")
-    wired.messaging.send("PR111", "fixer", "second")
-    counts = _listed(wire(wired.root))
-    assert counts["fixer"] == 1
-    assert counts["third"] == 1
+    tampered = bus_path.read_bytes()
+    with pytest.raises(RelationViolationError, match="Private bus checkpoint prefix tail changed"):
+        wired.messaging.send("PR111", "fixer", "second")
+    assert bus_path.read_bytes() == tampered
 
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
@@ -324,7 +332,8 @@ def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired
     wired.messaging.send("PR111", "fixer", "old direct")
     wired.registry.rename("PR111", "renamed")
     assert _listed(wired) == _expected(wired)
-    wired.messaging.acknowledge("broadcast", "PR111")
+    references = tuple(message.reference for message in wired.bus.inbox("broadcast", "PR111"))
+    wired.messaging.acknowledge("broadcast", references)
     assert _listed(wired) == _expected(wired)
 
 

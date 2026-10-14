@@ -21,6 +21,7 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.messages import InfoKind, Message
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
@@ -587,10 +588,9 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
         await real_emit(session_id, event, client, **kwargs)
 
     monkeypatch.setattr(agent, "_emit_event", observe)
+    origins = (Message("owner", child, "Finish work", InfoKind),) if reply else ()
     async with asyncio.timeout(20):
-        await agent.turns.run_agent_turn(
-            child, child, "Finish work", reply_targets=("owner",) if reply else ()
-        )
+        await agent.turns.run_agent_turn(child, child, "Finish work", origins=origins)
     assert observed == ["started", "native-settled"]
     assert native.provider.posts == len(native.saved_inputs()) == 1
     assert not agent.inputs.pending_turns.get("owner")

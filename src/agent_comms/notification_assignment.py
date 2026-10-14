@@ -41,7 +41,7 @@ class NotShownProgress(AssignmentProgress):
     def selected_notification(self, notification, read_at_ms, *, busy):
         return replace(
             notification,
-            state="Starting response" if busy else "Interrupted before read",
+            state="Sent",
             detail="",
             busy=busy,
             priority=notification.priority if busy else 3,
@@ -110,6 +110,7 @@ class AssignmentContext:
 @dataclass(frozen=True)
 class AssignmentActivityEvidence(TypedRow):
     triage_inflight: bool
+    current_execution_id: str | None
     context_session_file: str | None
     context_session_entry_id: str | None
     response_seq: int | None
@@ -130,6 +131,7 @@ class AssignmentActivityEvidence(TypedRow):
         context = self.context
         return AssignmentActivity(
             triage_inflight=self.triage_inflight,
+            current_execution_id=self.current_execution_id,
             model_context=context is not None,
             read_at_ms=recorded_times.get(context) if context is not None else None,
             response_seq=self.response_seq,
@@ -141,6 +143,7 @@ class AssignmentActivityEvidence(TypedRow):
 @dataclass(frozen=True)
 class AssignmentActivity:
     triage_inflight: bool
+    current_execution_id: str | None
     model_context: bool
     read_at_ms: int | None
     response_seq: int | None
@@ -150,6 +153,17 @@ class AssignmentActivity:
     @property
     def progress(self) -> AssignmentProgress:
         return ShownToModelProgress() if self.model_context else NotShownProgress()
+
+    def pending_notification(self, notification, queued_at_ms):
+        """Project custody behind the recipient's canonical unresolved execution."""
+        if self.current_execution_id is None:
+            return notification
+        return replace(
+            notification,
+            state=notification.receipt_state("Queued", queued_at_ms),
+            detail="",
+            busy=False,
+        )
 
     @property
     def response_reference(self) -> MessageReference | None:
@@ -222,6 +236,7 @@ class NotificationAssignment(NotificationSource):
         ascending: bool = False,
     ):
         from .coordination_database import CoordinationStore
+        from .coordination_tables.executions import CurrentExecutions
         from .native_runtime_input import NativeRuntimeInput
         from .recovery_projection import _preflight
 
@@ -250,12 +265,14 @@ class NotificationAssignment(NotificationSource):
                     f"JOIN ({membership}) member ON member.input_id=n.input_id "
                     "WHERE member.assignment_id=w.assignment_id "
                     "AND n.stage='triage' AND n.session_entry_id IS NULL) "
-                    "AS triage_inflight, "
+                    "AS triage_inflight, pointer.execution_id AS current_execution_id, "
                     f"({context.format(column='session_file')}) AS context_session_file, "
                     f"({context.format(column='session_entry_id')}) AS context_session_entry_id, "
                     "p.seq AS response_seq, p.message_id AS response_message_id, "
                     "p.received_at_ms AS response_received_at_ms "
                     f"FROM {WakeAssignment.declared_name} w "
+                    f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
+                    "ON pointer.owner_lookup=w.recipient_lookup "
                     f"LEFT JOIN {PublicationReceipts.declared_name} p "
                     "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target "
                     f"WHERE {predicate} ORDER BY w.wire_seq {'ASC' if ascending else 'DESC'},w.recipient"

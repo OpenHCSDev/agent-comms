@@ -13,7 +13,6 @@ from .drain_failures import drain_failures
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
 from .errors import RelationViolationError
-from .wake import derive_exact_reply_target
 
 if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
@@ -100,13 +99,6 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         session_id,
                         inputs.sessions.require(session_id),
                         "\n\n".join(turn.prompt for turn in pending),
-                        reply_targets=tuple(
-                            dict.fromkeys(
-                                target
-                                for turn in pending
-                                if (target := derive_exact_reply_target(turn.origin))
-                            )
-                        ),
                         origins=tuple(origin for turn in pending for origin in turn.origins),
                         autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
                         dependency_wait_id=pending[0].goal_wait_id,

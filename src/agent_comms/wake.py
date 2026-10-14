@@ -177,16 +177,3 @@ def resolve_wake_cohort(
         _member_decision(message, recipient, control, channel, effective_mentions)
         for recipient in frozen_audience.recipients
     )
-
-
-def derive_exact_reply_target(message: Message | None) -> str | None:
-    """Derive a wire origin's route independently of sender role and wake mode.
-
-    Channel responses retain the stored exact target, including ``#all``;
-    direct responses go to the stored original sender. A non-wire turn has no
-    wire route. This does not create, settle, or publish a response obligation.
-    """
-    if message is None:
-        return None
-    _require_stored(message)
-    return message.target if is_channel_target(message.target) else message.sender

@@ -42,6 +42,11 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     def delivery_reference(self, root_id: str) -> MessageReference | None:
         return None
 
+    @property
+    def reply_target(self) -> str | None:
+        """Automatic native destination declared by this original ingress."""
+        return None
+
 
 @dataclass(frozen=True)
 class InputProvenance(Provenance):
@@ -113,6 +118,10 @@ class HumanInputOrigin(InputOrigin):
             user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
             return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
                        admission, owner.worktree, owner.goal_checkpoint)
+
+    @property
+    def reply_target(self) -> str:
+        return self.author.sender
 
     def require_ingress(self, comms, snapshot, admission, controller):
         from .runtime import UNBOUND_CONTROLLER
