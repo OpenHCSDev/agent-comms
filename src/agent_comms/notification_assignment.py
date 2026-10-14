@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 from abc import abstractmethod
@@ -12,7 +12,10 @@ from .declared_family import DeclaredFamily
 from .coordination_schema import COORDINATION_SCHEMA_VERSION
 from .audience_manifest import FrozenRecipient
 from .coordination_tables.assignments import WakeAssignment
+from .coordination_tables.attempts import ReplayAssessments, ReplayFact
 from .coordination_tables.executions import CurrentExecutions
+from .coordination_tables.publications import PublicationReceipts
+from .message_reference import MessageReference
 from .typed_table import SQLiteUserVersion, TypedRow
 
 if TYPE_CHECKING:
@@ -26,6 +29,23 @@ if TYPE_CHECKING:
 class AssignmentActivity(TypedRow):
     triage_inflight: bool
     current_execution_id: str | None
+    model_context: bool
+    replay_facts: int
+    response_seq: int | None
+    response_message_id: str | None
+
+    @property
+    def response_output(self) -> bool:
+        facts = ReplayFact(self.replay_facts)
+        return bool(facts & (ReplayFact.ASSISTANT_OUTPUT | ReplayFact.TOOL_CALL_STARTED))
+
+    @property
+    def response_reference(self) -> MessageReference | None:
+        if self.response_seq is None and self.response_message_id is None:
+            return None
+        if self.response_seq is None or self.response_message_id is None:
+            raise ValueError("Published response reference is incomplete")
+        return MessageReference(self.response_seq, self.response_message_id)
 
     def blocks(self, assignment: WakeAssignment) -> bool:
         return (
@@ -116,10 +136,20 @@ class NotificationAssignment(NotificationSource):
                     f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
                     "WHERE member.assignment_id=w.assignment_id "
                     "AND n.stage='triage' AND n.session_entry_id IS NULL) "
-                    "AS triage_inflight, c.execution_id AS current_execution_id "
+                    "AS triage_inflight, c.execution_id AS current_execution_id, "
+                    f"EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
+                    f"JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id "
+                    "WHERE member.assignment_id=w.assignment_id "
+                    "AND n.session_entry_id IS NOT NULL) AS model_context, "
+                    "COALESCE(r.facts, 0) AS replay_facts, p.seq AS response_seq, "
+                    "p.message_id AS response_message_id "
                     f"FROM {WakeAssignment.declared_name} w "
                     f"LEFT JOIN {CurrentExecutions.declared_name} c "
                     "ON c.owner_lookup=w.recipient_lookup "
+                    f"LEFT JOIN {ReplayAssessments.declared_name} r "
+                    "ON r.execution_id=w.execution_id "
+                    f"LEFT JOIN {PublicationReceipts.declared_name} p "
+                    "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target "
                     f"WHERE {predicate} ORDER BY w.wire_seq {'ASC' if ascending else 'DESC'},w.recipient"
                     + (" LIMIT ?" if limit else ""),
                     (*parameters, limit) if limit else parameters,
@@ -133,10 +163,59 @@ class NotificationAssignment(NotificationSource):
         return FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)
 
     def project(self, observation: RecipientActivity) -> MessageNotification:
-        return self.assignment.lifecycle.notification(
+        lifecycle = self.assignment.lifecycle
+        notification = lifecycle.notification(
             self.recipient,
             observation=observation,
             updated_at_ms=self.assignment.updated_at_ms,
             triage_inflight=self.activity.triage_inflight,
             blocked_by_prior=self.activity.blocks(self.assignment),
         )
+        if lifecycle.engaged:
+            notification = observation.selected_response(
+                notification,
+                self.assignment.updated_at_ms,
+                model_context=self.activity.model_context,
+                response_output=self.activity.response_output,
+            )
+        from .assignment_states import (
+            CompletedAssignment,
+            DeferredAssignment,
+            DeliveredAssignment,
+        )
+
+        if isinstance(lifecycle, CompletedAssignment):
+            reference = self.activity.response_reference
+            if reference is None:
+                return replace(
+                    notification,
+                    state="Read — no reply",
+                    detail="The response turn ended without a published reply.",
+                    priority=2,
+                    busy=False,
+                )
+            return replace(
+                notification,
+                state="Answered",
+                detail=f"Reply published as message {reference.seq}.",
+                reply_reference=reference,
+            )
+        if isinstance(lifecycle, DeliveredAssignment):
+            return observation.delivered_response(notification, self.assignment.updated_at_ms)
+        if isinstance(lifecycle, DeferredAssignment) and not self.activity.triage_inflight:
+            return replace(
+                notification,
+                state=(
+                    "Read — interrupted, outcome unknown"
+                    if self.activity.model_context
+                    else "Interrupted before read — outcome unknown"
+                ),
+                detail=(
+                    "The message reached model context, but its turn was interrupted without a terminal outcome. Do not automatically retry."
+                    if self.activity.model_context
+                    else "No model-context receipt exists; processing was interrupted before a read was proved. Do not automatically retry."
+                ),
+                busy=False,
+                priority=3,
+            )
+        return notification

@@ -331,20 +331,7 @@ class EngagedAssignment(BoundAssignment):
     def require_engagement(self) -> Engagement:
         return self.decision
 
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        updated_at_ms=0,
-        triage_inflight=False,
-        blocked_by_prior=False,
-    ):
-        return observation.selected_response(
-            super().notification(recipient, observation=observation), updated_at_ms
-        )
-
-    notification_state = "Responding…"
+    notification_state = "Read — preparing response"
     notification_detail = "The agent chose to respond; work is in progress."
     notification_priority = 1
     notification_busy = True
@@ -361,7 +348,7 @@ class CompletedAssignment(BoundAssignment):
         return self.decision
 
     notification_priority = 2
-    notification_state = "Responded"
+    notification_state = "Answered"
     notification_detail = "The response workflow completed."
 
     terminal = True
@@ -413,8 +400,10 @@ class DeferredAssignment(InterruptedAssignment):
             )
         return super().notification(recipient, observation=observation)
 
-    notification_state = "Paused"
-    notification_detail = "Processing was deferred; this is not a successful receipt."
+    notification_state = "Interrupted — outcome unknown"
+    notification_detail = (
+        "Processing was interrupted without a terminal outcome. The message may not have reached the model; do not automatically retry."
+    )
 
     deferred = True
     engageable = True

@@ -50,12 +50,57 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
             source.message, notification.recipient_identity, snapshot, document=document
         )
 
-    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
+    def selected_response(
+        self,
+        notification: MessageNotification,
+        updated_at_ms: int,
+        *,
+        model_context: bool,
+        response_output: bool,
+    ) -> MessageNotification:
+        read = model_context or response_output
         if not self.turn_started_by(updated_at_ms):
-            return replace(notification, state="Paused", busy=False, priority=3,
-                detail="A response was selected, but no matching active turn is running. "
-                       "Outcome is unconfirmed; do not automatically retry.")
-        return notification
+            return replace(
+                notification,
+                state=(
+                    "Read — interrupted, outcome unknown"
+                    if read
+                    else "Interrupted before read — outcome unknown"
+                ),
+                busy=False,
+                priority=3,
+                detail=(
+                    "The message reached model context, but its response turn ended without a terminal outcome. Do not automatically retry."
+                    if read
+                    else "The response turn ended before a model-context receipt was recorded. Do not automatically retry."
+                ),
+            )
+        if response_output:
+            return replace(
+                notification,
+                state="Read - working",
+                detail="The agent read this message and produced response output or started a tool.",
+            )
+        if not model_context:
+            return replace(
+                notification,
+                state="Starting response",
+                detail="The message was selected for this turn; model-context receipt is still pending.",
+            )
+        return replace(
+            notification,
+            state="Read — preparing response",
+            detail="The agent read this message and started its response turn; no response output is recorded yet.",
+        )
+
+    def delivered_response(
+        self, notification: MessageNotification, updated_at_ms: int
+    ) -> MessageNotification:
+        return replace(
+            notification,
+            state="Read — no reply",
+            detail="The message entered a turn that has ended without a linked reply.",
+        )
 
 
 @dataclass(frozen=True)
@@ -65,7 +110,14 @@ class RecordedRecipientActivity(RecipientActivity):
     def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
         return notification
 
-    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
+    def selected_response(
+        self,
+        notification: MessageNotification,
+        updated_at_ms: int,
+        *,
+        model_context: bool,
+        response_output: bool,
+    ) -> MessageNotification:
         return replace(notification, state="Response selected", busy=False, priority=3,
             detail="The recorded assignment selected a response; completion is not recorded.")
 
@@ -113,18 +165,33 @@ class LiveRecipientActivity(RecipientActivity):
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return self.thread.turn_started_by(updated_at_ms)
 
-    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
-        notification = super().selected_response(notification, updated_at_ms)
-        if (
-            self.turn_started_by(updated_at_ms)
-            and self.thread.turn_state.phase.has_response_output
-        ):
+    def selected_response(
+        self,
+        notification: MessageNotification,
+        updated_at_ms: int,
+        *,
+        model_context: bool,
+        response_output: bool,
+    ) -> MessageNotification:
+        return super().selected_response(
+            notification,
+            updated_at_ms,
+            model_context=model_context,
+            response_output=response_output,
+        )
+
+    def delivered_response(
+        self, notification: MessageNotification, updated_at_ms: int
+    ) -> MessageNotification:
+        if self.turn_started_by(updated_at_ms):
             return replace(
                 notification,
-                state="Read - working",
-                detail="The agent read this message and has started its response.",
+                state="Read — current turn",
+                detail="The message entered the agent's current turn; no linked reply exists yet.",
+                busy=True,
+                priority=1,
             )
-        return notification
+        return super().delivered_response(notification, updated_at_ms)
 
     def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
         from .presentation import MessageNotification

@@ -102,11 +102,19 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.log.read_delivery_cohort(root_id, messages[0].seq).audience.recipients
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
-    recorded = assignment.notification(recipient, observation=RecordedRecipientActivity(), updated_at_ms=1)
+    initial = assignment.notification(
+        recipient, observation=RecordedRecipientActivity(), updated_at_ms=1
+    )
+    recorded = RecordedRecipientActivity().selected_response(
+        initial, 1, model_context=True, response_output=False
+    )
     assert recorded.state == "Response selected" and not recorded.busy
     assert "completion is not recorded" in recorded.detail
-    live = assignment.notification(recipient, observation=UnavailableRecipientActivity(), updated_at_ms=1)
-    assert live.state == "Paused" and "no matching active turn" in live.detail
+    live = UnavailableRecipientActivity().selected_response(
+        initial, 1, model_context=True, response_output=False
+    )
+    assert live.state == "Read — interrupted, outcome unknown"
+    assert "response turn ended" in live.detail
 
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
