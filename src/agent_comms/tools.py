@@ -9,7 +9,6 @@ from typing import ClassVar, Literal, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
-from .channel_targets import is_channel_target
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
 from .command import Command
 from .comms import Comms
@@ -54,14 +53,6 @@ class SubjectBinding(ContextBinding):
     @classmethod
     def resolve(cls, subject: str, actor: str | None) -> str:
         return subject
-
-
-class ActorBinding(ContextBinding):
-    @classmethod
-    def resolve(cls, subject: str, actor: str | None) -> str:
-        if actor is None:
-            raise ValueError("This tool requires an acting thread.")
-        return actor
 
 
 def tool_field(
@@ -209,42 +200,95 @@ class NativeOwnerCommand:
         return thread.execution.native_command_available(cls, status, owner_pid=thread.pid)
 
 
-@dataclass(frozen=True, kw_only=True)
-class CommsPinChannelTool(ToolRequest):
-    label = "Pin Channel"
-    description = (
-        "Persist whether a channel is pinned. Pinned channels sort before unpinned "
-        "channels; the selected channel sort remains the secondary order."
-    )
-    name: str = tool_field("Channel name")
-    pinned: bool = tool_field("True to pin; false to unpin")
+class ChannelArrangement(DeclaredFamily, affix="Arrangement"):
+    """One external channel/member ordering action with its own required fields."""
 
-    def apply(self, comms: Comms) -> JsonObject:
+    @classmethod
+    @abstractmethod
+    def apply(
+        cls, comms: Comms, *, channel: str, thread: str, pinned: bool | None,
+        channel_order: ChannelSort | None, thread_order: ThreadSort | None,
+    ) -> JsonObject: ...
+
+    @staticmethod
+    def require_channel(channel: str) -> str:
+        if not channel.strip():
+            raise ValueError("A channel name is required.")
+        return channel
+
+
+class PinChannelArrangement(ChannelArrangement):
+    @classmethod
+    def apply(cls, comms, *, channel, thread, pinned, channel_order, thread_order):
         from .cli_commands import PinChannelCliCommand
 
-        return PinChannelCliCommand(name=self.name, pinned=self.pinned).apply(comms)
+        if pinned is None:
+            raise ValueError("Pin channel requires pinned.")
+        return PinChannelCliCommand(
+            name=cls.require_channel(channel), pinned=pinned
+        ).apply(comms)
 
 
-@dataclass(frozen=True, kw_only=True)
-class CommsPinThreadTool(ToolRequest):
-    label = "Pin Thread in Channel"
-    description = (
-        "Persist whether a member is pinned within one channel. Pins do not change "
-        "membership or ordering in other channels. The selected member sort remains the"
-        " secondary order."
-    )
-    channel: str = tool_field("Channel containing the thread")
-    name: str = tool_field("Member thread name")
-    pinned: bool = tool_field("True to pin; false to unpin")
-
-    def apply(self, comms: Comms) -> JsonObject:
+class PinThreadArrangement(ChannelArrangement):
+    @classmethod
+    def apply(cls, comms, *, channel, thread, pinned, channel_order, thread_order):
         from .cli_commands import PinThreadCliCommand
 
-        channel = self.channel
-        PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
+        channel = cls.require_channel(channel)
+        if not thread.strip() or pinned is None:
+            raise ValueError("Pin thread requires thread and pinned.")
+        PinThreadCliCommand(channel=channel, name=thread, pinned=pinned).apply(comms)
         canonical = channel if channel.startswith("#") else f"#{channel}"
         return next(
             view.to_wire() for view in comms.views.channel_views() if view.channel.name == canonical
+        )
+
+
+class SortChannelsArrangement(ChannelArrangement):
+    @classmethod
+    def apply(cls, comms, *, channel, thread, pinned, channel_order, thread_order):
+        if channel_order is None:
+            raise ValueError("Sort channels requires channel_order.")
+        order = comms.channels.set_channel_order(channel_order)
+        return {"order": order.value}
+
+
+class SortChannelArrangement(ChannelArrangement):
+    @classmethod
+    def apply(cls, comms, *, channel, thread, pinned, channel_order, thread_order):
+        if thread_order is None:
+            raise ValueError("Sort channel requires thread_order.")
+        return comms.channels.set_channel_sort(
+            cls.require_channel(channel), thread_order
+        ).to_wire()
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderTool(ToolRequest):
+    label = "Arrange channels and members"
+    description = (
+        "Pin/unpin a channel or member, set the global channel order, or set one "
+        "channel's member order. Supply only the fields named by the selected action."
+    )
+    action: type[ChannelArrangement] = tool_field("Ordering action")
+    channel: str = tool_field("Channel name for channel/member actions", default="")
+    thread: str = tool_field("Member thread for pin_thread", default="")
+    pinned: bool | None = tool_field("Pin state for pin actions", default=None)
+    channel_order: ChannelSort | None = tool_field(
+        "Global channel order for sort_channels", default=None
+    )
+    thread_order: ThreadSort | None = tool_field(
+        "Member order for sort_channel", default=None
+    )
+
+    def apply(self, comms: Comms) -> JsonObject:
+        return self.action.apply(
+            comms,
+            channel=self.channel,
+            thread=self.thread,
+            pinned=self.pinned,
+            channel_order=self.channel_order,
+            thread_order=self.thread_order,
         )
 
 
@@ -289,20 +333,6 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
             "thinking_level": ThinkingLevel.optional_name(thread.thinking_level),
             "service_tier": thread.service_tier.value,
         }
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsSortChannelsTool(ToolRequest):
-    label = "Sort Channels"
-    description = (
-        "Persist channel-list ordering independently of member ordering. Pinned "
-        "channels stay first, with built-in channels first within each pin group."
-    )
-    order: ChannelSort = tool_field("Channel list order")
-
-    def apply(self, comms: Comms) -> JsonObject:
-        order = comms.channels.set_channel_order(self.order)
-        return {"order": order.value}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -410,17 +440,6 @@ class CommsDeleteViewTool(ToolRequest):
 
         DeleteViewCliCommand(name=self.name).apply(comms)
         return CommsChannelsTool().apply(comms)
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsSortChannelTool(ToolRequest):
-    label = "Sort channel members"
-    description = "Persist one channel's member ordering, shared by all attached views."
-    name: str = tool_field("Channel name")
-    order: ThreadSort = tool_field("Member ordering")
-
-    def apply(self, comms: Comms) -> JsonObject:
-        return comms.channels.set_channel_sort(self.name, self.order).to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -782,15 +801,16 @@ class CommsInboxTool(ToolRequest):
     label = "Comms Inbox"
     description = (
         "Fetch undelivered messages and unresolved native input attempts for a thread. "
-        "Optional ACK changes only the inbox marker; unresolved_inputs remain UNKNOWN. "
-        "Oversized results return complete=false, counts, and a complete result_file; "
-        "ACK is deferred. Read that file selectively, never dump it into context. For "
-        "standby, supply goal_id and wait_for to get standby_review: exact eligible "
-        "keys and messages, already reviewed entries, and excluded "
-        "owner/other-dependency inputs."
+        "Optional target limits the conversation. ACK marks exactly the returned "
+        "message references; unresolved_inputs remain UNKNOWN. Oversized results return "
+        "complete=false, counts, and a complete result_file; ACK is deferred. Read that "
+        "file selectively, never dump it into context. For standby, supply goal_id and "
+        "wait_for to get standby_review: exact eligible keys and messages, already "
+        "reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
-    ack: bool = tool_field("Mark delivered after reading", default=True)
+    target: str | None = tool_field("Optional channel or peer conversation", default=None)
+    ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
     goal_id: str | None = tool_field("Current goal for scoped standby review", default=None)
     wait_for: list[str] | None = tool_field(
         "Declared dependencies for standby review", default=None
@@ -798,6 +818,11 @@ class CommsInboxTool(ToolRequest):
 
     def apply(self, comms: Comms) -> JsonObject:
         thread = self.thread
+        target = self.target
+        if target is not None:
+            target = target.strip()
+            if not target:
+                raise ValueError("An inbox target cannot be empty.")
         goal_id = self.goal_id
         wait_for = self.wait_for
         if bool(goal_id) != bool(wait_for):
@@ -807,7 +832,7 @@ class CommsInboxTool(ToolRequest):
             if goal_id and wait_for
             else None
         )
-        inbox = comms.bus.inbox(thread)
+        inbox = comms.bus.inbox(thread, target)
         messages = [message.to_wire() for message in inbox]
         references = tuple(message.reference for message in inbox)
         unresolved = comms.goals.unresolved_inputs(thread)
@@ -963,82 +988,6 @@ class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
         from .cli_commands import ArchiveCliCommand
 
         return ArchiveCliCommand(name=self.name).apply(comms)
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsDismissTool(ToolRequest):
-    label = "Dismiss Unaddressed Channel Pings"
-    description = (
-        "End this turn quietly when a channel message is not addressed to you. Reports "
-        "which threads were mentioned, advances only your own delivery cursor for that "
-        "channel, and never wakes or notifies anyone else."
-    )
-    thread: str | None = tool_field(
-        "Thread dismissing its own pings (defaults to the executing thread)",
-        default=None,
-        binding=ActorBinding,
-    )
-    target: str = tool_field("Channel the ping arrived on")
-
-    def apply(self, comms: Comms) -> JsonObject:
-        """Dismiss channel pings addressed to other threads, ending the turn quietly."""
-        thread = self.thread or _executing_thread()
-        target = self.target.strip()
-        if not target:
-            raise ValueError("A channel target is required.")
-        name = comms.registry.require(thread).name
-        bus_messages = comms.bus.inbox(name, target)
-        if not bus_messages:
-            return {
-                "thread": name,
-                "target": target,
-                "acknowledged": 0,
-                "mentioned": (name,),
-                "dismissed": True,
-            }
-        mentioned: tuple[str, ...] = ()
-        for message in bus_messages:
-            if not is_channel_target(message.target) and (not message.sender_role.executable):
-                continue
-            if message.target != target and message.sender != target:
-                continue
-            if message.mentions:
-                mentioned = tuple(
-                    dict.fromkeys(item.thread for item in message.mentions if item.thread != name)
-                )
-                break
-        else:
-            mentioned = (name,)
-        acknowledged = comms.messaging.acknowledge(
-            name, tuple(message.reference for message in bus_messages)
-        )
-        return {
-            "thread": name,
-            "target": target,
-            "acknowledged": acknowledged,
-            "mentioned": mentioned,
-            "dismissed": True,
-        }
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsAckTool(ToolRequest):
-    label = "Acknowledge Comms Messages"
-    description = "Mark a thread inbox or one of its conversations delivered."
-    context = "thread"
-    action_label = "Mark inbox read"
-    action_order = 50
-    thread: str = tool_field("Thread whose delivery cursor advances", binding=ActorBinding)
-    target: str | None = tool_field(
-        "Optional conversation target", default=None, binding=SubjectBinding
-    )
-
-    def apply(self, comms: Comms) -> JsonObject:
-        messages = comms.bus.inbox(self.thread, self.target)
-        acknowledged = comms.messaging.acknowledge(
-            self.thread, tuple(message.reference for message in messages)
-        )
-        return {"acknowledged": acknowledged}
 
 
 def tool_catalog() -> list[JsonObject]:

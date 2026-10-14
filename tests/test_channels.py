@@ -517,7 +517,11 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     assert set(names(comms)[:2]) == {"#ui", "#zeta"}
     comms.messaging.send_user_message("#alpha", "Human input", worktree=str(tmp_path))
     comms.messaging.send("b", "#zeta", "Later agent output")
-    invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"})
+    invoke_tool(
+        comms,
+        "comms_order",
+        {"action": "sort_channels", "channel_order": "last_user_input"},
+    )
     assert names(wire(tmp_path))[0] == "#alpha"
     assert [view.channel.name for view in comms.views.coordination_snapshot("a").channels] == [
         view.channel.name for view in wire(tmp_path).views.coordination_snapshot("b").channels
@@ -571,7 +575,11 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
     observer = wire(tmp_path)
     observer.views.channel_views()  # Populate the observer cache before the external writes.
     for channel in ("#ui", "#none"):
-        result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True})
+        result = invoke_tool(
+            comms,
+            "comms_order",
+            {"action": "pin_channel", "channel": channel, "pinned": True},
+        )
         assert result["pinned"]
     views = observer.views.coordination_snapshot().channels
     assert [view.channel.name for view in views] == (
@@ -593,10 +601,16 @@ def test_member_pins_are_persistent_channel_scoped_and_preserve_sort(tmp_path, o
             "team", ViewKind.PARTICIPANTS, ViewPredicate(AnyOfMatch, frozenset({"api", "ui"}))
         )
     )
-    comms.channels.set_channel_sort("#team", order)
+    invoke_tool(
+        comms,
+        "comms_order",
+        {"action": "sort_channel", "channel": "#team", "thread_order": order.value},
+    )
     original = {view.channel.name: view.members for view in comms.views.channel_views()}
     result = invoke_tool(
-        comms, "comms_pin_thread", {"channel": "team", "name": "a", "pinned": True}
+        comms,
+        "comms_order",
+        {"action": "pin_thread", "channel": "team", "thread": "a", "pinned": True},
     )
     assert result["pinned_members"] == ["a"]
     observer = wire(tmp_path)
@@ -664,5 +678,9 @@ def test_invalid_pins_do_not_mutate_catalog(tmp_path):
     with pytest.raises(ValueError, match="not a member"):
         comms.channels.set_thread_pinned("api", "b", True)
     with pytest.raises(ValueError, match="Expected.*bool"):
-        invoke_tool(comms, "comms_pin_channel", {"name": "api", "pinned": "false"})
+        invoke_tool(
+            comms,
+            "comms_order",
+            {"action": "pin_channel", "channel": "api", "pinned": "false"},
+        )
     assert comms.channels.catalog.path.read_text() == before
