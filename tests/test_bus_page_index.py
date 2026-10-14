@@ -7,11 +7,11 @@ import sqlite3
 
 from agent_comms.bus_page_index import BusPageIndex, BusPageRow
 from agent_comms.comms import Comms
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
-from agent_comms.wire_metadata import ArchivedAccess
 from agent_comms.wire_log import OpenedWireSnapshot
+from agent_comms.wire_metadata import ArchivedAccess
 
 
 def retained_source(root, count):

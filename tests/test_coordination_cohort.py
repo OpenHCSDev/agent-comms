@@ -40,7 +40,7 @@ from agent_comms.exporting import (
     FullLimit,
     JsonlFormat,
 )
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import InfoKind, Message
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread

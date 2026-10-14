@@ -9,7 +9,7 @@ from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
 from test_private_human_ingress import _root
@@ -51,7 +51,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
         comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
     original = saved_catalog(tmp_path)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_initial_protocol()
     rows = [
         Message("other", target, str(i), InfoKind, timestamp=i, seq=i)
         for i, target in enumerate(("#engineering", "#api", "#ui", "#engineering"), 1)
