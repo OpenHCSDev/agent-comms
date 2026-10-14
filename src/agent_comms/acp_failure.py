@@ -26,18 +26,32 @@ from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
 class FailureSource(DeclaredFamily, affix="FailureSource"):
     """Native message provenance, distinct from failures without a history source."""
 
+    @property
+    @abstractmethod
+    def retained_in_history(self) -> bool:
+        """Whether feedback belongs to native history, not a local failure notice.
+
+        This declares ownership; it does not claim the journal append has finished.
+        """
+
     def for_publication(self, text: str, sensitive: bool) -> FailureSource:
         return self
 
 
 @dataclass(frozen=True)
 class UnrecordedFailureSource(FailureSource):
-    pass
+    @property
+    def retained_in_history(self) -> bool:
+        return False
 
 
 @dataclass(frozen=True)
 class NativeMessageFailureSource(FailureSource):
     message: AssistantMessage
+
+    @property
+    def retained_in_history(self) -> bool:
+        return True
 
     def for_publication(self, text: str, sensitive: bool) -> FailureSource:
         if not sensitive:
