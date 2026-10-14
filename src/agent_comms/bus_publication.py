@@ -235,7 +235,7 @@ class CommittedDelivery(MessageWireRecord):
         """Factory already bound root/audience; deliveries need no retained-public exception."""
 
     def checkpoint_rows(self, offset: int, length: int):
-        from .private_bus_checkpoint import Addressed, DeliverySources, ResponseKeys
+        from .private_bus_checkpoint import Addressed, DeliverySources, Replies, ResponseKeys
 
         if self.receipt is not None:
             yield ResponseKeys(self.receipt.publication_key)
@@ -243,6 +243,8 @@ class CommittedDelivery(MessageWireRecord):
                               self.audience.sender_lookup, offset=offset, length=length)
         for recipient in self.audience.recipients:
             yield Addressed(recipient.recipient_lookup, self.message.seq)
+        for answered in self.message.answered_references:
+            yield Replies(answered.seq, self.message.seq)
 
     def delivery_messages(self):
         from .routing import DeliveryMessage

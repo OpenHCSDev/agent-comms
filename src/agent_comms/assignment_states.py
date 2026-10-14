@@ -80,7 +80,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     notification_changed: ClassVar[bool] = False
     records_conversation_response: ClassVar[bool] = False
 
-    def recorded_response(self, original, candidates, recipient_lookup):
+    def recorded_response(self, original, replies, recipient_lookup):
         return None
 
     def notification(
@@ -525,14 +525,13 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
     notification_changed = True
     records_conversation_response = True
 
-    def recorded_response(self, original, candidates, recipient_lookup):
+    def recorded_response(self, original, replies, recipient_lookup):
         return next(
             (
-                candidate.message
-                for candidate in candidates
-                if candidate.audience.sender_lookup == recipient_lookup
-                and candidate.message.target == original.message.exact_reply_target
-                and candidate.message.reply_reference == original.message.reference
+                reply.message
+                for reply in replies
+                if reply.audience.sender_lookup == recipient_lookup
+                and reply.message.target == original.message.exact_reply_target
             ),
             None,
         )
