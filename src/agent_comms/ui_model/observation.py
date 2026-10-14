@@ -35,7 +35,7 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     StaleRevision,
 )
-from agent_comms.errors import StoredHistoryUnreadable
+from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 
 if TYPE_CHECKING:
     from multiprocessing.connection import Connection
@@ -157,7 +157,7 @@ class ReadRequest(AwaitedRead):
             return ReadAnswered(self.request_id, self.read(comms))
         except CoordinationReadUnavailable:
             return ReadBusy(self.request_id)
-        except (UnreadableHistory, StaleRevision) as error:
+        except (RelationViolationError, UnreadableHistory, StaleRevision) as error:
             return self.refused(error)
 
 
