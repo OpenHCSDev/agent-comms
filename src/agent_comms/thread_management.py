@@ -35,9 +35,6 @@ from .native_session_files import NativeSessionFiles
 from .owner_lifecycle import OwnerLifecycle
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
-from .acp_extension import ContextUsage, CoordinationChangedUpdate
-from .pi_vocabulary import ThinkingLevel
-from .thread_identity import ThreadIncarnation
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
@@ -493,26 +490,6 @@ class ThreadManagement:
             return "/".join(model)
         info = self.agents.agent_info_of(thread.name)
         return (info.model if info else None) or default
-
-    def configuration(self, name: str) -> CoordinationChangedUpdate:
-        """One thread's answer: resolved model, thinking, title and observed context usage."""
-        thread = self.registry.require(name)
-        info = self.agents.agent_info_of(thread.name)
-        usage = (
-            ContextUsage(info.context_used, info.context_size)
-            if info is not None and info.context_used is not None and info.context_size
-            else None
-        )
-        return CoordinationChangedUpdate(
-            ThreadIncarnation(thread.name, thread.created_at),
-            str(self.root.resolve()),
-            os.getpid(),
-            thread.worktree,
-            self.resolve_thread_model(thread.name),
-            ThinkingLevel.optional_name(thread.thinking_level),
-            thread.title or thread.name,
-            usage,
-        )
 
     def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
         """Attach authoritative Pi runtime state to an existing thread."""

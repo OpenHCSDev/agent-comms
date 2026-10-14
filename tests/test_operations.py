@@ -194,16 +194,16 @@ class TestThreadOps:
 
     def test_configuration_names_the_resolved_model(self, wired):
         wired.agents.set_agent_info("fixer", model="observed/model", context_used=25, context_size=100)
-        answer = wired.threads.configuration("fixer")
+        answer = wired.configuration.answer("fixer")
         assert answer.model == "observed/model"
         assert answer.context_usage.label == "25/100 tokens (25.0%)"
         wired.threads.set_thread_configuration(
             wired.registry.require("fixer"), model="configured/model"
         )
-        answer = wired.threads.configuration("fixer")
+        answer = wired.configuration.answer("fixer")
         assert answer.model == "configured/model"
         assert answer.context_usage.used == 25
-        assert wired.threads.configuration("PR111").context_usage is None
+        assert wired.configuration.answer("PR111").context_usage is None
 
     def test_presence_omits_expensive_viewer_pending_counts(self, wired):
         rows = {row["name"]: row for row in wired.views.presence()}

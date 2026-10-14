@@ -321,7 +321,7 @@ class SessionLifecycle:
     ) -> tuple[CoordinationChangedUpdate, GoalChangedUpdate]:
         """Capture original store projections before loop/client effects consume them."""
         goal, execution = self.comms.goals.goal_snapshot(thread_name)
-        return self.comms.threads.configuration(thread_name), GoalChangedUpdate(goal, execution)
+        return self.comms.configuration.answer(thread_name), GoalChangedUpdate(goal, execution)
 
     async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
         configuration = await Coordination.run_worker(partial(
