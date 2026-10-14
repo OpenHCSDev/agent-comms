@@ -59,8 +59,11 @@ class BusInput(MessageInput):
         return client_id is not None and client_id.startswith(cls.client_prefix)
 
 
+SEND_TOOL = 'comms_send'
+
+
 class ToolOutput(WireModel):
-    name: Literal['comms_send'] = 'comms_send'
+    name: Literal[SEND_TOOL] = SEND_TOOL
     output: str
 
 
@@ -306,6 +309,10 @@ class McpResult(WireModel):
     structuredContent: JsonValue = None
     isError: bool = False
 
+    @property
+    def succeeded(self) -> bool:
+        return not self.isError
+
 
 class McpError(WireModel):
     message: str
@@ -341,7 +348,7 @@ class McpToolItem(ToolItem):
         if self.status == 'inProgress':
             raise ValueError('MCP tool completed notification still says inProgress')
         return self.status == 'completed' and self.error is None and (
-            self.result is None or not self.result.isError)
+            self.result is None or self.result.succeeded)
 
 
 class SendOutputItem(Item):
@@ -351,7 +358,7 @@ class SendOutputItem(Item):
 
     def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
         # The bridge's send result is already rendered from the bus in Toad.
-        if self.name == ToolOutput.model_fields['name'].default:
+        if self.name == SEND_TOOL:
             return ()
         return (ToolEndTranscript(tool_call_id=self.id, tool_name=self.name, text=self.output),)
 
@@ -501,11 +508,15 @@ class ItemEntry(WireModel):
     startedAtMs: int | None = None
     completedAtMs: int | None = None
 
+    @property
+    def completed(self) -> bool:
+        return self.completedAtMs is not None
+
     def publication(self) -> TranscriptUpdate:
         timestamp = self.startedAtMs or self.completedAtMs
         return TranscriptUpdate(self.turnId, self.item.id, tuple(
             replace(event, timestamp=timestamp / 1000 if timestamp is not None else None)
-            for event in self.item.events(completed=self.completedAtMs is not None)))
+            for event in self.item.events(completed=self.completed)))
 
 
 class ItemsPage(WireModel):

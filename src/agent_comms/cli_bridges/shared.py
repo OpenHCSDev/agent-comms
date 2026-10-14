@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import argparse
+from contextlib import suppress
 import asyncio
 from dataclasses import dataclass
 from enum import Enum
@@ -146,7 +147,6 @@ class CoreConnection:
             child = await asyncio.create_subprocess_exec(
                 self.executable, '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
                 stdout=asyncio.subprocess.PIPE, stderr=errors)
-            assert child.stdout is not None
             try:
                 while line := await child.stdout.readline():
                     try:
@@ -170,14 +170,15 @@ class CoreConnection:
 
     @staticmethod
     async def join(child: asyncio.subprocess.Process) -> None:
-        if child.returncode is None:
+        # An exited child no longer accepts the signal.
+        with suppress(ProcessLookupError):
             child.terminate()
-            try:
-                async with asyncio.timeout(5):
-                    await child.wait()
-            except TimeoutError:
-                child.kill()
+        try:
+            async with asyncio.timeout(5):
                 await child.wait()
+        except TimeoutError:
+            child.kill()
+            await child.wait()
 
 SEND_RESULT = TypeAdapter(SendResult | CoreError)
 
@@ -189,26 +190,34 @@ class Operation(ABC, Generic[OperationBridge]):
     """A decoded CLI command owns its execution."""
 
     @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        """Declare the options only this command takes."""
+
+    @classmethod
     @abstractmethod
-    def from_arguments(cls, parser: argparse.ArgumentParser,
-                       arguments: argparse.Namespace) -> Operation: ...
+    def from_arguments(cls, arguments: argparse.Namespace) -> Operation: ...
 
     @abstractmethod
     async def run(self, bridge: OperationBridge) -> None: ...
 
 
 @dataclass(frozen=True)
-class Send(Operation['CliBridge']):
+class Send(Operation):
     target: str
     body: str
     kind: str
 
     @classmethod
-    def from_arguments(cls, parser: argparse.ArgumentParser,
-                       arguments: argparse.Namespace) -> Send:
-        if arguments.to is None or arguments.body is None:
-            parser.error('send requires --to and --body')
-        return cls(arguments.to, arguments.body, arguments.type)
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--to', required=True)
+        parser.add_argument('--body', required=True)
+        parser.add_argument('--type', default='info', choices=MessageKind.sendable_names())
+
+    @classmethod
+    def from_arguments(cls, arguments: argparse.Namespace) -> Send:
+        send = cls(arguments.to, arguments.body, arguments.type)
+        del arguments.to, arguments.body, arguments.type
+        return send
 
     async def run(self, bridge: CliBridge) -> None:
         result = await bridge.core.send(self.target, self.body, self.kind)
@@ -217,10 +226,7 @@ class Send(Operation['CliBridge']):
 
 class Inbox(Operation[OperationBridge]):
     @classmethod
-    def from_arguments(cls, parser: argparse.ArgumentParser,
-                       arguments: argparse.Namespace) -> Inbox:
-        if arguments.to is not None or arguments.body is not None:
-            parser.error('--to and --body belong to send')
+    def from_arguments(cls, arguments: argparse.Namespace) -> Inbox:
         return cls()
 
     def start(self, bridge: OperationBridge, tasks: asyncio.TaskGroup) -> None:
@@ -239,7 +245,7 @@ class Inbox(Operation[OperationBridge]):
                 raise
 
 
-class Watch(Inbox['TranscriptBridge']):
+class Watch(Inbox):
     def start(self, bridge: TranscriptBridge, tasks: asyncio.TaskGroup) -> None:
         super().start(bridge, tasks)
         tasks.create_task(bridge.publish_transcript())
@@ -249,6 +255,10 @@ class CliBridge(ABC, Generic[BridgeOptions]):
     """Core delivery and lifetime shared by CLI-specific transports."""
 
     operations: ClassVar[tuple[type[Operation], ...]] = (Inbox, Send)
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        """Declare the options this harness's transport needs."""
 
     def __init__(self, options: BridgeOptions, binding: Binding, journal: DeliveryJournal) -> None:
         self.options = options
@@ -283,9 +293,9 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         self.journal.report_unconfirmed()
         print(f'Watching {self.binding.bus} → {self.binding.thread}', file=sys.stderr, flush=True)
         async for message, payload in self.core.watch(self.options.state):
-            filtered = not message.type.conversation_message
-            outcome = Outcome.FILTERED if filtered else Outcome.UNCONFIRMED
-            if not self.journal.begin(message, payload, outcome) or filtered:
+            conversation = message.type.conversation_message
+            outcome = Outcome.UNCONFIRMED if conversation else Outcome.FILTERED
+            if not self.journal.begin(message, payload, outcome) or not conversation:
                 continue
             result = await self.deliver(message)
             self.journal.finish(message, result)
@@ -354,33 +364,26 @@ class LineMonitorBridge(CliBridge[Options]):
 
 def shared_parser(description: str | None, state: Path,
                   bridge_type: type[CliBridge]) -> argparse.ArgumentParser:
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument('--root')
+    common.add_argument('--bus-thread')
+    common.add_argument('--session')
+    common.add_argument('--state', type=Path, default=state)
+    bridge_type.add_arguments(common)
     parser = argparse.ArgumentParser(description=description)
-    operations = {operation.__name__.lower(): operation for operation in bridge_type.operations}
-
-    def decode_operation(value: str) -> type[Operation]:
-        try:
-            return operations[value]
-        except KeyError:
-            raise argparse.ArgumentTypeError(f'Choose one of: {", ".join(operations)}') from None
-
-    parser.add_argument('operation', nargs='?', type=decode_operation,
-                        metavar='{' + ','.join(operations) + '}',
-                        default=bridge_type.operations[0])
-    parser.add_argument('--root')
-    parser.add_argument('--bus-thread')
-    parser.add_argument('--session')
-    parser.add_argument('--state', type=Path, default=state)
-    parser.add_argument('--to')
-    parser.add_argument('--body')
-    parser.add_argument('--type', default='info', choices=MessageKind.sendable_names())
+    commands = parser.add_subparsers(dest='command', required=True)
+    for operation in bridge_type.operations:
+        command = commands.add_parser(operation.__name__.lower(), parents=[common])
+        operation.add_arguments(command)
+        command.set_defaults(operation=operation)
     return parser
 
 
 def parse_options(parser: argparse.ArgumentParser,
                   options_type: type[BridgeOptions]) -> BridgeOptions:
     arguments = parser.parse_args()
-    arguments.operation = arguments.operation.from_arguments(parser, arguments)
-    del arguments.to, arguments.body, arguments.type
+    del arguments.command
+    arguments.operation = arguments.operation.from_arguments(arguments)
     return options_type(**vars(arguments))
 
 

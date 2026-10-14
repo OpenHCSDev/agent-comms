@@ -1,6 +1,7 @@
 """Connect a running OpenCode HTTP session to the shared Core CLI bridge."""
 from __future__ import annotations
 
+import argparse
 import asyncio
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -106,6 +107,11 @@ class OpenCodeConnection:
 
 
 class OpenCodeBridge(CliBridge[OpenCodeOptions]):
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--server', required=True, help='HTTP address of the running OpenCode TUI/server')
+        parser.add_argument('--directory', type=Path, default=Path.cwd(), help='OpenCode session working directory')
+
     async def deliver(self, message: Message) -> Outcome:
         async with OpenCodeConnection.open(self.options, self.binding.thread) as connection:
             await connection.deliver(self.incoming_text(message))
@@ -122,7 +128,5 @@ class OpenCodeBridge(CliBridge[OpenCodeOptions]):
 
 def main() -> None:
     parser = shared_parser(__doc__, Path.home() / '.local/state/opencode-comms-inbox', OpenCodeBridge)
-    parser.add_argument('--server', required=True, help='HTTP address of the running OpenCode TUI/server')
-    parser.add_argument('--directory', type=Path, default=Path.cwd(), help='OpenCode session working directory')
     run_bridge(OpenCodeBridge, parse_options(parser, OpenCodeOptions))
 

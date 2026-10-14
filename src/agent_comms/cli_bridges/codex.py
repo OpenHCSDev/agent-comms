@@ -1,6 +1,7 @@
 """Codex transport for the shared Core CLI bridge."""
 from __future__ import annotations
 
+import argparse
 import asyncio
 from collections import deque
 from contextlib import asynccontextmanager
@@ -86,6 +87,10 @@ class CodexOptions(Options):
 
 
 class CodexBridge(TranscriptBridge[CodexOptions]):
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--socket', default=str(Path.home() / '.codex/app-server-control/app-server-control.sock'))
+
     async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
         async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
             await codex.call(ResumeThread(threadId=self.binding.thread))
@@ -94,7 +99,7 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
             # assembled from its actual start, not appended to an overlapping
             # snapshot fetched concurrently with those deltas.
             completed = {(entry.turnId, entry.item.id) for entry in page.data
-                         if entry.completedAtMs is not None}
+                         if entry.completed}
             for entry in reversed(page.data):
                 if (entry.turnId, entry.item.id) in completed:
                     yield entry.publication()
@@ -128,6 +133,5 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
 
 def main() -> None:
     parser = shared_parser(__doc__, Path.home() / '.local/state/codex-comms-inbox', CodexBridge)
-    parser.add_argument('--socket', default=str(Path.home() / '.codex/app-server-control/app-server-control.sock'))
     run_bridge(CodexBridge, parse_options(parser, CodexOptions))
 
