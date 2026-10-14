@@ -26,7 +26,8 @@ from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
-from .store_files import StoreRevision, _store_lock
+from .private_path import FileRevision
+from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import (
     ThreadOwnerBinding,
@@ -809,16 +810,16 @@ class CoordinationSnapshot:
 class WireRevision:
     """One observation of every Comms store a view derives from, by name."""
 
-    registry: StoreRevision
-    catalog: StoreRevision
-    bus_log: StoreRevision
-    history: StoreRevision
-    activity: StoreRevision
-    runtime_info: StoreRevision
-    reads: StoreRevision
-    goal_waits: StoreRevision
-    relationships: StoreRevision
-    notifications: tuple[StoreRevision, ...]
+    registry: FileRevision | None
+    catalog: FileRevision | None
+    bus_log: FileRevision | None
+    history: FileRevision | None
+    activity: FileRevision | None
+    runtime_info: FileRevision | None
+    reads: FileRevision | None
+    goal_waits: FileRevision | None
+    relationships: FileRevision | None
+    notifications: tuple[FileRevision | None, ...]
     expiry_tick: int
 
     def registrations_changed_since(self, earlier: WireRevision) -> bool:

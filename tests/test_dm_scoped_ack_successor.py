@@ -158,7 +158,7 @@ def test_marker_changed_during_page_fails_before_basis_issued(tmp_path: Path, mo
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted")
-    original = comms.bus.display_page
+    original = comms.bus.conversation_page
 
     def interpose(*args, **kwargs):
         page = original(*args, **kwargs)
@@ -168,7 +168,7 @@ def test_marker_changed_during_page_fails_before_basis_issued(tmp_path: Path, mo
         )
         return page
 
-    monkeypatch.setattr(comms.bus, "display_page", interpose)
+    monkeypatch.setattr(comms.bus, "conversation_page", interpose)
     with pytest.raises(ValueError, match="changed while paging"):
         comms.views.dm_display_page("peer", worktree=str(tmp_path))
 

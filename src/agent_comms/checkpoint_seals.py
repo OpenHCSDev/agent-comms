@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .private_path import FileRevision
 
 if TYPE_CHECKING:
     import os
@@ -17,13 +18,6 @@ if TYPE_CHECKING:
     from .private_bus_checkpoint import PrefixWitness
     from .wire_log import WireLog
     from .wire_metadata import WireMetadata
-
-Revision = tuple[int, int, int, int, int]
-
-
-def file_revision(info: os.stat_result) -> Revision:
-    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
-
 
 @dataclass(frozen=True)
 class PrefixSource:
@@ -37,19 +31,21 @@ class PrefixSource:
 @dataclass(frozen=True)
 class PrefixSeal:
     root_id: str
-    revision: Revision
+    revision: FileRevision
     through_seq: int
     digest: str
     tail: str
 
     @property
     def source_identity(self) -> PrefixSource:
-        return PrefixSource(self.root_id, self.revision[0], self.revision[1])
+        return PrefixSource(
+            self.root_id, self.revision.identity.device, self.revision.identity.inode
+        )
 
     def __post_init__(self) -> None:
         if len(self.root_id) != 32 or any(c not in "0123456789abcdef" for c in self.root_id):
             raise ValueError("Invalid prefix root identity")
-        if any(item < 0 for item in self.revision) or self.through_seq < 0:
+        if self.through_seq < 0:
             raise ValueError("Invalid prefix revision/sequence")
         if any(
             len(value) != 64 or any(c not in "0123456789abcdef" for c in value)
@@ -62,11 +58,7 @@ class PrefixSeal:
 class CheckpointSeal(DeclaredFamily, affix="Seal"):
     family_discriminator = "state"
     version: Literal[1]
-    db_revision: Revision
-
-    def __post_init__(self) -> None:
-        if any(item < 0 for item in self.db_revision):
-            raise ValueError("Invalid checkpoint index revision")
+    db_revision: FileRevision
 
     @abstractmethod
     def recover(
@@ -93,10 +85,10 @@ class FinalSeal(CheckpointSeal):
 
     @classmethod
     def capture(cls, witness: PrefixWitness, db_path: Path) -> FinalSeal:
-        return cls(1, file_revision(db_path.stat()), witness.seal())
+        return cls(1, FileRevision.from_stat(db_path.stat()), witness.seal())
 
     def check_final(self, saved: PrefixWitness, db_path: Path) -> None:
-        if self.witness != saved.seal() or self.db_revision != file_revision(db_path.stat()):
+        if self.witness != saved.seal() or self.db_revision != FileRevision.from_stat(db_path.stat()):
             raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
 
     def recover(
@@ -121,7 +113,7 @@ class PendingSeal(CheckpointSeal):
 
     @classmethod
     def capture(cls, prior: PrefixWitness, expected: PrefixWitness, db_path: Path) -> PendingSeal:
-        return cls(1, file_revision(db_path.stat()), prior.seal(), expected.seal())
+        return cls(1, FileRevision.from_stat(db_path.stat()), prior.seal(), expected.seal())
 
     def recover(
         self,
@@ -136,7 +128,7 @@ class PendingSeal(CheckpointSeal):
 
         if (
             saved.seal() not in (self.prior, self.expected)
-            or self.expected.revision != file_revision(info)
+            or self.expected.revision != FileRevision.from_stat(info)
             or self.prior.root_id != marker.root_id
         ):
             raise RelationViolationError("Private bus checkpoint pending intent is inconsistent.")

@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
-from .bus_projection import AppendCheckpoint, BusAppendIndex, BusFileRevision
+from .bus_projection import AppendCheckpoint, BusAppendIndex
+from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope
 from .read_ledger import ReadLedger
 from .messages import Message
@@ -65,7 +66,7 @@ class DisplayCheckpoint(AppendCheckpoint):
     def metrics(self) -> DisplayMetrics:
         return self.activity, self.counts
 
-    def current_for(self, revision: BusFileRevision, semantics: DisplayMetricScope) -> bool:
+    def current_for(self, revision: FileRevision, semantics: DisplayMetricScope) -> bool:
         return (self.source, self.semantics) == (revision, semantics)
 
     def rebase(self, opened: OpenedWireSnapshot,
