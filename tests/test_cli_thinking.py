@@ -75,9 +75,14 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
 
     monkeypatch.setattr(GetAvailableModels, "discover", discover_models)
     monkeypatch.setattr(GetAvailableThinkingLevels, "discover", discover_levels)
-    result = ConfigureCliCommand(name="worker", thinking="high").apply(comms)
+    result = ConfigureCliCommand(
+        name="worker", thinking="high", service_tier="standard"
+    ).apply(comms)
     assert result["thinking_level"] == "high"
-    assert comms.registry.require("worker").thinking_level is HighThinkingLevel
+    assert result["service_tier"] == "standard"
+    configured = comms.registry.require("worker")
+    assert configured.thinking_level is HighThinkingLevel
+    assert configured.service_tier.value == "standard"
 
 
 def test_native_arguments_configured_has_one_default(monkeypatch):
