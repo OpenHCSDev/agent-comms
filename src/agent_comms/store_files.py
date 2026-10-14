@@ -72,9 +72,12 @@ class StoreLockRelease:
     actions: ExitStack = field(default_factory=ExitStack)
     active: bool = True
 
-    def callback(self, operation, /, *args, **kwargs) -> None:
+    def require_active(self) -> None:
         if not self.active:
             raise RelationViolationError("Store lock release scope has ended.")
+
+    def callback(self, operation, /, *args, **kwargs) -> None:
+        self.require_active()
         self.actions.callback(operation, *args, **kwargs)
 
     def close(self) -> None:
@@ -98,8 +101,7 @@ class StoreLock:
     @classmethod
     def current_release(cls) -> StoreLockRelease:
         scope = cls._releases.get()
-        if not scope.active:
-            raise RelationViolationError("Store append requires an active lock release scope.")
+        scope.require_active()
         return scope
 
     @classmethod

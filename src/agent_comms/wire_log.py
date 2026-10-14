@@ -18,6 +18,7 @@ from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
 
+from .audience_manifest import MAX_WIRE_SEQ
 from .bus_publication import (
     CommittedDelivery,
     has_private_wire_fields,
@@ -456,8 +457,7 @@ class WireLog:
 
         A failed append or bus parent sync leaves the outcome UNKNOWN.
         """
-        # Borrow the canonical lock lifetime before any durable mutation.
-        release = StoreLock.current_release()
+        StoreLock.current_release().require_active()
         metadata.access.require_append()
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         if len(encoded) > 8 * 1024 * 1024:
@@ -480,7 +480,6 @@ class WireLog:
                 output.write(encoded)
                 output.flush()
                 os.fsync(output.fileno())
-                through_bytes = os.fstat(output.fileno()).st_size
         finally:
             os.close(descriptor)
         directory_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
@@ -502,12 +501,10 @@ class WireLog:
                 raise RelationViolationError(
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
-        release.callback(_notify_candidates, self, through_bytes)
+        StoreLock.current_release().callback(_notify_candidates, self, self.path.stat().st_size)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
         """Bus-owned attestation of a committed initial row; no live re-routing."""
-        from .audience_manifest import MAX_WIRE_SEQ
-
         if type(wire_seq) is not int or not 0 < wire_seq <= MAX_WIRE_SEQ:
             raise ValueError("wire_seq must be a positive SQLite-range integer.")
         with self.certified_read() as source:
