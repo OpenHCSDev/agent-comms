@@ -34,8 +34,9 @@ from .peer_relevance import (
 from .wire_record import WireRecord
 from .messages import Message
 from .presentation import ThreadView, WireRevision
+from .private_path import FileRevision
 from .registry_document import RegistrySnapshot
-from .store_files import _store_lock, file_revision
+from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
@@ -488,7 +489,7 @@ class ThreadRelationships:
         self._wire_lock_path = root / "wire"
         self.store = RelationshipStore(root / RelationshipStore.filename)
         self._lock = RLock()
-        self._recent_revision: tuple[int, int, int, int] | None = None
+        self._recent_revision: FileRevision | None = None
         self._recent: tuple[Message, ...] = ()
         self._limited = False
 
@@ -659,7 +660,7 @@ class ThreadRelationships:
     def _recent_messages(self) -> tuple[tuple[Message, ...], bool]:
         """Read bounded tail bytes once per bus revision, using core envelopes."""
         path = self.root / "bus.jsonl"
-        revision = file_revision(path)
+        revision = FileRevision.capture(path)
         with self._lock:
             if revision == self._recent_revision:
                 return self._recent, self._limited

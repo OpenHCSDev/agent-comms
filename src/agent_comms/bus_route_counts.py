@@ -16,7 +16,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
-from .bus_projection import BusFileRevision
+from .private_path import FileRevision
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .store_files import _store_lock
@@ -31,8 +31,7 @@ class RouteTable:
 @dataclass(frozen=True)
 class RouteSourceRow(RouteTable, TypedTable):
     id: int = field(metadata={"sql": Column(primary_key=True)})
-    identity: tuple[int, int, int, int] | None
-    offset: int
+    revision: FileRevision | None
     tail_digest: str | None
 
 
@@ -117,7 +116,7 @@ class BusRouteCounts:
             self._resources.close()
 
     def sync(
-        self, source: BinaryIO | None, revision: BusFileRevision | None,
+        self, source: BinaryIO | None, revision: FileRevision | None,
         decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
     ) -> bool:
         """Decode only appended rows; a replaced source rebuilds the projection.
@@ -127,12 +126,11 @@ class BusRouteCounts:
         this cut once its digest verifies against the file's bytes; a rewritten
         or truncated source fails that digest and rebuilds.
         """
-        identity, size, tail_digest = None, 0, None
+        size, tail_digest = 0, None
         if source is not None:
-            if not revision.opened_by(source):
+            opened = FileRevision.from_stat(os.fstat(source.fileno()))
+            if not revision.holds_cut(opened, revision.size):
                 raise RelationViolationError("Route projection source changed before its captured read")
-            st = os.fstat(source.fileno())
-            identity = (st.st_dev, revision.inode, revision.modified, revision.changed)
             size = revision.size
             if size:
                 source.seek(size - 1)
@@ -145,13 +143,13 @@ class BusRouteCounts:
         rebuild = recorded is None
         if recorded is not None:
             rebuild = (
-                (recorded.identity[:2] if recorded.identity else None)
-                != (identity[:2] if identity else None)
+                (recorded.revision.identity if recorded.revision else None)
+                != (revision.identity if revision else None)
                 or source is None
-                or size == recorded.offset
-                and recorded.identity != identity
+                or size == recorded.revision.size
+                and recorded.revision != revision
             )
-        offset = 0 if rebuild else recorded.offset
+        offset = 0 if rebuild else recorded.revision.size
         if not rebuild and offset:
             source.seek(max(0, offset - 4096))
             previous_tail = source.read(offset - max(0, offset - 4096))
@@ -214,7 +212,7 @@ class BusRouteCounts:
             )
             total.insert(self.connection)
         self.connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
-        RouteSourceRow(1, identity, size, tail_digest).insert(self.connection)
+        RouteSourceRow(1, revision, tail_digest).insert(self.connection)
         return True
 
     _requests = """requests AS (

@@ -8,7 +8,8 @@ import sqlite3
 import sys
 
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
-from agent_comms.store_files import _atomic_write_text, file_revision
+from agent_comms.private_path import FileRevision
+from agent_comms.store_files import _atomic_write_text
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_store import RegistryStore
 from agent_comms.transcript_routes import _assert_schema
@@ -81,7 +82,9 @@ def main():
         raise ValueError('Carry changed annotation storage mode.')
     # Only declared routing changed. The original typed namespace is bound to
     # that verified post-image; the old codec never parses target routing cells.
-    carried_source = replace(source, snapshot_registry_revision=file_revision(root / 'registry.json'))
+    carried_source = replace(
+        source, snapshot_registry_revision=FileRevision.capture(root / "registry.json")
+    )
     carried_source.require_original(root)
     result = {'root_id': root_id, 'through_seq': witness.through_seq,
               'original_writer_descriptor_verified': True,

@@ -9,7 +9,8 @@ import threading
 import pytest
 
 from agent_comms.bus_activity_index import ActivityCheckpoint, BusActivityIndex
-from agent_comms.bus_projection import AppendCheckpoint, BusFileRevision
+from agent_comms.bus_projection import AppendCheckpoint
+from agent_comms.private_path import FileRevision
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -248,7 +249,7 @@ def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix
     bus = wired.bus.log.path
     index = BusActivityIndex(bus)
     with bus.open("rb") as stream:
-        first_source = BusFileRevision.capture(stream)
+        first_source = FileRevision.from_stat(os.fstat(stream.fileno()))
         first = ActivityCheckpoint(
             first_source, first_source.size,
             AppendCheckpoint.fingerprint(stream, first_source.size), {}, {},
@@ -258,7 +259,7 @@ def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix
     saved = FieldCodec.decode(ActivityCheckpoint, json.loads(index.path.read_text()))
     assert saved.offset == first.offset
     with bus.open("rb") as stream:
-        latest_source = BusFileRevision.capture(stream)
+        latest_source = FileRevision.from_stat(os.fstat(stream.fileno()))
         latest = ActivityCheckpoint(
             latest_source, latest_source.size,
             AppendCheckpoint.fingerprint(stream, latest_source.size), {}, {},

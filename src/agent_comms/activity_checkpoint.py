@@ -9,11 +9,12 @@ from typing import ClassVar, Literal
 
 from .activity import Activity
 from .locked_store import LockedStore
+from .private_path import FileRevision
 
 
 @dataclass(frozen=True, slots=True)
 class ActivityCheckpoint:
-    source: tuple[int, int, int, int]
+    source: FileRevision
     offset: int
     tail: str
     latest: dict[str, Activity]
@@ -32,20 +33,17 @@ class ActivityCheckpoint:
             stream.seek(start)
             return hashlib.sha256(stream.read(offset - start)).hexdigest()
 
-    def matches(self, log: Path, revision: tuple[int, int, int, int]) -> bool:
-        if (
-            self.source[0] != revision[0]
-            or self.offset > revision[1]
-            or (self.source[1] == revision[1] and self.source[2:] != revision[2:])
-        ):
-            return False
-        return self.tail == self.tail_digest(log, self.offset)
+    def matches(self, log: Path, revision: FileRevision) -> bool:
+        return (
+            self.source.holds_cut(revision, self.offset)
+            and self.tail == self.tail_digest(log, self.offset)
+        )
 
     @classmethod
     def capture(
         cls,
         log: Path,
-        revision: tuple[int, int, int, int],
+        revision: FileRevision,
         latest: dict[str, Activity],
         offset: int,
     ) -> ActivityCheckpoint:
