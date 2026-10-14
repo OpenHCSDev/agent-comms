@@ -56,6 +56,9 @@ def _replay_stub(tmp_path: Path, lines: str) -> str:
 import json, sys
 for line in {lines.splitlines()!r}:
     record = json.loads(line)
+    message = record.get("message", {{}})
+    if message.get("role") == "assistant":
+        message.setdefault("content", [])
     if record.get("type") == "response" and record.get("id") == "agent-comms-prompt":
         for request in sys.stdin:
             request = json.loads(request)
@@ -68,6 +71,12 @@ for line in {lines.splitlines()!r}:
 
 
 _NATIVE_PROMPT_START = f"""\
+_raw_emit = emit
+def emit(value):
+    message = value.get("message", {{}})
+    if message.get("role") == "assistant":
+        message.setdefault("content", [])
+    _raw_emit(value)
 state = json.loads(sys.stdin.readline())
 emit({{"id": state["id"], "type": "response", "command": "get_state", "success": True,
       "data": {{"nativeInputProofCapability": {json.dumps(CAPABILITY)}}}}})
@@ -163,6 +172,19 @@ class TestRpcParsing:
     async def test_rpc_settled_exit_zero_requires_final_assistant_stop(
         self, tmp_path, assistant_stops, successful
     ):
+        assistant_records = []
+        for index, stop in enumerate(assistant_stops):
+            assistant_records.extend((
+                {"type": "message_start", "message": {"role": "assistant", "content": []}},
+                {"type": "message_end", "message": {
+                    "role": "assistant", "content": [], "stopReason": stop,
+                }},
+            ))
+            if stop == "error" and index + 1 < len(assistant_stops):
+                assistant_records.extend((
+                    {"type": "auto_retry_start", "attempt": 1, "maxAttempts": 2},
+                    {"type": "auto_retry_end", "success": True, "attempt": 1},
+                ))
         events = await _rpc_events(
             tmp_path,
             [
@@ -172,10 +194,7 @@ class TestRpcParsing:
                     "id": "agent-comms-prompt",
                     "success": True,
                 },
-                *(
-                    {"type": "message_end", "message": {"role": "assistant", "stopReason": stop}}
-                    for stop in assistant_stops
-                ),
+                *assistant_records,
                 {"type": "agent_settled"},
                 {
                     "type": "response",
@@ -329,7 +348,9 @@ for line in sys.stdin:
         emit({"type": "message_update", "assistantMessageEvent": {
             "type": "text_delta", "delta": "completed reply"}})
         # Pi includes the turn's messages in one large agent_end record.
-        emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}})
+        emit({"type": "message_end", "message": {
+            "role": "assistant", "content": [], "stopReason": "stop",
+        }})
         emit({"type": "agent_end", "messages": [{"role": "assistant", "content": "x" * 1048576}]})
         emit({"type": "agent_settled"})
     elif command == "get_session_stats":
@@ -537,7 +558,7 @@ for line in sys.stdin:
             "'success':True,'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only'}})\n"
             "prompt=json.loads(sys.stdin.readline())\n"
             "emit({'type':'response','command':'prompt','id':prompt['id'],'success':True})\n"
-            "emit({'type':'message_start','message':{'role':'assistant'}})\n"
+            "emit({'type':'message_start','message':{'role':'assistant','content':[]}})\n"
             "emit({'type':'message_update','assistantMessageEvent':"
             "{'type':'text_delta','delta':'foreign earlier turn'}})\n"
             "emit({'type':'message_end','message':{'role':'assistant',"
@@ -1083,8 +1104,8 @@ emit({"type": "response", "command": "get_state", "success": True, "data": initi
 assert json.loads(sys.stdin.readline())["type"] == "prompt"
 emit({"type": "message_update", "assistantMessageEvent":
       {"type": "text_delta", "delta": "A-before"}})
-emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop",
-      "usage": {"totalTokens": 250}}})
+emit({"type": "message_end", "message": {"role": "assistant", "content": [],
+      "stopReason": "stop", "usage": {"totalTokens": 250}}})
 assert json.loads(sys.stdin.readline())["message"] == "[peer] pending"
 evidence = __EVIDENCE__
 if evidence in {"get_state", "get_session_stats"}:
@@ -1104,8 +1125,8 @@ emit({"type": "tool_execution_start", "toolCallId": "B-secret", "toolName": "bas
 emit({"type": "tool_execution_update", "toolCallId": "B-secret", "partialResult": "B-secret"})
 emit({"type": "tool_execution_end", "toolCallId": "B-secret", "toolName": "bash",
       "result": {"content": [{"type": "text", "text": "B-secret"}]}})
-emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "error",
-      "errorMessage": "B-secret"}})
+emit({"type": "message_end", "message": {"role": "assistant", "content": [],
+      "stopReason": "error", "errorMessage": "B-secret"}})
 emit({"type": "auto_retry_start", "attempt": 2, "maxAttempts": 3})
 emit({"type": "agent_settled"})
 for line in sys.stdin:
@@ -2106,7 +2127,9 @@ if case in ("accepted_then_started", "accepted_then_duplicate", "trimmed_start")
     if case == "accepted_then_duplicate": send(event)
 send({{"type":"message_update", "assistantMessageEvent":
        {{"type":"text_delta", "delta":"original only"}}}})
-send({{"type":"message_end", "message":{{"role":"assistant", "stopReason":"stop"}}}})
+send({{"type":"message_end", "message":{{
+    "role":"assistant", "content":[], "stopReason":"stop",
+}}}})
 send({{"type":"agent_settled"}})
 sys.stdin.readline()  # postturn get_state
 sys.stdin.readline()  # get_session_stats
@@ -2146,7 +2169,9 @@ prompt = json.loads(sys.stdin.readline())
 send({"type":"response","command":"prompt","id":prompt["id"],"success":True})
 send({"type":"message_start","message":{"role":"user", "content":prompt["message"],
       "inputId":prompt["inputId"]}})
-send({"type":"message_end","message":{"role":"assistant", "stopReason":"stop"}})
+send({"type":"message_end","message":{
+    "role":"assistant", "content":[], "stopReason":"stop",
+}})
 send({"type":"agent_settled"})
 for line in sys.stdin:
     request = json.loads(line)
@@ -2402,7 +2427,7 @@ for line in sys.stdin:
                "content":command["message"],"inputId":command["inputId"]}}}})
         send({{"type":"message_update","assistantMessageEvent":{{
                "type":"text_delta","delta":"ok"}}}})
-        send({{"type":"message_end","message":{{"role":"assistant",
+        send({{"type":"message_end","message":{{"role":"assistant", "content":[],
                "stopReason":"stop"}}}})
         send({{"type":"agent_settled"}})
     elif kind == "get_session_stats":
@@ -2650,7 +2675,9 @@ if {case!r} in ("valid_steer", "wrong_steer_id"):
     send({{"type":"response","command":"prompt","id":steer["id"],"success":True}})
     steer_id = steer["inputId"] if {case!r} == "valid_steer" else "0" * 32
     send({{"type":"message_start","message":{{"role":"user","content":steer["message"],"inputId":steer_id}}}})
-send({{"type":"message_end","message":{{"role":"assistant","stopReason":"stop"}}}})
+send({{"type":"message_end","message":{{
+    "role":"assistant","content":[],"stopReason":"stop",
+}}}})
 send({{"type":"agent_settled"}})
 """,
         )
@@ -2689,7 +2716,9 @@ steer = json.loads(sys.stdin.readline())
 send({"type":"message_start","message":{"role":"user","content":steer["message"],
       "inputId":steer["inputId"]}})
 send({"type":"response","command":"prompt","id":steer["id"],"success":True})
-send({"type":"message_end","message":{"role":"assistant","stopReason":"stop"}})
+send({"type":"message_end","message":{
+    "role":"assistant","content":[],"stopReason":"stop",
+}})
 send({"type":"agent_settled"})
 for line in sys.stdin:
     if json.loads(line)["type"] == "get_session_stats":
@@ -2742,7 +2771,9 @@ for _ in range(200):
     if marker.exists(): break
     time.sleep(0.01)
 assert marker.exists()
-send({{"type":"message_end","message":{{"role":"assistant","stopReason":"stop"}}}})
+send({{"type":"message_end","message":{{
+    "role":"assistant","content":[],"stopReason":"stop",
+}}}})
 send({{"type":"agent_settled"}})
 for line in sys.stdin:
     if json.loads(line)["type"] == "get_session_stats":
@@ -3125,7 +3156,9 @@ else:
     send({{"type": "response", "command": "prompt", "id": steer["id"],
           "success": {steer_accepted}}})
     send({{"type": "message_start", "message": {{"role": "user", "content": steer["message"]}}}})
-send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop"}}}})
+send({{"type": "message_end", "message": {{
+    "role": "assistant", "content": [], "stopReason": "stop",
+}}}})
 send({{"type": "agent_settled"}})
 """,
         )
@@ -3161,7 +3194,9 @@ assert steer["message"] == f'[agent-comms input-id: {steer["id"]}]\\npeer'
 send({"type": "response", "command": "prompt", "id": steer["id"], "success": True})
 # Another independent user event has the *same* literal text as the queued steer.
 send({"type": "message_start", "message": {"role": "user", "content": "peer"}})
-send({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}})
+send({"type": "message_end", "message": {
+    "role": "assistant", "content": [], "stopReason": "stop",
+}})
 send({"type": "agent_settled"})
 """,
         )
