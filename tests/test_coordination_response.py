@@ -402,7 +402,7 @@ def test_fresh_selection_completes_saved_reply_before_admitting_new_assignment(
         fresh_assignment = accepted.value.assignments[0]
         install_native_runtime_schema(case.store)
 
-        _owner, participant, pending = SelectedParticipant.prepare(
+        _owner, participant, pending, _sent_outcomes = SelectedParticipant.prepare(
             case.comms, case.bus, case.store, case.root_id, "owner", case.origin_seq
         )
 

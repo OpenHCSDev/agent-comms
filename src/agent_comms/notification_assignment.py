@@ -2,25 +2,26 @@
 
 from __future__ import annotations
 
+import sqlite3
+from abc import abstractmethod
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
-from abc import abstractmethod
-from collections.abc import Iterable, Iterator
-from .declared_family import DeclaredFamily
 
-from .coordination_schema import COORDINATION_SCHEMA_VERSION
 from .audience_manifest import FrozenRecipient
+from .coordination_schema import COORDINATION_SCHEMA_VERSION
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.publications import PublicationReceipts
+from .declared_family import DeclaredFamily
 from .message_reference import MessageReference
 from .typed_table import SQLiteUserVersion, TypedRow
 
 if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
     from .bus_publication import CommittedDelivery
-    from .wake import WakeDecision, NoWakeDecision
     from .presentation import MessageNotification
+    from .wake import NoWakeDecision, WakeDecision
 
 
 class AssignmentProgress(DeclaredFamily, affix="Progress"):
@@ -263,6 +264,24 @@ class UnrecordedNotificationSource(NotificationSource):
 
 
 @dataclass(frozen=True)
+class NotificationAssignmentRead:
+    """Assignment rows captured from one caller-owned coordination snapshot."""
+
+    rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
+
+    def resolve(self) -> tuple[NotificationAssignment, ...]:
+        contexts = {
+            context for _, activity in self.rows
+            if (context := activity.context) is not None
+        }
+        recorded_progress = AssignmentContext.recorded_progress(contexts)
+        return tuple(
+            NotificationAssignment(assignment, activity.resolve(recorded_progress))
+            for assignment, activity in self.rows
+        )
+
+
+@dataclass(frozen=True)
 class NotificationAssignment(NotificationSource):
     assignment: WakeAssignment
     activity: AssignmentActivity
@@ -297,6 +316,73 @@ class NotificationAssignment(NotificationSource):
         return database, database.with_name(database.name + "-wal")
 
     @classmethod
+    def capture(
+        cls,
+        connection: sqlite3.Connection,
+        predicate: str,
+        parameters: tuple,
+        *,
+        limit: int = 0,
+        ascending: bool = False,
+    ) -> NotificationAssignmentRead:
+        """Capture detached assignment evidence from the caller's SQLite snapshot."""
+        from .coordination_tables.executions import CurrentExecutions
+        from .native_runtime_input import NativeRuntimeInput
+
+        if SQLiteUserVersion.read(connection.execute("PRAGMA user_version")) != [
+            SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
+        ]:
+            raise ValueError("Channel notification status has an unsupported schema")
+        columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
+        membership = NativeRuntimeInput.source_membership_sql()
+        context = (
+            f"SELECT n.{{column}} FROM {NativeRuntimeInput.declared_name} n "
+            f"JOIN ({membership}) member ON member.input_id=n.input_id "
+            "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
+            "ORDER BY CASE n.stage WHEN 'triage' THEN 0 ELSE 1 END,member.ordinal,n.input_id LIMIT 1"
+        )
+        rows = WakeAssignment.joined(
+            connection.execute(
+                f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
+                f"JOIN ({membership}) member ON member.input_id=n.input_id "
+                "WHERE member.assignment_id=w.assignment_id "
+                "AND n.stage='triage' AND n.session_entry_id IS NULL) "
+                "AS triage_inflight, pointer.execution_id AS current_execution_id, "
+                f"({context.format(column='session_file')}) AS context_session_file, "
+                f"({context.format(column='session_entry_id')}) AS context_session_entry_id, "
+                "p.seq AS response_seq, p.message_id AS response_message_id, "
+                "p.received_at_ms AS response_received_at_ms "
+                f"FROM {WakeAssignment.declared_name} w "
+                f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
+                "ON pointer.owner_lookup=w.recipient_lookup "
+                f"LEFT JOIN {PublicationReceipts.declared_name} p "
+                "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target "
+                f"WHERE {predicate} ORDER BY w.wire_seq {'ASC' if ascending else 'DESC'},w.recipient"
+                + (" LIMIT ?" if limit else ""),
+                (*parameters, limit) if limit else parameters,
+            ),
+            AssignmentActivityEvidence,
+        )
+        return NotificationAssignmentRead(tuple(rows))
+
+    @classmethod
+    def capture_window(
+        cls, connection: sqlite3.Connection, sources: Sequence[CommittedDelivery]
+    ) -> NotificationAssignmentRead:
+        from .presentation import MessageNotification
+
+        if len(sources) > MessageNotification.window_limit:
+            raise ValueError("Notification reads require a bounded visible message window")
+        if not sources:
+            return NotificationAssignmentRead(())
+        placeholders = ",".join("?" for _ in sources)
+        return cls.capture(
+            connection,
+            f"w.wire_seq IN ({placeholders})",
+            tuple(source.message.seq for source in sources),
+        )
+
+    @classmethod
     def select(
         cls,
         root: Path,
@@ -307,8 +393,6 @@ class NotificationAssignment(NotificationSource):
         ascending: bool = False,
     ):
         from .coordination_database import CoordinationStore
-        from .coordination_tables.executions import CurrentExecutions
-        from .native_runtime_input import NativeRuntimeInput
         from .recovery_projection import _preflight
 
         database = cls.database_path(root)
@@ -318,49 +402,10 @@ class NotificationAssignment(NotificationSource):
         if failure:
             raise ValueError(f"Channel notification status unavailable: {failure}")
         with CoordinationStore.observing(database, lock_timeout=0.05) as connection:
-            if SQLiteUserVersion.read(connection.execute("PRAGMA user_version")) != [
-                SQLiteUserVersion(COORDINATION_SCHEMA_VERSION)
-            ]:
-                raise ValueError("Channel notification status has an unsupported schema")
-            columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
-            membership = NativeRuntimeInput.source_membership_sql()
-            context = (
-                f"SELECT n.{{column}} FROM {NativeRuntimeInput.declared_name} n "
-                f"JOIN ({membership}) member ON member.input_id=n.input_id "
-                "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
-                "ORDER BY CASE n.stage WHEN 'triage' THEN 0 ELSE 1 END,member.ordinal,n.input_id LIMIT 1"
+            captured = cls.capture(
+                connection, predicate, parameters, limit=limit, ascending=ascending
             )
-            rows = WakeAssignment.joined(
-                connection.execute(
-                    f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
-                    f"JOIN ({membership}) member ON member.input_id=n.input_id "
-                    "WHERE member.assignment_id=w.assignment_id "
-                    "AND n.stage='triage' AND n.session_entry_id IS NULL) "
-                    "AS triage_inflight, pointer.execution_id AS current_execution_id, "
-                    f"({context.format(column='session_file')}) AS context_session_file, "
-                    f"({context.format(column='session_entry_id')}) AS context_session_entry_id, "
-                    "p.seq AS response_seq, p.message_id AS response_message_id, "
-                    "p.received_at_ms AS response_received_at_ms "
-                    f"FROM {WakeAssignment.declared_name} w "
-                    f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
-                    "ON pointer.owner_lookup=w.recipient_lookup "
-                    f"LEFT JOIN {PublicationReceipts.declared_name} p "
-                    "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target "
-                    f"WHERE {predicate} ORDER BY w.wire_seq {'ASC' if ascending else 'DESC'},w.recipient"
-                    + (" LIMIT ?" if limit else ""),
-                    (*parameters, limit) if limit else parameters,
-                ),
-                AssignmentActivityEvidence,
-            )
-        contexts = {
-            context for _, activity in rows
-            if (context := activity.context) is not None
-        }
-        recorded_progress = AssignmentContext.recorded_progress(contexts)
-        return tuple(
-            cls(assignment, activity.resolve(recorded_progress))
-            for assignment, activity in rows
-        )
+        return captured.resolve()
 
     @property
     def recipient(self) -> FrozenRecipient:

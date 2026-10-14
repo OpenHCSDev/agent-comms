@@ -27,26 +27,29 @@ from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
 from .store_files import StoreRevision, _store_lock
-from .thread_presentation import ThreadPresentation, ThreadOwnerBinding, UnavailableThreadOwnerBinding
-from .thread_status import ThreadStatus
 from .thread_identity import ThreadIncarnation
+from .thread_presentation import (
+    ThreadOwnerBinding,
+    ThreadPresentation,
+    UnavailableThreadOwnerBinding,
+)
+from .thread_status import ThreadStatus
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from .agent_activity import AgentActivity, RecipientActivity
     from .bus_publication import CommittedDelivery
-    from .agent_activity import AgentActivity
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .goal_waits import GoalWait
     from .message_bus import MessageBus
     from .messages import Message
-    from .read_ledger import ReadLedger
-    from .read_ledger import ReadDocument
+    from .notification_assignment import NotificationAssignmentRead
+    from .read_ledger import ReadDocument, ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
-    from .agent_activity import RecipientActivity
-    from .wire_log import WireLog, OpenedWireSnapshot
+    from .wire_log import OpenedWireSnapshot, WireLog
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,8 +127,11 @@ class MessageNotification:
         return result
 
     @classmethod
-    def delivery_window(cls, root: Path, registry: Registration,
-                        sources: Sequence[CommittedDelivery], *, owner_lookup: str | None = None):
+    def delivery_window(
+        cls, root: Path, registry: Registration, sources: Sequence[CommittedDelivery], *,
+        owner_lookup: str | None = None,
+        assignment_read: NotificationAssignmentRead | None = None,
+    ):
         """Project the original frozen audience even before handling is recorded."""
         from .agent_activity import AgentActivity
 
@@ -137,8 +143,10 @@ class MessageNotification:
              if cls.includes_recipient(source, recipient, owner_lookup)),
             snapshot=snapshot,
         )
-        return cls.project_delivery_window(root, snapshot, sources, observations,
-                                           owner_lookup=owner_lookup)
+        return cls.project_delivery_window(
+            root, snapshot, sources, observations,
+            owner_lookup=owner_lookup, assignment_read=assignment_read,
+        )
 
     @staticmethod
     def includes_recipient(source: CommittedDelivery, recipient: FrozenRecipient,
@@ -163,6 +171,7 @@ class MessageNotification:
         cls, root: Path, snapshot: RegistryProvenance,
         sources: Sequence[CommittedDelivery], observations: Mapping[str, RecipientActivity],
         *, owner_lookup: str | None = None,
+        assignment_read: NotificationAssignmentRead | None = None,
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Original assignment and read authorities own both display projections."""
         from .notification_assignment import NotificationAssignment
@@ -174,8 +183,12 @@ class MessageNotification:
         if not keys:
             return {}
         placeholders = ",".join("?" for _ in keys)
-        rows = NotificationAssignment.select(
-            root, f"w.wire_seq IN ({placeholders})", tuple(key[0] for key in keys)
+        rows = (
+            assignment_read.resolve()
+            if assignment_read is not None
+            else NotificationAssignment.select(
+                root, f"w.wire_seq IN ({placeholders})", tuple(key[0] for key in keys)
+            )
         )
         reads = ReadLedger(root / ReadLedger.filename)
         document = reads.read()
@@ -257,10 +270,10 @@ class MessageNotification:
         return cls.for_sources(root, registry, owner, sources)
 
     @classmethod
-    def recent_sent(
+    def sent_sources(
         cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
-    ) -> tuple[MessageNotification, ...]:
-        """Project one sender's bounded outcome cut without preparing its transcript."""
+    ):
+        """Capture one sender's bounded original source cut."""
         if not 1 <= limit <= cls.window_limit:
             raise ValueError("Sent notification limit must fit one bounded window")
         owner = registry.require(name)
@@ -269,17 +282,30 @@ class MessageNotification:
         captured = AssignedTranscriptSource.for_thread(root, owner, log).window(
             limit=0, sent_limit=limit
         )
-        return cls.for_sources(root, registry, owner, captured.sent_sources)
+        return owner, captured.sent_sources
+
+    @classmethod
+    def recent_sent(
+        cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
+    ) -> tuple[MessageNotification, ...]:
+        """Project one sender's bounded outcome cut without preparing its transcript."""
+        owner, sources = cls.sent_sources(root, registry, log, name, limit=limit)
+        return cls.for_sources(root, registry, owner, sources)
 
     @classmethod
     def for_sources(
-        cls, root: Path, registry: Registration, owner: Thread, sources: Sequence[CommittedDelivery]
+        cls, root: Path, registry: Registration, owner: Thread,
+        sources: Sequence[CommittedDelivery], *,
+        assignment_read: NotificationAssignmentRead | None = None,
     ) -> tuple[MessageNotification, ...]:
         """Project outcomes from the caller's original certified source window."""
         from .bus_publication import stable_thread_lookup
 
-        projected = cls.delivery_window(root, registry, sources,
-                                        owner_lookup=stable_thread_lookup(owner.created_at))
+        projected = cls.delivery_window(
+            root, registry, sources,
+            owner_lookup=stable_thread_lookup(owner.created_at),
+            assignment_read=assignment_read,
+        )
         return tuple(
             replace(notification, message=source.message)
             for source in sources
