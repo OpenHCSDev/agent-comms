@@ -41,6 +41,11 @@ def test_terminal_outcomes_release_exact_claims(monkeypatch, outcome):
         assert terminal.attempt.lifecycle.failed and not terminal.is_current
         expected_outcome = UnknownOutcomeAttempt if outcome == "unknown" else AttemptFailedAttempt
         assert type(terminal.attempt.lifecycle) is expected_outcome
+        phase = store.session._connection.execute(
+            "SELECT phase, phase_kind FROM attempts WHERE execution_id = ? AND attempt_ordinal = ?",
+            (attempt.execution_id, attempt.attempt_ordinal),
+        ).fetchone()
+        assert phase == (expected_outcome.declared_name, expected_outcome.declared_name)
         assert dict(comms.bus.log.claim_projection()) == {}
         notice = comms.views.full_history()[-1]
         release = notice.claim_transition.releases[0]

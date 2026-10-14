@@ -31,7 +31,7 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     has_model_context: ClassVar[bool] = False
 
     def observed(self, phase, *, backend_done: bool, process_dead: bool, progress: bool):
-        if phase is not type(self) and phase not in self.successors():
+        if phase is not type(self) and not issubclass(phase, self.successors()):
             raise IdentityConflict("attempt phase edge is not declared")
         if self.process_dead or self.backend_done:
             # Once either finality fact is recorded, the backend cannot
@@ -126,10 +126,6 @@ class TerminalAttempt(AttemptState):
         return cls()
 
 
-def _failed_outcomes() -> tuple[type[AttemptState], ...]:
-    return AttemptFailedAttempt, UnknownOutcomeAttempt
-
-
 class PromptStartingAttempt(LiveAttempt):
     allows_tool_admission = True
     starting = True
@@ -137,7 +133,7 @@ class PromptStartingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            *_failed_outcomes(),
+            AttemptFailedAttempt,
             PromptAcceptedAttempt,
             ProviderUnavailableAttempt,
         )
@@ -150,7 +146,7 @@ class PromptAcceptedAttempt(LiveAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            *_failed_outcomes(),
+            AttemptFailedAttempt,
             ModelRunningAttempt,
             ModelStalledAttempt,
         )
@@ -170,7 +166,7 @@ class ModelRunningAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            *_failed_outcomes(),
+            AttemptFailedAttempt,
             CompactionAttempt,
             ModelStalledAttempt,
             ProviderUnavailableAttempt,
@@ -186,7 +182,7 @@ class ToolRunningAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            *_failed_outcomes(),
+            AttemptFailedAttempt,
             ModelRunningAttempt,
             SettlingAttempt,
         )
@@ -197,7 +193,7 @@ class CompactionAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            *_failed_outcomes(),
+            AttemptFailedAttempt,
             ModelRunningAttempt,
             ModelStalledAttempt,
         )
@@ -220,7 +216,7 @@ class SettlingAttempt(ContextualAttempt):
     @classmethod
     def successors(cls):
         return (
-            *_failed_outcomes(),
+            AttemptFailedAttempt,
             SucceededAttempt,
         )
 
@@ -230,7 +226,7 @@ class ModelStalledAttempt(LiveAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            *_failed_outcomes(),
+            AttemptFailedAttempt,
         )
 
 
@@ -238,7 +234,7 @@ class AbortingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            *_failed_outcomes(),
+            AttemptFailedAttempt,
             RetryingAttempt,
         )
 
@@ -247,7 +243,7 @@ class RetryingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            *_failed_outcomes(),
+            AttemptFailedAttempt,
             ModelRunningAttempt,
             ModelStalledAttempt,
             PromptStartingAttempt,
@@ -259,7 +255,7 @@ class ProviderUnavailableAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            *_failed_outcomes(),
+            AttemptFailedAttempt,
             RetryingAttempt,
         )
 

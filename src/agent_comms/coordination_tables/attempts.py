@@ -216,8 +216,8 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
             "sql": Column(
                 generated=(
                     "CASE\n"
-                    "       WHEN phase IN ({failed_attempt_names}) THEN 'attempt_failed'\n"
-                    "       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE 'active' END"
+                    "       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE "
+                    "'active' END"
                 )
             ),
         },
@@ -297,7 +297,8 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
     WHERE NEW.attempt_ordinal > 1 AND NOT EXISTS (
       SELECT 1 FROM attempts a WHERE a.execution_id = NEW.execution_id
       AND a.attempt_ordinal = NEW.attempt_ordinal - 1
-      AND a.phase = 'attempt_failed' AND a.backend_done = 1 AND a.process_dead = 1
+      AND a.phase IN ({failed_attempt_phases})
+      AND a.backend_done = 1 AND a.process_dead = 1
       AND NEW.owner_generation > a.owner_generation
       AND NEW.owner_token_digest != a.owner_token_digest);
 END"""
