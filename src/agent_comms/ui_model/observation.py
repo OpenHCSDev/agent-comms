@@ -23,7 +23,7 @@ import signal
 import sys
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from contextlib import contextmanager
 from pathlib import Path
@@ -316,7 +316,7 @@ class ObserveSidebar(InterestRequest):
         return replace(interest, sidebar=self)
 
     def _answer(
-        self, revision: WireRevision, read, subject: str
+        self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str
     ) -> SidebarObserved | SidebarUnreadable | None:
         from agent_comms.ui_model.sidebar import SidebarModel
 
@@ -342,6 +342,10 @@ class ObserveSidebar(InterestRequest):
 
 
 class SidebarReadStage(ABC):
+    @property
+    @abstractmethod
+    def yields_to_loop(self) -> bool: ...
+
     @abstractmethod
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
@@ -352,6 +356,10 @@ class SidebarReadStage(ABC):
 
 
 class RosterSidebarRead(SidebarReadStage):
+    @property
+    def yields_to_loop(self) -> bool:
+        return True
+
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
     ) -> SidebarObserved | SidebarUnreadable | None:
@@ -362,10 +370,27 @@ class RosterSidebarRead(SidebarReadStage):
 
 
 class CompleteSidebarRead(SidebarReadStage):
+    @property
+    def yields_to_loop(self) -> bool:
+        return False
+
     def read(
         self, request: ObserveSidebar, comms: Comms, revision: WireRevision
     ) -> SidebarObserved | SidebarUnreadable | None:
         return request.answer(comms, revision)
+
+
+@dataclass(frozen=True)
+class SidebarReading:
+    request: ObserveSidebar
+    stage: SidebarReadStage
+
+
+@dataclass(frozen=True)
+class SidebarSent:
+    request: ObserveSidebar
+    expiry_period: int
+    stage: type[SidebarReadStage]
 
 
 @dataclass(frozen=True)
@@ -456,18 +481,33 @@ class RevisionObserved(Observed):
 
 
 @dataclass(frozen=True)
-class SidebarObserved(Observed):
+class SidebarResult(Observed):
     request: ObserveSidebar
-    snapshot: CoordinationSnapshot
-    derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]
+
+    @abstractmethod
+    def finish_read(self, service: ObservationService, stage: SidebarReadStage) -> None: ...
 
 
 @dataclass(frozen=True)
-class SidebarUnreadable(Observed):
+class SidebarObserved(SidebarResult):
+    snapshot: CoordinationSnapshot
+    derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]
+
+    def finish_read(self, service: ObservationService, stage: SidebarReadStage) -> None:
+        service.sidebar_read = SidebarReading(self.request, stage.next())
+        if stage.yields_to_loop:
+            service.observe_due = True
+            service.changed.set()
+
+
+@dataclass(frozen=True)
+class SidebarUnreadable(SidebarResult):
     """The requested sidebar could not be read; no stale snapshot is offered."""
 
-    request: ObserveSidebar
     error: UnreadableHistory
+
+    def finish_read(self, service: ObservationService, stage: SidebarReadStage) -> None:
+        service.sidebar_read = SidebarReading(self.request, stage)
 
 
 @dataclass(frozen=True)
@@ -522,8 +562,8 @@ class ObservationService:
         self.interest = Interest()
         self.changed = asyncio.Event()
         self.revision: WireRevision | None = None
-        self.sent_sidebar: tuple[ObserveSidebar, int, type[SidebarReadStage]] | None = None
-        self.sidebar_read: tuple[ObserveSidebar, SidebarReadStage] | None = None
+        self.sent_sidebar: SidebarSent | None = None
+        self.sidebar_read: SidebarReading | None = None
         self.sent_threads: frozenset[str] | None = None
         self.checked_views: tuple[ObserveViews, WireRevision] | None = None
         self.retry_threads = False
@@ -569,23 +609,17 @@ class ObservationService:
         if sidebar is not None:
             reading = self.sidebar_read
             stage = (
-                reading[1]
-                if reading is not None and reading[0] == sidebar
+                reading.stage
+                if reading is not None and reading.request == sidebar
                 else RosterSidebarRead()
             )
-            key = (sidebar, revision.expiry_tick // EXPIRY_PERIOD, type(stage))
+            key = SidebarSent(sidebar, revision.expiry_tick // EXPIRY_PERIOD, type(stage))
             if stores or key != self.sent_sidebar:
                 result = stage.read(sidebar, self.comms, revision)
                 if result is not None:
                     self.connection.send(result)
                     self.sent_sidebar = key
-                    next_stage = stage.next()
-                    self.sidebar_read = (sidebar, next_stage)
-                    if next_stage is not stage and isinstance(result, SidebarObserved):
-                        # The lightweight rows are already available to the UI process.
-                        # Return to the event loop before advancing whole-bus indexes.
-                        self.observe_due = True
-                        self.changed.set()
+                    result.finish_read(self, stage)
         threads = self.interest.threads
         if threads and (stores or threads != self.sent_threads or self.retry_threads):
             presentations, unavailable, busy = {}, {}, set()
