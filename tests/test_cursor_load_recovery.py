@@ -12,9 +12,33 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
+from agent_comms.cursor_publication import CursorPublication
 from agent_comms.runtime import SocketClient
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+
+
+async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monkeypatch):
+    comms = Comms(tmp_path / "wire")
+    owner = Thread(
+        "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
+    )
+    comms.registry.declare(owner)
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    seen = []
+
+    async def read_cursor(_bus, *, source_reads, **_kwargs):
+        seen.append(source_reads)
+        return None
+
+    monkeypatch.setattr("agent_comms.cursor_publication.NativeSourceCursor.read_async", read_cursor)
+    publication = CursorPublication(comms, object(), root_id)
+    await publication.observe(owner.name, owner.name)
+    await publication.observe(owner.name, owner.name)
+    owned = publication.delivery(owner.name).source_reads
+    assert seen == [owned, owned]
+    publication.close()
+    assert not publication.deliveries and not owned.readers
 
 
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):

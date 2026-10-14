@@ -6,9 +6,10 @@ the durable cursor. Every observation reads NativeSourceCursor's original proof.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 
 from acp.schema import SessionInfoUpdate
@@ -23,10 +24,11 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
-from .coordinator import Coordination
 from .coordination_errors import CoordinationError
+from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
+from .native_entries import NativeEvidenceScope
 from .native_source_cursor import NativeSourceCursor
 from .runtime import RuntimeServer
 from .thread_identity import AdmissionIdentity
@@ -44,6 +46,10 @@ class CursorDelivery:
     # cannot extend it, and a changed revision reruns the drain, whose own
     # observation replaces this one.
     advanced: bool = False
+    # This ACP session publication is the one lifetime owner. The reader owns
+    # verified prefix position/hash; repeated observations only decode appends.
+    source_reads: NativeEvidenceScope = field(default_factory=NativeEvidenceScope, repr=False)
+    observation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
     def next_revision(self) -> int:
         self.revision += 1
@@ -93,9 +99,19 @@ class CursorPublication:
         self, thread_name: str, session_id: str, *, defer_busy: bool = False,
         advance: bool = False,
     ) -> CursorEnvelope:
+        delivery = self.delivery(session_id)
+        async with delivery.observation_lock:
+            return await self._observe(
+                delivery, thread_name, session_id, defer_busy=defer_busy, advance=advance
+            )
+
+    async def _observe(
+        self, delivery: CursorDelivery, thread_name: str, session_id: str, *,
+        defer_busy: bool, advance: bool,
+    ) -> CursorEnvelope:
         if self.root_id is None:
             raise ValueError("Native cursor requires the configured root")
-        revision = self.delivery(session_id).next_revision()
+        revision = delivery.next_revision()
         scope = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         unavailable = CursorEnvelope(scope, revision, UnavailableCursorObservation())
         if scope is None:
@@ -105,9 +121,12 @@ class CursorPublication:
                 self.comms.root / "bus.jsonl", self.comms.registry,
                 private_response_writes=True,
             )
-            read_cursor = NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
+            read_cursor = (
+                NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
+            )
             cursor = await read_cursor(
-                bus, wire_root_id=self.root_id, owner_name=thread_name
+                bus, wire_root_id=self.root_id, owner_name=thread_name,
+                source_reads=delivery.source_reads,
             )
         except BlockingIOError:
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
@@ -169,3 +188,9 @@ class CursorPublication:
             # Resume only the cursor projection. The immutable native receipt
             # supplies its original admission; no claim or input is resumed.
             await self.publish(session_id, thread_name, advance=True)
+
+    def close(self) -> None:
+        """Retire every session-owned verified-prefix reader exactly once."""
+        for delivery in self.deliveries.values():
+            delivery.source_reads.close()
+        self.deliveries.clear()
