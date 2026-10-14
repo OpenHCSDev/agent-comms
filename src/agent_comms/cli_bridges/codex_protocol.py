@@ -26,11 +26,108 @@ from agent_comms.transcript_events import (
 from .shared import RegisteredWireMeta, WireModel, TranscriptUpdate
 
 
-class TextInput(WireModel):
-    type: Literal['text'] = 'text'
+class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
+    """A Codex object whose JSON ``type`` names its declared class."""
+    wire_tag: ClassVar[str]
+
+    @computed_field
+    @property
+    def type(self) -> str:
+        return self.wire_tag
+
+    @classmethod
+    def declared_union(cls) -> object:
+        """The wire grammar of every declared member, discriminated by its tag."""
+        def tag(value: object) -> str:
+            if isinstance(value, cls):
+                return value.wire_tag
+            return WireHeader.model_validate(value).type
+        return Annotated[
+            Union[tuple(Annotated[member, Tag(member.wire_tag)]
+                        for member in cls.__registry_config__.registry_dict.values())],
+            Discriminator(tag),
+        ]
+
+
+class WireHeader(WireModel):
+    type: str
+
+
+class UserInput(TaggedWire, ABC):
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
+    )
+
+    @property
+    @abstractmethod
+    def display(self) -> str: ...
+
+
+class TextInput(UserInput):
+    wire_tag = 'text'
     text: str
-    # Codex sends this back inside items, decoded from JSON as an array.
-    text_elements: list[JsonValue] = Field(default_factory=list)
+
+    @property
+    def display(self) -> str:
+        return self.text
+
+
+class ImageInput(UserInput):
+    wire_tag = 'image'
+
+    @property
+    def display(self) -> str:
+        return 'Image'
+
+
+class LocalImageInput(UserInput):
+    wire_tag = 'localImage'
+    path: str
+
+    @property
+    def display(self) -> str:
+        return f'Image: {self.path}'
+
+
+class AudioInput(UserInput):
+    wire_tag = 'audio'
+    url: str
+
+    @property
+    def display(self) -> str:
+        return 'Audio'
+
+
+class LocalAudioInput(UserInput):
+    wire_tag = 'localAudio'
+    path: str
+
+    @property
+    def display(self) -> str:
+        return f'Audio: {self.path}'
+
+
+class SkillInput(UserInput):
+    wire_tag = 'skill'
+    name: str
+    path: str
+
+    @property
+    def display(self) -> str:
+        return f'Skill: {self.name}'
+
+
+class MentionInput(UserInput):
+    wire_tag = 'mention'
+    name: str
+    path: str
+
+    @property
+    def display(self) -> str:
+        return f'@{self.name}'
+
+
+CodexUserInput = UserInput.declared_union()
 
 
 class RequestParams(WireModel):
@@ -132,18 +229,12 @@ class RpcNotification(WireModel):
 RPC_RESPONSE = TypeAdapter(RpcSuccess | RpcFailure | RpcNotification)
 
 
-class Item(WireModel, ABC, metaclass=RegisteredWireMeta):
+class Item(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag',
         skip_if_no_key=True,
     )
-    wire_tag: ClassVar[str]
     id: str
-
-    @computed_field
-    @property
-    def type(self) -> str:
-        return self.wire_tag
 
     @abstractmethod
     def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]: ...
@@ -184,14 +275,14 @@ class ReasoningItem(Item):
 
 class UserItem(Item):
     wire_tag = 'userMessage'
-    content: list[TextInput]
+    content: list[CodexUserInput]
     clientId: str | None = None
 
     def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
         # Bus inputs already appear in Core's inbox. Do not echo them as new input.
         if BusInput.identifies(self.clientId):
             return ()
-        return (UserTranscript('\n'.join(part.text for part in self.content)),)
+        return (UserTranscript('\n'.join(part.display for part in self.content)),)
 
 
 class ToolItem(Item, ABC):
@@ -247,8 +338,18 @@ class CommandItem(ToolItem):
         self.aggregatedOutput = self.output + text
 
 
-class ToolText(WireModel):
-    type: Literal['inputText']
+class ToolContentPart(TaggedWire, ABC):
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
+    )
+
+    @property
+    @abstractmethod
+    def display(self) -> str: ...
+
+
+class ToolText(ToolContentPart):
+    wire_tag = 'inputText'
     text: str
 
     @property
@@ -256,8 +357,8 @@ class ToolText(WireModel):
         return self.text
 
 
-class ToolImage(WireModel):
-    type: Literal['inputImage']
+class ToolImage(ToolContentPart):
+    wire_tag = 'inputImage'
     imageUrl: str
 
     @property
@@ -265,8 +366,8 @@ class ToolImage(WireModel):
         return '[Image output]'
 
 
-class ToolAudio(WireModel):
-    type: Literal['inputAudio']
+class ToolAudio(ToolContentPart):
+    wire_tag = 'inputAudio'
     audioUrl: str
 
     @property
@@ -274,7 +375,7 @@ class ToolAudio(WireModel):
         return '[Audio output]'
 
 
-ToolContent = Annotated[ToolText | ToolImage | ToolAudio, Field(discriminator='type')]
+ToolContent = ToolContentPart.declared_union()
 
 
 class DynamicToolItem(ToolItem):
@@ -478,21 +579,7 @@ class AgentActivityItem(Item):
 
 # The existing registration owner derives this wire grammar from declarations.
 # A new item supplies its tag and behavior once, without a second decoder edit.
-class ItemHeader(WireModel):
-    type: str
-
-
-def item_tag(value: object) -> str:
-    if isinstance(value, Item):
-        return value.wire_tag
-    return ItemHeader.model_validate(value).type
-
-
-CodexItem = Annotated[
-    Union[tuple(Annotated[member, Tag(member.wire_tag)]
-                for member in Item.__registry_config__.registry_dict.values())],
-    Discriminator(item_tag),
-]
+CodexItem = Item.declared_union()
 
 
 class ItemsList(RequestParams):
