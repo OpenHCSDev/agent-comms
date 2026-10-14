@@ -26,32 +26,89 @@ if TYPE_CHECKING:
 class AssignmentProgress(DeclaredFamily, affix="Progress"):
     """The original model-context receipt owns the displayed read fact."""
 
-    read_at_ms: int | None = None
-
     @abstractmethod
     def selected_notification(
-        self, notification: MessageNotification, read_at_ms: int | None, *, busy: bool
+        self, notification: MessageNotification, *, busy: bool
     ) -> MessageNotification: ...
 
     @abstractmethod
-    def interrupted_notification(
-        self, notification: MessageNotification, read_at_ms: int | None
+    def interrupted_notification(self, notification: MessageNotification) -> MessageNotification: ...
+
+    @abstractmethod
+    def read_notification(self, notification: MessageNotification) -> MessageNotification: ...
+
+    @abstractmethod
+    def answered_notification(
+        self, notification: MessageNotification, reference: MessageReference, answered_at_ms: int
     ) -> MessageNotification: ...
 
-    def read_notification(self, notification: MessageNotification, fallback_ms: int | None = None):
-        read_at_ms = self.read_at_ms or fallback_ms
+
+class NotShownProgress(AssignmentProgress):
+    def selected_notification(self, notification, *, busy):
         return replace(
             notification,
-            state=notification.receipt_state("Read", read_at_ms),
+            state="Sent",
+            detail="",
+            busy=busy,
+            priority=notification.priority if busy else 3,
+        )
+
+    def interrupted_notification(self, notification):
+        return replace(
+            notification,
+            state="Interrupted before read",
+            detail="",
+            busy=False,
+            priority=3,
+        )
+
+    def read_notification(self, notification):
+        raise ValueError("Read notification has no model-context receipt")
+
+    def answered_notification(self, notification, reference, answered_at_ms):
+        return replace(
+            notification,
+            state=notification.receipt_state("Answered", answered_at_ms),
+            detail="",
+            reply_reference=reference,
+            answered_at_ms=answered_at_ms,
+        )
+
+
+@dataclass(frozen=True)
+class ShownToModelProgress(AssignmentProgress):
+    read_at_ms: int | None
+
+    def selected_notification(self, notification, *, busy):
+        return replace(
+            notification,
+            state=notification.receipt_state("Read", self.read_at_ms),
+            detail="",
+            busy=busy,
+            read_at_ms=self.read_at_ms,
+        )
+
+    def interrupted_notification(self, notification):
+        return replace(
+            notification,
+            state=notification.receipt_state("Read", self.read_at_ms),
+            detail="",
+            busy=False,
+            priority=3,
+            read_at_ms=self.read_at_ms,
+        )
+
+    def read_notification(self, notification):
+        return replace(
+            notification,
+            state=notification.receipt_state("Read", self.read_at_ms),
             detail="",
             priority=2,
             busy=False,
-            read_at_ms=read_at_ms,
+            read_at_ms=self.read_at_ms,
         )
 
-    def answered_notification(
-        self, notification: MessageNotification, reference: MessageReference, answered_at_ms: int
-    ):
+    def answered_notification(self, notification, reference, answered_at_ms):
         return replace(
             notification,
             state=notification.receipt_state("Answered", answered_at_ms),
@@ -62,62 +119,19 @@ class AssignmentProgress(DeclaredFamily, affix="Progress"):
         )
 
 
-class NotShownProgress(AssignmentProgress):
-    def selected_notification(self, notification, read_at_ms, *, busy):
-        return replace(
-            notification,
-            state="Sent",
-            detail="",
-            busy=busy,
-            priority=notification.priority if busy else 3,
-        )
-
-    def interrupted_notification(self, notification, read_at_ms):
-        return replace(
-            notification,
-            state="Interrupted before read",
-            detail="",
-            busy=False,
-            priority=3,
-        )
-
-
-@dataclass(frozen=True)
-class ShownToModelProgress(AssignmentProgress):
-    read_at_ms: int | None
-    def selected_notification(self, notification, read_at_ms, *, busy):
-        return replace(
-            notification,
-            state=notification.receipt_state("Read", read_at_ms),
-            detail="",
-            busy=busy,
-            read_at_ms=read_at_ms,
-        )
-
-    def interrupted_notification(self, notification, read_at_ms):
-        return replace(
-            notification,
-            state=notification.receipt_state("Read", read_at_ms),
-            detail="",
-            busy=False,
-            priority=3,
-            read_at_ms=read_at_ms,
-        )
-
-
 class RemovedContextProgress(AssignmentProgress):
     """The proved context survives, but its recipient session was removed."""
 
-    state = "Recipient session removed"
-    detail = "Read time unavailable because the recipient session was removed."
+    state = "Removed"
+    detail = "Recipient session removed"
 
-    def selected_notification(self, notification, read_at_ms, *, busy):
+    def selected_notification(self, notification, *, busy):
         return replace(notification, state=self.state, detail=self.detail, busy=busy, priority=3)
 
-    def interrupted_notification(self, notification, read_at_ms):
+    def interrupted_notification(self, notification):
         return replace(notification, state=self.state, detail=self.detail, busy=False, priority=3)
 
-    def read_notification(self, notification, fallback_ms=None):
+    def read_notification(self, notification):
         return replace(notification, state=self.state, detail=self.detail, busy=False, priority=3)
 
     def answered_notification(self, notification, reference, answered_at_ms):
@@ -210,10 +224,6 @@ class AssignmentActivity:
     @property
     def progress(self) -> AssignmentProgress:
         return self.context_progress
-
-    @property
-    def read_at_ms(self) -> int | None:
-        return self.context_progress.read_at_ms
 
     def pending_notification(self, notification, queued_at_ms):
         """Project custody behind the recipient's canonical unresolved execution."""

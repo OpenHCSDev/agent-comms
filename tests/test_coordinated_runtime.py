@@ -496,7 +496,8 @@ async def test_removed_sent_session_is_context_not_a_model_start_blocker(
 
     assert outcome is not None
     assert len(calls) == 1
-    assert '"state":"Recipient session removed"' in calls[0][1]
+    assert '"state":"Removed"' in calls[0][1]
+    assert '"detail":"Recipient session removed"' in calls[0][1]
 
 
 async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch) -> None:

@@ -207,10 +207,10 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     assert sent.state == "Sent" and sent.read_at_ms is None
     assert read.state.startswith("Read ") and read.read_at_ms == 2_000
     assert answered.state.startswith("Answered ") and answered.answered_at_ms == 3_000
-    assert removed.state == "Recipient session removed"
-    assert "session was removed" in removed.detail
+    assert removed.state == "Removed"
+    assert removed.detail == "Recipient session removed"
     assert removed_answer.state.startswith("Answered ")
-    assert "session was removed" in removed_answer.detail
+    assert removed_answer.detail == "Recipient session removed"
     assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
 
 

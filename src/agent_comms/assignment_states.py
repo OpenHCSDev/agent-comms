@@ -253,7 +253,7 @@ class IgnoredAssignment(AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return activity.progress.read_notification(notification, updated_at_ms)
+        return activity.progress.read_notification(notification)
 
     notification_priority = 2
     notification_state = "Read"
@@ -361,7 +361,7 @@ class EngagedAssignment(BoundAssignment):
             recipient, observation=observation, activity=activity
         )
         return observation.selected_response(
-            notification, updated_at_ms, activity.progress, activity.read_at_ms
+            notification, updated_at_ms, activity.progress
         )
 
     def wake_frame(self, source, obligation) -> tuple[str, str]:
@@ -460,7 +460,7 @@ class DeferredAssignment(InterruptedAssignment):
             recipient, observation=observation, activity=activity
         )
         return observation.selected_response(
-            notification, updated_at_ms, activity.progress, activity.read_at_ms
+            notification, updated_at_ms, activity.progress
         )
 
     notification_state = "Interrupted before read"
