@@ -10,6 +10,7 @@ from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -127,6 +128,10 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def require_available(self) -> None:
         pass
 
+    def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
+        """An ordinary preparation has no earlier request failure to display."""
+        return activity
+
 
 @dataclass(frozen=True)
 class ReadyDrainReadiness(DrainReadiness):
@@ -156,6 +161,29 @@ class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
 
     def presentation(self, ordinary, *, busy):
         return ordinary if busy or ordinary.busy else super().presentation(ordinary, busy=busy)
+
+    def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
+        return replace(
+            activity,
+            readiness=FailedPreparingDrainReadiness(self.diagnostic, activity.timestamp),
+        )
+
+
+@dataclass(frozen=True)
+class FailedPreparingDrainReadiness(NativeInputDrainReadiness):
+    """A retained native failure while the next turn has not reached its request."""
+
+    failed_at: float
+
+    def presentation(self, ordinary, *, busy):
+        when = datetime.fromtimestamp(self.failed_at).astimezone().strftime("%H:%M")
+        return replace(
+            ordinary,
+            marker="!",
+            summary=f"Failed {when} · {self.diagnostic.summary}",
+            busy=busy,
+            attention=True,
+        )
 
 
 class UnavailableDrainReadiness(DiagnosticDrainReadiness):
