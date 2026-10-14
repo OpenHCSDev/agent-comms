@@ -29,6 +29,7 @@ from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from agent_comms.input_disposition import InputDispositions
+from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
@@ -48,6 +49,36 @@ async def wait_for(predicate):
     async with asyncio.timeout(30):
         while not predicate():
             await asyncio.sleep(0.01)
+
+
+async def test_native_preflight_failure_is_visible_and_cannot_mark_started(native_backend, monkeypatch):
+    native = native_backend
+    await native.author_history()
+    saved = native.session.read_bytes()
+    async with native.open_owner() as (owner, session):
+        updates = Updates()
+        owner.on_connect(updates)
+
+        async def refused_preflight(self):
+            # Inject refusal at the prompt's current capability-preflight
+            # boundary after authentic SDK source/identity acquisition.
+            raise NativePiUnavailable("native preflight refused before prompt")
+
+        monkeypatch.setattr(backend.TurnSession, "input_ready", refused_preflight)
+        with pytest.raises(RequestError) as caught:
+            await owner.prompt(session, [TextContentBlock(type="text", text="test")])
+        assert isinstance(caught.value.__cause__, NativePiUnavailable)
+        assert "preflight" in str(caught.value.__cause__)
+        failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
+        assert failure.notification_published and failure.failure.input_state.public_status == "not_sent"
+        rows = owner.inputs.dispositions.read().unknown(frozenset({session}))
+        assert len(rows) == 1 and not rows[0].has_native_binding
+        assert rows[0].public_status == "not_sent"
+        assert not owner.inputs.pending_turns and not owner.turns.turn_state(session).busy
+        assert any(isinstance(fact, InputDeliveryChangedUpdate)
+                   for update in updates.rows for fact in decode_updates(update.get("_meta")))
+        assert Comms(native.root).goals.unresolved_inputs(session) == [row.public() for row in rows]
+    assert native.session.read_bytes() == saved and native.provider.posts == 0
 
 
 @pytest.mark.parametrize("second_start", [False, True])
@@ -406,11 +437,7 @@ async def test_waiting_messages_and_a_model_change_reach_the_next_model_call_tog
             await asyncio.gather(turn, return_exceptions=True)
 
 
-async def test_hard_exit_after_owner_acceptance_preserves_unknown_without_replay(
-    native_backend, monkeypatch
-):
-    monkeypatch.delenv("PI_AGENT_ID", raising=False)
-    monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
+async def test_hard_exit_after_owner_acceptance_preserves_unknown_without_replay(native_backend):
     native = native_backend
     await native.author_history()
     saved = native.session.read_bytes()

@@ -10,7 +10,7 @@ from acp.schema import SessionConfigSelectOption
 from agent_comms.acp import CommsClient
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.config_options import (
@@ -56,7 +56,7 @@ async def owner(tmp_path, monkeypatch):
 
 
 async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owner, tmp_path):
-    other = CommsClient(wire(tmp_path / "other"), agent_bin="pi")
+    other = CommsClient(Comms(tmp_path / "other"), agent_bin="pi")
     assert type(owner.sessions) is SessionLifecycle
     assert type(other.sessions) is AttachedSessionLifecycle
     await owner.initialize(1, {})

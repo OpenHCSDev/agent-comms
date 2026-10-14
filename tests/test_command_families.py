@@ -12,9 +12,10 @@ import pytest
 
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand, option
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.messages import InfoKind
 from agent_comms.pi_vocabulary import ServiceTier
+from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,
@@ -79,6 +80,10 @@ def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, caps
         def apply(self, ctx):
             return {"amount": self.amount + 1, "root": str(ctx.root)}
 
+    comms = Comms(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
+    monkeypatch.delenv(ROOT_ID_ENV, raising=False)
+    monkeypatch.delenv(PACKAGE_ENV, raising=False)
     assert main(["--root", str(tmp_path), "contract-probe", "--amount", "40"]) == 0
     assert json.loads(capsys.readouterr().out) == {"amount": 41, "root": str(tmp_path)}
 
@@ -206,9 +211,9 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
     ],
 )
 def test_normal_history_cli_keeps_migrated_content_and_source_identity(
-    tmp_path, capsys, arguments, key
+    tmp_path, capsys, monkeypatch, arguments, key
 ):
-    old, live = wire(tmp_path / "old"), wire(tmp_path / "live")
+    old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
     for comms in (old, live):
         for name in ("alice", "bob"):
             comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
@@ -216,6 +221,8 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct")
     source = live.views.attach_history(old.root)
     live_bus = (live.root / "bus.jsonl").read_bytes()
+    monkeypatch.delenv(ROOT_ID_ENV, raising=False)
+    monkeypatch.delenv(PACKAGE_ENV, raising=False)
     assert main(["--root", str(live.root), *arguments]) == 0
     rows = json.loads(capsys.readouterr().out)[key]
     historical = [row for row in rows if "history" in row]
