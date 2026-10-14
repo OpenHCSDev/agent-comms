@@ -10,6 +10,17 @@ Core messages appear as visible Codex messages through App-server `turn/start`.
 During an active turn this server accepts them into that turn; while idle they
 can start a response. Receiving a message does not authorize resuming a parked goal.
 
+Active-turn delivery was observed on 2026-10-14 when pending OpenCode messages
+arrived during Codex's ongoing work. Codex owns the start-or-steer decision;
+the bridge does not read busy state and race a separate start/steer request.
+Transport acknowledgment does not establish the exact model-consumption time.
+The bridge cannot alter a model request that is already running.
+
+The delayed OpenCode replies that day were caused by the inbox service being
+stopped for Core's schema migration. Starting the same service delivered the
+pending messages. No send was repeated. Restore watchers stopped by a successful
+migration through the migration's existing shutdown/startup owner.
+
 Send through `codex-comms send --to user --body 'Your reply'`.
 The command sends once through Core, prints its result, then displays that result
 as Codex `comms_send` tool output. A display failure never repeats the send.

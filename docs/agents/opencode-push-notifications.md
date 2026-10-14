@@ -55,6 +55,14 @@ bridge waits for the matching text part and reads its containing message to
 confirm a saved user input in the bound session. Only then is delivery recorded.
 The existing session runner handles incoming input while a turn is active.
 
+It rereads saved messages between generation steps. Live session history showed
+a user input arriving during a tool-based exchange and becoming the parent of
+the next assistant step. A source inspection also found a final-response race:
+the runner can decide to exit from an older history snapshot while a concurrent
+prompt saves a new input and joins that exiting run. Persistence confirmation
+therefore does not guarantee another model step. Repair of that native runner
+boundary is in progress; the bridge does not poll or resubmit saved inputs.
+
 This confirms persistence, not a completed model response or visible pixels.
 Native errors and a missing confirmation leave the attempt unconfirmed; the
 bridge never resubmits it. The shared Core-watch crash gap documented in
