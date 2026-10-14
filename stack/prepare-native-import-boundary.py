@@ -191,7 +191,9 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         ("native-import-manifest.json", "agent-comms-imports.json"),
     ):
         shutil.copyfile(stack / source, package / "dist" / target)
-    for name in ("selected_claimed_write.mjs", "channel_coding_tools.mjs"):
+    for name in (
+        "owner_tool_socket.mjs", "selected_claimed_write.mjs", "channel_coding_tools.mjs"
+    ):
         shutil.copyfile(stack.parent / "src/agent_comms" / name, package / "dist" / name)
     subprocess.run(
         ["node", str(stack / "prepare-native-global-extensions.mjs"), str(package)],
