@@ -13,7 +13,7 @@ from uuid import uuid4
 import aiohttp
 from pydantic import JsonValue
 from agent_comms.messages import Message
-from .shared import TranscriptBridge, Options, Outcome, SendResult, TranscriptUpdate, shared_parser, parse_options, run_bridge
+from .shared import TranscriptBridge, Options, Outcome, SendResult, TranscriptUpdate, TurnStarted, shared_parser, parse_options, run_bridge
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcFailure, RpcNotification, RpcSuccess, TextInput,
@@ -98,17 +98,19 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
             # Seed only completed snapshots. An active item's deltas must be
             # assembled from its actual start, not appended to an overlapping
             # snapshot fetched concurrently with those deltas.
-            completed = {(entry.turnId, entry.item.id) for entry in page.data
-                         if entry.completed}
             for entry in reversed(page.data):
-                if (entry.turnId, entry.item.id) in completed:
+                if entry.completed:
                     yield entry.publication()
+            # Interrupted turns leave unfinished items behind; only the newest
+            # item can belong to a turn still running when the watch began.
+            if page.data and not page.data[0].completed:
+                yield TurnStarted(page.data[0].turnId)
             stream = ItemStream(self.binding.thread)
             buffered = tuple(codex.pending)
             codex.pending.clear()
             for notification in buffered:
                 update = stream.receive(notification)
-                if update is not None and (update.turn_id, update.item_id) not in completed:
+                if update is not None:
                     yield update
             async for notification in codex.notifications():
                 update = stream.receive(notification)

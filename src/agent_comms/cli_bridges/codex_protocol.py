@@ -8,7 +8,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import replace
 import json
-import sys
 from typing import Annotated, ClassVar, Generic, Literal, TypeVar, Union
 
 from metaclass_registry import RegistryConfig
@@ -17,13 +16,18 @@ from pydantic import (
     computed_field,
 )
 
+from agent_comms.activity import ActivityState
+from agent_comms.native_tools import NativeTool
 from agent_comms.transcript_events import (
     AssistantTranscript, ThinkingTranscript, ToolStartTranscript, ToolEndTranscript,
     TranscriptEvent, UserTranscript, NoticeTranscript,
 )
 
 
-from .shared import RegisteredWireMeta, WireModel, TranscriptUpdate
+from .shared import (
+    ActiveItem, FinishedItem, RegisteredWireMeta, TranscriptUpdate,
+    TurnEnded, TurnStarted, WireModel,
+)
 
 
 class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
@@ -235,42 +239,44 @@ class Item(TaggedWire, ABC):
         skip_if_no_key=True,
     )
     id: str
+    # What the CLI is doing while it produces this item.
+    activity: ClassVar[ActivityState] = ActivityState.WORKING
+    doing: ClassVar[str] = ''
 
     @abstractmethod
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]: ...
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        """The finished item's presentation."""
+
+    @property
+    def activity_detail(self) -> str:
+        return self.doing
 
 class TextBody(WireModel):
     text: str
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         return (AssistantTranscript(self.text),)
-
-    def append_text(self, text: str) -> None:
-        self.text += text
 
 
 class AssistantItem(TextBody, Item):
     wire_tag = 'agentMessage'
+    doing = 'Replying'
 
 
 class PlanItem(TextBody, Item):
     wire_tag = 'plan'
+    doing = 'Planning'
 
 
 class ReasoningItem(Item):
     wire_tag = 'reasoning'
+    activity = ActivityState.THINKING
     summary: list[str] = Field(default_factory=list)
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         # Only public summaries; private/raw reasoning is never projected.
-        return (ThinkingTranscript('\n\n'.join(self.summary)),)
-
-    def append_summary(self, index: int, text: str) -> None:
-        if index == len(self.summary):
-            self.summary.append('')
-        if not 0 <= index < len(self.summary):
-            raise ValueError('Reasoning summary arrived out of order')
-        self.summary[index] += text
+        text = '\n\n'.join(part for part in self.summary if part)
+        return (ThinkingTranscript(text),) if text else ()
 
 
 class UserItem(Item):
@@ -278,7 +284,7 @@ class UserItem(Item):
     content: list[CodexUserInput]
     clientId: str | None = None
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         # Bus inputs already appear in Core's inbox. Do not echo them as new input.
         if BusInput.identifies(self.clientId):
             return ()
@@ -302,13 +308,17 @@ class ToolItem(Item, ABC):
     @abstractmethod
     def succeeded(self) -> bool: ...
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
-        start = ToolStartTranscript(tool_call_id=self.id, tool_name=self.tool_name,
-                                    raw_input=self.arguments)
-        if not completed:
-            return (start,)
-        return (start, ToolEndTranscript(tool_call_id=self.id, tool_name=self.tool_name,
-                                        text=self.output, ok=self.succeeded))
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.tool_name,
+                                    raw_input=self.arguments),
+                ToolEndTranscript(tool_call_id=self.id, tool_name=self.tool_name,
+                                  text=self.output, ok=self.succeeded))
+
+    @property
+    def activity_detail(self) -> str:
+        # Core's tool declarations own the action text native tools show.
+        arguments = self.arguments if isinstance(self.arguments, dict) else {}
+        return NativeTool.start(self.id, self.tool_name, arguments).title
 
 
 class CommandItem(ToolItem):
@@ -320,11 +330,11 @@ class CommandItem(ToolItem):
 
     @property
     def tool_name(self) -> str:
-        return 'shell'
+        return 'bash'  # Core's declared shell tool, which presents its command
 
     @property
     def arguments(self) -> JsonValue:
-        return self.command
+        return {'command': self.command}
 
     @property
     def output(self) -> str:
@@ -333,9 +343,6 @@ class CommandItem(ToolItem):
     @property
     def succeeded(self) -> bool:
         return self.status == 'completed' and self.exitCode == 0
-
-    def append_output(self, text: str) -> None:
-        self.aggregatedOutput = self.output + text
 
 
 class ToolContentPart(TaggedWire, ABC):
@@ -458,7 +465,7 @@ class SendOutputItem(Item):
     name: str
     output: str
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         # The bridge's send result is already rendered from the bus in Toad.
         if self.name == SEND_TOOL:
             return ()
@@ -467,15 +474,16 @@ class SendOutputItem(Item):
 
 class CompactionItem(Item):
     wire_tag = 'contextCompaction'
+    doing = 'Compacting context'
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript('Context compacted.' if completed else 'Compacting context…'),)
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return (NoticeTranscript('Context compacted.'),)
 
 
 class HookPromptItem(Item):
     wire_tag = 'hookPrompt'
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         # Harness instructions are not assistant output.
         return ()
 
@@ -483,7 +491,7 @@ class HookPromptItem(Item):
 class ReviewBody(WireModel):
     review: str
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(self.review),)
 
 
@@ -499,15 +507,19 @@ class SleepItem(Item):
     wire_tag = 'sleep'
     durationMs: int
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f"Wait {'ended' if completed else 'started'} ({self.durationMs} ms requested)."),)
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return (NoticeTranscript(f'Waited ({self.durationMs} ms requested).'),)
+
+    @property
+    def activity_detail(self) -> str:
+        return f'Waiting {self.durationMs} ms'
 
 
 class ImageViewItem(Item):
     wire_tag = 'imageView'
     path: str
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(f'Image: {self.path}'),)
 
 
@@ -517,7 +529,7 @@ class ImageGenerationItem(Item):
     result: str
     savedPath: str | None = None
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(f'Image generation: {self.status}' +
                                  (f' — {self.savedPath}' if self.savedPath else '')),)
 
@@ -528,9 +540,13 @@ class WebSearchItem(Item):
     action: JsonValue = None
     results: JsonValue = None
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         # Search status carries no success flag. Do not invent a successful end.
-        return (NoticeTranscript(f"Web search {'finished' if completed else 'started'}: {self.query}"),)
+        return (NoticeTranscript(f'Web search: {self.query}'),)
+
+    @property
+    def activity_detail(self) -> str:
+        return f'Searching: {self.query}'
 
 
 class FileChange(WireModel):
@@ -541,10 +557,11 @@ class FileChange(WireModel):
 
 class FileChangeItem(Item):
     wire_tag = 'fileChange'
+    doing = 'Editing files'
     changes: list[FileChange]
     status: str
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript('File changes: ' + self.status + '\n' +
                                  '\n'.join(f'{change.path}\n{change.diff}' for change in self.changes)),)
 
@@ -561,7 +578,7 @@ class AgentToolItem(Item):
     receiverThreadIds: list[str]
     agentsStates: dict[str, AgentState]
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(f'{self.tool}: {self.status}\n' + '\n'.join(
             f'{name}: {state.status}' + (f' — {state.message}' if state.message else '')
             for name, state in self.agentsStates.items())),)
@@ -573,7 +590,7 @@ class AgentActivityItem(Item):
     agentThreadId: str
     kind: str
 
-    def events(self, *, completed: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(f'{self.agentPath}: {self.kind}'),)
 
 
@@ -600,11 +617,12 @@ class ItemEntry(WireModel):
     def completed(self) -> bool:
         return self.completedAtMs is not None
 
-    def publication(self) -> TranscriptUpdate:
+    def publication(self) -> FinishedItem:
+        if self.completedAtMs is None:
+            raise ValueError(f'Item {self.item.id} has not finished')
         timestamp = self.startedAtMs or self.completedAtMs
-        return TranscriptUpdate(self.turnId, self.item.id, tuple(
-            replace(event, timestamp=timestamp / 1000 if timestamp is not None else None)
-            for event in self.item.events(completed=self.completed)))
+        return FinishedItem(self.turnId, self.item.id, tuple(
+            replace(event, timestamp=timestamp / 1000) for event in self.item.events()))
 
 
 class ItemsPage(WireModel):
@@ -617,107 +635,71 @@ class TranscriptNotification(WireModel, ABC, metaclass=RegisteredWireMeta):
         registry_dict={}, key_attribute='method', skip_if_no_key=True)
     method: ClassVar[str]
     threadId: str
-    turnId: str
 
     @abstractmethod
     def apply(self, stream: ItemStream) -> TranscriptUpdate | None: ...
 
 
-class Started(TranscriptNotification):
+class TurnHeader(WireModel):
+    id: str
+
+
+class TurnBegan(TranscriptNotification):
+    method = 'turn/started'
+    turn: TurnHeader
+
+    def apply(self, stream: ItemStream) -> TranscriptUpdate:
+        return TurnStarted(self.turn.id)
+
+
+class TurnFinished(TranscriptNotification):
+    method = 'turn/completed'
+    turn: TurnHeader
+
+    def apply(self, stream: ItemStream) -> TranscriptUpdate:
+        for key in [key for key in stream.started if key[0] == self.turn.id]:
+            del stream.started[key]
+        return TurnEnded(self.turn.id)
+
+
+class ItemNotification(TranscriptNotification, ABC):
+    turnId: str
+
+
+class Started(ItemNotification):
     method = 'item/started'
     item: CodexItem
     startedAtMs: int
 
     def apply(self, stream: ItemStream) -> TranscriptUpdate:
-        entry = ItemEntry(turnId=self.turnId, item=self.item, startedAtMs=self.startedAtMs)
-        stream.active[self.turnId, self.item.id] = entry
-        return entry.publication()
+        stream.started[self.turnId, self.item.id] = self.startedAtMs
+        return ActiveItem(self.turnId, self.item.id, self.item.activity, self.item.activity_detail)
 
 
-class Completed(TranscriptNotification):
+class Completed(ItemNotification):
     method = 'item/completed'
     item: CodexItem
     completedAtMs: int
 
     def apply(self, stream: ItemStream) -> TranscriptUpdate:
-        key = self.turnId, self.item.id
-        previous = stream.active.pop(key, None)
-        stream.incomplete.discard(key)
+        # A completed notification carries the whole item; deltas are not needed.
         return ItemEntry(turnId=self.turnId, item=self.item,
-                         startedAtMs=previous.startedAtMs if previous else None,
+                         startedAtMs=stream.started.pop((self.turnId, self.item.id), None),
                          completedAtMs=self.completedAtMs).publication()
 
 
-class ItemDelta(TranscriptNotification, ABC):
-    itemId: str
-    delta: str
-
-    @abstractmethod
-    def append(self, item: Item) -> None: ...
-
-    def apply(self, stream: ItemStream) -> TranscriptUpdate | None:
-        key = self.turnId, self.itemId
-        if key not in stream.active:
-            # Connecting midway through an item provides no initial content.
-            # Its full completion is authoritative; never publish a suffix as
-            # though it were the whole item or replay a possibly included delta.
-            if key not in stream.incomplete:
-                print(f'Joined during item {self.itemId}; waiting for its complete snapshot',
-                      file=sys.stderr, flush=True)
-                stream.incomplete.add(key)
-            return None
-        entry = stream.active[key]
-        self.append(entry.item)
-        return entry.publication()
-
-
-class TextAppend(ItemDelta, ABC):
-    def append(self, item: Item) -> None:
-        if not isinstance(item, TextBody):
-            raise TypeError('Text delta names an item without text content')
-        item.append_text(self.delta)
-
-
-class AssistantDelta(TextAppend):
-    method = 'item/agentMessage/delta'
-
-
-class PlanDelta(TextAppend):
-    method = 'item/plan/delta'
-
-
-class ReasoningDelta(ItemDelta):
-    method = 'item/reasoning/summaryTextDelta'
-    summaryIndex: int
-
-    def append(self, item: Item) -> None:
-        if not isinstance(item, ReasoningItem):
-            raise TypeError('Summary delta names a non-reasoning item')
-        item.append_summary(self.summaryIndex, self.delta)
-
-
-class CommandDelta(ItemDelta):
-    method = 'item/commandExecution/outputDelta'
-
-    def append(self, item: Item) -> None:
-        if not isinstance(item, CommandItem):
-            raise TypeError('Command output names a non-command item')
-        item.append_output(self.delta)
-
-
 class ItemStream:
-    """Only active item assembly; Core owns durable transcript replacement."""
+    """When each item in progress started; finished items arrive whole."""
 
     def __init__(self, thread: str):
         self.thread = thread
-        self.active: dict[tuple[str, str], ItemEntry] = {}
-        self.incomplete: set[tuple[str, str]] = set()
+        self.started: dict[tuple[str, str], int] = {}
 
     def receive(self, notification: RpcNotification) -> TranscriptUpdate | None:
         declarations = TranscriptNotification.__registry_config__.registry_dict
         if notification.method not in declarations:
-            # Usage, account, raw/private reasoning and other control events
-            # are not transcript content. Known content methods declare a type.
+            # Deltas, usage, account, raw/private reasoning and other control
+            # events are not transcript content. Known methods declare a type.
             return None
         event = declarations[notification.method].model_validate(notification.params)
         if event.threadId != self.thread:

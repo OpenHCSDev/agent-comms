@@ -7,35 +7,39 @@ from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcripts import TranscriptReadIdentity
 
 
-def test_cli_items_page_in_place_and_stale_the_read_that_saw_them(tmp_path):
+def test_finished_cli_items_append_once_and_page(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(Thread("codex", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
-    transcript.publish(turn_id="t1", item_id="reply",
-                       events=(AssistantTranscript("Hel", timestamp=1.0),))
-    transcript.publish(turn_id="t1", item_id="compaction",
-                       events=(NoticeTranscript("Compacting context…", timestamp=2.0),))
+    transcript.finish(turn_id="t1", item_id="compaction",
+                      events=(NoticeTranscript("Compacting context…", timestamp=2.0),))
     read = comms.transcripts.capture_page_read("codex")
     assert read.content_current()
     # The identity crosses the ACP and observation wires.
     wired = FieldCodec.decode(TranscriptReadIdentity, FieldCodec.encode(read.identity))
     assert wired == read.identity
+    assert [event.text for event in comms.transcripts.thread_transcript_page("codex").events] \
+        == ["Compacting context…"]
 
-    transcript.publish(turn_id="t1", item_id="reply",
-                       events=(AssistantTranscript("Hello", timestamp=1.0),))
-    assert not read.content_current()
+    # Finishing appends after what the read captured; the read stays current.
+    transcript.finish(turn_id="t1", item_id="reply",
+                      events=(AssistantTranscript("Hello", timestamp=1.0),))
+    # A watch that starts again republishes what Codex already finished.
+    transcript.finish(turn_id="t1", item_id="reply",
+                      events=(AssistantTranscript("Hello", timestamp=1.0),))
+    transcript.finish(turn_id="t1", item_id="hook", events=())
+    assert read.content_current()
     page = comms.transcripts.thread_transcript_page("codex")
-    assert [event.text for event in page.events] == ["Hello", "Compacting context…"]
-    assert not page.has_older
+    assert [event.text for event in page.events] == ["Compacting context…", "Hello"]
 
     newest = comms.transcripts.thread_transcript_page("codex", max_messages=1)
-    assert [event.text for event in newest.events] == ["Compacting context…"]
+    assert [event.text for event in newest.events] == ["Hello"]
     older = comms.transcripts.thread_transcript_page("codex", before=newest.before,
                                                      max_messages=1)
-    assert [event.text for event in older.events] == ["Hello"]
+    assert [event.text for event in older.events] == ["Compacting context…"]
     assert newest.has_older and not older.has_older
     later = comms.transcripts.thread_transcript_page("codex", after=older.after)
-    assert [event.text for event in later.events] == ["Compacting context…"]
+    assert [event.text for event in later.events] == ["Hello"]
 
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):

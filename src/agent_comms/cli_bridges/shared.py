@@ -20,6 +20,9 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 from metaclass_registry import AutoRegisterMeta
 from agent_comms.messages import Message, MessageKind
 from agent_comms.thread_identity import ThreadRole
+from agent_comms.activity import ActivityState
+from agent_comms.agent_activity import AgentActivity
+from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.transcript_events import TranscriptEvent
 
 
@@ -47,11 +50,57 @@ class Binding:
 
 
 @dataclass(frozen=True)
-class TranscriptUpdate:
-    """One CLI item's complete current presentation, identified by its producer."""
+class ThreadOutput:
+    """Where a CLI's output lands in Core: finished items and current activity."""
+    transcript: ExternalTranscript
+    agents: AgentActivity
+
+    def status(self, state: ActivityState, detail: str = '') -> None:
+        detail = ' '.join(detail.split())
+        self.agents.set_activity(self.transcript.incarnation.name, state,
+                                 detail if len(detail) <= 200 else detail[:199] + '…')
+
+
+@dataclass(frozen=True)
+class TranscriptUpdate(ABC):
+    """One change a CLI reports about its thread."""
     turn_id: str
+
+    @abstractmethod
+    def publish(self, output: ThreadOutput) -> None: ...
+
+
+@dataclass(frozen=True)
+class TurnStarted(TranscriptUpdate):
+    def publish(self, output: ThreadOutput) -> None:
+        output.status(ActivityState.WORKING)
+
+
+@dataclass(frozen=True)
+class TurnEnded(TranscriptUpdate):
+    def publish(self, output: ThreadOutput) -> None:
+        output.status(ActivityState.IDLE)
+
+
+@dataclass(frozen=True)
+class ActiveItem(TranscriptUpdate):
+    """An item the CLI started producing: what it is doing now."""
+    item_id: str
+    state: ActivityState
+    detail: str
+
+    def publish(self, output: ThreadOutput) -> None:
+        output.status(self.state, self.detail)
+
+
+@dataclass(frozen=True)
+class FinishedItem(TranscriptUpdate):
+    """One CLI item's complete presentation, identified by its producer."""
     item_id: str
     events: tuple[TranscriptEvent, ...]
+
+    def publish(self, output: ThreadOutput) -> None:
+        output.transcript.finish(turn_id=self.turn_id, item_id=self.item_id, events=self.events)
 
 @dataclass
 class Options:
@@ -329,12 +378,13 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
     async def publish_transcript(self) -> None:
         from agent_comms.comms import Comms
 
-        transcript = await asyncio.to_thread(
-            Comms(Path(self.binding.root)).transcripts.external, self.binding.bus)
+        comms = Comms(Path(self.binding.root))
+        output = ThreadOutput(
+            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
+        # A new watch has seen no turn; one already running reports itself.
+        await asyncio.to_thread(output.status, ActivityState.IDLE)
         async for update in self.transcript():
-            await asyncio.to_thread(
-                transcript.publish, turn_id=update.turn_id,
-                item_id=update.item_id, events=update.events)
+            await asyncio.to_thread(update.publish, output)
 
 class LineMonitorBridge(CliBridge[Options]):
     """Harnesses whose monitor injects each stdout line as a notification."""

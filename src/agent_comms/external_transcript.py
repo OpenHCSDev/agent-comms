@@ -1,10 +1,11 @@
 """Transcript items a CLI harness publishes for its sessionless bus thread.
 
 A thread without a native session has no session file of its own; the CLI
-bridge publishes each of its items (a reply, a reasoning summary, a tool call,
-a compaction) here, whole, every time the item changes. The thread's page
-merges these items with its bus messages exactly as a native session's
-records are merged: the item's sequence is its position.
+bridge publishes each finished item (a reply, a reasoning summary, a tool call,
+a compaction) here once. Finished items are append-only, so the thread's page
+merges them with its bus messages exactly as a native session's records are
+merged: the item's sequence is its position. What the CLI is doing before an
+item finishes is the thread's activity, reported through Core's activity log.
 """
 
 from __future__ import annotations
@@ -20,22 +21,19 @@ from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent
-from .typed_table import Column, Index, TypedStore, TypedTable
+from .typed_table import Column, TypedStore, TypedTable
 
 
 @dataclass(frozen=True)
 class ExternalItemRow(TypedTable):
-    """One CLI item's current presentation; its position is fixed at first publication."""
+    """One finished CLI item, at the position it took when it finished."""
 
     thread: str = field(metadata={"sql": Column(primary_key=True)})
     turn_id: str = field(metadata={"sql": Column(primary_key=True)})
     item_id: str = field(metadata={"sql": Column(primary_key=True)})
     seq: int
-    # Every publication to a thread takes that thread's next revision.
-    revision: int
     events: tuple[TranscriptEvent, ...]
     unique = (("thread", "seq"),)
-    indexes = (Index(("thread", "revision")),)
 
 
 @dataclass(frozen=True)
@@ -58,19 +56,18 @@ class ExternalRecord:
         return sum(event.text_size for event in self.events)
 
     def incomplete_tail(self, through: int) -> bool:
-        return False  # Each publication is the whole item.
+        return False  # Only finished items are records.
 
 
 @dataclass(frozen=True)
 class ExternalCut(RecordsCut):
-    """The thread's newest item sequence and publication revision when read."""
+    """The thread's newest finished item sequence when read."""
 
     offset: int
-    revision: int
 
     def contains(self, current: ExternalCut, through: int) -> bool:
-        # Items change in place, so any publication can change captured content.
-        return current == self
+        # Finished items are append-only: later items belong to the next update.
+        return current.offset >= self.offset
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,7 +78,7 @@ class ExternalTranscript(TypedStore):
     incarnation: ThreadIncarnation
     filename: ClassVar[str] = "external_transcripts.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow,)
-    # Items are republished on every delta; a lost tail is replaced by the next.
+    # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
 
     @classmethod
@@ -93,27 +90,25 @@ class ExternalTranscript(TypedStore):
     def lookup(self) -> str:
         return stable_thread_lookup(self.incarnation.created_at)
 
-    def publish(self, *, turn_id: str, item_id: str,
-                events: tuple[TranscriptEvent, ...]) -> None:
-        """Replace this item's presentation, keeping its first position."""
+    def finish(self, *, turn_id: str, item_id: str,
+               events: tuple[TranscriptEvent, ...]) -> None:
+        """Append a finished item once; an item with no presentation adds nothing."""
+        if not events:
+            return
+        key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
         with self.transaction(write=True) as connection:
-            current = ExternalItemRow.one(
-                connection, thread=self.lookup, turn_id=turn_id, item_id=item_id)
-            cut = self._cut(connection)
-            ExternalItemRow(
-                self.lookup, turn_id, item_id,
-                current.seq if current is not None else cut.offset + 1,
-                cut.revision + 1, events,
-            ).upsert(connection)
+            if ExternalItemRow.one(connection, **key) is None:
+                ExternalItemRow(seq=self._cut(connection).offset + 1, events=events,
+                                **key).insert(connection)
 
     def _cut(self, connection) -> ExternalCut:
         return ExternalCut(*connection.execute(
-            'SELECT coalesce(max(seq), 0), coalesce(max(revision), 0) '
-            f'FROM "{ExternalItemRow.declared_name}" WHERE thread = ?', (self.lookup,)).fetchone())
+            f'SELECT coalesce(max(seq), 0) FROM "{ExternalItemRow.declared_name}" '
+            'WHERE thread = ?', (self.lookup,)).fetchone())
 
     def cut(self) -> ExternalCut:
         if not self.path.exists():
-            return ExternalCut(0, 0)  # No CLI has published an item.
+            return ExternalCut(0)  # No CLI has published an item.
         with self.transaction(write=False) as connection:
             return self._cut(connection)
 
