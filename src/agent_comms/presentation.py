@@ -332,6 +332,8 @@ class BusPresentation:
             *(view.thread.name for view in snapshot.threads),
             *(view.channel.name for view in snapshot.channels),
         }
+        if basis.notice is not None and not self.bus.reads.consume_notice(basis.notice):
+            snapshot = replace(snapshot, read_marker_notice=None)
         return replace(snapshot, unread_pending=frozenset(pending))
 
     @contextmanager

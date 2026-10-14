@@ -120,6 +120,20 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
         self.update(advance)
 
+    def consume_notice(self, expected: str) -> bool:
+        """Grant one presentation custody of the pending durable notice."""
+        consumed = False
+
+        def consume(document: ReadDocument) -> ReadDocument:
+            nonlocal consumed
+            if document.notice != expected:
+                return document
+            consumed = True
+            return replace(document, notice=None)
+
+        self.update(consume)
+        return consumed
+
     def seen_sequences(
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
     ) -> frozenset[int]:
