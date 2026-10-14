@@ -281,18 +281,6 @@ def _atomic_write_text(
         temporary_path.unlink(missing_ok=True)
 
 
-StoreRevision = tuple[int, int, int, int] | None
-
-
-def file_revision(path: Path) -> StoreRevision:
-    """Identity of an on-disk revision, including atomic replacements."""
-    try:
-        stat = path.stat()
-    except FileNotFoundError:
-        return None
-    return stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
-
-
 def _repair_trailing_jsonl(path: Path) -> None:
     """Complete a valid unterminated record or quarantine a truncated one."""
     try:

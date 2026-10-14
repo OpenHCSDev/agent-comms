@@ -25,8 +25,9 @@ from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
-from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource, file_revision
+from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .errors import RelationViolationError
+from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, TypedTable
 from .wire_metadata import WireMetadata
@@ -65,15 +66,15 @@ class PrefixWitness(PrefixSeal):
 
     @property
     def device(self) -> int:
-        return self.revision[0]
+        return self.revision.identity.device
 
     @property
     def inode(self) -> int:
-        return self.revision[1]
+        return self.revision.identity.inode
 
     @property
     def offset(self) -> int:
-        return self.revision[2]
+        return self.revision.size
 
     def seal(self) -> PrefixSeal:
         return FieldCodec.decode(PrefixSeal, FieldCodec.project(self, "seal"))
@@ -126,8 +127,8 @@ class CertifiedSourceRead:
             raise RelationViolationError("Certified source read has left its lock lifetime.")
         self.marker.seal.check_final(self.witness, _path(self.path))
         if (
-            file_revision(os.fstat(self.stream.fileno())) != self.witness.revision
-            or file_revision(self.path.stat()) != self.witness.revision
+            FileRevision.from_stat(os.fstat(self.stream.fileno())) != self.witness.revision
+            or FileRevision.from_stat(self.path.stat()) != self.witness.revision
         ):
             raise RelationViolationError("Conversation source needs a current certificate.")
 
@@ -737,9 +738,12 @@ class PrefixCertificate(CheckpointTable, TypedTable):
                             pass
                         if through_seq != marker.last_seq:
                             raise RelationViolationError("Private bus has an unsettled publication sequence.")
-                        if file_revision(os.fstat(stream.fileno())) != file_revision(info) or file_revision(
-                            bus.path.stat()
-                        ) != file_revision(info):
+                        if (
+                            FileRevision.from_stat(os.fstat(stream.fileno()))
+                            != FileRevision.from_stat(info)
+                            or FileRevision.from_stat(bus.path.stat())
+                            != FileRevision.from_stat(info)
+                        ):
                             raise RelationViolationError("Private bus changed during checkpoint installation.")
                         cls.capture(marker.root_id, info, through_seq, digest,
                                     _tail(stream, info.st_size)).insert(db)
@@ -776,7 +780,12 @@ class PrefixCertificate(CheckpointTable, TypedTable):
     def witness(self) -> PrefixWitness:
         return PrefixWitness(
             self.root_id,
-            (self.device, self.inode, self.offset, self.mtime_ns, self.ctime_ns),
+            FileRevision(
+                FileIdentity(self.device, self.inode),
+                self.offset,
+                self.mtime_ns,
+                self.ctime_ns,
+            ),
             self.through_seq,
             self.digest,
             self.tail,
@@ -914,7 +923,7 @@ def _recover_pending_unlocked(
     """Repair only a durable writer intent after a COMPLETE canonical bus scan."""
     prior = seal.prior
     digest = _SEED
-    prior_seen = prior.revision[2] == 0
+    prior_seen = prior.revision.size == 0
     prior_seq = 0
     last_seq = 0
     count = 0
@@ -932,7 +941,7 @@ def _recover_pending_unlocked(
                 raise RelationViolationError("Private bus pending recovery exceeds cold bound.")
             digest = _chain(digest, raw)
             last_seq = record.sequence_after(last_seq)
-            if offset + len(raw) == prior.revision[2]:
+            if offset + len(raw) == prior.revision.size:
                 prior_seen = True
                 prior_seq = last_seq
                 if digest.hex() != prior.digest or prior_seq != prior.through_seq:
@@ -943,14 +952,14 @@ def _recover_pending_unlocked(
 
         for _ in bus.verified_records_unlocked(marker, on_row=collect):
             pass
-        if not prior_seen or (prior.revision[2] == 0 and prior.digest != _SEED.hex()):
+        if not prior_seen or (prior.revision.size == 0 and prior.digest != _SEED.hex()):
             raise RelationViolationError("Private bus checkpoint old prefix is unavailable.")
-        if file_revision(bus.path.stat()) != file_revision(info):
+        if FileRevision.from_stat(bus.path.stat()) != FileRevision.from_stat(info):
             raise RelationViolationError("Private bus changed during pending recovery.")
         with bus.path.open("rb") as stream:
             expected = PrefixWitness(
                 marker.root_id,
-                file_revision(info),
+                FileRevision.from_stat(info),
                 last_seq,
                 digest.hex(),
                 _tail(stream, info.st_size),
@@ -994,7 +1003,7 @@ def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWi
         raise RelationViolationError(
             "Private bus checkpoint exceeds the durable sequence marker."
         )
-    if file_revision(info) != saved.revision:
+    if FileRevision.from_stat(info) != saved.revision:
         raise CheckpointNeedsRepair("Bus has rows the checkpoint does not cover yet.")
     return saved
 
@@ -1018,7 +1027,7 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
         raise RelationViolationError(
             "Private bus checkpoint exceeds the durable sequence marker."
         )
-    if file_revision(info) == saved.revision:
+    if FileRevision.from_stat(info) == saved.revision:
         return saved
     # Changed revision: a suffix alone cannot rule out an earlier in-place edit.
     # Validate complete canonical history, compare digest at the saved offset,
@@ -1062,14 +1071,15 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
         pass
     if not observed_prefix or (saved.offset == 0 and saved.digest != _SEED.hex()):
         raise RelationViolationError("Private bus checkpoint prefix is unavailable.")
-    if file_revision(os.fstat(stream.fileno())) != file_revision(info) or file_revision(
-        bus.path.stat()
-    ) != file_revision(info):
+    if (
+        FileRevision.from_stat(os.fstat(stream.fileno())) != FileRevision.from_stat(info)
+        or FileRevision.from_stat(bus.path.stat()) != FileRevision.from_stat(info)
+    ):
         raise RelationViolationError("Private bus changed during checkpoint validation.")
     # Full parser above checked all cross-prefix response key duplicates.
     expected = PrefixWitness(
         saved.root_id,
-        file_revision(info),
+        FileRevision.from_stat(info),
         last_seq,
         digest.hex(),
         _tail(stream, info.st_size),
@@ -1193,7 +1203,7 @@ def append_private_bus_checkpoint_unlocked(
             digest = _chain(bytes.fromhex(saved.digest), raw)
             expected = PrefixWitness(
                 saved.root_id,
-                file_revision(info),
+                FileRevision.from_stat(info),
                 sequence,
                 digest.hex(),
                 _tail(stream, info.st_size),
@@ -1234,7 +1244,7 @@ def addressed_source_pointers_unlocked(
         if (
             saved.root_id != marker.root_id
             or saved.through_seq != marker.last_seq
-            or file_revision(bus.path.stat()) != saved.revision
+            or FileRevision.from_stat(bus.path.stat()) != saved.revision
         ):
             raise RelationViolationError("Current source pointers require an unchanged checkpoint.")
         rows = DeliverySources.read(
@@ -1246,6 +1256,6 @@ def addressed_source_pointers_unlocked(
             )
         )
         marker.seal.check_final(saved, path)
-        if file_revision(bus.path.stat()) != saved.revision:
+        if FileRevision.from_stat(bus.path.stat()) != saved.revision:
             raise RelationViolationError("Source changed during awareness read.")
         return tuple(reversed(rows))

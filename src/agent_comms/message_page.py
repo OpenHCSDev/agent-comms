@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
 from .messages import Message
+from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayBasis, MessageDisplayScope
 
 if TYPE_CHECKING:
@@ -34,7 +35,7 @@ class MessagePage:
     display_scope: ChannelDisplayScope | None = None
     display_basis: DMDisplayBasis | None = None
     historical_display: HistoricalDisplay | None = None
-    history_revision: tuple[int, int, int, int] | None = None
+    history_revision: FileRevision | None = None
 
     @property
     def oldest_cursor(self) -> int | HistoryCursor | None:

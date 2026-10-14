@@ -16,6 +16,7 @@ import os
 import struct
 import sys
 from pathlib import Path
+from typing import ClassVar
 
 from .goal_waits import GoalWaits
 
@@ -44,19 +45,33 @@ _AUTHORITY_FILES = frozenset({
 
 @dataclass(frozen=True)
 class WatchSource:
-    """Files in one directory whose physical changes wake a reader."""
+    """Files in one directory whose declared writes wake a reader."""
 
     directory: Path
     names: frozenset[bytes]
-    modified: bool = False
+    modified: ClassVar[bool] = False
 
     @classmethod
     def wire(cls, root: Path) -> WatchSource:
-        return cls(root, _AUTHORITY_FILES)
+        return ReplacedWatchSource(root, _AUTHORITY_FILES)
 
     @classmethod
-    def file(cls, path: Path, *, modified: bool = False) -> WatchSource:
-        return cls(path.parent, frozenset({os.fsencode(path.name)}), modified)
+    def file(cls, path: Path) -> WatchSource:
+        return ReplacedWatchSource(path.parent, frozenset({os.fsencode(path.name)}))
+
+    @classmethod
+    def modified_file(cls, path: Path) -> WatchSource:
+        return ModifiedWatchSource(path.parent, frozenset({os.fsencode(path.name)}))
+
+
+class ReplacedWatchSource(WatchSource):
+    """Atomic replacement and directory-entry changes wake this source."""
+
+
+class ModifiedWatchSource(WatchSource):
+    """In-place writes as well as directory-entry changes wake this source."""
+
+    modified = True
 
 
 @dataclass(frozen=True)

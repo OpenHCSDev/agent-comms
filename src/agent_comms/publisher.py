@@ -41,13 +41,10 @@ from .errors import (
 )
 from .mentions import ThreadMention
 from .messages import Message
+from .private_path import FileRevision
 from .private_registry_guard import _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
-from .store_files import (
-    StoreLock,
-    _store_lock,
-    file_revision,
-)
+from .store_files import StoreLock, _store_lock
 
 if TYPE_CHECKING:
 
@@ -364,7 +361,7 @@ class Publisher:
                 self._registry.store.path,
                 self._channels.path,
             )
-            before_revisions = tuple(file_revision(path) for path in source_paths)
+            before_revisions = tuple(FileRevision.capture(path) for path in source_paths)
             snapshot = self._registry.snapshot()
             snapshot.require_unambiguous_ownership()
             catalog = self._channels.read()
@@ -454,7 +451,7 @@ class Publisher:
             revision = hashlib.sha256(
                 repr(
                     (
-                        file_revision(self._registry.store.path),
+                        FileRevision.capture(self._registry.store.path),
                         self._channels.revision(),
                         sorted(
                             (name, thread.created_at, sorted(thread.tags))
@@ -496,7 +493,7 @@ class Publisher:
             }
             # Check the exact bytes and one coherent source revision before any append.
             CommittedDelivery.from_wire(row, metadata.root_id)
-            if before_revisions != tuple(file_revision(path) for path in source_paths):
+            if before_revisions != tuple(FileRevision.capture(path) for path in source_paths):
                 raise RelationViolationError("Send-time registry/catalog revision changed.")
             # Every frozen subscriber needs an identity, including stopped
             # observers. Register from this authoritative registry snapshot,

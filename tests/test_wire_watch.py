@@ -35,6 +35,13 @@ def test_tick_revision_paths_watch_final_bus_publication(tmp_path, monkeypatch):
         for name in source.names
     }
     assert watched == declared
+    modified = {
+        source.directory / os.fsdecode(name)
+        for source in paths.watch_sources
+        if source.modified
+        for name in source.names
+    }
+    assert modified == {*paths.coordination, *paths.goal_attempts}
     assert paths.bus[0] not in watched and paths.checkpoint not in watched
 
 

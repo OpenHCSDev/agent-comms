@@ -15,8 +15,8 @@ from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO, Literal
 
+from .private_path import FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
-from .bus_projection import BusFileRevision
 
 
 class StaleBusPageIndexError(ValueError):
@@ -33,19 +33,18 @@ class PageIndexTable:
 
 @dataclass(frozen=True)
 class BusPageSource(PageIndexTable, TypedTable):
-    identity: tuple[int, int, int, int]
-    offset: int = field(metadata={"sql": Column(check="offset>=0")})
+    revision: FileRevision
     tail: str
     singleton: Literal[1] = field(default=1, metadata={"sql": Column(primary_key=True)})
 
-    def covers(self, stream: BinaryIO, source: BusFileRevision) -> bool:
+    def covers(self, stream: BinaryIO, source: FileRevision) -> bool:
         """A later append index may lend offsets within this original cut."""
-        opened = os.fstat(stream.fileno())
+        opened = FileRevision.from_stat(os.fstat(stream.fileno()))
         return (
-            source.opened_by(stream)
-            and self.identity[:2] == (opened.st_dev, source.inode)
-            and source.size <= self.offset <= opened.st_size
-            and self.tail == BusPageIndex._tail(stream, self.offset)
+            source.holds_cut(opened, source.size)
+            and self.revision.identity == opened.identity
+            and source.size <= self.revision.size <= opened.size
+            and self.tail == BusPageIndex._tail(stream, self.revision.size)
         )
 
 
@@ -117,17 +116,15 @@ class BusPageIndex:
                 stream.seek(size - 1)
                 if stream.read(1) != b"\n":
                     return False
-            identity = (stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns)
+            revision = FileRevision.from_stat(stat)
             try:
                 saved = BusPageSource.one(self.connection, singleton=1)
             except (ValueError, TypeError):
                 saved = None  # Rebuild damaged current-format derived evidence from its source.
-            offset = saved.offset if saved is not None else 0
+            offset = saved.revision.size if saved is not None else 0
             valid = (
                 saved is not None
-                and 0 <= offset <= size
-                and saved.identity[:2] == identity[:2]
-                and (offset != size or saved.identity[2:] == identity[2:])
+                and saved.revision.holds_cut(revision, offset)
                 and saved.tail == self._tail(stream, offset)
             )
             if not valid:
@@ -170,7 +167,7 @@ class BusPageIndex:
                             self.connection
                         )
                         last_sequence = message.seq
-                BusPageSource(identity, size, self._tail(stream, size)).upsert(self.connection)
+                BusPageSource(revision, self._tail(stream, size)).upsert(self.connection)
             return True
 
     def current(self) -> bool:
@@ -187,9 +184,7 @@ class BusPageIndex:
             except (ValueError, TypeError):
                 return False  # Damaged derived evidence: the caller reads the source.
             return saved is not None and saved == BusPageSource(
-                (stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns),
-                size,
-                self._tail(stream, size),
+                FileRevision.from_stat(stat), self._tail(stream, size)
             )
 
     def offsets(
