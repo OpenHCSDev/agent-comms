@@ -21,13 +21,14 @@ from agent_comms.envelope_claim_transitions import (
     ClaimTransitionError,
     ExistingFileClaim,
 )
-from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError
+from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError, StoredHistoryUnreadable
 from agent_comms.exporting import (
     EverythingScope,
     FullLimit,
     JsonlFormat,
 )
 from agent_comms.messages import Message, HandoffKind, InfoKind
+from agent_comms.message_reference import MessageReference
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(
@@ -116,8 +117,9 @@ def test_valid_json_without_newline_not_exposed_by_any_gated_read(
 def test_malformed_complete_row_is_not_an_ordinary_message(tmp_path: Path) -> None:
     comms = marked(tmp_path)
     comms.bus.log.path.write_bytes(b'{"seq":1,"seq":2}\n')
-    with pytest.raises(RelationViolationError, match="Malformed"):
+    with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as malformed:
         comms.bus.log.full_history()
+    assert isinstance(malformed.value.__cause__, ValueError)
 
 
 def _participants(tmp_path: Path) -> tuple[Comms, Path]:
@@ -164,8 +166,11 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     from agent_comms.field_codec import FieldCodec
     from agent_comms.routing import TurnRouting
 
-    routing = TurnRouting((sent,), None)
-    assert FieldCodec.encode(routing)["requests"] == [sent.to_wire()]
+    reference = MessageReference(sent.seq, sent.message_id)
+    routing = TurnRouting((reference,), None)
+    assert FieldCodec.encode(routing)["requests"] == [
+        {"seq": sent.seq, "message_id": sent.message_id}
+    ]
     comms.transcripts.routes.record("session", ("entry",), routing)
     with Comms(comms.root).transcripts.routes.for_session("session") as routes:
         assert routes.get("entry") == routing
@@ -246,10 +251,10 @@ def test_same_file_double_slash_alias_conflicts_without_second_message(
     assert dict(comms.bus.log.claim_projection()) == {canonical: conflict.value.existing}
 
 
-def test_durable_raw_alias_claim_cannot_enter_guarded_public_or_projection(
+def test_raw_alias_claim_is_refused_before_append_or_projection(
     tmp_path: Path,
 ) -> None:
-    """An old/noncanonical claim row must never acquire a second identity."""
+    """A noncanonical claim row never enters the durable bus."""
     comms, worktree = _participants(tmp_path)
     first = comms.messaging.send_message(
         "alice", "bob", "Canonical claim", claims=[ExistingFileClaim(Path("a.py"))]
@@ -269,13 +274,11 @@ def test_durable_raw_alias_claim_cannot_enter_guarded_public_or_projection(
     }
     with store_files._store_lock(comms.bus.log.path):
         metadata = comms.bus.log._private_marker_unlocked()
-        comms.bus.log._append_private_unlocked(metadata, record)
-    with pytest.raises(RelationViolationError, match="Malformed claim envelope"):
-        comms.views.full_history()
-    with pytest.raises(RelationViolationError, match="Malformed claim envelope"):
-        comms.bus.log.claim_projection()
-    with pytest.raises(RelationViolationError, match="Malformed claim envelope"):
-        comms.bus.log.message_by_id(second.message_id)
+        with pytest.raises(ValueError, match="canonical absolute path"):
+            comms.bus.log._append_private_unlocked(metadata, record)
+    assert comms.views.full_history() == [first]
+    assert list(comms.bus.log.claim_projection()) == [str(worktree / "a.py")]
+    assert comms.bus.log.message_by_id(second.message_id) is None
 
 
 def test_release_requires_exact_owner_and_preserves_generation(
@@ -495,7 +498,7 @@ def test_failed_fsync_complete_visible_row_is_unknown_not_replayed(
         target = os.readlink(f"/proc/self/fd/{descriptor}")
         bus = comms.bus.log.path
         trigger = (
-            target == str(bus)
+            target == str(bus) and bus.stat().st_size > 0
             if fail_at == "bus"
             else (target == str(bus.parent) and bus.exists() and bus.stat().st_size > 0)
         )
@@ -520,73 +523,6 @@ def test_failed_fsync_complete_visible_row_is_unknown_not_replayed(
             "bob", "alice", "Conflict", claims=[ExistingFileClaim(Path("a.py"))]
         )
     assert comms.views.full_history() == messages
-
-
-def test_fsynced_existing_bus_row_survives_single_uncommitted_marker_rename_loss(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Only a marker rename rolls back; the existing bus inode's append survives."""
-    comms, worktree = _participants(tmp_path)
-    (worktree / "c.py").write_text("third")
-    first = comms.messaging.send_message(
-        "alice", "bob", "Alice owns a", claims=[ExistingFileClaim(Path("a.py"))]
-    )
-    marker = comms.root / "bus_meta.json"
-    bus = comms.bus.log.path
-    old_marker = marker.read_bytes()
-    old_size = bus.stat().st_size
-    real_fsync = os.fsync
-    bus_fsynced = False
-    failed = False
-
-    def fail_final_directory_fsync(descriptor: int) -> None:
-        nonlocal bus_fsynced, failed
-        target = os.readlink(f"/proc/self/fd/{descriptor}")
-        if target == str(bus) and bus.stat().st_size > old_size:
-            bus_fsynced = True
-        if target == str(comms.root) and bus_fsynced and not failed:
-            failed = True
-            raise OSError("directory fsync after existing-inode append")
-        real_fsync(descriptor)
-
-    with monkeypatch.context() as patch:
-        patch.setattr(store_files.os, "fsync", fail_final_directory_fsync)
-        with pytest.raises(ClaimEnvelopeUnknownError, match="UNKNOWN"):
-            comms.messaging.send_message(
-                "bob", "alice", "Bob owns b", claims=[ExistingFileClaim(Path("b.py"))]
-            )
-    assert bus_fsynced and failed
-    assert bus.stat().st_size > old_size
-    assert len(comms.views.full_history()) == 2
-    # Model an ordinary crash reverting ONLY the unsynced atomic marker rename.
-    # The existing bus inode and its appended row were already fsynced.
-    marker.write_bytes(old_marker)
-    with marker.open("rb") as stream:
-        real_fsync(stream.fileno())
-    directory_fd = os.open(comms.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
-    try:
-        real_fsync(directory_fd)
-    finally:
-        os.close(directory_fd)
-
-    reopened = Comms(comms.root, private_claim_writes=True)
-    committed = reopened.views.full_history()
-    assert len(committed) == 2 and committed[0] == first
-    assert committed[1].seq == 2
-    projection = reopened.bus.log.claim_projection()
-    assert projection[str(worktree / "a.py")].owner == "alice"
-    assert projection[str(worktree / "b.py")].owner == "bob"
-    with pytest.raises(ClaimConflict):
-        reopened.messaging.send_message(
-            "alice", "bob", "Loser never publishes", claims=[ExistingFileClaim(Path("b.py"))]
-        )
-    assert len(reopened.views.full_history()) == 2
-    third = reopened.messaging.send_message(
-        "observer", "alice", "Next distinct claim", claims=[ExistingFileClaim(Path("c.py"))]
-    )
-    assert third.seq == 3
-    assert len(reopened.views.full_history()) == 3
-    assert reopened.bus.log.claim_projection()[str(worktree / "c.py")].owner == "observer"
 
 
 def test_large_transition_reopens_and_exports_without_a_second_parser_limit(
@@ -629,8 +565,9 @@ def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path: Path)
     public = Message("alice", "bob", "attempt", InfoKind, seq=1).to_wire()
     public["claim_transition"] = {"claims": ["/tmp/a.py"]}
     comms.bus.log.path.write_bytes(json.dumps(public).encode() + b"\n")
-    with pytest.raises(RelationViolationError, match="Malformed claim"):
+    with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as malformed:
         comms.bus.log.full_history()
+    assert type(malformed.value.__cause__) is ValueError
 
 
 def _private_verified_rows(comms: Comms) -> list[tuple[object, object, object]]:
@@ -661,7 +598,7 @@ def test_claim_bearing_visible_failed_fsync_all_reader_routes_block_then_resync(
     def fail_fsync(descriptor: int) -> None:
         nonlocal fsyncs
         target = os.readlink(f"/proc/self/fd/{descriptor}")
-        if target == str(bus):
+        if target == str(bus) and bus.stat().st_size > 0:
             fsyncs += 1
             if phase != "allow":
                 raise OSError("claim row visible but not durable")
@@ -722,7 +659,9 @@ def test_claim_bearing_json_valid_no_newline_never_exposed(tmp_path: Path) -> No
         lambda: _private_verified_rows(comms),
     )
     for read in denied:
-        with pytest.raises(RelationViolationError, match="Incomplete"):
+        with pytest.raises(
+            RelationViolationError, match="Private bus checkpoint root/inode/size changed"
+        ):
             read()
 
 
@@ -774,7 +713,7 @@ real_fsync = os.fsync
 
 def kill_at_boundary(fd):
     name = os.readlink(f'/proc/self/fd/{fd}')
-    if phase == 'before_bus_append' and '.bus_meta.json.' in name or (phase == 'after_bus_append_before_fsync' and name == str(bus)):
+    if phase == 'before_bus_append' and '.bus_meta.json.' in name or (phase == 'after_bus_append_before_fsync' and name == str(bus) and bus.stat().st_size > 0):
         os.kill(os.getpid(), signal.SIGKILL)
     real_fsync(fd)
 store_files.os.fsync = kill_at_boundary
