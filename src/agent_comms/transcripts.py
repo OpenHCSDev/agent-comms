@@ -106,7 +106,9 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     requested_name: str
     thread: ThreadProvenance = field(metadata={"content_exclude": True})
     session_file: str
-    native_revision: tuple[int, int, int, int] | None
+    native_revision: tuple[int, int, int, int] | None = field(
+        metadata={"content_exclude": True}
+    )
     route_revision: TranscriptRouteRevision
     bus_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
     coordination_revision: tuple[int, int, int, int] | None = field(
@@ -178,14 +180,38 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
             self.receipt_frontier,
         )
 
+    def contains_native_cut(self, other: TranscriptReadIdentity) -> bool:
+        """Whether ``other`` still contains this read's captured native bytes.
+
+        Native sessions are append-only within one inode.  The page is bounded
+        by this identity's cursor, so later bytes belong to the next update and
+        cannot revoke preparation already admitted for this cut.  Replacement,
+        truncation, or a non-growth revision can have changed bytes in the cut.
+        """
+        captured, current = self.native_revision, other.native_revision
+        if captured is None or current is None:
+            return captured == current
+        captured_inode, captured_size, captured_mtime, captured_ctime = captured
+        current_inode, current_size, current_mtime, current_ctime = current
+        cut = self.page_bound.offset
+        return (
+            captured_inode == current_inode
+            and current_size >= cut
+            and (
+                current_size > captured_size
+                or (current_mtime, current_ctime) == (captured_mtime, captured_ctime)
+            )
+        )
+
     def same_content(self, other: TranscriptReadIdentity) -> bool:
-        """Fence content, including the original native publication proof.
+        """Fence the captured cut and its original publication proof.
 
         Reader acknowledgements and thread activity do not change page content.
         The scoped published relation remains fenced: an obligation can commit
         just after its wire append and replace the native final reply projection.
+        Native growth after the captured byte bound belongs to a later update.
         """
-        return self.content_identity == other.content_identity
+        return self.contains_native_cut(other) and self.content_identity == other.content_identity
 
 
 @dataclass(frozen=True, slots=True)
