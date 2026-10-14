@@ -9,6 +9,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, NativeProvenance, JournalProvenance, TurnContext, TranscriptSegment, UserInputSegment
+from agent_comms.turn_context import ContextManifestWire
 from agent_comms.pi_commands import Prompt
 from agent_comms.image_inputs import ImageInput
 from agent_comms.wire_record import WireRecord, ObservationWireRecord, ContextManifestWireObservation
@@ -303,6 +304,8 @@ def test_recorded_manifest_row_records_each_shared_fact_once():
                     hashlib.sha256(f"message {index}".encode()).hexdigest(), 5 + index, 1)
                 for index in range(20))),
     ), "pi.estimateTokens")
+    expanded = FieldCodec.encode(manifest)
+    assert ContextManifestWire.from_wire(expanded) == manifest
     row = ObservationWireRecord(ContextManifestWireObservation(manifest)).to_wire()
     encoded = row["observation"]["manifest"]
     assert len(encoded["sessions"]) == 1 and len(encoded["paths"]) == 1

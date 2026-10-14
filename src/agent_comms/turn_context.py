@@ -225,9 +225,9 @@ class UnattributedProvenance(Provenance):
 class ManifestSources:
     """The row's shared tables, typed and decoded by the canonical codec."""
 
-    sources: list[dict[str, Any]]
-    sessions: list[NativeSessionIdentity]
-    paths: list[str]
+    sources: list[dict[str, Any]] = field(default_factory=list)
+    sessions: list[NativeSessionIdentity] = field(default_factory=list)
+    paths: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         self._index = {key: {} for _, key in FieldCodec._fields(type(self))}
@@ -339,7 +339,7 @@ class ManifestPart:
     def expanded_form(cls, form: Mapping[str, Any], sources: ManifestSources) -> dict[str, Any]:
         expanded = FieldCodec.decode(dict[str, Any], form)
         if "provenance" in expanded:
-            raise ValueError("Compact part must reference row sources, not repeat them")
+            return expanded
         indexes = FieldCodec.decode(tuple[int, ...], expanded.pop("sources", None))
         expanded["provenance"] = [sources.source_form(index) for index in indexes]
         for declared, key in FieldCodec._fields(cls):
