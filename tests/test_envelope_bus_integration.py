@@ -567,7 +567,7 @@ def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path: Path)
     comms.bus.log.path.write_bytes(json.dumps(public).encode() + b"\n")
     with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as malformed:
         comms.bus.log.full_history()
-    assert isinstance(malformed.value.__cause__, (TypeError, ValueError))
+    assert type(malformed.value.__cause__) is ValueError
 
 
 def _private_verified_rows(comms: Comms) -> list[tuple[object, object, object]]:
