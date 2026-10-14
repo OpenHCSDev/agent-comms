@@ -147,15 +147,12 @@ class DiagnosticDrainReadiness(DrainReadiness):
         return self.diagnostic
 
     def presentation(self, ordinary, *, busy):
-        return ThreadPresentation(ordinary.title, "!", self.diagnostic.summary,
-                                  busy=busy, attention=True)
+        """Signal the retained failure without replacing current activity."""
+        return replace(ordinary, attention=True)
 
 
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
     """Retain the failed request warning; new messages keep ordinary availability."""
-
-    def presentation(self, ordinary, *, busy):
-        return ordinary if busy or ordinary.busy else super().presentation(ordinary, busy=busy)
 
 
 class UnavailableDrainReadiness(DiagnosticDrainReadiness):

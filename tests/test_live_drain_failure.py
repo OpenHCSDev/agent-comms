@@ -83,6 +83,23 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         await agent.shutdown()
 
 
+async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
+    comms, agent, _ = _session(tmp_path)
+    owner = comms.registry.snapshot().owner_identity("beta")
+    diagnostic = UnavailableDrainDiagnostic(owner, "OSError", "past drain failed")
+    assert comms.agents.set_drain_diagnostic("beta", owner, diagnostic)
+    lease = comms.agents.begin_turn("beta", "later-successful-turn").turn_lease
+    try:
+        await agent.inputs.drain_inbox("beta")
+        current = owner_view(comms)
+        assert current.activity.readiness.source_diagnostic() is None
+        assert current.thread.executing
+        assert current.presentation.busy and not current.presentation.attention
+    finally:
+        comms.agents.finish_turn(lease)
+        await agent.shutdown()
+
+
 async def test_unexpected_drain_failure_is_visible_and_propagates(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
 
