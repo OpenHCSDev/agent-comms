@@ -105,14 +105,13 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     initial = assignment.notification(
         recipient, observation=RecordedRecipientActivity(), updated_at_ms=1
     )
-    recorded = RecordedRecipientActivity().selected_response(
-        initial, 1, model_context=True, response_output=False
-    )
+    from agent_comms.notification_assignment import ShownToModelProgress
+
+    progress = ShownToModelProgress()
+    recorded = RecordedRecipientActivity().selected_response(initial, 1, progress)
     assert recorded.state == "Response selected" and not recorded.busy
     assert "completion is not recorded" in recorded.detail
-    live = UnavailableRecipientActivity().selected_response(
-        initial, 1, model_context=True, response_output=False
-    )
+    live = UnavailableRecipientActivity().selected_response(initial, 1, progress)
     assert live.state == "Read — interrupted, outcome unknown"
     assert "response turn ended" in live.detail
 

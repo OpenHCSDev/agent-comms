@@ -14,6 +14,7 @@ from .registration import Registration
 from .native_input_owner import RegistryOwner
 
 if TYPE_CHECKING:
+    from .notification_assignment import AssignmentProgress
     from .presentation import MessageNotification
 from .activity import (
     Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity,
@@ -54,43 +55,10 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
         self,
         notification: MessageNotification,
         updated_at_ms: int,
-        *,
-        model_context: bool,
-        response_output: bool,
+        progress: AssignmentProgress,
     ) -> MessageNotification:
-        read = model_context or response_output
-        if not self.turn_started_by(updated_at_ms):
-            return replace(
-                notification,
-                state=(
-                    "Read — interrupted, outcome unknown"
-                    if read
-                    else "Interrupted before read — outcome unknown"
-                ),
-                busy=False,
-                priority=3,
-                detail=(
-                    "The message reached model context, but its response turn ended without a terminal outcome. Do not automatically retry."
-                    if read
-                    else "The response turn ended before a model-context receipt was recorded. Do not automatically retry."
-                ),
-            )
-        if response_output:
-            return replace(
-                notification,
-                state="Read - working",
-                detail="The agent read this message and produced response output or started a tool.",
-            )
-        if not model_context:
-            return replace(
-                notification,
-                state="Starting response",
-                detail="The message was selected for this turn; model-context receipt is still pending.",
-            )
-        return replace(
-            notification,
-            state="Read — preparing response",
-            detail="The agent read this message and started its response turn; no response output is recorded yet.",
+        return progress.notification(
+            notification, running=self.turn_started_by(updated_at_ms)
         )
 
     def delivered_response(
@@ -114,9 +82,7 @@ class RecordedRecipientActivity(RecipientActivity):
         self,
         notification: MessageNotification,
         updated_at_ms: int,
-        *,
-        model_context: bool,
-        response_output: bool,
+        progress: AssignmentProgress,
     ) -> MessageNotification:
         return replace(notification, state="Response selected", busy=False, priority=3,
             detail="The recorded assignment selected a response; completion is not recorded.")
@@ -164,21 +130,6 @@ class LiveRecipientActivity(RecipientActivity):
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return self.thread.turn_started_by(updated_at_ms)
-
-    def selected_response(
-        self,
-        notification: MessageNotification,
-        updated_at_ms: int,
-        *,
-        model_context: bool,
-        response_output: bool,
-    ) -> MessageNotification:
-        return super().selected_response(
-            notification,
-            updated_at_ms,
-            model_context=model_context,
-            response_output=response_output,
-        )
 
     def delivered_response(
         self, notification: MessageNotification, updated_at_ms: int

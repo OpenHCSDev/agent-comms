@@ -25,6 +25,52 @@ if TYPE_CHECKING:
     from .presentation import MessageNotification
 
 
+class AssignmentProgress(DeclaredFamily, affix="Progress"):
+    """How far one assignment got, derived once from its durable evidence."""
+
+    running_state = "Starting response"
+    running_detail = (
+        "The message was selected for this turn; model-context receipt is still pending."
+    )
+    interrupted_state = "Interrupted before read — outcome unknown"
+    interrupted_detail = (
+        "The response turn ended before a model-context receipt was recorded. "
+        "Do not automatically retry."
+    )
+
+    def notification(self, notification: MessageNotification, *, running: bool):
+        return replace(
+            notification,
+            state=self.running_state if running else self.interrupted_state,
+            detail=self.running_detail if running else self.interrupted_detail,
+            busy=running,
+            priority=notification.priority if running else 3,
+        )
+
+
+class _ReadAssignmentProgress:
+    interrupted_state = "Read — interrupted, outcome unknown"
+    interrupted_detail = (
+        "The message reached model context, but its response turn ended without a terminal "
+        "outcome. Do not automatically retry."
+    )
+
+
+class ShownToModelProgress(_ReadAssignmentProgress, AssignmentProgress):
+    running_state = "Read — preparing response"
+    running_detail = (
+        "The agent read this message and started its response turn; no response output is "
+        "recorded yet."
+    )
+
+
+class ProducedOutputProgress(_ReadAssignmentProgress, AssignmentProgress):
+    running_state = "Read - working"
+    running_detail = (
+        "The agent read this message and produced response output or started a tool."
+    )
+
+
 @dataclass(frozen=True)
 class AssignmentActivity(TypedRow):
     triage_inflight: bool
@@ -35,9 +81,13 @@ class AssignmentActivity(TypedRow):
     response_message_id: str | None
 
     @property
-    def response_output(self) -> bool:
+    def progress(self) -> AssignmentProgress:
         facts = ReplayFact(self.replay_facts)
-        return bool(facts & (ReplayFact.ASSISTANT_OUTPUT | ReplayFact.TOOL_CALL_STARTED))
+        if facts & (ReplayFact.ASSISTANT_OUTPUT | ReplayFact.TOOL_CALL_STARTED):
+            return ProducedOutputProgress()
+        if self.model_context:
+            return ShownToModelProgress()
+        return AssignmentProgress()
 
     @property
     def response_reference(self) -> MessageReference | None:
@@ -163,59 +213,11 @@ class NotificationAssignment(NotificationSource):
         return FrozenRecipient(self.assignment.recipient_lookup, self.assignment.recipient)
 
     def project(self, observation: RecipientActivity) -> MessageNotification:
-        lifecycle = self.assignment.lifecycle
-        notification = lifecycle.notification(
+        return self.assignment.lifecycle.notification(
             self.recipient,
             observation=observation,
+            activity=self.activity,
             updated_at_ms=self.assignment.updated_at_ms,
             triage_inflight=self.activity.triage_inflight,
             blocked_by_prior=self.activity.blocks(self.assignment),
         )
-        if lifecycle.engaged:
-            notification = observation.selected_response(
-                notification,
-                self.assignment.updated_at_ms,
-                model_context=self.activity.model_context,
-                response_output=self.activity.response_output,
-            )
-        from .assignment_states import (
-            CompletedAssignment,
-            DeferredAssignment,
-            DeliveredAssignment,
-        )
-
-        if isinstance(lifecycle, CompletedAssignment):
-            reference = self.activity.response_reference
-            if reference is None:
-                return replace(
-                    notification,
-                    state="Read — no reply",
-                    detail="The response turn ended without a published reply.",
-                    priority=2,
-                    busy=False,
-                )
-            return replace(
-                notification,
-                state="Answered",
-                detail=f"Reply published as message {reference.seq}.",
-                reply_reference=reference,
-            )
-        if isinstance(lifecycle, DeliveredAssignment):
-            return observation.delivered_response(notification, self.assignment.updated_at_ms)
-        if isinstance(lifecycle, DeferredAssignment) and not self.activity.triage_inflight:
-            return replace(
-                notification,
-                state=(
-                    "Read — interrupted, outcome unknown"
-                    if self.activity.model_context
-                    else "Interrupted before read — outcome unknown"
-                ),
-                detail=(
-                    "The message reached model context, but its turn was interrupted without a terminal outcome. Do not automatically retry."
-                    if self.activity.model_context
-                    else "No model-context receipt exists; processing was interrupted before a read was proved. Do not automatically retry."
-                ),
-                busy=False,
-                priority=3,
-            )
-        return notification

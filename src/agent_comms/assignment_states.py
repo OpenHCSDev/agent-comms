@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
@@ -70,6 +70,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
         recipient,
         *,
         observation: RecipientActivity,
+        activity=None,
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
         blocked_by_prior: bool = False,
@@ -182,9 +183,11 @@ class PendingNotification:
     the same declarations; settled history belongs to neither operation.
     """
 
-    def notification(self, recipient, *, observation, updated_at_ms=0,
+    def notification(self, recipient, *, observation, activity=None, updated_at_ms=0,
                      triage_inflight=False, blocked_by_prior=False):
-        ordinary = super().notification(recipient, observation=observation)
+        ordinary = super().notification(
+            recipient, observation=observation, activity=activity
+        )
         return observation.pending_notification(ordinary, blocked_by_prior=blocked_by_prior)
 
 
@@ -307,6 +310,27 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
 
 
 class EngagedAssignment(BoundAssignment):
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity=None,
+        updated_at_ms=0,
+        triage_inflight=False,
+        blocked_by_prior=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return (
+            notification
+            if activity is None
+            else observation.selected_response(
+                notification, updated_at_ms, activity.progress
+            )
+        )
+
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         from .wake import derive_exact_reply_target
 
@@ -344,6 +368,37 @@ class EngagedAssignment(BoundAssignment):
 
 
 class CompletedAssignment(BoundAssignment):
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity=None,
+        updated_at_ms=0,
+        triage_inflight=False,
+        blocked_by_prior=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        if activity is None:
+            return notification
+        reference = activity.response_reference
+        if reference is None:
+            return replace(
+                notification,
+                state="Read — no reply",
+                detail="The response turn ended without a published reply.",
+                priority=2,
+                busy=False,
+            )
+        return replace(
+            notification,
+            state="Answered",
+            detail=f"Reply published as message {reference.seq}.",
+            reply_reference=reference,
+        )
+
     def require_completion(self) -> Engagement:
         return self.decision
 
@@ -377,6 +432,7 @@ class DeferredAssignment(InterruptedAssignment):
         recipient,
         *,
         observation,
+        activity=None,
         updated_at_ms=0,
         triage_inflight=False,
         blocked_by_prior=False,
@@ -398,7 +454,14 @@ class DeferredAssignment(InterruptedAssignment):
                 "The check was attempted but no decision was confirmed. "
                 "Do not automatically retry.",
             )
-        return super().notification(recipient, observation=observation)
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return (
+            notification
+            if activity is None
+            else activity.progress.notification(notification, running=False)
+        )
 
     notification_state = "Interrupted — outcome unknown"
     notification_detail = (
@@ -433,6 +496,25 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
     """
 
     decision: PendingDecision
+
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity=None,
+        updated_at_ms=0,
+        triage_inflight=False,
+        blocked_by_prior=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return (
+            notification
+            if activity is None
+            else observation.delivered_response(notification, updated_at_ms)
+        )
 
     notification_priority = 2
     notification_state = "Delivered"
