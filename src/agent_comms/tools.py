@@ -9,7 +9,6 @@ from typing import ClassVar, Literal, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
-from .channel_targets import is_channel_target
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
 from .command import Command
 from .comms import Comms
@@ -54,14 +53,6 @@ class SubjectBinding(ContextBinding):
     @classmethod
     def resolve(cls, subject: str, actor: str | None) -> str:
         return subject
-
-
-class ActorBinding(ContextBinding):
-    @classmethod
-    def resolve(cls, subject: str, actor: str | None) -> str:
-        if actor is None:
-            raise ValueError("This tool requires an acting thread.")
-        return actor
 
 
 def tool_field(
@@ -782,15 +773,16 @@ class CommsInboxTool(ToolRequest):
     label = "Comms Inbox"
     description = (
         "Fetch undelivered messages and unresolved native input attempts for a thread. "
-        "Optional ACK changes only the inbox marker; unresolved_inputs remain UNKNOWN. "
-        "Oversized results return complete=false, counts, and a complete result_file; "
-        "ACK is deferred. Read that file selectively, never dump it into context. For "
-        "standby, supply goal_id and wait_for to get standby_review: exact eligible "
-        "keys and messages, already reviewed entries, and excluded "
-        "owner/other-dependency inputs."
+        "Optional target limits the conversation. ACK marks exactly the returned "
+        "message references; unresolved_inputs remain UNKNOWN. Oversized results return "
+        "complete=false, counts, and a complete result_file; ACK is deferred. Read that "
+        "file selectively, never dump it into context. For standby, supply goal_id and "
+        "wait_for to get standby_review: exact eligible keys and messages, already "
+        "reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
-    ack: bool = tool_field("Mark delivered after reading", default=True)
+    target: str | None = tool_field("Optional channel or peer conversation", default=None)
+    ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
     goal_id: str | None = tool_field("Current goal for scoped standby review", default=None)
     wait_for: list[str] | None = tool_field(
         "Declared dependencies for standby review", default=None
@@ -798,6 +790,11 @@ class CommsInboxTool(ToolRequest):
 
     def apply(self, comms: Comms) -> JsonObject:
         thread = self.thread
+        target = self.target
+        if target is not None:
+            target = target.strip()
+            if not target:
+                raise ValueError("An inbox target cannot be empty.")
         goal_id = self.goal_id
         wait_for = self.wait_for
         if bool(goal_id) != bool(wait_for):
@@ -807,7 +804,7 @@ class CommsInboxTool(ToolRequest):
             if goal_id and wait_for
             else None
         )
-        inbox = comms.bus.inbox(thread)
+        inbox = comms.bus.inbox(thread, target)
         messages = [message.to_wire() for message in inbox]
         references = tuple(message.reference for message in inbox)
         unresolved = comms.goals.unresolved_inputs(thread)
@@ -963,82 +960,6 @@ class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
         from .cli_commands import ArchiveCliCommand
 
         return ArchiveCliCommand(name=self.name).apply(comms)
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsDismissTool(ToolRequest):
-    label = "Dismiss Unaddressed Channel Pings"
-    description = (
-        "End this turn quietly when a channel message is not addressed to you. Reports "
-        "which threads were mentioned, advances only your own delivery cursor for that "
-        "channel, and never wakes or notifies anyone else."
-    )
-    thread: str | None = tool_field(
-        "Thread dismissing its own pings (defaults to the executing thread)",
-        default=None,
-        binding=ActorBinding,
-    )
-    target: str = tool_field("Channel the ping arrived on")
-
-    def apply(self, comms: Comms) -> JsonObject:
-        """Dismiss channel pings addressed to other threads, ending the turn quietly."""
-        thread = self.thread or _executing_thread()
-        target = self.target.strip()
-        if not target:
-            raise ValueError("A channel target is required.")
-        name = comms.registry.require(thread).name
-        bus_messages = comms.bus.inbox(name, target)
-        if not bus_messages:
-            return {
-                "thread": name,
-                "target": target,
-                "acknowledged": 0,
-                "mentioned": (name,),
-                "dismissed": True,
-            }
-        mentioned: tuple[str, ...] = ()
-        for message in bus_messages:
-            if not is_channel_target(message.target) and (not message.sender_role.executable):
-                continue
-            if message.target != target and message.sender != target:
-                continue
-            if message.mentions:
-                mentioned = tuple(
-                    dict.fromkeys(item.thread for item in message.mentions if item.thread != name)
-                )
-                break
-        else:
-            mentioned = (name,)
-        acknowledged = comms.messaging.acknowledge(
-            name, tuple(message.reference for message in bus_messages)
-        )
-        return {
-            "thread": name,
-            "target": target,
-            "acknowledged": acknowledged,
-            "mentioned": mentioned,
-            "dismissed": True,
-        }
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsAckTool(ToolRequest):
-    label = "Acknowledge Comms Messages"
-    description = "Mark a thread inbox or one of its conversations delivered."
-    context = "thread"
-    action_label = "Mark inbox read"
-    action_order = 50
-    thread: str = tool_field("Thread whose delivery cursor advances", binding=ActorBinding)
-    target: str | None = tool_field(
-        "Optional conversation target", default=None, binding=SubjectBinding
-    )
-
-    def apply(self, comms: Comms) -> JsonObject:
-        messages = comms.bus.inbox(self.thread, self.target)
-        acknowledged = comms.messaging.acknowledge(
-            self.thread, tuple(message.reference for message in messages)
-        )
-        return {"acknowledged": acknowledged}
 
 
 def tool_catalog() -> list[JsonObject]:
