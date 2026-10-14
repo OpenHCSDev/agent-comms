@@ -461,19 +461,25 @@ class WakeCandidateIndex:
         if self.log._private_marker_unlocked().root_id != hint.root_id:
             raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
         prior_bytes = 0
-        if self.path.exists():
+        if bootstrap_new:
+            # Existence is not initialization: another process may have created
+            # the WAL but not committed its first checkpoint. BEGIN IMMEDIATE in
+            # maintain serializes that decision against the stored row.
+            more_source_bytes = not self.maintain(
+                bootstrap_new=True, max_rows=max_rows, max_bytes=max_bytes
+            )
+        else:
+            if not self.path.exists():
+                raise ProjectionRebuildRequiredError(
+                    "candidate index needs explicit initial build"
+                )
             prior = self._verified_checkpoint(hint.root_id)
             prior_bytes = prior.byte_offset
             if prior.byte_offset >= hint.through_bytes:
                 return CandidateCatchUp(prior.byte_offset, True, False)
-            rebuild = False
-        elif bootstrap_new:
-            rebuild = True
-        else:
-            raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
-        more_source_bytes = not self.maintain(
-            rebuild=rebuild, max_rows=max_rows, max_bytes=max_bytes
-        )
+            more_source_bytes = not self.maintain(
+                max_rows=max_rows, max_bytes=max_bytes
+            )
         checkpoint = self._verified_checkpoint(hint.root_id)
         if checkpoint.byte_offset <= prior_bytes and more_source_bytes:
             # The checkpoint row owns the byte position: a batch that consumed

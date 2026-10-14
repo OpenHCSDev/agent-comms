@@ -42,13 +42,13 @@ def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _maintain_in_process(root: str, root_id: str, through_seq: int, start, results) -> None:
+def _maintain_in_process(root: str, root_id: str, through_bytes: int, start, results) -> None:
     """One independent runtime connection bootstrapping the shared WAL."""
     start.wait()
     try:
-        index = WakeCandidateIndex(Comms(Path(root)).bus)
+        index = WakeCandidateIndex(Comms(Path(root)).bus.log)
         outcome = index.catch_up_committed_append(
-            index.notify_committed_append(root_id=root_id, through_seq=through_seq),
+            index.notify_committed_append(root_id=root_id, through_bytes=through_bytes),
             bootstrap_new=True, max_rows=256, max_bytes=8 * 1024 * 1024,
         )
     except BaseException as error:
@@ -79,19 +79,20 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
 
 def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) -> None:
     comms, root_id, _lookup = _private(tmp_path)
-    index = WakeCandidateIndex(comms.bus)
+    index = WakeCandidateIndex(comms.bus.log)
     comms.messaging.send_initial_cohort("sender", "#team", "initial")
     for number in range(128):
         comms.messaging.send_initial_cohort(
             "sender", "#team", f"{number:04d} " + "x" * 4096
         )
     expected_seq = comms.bus.log.latest_sequence()
+    expected_bytes = comms.bus.log.path.stat().st_size
     context = multiprocessing.get_context("spawn")
     start, results = context.Event(), context.Queue()
     processes = [
         context.Process(
             target=_maintain_in_process,
-            args=(str(comms.root), root_id, expected_seq, start, results),
+            args=(str(comms.root), root_id, expected_bytes, start, results),
         )
         for _ in range(2)
     ]
@@ -105,13 +106,13 @@ def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) ->
     assert all(outcome[0] == "ok" for outcome in outcomes), outcomes
     with sqlite3.connect(index.path) as db:
         checkpoint = db.execute(
-            "SELECT last_seq FROM candidate_checkpoint WHERE singleton=1"
+            "SELECT last_seq, byte_offset FROM candidate_checkpoint WHERE singleton=1"
         ).fetchone()
         count, distinct_count = db.execute(
             "SELECT count(*), count(DISTINCT source_seq || ':' || recipient_lookup) "
             "FROM candidate"
         ).fetchone()
-    assert checkpoint == (expected_seq,)
+    assert checkpoint == (expected_seq, expected_bytes)
     assert count == distinct_count
 
 
