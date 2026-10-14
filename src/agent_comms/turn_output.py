@@ -58,6 +58,13 @@ class TurnOutput:
         self.error_message = None
 
     @property
+    def declared_failure(self) -> failures.TurnFailure | None:
+        failure = self.failure
+        if failure is None or self.retry_result is None:
+            return failure
+        return self.retry_result.refine_failure(failure)
+
+    @property
     def failure_text(self) -> str:
         return self.failure.text if self.failure else ""
 

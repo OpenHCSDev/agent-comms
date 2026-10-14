@@ -52,7 +52,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
-from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -71,6 +71,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
+from agent_comms.turn_failure import ProviderRetryExhausted
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
 
 
@@ -633,6 +634,28 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
             ),
             AlreadyApplied,
         )
+
+
+def test_provider_failure_after_tool_start_is_terminal(db_path: Path) -> None:
+    with ready(db_path, max_attempts=3) as db:
+        _, fence = started(db)
+        with db.session.transaction() as connection:
+            ReplayAssessments.accumulate(
+                connection, "exec", ReplayFact.TOOL_CALL_STARTED
+            )
+        fence = final_evidence(db, fence)
+        outcome = db.attempts.settle_nonpublication(
+            fence,
+            expected_pointer_revision=1,
+            outcome=AttemptFailedAttempt(),
+            reason_code="provider_failed",
+            failure=ProviderRetryExhausted("controlled provider failure"),
+        )
+        assert type(outcome.value.execution.lifecycle) is FailedExecution
+        assert not outcome.value.can_retry
+        assert outcome.value.replay is not None
+        assert outcome.value.replay.facts == ReplayFact.TOOL_CALL_STARTED
+        assert outcome.value.replay.side_effects_possible
 
 
 @pytest.mark.parametrize("first_fact", ["process_dead", "backend_done"])

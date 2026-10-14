@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from .selected_tool_broker import NativeToolMode
     from .fresh_private_session import FreshPrivateSession
     from .selected_session import SelectedSession
+    from .turn_failure import TurnFailure
 
 CAPABILITY = "pi-native-input-v1-live-only"
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -333,11 +334,15 @@ class NativeContextProof(NativeContextRecord):
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
 
-    def __init__(self, detail: str, context: NativeContextProof, provider: str, model: str):
+    def __init__(
+        self, detail: str, context: NativeContextProof, provider: str, model: str,
+        failure: TurnFailure,
+    ):
         super().__init__(f"Native Pi assistant did not finish successfully: {detail}")
         self.context = context
         self.provider = provider
         self.model = model
+        self.failure = failure
         # Provider text may contain arbitrary response bodies. Only complete
         # known short errors may be broadcast into a shared channel.
         match = re.fullmatch(

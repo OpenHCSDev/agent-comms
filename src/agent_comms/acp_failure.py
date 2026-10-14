@@ -108,6 +108,9 @@ class ProviderRetryResult:
             final_error=redact(self.final_error) if self.final_error else None,
         )
 
+    def refine_failure(self, failure):
+        return failure if self.success else failure.after_provider_retry_exhausted()
+
     @property
     def summary(self) -> str:
         return " ".join(part for part in (

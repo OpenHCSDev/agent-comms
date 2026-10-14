@@ -1118,17 +1118,20 @@ def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
 
 def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_path):
     from agent_comms.native_pi import NativeContextProof
+    from agent_comms.turn_failure import ModelRequestFailed
 
     context = NativeContextProof(
         INPUT_ID, "session", "entry", 1, DIGEST, tmp_path / "session.jsonl"
     )
     failed = NativePiTerminalFailure(
-        "SECRET provider response including prompt data", context, "provider", "model"
+        "SECRET provider response including prompt data", context, "provider", "model",
+        ModelRequestFailed("SECRET provider response including prompt data"),
     )
     assert failed.public_message == "provider/model: provider request failed."
     assert "SECRET" not in failed.public_message
     usage = NativePiTerminalFailure(
-        "Codex error: The usage limit has been reached", context, "openai-codex", "gpt-6-sol"
+        "Codex error: The usage limit has been reached", context, "openai-codex", "gpt-6-sol",
+        ModelRequestFailed("Codex error: The usage limit has been reached"),
     )
     assert "The usage limit has been reached" in usage.public_message
 

@@ -17,6 +17,7 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _receipt_matches, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, _assert_response_schema
+from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -67,6 +68,19 @@ class SelectedParticipant(MroDispatch):
         self.owner = await Coordination.run_worker(partial(
             self.comms.registry.attach_native_session, self.owner, identity.session_file
         ))
+
+    def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:
+        """Acquire the strictly newer coordinator owner required by a retry."""
+        if snapshot.execution.lifecycle.retry:
+            participant = self.store.participants.advance_generation(
+                self.lookup,
+                self.owner.thread.name,
+                expected_generation=self.identity.generation,
+            ).value
+            self.identity = ParticipantOwner(
+                self.owner.thread, participant.participant_generation
+            )
+        self.require_current(self.store)
 
     def require_current(self, resource: Coordination) -> None:
         self.owner.require_registry(self.comms.registry)
