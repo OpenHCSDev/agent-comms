@@ -109,10 +109,7 @@ class OpenedWireSnapshot:
         """Decode only bytes appended to the same opened source inode."""
         if self.stream is None or self.revision is None:
             raise RelationViolationError("Wire tail has no opened source")
-        if (
-            previous.identity != self.revision.identity
-            or previous.size > self.revision.size
-        ):
+        if previous.identity != self.revision.identity or previous.size > self.revision.size:
             raise RelationViolationError("Wire tail does not extend the settled source")
         self.stream.seek(previous.size)
         scan = WireScan(self.metadata, previous_sequence=previous_sequence)
@@ -632,11 +629,8 @@ class WireLog:
                 boundary = stream.seek(0, 2) if stream is not None else 0
                 if stream is not None:
                     stream.seek(0)
-                revision = (
-                    FileRevision.from_stat(os.fstat(stream.fileno()))
-                    if stream is not None
-                    else None
-                )
+                revision = (FileRevision.from_stat(os.fstat(stream.fileno()))
+                            if stream is not None else None)
                 snapshot_type = OpenedWireSnapshot
                 if lock.source is not None:
                     source = lock.certified_read()
@@ -646,13 +640,10 @@ class WireLog:
                     source.require_open_prefix()
                     # Bind the separate retained descriptor to the exact admitted
                     # inode/revision while original physical custody is held.
-                    if (
-                        stream is None
-                        or revision
-                        != FileRevision.from_stat(os.fstat(source.stream.fileno()))
-                        or os.fstat(stream.fileno()).st_dev != source.witness.device
-                        or boundary != source.witness.offset
-                    ):
+                    if (stream is None
+                            or revision != FileRevision.from_stat(os.fstat(source.stream.fileno()))
+                            or os.fstat(stream.fileno()).st_dev != source.witness.device
+                            or boundary != source.witness.offset):
                         raise RelationViolationError("Opened read differs from its certified source cut")
                     snapshot_type = CertifiedOpenedWireSnapshot
                 opened = snapshot_type(metadata, through, stream, revision)

@@ -486,11 +486,8 @@ class HistoryViews:
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
         parts = {
-            name: (
-                tuple(FileRevision.capture(item) for item in path)
-                if isinstance(path, tuple)
-                else FileRevision.capture(path)
-            )
+            name: (tuple(map(FileRevision.capture, path)) if isinstance(path, tuple)
+                   else FileRevision.capture(path))
             for name, path in self.revision_paths().items()
         }
         return WireRevision(**parts, expiry_tick=int(time.time()))
