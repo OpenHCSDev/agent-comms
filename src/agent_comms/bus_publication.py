@@ -243,8 +243,8 @@ class CommittedDelivery(MessageWireRecord):
                               self.audience.sender_lookup, offset=offset, length=length)
         for recipient in self.audience.recipients:
             yield Addressed(recipient.recipient_lookup, self.message.seq)
-        if self.message.reply_reference is not None:
-            yield Replies(self.message.reply_reference.seq, self.message.seq)
+        for answered in self.message.answered_references:
+            yield Replies(answered.seq, self.message.seq)
 
     def delivery_messages(self):
         from .routing import DeliveryMessage
