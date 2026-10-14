@@ -121,7 +121,7 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         self.update(advance)
 
     def consume_notice(self, expected: str) -> bool:
-        """Grant one presentation custody of the pending durable notice."""
+        """Clear the stored notice once it has been shown; return whether this call cleared it."""
         consumed = False
 
         def consume(document: ReadDocument) -> ReadDocument:
