@@ -93,7 +93,6 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
         )
         for name in (
-            "PI_AGENT_ID",
             "AGENT_COMMS_THREAD",
             "AGENT_COMMS_ROOT",
             "PI_SESSION_FILE",

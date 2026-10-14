@@ -146,7 +146,6 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
         )
         for key in (
-            "PI_AGENT_ID",
             "PI_PARENT_ID",
             "PI_TASK",
             "PI_WORKTREE",

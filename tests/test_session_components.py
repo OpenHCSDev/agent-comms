@@ -40,7 +40,6 @@ async def owner(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ModelConfigOption, "discover", models)
     monkeypatch.setattr(ThinkingLevelConfigOption, "discover", levels)
-    monkeypatch.delenv("PI_AGENT_ID", raising=False)
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     agent = canonical_agent(
         Comms(tmp_path / "wire"),

@@ -15,6 +15,7 @@ from .thread_identity import GenerationCounter, ThreadIncarnation
 from .input_origin import InputOrigin, InputProvenance, UnattributedInputOrigin
 
 if TYPE_CHECKING:
+    from .message_reference import MessageReference
     from .registry_document import RegistrySnapshot
     from .text_digest import TextDigest
     from .turn_lease import TurnLeaseFence
@@ -102,6 +103,11 @@ class InputAttempt(DeclaredFamily, affix="Input"):
         return None
 
     def bound_bus_input(self) -> SentInput | None:
+        return None
+
+    def active_reply_reference(
+        self, lease: TurnLeaseFence, root_id: str, snapshot: RegistrySnapshot
+    ) -> MessageReference | None:
         return None
 
 
@@ -280,6 +286,15 @@ class StartedInput(SentInput):
         if not self.matches_admission(admission):
             raise RelationViolationError("Input start admission changed")
         return self
+
+    def active_reply_reference(self, lease, root_id, snapshot):
+        if (
+            lease.identity.incarnation.matches_recorded_name(self.owner, snapshot)
+            and self.matches_admission(lease.admission_generation)
+            and self.turn_id == lease.turn_id
+        ):
+            return self.origin.delivery_reference(root_id)
+        return None
 
     def started_for_native(
         self,
