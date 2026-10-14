@@ -25,6 +25,7 @@ from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDia
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import (
+    CoordinationReadUnavailable,
     IdentityConflict,
     PublicationActivationBlocked,
     StaleFence,
@@ -592,6 +593,42 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     with pytest.raises(PublicationActivationBlocked):
         await agent.cursors.publish("beta", "beta")
     assert len(calls) == 1  # Observation never initiates or replays an input.
+
+
+@pytest.mark.parametrize("error_type", [BlockingIOError, CoordinationReadUnavailable])
+async def test_busy_cursor_uses_one_deferred_publication_path(tmp_path, monkeypatch, error_type):
+    _, agent, _ = _session(tmp_path)
+    updates = []
+
+    async def record_update(**kwargs):
+        updates.append(kwargs)
+
+    async def busy_read(*args, **kwargs):
+        raise error_type("cursor read busy")
+
+    monkeypatch.setattr(agent._runtime, "session_update", record_update)
+    monkeypatch.setattr("agent_comms.cursor_publication.NativeSourceCursor.read_async", busy_read)
+    observed = await agent.cursors.observe("beta", "beta")
+    assert observed.status == "busy"
+    with pytest.raises(error_type):
+        await agent.cursors.observe("beta", "beta", defer_busy=True)
+    await agent.cursors.publish("beta", "beta")
+    assert updates == []
+
+
+@pytest.mark.parametrize("error_type", [IdentityConflict, StaleFence])
+async def test_replaced_cursor_owner_is_terminal_not_unavailable(tmp_path, monkeypatch, error_type):
+    _, agent, _ = _session(tmp_path)
+
+    async def replaced_read(*args, **kwargs):
+        raise error_type("cursor owner replaced")
+
+    monkeypatch.setattr(
+        "agent_comms.cursor_publication.NativeSourceCursor.read_async", replaced_read
+    )
+    observed = await agent.cursors.observe("beta", "beta")
+    assert observed.status == "replaced"
+    assert observed.observation.needs_refresh is False
 
 
 async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_path, monkeypatch):

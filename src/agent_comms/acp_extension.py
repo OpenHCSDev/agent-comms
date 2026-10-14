@@ -241,6 +241,13 @@ class BusyCursorObservation(CursorObservation):
 
 
 @dataclass(frozen=True)
+class ReplacedOwnerCursorObservation(CursorObservation):
+    @property
+    def status(self) -> str:
+        return "replaced"
+
+
+@dataclass(frozen=True)
 class EmptyCursorObservation(CursorObservation):
     @property
     def needs_refresh(self) -> bool:

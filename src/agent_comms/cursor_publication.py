@@ -20,6 +20,7 @@ from .acp_extension import (
     CursorEnvelope,
     CursorScope,
     EmptyCursorObservation,
+    ReplacedOwnerCursorObservation,
     UnavailableCursorObservation,
     VerifiedCursorObservation,
     encode_updates,
@@ -136,17 +137,14 @@ class CursorPublication:
                 )
             except sqlite3.OperationalError as error:
                 CoordinationReadUnavailable.raise_from(error)
-        except BlockingIOError:
+        except (BlockingIOError, CoordinationReadUnavailable):
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             if defer_busy and current == scope:
                 raise
             return CursorEnvelope(current, revision, BusyCursorObservation())
-        except CoordinationReadUnavailable:
-            current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
-            return CursorEnvelope(current, revision, BusyCursorObservation())
         except (IdentityConflict, StaleFence):
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
-            return CursorEnvelope(current, revision, UnavailableCursorObservation())
+            return CursorEnvelope(current, revision, ReplacedOwnerCursorObservation())
         current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         if current != scope:
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
@@ -172,7 +170,7 @@ class CursorPublication:
             observed = await self.observe(
                 thread_name, session_id, defer_busy=True, advance=advance
             )
-        except BlockingIOError:
+        except (BlockingIOError, CoordinationReadUnavailable):
             # Busy observation is not a new fact. A settled native operation
             # requires another read when the lock clears, without input replay.
             if selected_status is not None:
