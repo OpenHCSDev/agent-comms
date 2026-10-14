@@ -48,7 +48,8 @@ def test_reply_counts_are_persistent_human_read_positions(tmp_path):
     assert comms.views.viewer_snapshot(str(tmp_path / "other-project")).thread_unread["worker"] == 1
     comms.messaging.send("worker", "#ci", "Channel reply")
     comms.views.mark_channel_view_read("#ci", worktree=str(tmp_path))
-    comms.messaging.acknowledge("worker")
+    messages = comms.bus.inbox("worker")
+    comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))
     assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 1
 
 

@@ -46,7 +46,8 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     for number in range(6):
         message = comms.messaging.send_message("sender", "#team", f"@beta review {number}")
     assert comms.registry.require("alpha").active_turn is None
-    comms.messaging.acknowledge("alpha", "#team")
+    references = tuple(message.reference for message in comms.bus.inbox("alpha", "#team"))
+    comms.messaging.acknowledge("alpha", references)
     ledger = comms.bus.reads.path.read_bytes()
     source = comms.bus.log.path.read_bytes()
     frame = "".join(segment.text() for segment in comms.bus.awareness_segments(observer, ()))

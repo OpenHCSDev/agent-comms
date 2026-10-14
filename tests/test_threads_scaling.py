@@ -33,9 +33,11 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     wired.messaging.send("fixer", "#base", "tagged")
     wired.messaging.send("third", "#all", "global from third")
     assert _listed(wired) == _expected(wired)
-    assert wired.messaging.acknowledge("fixer", "PR111") == 1
+    references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+    assert wired.messaging.acknowledge("fixer", references) == 1
     assert _listed(wired) == _expected(wired)
-    wired.messaging.acknowledge("PR111")
+    messages = wired.bus.inbox("PR111")
+    wired.messaging.acknowledge("PR111", tuple(message.reference for message in messages))
     assert _listed(wired) == _expected(wired)
     wired.owners.stop("third")
     assert _listed(wired, active_only=True) == _expected(wired, active_only=True)
@@ -324,7 +326,8 @@ def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired
     wired.messaging.send("PR111", "fixer", "old direct")
     wired.registry.rename("PR111", "renamed")
     assert _listed(wired) == _expected(wired)
-    wired.messaging.acknowledge("broadcast", "PR111")
+    references = tuple(message.reference for message in wired.bus.inbox("broadcast", "PR111"))
+    wired.messaging.acknowledge("broadcast", references)
     assert _listed(wired) == _expected(wired)
 
 

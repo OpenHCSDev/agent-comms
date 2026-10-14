@@ -203,10 +203,12 @@ class Messaging:
         schedule_candidate_catchup(self.bus, committed.seq)
         return committed
 
-    def acknowledge(self, name: str, target: str | None = None) -> int:
-        """Mark an inbox or one conversation delivered. Returns count acknowledged."""
+    def acknowledge(
+        self, name: str, references: Sequence[MessageReference]
+    ) -> int:
+        """Mark only the returned message references delivered."""
         with _store_lock(self._wire_lock_path):
-            return self.bus.mark_delivered(name, target)
+            return self.bus.mark_delivered(name, references)
 
     def acknowledge_through(self, name: str, sequence: int) -> None:
         with _store_lock(self._wire_lock_path):
