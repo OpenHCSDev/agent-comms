@@ -85,8 +85,18 @@ class UnseenDelivery(TypedRow):
     target: str
 
 
-class RouteIndexRebuilding(CoordinationReadUnavailable):
+class RouteIndexState:
+    caught_up: ClassVar[bool]
+
+
+class RouteIndexReady(RouteIndexState):
+    caught_up = True
+
+
+class RouteIndexRebuilding(CoordinationReadUnavailable, RouteIndexState):
     """The writer has not committed route counts through the requested cut."""
+
+    caught_up = False
 
     def __init__(self, through: int, size: int) -> None:
         self.through = through
@@ -153,7 +163,7 @@ class BusRouteCounts:
     def sync(
         self, source: BinaryIO | None, revision: FileRevision | None,
         decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
-    ) -> bool | RouteIndexRebuilding:
+    ) -> RouteIndexState:
         """Decode a bounded source delta first, then commit under a short lock."""
         size = revision.size if revision is not None else 0
         if source is not None:
@@ -172,9 +182,9 @@ class BusRouteCounts:
             if source is None or self._tail(source, offset) != recorded.tail_digest:
                 rebuild, offset = True, 0
             elif size < offset:
-                return True
+                return RouteIndexReady()
         if not rebuild and offset == size:
-            return True
+            return RouteIndexReady()
 
         rows: list[RouteEntryRow] = []
         totals: dict[tuple[str, str, str], tuple[int, float]] = {}
@@ -210,7 +220,8 @@ class BusRouteCounts:
             if current != recorded:
                 connection.rollback()
                 current_through = current.revision.size if current and current.revision else 0
-                return True if current_through >= size else RouteIndexRebuilding(current_through, size)
+                return (RouteIndexReady() if current_through >= size
+                        else RouteIndexRebuilding(current_through, size))
             if rebuild:
                 for owner in TypedTable.members_with(RouteTable):
                     connection.execute(f'DELETE FROM "{owner.declared_name}"')
@@ -227,7 +238,7 @@ class BusRouteCounts:
             connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
             RouteSourceRow(1, checkpoint, tail_digest).insert(connection)
             connection.commit()
-        return True if through == size else RouteIndexRebuilding(through, size)
+        return RouteIndexReady() if through == size else RouteIndexRebuilding(through, size)
 
     _requests = """requests AS (
                 SELECT json_extract(value, '$.actor') AS actor,

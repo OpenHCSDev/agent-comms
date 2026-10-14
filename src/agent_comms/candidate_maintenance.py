@@ -62,7 +62,7 @@ def _drain_candidate(root: Path) -> None:
         with log.locked():
             metadata = log._private_marker_unlocked()
         root_id = metadata.root_id
-        from .bus_route_counts import BusRouteCounts, RouteIndexRebuilding
+        from .bus_route_counts import BusRouteCounts
         from .routing import DeliveryMessage
 
         index = WakeCandidateIndex(log)
@@ -80,7 +80,7 @@ def _drain_candidate(root: Path) -> None:
                     source.revision,
                     lambda record: DeliveryMessage.from_wire(record, root_id=source.metadata.root_id),
                 )
-            if result.caught_up and not isinstance(route_result, RouteIndexRebuilding):
+            if result.caught_up and route_result.caught_up:
                 with _guard:
                     if _pending[root][1] <= result.checkpoint_bytes:
                         # Retire this worker once, atomically with its final
