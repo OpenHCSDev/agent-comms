@@ -216,12 +216,13 @@ class WakeCandidateIndex:
         root_id: str,
         *,
         rebuild: bool,
+        bootstrap_new: bool = False,
     ) -> CandidateCheckpoint:
         """Check the committed source identity and its bounded prefix fingerprint."""
         checkpoint = CandidateCheckpoint.one(db, singleton=1)
-        if checkpoint is None and not rebuild:
+        if checkpoint is None and not (rebuild or bootstrap_new):
             raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
-        if rebuild:
+        if rebuild or checkpoint is None:
             return CandidateCheckpoint(1, 3, root_id, stat.st_dev, stat.st_ino, 0, "", 0)
         checkpoint.require_source(stream, stat, root_id)
         return checkpoint
@@ -342,10 +343,12 @@ class WakeCandidateIndex:
         ).upsert(db)
 
     def maintain(
-        self, *, rebuild: bool = False, max_rows: int = 64, max_bytes: int = 256 * 1024
+        self, *, rebuild: bool = False, bootstrap_new: bool = False,
+        max_rows: int = 64, max_bytes: int = 256 * 1024,
     ) -> bool:
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
+        bootstrap_new = FieldCodec.decode(bool, bootstrap_new)
         try:
             marker = self.bus.log._private_marker_unlocked()
             root_id = marker.root_id
@@ -358,7 +361,8 @@ class WakeCandidateIndex:
                     db.execute("BEGIN IMMEDIATE")
                     try:
                         checkpoint = self._checkpoint_start(
-                            db, stream, stat, root_id, rebuild=rebuild
+                            db, stream, stat, root_id,
+                            rebuild=rebuild, bootstrap_new=bootstrap_new,
                         )
                         offset, last_seq = checkpoint.byte_offset, checkpoint.last_seq
                         batch = self._replay_prefix(
@@ -456,19 +460,25 @@ class WakeCandidateIndex:
         if self.bus.log._private_marker_unlocked().root_id != hint.root_id:
             raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
         prior_bytes = 0
-        if self.path.exists():
+        if bootstrap_new:
+            # Existence is not initialization: another process may have created
+            # the WAL but not committed its first checkpoint. BEGIN IMMEDIATE in
+            # maintain serializes that decision against the stored row.
+            more_source_bytes = not self.maintain(
+                bootstrap_new=True, max_rows=max_rows, max_bytes=max_bytes
+            )
+        else:
+            if not self.path.exists():
+                raise ProjectionRebuildRequiredError(
+                    "candidate index needs explicit initial build"
+                )
             prior = self._verified_checkpoint(hint.root_id)
             prior_bytes = prior.byte_offset
             if prior.last_seq >= hint.through_seq:
                 return CandidateCatchUp(prior.last_seq, True, False)
-            rebuild = False
-        elif bootstrap_new:
-            rebuild = True
-        else:
-            raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
-        more_source_bytes = not self.maintain(
-            rebuild=rebuild, max_rows=max_rows, max_bytes=max_bytes
-        )
+            more_source_bytes = not self.maintain(
+                max_rows=max_rows, max_bytes=max_bytes
+            )
         checkpoint = self._verified_checkpoint(hint.root_id)
         if checkpoint.byte_offset <= prior_bytes and more_source_bytes:
             # The checkpoint row owns the byte position: a batch that consumed
