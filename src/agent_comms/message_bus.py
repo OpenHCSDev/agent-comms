@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections.abc import AsyncIterator, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -23,7 +22,7 @@ from .read_basis import (
     MessageDisplayScope,
     ViewUnread,
 )
-from .routing import DeliveryMessage, DeliveryScope, PendingCounts
+from .routing import DeliveryScope, PendingCounts
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -293,36 +292,19 @@ class MessageBus:
         """
         recipients = self._route_recipients(snapshot, deliveries)
 
-        def decode(record):
-            # The root id is the marker's: a bus never written has no marker
-            # and no records, so it is read only to decode one.
-            return DeliveryMessage.from_wire(record, root_id=source.metadata.root_id)
-
-        try:
-            with BusRouteCounts(self.log.path) as index:
-                if not index.sync(source.stream, source.revision, decode):
-                    return None
-                requests = []
-                for route in index.routes():
-                    for actor in recipients(route.target):
-                        since = deliveries[actor].minimum_timestamp(
-                            route.sender, route.target, route.sender_lookup, snapshot
-                        )
-                        if since is not None:
-                            requests.append(PendingRoute(
-                                actor, route.target, route.sender, route.sender_lookup, since,
-                            ))
-                return read(index, requests)
-        except (OSError, sqlite3.DatabaseError):
-            # A disposable index outage still uses exactly the same identity filter.
-            return None
-
-    def _scanned_deliveries(self, source: OpenedWireSnapshot):
-        """Every delivery in this cut, decoded from the log itself."""
-        if source.stream is not None:
-            source.stream.seek(0)
-        records = self.log._snapshot_records(source.metadata, source.stream, source.boundary)
-        return (item for record in records for item in record.delivery_messages())
+        with BusRouteCounts(self.log.path) as index:
+            index.require_cut(source.stream, source.revision)
+            requests = []
+            for route in index.routes():
+                for actor in recipients(route.target):
+                    since = deliveries[actor].minimum_timestamp(
+                        route.sender, route.target, route.sender_lookup, snapshot
+                    )
+                    if since is not None:
+                        requests.append(PendingRoute(
+                            actor, route.target, route.sender, route.sender_lookup, since,
+                        ))
+            return read(index, requests)
 
     def _pending_counts(
         self, source: OpenedWireSnapshot, snapshot: RegistrySnapshot,
@@ -342,15 +324,8 @@ class MessageBus:
                 requests, [ActorSeen(actor, sequences) for actor, sequences in seen.items()]
             ),
         )
-        if rows is not None:
-            for row in rows:
-                add(row.actor, row.sender, row.target, row.count)
-        else:
-            for item in self._scanned_deliveries(source):
-                message = item.message
-                for actor in recipients(message.target):
-                    if deliveries[actor].current(item, snapshot) and message.seq not in seen[actor]:
-                        add(actor, message.sender, message.target, 1)
+        for row in rows:
+            add(row.actor, row.sender, row.target, row.count)
         return counts
 
     def mark_delivered(

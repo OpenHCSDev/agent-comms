@@ -62,7 +62,11 @@ def _drain_candidate(root: Path) -> None:
         with log.locked():
             metadata = log._private_marker_unlocked()
         root_id = metadata.root_id
+        from .bus_route_counts import BusRouteCounts, RouteIndexRebuilding
+        from .routing import DeliveryMessage
+
         index = WakeCandidateIndex(log)
+        routes = BusRouteCounts(log.path)
         while True:
             with _guard:
                 target = _pending[root][1]
@@ -70,7 +74,13 @@ def _drain_candidate(root: Path) -> None:
             result = index.catch_up_committed_append(
                 hint, max_rows=64, max_bytes=256 * 1024, bootstrap_new=True
             )
-            if result.caught_up:
+            with log._opened_wire_snapshot(need_sequence=False) as source:
+                route_result = routes.sync(
+                    source.stream,
+                    source.revision,
+                    lambda record: DeliveryMessage.from_wire(record, root_id=source.metadata.root_id),
+                )
+            if result.caught_up and not isinstance(route_result, RouteIndexRebuilding):
                 with _guard:
                     if _pending[root][1] <= result.checkpoint_bytes:
                         # Retire this worker once, atomically with its final

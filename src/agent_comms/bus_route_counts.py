@@ -10,13 +10,14 @@ import json
 import os
 import sqlite3
 from collections.abc import Callable, Mapping
-from contextlib import ExitStack
+from contextlib import closing
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from .private_path import FileRevision
+from .coordination_errors import CoordinationReadUnavailable
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .store_files import _store_lock
@@ -84,95 +85,104 @@ class UnseenDelivery(TypedRow):
     target: str
 
 
+class RouteIndexRebuilding(CoordinationReadUnavailable):
+    """The writer has not committed route counts through the requested cut."""
+
+    def __init__(self, through: int, size: int) -> None:
+        self.through = through
+        self.size = size
+        super().__init__(f"Route index covers {through} of {size} bytes")
+
+
 class BusRouteCounts:
+    rebuild_bytes = 4 * 1024 * 1024
+
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
         self.path = bus_path.with_name("bus_route_counts.sqlite3")
 
     def __enter__(self) -> BusRouteCounts:
-        # Readers of this disposable projection share only its own resource,
-        # never the canonical publication lock. Sync and queries see one index
-        # revision even when another reader captures a later original bus cut.
-        with ExitStack() as resources:
-            resources.enter_context(_store_lock(self.path))
-            fresh = not self.path.exists()
-            self.connection = sqlite3.connect(self.path, timeout=30)
-            resources.callback(self.connection.close)
-            self.connection.execute("PRAGMA synchronous=FULL")
-            self.connection.execute("BEGIN IMMEDIATE")
-            if fresh:
-                for owner in TypedTable.members_with(RouteTable):
-                    owner.create(self.connection)
-            self._resources = resources.pop_all()
+        """Open one committed WAL snapshot without taking the writer lock."""
+        if not self.path.exists():
+            raise RouteIndexRebuilding(0, self.bus_path.stat().st_size if self.bus_path.exists() else 0)
+        self.connection = sqlite3.connect(
+            self.path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0
+        )
+        self.connection.execute("PRAGMA query_only=ON")
+        self.connection.execute("BEGIN")
         return self
 
-    def __exit__(self, error_type, _error, _traceback) -> None:
-        try:
-            if error_type is None:
-                self.connection.commit()
-            else:
-                self.connection.rollback()
-        finally:
-            self._resources.close()
+    def __exit__(self, _error_type, _error, _traceback) -> None:
+        self.connection.close()
+
+    @staticmethod
+    def _tail(source: BinaryIO, offset: int) -> str:
+        start = max(0, offset - 4096)
+        source.seek(start)
+        return sha256(source.read(offset - start)).hexdigest()
+
+    def require_cut(self, source: BinaryIO | None, revision: FileRevision | None) -> None:
+        records = RouteSourceRow.select(self.connection)
+        recorded = records[0] if records else None
+        size = revision.size if revision is not None else 0
+        through = recorded.revision.size if recorded and recorded.revision else 0
+        if recorded is None or through < size:
+            raise RouteIndexRebuilding(through, size)
+        if source is not None and through and self._tail(source, through) != recorded.tail_digest:
+            raise RouteIndexRebuilding(0, size)
+
+    def _initialize(self) -> None:
+        """The writer alone creates the WAL store; no source bytes are decoded here."""
+        with _store_lock(self.path), closing(sqlite3.connect(self.path, timeout=30)) as connection:
+            connection.execute("PRAGMA journal_mode=WAL")
+            connection.execute("PRAGMA synchronous=FULL")
+            connection.execute("BEGIN IMMEDIATE")
+            if not connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+                (RouteSourceRow.declared_name,),
+            ).fetchone():
+                for owner in TypedTable.members_with(RouteTable):
+                    owner.create(connection)
+            connection.commit()
+
+    def _recorded(self) -> RouteSourceRow | None:
+        with self:
+            rows = RouteSourceRow.select(self.connection)
+            return rows[0] if rows else None
 
     def sync(
         self, source: BinaryIO | None, revision: FileRevision | None,
         decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
-    ) -> bool:
-        """Decode only appended rows; a replaced source rebuilds the projection.
-
-        Another reader can index a later cut of the same file between this
-        reader's opened cut and its sync. The recorded revision then answers
-        this cut once its digest verifies against the file's bytes; a rewritten
-        or truncated source fails that digest and rebuilds.
-        """
-        size, tail_digest = 0, None
+    ) -> bool | RouteIndexRebuilding:
+        """Decode a bounded source delta first, then commit under a short lock."""
+        size = revision.size if revision is not None else 0
         if source is not None:
             opened = FileRevision.from_stat(os.fstat(source.fileno()))
-            if not revision.holds_cut(opened, revision.size):
+            if not revision.holds_cut(opened, size):
                 raise RelationViolationError("Route projection source changed before its captured read")
-            size = revision.size
             if size:
                 source.seek(size - 1)
                 if source.read(1) != b"\n":
-                    return False
-            source.seek(max(0, size - 4096))
-            tail_digest = sha256(source.read(size - source.tell())).hexdigest()
-        records = RouteSourceRow.select(self.connection)
-        recorded = records[0] if records else None
-        rebuild = recorded is None
-        if recorded is not None:
-            rebuild = (
-                (recorded.revision.identity if recorded.revision else None)
-                != (revision.identity if revision else None)
-                or source is None
-                or size == recorded.revision.size
-                and recorded.revision != revision
-            )
-        offset = 0 if rebuild else recorded.revision.size
+                    raise RelationViolationError("Route projection source has an incomplete original row")
+        self._initialize()
+        recorded = self._recorded()
+        rebuild = recorded is None or source is None
+        offset = recorded.revision.size if recorded and recorded.revision else 0
         if not rebuild and offset:
-            source.seek(max(0, offset - 4096))
-            previous_tail = source.read(offset - max(0, offset - 4096))
-            if sha256(previous_tail).hexdigest() != recorded.tail_digest:
+            if source is None or self._tail(source, offset) != recorded.tail_digest:
                 rebuild, offset = True, 0
             elif size < offset:
-                # Another reader indexed a later cut of this same file after
-                # this cut was opened, so the recorded offset is ahead of this
-                # cut. Its digest just verified against this inode's bytes:
-                # the append-only writer (wire_log._append_private_unlocked,
-                # os.O_APPEND) leaves them unchanged, so the recorded revision
-                # answers this cut without decoding. A truncated or rewritten
-                # source loses those bytes and rebuilt above instead.
                 return True
         if not rebuild and offset == size:
             return True
-        totals: dict[tuple[str, str, str], RouteTotalRow] = {}
-        if rebuild:
-            for owner in TypedTable.members_with(RouteTable):
-                self.connection.execute(f'DELETE FROM "{owner.declared_name}"')
+
+        rows: list[RouteEntryRow] = []
+        totals: dict[tuple[str, str, str], tuple[int, float]] = {}
+        through = size
         if source is not None:
             source.seek(offset)
-            while source.tell() < size:
+            limit = min(size, offset + self.rebuild_bytes)
+            while source.tell() < size and source.tell() < limit:
                 raw = source.readline(size - source.tell())
                 if not raw.endswith(b"\n"):
                     raise RelationViolationError("Route projection source has an incomplete original row")
@@ -181,39 +191,43 @@ class BusRouteCounts:
                 for delivery in decode(json.loads(raw)):
                     message = delivery.message
                     row = RouteEntryRow(
-                        message.seq,
-                        message.target,
-                        message.sender,
-                        delivery.sender_lookup,
-                        message.timestamp,
+                        message.seq, message.target, message.sender,
+                        delivery.sender_lookup, message.timestamp,
                     )
-                    row.insert(self.connection)
+                    rows.append(row)
                     key = row.target, row.sender, row.sender_lookup
-                    if key not in totals:
-                        prior = RouteTotalRow.select(
-                            self.connection,
-                            where="target=? AND sender=? AND sender_lookup=?",
-                            parameters=key,
-                        )
-                        totals[key] = (
-                            prior[0] if prior else RouteTotalRow(*key, 0, row.timestamp)
-                        )
-                    current = totals[key]
-                    totals[key] = replace(
-                        current,
-                        total=current.total + 1,
-                        oldest=min(current.oldest, row.timestamp),
-                    )
-        for key, total in totals.items():
-            self.connection.execute(
-                f'DELETE FROM "{RouteTotalRow.declared_name}" '
-                "WHERE target=? AND sender=? AND sender_lookup=?",
-                key,
-            )
-            total.insert(self.connection)
-        self.connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
-        RouteSourceRow(1, revision, tail_digest).insert(self.connection)
-        return True
+                    count, oldest = totals.get(key, (0, row.timestamp))
+                    totals[key] = count + 1, min(oldest, row.timestamp)
+            through = source.tell()
+        tail_digest = self._tail(source, through) if source is not None else None
+        checkpoint = replace(revision, size=through) if revision is not None else None
+
+        with _store_lock(self.path), closing(sqlite3.connect(self.path, timeout=30)) as connection:
+            connection.execute("PRAGMA synchronous=FULL")
+            connection.execute("BEGIN IMMEDIATE")
+            current_rows = RouteSourceRow.select(connection)
+            current = current_rows[0] if current_rows else None
+            if current != recorded:
+                connection.rollback()
+                current_through = current.revision.size if current and current.revision else 0
+                return True if current_through >= size else RouteIndexRebuilding(current_through, size)
+            if rebuild:
+                for owner in TypedTable.members_with(RouteTable):
+                    connection.execute(f'DELETE FROM "{owner.declared_name}"')
+            for row in rows:
+                row.insert(connection)
+            for (target, sender, sender_lookup), (count, oldest) in totals.items():
+                connection.execute(
+                    f'INSERT INTO "{RouteTotalRow.declared_name}" '
+                    '(target,sender,sender_lookup,total,oldest) VALUES (?,?,?,?,?) '
+                    'ON CONFLICT(target,sender,sender_lookup) DO UPDATE SET '
+                    'total=total+excluded.total, oldest=min(oldest,excluded.oldest)',
+                    (target, sender, sender_lookup, count, oldest),
+                )
+            connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
+            RouteSourceRow(1, checkpoint, tail_digest).insert(connection)
+            connection.commit()
+        return True if through == size else RouteIndexRebuilding(through, size)
 
     _requests = """requests AS (
                 SELECT json_extract(value, '$.actor') AS actor,
