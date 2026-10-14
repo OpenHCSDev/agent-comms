@@ -64,6 +64,7 @@ class MessageNotification:
     reply_reference: MessageReference | None = None
     read_at_ms: int | None = None
     answered_at_ms: int | None = None
+    changed: bool = False
 
     @property
     def recipient(self) -> str:
@@ -187,15 +188,56 @@ class MessageNotification:
                 notification = observation.after_inbox_read(
                     outcome.project(observation), source, reads, document, snapshot
                 )
+                displayed_to = observation.displayed_recipient(
+                    notification, source, reads, document, snapshot
+                )
                 result[key].append(
                     replace(
                         notification,
-                        displayed_to=observation.displayed_recipient(
-                            notification, source, reads, document, snapshot
-                        ),
+                        displayed_to=displayed_to,
+                        changed=notification.changed or bool(displayed_to),
                     )
                 )
+            direct_read = cls.direct_read_notification(
+                source, snapshot, reads, document, owner_lookup=owner_lookup
+            )
+            if direct_read is not None:
+                result[key].append(direct_read)
         return {key: tuple(rows) for key, rows in result.items()}
+
+    @classmethod
+    def direct_read_notification(
+        cls, source, snapshot, reads, document, *, owner_lookup
+    ) -> MessageNotification | None:
+        """Project a human DM read even though humans have no wake assignment."""
+        from .bus_publication import stable_thread_lookup
+        from .channel_targets import is_channel_target
+
+        message = source.message
+        if (
+            source.audience.recipients
+            or is_channel_target(message.target)
+            or (owner_lookup is not None and source.audience.sender_lookup != owner_lookup)
+        ):
+            return None
+        name = snapshot.canonical_name(message.target)
+        target = snapshot.threads.get(name)
+        if target is None or not reads.human(target.role):
+            return None
+        recipient = FrozenRecipient(stable_thread_lookup(target.created_at), target.name)
+        displayed_to = reads.displayed_recipient(
+            message, recipient, snapshot, document=document
+        )
+        if not displayed_to:
+            return None
+        return cls(
+            recipient,
+            "Read",
+            "",
+            priority=2,
+            displayed_to=displayed_to,
+            changed=True,
+        )
 
     @classmethod
     def recent(

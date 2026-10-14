@@ -78,7 +78,12 @@ class ExternalRecipientActivity(RecipientActivity):
             self.incarnation.name, snapshot, document=document
         ):
             return replace(
-                notification, state="Acknowledged", detail="", priority=2, busy=False
+                notification,
+                state="Acknowledged",
+                detail="",
+                priority=2,
+                busy=False,
+                changed=True,
             )
         return notification
 

@@ -194,6 +194,51 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
             yield from super().public_records_for(sequences, before_offset=before_offset)
 
 
+@dataclass(frozen=True, slots=True)
+class ConversationSourceWindowRequest:
+    """One bounded indexed conversation selection from a certified wire cut."""
+
+    predicate: str
+    parameters: tuple
+    limit: int
+    ascending: bool
+
+    def capture(self, source, lookup: str) -> ConversationSourceWindow:
+        rows = (
+            source.conversation_sources(
+                lookup,
+                self.predicate,
+                self.parameters,
+                limit=self.limit,
+                ascending=self.ascending,
+            )
+            if self.limit
+            else ()
+        )
+        return ConversationSourceWindow(self, tuple(rows))
+
+    @classmethod
+    def capture_many(
+        cls,
+        log: WireLog,
+        lookup: str,
+        requests: tuple[ConversationSourceWindowRequest, ...],
+    ) -> tuple[ConversationSourceWindow, ...]:
+        """Capture all requests from the same certified wire cut."""
+        if not log.path.exists() and not log.metadata_path.exists():
+            return tuple(ConversationSourceWindow(request, ()) for request in requests)
+        with log.certified_read() as source:
+            return tuple(request.capture(source, lookup) for request in requests)
+
+
+@dataclass(frozen=True, slots=True)
+class ConversationSourceWindow:
+    """One request and its rows from the same certified wire cut."""
+
+    request: ConversationSourceWindowRequest
+    sources: tuple[CommittedDelivery, ...]
+
+
 class WireLog:
     def __init__(self, path: Path):
         # Construction is read-only and needs no registry or publication settings.
@@ -271,17 +316,8 @@ class WireLog:
 
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Read an original window through its existing canonical barrier."""
-        with _store_lock(self.path) as lock:
-            if not self.path.exists():
-                return ()
-            marker = self._private_marker_unlocked()
-            source = lock.certified_read()
-            source.require_marker(marker)
-            originals = source.conversation_sources(
-                lookup, predicate, parameters, limit=limit, ascending=ascending
-            )
-            source.require_current()
-        return tuple(originals)
+        request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending)
+        return request.capture_many(self, lookup, (request,))[0].sources
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.

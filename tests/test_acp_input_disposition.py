@@ -260,6 +260,15 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native
             (assignment,) = await Coordination.run_worker(assignments)
             assert assignment.wire_seq == message.seq
             assert type(assignment.lifecycle) is DeliveredAssignment
+            sender_view = comms.views.thread_presentation("sender")
+            assert sender_view is not None
+            sent_read = next(
+                outcome for outcome in sender_view.sent_notifications
+                if outcome.message.reference == message.reference
+            )
+            assert sent_read.state.startswith("Read ")
+            assert sent_read.read_at_ms == assignment.updated_at_ms
+            assert sent_read.changed
             # One turn, two inputs: the prompt and the message, each sent once.
             assert native.provider.posts == 2
             taken = native.saved_inputs()[-1]

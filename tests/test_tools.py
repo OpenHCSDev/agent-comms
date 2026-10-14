@@ -95,6 +95,30 @@ class TestToolCatalog:
         with pytest.raises(ValueError, match="Expected.*bool"):
             invoke_tool(comms, "comms_threads", {"active_only": "yes"})
 
+    def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):
+        monkeypatch.delenv("PI_AGENT_ID", raising=False)
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "sender")
+        comms.registry.declare(Thread(name="sender", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="recipient", tags=frozenset(), worktree="/wt"))
+        sent = comms.messaging.send_message("sender", "recipient", "track me")
+        for index in range(6):
+            comms.messaging.send_message("recipient", "sender", f"incoming {index}")
+
+        presentation = comms.views.thread_presentation("sender")
+        assert all(row.message.reference != sent.reference for row in presentation.notifications)
+        assert [row.message.reference for row in presentation.sent_notifications] == [sent.reference]
+
+        result = invoke_tool(comms, "comms_threads", {})
+        assert [
+            (
+                row["message"]["seq"],
+                row["message"]["text"],
+                row["recipient_identity"]["canonical_thread"],
+                row["state"],
+            )
+            for row in result["sent_notifications"]
+        ] == [(sent.seq, "track me", "recipient", "Sent")]
+
     def test_ack_can_target_one_conversation(self, comms):
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
