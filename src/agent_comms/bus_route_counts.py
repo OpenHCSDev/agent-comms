@@ -123,6 +123,14 @@ class BusRouteCounts:
         )
         self.connection.execute("PRAGMA query_only=ON")
         self.connection.execute("BEGIN")
+        if not self.connection.execute(
+            f"SELECT 1 FROM sqlite_master WHERE type='table' "
+            f"AND name='{RouteSourceRow.declared_name}'"
+        ).fetchone():
+            self.connection.close()
+            raise RouteIndexRebuilding(
+                0, self.bus_path.stat().st_size if self.bus_path.exists() else 0
+            )
         return self
 
     def __exit__(self, _error_type, _error, _traceback) -> None:
@@ -146,6 +154,16 @@ class BusRouteCounts:
 
     def _initialize(self) -> None:
         """The writer alone creates the WAL store; no source bytes are decoded here."""
+        if self.path.exists():
+            with closing(sqlite3.connect(
+                self.path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0
+            )) as current:
+                table = current.execute(
+                    f"SELECT 1 FROM sqlite_master WHERE type='table' "
+                    f"AND name='{RouteSourceRow.declared_name}'"
+                ).fetchone()
+                if table and current.execute("PRAGMA journal_mode").fetchone()[0] == "wal":
+                    return
         with _store_lock(self.path), closing(sqlite3.connect(self.path, timeout=30)) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
@@ -157,6 +175,10 @@ class BusRouteCounts:
                 for owner in TypedTable.members_with(RouteTable):
                     owner.create(connection)
             connection.commit()
+
+    def prepare(self) -> None:
+        """Create the writer-owned WAL store after its publication lock releases."""
+        self._initialize()
 
     def _recorded(self) -> RouteSourceRow | None:
         with self:
