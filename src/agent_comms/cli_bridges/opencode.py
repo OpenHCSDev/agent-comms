@@ -15,6 +15,7 @@ from agent_comms.messages import Message
 
 from .shared import (
     TranscriptBridge, TranscriptUpdate, Options, Outcome, SendResult, parse_options, run_bridge, shared_parser,
+    Watch, Binding,
 )
 from .opencode_protocol import (
     Connected, OpenCodeEvent, OpenCodeStream, Prompt, SavedInput, Session, TextInput, Toast,
@@ -47,6 +48,41 @@ async def event_payloads(response: aiohttp.ClientResponse) -> AsyncIterator[str]
 class OpenCodeOptions(Options):
     server: str
     directory: Path
+
+
+@dataclass(frozen=True)
+class Attach(Watch):
+    """The selected native session owns its Core thread and bridge child."""
+
+    pid: int
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--pid', type=int, required=True)
+
+    @classmethod
+    def from_arguments(cls, arguments: argparse.Namespace) -> Attach:
+        operation = cls(arguments.pid)
+        del arguments.pid
+        return operation
+
+    def binding(self, options: OpenCodeOptions) -> Binding:
+        from agent_comms.comms import wire
+
+        if options.session is None:
+            raise ValueError('Attach requires the selected native session')
+        comms = wire(options.root)
+        name = options.bus_thread or f'opencode-{options.session}'
+        options.state = options.state / options.session
+        return Binding(str(comms.root), name, options.session)
+
+    def start(self, bridge: OpenCodeBridge, tasks: asyncio.TaskGroup) -> None:
+        from agent_comms.comms import wire
+        from agent_comms.cli_commands import RegisterCliCommand
+
+        RegisterCliCommand(name=bridge.binding.bus, worktree=str(bridge.options.directory),
+                           pid=self.pid).apply(wire(bridge.binding.root))
+        super().start(bridge, tasks)
 
 
 class OpenCodeConnection:
@@ -136,6 +172,8 @@ class OpenCodeConnection:
 
 
 class OpenCodeBridge(TranscriptBridge[OpenCodeOptions]):
+    operations = (*TranscriptBridge.operations, Attach)
+
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--server', required=True, help='HTTP address of the running OpenCode TUI/server')

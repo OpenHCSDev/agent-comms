@@ -65,6 +65,7 @@ pi-comms-native = "agent_comms.native_pi:main"
 agent-comms-claude-bridge = "agent_comms.cli_bridges.claude:main"
 agent-comms-codex-bridge = "agent_comms.cli_bridges.codex:main"
 agent-comms-opencode-bridge = "agent_comms.cli_bridges.opencode:main"
+opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_comms"]

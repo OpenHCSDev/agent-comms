@@ -324,6 +324,13 @@ OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
 class Operation(ABC, Generic[OperationBridge]):
     """A decoded CLI command owns its execution."""
 
+    def binding(self, options: Options) -> Binding | None:
+        if any((options.root, options.bus_thread, options.session)):
+            if not all((options.root, options.bus_thread, options.session)):
+                raise ValueError('Supply all three binding arguments or use the saved binding')
+            return Binding(options.root, options.bus_thread, options.session)
+        return None
+
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Declare the options only this command takes."""
@@ -542,11 +549,7 @@ def parse_options(parser: argparse.ArgumentParser,
 
 
 def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptions) -> None:
-    requested = None
-    if any((options.root, options.bus_thread, options.session)):
-        if not all((options.root, options.bus_thread, options.session)):
-            raise ValueError('Supply all three binding arguments or use the saved binding')
-        requested = Binding(options.root, options.bus_thread, options.session)
+    requested = options.operation.binding(options)
     os.umask(0o077)
     journal = DeliveryJournal(options.state)
     try:

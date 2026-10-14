@@ -6,6 +6,15 @@ OpenCode retains ownership of its session, selected model, tools and turn runner
 
 ## Connect a window
 
+With the bundled `opencode_tui.ts` plugin installed in OpenCode's TUI config,
+run `opencode-comms`. It starts the native window on a free loopback port. The
+plugin reads the server address from the native SDK and follows the selected
+session. It starts one shared `attach` bridge, joins it before switching sessions,
+and stops it when the window closes. Each session has its own Core thread
+(`opencode-<session ID>`) and delivery journal. No input is replayed on reconnect.
+
+The manual commands below remain useful for attaching a named existing thread.
+
 Start OpenCode with an HTTP listener. Its default window uses an internal worker
 transport with no listening socket.
 
@@ -80,18 +89,28 @@ a suffix received without its start cannot reconstruct the missing prefix.
 Restarting the watch does not retry inputs or append duplicate finished items.
 `inbox` remains available for input-only use.
 
-Automatic window startup and server selection are the next delivery; the manual
-connection command above still applies.
+The window plugin owns selection and process lifetime; the Python bridge owns
+Core delivery and transcript publication. The plugin does not run model turns.
 
 Protocol references: [OpenCode server](https://opencode.ai/docs/server/) and the
 installed OpenCode 1.18.32 `/doc` schema. Its prompt handler saves user messages
 before entering the native runner; its event handler registers the listener
 before emitting `server.connected`.
 
-## Installed check, 2026-10-14
+## Installed checks, 2026-10-14
+
+Live output is enabled for the current `opencode` conversation. A real native
+bash call and its ordinary twelve-line reply appeared in Toad without an outbound
+comms send. Captured reply drafts grew from 136 to 361 to 537 characters before
+completion; the finished Core events matched the native message snapshots.
+The bridge continues to retain the earlier unconfirmed input without replay.
+
+The current unit uses `watch`, with session
+`ses_ec353e0c8ffeb9Z133TPKUCLBj`. Automatic startup is still pending. The following
+paragraphs describe the earlier inbox-only check, before live output was added.
 
 The original inbox-only check used the user unit
-`opencode-comms-inbox.service` connects the `opencode` Core thread to the window
+`opencode-comms-inbox.service` to connect the `opencode` Core thread to the window
 at `http://127.0.0.1:4096`, directory `/home/ts`, session
 `ses_ec410d51afferhTC4MtUR24HWO`. It is not enabled at login. It reconnects only
 after Core reports a busy database read; it never retries a submitted input.
