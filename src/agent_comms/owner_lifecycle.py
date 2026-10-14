@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import shlex
+import shutil
 import sys
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -372,8 +373,6 @@ class OwnerLifecycle:
                 # Keep the owner on this installation's pinned Pi entrypoint.
                 agent_bin = self.native_entrypoint()
             else:
-                import shutil
-
                 # The owner process keeps the launcher selected at its start.
                 # A later PATH or installed-runtime symlink change cannot retarget
                 # drains already owned by this process.

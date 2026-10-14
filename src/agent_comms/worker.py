@@ -34,7 +34,7 @@ async def run() -> None:
         private_nk_native_package=private_nk.native_package if private_nk else None,
         private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
         private_nk_verified_cli=verified_cli,
-        agent_bin=NativeArguments.running_entrypoint(),
+        agent_bin=NativeArguments.owner_launcher(),
     )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()

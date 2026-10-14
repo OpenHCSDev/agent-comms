@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import shlex
-import shutil
 import sys
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
@@ -164,10 +163,9 @@ class NativeArguments:
     )
 
     @classmethod
-    def running_entrypoint(cls) -> str:
-        """This owner's installed native launcher, fixed by its Python invocation."""
-        invocation = Path(shutil.which(sys.orig_argv[0]) or sys.orig_argv[0]).absolute()
-        launcher = invocation.with_name("pi-comms-native")
+    def owner_launcher(cls) -> str:
+        """The native launcher installed beside this owner's Python executable."""
+        launcher = Path(sys.executable).with_name("pi-comms-native")
         if not launcher.is_file():
             raise ValueError("Owner runtime has no native Pi launcher; restart in a complete runtime")
         return str(launcher)
