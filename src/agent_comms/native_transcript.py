@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
@@ -158,32 +159,47 @@ class NativeTranscript:
                 raise ValueError("Native publication has no committed context inclusion")
             return proof.corroborate(self.path.absolute(), header, {user.input_id: user})
 
-    def input_ancestor(self, record: NativeRecord):
-        """Follow original parent IDs to the input boundary, without an index.
+    def inputs_for(self, records) -> tuple:
+        """Each record's original input, found in one reverse walk for the batch.
 
-        The reverse reader visits each intervening record once, with fixed scan
-        buffers. A user boundary ends the walk even when it is not tracked.
-        Tool rounds and branches cannot lend another input's publication proof.
+        Parent IDs are followed back from the latest record; every intervening
+        record is visited once for the whole batch, and the walk stops when each
+        chain reaches a user boundary or a root. Tool rounds and branches cannot
+        lend another input's publication proof.
         """
-        parent = record.entry.parent_id
-        if parent is None:
-            return None
-        for ancestor in self.reverse(record.start):
-            entry = ancestor.entry
-            if entry is None or entry.id != parent:
+        found = [None] * len(records)
+        waiting: dict[str | None, list[int]] = defaultdict(list)
+        latest = 0
+        for position, record in enumerate(records):
+            entry = record.entry
+            if entry is None:
                 continue
             if entry.input_boundary:
-                return entry
-            parent = entry.parent_id
-            if parent is None:
-                return None
-        return None
+                found[position] = entry
+            else:
+                waiting[entry.parent_id].append(position)
+                latest = max(latest, record.start)
+        # A chain that reaches a root (no parent) has no input.
+        waiting.pop(None, None)
+        if waiting:
+            for ancestor in self.reverse(latest):
+                entry = ancestor.entry
+                if entry is None or entry.id not in waiting:
+                    continue
+                chain = waiting.pop(entry.id)
+                if entry.input_boundary:
+                    for position in chain:
+                        found[position] = entry
+                else:
+                    waiting[entry.parent_id].extend(chain)
+                    waiting.pop(None, None)
+                if not waiting:
+                    break
+        return tuple(found)
 
     def input_for(self, record: NativeRecord):
         """The native record and its parent chain own the original input."""
-        if record.entry is None:
-            return None
-        return record.entry if record.entry.input_boundary else self.input_ancestor(record)
+        return self.inputs_for((record,))[0]
 
     def publication_input(self, *, after: int, through: int):
         """Return the final producer and its actual tracked input ancestry.

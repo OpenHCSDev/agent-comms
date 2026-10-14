@@ -256,7 +256,7 @@ def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix
         )
     wired.messaging.send_message("PR111", "#base", "later source row")
     index.write(first)
-    saved = FieldCodec.decode(ActivityCheckpoint, json.loads(index.path.read_text()))
+    saved = index.prepare()
     assert saved.offset == first.offset
     with bus.open("rb") as stream:
         latest_source = FileRevision.from_stat(os.fstat(stream.fileno()))
@@ -266,7 +266,7 @@ def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix
         )
     index.write(latest)
     index.write(first)
-    saved = FieldCodec.decode(ActivityCheckpoint, json.loads(index.path.read_text()))
+    saved = index.prepare()
     assert saved.offset == latest.offset
 
 
