@@ -316,13 +316,13 @@ class ObserveSidebar(InterestRequest):
         return replace(interest, sidebar=self)
 
     def _answer(
-        self, comms: Comms, revision: WireRevision, read
+        self, revision: WireRevision, read, subject: str
     ) -> SidebarObserved | SidebarUnreadable | None:
         from agent_comms.ui_model.sidebar import SidebarModel
 
         try:
             snapshot = read(
-                self.worktree, show_stopped=self.show_stopped, show_archived=self.show_archived)
+                subject, show_stopped=self.show_stopped, show_archived=self.show_archived)
             return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
         except UnreadableHistory.DEFERRED_READS:
             return None  # No new snapshot; keep the original interest for the next observation.
@@ -332,12 +332,13 @@ class ObserveSidebar(InterestRequest):
     def roster(
         self, comms: Comms, revision: WireRevision
     ) -> SidebarObserved | SidebarUnreadable | None:
-        return self._answer(comms, revision, comms.views.viewer_roster)
+        viewer = comms.messaging.user_identity(self.worktree).name
+        return self._answer(revision, comms.views.presentation.roster, viewer)
 
     def answer(
         self, comms: Comms, revision: WireRevision
     ) -> SidebarObserved | SidebarUnreadable | None:
-        return self._answer(comms, revision, comms.views.viewer_snapshot)
+        return self._answer(revision, comms.views.viewer_snapshot, self.worktree)
 
 
 class SidebarReadStage(ABC):

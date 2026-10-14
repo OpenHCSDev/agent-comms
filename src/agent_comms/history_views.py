@@ -43,7 +43,6 @@ from .messaging import Messaging
 from .presentation import (
     ChannelView,
     CoordinationSnapshot,
-    DisplaySelection,
     MessageNotification,
     ThreadView,
     WireRevision,
@@ -92,7 +91,7 @@ class HistoryViews:
         self.goals = goals
         self.ledger = ledger
         self._wire_lock_path = root / "wire"
-        self.presentation = BusPresentation(bus, registry, channels.catalog)
+        self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
         self.transcript_reads = transcript_read_state(bus.reads.path)
 
     def message_notifications(self, messages: Sequence[Message]):
@@ -370,25 +369,6 @@ class HistoryViews:
             unread=unread, channel_unread=channel_unread,
             show_stopped=show_stopped, show_archived=show_archived,
         )
-
-    def viewer_roster(
-        self, worktree: str, *, show_stopped: bool = True, show_archived: bool = False
-    ) -> CoordinationSnapshot:
-        """Current sidebar rows without advancing whole-bus derived indexes."""
-        viewer = self.messaging.user_identity(worktree).name
-        with DisplaySelection.reading(
-            self.registry, self.channels.catalog, self.bus.reads, viewer
-        ) as basis:
-            snapshot = CoordinationSnapshot.capture(
-                self.root, basis.registry, basis.catalog, self.agents, basis.channels,
-                {}, {}, unread={}, channel_unread={}, show_stopped=show_stopped,
-                show_archived=show_archived, read_marker_notice=basis.notice,
-            )
-        pending = {
-            *(view.thread.name for view in snapshot.threads),
-            *(view.channel.name for view in snapshot.channels),
-        }
-        return replace(snapshot, unread_pending=frozenset(pending))
 
     def viewer_snapshot(
         self, worktree: str, *, show_stopped: bool = True, show_archived: bool = False
