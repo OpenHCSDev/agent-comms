@@ -19,7 +19,7 @@ from agent_comms.assignment_states import (
     FullPendingAssignment,
 )
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
-from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.cohort_schema import CohortDeliveryReceipts, install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import (
     accept_delivery_cohort,
@@ -40,7 +40,7 @@ from agent_comms.exporting import (
     FullLimit,
     JsonlFormat,
 )
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import InfoKind, Message
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
@@ -97,7 +97,8 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     message = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
     raw = json.loads((tmp_path / "comms" / "bus.jsonl").read_text())
     assert (tmp_path / "comms" / "bus.jsonl").stat().st_mode & 0o777 == 0o600
-    assert set(raw[PRIVATE_WIRE_FIELD]) == {"version", "initial"}
+    assert set(raw[PRIVATE_WIRE_FIELD]) == {"kind", "version", "initial"}
+    assert raw[PRIVATE_WIRE_FIELD]["kind"] == "initial"
     assert raw["seq"] == message.seq and raw["id"] == message.message_id
     assert all(PRIVATE_WIRE_FIELD not in item.to_wire() for item in comms.bus.log.full_history())
     assert [item.seq for item in comms.bus.full_history_page(max_bytes=32).messages] == [
@@ -184,6 +185,28 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     assert (
         recovered.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 2
     )
+
+
+def test_sealed_receipts_follow_recipient_progress(tmp_path: Path) -> None:
+    comms, store, root_id, lookups = _root(tmp_path)
+    alice_first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+    bob = comms.messaging.send_initial_cohort("sender", "Bob", "other recipient")
+    alice_second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
+    for message in (alice_first, bob, alice_second):
+        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+
+    assert CohortDeliveryReceipts.sealed_sequences_after(
+        store.session._connection,
+        wire_root_id=root_id,
+        recipient_lookup=lookups["Alice"],
+        after_seq=alice_first.seq,
+    ) == frozenset({alice_second.seq})
+    assert CohortDeliveryReceipts.sealed_sequences_after(
+        store.session._connection,
+        wire_root_id=root_id,
+        recipient_lookup=lookups["Bob"],
+        after_seq=0,
+    ) == frozenset({bob.seq})
 
 
 def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
@@ -286,11 +309,18 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
     case = _ready(tmp_path, direct=True)
     try:
         intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", owner_witness=case.witness
+            case.store, case.bus, case.fence, "reply",
+            exact_target=case.reply_target, owner_witness=case.witness,
         ).value
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(
+            case.store, case.bus, case.fence,
+            exact_target=case.reply_target, owner_witness=case.witness,
+        )
         first = case.bus.log.read_keyed_response(intent)
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(
+            case.store, case.bus, case.fence,
+            exact_target=case.reply_target, owner_witness=case.witness,
+        )
         assert case.bus.log.read_keyed_response(intent) == first
         assert [m.seq for m in case.bus.log.full_history()] == [case.origin_seq, first.seq]
         delivery = case.bus.log.read_delivery_cohort(case.root_id, first.seq)

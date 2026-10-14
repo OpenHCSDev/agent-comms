@@ -28,7 +28,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
     assert [assignment.recipient for assignment in accepted.assignments] == ["beta"]
     current = comms.views.message_notifications((message,))[(message.seq, message.message_id)]
-    assert [(row.recipient, row.state) for row in current] == [("beta", "Pending")]
+    assert [(row.recipient, row.state) for row in current] == [("beta", "Sent")]
     assert comms.registry.require("beta").active_turn is None
     assert original.message in comms.views.channel_history("#team")
     assert message in comms.views.channel_history("#team")
@@ -46,7 +46,8 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     for number in range(6):
         message = comms.messaging.send_message("sender", "#team", f"@beta review {number}")
     assert comms.registry.require("alpha").active_turn is None
-    comms.messaging.acknowledge("alpha", "#team")
+    references = tuple(message.reference for message in comms.bus.inbox("alpha", "#team"))
+    comms.messaging.acknowledge("alpha", references)
     ledger = comms.bus.reads.path.read_bytes()
     source = comms.bus.log.path.read_bytes()
     frame = "".join(segment.text() for segment in comms.bus.awareness_segments(observer, ()))
@@ -111,7 +112,8 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
                 assert initial.message.message_id in rendered
                 assert "Canonical bus awareness" in rendered
                 assert "No response obligation" in rendered
-                assert agent.turns.persistent_backends == {}
+                assert set(agent.turns.persistent_backends) == {"alpha"}
+                assert not agent.turns.persistent_backends["alpha"].available
                 assert not (root / "acp_passive_channel_awareness.json").exists()
     finally:
         await agent.shutdown()

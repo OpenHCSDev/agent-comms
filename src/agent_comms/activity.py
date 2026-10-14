@@ -17,12 +17,12 @@ from typing import TYPE_CHECKING, ClassVar
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .private_path import FileRevision
 from .store_files import (
     _append_jsonl,
     _atomic_write_text,
     _jsonl_records,
     _store_lock,
-    file_revision,
 )
 from .thread_identity import OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
@@ -235,7 +235,7 @@ class ActivityReadState:
     up while concurrent readers wait for its result.
     """
 
-    revision: tuple | None = None
+    revision: FileRevision | None = None
     latest: dict[str, Activity] = field(default_factory=dict)
     complete_latest: dict[str, Activity] = field(default_factory=dict)
     offset: int = 0
@@ -302,14 +302,14 @@ class ActivityLog(ThreadOwnedState):
     def _latest_events(self) -> Mapping[str, Activity]:
         read = self._read
         with read.lock, _store_lock(self._path):
-            revision = file_revision(self._path)
+            revision = FileRevision.capture(self._path)
             if revision == read.revision:
                 return read.latest
             append = (
                 revision is not None
                 and read.revision is not None
-                and revision[0] == read.revision[0]
-                and revision[1] > read.revision[1]
+                and revision.identity == read.revision.identity
+                and revision.size > read.revision.size
             )
             # Publish a new map: other threads may still be iterating the old
             # snapshot after the store lock has been released.

@@ -47,7 +47,6 @@ from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
-from agent_comms.wake import derive_exact_reply_target
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
 # emulation cannot attest this boundary or exercise its durability contract.
@@ -110,7 +109,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
         (extra_assignment,) = receipt.assignments
         sources.append(SelectedSource(extra_assignment.assignment_id, store.assignments, delivery))
-    reply_target = derive_exact_reply_target(original)
+    reply_target = original.exact_reply_target
     assert reply_target is not None
     store.executions.create(
         "exec",
@@ -403,7 +402,7 @@ def test_fresh_selection_completes_saved_reply_before_admitting_new_assignment(
         fresh_assignment = accepted.value.assignments[0]
         install_native_runtime_schema(case.store)
 
-        _owner, participant, pending = SelectedParticipant.prepare(
+        _owner, participant, pending, _sent_outcomes = SelectedParticipant.prepare(
             case.comms, case.bus, case.store, case.root_id, "owner", case.origin_seq
         )
 

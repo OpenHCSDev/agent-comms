@@ -18,18 +18,14 @@ from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
 
+from .audience_manifest import MAX_WIRE_SEQ
 from .bus_publication import (
     CommittedDelivery,
     has_private_wire_fields,
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
-from .bus_projection import (
-    AppendCheckpoint,
-    BusAppendIndex,
-    BusFileRevision,
-    Checkpoint,
-)
+from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
     project_verified_transitions,
@@ -39,6 +35,7 @@ from .errors import (
 )
 from .field_codec import FieldCodec
 from .messages import Message
+from .private_path import FileRevision
 from .store_files import (
     StoreLock,
     StoreLockContention,
@@ -52,6 +49,12 @@ from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
 
 
+def _notify_candidates(log: WireLog, through_bytes: int) -> None:
+    from .candidate_maintenance import schedule_candidate_catchup
+
+    schedule_candidate_catchup(log, through_bytes)
+
+
 @dataclass(frozen=True)
 class OpenedWireSnapshot:
     """One original descriptor and fixed cut, owned until the reader exits.
@@ -63,7 +66,7 @@ class OpenedWireSnapshot:
     metadata: WireMetadata
     through: int
     stream: BinaryIO | None
-    revision: BusFileRevision | None
+    revision: FileRevision | None
     _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | None] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
@@ -99,6 +102,29 @@ class OpenedWireSnapshot:
             return WireRecord.public_from_wire(record).messages()
         except (TypeError, ValueError) as error:
             raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
+
+    def appended_records(self, previous: FileRevision,
+                         previous_sequence: int) -> tuple[WireRecord, ...]:
+        """Decode only bytes appended to the same opened source inode."""
+        if self.stream is None or self.revision is None:
+            raise RelationViolationError("Wire tail has no opened source")
+        if previous.identity != self.revision.identity or previous.size > self.revision.size:
+            raise RelationViolationError("Wire tail does not extend the settled source")
+        self.stream.seek(previous.size)
+        scan = WireScan(self.metadata, previous_sequence=previous_sequence)
+        records = []
+        while self.stream.tell() < self.boundary:
+            raw = self.stream.readline(
+                min(scan.max_row_bytes + 1, self.boundary - self.stream.tell())
+            )
+            if not raw:
+                break
+            records.append(scan.read(raw))
+        if scan.previous_sequence != self.metadata.last_seq:
+            raise RelationViolationError("Wire tail does not reach its marker")
+        if FileRevision.from_file(self.stream) != self.revision:
+            raise RelationViolationError("Wire tail changed while it was read")
+        return tuple(records)
 
     def public_records(self, offset: int = 0, *, before_offset: int | None = None
                        ) -> Iterator[tuple[Message, int]]:
@@ -486,6 +512,7 @@ class WireLog:
 
         A failed append or bus parent sync leaves the outcome UNKNOWN.
         """
+        StoreLock.current_release().require_active()
         metadata.access.require_append()
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
         if len(encoded) > 8 * 1024 * 1024:
@@ -529,11 +556,10 @@ class WireLog:
                 raise RelationViolationError(
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
+        StoreLock.current_release().callback(_notify_candidates, self, self.path.stat().st_size)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
         """Bus-owned attestation of a committed initial row; no live re-routing."""
-        from .audience_manifest import MAX_WIRE_SEQ
-
         if type(wire_seq) is not int or not 0 < wire_seq <= MAX_WIRE_SEQ:
             raise ValueError("wire_seq must be a positive SQLite-range integer.")
         with self.certified_read() as source:
@@ -602,7 +628,7 @@ class WireLog:
                 boundary = stream.seek(0, 2) if stream is not None else 0
                 if stream is not None:
                     stream.seek(0)
-                revision = BusFileRevision.capture(stream) if stream is not None else None
+                revision = FileRevision.from_file(stream) if stream is not None else None
                 snapshot_type = OpenedWireSnapshot
                 if lock.source is not None:
                     source = lock.certified_read()
@@ -612,7 +638,7 @@ class WireLog:
                     source.require_open_prefix()
                     # Bind the separate retained descriptor to the exact admitted
                     # inode/revision while original physical custody is held.
-                    if (stream is None or revision != BusFileRevision.capture(source.stream)
+                    if (stream is None or revision != FileRevision.from_file(source.stream)
                             or os.fstat(stream.fileno()).st_dev != source.witness.device
                             or boundary != source.witness.offset):
                         raise RelationViolationError("Opened read differs from its certified source cut")

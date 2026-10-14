@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .catalog_document import CatalogDocument
 from .locked_store import LockedStore
-from .store_files import file_revision
+from .private_path import FileRevision
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
@@ -29,8 +29,8 @@ class ChannelCatalog(ThreadOwnedState, LockedStore[CatalogDocument]):
     def empty(self) -> CatalogDocument:
         return CatalogDocument()
 
-    def revision(self) -> tuple:
-        return (file_revision(self.path),)
+    def revision(self) -> tuple[FileRevision | None]:
+        return (FileRevision.capture(self.path),)
 
     @contextmanager
     def editing(self) -> Iterator[CatalogDocument]:

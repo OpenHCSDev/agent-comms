@@ -150,7 +150,7 @@ def _root(
         assert accepted.value.member_count == len(initial.audience.recipients)
     # The global fixture deliberately disables background candidate workers.
     # Tests that consume selected awareness own their deterministic projection.
-    assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
+    assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
     return root, root_id, comms, initial, people
 
 
@@ -235,6 +235,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             {
                 "type": "message",
                 "id": entry_id,
+                "timestamp": "2026-09-26T00:00:00.000Z",
                 "message": {
                     "role": "user",
                     "inputId": input_id,
@@ -452,20 +453,77 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = stable_thread_lookup(people[1].created_at)
         assignment = sealed_cohort_assignments(store, lookup)[0]
-    sent_outcome = MessageNotification(
+    notification = MessageNotification(
         initial.audience.recipients[0], "Read", "",
         message=initial.message, changed=True,
     )
+    sent_outcome = notification.sent_outcome()
+    assert sent_outcome is not None
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(
         ((initial, assignment),), people[1], sent_outcomes=(sent_outcome,)
     ),)).text
     assert 'recent_sent_outcomes: [{"source_seq":' in frame
     assert '"state":"Read"' in frame
-    with pytest.raises(ValueError, match="changed authored-message outcomes"):
-        SelectedWakeSegment.capture(
-            ((initial, assignment),), people[1],
-            sent_outcomes=(replace(sent_outcome, changed=False),),
+    assert replace(notification, changed=False).sent_outcome() is None
+
+
+async def test_removed_sent_session_is_context_not_a_model_start_blocker(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from agent_comms.notification_assignment import RemovedContextProgress
+    from agent_comms.presentation import MessageNotification
+    from agent_comms.selected_participant import SelectedParticipant
+
+    root, root_id, _comms, initial, people = _root(tmp_path, direct=True)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+    removed = RemovedContextProgress().read_notification(
+        MessageNotification(
+            initial.audience.recipients[0], "Sent", "", message=initial.message, changed=True
         )
+    )
+    removed_outcome = removed.sent_outcome()
+    assert removed_outcome is not None
+    monkeypatch.setattr(
+        SelectedParticipant,
+        "capture_sent_outcomes",
+        lambda _comms, _owner, _sources, _assignment_read: (removed_outcome,),
+    )
+    runner, calls = _fake_model()
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
+
+    outcome = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+    ).run()
+
+    assert outcome is not None
+    assert len(calls) == 1
+    assert '"state":"Removed"' in calls[0][1]
+    assert '"detail":"Recipient session removed"' in calls[0][1]
+
+
+async def test_unavailable_sent_outcomes_propagate_before_model_start(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.presentation import MessageNotification
+
+    root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+
+    def unavailable(*_args, **_kwargs):
+        raise NativePiUnavailable("optional sent outcome unavailable")
+
+    monkeypatch.setattr(MessageNotification, "for_sources", unavailable)
+    runner, calls = _fake_model()
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
+
+    with pytest.raises(NativePiUnavailable, match="optional sent outcome unavailable"):
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta",
+            native_package=tmp_path, opt_in=True,
+        ).run()
+
+    assert calls == []
 
 
 async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch) -> None:
@@ -640,7 +698,7 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
 ) -> None:
     root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
     if available:
-        assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
+        assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
     else:
 
         def unavailable(*_args, **_kwargs):
@@ -731,7 +789,8 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
 
     monkeypatch.setattr(OptionalAwarenessProjection, "__call__", blocked_builder)
     projection = OptionalAwarenessProjection.for_selected(
-        WakeCandidateIndex(first_comms.bus),
+        WakeCandidateIndex(first_comms.bus.log),
+        registry=first_comms.registry,
         through_seq=first_initial.message.seq,
         generation=1,
         admission_generation=1,
@@ -770,7 +829,7 @@ async def test_optional_awareness_requires_complete_binding_and_resource_budget(
     tmp_path: Path, monkeypatch, kind: str
 ) -> None:
     root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
-    assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
+    assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
@@ -1802,6 +1861,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     tmp_path, monkeypatch, direct
 ):
     from agent_comms.native_pi import NativePiTerminalFailure
+    from agent_comms.turn_failure import ModelRequestFailed
 
     root, root_id, comms, initial, people = _root(tmp_path, direct=direct)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
@@ -1817,6 +1877,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
             result.context,
             kwargs["provider"],
             kwargs["model"],
+            ModelRequestFailed("Codex error: The usage limit has been reached"),
         )
 
     monkeypatch.setattr(TrackedTurnSession, "execute", failed)
@@ -1860,6 +1921,74 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     assert len(calls) == before + 1
 
 
+@pytest.mark.parametrize("direct", [True, False])
+async def test_transient_provider_failure_retries_two_attempts_then_completes(
+    tmp_path, monkeypatch, direct
+):
+    from agent_comms.native_pi import NativePiTerminalFailure
+    from agent_comms.turn_failure import ProviderRetryExhausted, ProviderTransportFailed
+
+    root, root_id, comms, initial, people = _root(tmp_path, direct=direct)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+    fake, calls = _fake_model(decision="FULL")
+    full_attempts = []
+    delays = []
+
+    async def no_wait(delay):
+        delays.append(delay)
+
+    async def transient(package, **kwargs):
+        result = await fake(package, **kwargs)
+        from agent_comms.private_send_stage import TriageNativeSend
+
+        if isinstance(kwargs["prompt_send_boundary"].stage, TriageNativeSend):
+            return result
+        full_attempts.append(result.context.input_id)
+        if len(full_attempts) <= 2:
+            detail = "controlled transient provider failure"
+            raise NativePiTerminalFailure(
+                detail,
+                result.context,
+                kwargs["provider"],
+                kwargs["model"],
+                (
+                    ProviderRetryExhausted(detail)
+                    if len(full_attempts) == 1
+                    else ProviderTransportFailed(detail)
+                ),
+            )
+        return result
+
+    monkeypatch.setattr("agent_comms.private_send_stage.asyncio.sleep", no_wait)
+    monkeypatch.setattr(TrackedTurnSession, "execute", transient)
+    result = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path
+    ).run()
+
+    assert result is not None and result.disposition is CompletedAssignment
+    assert delays == [1, 2]
+    assert len(calls) == 3 + (not direct)
+    assert len(full_attempts) == 3 and len(set(full_attempts)) == 3
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        lookup = stable_thread_lookup(people[2].created_at)
+        assignment = sealed_cohort_assignments(store, lookup)[0]
+        assert assignment.source == initial.message.reference
+        snapshot = store.snapshots.get(assignment.lifecycle.execution_id)
+        assert snapshot.execution.max_attempts == 3
+        assert snapshot.attempt is not None and snapshot.attempt.attempt_ordinal == 3
+        attempts = store.session._connection.execute(
+            "SELECT attempt_ordinal FROM attempts WHERE execution_id=? ORDER BY attempt_ordinal",
+            (snapshot.execution.execution_id,),
+        ).fetchall()
+        assert [row[0] for row in attempts] == [1, 2, 3]
+        native_inputs = store.session._connection.execute(
+            "SELECT attempt_ordinal FROM native_runtime_input WHERE execution_id=? "
+            "ORDER BY attempt_ordinal",
+            (snapshot.execution.execution_id,),
+        ).fetchall()
+        assert [row[0] for row in native_inputs] == [1, 2, 3]
+
+
 async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monkeypatch):
     from agent_comms.goals import Goal
 
@@ -1896,7 +2025,7 @@ async def test_current_work_context_reaches_both_triage_and_full(tmp_path, monke
         assert context["current_goal"]["text"] == "Restore channel subscribers"
         assert context["current_goal"]["progress"] == "Routing fixed"
         assert context["original_assignment"].startswith("Bootstrap:")
-        assert "A prior task assignment, bootstrap instruction to wait" in prompt
+        assert "Answer direct requests, engage owned work, and ignore chatter" in prompt
 
 
 async def test_selected_execution_cannot_be_run_twice_or_reentered(tmp_path, monkeypatch):

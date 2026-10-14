@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import shlex
+import shutil
 import sys
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -371,6 +372,11 @@ class OwnerLifecycle:
                 # The default stock binary cannot attest native input IDs.
                 # Keep the owner on this installation's pinned Pi entrypoint.
                 agent_bin = self.native_entrypoint()
+            else:
+                # The owner process keeps the launcher selected at its start.
+                # A later PATH or installed-runtime symlink change cannot retarget
+                # drains already owned by this process.
+                agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
             # Explicit launch installs the current runtime before registering
             # this owner. Readers never create or repair runtime schemas.
             from .bus_publication import stable_thread_lookup

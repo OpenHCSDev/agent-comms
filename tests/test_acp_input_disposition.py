@@ -215,7 +215,9 @@ async def test_native_steer_keeps_original_input_and_turn_custody(native_backend
                for child in native.children)
 
 
-async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native_backend):
+async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
+    native_backend, monkeypatch,
+):
     native = native_backend
     await native.author_history()
     held = asyncio.Event()
@@ -260,6 +262,13 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native
             (assignment,) = await Coordination.run_worker(assignments)
             assert assignment.wire_seq == message.seq
             assert type(assignment.lifecycle) is DeliveredAssignment
+            def forbid_native_evidence(*_args, **_kwargs):
+                raise AssertionError("notification projection decoded native evidence")
+
+            monkeypatch.setattr(
+                "agent_comms.native_entries.NativeEntry.read_evidence",
+                forbid_native_evidence,
+            )
             sender_view = comms.views.thread_presentation("sender")
             assert sender_view is not None
             sent_read = next(
@@ -350,7 +359,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             open_release.set()
             await asyncio.wait_for(started.wait(), 30)
             in_flight, = comms.views.message_notifications([message])[key]
-            assert in_flight.state == "Starting response" and in_flight.busy
+            assert in_flight.state == "Sent"
             assert in_flight.read_at_ms is None
             started_release.set()
             # Opening is the retry trigger; no second bus append or observation
@@ -534,10 +543,25 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             await wait_for(lambda: native.provider.posts == 1)
             reply_turn = owner.inputs.wake_tasks[session]
             known = len(owner.inputs.dispositions.read().rows)
+            assert native.provider.requests[0]["model"] == "fixture"
+            elsewhere = Comms(native.root, private_initial_writes=True)
+
+            def store_change():
+                thread = elsewhere.registry.require(session)
+                elsewhere.threads.set_thread_configuration(
+                    thread, model="response-local/fixture-second",
+                    thinking_level=thread.thinking_level,
+                )
+
+            await Coordination.run_worker(store_change)
             second = comms.messaging.send_message("sender", session, "the yaml one, I mean")
             native.provider.response_gate = None
-            # The owner's own observation hands the second message to the running turn.
-            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == known + 1)
+            # One observer feeds settings and accepted messages through the running-turn inbox.
+            await wait_for(
+                lambda: len(owner.inputs.dispositions.read().rows) == known + 1
+                and owner.sessions.config.settings_in_use[session].model
+                == "response-local/fixture-second"
+            )
             held.set()
             await asyncio.wait_for(reply_turn, 30)
 
@@ -553,6 +577,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             assert states[first.seq] is not DeliveredAssignment
             # One turn took both: the second went in at the next model call, sent once.
             assert native.provider.posts == 2
+            assert native.provider.requests[1]["model"] == "fixture-second"
             assert "the yaml one, I mean" in json.dumps(native.provider.requests[1]["messages"])
             assert "the yaml one, I mean" not in json.dumps(native.provider.requests[0]["messages"])
             assert len({row.turn_id for row in owner.inputs.dispositions.read().rows.values()}) == 1

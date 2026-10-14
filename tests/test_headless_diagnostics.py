@@ -86,7 +86,7 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     monkeypatch.setattr(comms.messaging, "send", publish)
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     await owner.turns.run_agent_turn(
-        session, session, "Private input", origins=(incoming,), reply_targets=("#comms",)
+        session, session, "Private input", origins=(incoming,)
     )
     assert observed[0]["sequences"] == [incoming.seq]
     assert observed[0]["reason"] == "native_preflight_timeout"

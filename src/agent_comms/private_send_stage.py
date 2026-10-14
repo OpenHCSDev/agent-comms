@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
 from contextlib import contextmanager
 from collections.abc import Iterator
 
 from .assignment_states import DeferredAssignment, FailedAssignment
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_errors import IdentityConflict, StaleFence
+from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .durable_turn import DurableTurn
@@ -36,6 +36,7 @@ from .private_sidecar import native_request_digest
 from .reservation_rules import ReservationViolationError
 from .selected_triage import SelectedTriage
 from .text_digest import TextDigest
+from .turn_failure import TurnFailure
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,7 @@ class NativeSendStage(ABC):
         input_id: str,
         token_digest: str,
         context: NativeContextProof,
+        failure: TurnFailure,
     ):
         """Record the failed input's verified model context and fail its claims.
 
@@ -76,6 +78,9 @@ class NativeSendStage(ABC):
         session file. Recording it states which model context the input entered,
         as a successful input records it. A failed input is never sent again.
         """
+
+    async def continue_after_failure(self, settlement, failure: TurnFailure) -> None:
+        """Triage and terminal full failures have no subsequent attempt."""
 
     def fail_unknown(self, bus, owner, witness) -> None:
         owner.require_registry(bus._registry)
@@ -236,7 +241,14 @@ class NativeSendStage(ABC):
 
 
 class TriageNativeSend(NativeSendStage):
-    def fail_terminal(self, store, owner, input_id, token_digest, context) -> tuple[WakeAssignment, ...]:
+    def fail_terminal(
+        self, store, owner, input_id, token_digest, context, failure
+    ) -> tuple[WakeAssignment, ...]:
+        return self.fail_decision(store, owner, input_id, token_digest, context)
+
+    def fail_decision(
+        self, store, owner, input_id, token_digest, context
+    ) -> tuple[WakeAssignment, ...]:
         """A provider failure and an unparseable decision both end the triage here.
 
         The context and the failed claims commit in one transaction; no
@@ -338,14 +350,20 @@ class FullNativeSend(NativeSendStage):
     def execution(self) -> FullNativeExecution:
         return FullNativeExecution(self.fence.execution_id, self.fence.attempt_ordinal)
 
-    def fail_terminal(self, store, owner, input_id, token_digest, context) -> None:
+    def fail_terminal(self, store, owner, input_id, token_digest, context, failure):
         # Same order as success: record the context under the live attempt,
         # then settle the attempt.
         with store.session.transaction() as db:
             row = self.pending_input(store, input_id, owner, token_digest)
             store.attempts.require_fence(self.fence)
             row.commit_context(db, context)
-        self.progress.fail_terminal()
+        settlement = self.progress.fail_terminal(failure)
+        return settlement
+
+    async def continue_after_failure(self, settlement, failure: TurnFailure) -> None:
+        if settlement.can_retry:
+            await asyncio.sleep(failure.retry_delay(self.execution.attempt_ordinal))
+            raise RetryScheduled
 
     def fail_unknown(self, bus, owner, witness) -> None:
         with self.progress.attempts.session.boundary(bus) as boundary:
@@ -359,10 +377,12 @@ class FullNativeSend(NativeSendStage):
             raise StaleFence("full input cannot bind to the current attempt")
         if NativeRuntimeInput.select(
             db,
-            where="execution_id=?",
-            parameters=(self.execution.execution_id,),
+            where="execution_id=? AND attempt_ordinal=?",
+            parameters=(
+                self.execution.execution_id, self.execution.attempt_ordinal,
+            ),
         ):
-            raise IdentityConflict("a full-turn input already exists; no automatic replay")
+            raise IdentityConflict("this execution attempt already has a native input")
 
     def commit(
         self,

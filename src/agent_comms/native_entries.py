@@ -166,7 +166,7 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
 
     @property
     def recorded_at(self) -> datetime | None:
-        """Pi's external ISO8601 time, decoded once; missing or invalid time is undated."""
+        """Pi's external ISO8601 time, decoded once for tolerant transcript display."""
         if self.timestamp is None:
             return None
         try:
@@ -175,6 +175,13 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
         except (ValueError, OverflowError):
             return None
         return recorded if recorded.utcoffset() is not None else None
+
+    def require_recorded_at(self) -> datetime:
+        """Strict evidence entries follow Pi's required timestamp contract."""
+        recorded = self.recorded_at
+        if recorded is None:
+            raise ValueError("Native Pi session evidence entry has no valid timestamp")
+        return recorded
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         """Project one journal clock onto every display part without inventing time.
@@ -258,15 +265,28 @@ class NativeEvidenceRead:
         self.source.close()
         self.entries = ()
 
-    def observe(self):
-        return self._observe(reverified=False)
+    def observe(self, entry_ids: set[str] | None = None):
+        """Decode the captured cut, optionally projecting only selected entries."""
+        return self._observe(reverified=False, entry_ids=entry_ids)
 
-    def _reverify(self):
+    def recorded_times(self, entry_ids: set[str]) -> dict[str, int]:
+        """Read every selected context clock through the strict evidence decoder."""
+        _, entries = self.observe(entry_ids)
+        by_id = dict(item for entry in entries for item in entry.identified())
+        missing = entry_ids.difference(by_id)
+        if missing:
+            raise ValueError(f"Native Pi context entries are absent: {sorted(missing)!r}")
+        return {
+            entry_id: int(by_id[entry_id].require_recorded_at().timestamp() * 1000)
+            for entry_id in entry_ids
+        }
+
+    def _reverify(self, entry_ids: set[str] | None):
         self.entries = ()
         self.source.reverify_from_start()
-        return self._observe(reverified=True)
+        return self._observe(reverified=True, entry_ids=entry_ids)
 
-    def _observe(self, *, reverified: bool):
+    def _observe(self, *, reverified: bool, entry_ids: set[str] | None):
         from .native_pi import (
             NativeEvidencePrefixChanged,
             NativePiUnavailable,
@@ -275,7 +295,7 @@ class NativeEvidenceRead:
 
         try:
             _private_session_dir(self.source.path.parent)
-            appended = tuple(self.decode_rows(self.source.rows()))
+            appended = tuple(self.decode_rows(self.source.rows(), entry_ids))
             entries = self.entries + appended
             if not entries or not isinstance(entries[0], SessionEntry):
                 raise ValueError("Native Pi session header is invalid")
@@ -288,7 +308,7 @@ class NativeEvidenceRead:
             # Replacement, truncation or a changed prior hash enters the
             # source owner's named unverified state. Reopen once and decode
             # from byte zero; no stale entry or offset survives the transition.
-            return self._reverify()
+            return self._reverify(entry_ids)
         except NativePiUnavailable:
             self.close()
             raise
@@ -298,8 +318,14 @@ class NativeEvidenceRead:
         self.entries = entries
         return entries[0], entries
 
-    def decode_rows(self, rows):
-        return (NativeEntry.from_evidence(row) for row in rows)
+    def decode_rows(self, rows, entry_ids: set[str] | None = None):
+        for index, row in enumerate(rows):
+            if (
+                entry_ids is None
+                or (index == 0 and not self.entries)
+                or row.get("id") in entry_ids
+            ):
+                yield NativeEntry.from_evidence(row)
 
 
 class NativeInputEvidenceRead(NativeEvidenceRead):
@@ -309,11 +335,15 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
     an acquired input-proof projection, not a history index or another store.
     """
 
-    def decode_rows(self, rows):
+    def decode_rows(self, rows, entry_ids: set[str] | None = None):
         for index, row in enumerate(rows):
             # The first physical record must remain the original session header.
-            entry = (NativeEntry.from_evidence(row) if index == 0 and not self.entries
-                     else NativeEntry.wire_member(row).input_evidence(row))
+            if index == 0 and not self.entries:
+                yield NativeEntry.from_evidence(row)
+                continue
+            if entry_ids is not None and row.get("id") not in entry_ids:
+                continue
+            entry = NativeEntry.wire_member(row).input_evidence(row)
             if entry is not None:
                 yield entry
 

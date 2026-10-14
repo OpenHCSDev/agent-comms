@@ -124,7 +124,8 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     store.record(
         key, seq=message.seq, owner="owner", admission=admission, target="owner", text=message.body
     )
-    comms.messaging.acknowledge("owner")
+    messages = comms.bus.inbox("owner")
+    comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
     action = StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
         comms.goals.update_goal("owner", action)
@@ -171,7 +172,11 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
 async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    from agent_comms.native_arguments import NativeArguments
+
+    configured_model = NativeArguments.parse(NativeArguments.default).model
+    assert configured_model is not None
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
     from goal_owner_fixture import activate_empty_source

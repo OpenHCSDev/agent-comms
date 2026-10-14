@@ -5,8 +5,10 @@ import os
 from contextlib import AsyncExitStack
 from abc import abstractmethod
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
+from acp import RequestError
 
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
@@ -15,10 +17,15 @@ from agent_comms.comms import Comms
 from agent_comms.agent_backend import PlacedCompaction
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
+from agent_comms.messages import InfoKind, Message
+from agent_comms.owned_send_admission import OwnedSendAdmission
 from agent_comms.owned_turn import OwnedTurn
+from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
 from test_backend_native_lifecycle import native_backend as native_backend
+
+pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
 class EffectCase(DeclaredFamily, affix="Case"):
@@ -30,7 +37,7 @@ class EffectCase(DeclaredFamily, affix="Case"):
     successful = True
 
     async def assert_effect(self, execution, progress):
-        assert progress.terminal_ok is self.successful
+        assert progress.result is not None and progress.result.ok is self.successful
 
 
 class NormalCase(EffectCase):
@@ -64,7 +71,6 @@ class CompactionCase(EffectCase):
 
     async def assert_effect(self, execution, progress):
         await super().assert_effect(execution, progress)
-        assert progress.compaction_resume_activity is None
         info = execution.runner.comms.agents.agent_info_of(execution.thread_name)
         assert info.context_used == 20 and info.context_size == 1000
 
@@ -126,7 +132,10 @@ async def owner_turn(comms, tmp_path):
     )
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
-    execution = OwnedTurn(owner.turns, session.session_id, name, "work", reply_targets=("#comms",))
+    origin = comms.messaging.send_user_message(name, "work", worktree=str(tmp_path))
+    execution = OwnedTurn(
+        owner.turns, session.session_id, name, "work", origins=(origin,)
+    )
     try:
         async with AsyncExitStack() as resources:
             async with AsyncExitStack() as permits:
@@ -134,6 +143,25 @@ async def owner_turn(comms, tmp_path):
                 yield execution, execution.progress
     finally:
         await owner.shutdown()
+
+
+async def start_owned_input(execution, progress):
+    admission = OwnedSendAdmission(
+        comms=execution.runner.comms,
+        inputs=execution.runner.inputs,
+        goal_store=execution.runner.comms.goals.open_goal_store(),
+        session_id=execution.session_id,
+        thread=execution.thread,
+        turn=TurnId(execution.turn_id),
+        admission=execution.turn_lease.admission_generation,
+        original=execution.original,
+        goal_permit=execution.goal_permit,
+    )
+    native_id = uuid4().hex
+    with admission(None, native_id, execution.original.prompt) as admitted:
+        assert admitted is True
+    assert admission.native_start(None, native_id, execution.original.prompt)
+    await progress.consume(ae.InputStarted(None))
 
 
 def waiting_owner(execution):
@@ -170,11 +198,9 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
 
     monkeypatch.setattr(runner.effects, "_emit_event", observe)
     value = case()
-    await progress.consume(ae.InputStarted(None))
+    await start_owned_input(execution, progress)
     for event in value.body():
         await progress.consume(event)
-        if isinstance(event, ae.ToolStart) and progress.compaction_resume_activity is None:
-            assert comms.agents.activity_of(execution.thread_name).detail == event.title
         if isinstance(event, ae.CompactionStart):
             assert comms.agents.activity_of(execution.thread_name).detail == "Compacting context"
     await progress.consume(ae.StreamSettled())
@@ -201,14 +227,13 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
         is None
     )
     assert comms.goals.goal_wait("waiting") is not None
-    await progress.publish_result()
-    messages = comms.bus.log.full_history()
-    if value.successful:
-        assert any(row.body == "answer" and not row.notice for row in messages)
-    else:
+    if not value.successful:
+        with pytest.raises(RequestError, match="Internal error"):
+            await progress.publish_result()
+        messages = comms.bus.log.full_history()
         assert not any(row.body == "provisional" for row in messages)
         assert any(row.notice and "[Open diagnostic]" in row.body for row in messages)
-        assert progress.terminal_failure["diagnostic"] == diagnostic
+        assert progress.result is not None and progress.result.diagnostic == diagnostic
     await runner.settle_turn(
         execution.session_id,
         execution.turn_lease,
@@ -225,6 +250,7 @@ async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeyp
     execution, progress = owner_turn
     comms, runner = execution.runner.comms, execution.runner
     waiting_owner(execution)
+    await start_owned_input(execution, progress)
     if after_stream:
         await progress.consume(ae.StreamSettled())
     original = runner.effects._emit_event
@@ -234,15 +260,24 @@ async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeyp
         if isinstance(event, TurnTranscriptUpdate) and not event.state.busy:
             raise ConnectionError("client disconnected after receiving terminal event")
 
+    released = []
+    release_waits = comms.goals.release_waits_after_terminal_turn
+
+    def capture_release(fence):
+        released.append(fence)
+        return release_waits(fence)
+
+    monkeypatch.setattr(comms.goals, "release_waits_after_terminal_turn", capture_release)
     monkeypatch.setattr(runner.effects, "_emit_event", disconnected)
     with pytest.raises(ConnectionError, match="client disconnected"):
         await runner.settle_turn(
             execution.session_id,
             execution.turn_lease,
         )
+    monkeypatch.setattr(runner.effects, "_emit_event", original)
     assert comms.goals.goal_wait("waiting") is None
     goal = comms.registry.require("waiting").goal
-    assert comms.goals.release_waits_after_terminal_turn(progress.terminal_fence) == ()
+    assert len(released) == 1 and release_waits(released[0]) == ()
     assert comms.registry.require("waiting").goal == goal
 
 
@@ -254,8 +289,6 @@ async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeyp
 async def test_actual_native_stream_reaches_current_consumer_and_settlement(
     native_backend, monkeypatch, provider_status, committed_progress
 ):
-    from acp import RequestError
-
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.transcript_events import SentTranscript, TextTranscript
 
@@ -283,12 +316,15 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
         private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
         private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
     )
+    await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
-    comms.threads.attach_session(name, str(native.session))
+    comms.threads.attach_session(comms.registry.require(name), str(native.session))
+    origin = comms.messaging.send_user_message(
+        name, "native acceptance", worktree=str(native.project)
+    )
     execution = OwnedTurn(
-        owner.turns, session.session_id, name, "native acceptance",
-        reply_targets=("#comms",),
+        owner.turns, session.session_id, name, "native acceptance", origins=(origin,)
     )
     try:
         if provider_status == 200:
@@ -298,15 +334,16 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
                 await execution.run()
         assert comms.registry.require(name).active_turn is None
         assert session.session_id not in owner.inputs.backend_inboxes
-        assert native.provider.posts == (2 if committed_progress else 1)
+        if provider_status == 200:
+            assert native.provider.posts == (2 if committed_progress else 1)
         inputs = InputDispositions(comms.root / InputDispositions.filename).read().rows
         assert len(inputs) == 1 and all(row.has_started for row in inputs.values())
         rows = comms.bus.log.full_history()
         replies = [row for row in rows if row.sender == name]
         if provider_status == 200:
             assert [(row.body, row.notice) for row in replies] == (
-                [("Working", True), ("Native response lifecycle.", False)]
-                if committed_progress else [("Native response lifecycle.", False)]
+                [("Working", True), ("Native response lifecycle.", True)]
+                if committed_progress else [("Native response lifecycle.", True)]
             )
             page = comms.transcripts.capture_page_read(name).read()
             final = [
@@ -315,7 +352,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             ]
             assert len(final) == 1 and isinstance(final[0], SentTranscript)
             assert final[0].source == replies[-1].reference
-            assert final[0].routing.reply.targets == ("#comms",)
+            assert final[0].routing.reply.targets == (origin.sender,)
         else:
             assert len(replies) == 1 and replies[0].notice
             assert "[Open diagnostic]" in replies[0].body
@@ -346,6 +383,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
         private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
         private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
     )
+    await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     comms.threads.set_thread_configuration(comms.registry.require(name), model='response-local/fixture')
@@ -405,7 +443,7 @@ async def test_failure_publication_preserves_private_cause_after_transport_disco
 
     async def disconnect_after_error(session, event, **kwargs):
         await emit(session, event, **kwargs)
-        if isinstance(event, ae.Error):
+        if isinstance(event, ae.Done):
             emitted.append(event)
             raise ConnectionError("error notification transport closed")
 

@@ -24,10 +24,8 @@ from acp.schema import (
     TerminalAuthMethod,
 )
 
-from .pi_vocabulary import ThinkingLevel
 from . import agent_events as events
 from .acp_extension import (
-    ContextUsage,
     CoordinationChangedUpdate,
     GoalChangedUpdate,
     encode_updates,
@@ -40,7 +38,6 @@ from .config_options import SessionConfigOptions
 from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
-from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .registry_document import RegistrySnapshot
 from .transcript_updates import TranscriptReplay
@@ -69,6 +66,7 @@ class SessionLifecycle:
         self.worktrees: dict[str, str] = {}
         self.proxies: dict[str, RuntimeProxy] = {}
         self._attachment_lock = asyncio.Lock()
+        self._identity_lock = asyncio.Lock()
         self.transcript = TranscriptReplay(comms, runtime)
         self.config = SessionConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
 
@@ -281,33 +279,35 @@ class SessionLifecycle:
             )
 
     async def sync_identity(self, session_id: str) -> str:
-        cached_name = self.require(session_id)
-        snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
-        thread = snapshot.require(cached_name)
-        name = thread.name
-        if (
-            name != cached_name
-            or thread.pid != os.getpid()
-            or not snapshot.status(name).running
-        ):
-            await self.effects.turns.close_idle_backend(session_id, thread)
-        self.bindings[session_id] = name
-        if (
-            self.titles.get(session_id) != name
-            or self.display_titles.get(session_id) != thread.title
-            or self.worktrees.get(session_id) != thread.worktree
-        ):
-            await self.runtime.session_update(
-                session_id=session_id,
-                update=SessionInfoUpdate(
-                    session_update="session_info_update",
-                    title=thread.title or name,
-                    field_meta=await self.metadata(name, session_id=session_id),
-                ),
-            )
-            self.titles[session_id], self.display_titles[session_id] = name, thread.title
-            self.worktrees[session_id] = thread.worktree
-        return name
+        """Publish each observed identity generation once across concurrent consumers."""
+        async with self._identity_lock:
+            cached_name = self.require(session_id)
+            snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
+            thread = snapshot.require(cached_name)
+            name = thread.name
+            if (
+                name != cached_name
+                or thread.pid != os.getpid()
+                or not snapshot.status(name).running
+            ):
+                await self.effects.turns.close_idle_backend(session_id, thread)
+            self.bindings[session_id] = name
+            if (
+                self.titles.get(session_id) != name
+                or self.display_titles.get(session_id) != thread.title
+                or self.worktrees.get(session_id) != thread.worktree
+            ):
+                await self.runtime.session_update(
+                    session_id=session_id,
+                    update=SessionInfoUpdate(
+                        session_update="session_info_update",
+                        title=thread.title or name,
+                        field_meta=await self.metadata(name, session_id=session_id),
+                    ),
+                )
+                self.titles[session_id], self.display_titles[session_id] = name, thread.title
+                self.worktrees[session_id] = thread.worktree
+            return name
 
     async def observe_native_configuration(
         self, session_id: str, thread_name: str, event: events.AgentInfo
@@ -323,27 +323,8 @@ class SessionLifecycle:
         self, thread_name: str,
     ) -> tuple[CoordinationChangedUpdate, GoalChangedUpdate]:
         """Capture original store projections before loop/client effects consume them."""
-        thread = self.comms.registry.require(thread_name)
         goal, execution = self.comms.goals.goal_snapshot(thread_name)
-        info = self.comms.agents.agent_info_of(thread_name)
-        usage = (
-            ContextUsage(info.context_used, info.context_size)
-            if info is not None and info.context_used is not None and info.context_size
-            else None
-        )
-        return (
-            CoordinationChangedUpdate(
-                ThreadIncarnation(thread.name, thread.created_at),
-                str(self.comms.root.resolve()),
-                os.getpid(),
-                thread.worktree,
-                thread.model,
-                ThinkingLevel.optional_name(thread.thinking_level),
-                thread.title or thread.name,
-                usage,
-            ),
-            GoalChangedUpdate(goal, execution),
-        )
+        return self.comms.configuration.answer(thread_name), GoalChangedUpdate(goal, execution)
 
     async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, Any]:
         configuration = await Coordination.run_worker(partial(

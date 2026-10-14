@@ -29,7 +29,11 @@ from goal_owner_fixture import canonical_goal_wire
 async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     tmp_path, monkeypatch, changed
 ):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    from agent_comms.native_arguments import NativeArguments
+
+    configured_model = NativeArguments.parse(NativeArguments.default).model
+    assert configured_model is not None
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = canonical_goal_wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
@@ -370,7 +374,8 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, ackn
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
     message = comms.messaging.send_message("child", "parent", "Finished immediately")
     if acknowledged:
-        comms.messaging.acknowledge("parent")
+        references = tuple(message.reference for message in comms.bus.inbox("parent"))
+        comms.messaging.acknowledge("parent", references)
     with pytest.raises(ValueError, match=f"Dependency reply {message.seq}.*pending or UNKNOWN"):
         comms.goals.update_goal(
             "parent",

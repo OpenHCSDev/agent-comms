@@ -109,6 +109,102 @@ class PiPayload:
 
 
 @dataclass(frozen=True)
+class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
+    opaque = False
+
+    @classmethod
+    def wire_member(cls, value):
+        try:
+            success = FieldCodec.decode(bool, value.get("success"))
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Provider retry end requires a boolean success outcome"
+            ) from error
+        if success:
+            return SucceededProviderRetry
+        final_error = value.get("finalError")
+        if not isinstance(final_error, str) or not final_error.strip():
+            raise ValueError("Failed provider retry end requires finalError")
+        return FailedProviderRetry
+
+    @abstractmethod
+    def result(self, attempt: int, redact): ...
+
+    @abstractmethod
+    def apply(self, event, session): ...
+
+    @abstractmethod
+    def recovery_events(self, session): ...
+
+    @abstractmethod
+    def finish_tracked(self, session) -> None: ...
+
+    @abstractmethod
+    def retry_wire(self) -> dict[str, object]: ...
+
+
+@dataclass(frozen=True)
+class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
+    def result(self, attempt: int, redact):
+        from .acp_failure import ProviderRetryResult
+
+        return ProviderRetryResult(success=True, attempt=attempt)
+
+    def apply(self, event, session):
+        session.output.error_message = None
+        return ()
+
+    def recovery_events(self, session):
+        from .turn_phase import ModelWaitPhase
+
+        return (session.watchdog.state(
+            "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
+        ),)
+
+    def finish_tracked(self, session) -> None:
+        session.request_retried()
+
+    def retry_wire(self) -> dict[str, object]:
+        return {"success": True}
+
+
+@dataclass(frozen=True)
+class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
+    final_error: str = field(metadata={"wire_name": "finalError"})
+
+    def __post_init__(self) -> None:
+        if not self.final_error.strip():
+            raise ValueError("Failed provider retry end requires finalError")
+
+    def result(self, attempt: int, redact):
+        from .acp_failure import ProviderRetryResult
+
+        return ProviderRetryResult(
+            success=False, attempt=attempt, final_error=redact(self.final_error)
+        )
+
+    def apply(self, event, session):
+        from .turn_phase import ModelWaitPhase
+
+        session.watchdog.retry_recovery_pending = False
+        return (
+            *event.exhausted(session),
+            session.watchdog.state(
+                "failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()
+            ),
+        )
+
+    def recovery_events(self, session):
+        return ()
+
+    def finish_tracked(self, session) -> None:
+        session.fail_terminal(self.final_error)
+
+    def retry_wire(self) -> dict[str, object]:
+        return {"success": False, "finalError": self.final_error}
+
+
+@dataclass(frozen=True)
 class PiCost(PiPayload):
     input: float | None = wire_field("input")
     output: float | None = wire_field("output")
@@ -361,6 +457,9 @@ class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
         except ValueError:
             return UnknownDiagnostic
 
+    def refine_model_request_failure(self, failure):
+        return failure
+
     @property
     def description(self) -> str:
         return ""
@@ -372,6 +471,11 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     error: ProviderDiagnosticError
     details: ProviderTransportDetails
     timestamp: int | None = None
+
+    def refine_model_request_failure(self, failure):
+        from .turn_failure import ProviderTransportFailed
+
+        return ProviderTransportFailed(failure.text)
 
     @property
     def description(self) -> str:

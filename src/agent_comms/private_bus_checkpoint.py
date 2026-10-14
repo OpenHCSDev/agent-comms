@@ -25,8 +25,9 @@ from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
-from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource, file_revision
+from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .errors import RelationViolationError
+from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, TypedTable
 from .wire_metadata import WireMetadata
@@ -65,15 +66,15 @@ class PrefixWitness(PrefixSeal):
 
     @property
     def device(self) -> int:
-        return self.revision[0]
+        return self.revision.identity.device
 
     @property
     def inode(self) -> int:
-        return self.revision[1]
+        return self.revision.identity.inode
 
     @property
     def offset(self) -> int:
-        return self.revision[2]
+        return self.revision.size
 
     def seal(self) -> PrefixSeal:
         return FieldCodec.decode(PrefixSeal, FieldCodec.project(self, "seal"))
@@ -126,10 +127,65 @@ class CertifiedSourceRead:
             raise RelationViolationError("Certified source read has left its lock lifetime.")
         self.marker.seal.check_final(self.witness, _path(self.path))
         if (
-            file_revision(os.fstat(self.stream.fileno())) != self.witness.revision
-            or file_revision(self.path.stat()) != self.witness.revision
+            FileRevision.from_stat(os.fstat(self.stream.fileno())) != self.witness.revision
+            or FileRevision.from_stat(self.path.stat()) != self.witness.revision
         ):
             raise RelationViolationError("Conversation source needs a current certificate.")
+
+    def install_at(self, bus: WireLog) -> PrefixWitness:
+        """Install a verified carry under the destination's canonical lock.
+
+        The maintenance caller first checks history preservation against its
+        immutable original. Both roots must already have current certificates
+        and identical non-seal marker facts. Candidate bytes are copied, never
+        moved: its evidence remains usable if destination publication fails.
+        No retired row decoder or second certificate algorithm belongs here.
+        """
+        from .wire_log import WireLog
+
+        if not isinstance(bus, WireLog) or bus.path.name != "bus.jsonl":
+            raise TypeError("Canonical private WireLog required")
+        self.require_current()
+        if bus.path.resolve() == self.path.resolve():
+            raise RelationViolationError("Carry destination must differ from its source")
+        expected = replace(self.marker, checkpoint_version=None, checkpoint_seal=None)
+        with bus.locked() as lock:
+            prior = lock.certified_read()
+            prior.require_current()
+            prior.require_marker(bus._private_marker_unlocked())
+            if replace(prior.marker, checkpoint_version=None, checkpoint_seal=None) != expected:
+                raise RelationViolationError("Carry changed destination marker facts")
+            with tempfile.TemporaryDirectory(prefix=".checkpoint-carry-", dir=bus.path.parent) as stage:
+                staged = Path(stage) / bus.path.name
+                fd = os.open(staged, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                digest = _SEED
+                self.stream.seek(0)
+                with os.fdopen(fd, "wb") as output:
+                    while raw := self.stream.readline(WireScan.max_row_bytes + 1):
+                        if len(raw) > WireScan.max_row_bytes or not raw.endswith(b"\n"):
+                            raise RelationViolationError("Carried source has an invalid row boundary")
+                        output.write(raw)
+                        digest = _chain(digest, raw)
+                    output.flush()
+                    os.fsync(output.fileno())
+                if digest.hex() != self.witness.digest:
+                    raise RelationViolationError("Carried bytes differ from their certificate")
+                self.require_current()
+                prior.require_current()
+                prior.require_marker(bus._private_marker_unlocked())
+                try:
+                    # Keep the required old seal and index until the shared
+                    # installer publishes the new pair. Any failed replacement
+                    # remains sealed-but-inconsistent, so readers must refuse.
+                    os.replace(staged, bus.path)
+                    _directory_sync(bus.path)
+                    witness = PrefixCertificate._install(bus, prior.marker)
+                    self.require_current()
+                    return witness
+                except Exception as error:
+                    raise RelationViolationError(
+                        "Carried checkpoint installation outcome UNKNOWN; preserve both roots"
+                    ) from error
 
     def committed_sequence(self) -> int:
         """Global committed high-water; silent observations allocate no sequence."""
@@ -650,6 +706,58 @@ class PrefixCertificate(CheckpointTable, TypedTable):
     ctime_ns: int
 
     @classmethod
+    def _install(cls, bus: WireLog, marker: WireMetadata) -> PrefixWitness:
+        """Build and publish one complete index under the caller's bus lock.
+
+        Fresh installation and verified carry share this algorithm. Retaining
+        an old required seal throughout carry makes an interrupted replacement
+        unreadable instead of admitting an unsealed full-scan fallback.
+        """
+        path = _path(bus.path)
+        _directory_sync(bus.path)
+        with tempfile.TemporaryDirectory(prefix=".checkpoint-install-", dir=path.parent) as stage:
+            staged = Path(stage) / path.name
+            fd = os.open(staged, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+            os.close(fd)
+            with closing(_connect(staged)) as db:
+                for table in TypedTable.members_with(CheckpointTable):
+                    table.create(db)
+                with bus.path.open("rb") as stream:
+                    info = os.fstat(stream.fileno())
+                    digest = _SEED
+                    through_seq = 0
+
+                    def collect(offset, raw, record):
+                        nonlocal digest, through_seq
+                        digest = _chain(digest, raw)
+                        through_seq = record.sequence_after(through_seq)
+                        _index_row(db, offset, raw, record)
+
+                    with db:
+                        for _ in bus.verified_records_unlocked(marker, on_row=collect):
+                            pass
+                        if through_seq != marker.last_seq:
+                            raise RelationViolationError("Private bus has an unsettled publication sequence.")
+                        if (
+                            FileRevision.from_stat(os.fstat(stream.fileno()))
+                            != FileRevision.from_stat(info)
+                            or FileRevision.from_stat(bus.path.stat())
+                            != FileRevision.from_stat(info)
+                        ):
+                            raise RelationViolationError("Private bus changed during checkpoint installation.")
+                        cls.capture(marker.root_id, info, through_seq, digest,
+                                    _tail(stream, info.st_size)).insert(db)
+            _directory_sync(staged)
+            with closing(_connect(staged, readonly=True)) as db:
+                witness = _saved(db)
+            os.replace(staged, path)
+            _directory_sync(path)
+            published = replace(marker)
+            published.seal_with(FinalSeal.capture(witness, path))
+            bus.write_metadata_unlocked(published)
+            return witness
+
+    @classmethod
     def read_witness(cls, db: sqlite3.Connection) -> PrefixWitness:
         """Decode the original certificate through its own declaration.
 
@@ -672,7 +780,12 @@ class PrefixCertificate(CheckpointTable, TypedTable):
     def witness(self) -> PrefixWitness:
         return PrefixWitness(
             self.root_id,
-            (self.device, self.inode, self.offset, self.mtime_ns, self.ctime_ns),
+            FileRevision(
+                FileIdentity(self.device, self.inode),
+                self.offset,
+                self.mtime_ns,
+                self.ctime_ns,
+            ),
             self.through_seq,
             self.digest,
             self.tail,
@@ -791,51 +904,7 @@ def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -
                 os.fsync(fd)
             finally:
                 os.close(fd)
-        _directory_sync(bus.path)
-        # Staging beside the destination makes publication atomic and never
-        # exposes a partially built index to current readers or appenders.
-        with tempfile.TemporaryDirectory(prefix=".checkpoint-install-", dir=path.parent) as stage:
-            staged = Path(stage) / path.name
-            fd = os.open(staged, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
-            os.close(fd)
-            with closing(_connect(staged)) as db:
-                for table in TypedTable.members_with(CheckpointTable):
-                    table.create(db)
-                with bus.path.open("rb") as stream:
-                    info = os.fstat(stream.fileno())
-                    digest = _SEED
-                    through_seq = 0
-
-                    def collect(offset, raw, record):
-                        nonlocal digest, through_seq
-                        digest = _chain(digest, raw)
-                        through_seq = record.sequence_after(through_seq)
-                        _index_row(db, offset, raw, record)
-
-                    with db:
-                        for _ in bus.verified_records_unlocked(marker, on_row=collect):
-                            pass
-                        if through_seq != marker.last_seq:
-                            raise RelationViolationError(
-                                "Private bus has an unsettled publication sequence."
-                            )
-                        if file_revision(os.fstat(stream.fileno())) != file_revision(
-                            info
-                        ) or file_revision(bus.path.stat()) != file_revision(info):
-                            raise RelationViolationError(
-                                "Private bus changed during checkpoint installation."
-                            )
-                        PrefixCertificate.capture(
-                            marker.root_id, info, through_seq, digest, _tail(stream, info.st_size)
-                        ).insert(db)
-            _directory_sync(staged)
-            with closing(_connect(staged, readonly=True)) as db:
-                witness = _saved(db)
-            os.replace(staged, path)
-            _directory_sync(path)
-            marker.seal_with(FinalSeal.capture(witness, path))
-            bus.write_metadata_unlocked(marker)
-            return witness
+        return PrefixCertificate._install(bus, marker)
 
 
 def certificate_enabled(bus_path: Path) -> bool:
@@ -854,7 +923,7 @@ def _recover_pending_unlocked(
     """Repair only a durable writer intent after a COMPLETE canonical bus scan."""
     prior = seal.prior
     digest = _SEED
-    prior_seen = prior.revision[2] == 0
+    prior_seen = prior.revision.size == 0
     prior_seq = 0
     last_seq = 0
     count = 0
@@ -872,7 +941,7 @@ def _recover_pending_unlocked(
                 raise RelationViolationError("Private bus pending recovery exceeds cold bound.")
             digest = _chain(digest, raw)
             last_seq = record.sequence_after(last_seq)
-            if offset + len(raw) == prior.revision[2]:
+            if offset + len(raw) == prior.revision.size:
                 prior_seen = True
                 prior_seq = last_seq
                 if digest.hex() != prior.digest or prior_seq != prior.through_seq:
@@ -883,14 +952,14 @@ def _recover_pending_unlocked(
 
         for _ in bus.verified_records_unlocked(marker, on_row=collect):
             pass
-        if not prior_seen or (prior.revision[2] == 0 and prior.digest != _SEED.hex()):
+        if not prior_seen or (prior.revision.size == 0 and prior.digest != _SEED.hex()):
             raise RelationViolationError("Private bus checkpoint old prefix is unavailable.")
-        if file_revision(bus.path.stat()) != file_revision(info):
+        if FileRevision.from_stat(bus.path.stat()) != FileRevision.from_stat(info):
             raise RelationViolationError("Private bus changed during pending recovery.")
         with bus.path.open("rb") as stream:
             expected = PrefixWitness(
                 marker.root_id,
-                file_revision(info),
+                FileRevision.from_stat(info),
                 last_seq,
                 digest.hex(),
                 _tail(stream, info.st_size),
@@ -934,7 +1003,7 @@ def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWi
         raise RelationViolationError(
             "Private bus checkpoint exceeds the durable sequence marker."
         )
-    if file_revision(info) != saved.revision:
+    if FileRevision.from_stat(info) != saved.revision:
         raise CheckpointNeedsRepair("Bus has rows the checkpoint does not cover yet.")
     return saved
 
@@ -958,7 +1027,7 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
         raise RelationViolationError(
             "Private bus checkpoint exceeds the durable sequence marker."
         )
-    if file_revision(info) == saved.revision:
+    if FileRevision.from_stat(info) == saved.revision:
         return saved
     # Changed revision: a suffix alone cannot rule out an earlier in-place edit.
     # Validate complete canonical history, compare digest at the saved offset,
@@ -1002,14 +1071,15 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
         pass
     if not observed_prefix or (saved.offset == 0 and saved.digest != _SEED.hex()):
         raise RelationViolationError("Private bus checkpoint prefix is unavailable.")
-    if file_revision(os.fstat(stream.fileno())) != file_revision(info) or file_revision(
-        bus.path.stat()
-    ) != file_revision(info):
+    if (
+        FileRevision.from_stat(os.fstat(stream.fileno())) != FileRevision.from_stat(info)
+        or FileRevision.from_stat(bus.path.stat()) != FileRevision.from_stat(info)
+    ):
         raise RelationViolationError("Private bus changed during checkpoint validation.")
     # Full parser above checked all cross-prefix response key duplicates.
     expected = PrefixWitness(
         saved.root_id,
-        file_revision(info),
+        FileRevision.from_stat(info),
         last_seq,
         digest.hex(),
         _tail(stream, info.st_size),
@@ -1133,7 +1203,7 @@ def append_private_bus_checkpoint_unlocked(
             digest = _chain(bytes.fromhex(saved.digest), raw)
             expected = PrefixWitness(
                 saved.root_id,
-                file_revision(info),
+                FileRevision.from_stat(info),
                 sequence,
                 digest.hex(),
                 _tail(stream, info.st_size),
@@ -1174,7 +1244,7 @@ def addressed_source_pointers_unlocked(
         if (
             saved.root_id != marker.root_id
             or saved.through_seq != marker.last_seq
-            or file_revision(bus.path.stat()) != saved.revision
+            or FileRevision.from_stat(bus.path.stat()) != saved.revision
         ):
             raise RelationViolationError("Current source pointers require an unchanged checkpoint.")
         rows = DeliverySources.read(
@@ -1186,6 +1256,6 @@ def addressed_source_pointers_unlocked(
             )
         )
         marker.seal.check_final(saved, path)
-        if file_revision(bus.path.stat()) != saved.revision:
+        if FileRevision.from_stat(bus.path.stat()) != saved.revision:
             raise RelationViolationError("Source changed during awareness read.")
         return tuple(reversed(rows))

@@ -19,11 +19,11 @@ from .claim_admission import (
     verify_selected_wake,
 )
 from .comms import Comms
-from .field_codec import FieldCodec
 from .envelope_claim_transitions import (
     ClaimOwner,
     WakeAdmission,
 )
+from .field_codec import FieldCodec
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .native_tools import CodingTool
 from .selected_tool_broker import (
@@ -43,8 +43,11 @@ class CodingCall(NativeToolCall):
     def name(self) -> str:
         return FieldCodec.encode(type(self.tool))
 
-    def commit_terminal(self, is_error: bool, directory: Path, input_id: str) -> None:
-        record_selected_terminal(directory, self.slot(input_id), self.slot(input_id))
+    def commit_terminal(
+        self, is_error: bool, directory: Path, input_id: str, round_number: int
+    ) -> None:
+        slot = self.slot(input_id, round_number)
+        record_selected_terminal(directory, slot, slot)
 
     def admission_failed(self) -> None:
         # A denied ordinary tool may report an error and let Pi explain it. The
@@ -66,8 +69,9 @@ class CodingCall(NativeToolCall):
         except (ValueError, TypeError, KeyError) as error:
             raise SelectedToolDenied(f"Invalid native coding call: {error}") from error
 
-    def slot(self, input_id: str) -> str:
-        return hashlib.sha256((input_id + "\0" + self.call_id).encode()).hexdigest()[:32]
+    def slot(self, input_id: str, round_number: int) -> str:
+        identity = f"{input_id}\0{round_number}\0{self.call_id}"
+        return hashlib.sha256(identity.encode()).hexdigest()[:32]
 
 
 @dataclass
@@ -99,10 +103,11 @@ class CodingToolOwner:
             operation_id=operation_id,
         ))
 
-    def admit(self, call: CodingCall) -> None:
+    def admit(self, round_number: int, call: CodingCall) -> None:
         verify_sent_full_input(self.store, self.admission, self.owner_name, self.input_id)
         verify_selected_wake(self.comms, self.store, self.admission, self.owner_name)
-        consume_selected_slot(self.session_dir, call.slot(self.input_id), call.slot(self.input_id))
+        slot = call.slot(self.input_id, round_number)
+        consume_selected_slot(self.session_dir, slot, slot)
         resource = call.tool.claim
         if resource is not None:
             owner = self.comms.registry.require(self.owner_name)
@@ -111,7 +116,7 @@ class CodingToolOwner:
             claim_admission = (
                 prior.admission
                 if prior is not None
-                else replace(self.admission, operation_id=call.slot(self.input_id))
+                else replace(self.admission, operation_id=slot)
             )
             claimed = publish_selected_resource_claim(
                 self.comms, self.store, claim_admission, self.owner_name, resource
@@ -159,8 +164,8 @@ class CodingToolSocket(OwnerToolSocket[CodingCall]):
             raise SelectedToolDenied("Coding request is not authenticated")
         return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
 
-    def admit(self, call: CodingCall) -> None:
-        self.owner.admit(call)
+    def admit(self, round_number: int, call: CodingCall) -> None:
+        self.owner.admit(round_number, call)
 
     def failure_response(self, error: Exception) -> dict[str, object]:
         return {"ok": False, "error": str(error)}

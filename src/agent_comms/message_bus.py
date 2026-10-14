@@ -12,8 +12,10 @@ from .bus_route_counts import ActorSeen, BusRouteCounts, PendingRoute
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
-from .message_page import MessagePage, MessagePageRequest
+from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
+from .message_reference import MessageReference
 from .messages import Message
+from .private_path import FileRevision
 from .read_basis import (
     ChannelDisplayScope,
     DMDisplayScope,
@@ -22,7 +24,6 @@ from .read_basis import (
     ViewUnread,
 )
 from .routing import DeliveryMessage, DeliveryScope, PendingCounts
-from .store_files import file_revision
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -86,7 +87,7 @@ class MessageBus:
             )
         else:
             scopes = display_scopes
-        revision = (file_revision(self.log.path), viewer_names)
+        revision = (FileRevision.capture(self.log.path), viewer_names)
         cached = self._view_unread_cache.get(viewer)
         if cached is not None and cached.revision == revision and cached.scopes == scopes:
             return dict(cached.counts)
@@ -187,10 +188,12 @@ class MessageBus:
         Closing before the next read leaves the last message unread.
         """
         from contextlib import aclosing
-        from .wire_watch import WireWatch
+        from .wire_watch import WatchSource, WireWatch
 
         reader = self._registry.require(name).incarnation
-        async with aclosing(WireWatch.observations(self.log.path.parent)) as changes:
+        async with aclosing(
+            WireWatch.observations(WatchSource.wire(self.log.path.parent))
+        ) as changes:
             async for _ in changes:
                 snapshot = self._registry.snapshot()
                 if not reader.current(snapshot):
@@ -229,7 +232,7 @@ class MessageBus:
         for actor in set(actors.values()):
             deliveries[actor] = self._delivery_scope(actor, snapshot, catalog=catalog)
         revision = tuple(
-            file_revision(path)
+            FileRevision.capture(path)
             for path in (
                 self.log.path,
                 self._registry.store.path,
@@ -350,10 +353,17 @@ class MessageBus:
                         add(actor, message.sender, message.target, 1)
         return counts
 
-    def mark_delivered(self, name: str, target: str | None = None) -> int:
-        """Mark unread messages delivered and return the count without retaining them."""
+    def mark_delivered(
+        self, name: str, references: Sequence[MessageReference]
+    ) -> int:
+        """Mark only the named unread messages delivered and return their count."""
+        requested = frozenset(references)
         snapshot = self._registry.snapshot()
-        messages = self.inbox(name, target, snapshot=snapshot)
+        messages = tuple(
+            message
+            for message in self.inbox(name, snapshot=snapshot)
+            if message.reference in requested
+        )
         basis = self.reads.capture(name, messages, snapshot, self.log.path)
         self.reads.mark_displayed(basis.viewer, basis)
         return len(messages)
@@ -481,6 +491,20 @@ class MessageBus:
     ) -> MessagePage:
         """Browse a captured presentation scope, not a delivery/history authority."""
         return MessagePageRequest.capture(
+            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
+        ).read(self.log)
+
+    def conversation_page(
+        self,
+        scope: MessageDisplayScope,
+        *,
+        before: int | None = None,
+        after: int | None = None,
+        limit: int = 100,
+        max_bytes: int = 256 * 1024,
+    ) -> MessagePage:
+        """Present only records whose declaring kind is conversation content."""
+        return ConversationMessagePageRequest.capture(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         ).read(self.log)
 

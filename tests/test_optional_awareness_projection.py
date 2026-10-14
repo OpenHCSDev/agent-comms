@@ -24,6 +24,7 @@ from agent_comms.wake_policy import FullWake
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
+from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -60,7 +61,7 @@ def _root(
     root_id = comms.messaging.initialize_private_initial_protocol()
     store = Coordination(str(root / "coordination.sqlite3"))
     install_private_cohort_schema(store)
-    return comms, store, WakeCandidateIndex(comms.bus), root_id
+    return comms, store, WakeCandidateIndex(comms.bus.log), root_id
 
 
 def _accepted(
@@ -104,6 +105,7 @@ def _projection(
         index,
         after_seq,
         through_seq,
+        registry=Registration(index.log.path.with_name("registry.json")),
         expected_participant_generation=store.participants.get(
             stable_thread_lookup(owner.created_at)
         ).participant_generation,
@@ -452,7 +454,7 @@ def test_owner_generation_advance_during_snapshot_omits_at_inclusion(
         original = OptionalAwarenessProjection._open_obligations
 
         def race(self, db, lookup):
-            with Coordination(str(index.bus.log.path.with_name("coordination.sqlite3"))) as other:
+            with Coordination(str(index.log.path.with_name("coordination.sqlite3"))) as other:
                 other.participants.advance_generation(lookup, owner.name, expected_generation=1)
             return original(self, db, lookup)
 

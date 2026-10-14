@@ -16,8 +16,9 @@ from agent_comms.coordination_cohort import next_sealed_assignment
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.owned_turn import OwnedTurn
+from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
-from agent_comms.store_files import file_revision
+from agent_comms.private_path import FileRevision
 from agent_comms.store_files import _store_lock
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
@@ -117,7 +118,10 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, 
 @pytest.mark.asyncio
 async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path, monkeypatch):
     comms, agent, _root_id = _session(tmp_path)
-    execution = OwnedTurn(agent.turns, "beta", "beta", "publication custody", reply_targets=("#team",))
+    origin = Message("user", "#team", "publication custody", InfoKind)
+    execution = OwnedTurn(
+        agent.turns, "beta", "beta", "publication custody", origins=(origin,)
+    )
     async with AsyncExitStack() as resources:
         async with AsyncExitStack() as permits:
             assert await execution.acquire(resources, permits)
@@ -429,10 +433,10 @@ def test_coordination_read_preserves_revision_and_repairs_exposed_mode(tmp_path)
     path = tmp_path / "coordination.sqlite3"
     with Coordination(path):
         pass
-    revision = file_revision(path)
+    revision = FileRevision.capture(path)
     with Coordination(path):
         pass
-    assert file_revision(path) == revision
+    assert FileRevision.capture(path) == revision
     path.chmod(0o644)
     with Coordination(path):
         assert path.stat().st_mode & 0o777 == 0o600
@@ -562,8 +566,9 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
 async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     tmp_path, monkeypatch
 ) -> None:
-    """The sealed address record answers the wake before any row is decoded."""
+    """A foreign append decodes only bytes after the owner's settled offset."""
     from agent_comms import input_drain
+    from agent_comms.wire_log import OpenedWireSnapshot
 
     comms, agent, _root_id = _session(tmp_path)
     comms.registry.declare(
@@ -593,7 +598,15 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     async def no_catalog(session_id):
         pass
 
+    tails = []
+    appended_records = OpenedWireSnapshot.appended_records
+
+    def measured_tail(self, previous, previous_sequence):
+        tails.append(self.boundary - previous.size)
+        return appended_records(self, previous, previous_sequence)
+
     monkeypatch.setattr(input_drain.WireWatch, "observations", staticmethod(observations))
+    monkeypatch.setattr(OpenedWireSnapshot, "appended_records", measured_tail)
     monkeypatch.setattr(agent.inputs, "drain_inbox", counted)
     monkeypatch.setattr(agent.sessions.config, "sync_thread", no_catalog)
     observer = asyncio.create_task(agent.inputs.observe("beta"))
@@ -610,6 +623,10 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
         comms.messaging.send_message("sender", "gamma", "for gamma")
         await tick()  # only shared stores grew, and none of it addresses beta
         assert len(drains) == settled, "another agent's bus append woke an idle owner"
+        comms.messaging.send_message("sender", "gamma", "another for gamma")
+        await tick()
+        assert len(drains) == settled
+        assert tails and tails[-1] < comms.bus.log.path.stat().st_size
         comms.messaging.send_message("sender", "beta", "for beta")
         await tick()  # the address record has an unadmitted row for beta: full tick
         assert len(drains) == settled + 1, "a delivered row for the owner did not wake it"

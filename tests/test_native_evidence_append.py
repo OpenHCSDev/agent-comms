@@ -8,6 +8,7 @@ import os
 
 import pytest
 
+from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import (
     NativePiUnavailable,
     PrivateEvidenceRead,
@@ -24,6 +25,45 @@ APPEND = (json.dumps({"type": "custom", "id": "concurrent-append",
 def append_to(path):
     with path.open("ab", buffering=0) as stream:
         stream.write(APPEND)
+
+
+def test_removed_context_source_is_a_named_progress_state(tmp_path):
+    from agent_comms.notification_assignment import AssignmentContext, RemovedContextProgress
+
+    sessions = tmp_path / "sessions"
+    sessions.mkdir(mode=0o700)
+    context = AssignmentContext(str(sessions / "removed.jsonl"), "entry")
+    progress = AssignmentContext.recorded_progress((context,))
+    assert type(progress[context]) is RemovedContextProgress
+
+
+def test_recorded_time_projection_decodes_only_selected_entries(tmp_path, monkeypatch):
+    session = _evidence(tmp_path)
+    rows = [json.loads(line) for line in session.read_text().splitlines()]
+    rows[1]["timestamp"] = "2026-10-14T08:00:00+00:00"
+    rows.extend(
+        {"type": "custom", "id": f"unrelated-{index}", "customType": "bulk", "data": {}}
+        for index in range(100)
+    )
+    session.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    original = NativeEntry.from_evidence.__func__
+    decoded = []
+
+    def counted(cls, row):
+        decoded.append(row.get("id"))
+        return original(cls, row)
+
+    monkeypatch.setattr(NativeEntry, "from_evidence", classmethod(counted))
+    with NativeEntry.open_evidence(session) as evidence:
+        assert evidence.recorded_times({"entry"}) == {"entry": 1_791_964_800_000}
+    assert decoded == ["sid", "entry"]
+
+
+def test_missing_selected_context_entry_is_not_an_undated_read(tmp_path):
+    session = _evidence(tmp_path)
+    with NativeEntry.open_evidence(session) as evidence:
+        with pytest.raises(ValueError, match="context entries are absent"):
+            evidence.recorded_times({"absent-entry"})
 
 
 def test_unchanged_verified_revision_reads_no_bytes(tmp_path, monkeypatch):
@@ -87,6 +127,25 @@ def test_next_decode_cannot_reuse_prefetched_bytes(tmp_path):
             FileRevision.from_stat(os.fstat(source.stream.fileno())),
         )
         assert tuple(source._decode_captured(len(first + new)))[0]["id"] == "new"
+
+
+def test_growth_during_prefix_read_keeps_the_captured_entries(tmp_path, monkeypatch):
+    session = _evidence(tmp_path)
+    with PrivateEvidenceRead.open(session) as source:
+        read_chunks = source._pread_chunks
+        appended = False
+
+        def grow_after_captured_chunk(start, stop):
+            nonlocal appended
+            for raw in read_chunks(start, stop):
+                yield raw
+                if not appended:
+                    append_to(session)
+                    appended = True
+
+        monkeypatch.setattr(source, "_pread_chunks", grow_after_captured_chunk)
+        assert len(tuple(source.rows())) == 2
+        assert tuple(source.rows())[0]["id"] == "concurrent-append"
 
 
 def test_append_during_decoding_is_read_on_the_next_observation(tmp_path):

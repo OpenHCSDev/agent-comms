@@ -356,7 +356,7 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
 
         Missing replay evidence cannot establish safety. Only an existing
         assessment may retain that fact, and every incoming observation can
-        revoke it. The monotonic record and SQL constraints own the write.
+        revoke it. Output facts remain monotonic across all attempts.
         """
         before = cls.one(db, execution_id=execution_id)
         if before is None:
@@ -375,8 +375,15 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         after.record(db, before)
 
     @classmethod
-    def revoke_for_retry(cls, db, execution_id: str) -> None:
-        """A new fenced attempt cannot reuse the prior attempt's safety proof."""
+    def authorize_if_unobserved(cls, db, execution_id: str) -> None:
+        """Record provider-failure proof only while no output fact exists."""
+        before = cls.one(db, execution_id=execution_id)
+        if before is None:
+            cls(execution_id, ReplayFact.NONE, True, False, 1).record(db, None)
+
+    @classmethod
+    def revoke(cls, db, execution_id: str) -> None:
+        """A nonretryable failure consumes any earlier provider-failure proof."""
         before = cls.one(db, execution_id=execution_id)
         if before is not None and before.replay_safe:
             replace(before, replay_safe=False, revision=before.revision + 1).record(db, before)

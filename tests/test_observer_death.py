@@ -6,6 +6,8 @@ import signal
 
 import pytest
 
+from agent_comms.errors import RelationViolationError
+from agent_comms.message_reference import MessageReference
 from agent_comms.ui_model.observation import ObservationProcess, ObserverDied, ReadNotifications, StopSidebar
 
 
@@ -45,6 +47,16 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
         assert later.value is died.value
     finally:
         process.close()
+
+
+async def test_an_invalid_notification_reference_does_not_kill_the_observer(comms):
+    comms.messaging.initialize_private_initial_protocol()
+    with ObservationProcess.awaited(comms.root) as process:
+        with pytest.raises(RelationViolationError, match="not its original source"):
+            await process.read(ReadNotifications(
+                str(comms.root), (MessageReference(1, "not-the-original"),)
+            ))
+        assert await process.read(ReadNotifications(str(comms.root), ())) == {}
 
 
 async def test_an_observer_that_failed_is_reported_with_its_own_traceback_and_exit_status(tmp_path):

@@ -28,6 +28,8 @@ from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import activate_empty_source, canonical_goal_wire
 from test_backend_native_lifecycle import native_backend as native_backend
 
+pytestmark = pytest.mark.usefixtures("fake_native_catalog")
+
 
 @pytest.fixture
 async def retained_native_acp_owner(native_backend, monkeypatch):
@@ -58,7 +60,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
         drain.cancel()
         await asyncio.gather(drain, return_exceptions=True)
         comms.registry.register(replace(comms.registry.require(child), auto_title_pending=False))
-        comms.threads.attach_session(child, str(native.session))
+        comms.threads.attach_session(comms.registry.require(child), str(native.session))
         yield native, comms, agent, child
     finally:
         await agent.shutdown()
@@ -198,7 +200,6 @@ def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
     assert reopened.registry.require("owner").goal.state.pause_source is None
     assert reopened.goals.release_waits_after_terminal_turn(child_fence) == ()
     assert reopened.registry.require("owner").goal == continued
-    assert not (comms.root / "goal-private").exists()
 
 
 @pytest.mark.parametrize("notice", [False, True])
@@ -318,7 +319,6 @@ def test_reply_arriving_after_idle_check_stays_visible_without_model_start(tmp_p
     assert comms.registry.require("owner").goal.state.declared_name == "active"
     assert [message.body for message in comms.bus.inbox("owner")] == ["Late direct reply"]
     assert comms.goals.goal_wait("owner") is None
-    assert not (comms.root / "goal-private").exists()
 
 
 def test_terminal_hook_rechecks_goal_and_owner_identity(tmp_path):
@@ -388,7 +388,6 @@ def test_delayed_old_terminal_cannot_release_newer_turn_before_reply(tmp_path, r
     assert comms.registry.require("owner").goal.state.active
     assert comms.registry.require("owner").goal.id == goal.id
     assert comms.goals.goal_wait("owner") is not None
-    assert not (comms.root / "goal-private").exists()
 
 
 def test_newer_silent_terminal_releases_waiter(tmp_path):
@@ -475,9 +474,9 @@ async def test_acp_optional_reply_read_failure_after_settled_does_not_fail_done(
 
 
 async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path, monkeypatch):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = canonical_goal_wire(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    with comms.bus.log.certified_read() as source:
+        root_id = source.marker.root_id
     agent = CommsAgent(
         comms,
         agent_bin="pi",
@@ -487,9 +486,9 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
         private_nk_wire_root_id=root_id,
     )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+    activate_empty_source(agent)
     owner = (await agent.new_session(str(tmp_path / "owner"))).session_id
     child = (await agent.new_session(str(tmp_path / "child"))).session_id
-    activate_empty_source(agent)
     goal = comms.goals.update_goal(
         owner, SetGoalAction(text="Review child work")
     )
@@ -565,7 +564,7 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
     retained_native_acp_owner, monkeypatch, reply
 ):
     native, comms, agent, child = retained_native_acp_owner
-    native.provider.text = "Reported" if reply else ""
+    native.provider.text = "Reported" if reply else " "
     _thread(comms, "owner", native.project)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
     assert goal is not None
@@ -587,14 +586,14 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
         await real_emit(session_id, event, client, **kwargs)
 
     monkeypatch.setattr(agent, "_emit_event", observe)
+    origins = (
+        (comms.messaging.send_message("owner", child, "Finish work"),) if reply else ()
+    )
     async with asyncio.timeout(20):
-        await agent.turns.run_agent_turn(
-            child, child, "Finish work", reply_targets=("owner",) if reply else ()
-        )
+        await agent.turns.run_agent_turn(child, child, "Finish work", origins=origins)
     assert observed == ["started", "native-settled"]
     assert native.provider.posts == len(native.saved_inputs()) == 1
     assert not agent.inputs.pending_turns.get("owner")
-    assert not (comms.root / "goal-private").exists()
     assert comms.registry.require(child).active_turn is None
     if reply:
         assert comms.registry.require("owner").goal.state.active

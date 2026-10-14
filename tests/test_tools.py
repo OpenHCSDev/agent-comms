@@ -79,7 +79,6 @@ class TestToolCatalog:
             "comms_start",
             "comms_queue_restart",
             "comms_archive",
-            "comms_ack",
         ]
         assert actions[0]["context_bindings"] == {"parent": "subject"}
 
@@ -129,16 +128,19 @@ class TestToolCatalog:
             for row in result["sent_notifications"]
         ] == [(sent.seq, "track me", "recipient", "Sent")]
 
-    def test_ack_can_target_one_conversation(self, comms):
+    def test_inbox_ack_can_target_one_conversation(self, comms):
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="c", tags=frozenset(), worktree="/wt"))
         comms.messaging.send("a", "b", "from a")
         comms.messaging.send("c", "b", "from c")
 
-        result = invoke_context_tool(comms, "comms_ack", subject="a", actor="b")
+        result = invoke_tool(
+            comms, "comms_inbox", {"thread": "b", "target": "a"}
+        )
 
-        assert result == {"acknowledged": 1}
+        assert [message["text"] for message in result["messages"]] == ["from a"]
+        assert result["acknowledged"] == 1
         assert comms.bus.pending_count("b", "a") == 0
         assert comms.bus.pending_count("b", "c") == 1
 
@@ -147,7 +149,7 @@ class TestToolCatalog:
 def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms, monkeypatch):
     from dataclasses import dataclass
 
-    from agent_comms.tools import ActorBinding, SubjectBinding, ToolRequest, tool_field
+    from agent_comms.tools import SubjectBinding, ToolRequest, tool_field
 
     monkeypatch.setattr(ToolRequest, "__registry__", dict(ToolRequest.__registry__))
 
@@ -157,7 +159,7 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
         description = "Test-only declaration extends the complete adapter path."
         context = "thread"
         target: str = tool_field("Selected peer", binding=SubjectBinding)
-        viewer: str = tool_field("Acting thread", binding=ActorBinding)
+        viewer: str = tool_field("Viewing thread")
         include_body: bool = tool_field("Include message bodies", default=False)
 
         def apply(self, comms):
@@ -173,17 +175,21 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
     schema = next(row for row in tool_catalog() if row["name"] == InspectInboxTool.declared_name)
     assert schema["parameters"]["required"] == ["target", "viewer"]
     assert schema["parameters"]["properties"]["include_body"]["default"] is False
-    assert schema["context_bindings"] == {"target": "subject", "viewer": "actor"}
+    assert schema["context_bindings"] == {"target": "subject"}
     assert schema in context_tool_catalog("thread")
     result = invoke_context_tool(
         comms,
         InspectInboxTool.declared_name,
         subject="a",
         actor="b",
-        arguments={"include_body": True},
+        arguments={"viewer": "b", "include_body": True},
     )
     assert result == {"count": 1, "bodies": ["Actual inbox source"]}
-    for arguments in ({"include_body": "yes"}, {"include_body": None}, {"tool": "forged"}):
+    for arguments in (
+        {"viewer": "b", "include_body": "yes"},
+        {"viewer": "b", "include_body": None},
+        {"viewer": "b", "tool": "forged"},
+    ):
         with pytest.raises(ValueError):
             invoke_context_tool(
                 comms, InspectInboxTool.declared_name, subject="a", actor="b", arguments=arguments

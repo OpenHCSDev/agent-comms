@@ -10,10 +10,11 @@ import stat
 import tempfile
 import time
 from collections.abc import Iterator, Mapping
-from contextlib import asynccontextmanager, contextmanager
-from dataclasses import dataclass
+from contextlib import ExitStack, asynccontextmanager, contextmanager
+from contextvars import Context, ContextVar
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import BinaryIO, TYPE_CHECKING
+from typing import BinaryIO, ClassVar, TYPE_CHECKING
 
 from .errors import RelationViolationError
 from .private_path import PrivateFileRole
@@ -64,12 +65,73 @@ class StoreLockContention:
             await asyncio.sleep(delay)
 
 
+@dataclass
+class StoreLockRelease:
+    """Actions owned by one outer physical-lock lifetime."""
+
+    actions: ExitStack = field(default_factory=ExitStack)
+    active: bool = True
+
+    def require_active(self) -> None:
+        if not self.active:
+            raise RelationViolationError("Store lock release scope has ended.")
+
+    def callback(self, operation, /, *args, **kwargs) -> None:
+        self.require_active()
+        self.actions.callback(operation, *args, **kwargs)
+
+    def close(self) -> None:
+        if self.active:
+            # Callbacks may take fresh locks; every inherited context sees this
+            # scope as ended before the first callback runs.
+            self.active = False
+            self.actions.close()
+
+
 @dataclass(frozen=True)
 class StoreLock:
     """One physical lock's descriptor and opened durability resource."""
 
     descriptor: int
     source: CertifiedSourceRead | None
+    _releases: ClassVar[ContextVar[StoreLockRelease]] = ContextVar(
+        "store_lock_release", default=StoreLockRelease(active=False)
+    )
+
+    @classmethod
+    def current_release(cls) -> StoreLockRelease:
+        scope = cls._releases.get()
+        scope.require_active()
+        return scope
+
+    @classmethod
+    def worker_context(cls) -> Context:
+        """Carry only the active lock lifetime into joined work."""
+        context = Context()
+        scope = cls._releases.get()
+        if scope.active:
+            context.run(cls._releases.set, scope)
+        return context
+
+    @classmethod
+    @contextmanager
+    def releasing(cls):
+        """Nested locks share the outer lock's post-release work.
+
+        The scope object, not a context-specific token, owns retirement. Marking
+        it inactive retires every inherited context before callbacks take fresh
+        locks. A stale inherited value therefore starts an independent scope.
+        """
+        current = cls._releases.get()
+        if current.active:
+            yield current
+            return
+        scope = StoreLockRelease()
+        cls._releases.set(scope)
+        try:
+            yield scope
+        finally:
+            scope.close()
 
     def certified_read(self) -> CertifiedSourceRead:
         if self.source is None:
@@ -120,7 +182,9 @@ def _store_lock_file(store_path: Path):
     """
     store_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = store_path.with_name(f".{store_path.name}.lock")
-    with os.fdopen(os.open(lock_path, os.O_RDONLY | os.O_CREAT, 0o666), "rb") as lock_file:
+    with StoreLock.releasing(), os.fdopen(
+        os.open(lock_path, os.O_RDONLY | os.O_CREAT, 0o666), "rb"
+    ) as lock_file:
         yield lock_file
 
 
@@ -215,18 +279,6 @@ def _atomic_write_text(
                 os.close(directory_fd)
     finally:
         temporary_path.unlink(missing_ok=True)
-
-
-StoreRevision = tuple[int, int, int, int] | None
-
-
-def file_revision(path: Path) -> StoreRevision:
-    """Identity of an on-disk revision, including atomic replacements."""
-    try:
-        stat = path.stat()
-    except FileNotFoundError:
-        return None
-    return stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns
 
 
 def _repair_trailing_jsonl(path: Path) -> None:

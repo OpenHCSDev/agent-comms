@@ -52,10 +52,9 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
         notification: MessageNotification,
         updated_at_ms: int,
         progress: AssignmentProgress,
-        read_at_ms: int | None,
     ) -> MessageNotification:
         return progress.selected_notification(
-            notification, read_at_ms, busy=self.turn_started_by(updated_at_ms)
+            notification, busy=self.turn_started_by(updated_at_ms)
         )
 
 
@@ -126,10 +125,7 @@ class AgentActivity:
     def _observed(self, participant: Thread, owner: OwnerIdentity,
                   event: Activity) -> ObservedActivity:
         activity = ObservedActivity.acquire(event, owner)
-        if participant.turn_state.busy:
-            phase = participant.turn_state.phase
-            return replace(activity, state=phase.activity_state, detail=phase.summary)
-        return activity
+        return participant.execution.project_activity(participant, activity)
 
     def all_activity(self, *, snapshot: RegistrySnapshot | None = None) -> Mapping[str, ObservedActivity]:
         snapshot = snapshot or self.registry.snapshot()

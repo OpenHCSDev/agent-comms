@@ -316,6 +316,28 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
     without_rowid = True
 
     @classmethod
+    def sealed_sequences_after(
+        cls,
+        db: sqlite3.Connection,
+        *,
+        wire_root_id: str,
+        recipient_lookup: str,
+        after_seq: int,
+    ) -> frozenset[int]:
+        """Sealed addressed receipts after one recipient's visited position."""
+        rows = cls.read(
+            db.execute(
+                "SELECT d.* FROM cohort_delivery_receipts d "
+                "JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id "
+                "AND r.wire_seq=d.wire_seq AND r.sealed=1 "
+                "WHERE d.wire_root_id=? AND d.recipient_lookup=? AND d.wire_seq>? "
+                "ORDER BY d.wire_seq",
+                (wire_root_id, recipient_lookup, after_seq),
+            )
+        )
+        return frozenset(row.wire_seq for row in rows)
+
+    @classmethod
     def references(cls):
         return (
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),

@@ -32,16 +32,16 @@ from agent_comms.coordinator import Coordination
 
 from .bus_publication import stable_thread_lookup
 from .child_process import ProcessIdentity
-from .cohort_schema import CohortDeliveryReceipts
+from .cohort_schema import CohortDeliveryReceipts, assert_cohort_schema
 from .comms import Comms
-from .coordination_cohort import accept_delivery_cohort, sealed_cohort_sequences
+from .coordination_cohort import accept_delivery_cohort
 from .envelope_claim_transitions import ExistingFileClaim
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .message_bus import MessageBus
 from .native_pi import _private_session_dir, _trusted_package
 from .private_registry_guard import _require_no_private_owner_rename
-from .selected_actions import SelectedExistingFileWrite
+from .selected_actions import SelectedAction, SelectedExistingFileWrite
 from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
 from .threads import Thread
@@ -87,13 +87,20 @@ async def _accept_visible_deliveries(
     infer a cohort from an ordinary public message or its body.
     """
     def accept(resource: Coordination) -> int:
-        sealed = sealed_cohort_sequences(resource, root_id)
         with bus.log.certified_read() as source:
             _require_no_private_owner_rename(bus.log.path.parent)
             marker = bus.log._private_marker_unlocked()
             if marker.root_id != root_id:
                 raise IdentityConflict("private initial wire root changed")
             admitted_after = max(after_seq, marker.admission_after_seq)
+            with resource.session.read():
+                assert_cohort_schema(resource.session._connection)
+                sealed = CohortDeliveryReceipts.sealed_sequences_after(
+                    resource.session._connection,
+                    wire_root_id=root_id,
+                    recipient_lookup=lookup,
+                    after_seq=admitted_after,
+                )
             addressed = source.addressed_sequences(bus.log, lookup, admitted_after)
             # Progress comes from every addressed original in the fixed source
             # cut, including already sealed/historical recipient rows.
@@ -135,7 +142,7 @@ async def run_foreground_once(
     opt_in: bool = True,
     wait_seconds: float = 60.0,
     ready: Callable[[Thread], None] | None = None,
-    selected_existing_file_write: SelectedExistingFileWrite | None = None,
+    selected_existing_file_write: SelectedAction | None = None,
 ) -> CoordinatedTurn | NoWakeReceipt | None:
     """Register THIS PID as a new recipient; wait boundedly for one claim.
 
@@ -157,11 +164,6 @@ async def run_foreground_once(
     await Coordination.run_worker(partial(
         _preflight, root, wire_root_id, native_package, opt_in,
     ))
-    if (
-        selected_existing_file_write is not None
-        and type(selected_existing_file_write) is not SelectedExistingFileWrite
-    ):
-        raise TypeError("foreground selected write needs a trusted explicit plan")
     comms = Comms(root)
     def retire(thread):
         with _store_lock(comms._wire_lock_path):
@@ -173,17 +175,18 @@ async def run_foreground_once(
                 comms.registry.unregister(name)
 
     def admit(resources):
-        if selected_existing_file_write is not None:
+        thread = Thread(
+            name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
+        )
+        action = selected_existing_file_write
+        if action is not None:
             # Refuse an uninitialized claim protocol or permanently invalid
             # resource before owner registration or an irreversible native send.
             with comms.bus.log.locked():
                 marker = comms.bus.log._private_marker_unlocked()
             if not marker.claims:
                 raise PublicationActivationBlocked("selected file write needs a private claim protocol")
-            selected_existing_file_write.resource.normalized(worktree)
-        thread = Thread(
-            name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
-        )
+            action = action.prepare(thread)
         # The registry name reservation and registration must be ONE wire-locked
         # operation; `claim_thread` silently chooses a suffix on a collision.
         with _store_lock(comms._wire_lock_path):
@@ -196,10 +199,12 @@ async def run_foreground_once(
             store.install_private_runtime()
             lookup = stable_thread_lookup(comms.registry.require(name).created_at)
             store.participants.register(lookup, name, name, committed=True)
-        return thread, lookup
+        return thread, lookup, action
 
     async with AsyncExitStack() as resources:
-        thread, lookup = await Coordination.run_worker(partial(admit, resources))
+        thread, lookup, selected_existing_file_write = await Coordination.run_worker(
+            partial(admit, resources)
+        )
         if ready is not None:
             ready(thread)
         deadline = time.monotonic() + wait_seconds

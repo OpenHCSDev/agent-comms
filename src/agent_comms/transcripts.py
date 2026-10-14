@@ -23,6 +23,7 @@ from .messages import Message
 from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from .private_path import FileRevision
 from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .registration import Registration
 from .routing import TurnRouting
@@ -31,7 +32,6 @@ from .turn_lease import TurnLeaseFence
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_receipts import AssignedSourceCursor, AssignedSourceIdentity
-from .store_files import file_revision
 from .coordination_errors import StaleRevision, TranscriptChanged
 
 _LOG = logging.getLogger(__name__)
@@ -106,17 +106,17 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     requested_name: str
     thread: ThreadProvenance = field(metadata={"content_exclude": True})
     session_file: str
-    native_revision: tuple[int, int, int, int] | None
+    native_revision: FileRevision | None = field(metadata={"content_exclude": True})
     route_revision: TranscriptRouteRevision
-    bus_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
-    coordination_revision: tuple[int, int, int, int] | None = field(
+    bus_revision: FileRevision | None = field(metadata={"content_exclude": True})
+    coordination_revision: FileRevision | None = field(
         metadata={"content_exclude": True}
     )
-    coordination_journal_revision: tuple[int, int, int, int] | None = field(
+    coordination_journal_revision: FileRevision | None = field(
         metadata={"content_exclude": True}
     )
     reply_revision: PublishedReplyRevision
-    read_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
+    read_revision: FileRevision | None = field(metadata={"content_exclude": True})
     receipt_frontier: AssignedSourceCursor
     before: TranscriptCursor | None
     after: TranscriptCursor | None
@@ -160,7 +160,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     def content_bus(self):
         # The certified frozen membership frontier owns relevant appends.
         # Keep inode custody: replacing the source is never an unrelated append.
-        return self.bus_revision[0] if self.bus_revision is not None else None
+        return self.bus_revision.identity if self.bus_revision is not None else None
 
     @property
     def content_identity(self) -> bytes:
@@ -174,18 +174,32 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         """The original witnessed byte/receipt bound owns page preparation."""
         return self.through or TranscriptCursor(
             self.session_file,
-            self.native_revision[1] if self.native_revision is not None else 0,
+            self.native_revision.size if self.native_revision is not None else 0,
             self.receipt_frontier,
         )
 
+    def contains_native_cut(self, other: TranscriptReadIdentity) -> bool:
+        """Whether ``other`` still contains this read's captured native bytes.
+
+        Native sessions are append-only within one inode.  The page is bounded
+        by this identity's cursor, so later bytes belong to the next update and
+        cannot revoke preparation already admitted for this cut.  Replacement,
+        truncation, or a non-growth revision can have changed bytes in the cut.
+        """
+        captured, current = self.native_revision, other.native_revision
+        if captured is None or current is None:
+            return captured == current
+        return captured.holds_cut(current, self.page_bound.offset)
+
     def same_content(self, other: TranscriptReadIdentity) -> bool:
-        """Fence content, including the original native publication proof.
+        """Fence the captured cut and its original publication proof.
 
         Reader acknowledgements and thread activity do not change page content.
         The scoped published relation remains fenced: an obligation can commit
         just after its wire append and replace the native final reply projection.
+        Native growth after the captured byte bound belongs to a later update.
         """
-        return self.content_identity == other.content_identity
+        return self.contains_native_cut(other) and self.content_identity == other.content_identity
 
 
 @dataclass(frozen=True, slots=True)
@@ -392,11 +406,11 @@ class Transcripts:
                 name,
                 thread,
                 session_file,
-                file_revision(Path(session_file)) if session_file else None,
+                FileRevision.capture(Path(session_file)) if session_file else None,
                 routes.revision(),
-                file_revision(log.path),
-                file_revision(root / "coordination.sqlite3"),
-                file_revision(root / "coordination.sqlite3-wal"),
+                FileRevision.capture(log.path),
+                FileRevision.capture(root / "coordination.sqlite3"),
+                FileRevision.capture(root / "coordination.sqlite3-wal"),
                 (
                     NativeRuntimeInput.publication_revision(
                         root,
@@ -406,7 +420,7 @@ class Transcripts:
                     if session_file and Path(session_file).is_file()
                     else PublishedReplyRevision(0, 0)
                 ),
-                file_revision(root / self.bus.reads.path.name),
+                FileRevision.capture(root / self.bus.reads.path.name),
                 captured.cursor,
                 before,
                 after,

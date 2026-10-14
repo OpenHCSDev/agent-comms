@@ -72,7 +72,19 @@ class ForkSpec:
     def initial_prompt(self) -> str:
         return self.task if self.prompt is None else self.prompt
 
-
+    def child(self, parent: Thread, session_file: str) -> Thread:
+        """Derive the child declaration from the exact parent and fork result."""
+        return Thread(
+            name=self.name,
+            tags=parent.tags if self.tags is None else self.tags,
+            worktree=parent.worktree,
+            parent=parent.name,
+            task=self.task,
+            session_file=session_file,
+            process_identity=None,
+            model=parent.model,
+            thinking_level=parent.thinking_level,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,6 +162,7 @@ class ThreadManagement:
         with _store_lock(self._wire_lock_path):
             if self.registry.name_reserved(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
+            self.registry.require_declaration_available(thread, StoppedThreadStatus())
             session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             # Session output must remain in an owner-controlled directory.
             info = session_path.parent.lstat()
@@ -582,6 +595,9 @@ class ThreadManagement:
         """
         resolved_bin = NativeArguments.configured_binary(pi_bin)
         parent = self._fork_parent(spec)
+        self.registry.require_declaration_available(
+            spec.child(parent, parent.require_saved_session())
+        )
         location = asyncio.run(parent.backend.fork(parent, resolved_bin))
         with _store_lock(self._wire_lock_path):
             return self._fork_unlocked(spec, resolved_bin, parent.session_file, location)
@@ -613,17 +629,7 @@ class ThreadManagement:
                 f"Parent thread {spec.parent!r} changed its saved session during the fork; "
                 f"the created fork {location.path} was not registered."
             )
-        child = Thread(
-            name=spec.name,
-            tags=parent.tags if spec.tags is None else spec.tags,
-            worktree=parent.worktree,
-            parent=spec.parent,
-            task=spec.task,
-            session_file=location.path,
-            process_identity=None,
-            model=parent.model,
-            thinking_level=parent.thinking_level,
-        )
+        child = spec.child(parent, location.path)
         # A new incarnation's inbox already starts at its creation time
         # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
         child = self.registry._declare_unlocked(child)
