@@ -291,7 +291,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
         owner, "reply-turn", expected_generation=generation
     )
     lease = owner.require_turn_lease()
-    inputs = InputDispositions(old.root / InputDispositions.filename)
+    inputs = InputDispositions(old.root)
     key = inputs.bus_key(original, owner)
     source_text = "delivered original"
     assert inputs.record(

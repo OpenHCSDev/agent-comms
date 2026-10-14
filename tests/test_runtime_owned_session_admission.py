@@ -51,7 +51,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert not owner._runtime.clients
         assert comms.registry.require("registered") == thread
         assert not (root / "native-sessions").exists()
-        assert not (root / "input_dispositions.json").exists()
+        assert not (root / "input_dispositions.sqlite3").exists()
 
         retired = Thread("retired-owner", frozenset(), str(project),
                          process_identity=ProcessIdentity.capture(os.getpid()))
@@ -76,7 +76,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
             "original-acp-session": "registered",
         }
         assert not (root / "native-sessions").exists()
-        assert not (root / "input_dispositions.json").exists()
+        assert not (root / "input_dispositions.sqlite3").exists()
     finally:
         await proxy.close()
         await client.shutdown()

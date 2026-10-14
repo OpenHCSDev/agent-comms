@@ -650,7 +650,7 @@ def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
     try:
         follow_up = case.comms.messaging.send_message("sender", "owner", "Part 2, mid-turn")
         lease = case.witness.thread.require_turn_lease()
-        inputs = InputDispositions(case.comms.root / InputDispositions.filename)
+        inputs = InputDispositions(case.comms.root)
         key = inputs.bus_key(follow_up, case.witness.thread)
         text = "Part 2, mid-turn"
         assert inputs.record(

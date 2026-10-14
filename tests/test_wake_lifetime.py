@@ -10,6 +10,7 @@ from agent_comms.routing import ScheduledTurn
 from agent_comms.runtime import UNBOUND_CONTROLLER
 from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private(tmp_path):
@@ -49,7 +50,7 @@ async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private
         await asyncio.wait_for(inputs.close(), 1)
         assert task.cancelled()
         assert inputs.pending_turns["owner"] == [queued]
-        assert not inputs.dispositions.read().rows
+        assert not stored_inputs(inputs.dispositions.root).rows
         assert not agent.turns.turn_tasks
         check.schedule()
         assert not inputs.wake_tasks

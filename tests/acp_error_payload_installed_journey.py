@@ -31,6 +31,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 
 from native_context_budget_installed_journey import ReceiptSubscriber
+from stored_inputs import stored_inputs
 
 
 REASON = "Controlled provider usage limit has been reached; original input not retried"
@@ -175,11 +176,11 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
                 owner = comms.registry.require("error-native")
                 native = Path(owner.session_file)
                 original = native.read_bytes()
-                dispositions = InputDispositions(root / InputDispositions.filename).read()
+                dispositions = stored_inputs(root)
             async with attached(FailureSubscriber()) as client:
                 assert len(requests) == 2, "Failure/history reattachment replayed original input"
                 assert native.read_bytes() == original
-                assert InputDispositions(root / InputDispositions.filename).read() == dispositions
+                assert stored_inputs(root) == dispositions
                 assert comms.registry.require("error-native").active_turn is None
                 users = [row["message"] for row in map(json.loads, original.splitlines())
                          if row.get("type") == "message" and row["message"].get("role") == "user"]

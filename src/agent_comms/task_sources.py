@@ -16,7 +16,7 @@ from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
     from .input_attempt import StoredInput
-    from .input_disposition import InputDocument
+    from .input_disposition import InputDispositions
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -207,7 +207,7 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
     def original_wording_context_source(self, original: Message) -> Provenance:
         return WireProvenance(original.reference)
 
-    def original_input_sources(self, inputs: InputDocument) -> tuple[StoredInput, ...]:
+    def original_input_sources(self, inputs: InputDispositions) -> tuple[StoredInput, ...]:
         return ()
 
     def original_wording_provenance(self, original: Message) -> dict[str, object]:
@@ -537,7 +537,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
     def original_wording_context_source(self, original: StoredInput) -> Provenance:
         return original.context_provenance()
 
-    def original_input_sources(self, inputs: InputDocument) -> tuple[StoredInput, ...]:
+    def original_input_sources(self, inputs: InputDispositions) -> tuple[StoredInput, ...]:
         return (self.subject.require_human_input().require_original(inputs),)
 
     def original_wording_provenance(self, original: StoredInput) -> dict[str, object]:
@@ -549,8 +549,8 @@ class NativeInputConstraintPin(HumanConstraintPin):
         from .input_disposition import InputDispositions
 
         original_source.require_current()
-        with InputDispositions(original_source.path.parent / InputDispositions.filename).reading() as inputs:
-            row = self.subject.require_human_input().require_original(inputs)
+        row = self.subject.require_human_input().require_original(
+            InputDispositions(original_source.path.parent))
         origin = row.origin.require_human()
         if origin.root_id != original_source.witness.root_id:
             raise RelationViolationError("USER input pin belongs to another wire root")

@@ -457,11 +457,10 @@ def _answered_by(bus, metadata, owner: LiveResponseOwner, snapshot, target: str)
     from .input_disposition import InputDispositions
     from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
-    inputs = InputDispositions(bus.log.path.parent / InputDispositions.filename).read()
+    lease = owner.thread.require_turn_lease()
+    inputs = InputDispositions(bus.log.path.parent).in_turn(lease.turn_id)
     with opened_private_checkpoint_unlocked(bus.log, metadata) as source:
-        return inputs.answered_by(
-            owner.thread.require_turn_lease(), source, snapshot, target
-        )
+        return inputs.answered_by(lease, source, snapshot, target)
 
 
 def prepare_fenced_response(

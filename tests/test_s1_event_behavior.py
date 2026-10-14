@@ -24,6 +24,7 @@ from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
 from test_backend_native_lifecycle import native_backend as native_backend
+from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
@@ -336,7 +337,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
         assert session.session_id not in owner.inputs.backend_inboxes
         if provider_status == 200:
             assert native.provider.posts == (2 if committed_progress else 1)
-        inputs = InputDispositions(comms.root / InputDispositions.filename).read().rows
+        inputs = stored_inputs(comms.root).rows
         assert len(inputs) == 1 and all(row.has_started for row in inputs.values())
         rows = comms.bus.log.full_history()
         replies = [row for row in rows if row.sender == name]

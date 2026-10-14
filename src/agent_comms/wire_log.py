@@ -409,7 +409,7 @@ class WireLog:
             with self.certified_read() as source:
                 snapshot = registry.snapshot()
                 owner = snapshot.require(name)
-                inputs = InputDispositions(self.path.parent / InputDispositions.filename).read()
+                inputs = InputDispositions(self.path.parent)
                 captured = source.retained_task_facts(owner.incarnation)
                 export = WireExportBoundary(source.marker.last_seq, time.time())
         yield owner, snapshot, RetainedTaskFacts(tuple(captured)), inputs, export

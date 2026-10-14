@@ -103,7 +103,7 @@ class Messaging:
             return ()
         from .input_disposition import InputDispositions
 
-        inputs = InputDispositions(self.root / InputDispositions.filename).read()
+        inputs = InputDispositions(self.root).in_turn(lease.turn_id)
         with self.bus.log.certified_read() as source:
             return inputs.answered_by(lease, source, self.registry.snapshot(), target)
 

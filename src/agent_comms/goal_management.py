@@ -75,9 +75,9 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
             rows = (
-                InputDispositions(self.root / InputDispositions.filename)
-                .read()
-                .unknown(self.registry.aliases_for(name))
+                InputDispositions(self.root)
+                .unresolved(aliases := self.registry.aliases_for(name))
+                .unknown(aliases)
             )
             return [row.public() for row in rows]
 
@@ -95,8 +95,8 @@ class Goals:
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
             return (
-                InputDispositions(self.root / InputDispositions.filename)
-                .read()
+                InputDispositions(self.root)
+                .unresolved(aliases)
                 .delivery_overview(
                     aliases, include_history=include_history, awaiting_keys=awaiting_keys
                 )
@@ -111,7 +111,7 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
-            return InputDispositions(self.root / InputDispositions.filename).dismiss_historical(
+            return InputDispositions(self.root).dismiss_historical(
                 aliases, awaiting_keys=awaiting_keys
             )
 
@@ -135,8 +135,8 @@ class Goals:
             dict.fromkeys(GoalWaitTarget(target.name, target.created_at) for target in resolved)
         )
         owners = self.registry.aliases_for(thread.name)
-        document = InputDispositions(self.root / InputDispositions.filename).read()
-        unknown = {row.key: row for row in document.unknown(owners)}
+        dispositions = InputDispositions(self.root)
+        unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
         eligible = set()
         snapshot = self.registry.snapshot()
         from .input_attempt import ReservedInput
@@ -144,14 +144,13 @@ class Goals:
         lookup = stable_thread_lookup(thread.created_at)
         # Original certification supplies both sides of the reply. Display ACKs
         # and today's sender aliases cannot admit a different incarnation.
-        for original in self.bus.log.addressed_sources(lookup):
-            message = original.message
-            if not (
-                original.direct_for(lookup)
-                and any(target.sent(original) for target in targets)
-            ):
-                continue
-            key = InputDispositions.bus_key(message, thread)
+        replies = {
+            InputDispositions.bus_key(original.message, thread): original.message
+            for original in self.bus.log.addressed_sources(lookup)
+            if original.direct_for(lookup) and any(target.sent(original) for target in targets)
+        }
+        document = dispositions.read(tuple(replies))
+        for key, message in replies.items():
             row = document.lookup(key)
             if not row.exists:
                 # Read-only inspection of a canonical input. Only an

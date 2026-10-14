@@ -11,6 +11,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
@@ -96,7 +97,7 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     assert "[Open diagnostic](file://" in notice["text"]
     assert "SECRET" not in notice["text"]
     assert (
-        owner.inputs.dispositions.read()
+        stored_inputs(owner.inputs.dispositions.root)
         .rows[owner.inputs.dispositions.bus_key(incoming, comms.registry.require(session))]
         .declared_name
         == "unknown"

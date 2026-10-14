@@ -17,6 +17,7 @@ from agent_comms.goal_actions import (
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
+from stored_inputs import stored_inputs
 
 
 def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path, monkeypatch):
@@ -37,7 +38,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         comms.messaging.send_message("parent", "worker", text)
         for text in ("Set standby", "Yes wait")
     ]
-    ledger = InputDispositions(comms.root / InputDispositions.filename)
+    ledger = InputDispositions(comms.root)
     admission = comms.registry.snapshot().admission_generations["worker"]
     ledger.record(
         "acp:owner-input",
@@ -98,12 +99,12 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert again["reviewed_inputs"] == []
     assert [row["inputId"] for row in again["already_reviewed_inputs"]] == keys
     for message, key in zip(messages, keys, strict=True):
-        row = ledger.read().rows[key]
+        row = stored_inputs(ledger.root).rows[key]
         assert row.unresolved and row.accepts_reservation
         assert not hasattr(row, "native_id") and not hasattr(row, "turn_id")
         assert row.source_text == message.body and not hasattr(row, "sent_text")
         assert row.admission == admission and row.reviewed_for_goal(goal.id)
-    assert not ledger.read().rows["acp:owner-input"].goal_reviews
+    assert not stored_inputs(ledger.root).rows["acp:owner-input"].goal_reviews
     generation = comms.goals.open_goal_store().snapshot(goal.id)
     assert generation is not None and generation.lifecycle.ready
     assert generation.attempt_id is None

@@ -16,6 +16,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 @pytest.mark.parametrize(
@@ -139,7 +140,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 comms.registry.rename("worker", "renamed-worker")
             await agent.inputs.drain_inbox("worker")
             key = agent.inputs.dispositions.bus_key(message, comms.registry.require("worker"))
-            assert agent.inputs.dispositions.read().rows[key].declared_name == "reserved"
+            assert stored_inputs(agent.inputs.dispositions.root).rows[key].declared_name == "reserved"
             if case == "goal":
                 comms.goals.update_goal("worker", SetGoalAction(text="Changed goal"))
             elif case == "stop":
@@ -168,7 +169,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     agent.turns.persistent_backends["worker"].custody.idle().child.proc
                     is warmup_proc
                 )
-            assert agent.inputs.dispositions.read().rows[key].declared_name == (
+            assert stored_inputs(agent.inputs.dispositions.root).rows[key].declared_name == (
                 "started" if success else "unknown"
             )
             assert not agent.inputs.pending_turns.get("worker")
@@ -191,10 +192,10 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             if success:
                 assert (
                     matched[0]["inputId"]
-                    == agent.inputs.dispositions.read().rows.get(key).native_id
+                    == stored_inputs(agent.inputs.dispositions.root).rows.get(key).native_id
                 )
                 for origin in messages:
-                    row = agent.inputs.dispositions.read().rows.get(
+                    row = stored_inputs(agent.inputs.dispositions.root).rows.get(
                         agent.inputs.dispositions.bus_key(origin, comms.registry.require("worker"))
                     )
                     assert row.declared_name == "started"

@@ -24,6 +24,7 @@ from agent_comms.goal_generation import CompletedGeneration, ReadyGeneration
 from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 from test_backend_native_lifecycle import native_backend
+from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
@@ -76,7 +77,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
         target=session,
         text="Uncertain old input must never replay",
     )
-    old_unknown = owner.inputs.dispositions.read().rows.get("acp:old-unknown")
+    old_unknown = stored_inputs(owner.inputs.dispositions.root).rows.get("acp:old-unknown")
 
     native_stream = backend.stream_agent_events
 
@@ -188,7 +189,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
             assert comms.registry.require(session).goal.state.declared_name == "completed"
             assert store.snapshot(goal.id).lifecycle == CompletedGeneration()
         assert max_active_backends == 1
-        assert owner.inputs.dispositions.read().rows.get("acp:old-unknown") == old_unknown
+        assert stored_inputs(owner.inputs.dispositions.root).rows.get("acp:old-unknown") == old_unknown
         assert all("Uncertain old input must never replay" not in prompt for prompt in calls)
     finally:
         release.set()

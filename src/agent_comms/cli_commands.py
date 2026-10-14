@@ -629,17 +629,6 @@ class ToolsCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RepairInputRoutingCliCommand(CliCommand, declared_name="repair-input-routing"):
-    help = "Preview historical native-input attribution repair"
-    persist: bool = option(
-        "--apply", help="Persist verified input routing", default=False, wire_name="apply"
-    )
-
-    def apply(self, ctx: Comms) -> Any:
-        return ctx.transcripts.repair_input_routing(dry_run=not self.persist)
-
-
-@dataclass(frozen=True, kw_only=True)
 class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
     help = "Import an OpenCode/Codex context snapshot"
     format: ImportFormat = option("--format")
@@ -809,14 +798,8 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
 
     def original_source(self, ctx: Comms):
         from .input_disposition import InputDispositions
-        from .errors import RelationViolationError
 
-        with InputDispositions(ctx.root / InputDispositions.filename).reading() as inputs:
-            try:
-                original = inputs.rows[self.source]
-            except KeyError as error:
-                raise RelationViolationError("Constraint lacks its original input") from error
-            return original.context_provenance().require_human_input()
+        return InputDispositions(ctx.root).lookup(self.source).context_provenance().require_human_input()
 
     def pin_original(self, ctx: Comms, source):
         return ctx.messaging.pin_input_constraint(self.thread, source, worktree=self.worktree)

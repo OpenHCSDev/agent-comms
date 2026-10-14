@@ -25,6 +25,7 @@ from toad.widgets.transcript_history import TranscriptHistory
 from l0a_native_installed_pilot import until, response_painted
 from runtime_fixture import stop_test_children, stop_test_owners
 from saved_state_user_journey_pilot import submit_editor
+from stored_inputs import stored_inputs
 
 
 class ObservedApp(ToadApp):
@@ -191,7 +192,7 @@ async def run(arguments):
             rows = [json.loads(line) for line in native.read_text().splitlines()]
             originals = [row for row in rows if row.get("message", {}).get("role") == "user"]
             assert len(originals) == 2 and len(posts) == 2, "Original input or provider call replayed"
-            attempts = InputDispositions(service.root / InputDispositions.filename).read().rows
+            attempts = stored_inputs(service.root).rows
             assert len(attempts) == 2 and all(row.has_started and not row.unresolved for row in attempts.values()), "Subscriber loss changed an accepted input's disposition"
             report["original_dispositions"] = [row.public_status for row in attempts.values()]
             observations = [json.loads(line) for path in (service.root / "diagnostics").glob("*.requests.jsonl")

@@ -224,9 +224,9 @@ class TranscriptRoutes:
         except (ValueError, TypeError) as error:
             raise RelationViolationError("Native publication evidence is invalid") from error
         ids = routing.annotation_ids(reader, checkpoint, str(path), final.end)
-        inputs = InputDispositions(log.path.parent / InputDispositions.filename)
+        inputs = InputDispositions(log.path.parent)
         lookup = stable_thread_lookup(incarnation.created_at)
-        with log.certified_read() as source, registry.store.reading() as document, inputs.reading() as attempts:
+        with log.certified_read() as source, registry.store.reading() as document:
             snapshot = document.snapshot()
             incarnation = lease.identity.incarnation.resolved(snapshot)
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
@@ -234,7 +234,8 @@ class TranscriptRoutes:
                 raise RelationViolationError("Native publication turn lease changed")
             if current.session_file != str(path) or FileRevision.capture(path) != revision:
                 raise RelationViolationError("Native publication session changed")
-            if not attempts.started_for_native(lease, user.input_id, user.message.text, snapshot=snapshot):
+            if not inputs.in_turn(lease.turn_id).started_for_native(
+                    lease, user.input_id, user.message.text, snapshot=snapshot):
                 raise RelationViolationError("Native publication has no original STARTED input")
             references = tuple(dict.fromkeys((*routing.requests, *published)))
             marks = ",".join("?" for _ in references)
