@@ -170,7 +170,7 @@ export class NativeTurnRun {
         if (event.type === 'message_update') {
             const delta = event.assistantMessageEvent;
             if (delta?.type === 'toolcall_start' ||
-                (delta?.type?.endsWith('_delta') && delta.delta?.length)) this.state = this.state.produced();
+                (delta?.type === 'text_delta' && delta.delta?.length)) this.state = this.state.produced();
         }
         if (event.type === 'message_end' && event.message.role === 'assistant') {
             const content = event.message.content;
