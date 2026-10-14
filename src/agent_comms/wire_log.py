@@ -103,9 +103,8 @@ class OpenedWireSnapshot:
         except (TypeError, ValueError) as error:
             raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
 
-    def appended_records(
-        self, previous: FileRevision, previous_sequence: int,
-    ) -> tuple[WireRecord, ...]:
+    def appended_records(self, previous: FileRevision,
+                         previous_sequence: int) -> tuple[WireRecord, ...]:
         """Decode only bytes appended to the same opened source inode."""
         if self.stream is None or self.revision is None:
             raise RelationViolationError("Wire tail has no opened source")
@@ -123,7 +122,7 @@ class OpenedWireSnapshot:
             records.append(scan.read(raw))
         if scan.previous_sequence != self.metadata.last_seq:
             raise RelationViolationError("Wire tail does not reach its marker")
-        if FileRevision.from_stat(os.fstat(self.stream.fileno())) != self.revision:
+        if FileRevision.from_file(self.stream) != self.revision:
             raise RelationViolationError("Wire tail changed while it was read")
         return tuple(records)
 
@@ -629,8 +628,7 @@ class WireLog:
                 boundary = stream.seek(0, 2) if stream is not None else 0
                 if stream is not None:
                     stream.seek(0)
-                revision = (FileRevision.from_stat(os.fstat(stream.fileno()))
-                            if stream is not None else None)
+                revision = FileRevision.from_file(stream) if stream is not None else None
                 snapshot_type = OpenedWireSnapshot
                 if lock.source is not None:
                     source = lock.certified_read()
@@ -640,8 +638,7 @@ class WireLog:
                     source.require_open_prefix()
                     # Bind the separate retained descriptor to the exact admitted
                     # inode/revision while original physical custody is held.
-                    if (stream is None
-                            or revision != FileRevision.from_stat(os.fstat(source.stream.fileno()))
+                    if (stream is None or revision != FileRevision.from_file(source.stream)
                             or os.fstat(stream.fileno()).st_dev != source.witness.device
                             or boundary != source.witness.offset):
                         raise RelationViolationError("Opened read differs from its certified source cut")

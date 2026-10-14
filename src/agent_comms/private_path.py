@@ -53,6 +53,10 @@ class FileRevision:
         )
 
     @classmethod
+    def from_file(cls, stream: BinaryIO) -> FileRevision:
+        return cls.from_stat(os.fstat(stream.fileno()))
+
+    @classmethod
     def capture(cls, path: Path) -> FileRevision | None:
         try:
             return cls.from_stat(path.stat())
@@ -72,7 +76,7 @@ class FileRevision:
 
     def opened_by(self, stream: BinaryIO) -> bool:
         """Whether an opened file still contains this captured byte cut."""
-        return self.holds_cut(type(self).from_stat(os.fstat(stream.fileno())), self.size)
+        return self.holds_cut(type(self).from_file(stream), self.size)
 
 
 class FilesystemRole(DeclaredFamily, affix="Role"):
