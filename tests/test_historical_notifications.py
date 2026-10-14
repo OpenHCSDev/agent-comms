@@ -86,6 +86,22 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
                                                 newer_namespace, document=document) == ()
 
 
+def test_context_evidence_rejects_mixed_sql_columns():
+    from agent_comms.notification_assignment import AssignmentContextEvidence
+
+    for values in (("session.jsonl", None), (None, "entry-id")):
+        with pytest.raises(ValueError, match="model-context location is incomplete"):
+            AssignmentContextEvidence.from_columns(*values)
+
+
+def test_response_evidence_rejects_mixed_sql_columns():
+    from agent_comms.notification_assignment import AssignmentResponse
+
+    for values in ((1, None, 2), (None, "message-id", 2), (1, "message-id", None)):
+        with pytest.raises(ValueError, match="response evidence is incomplete"):
+            AssignmentResponse.from_columns(*values)
+
+
 def test_recorded_assignment_schema_refusal_is_read_only(archived_notification):
     _old, live, source, messages, _root_id = archived_notification
     database = Path(source.root) / "coordination.sqlite3"
@@ -103,14 +119,16 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     recipient, = old.bus.log.read_delivery_cohort(root_id, messages[0].seq).audience.recipients
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
     from agent_comms.notification_assignment import (
+        AssignmentActivity,
         ShownToModelProgress,
-        UnansweredAssignmentActivity,
+        UnansweredResponse,
     )
 
-    activity = UnansweredAssignmentActivity(
+    activity = AssignmentActivity(
         triage_inflight=False,
         current_execution_id=None,
         context_progress=ShownToModelProgress(1),
+        response=UnansweredResponse(),
     )
     with pytest.raises(TypeError, match="activity"):
         assignment.notification(
@@ -141,31 +159,25 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     ).audience.recipients
     from agent_comms.message_reference import MessageReference
     from agent_comms.notification_assignment import (
-        AnsweredAssignmentActivity,
+        AnsweredResponse,
+        AssignmentActivity,
         NotShownProgress,
         RemovedContextProgress,
         ShownToModelProgress,
-        UndatedContextProgress,
-        UnansweredAssignmentActivity,
+        UnansweredResponse,
     )
 
-    sent_activity = UnansweredAssignmentActivity(
+    sent_activity = AssignmentActivity(
         triage_inflight=False,
         current_execution_id=None,
         context_progress=NotShownProgress(),
+        response=UnansweredResponse(),
     )
     engagement = EngagedAssignment.build(FullWake(), "durable-execution", "sender")
     sent = engagement.notification(
         recipient,
         observation=RecordedRecipientActivity(),
         activity=sent_activity,
-        updated_at_ms=1_000,
-    )
-    undated_activity = replace(sent_activity, context_progress=UndatedContextProgress())
-    undated = engagement.notification(
-        recipient,
-        observation=RecordedRecipientActivity(),
-        activity=undated_activity,
         updated_at_ms=1_000,
     )
     read_activity = replace(sent_activity, context_progress=ShownToModelProgress(2_000))
@@ -175,12 +187,9 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         activity=read_activity,
         updated_at_ms=1_000,
     )
-    answered_activity = AnsweredAssignmentActivity(
-        read_activity.triage_inflight,
-        read_activity.current_execution_id,
-        read_activity.context_progress,
-        MessageReference(99, "durable-reply"),
-        3_000,
+    answered_activity = replace(
+        read_activity,
+        response=AnsweredResponse(MessageReference(99, "durable-reply"), 3_000),
     )
     answered = CompletedAssignment.build(
         FullWake(), "durable-execution", "sender"
@@ -203,18 +212,14 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     ).notification(
         recipient,
         observation=RecordedRecipientActivity(),
-        activity=AnsweredAssignmentActivity(
-            removed_activity.triage_inflight,
-            removed_activity.current_execution_id,
-            removed_activity.context_progress,
-            MessageReference(99, "durable-reply"),
-            3_000,
+        activity=replace(
+            removed_activity,
+            response=AnsweredResponse(MessageReference(99, "durable-reply"), 3_000),
         ),
         updated_at_ms=3_000,
     )
 
     assert sent.state == "Sent" and sent.read_at_ms is None
-    assert undated.state == "Read" and undated.read_at_ms is None
     assert read.state.startswith("Read ") and read.read_at_ms == 2_000
     assert answered.state.startswith("Answered ") and answered.answered_at_ms == 3_000
     assert removed.state == "Removed"
