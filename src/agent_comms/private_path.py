@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import ClassVar
+from typing import BinaryIO, ClassVar
 from collections.abc import Iterator
 
 from .declared_family import DeclaredFamily
@@ -24,6 +24,10 @@ from .declared_family import DeclaredFamily
 class FileIdentity:
     device: int
     inode: int
+
+    def __post_init__(self) -> None:
+        if self.device < 0 or self.inode < 0:
+            raise ValueError("File identity fields must be nonnegative")
 
     @classmethod
     def from_stat(cls, observed: os.stat_result) -> FileIdentity:
@@ -36,6 +40,10 @@ class FileRevision:
     size: int
     mtime_ns: int
     ctime_ns: int
+
+    def __post_init__(self) -> None:
+        if self.size < 0 or self.mtime_ns < 0 or self.ctime_ns < 0:
+            raise ValueError("File revision fields must be nonnegative")
 
     @classmethod
     def from_stat(cls, observed: os.stat_result) -> FileRevision:
@@ -61,6 +69,10 @@ class FileRevision:
                 or (current.mtime_ns, current.ctime_ns) == (self.mtime_ns, self.ctime_ns)
             )
         )
+
+    def opened_by(self, stream: BinaryIO) -> bool:
+        """Whether an opened file still contains this captured byte cut."""
+        return self.holds_cut(type(self).from_stat(os.fstat(stream.fileno())), self.size)
 
 
 class FilesystemRole(DeclaredFamily, affix="Role"):

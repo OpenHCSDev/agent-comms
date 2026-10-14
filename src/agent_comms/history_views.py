@@ -48,7 +48,8 @@ from .presentation import (
     WireRevision,
 )
 from .read_basis import ChannelDisplayScope, DMDisplayBasis
-from .store_files import _store_lock, file_revision
+from .private_path import FileRevision
+from .store_files import _store_lock
 from .thread_presentation import ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
@@ -484,9 +485,14 @@ class HistoryViews:
 
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
-        parts = {name: (tuple(file_revision(item) for item in path) if isinstance(path, tuple)
-                        else file_revision(path))
-                 for name, path in self.revision_paths().items()}
+        parts = {
+            name: (
+                tuple(FileRevision.capture(item) for item in path)
+                if isinstance(path, tuple)
+                else FileRevision.capture(path)
+            )
+            for name, path in self.revision_paths().items()
+        }
         return WireRevision(**parts, expiry_tick=int(time.time()))
 
     def who(self) -> Sequence[Mapping]:
