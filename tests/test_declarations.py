@@ -618,7 +618,10 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
     older = reopened.bus.dm_history_page("renamed", "b", before=2, max_bytes=1)
     assert [row.seq for row in older.messages] == [1]
     assert [row.seq for row in reopened.bus.inbox("b")] == [1, 3]
-    assert reopened.bus.mark_delivered("b") == 2
+    unread = reopened.bus.inbox("b")
+    assert reopened.bus.mark_delivered(
+        "b", tuple(message.reference for message in unread)
+    ) == 2
     assert reopened.bus.pending_count("b") == 0
     later = reopened.messaging.send_message("renamed", "b", "later")
     assert later.seq == 4

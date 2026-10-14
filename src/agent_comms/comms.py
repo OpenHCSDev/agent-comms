@@ -17,6 +17,7 @@ from .owner_lifecycle import OwnerLifecycle
 from .registration import Registration
 from .relationships import ThreadRelationships
 from .thread_management import ThreadManagement
+from .thread_configuration import ThreadConfiguration
 from .transcripts import Transcripts
 
 
@@ -45,6 +46,7 @@ class Comms:
             self.root, self.registry, self.bus,
             ChannelCatalog(self.root / ChannelCatalog.filename), self.agents, self.owners, self.ledger
         )
+        self.configuration = ThreadConfiguration(self.root, self.registry, self.threads, self.agents)
         self.channels = ChannelManagement(self.root, self.registry, self.bus, self.threads)
         self.views = HistoryViews(
             self.root,

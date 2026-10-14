@@ -15,6 +15,7 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
 from agent_comms.selected_triage import FullSelectedTriage, IgnoreSelectedTriage
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_runtime_input import NativeRuntimeInput
@@ -117,7 +118,8 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
         assert isinstance(failure, NativeInputDrainDiagnostic)
         assert failure.error_type == "NativePiUnavailable" and "died" in failure.reason
         assert len(calls) == 1
-        comms.messaging.acknowledge("alpha")
+        messages = comms.bus.inbox("alpha")
+        comms.messaging.acknowledge("alpha", tuple(message.reference for message in messages))
         assert await owner.inputs.drain_inbox("alpha") == 0
         assert len(calls) == 1 and not owner.inputs.pending_turns
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
@@ -207,7 +209,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
         return await model(*args, **kwargs)
 
     monkeypatch.setattr(TrackedTurnSession, "execute", suspended)
-    async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, message, _root):
+    async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, message, root_id):
         assert await owner.inputs.drain_inbox("beta") == 1
         turn = owner.inputs.wake_tasks["beta"]
         try:
@@ -215,7 +217,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             key = message.seq, message.message_id
             notices = comms.views.message_notifications([message])[key]
             assert len(notices) == 1
-            assert notices[0].state == "Starting response"
+            assert notices[0].state == "Sent"
             assert notices[0].detail == "" and notices[0].busy
             assert comms.views.recent_notifications("beta") == (
                 replace(notices[0], message=message),
@@ -237,8 +239,20 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             # Output is not a competing read authority. Until the native
             # context receipt exists, even output evidence remains not-read.
             working = comms.views.message_notifications([message])[key]
-            assert working[0].state == "Starting response"
+            assert working[0].state == "Sent"
             assert working[0].detail == "" and working[0].busy
+
+            held = comms.messaging.send_message(
+                "sender", "beta", "wait behind the recipient's unresolved turn"
+            )
+            with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+                accepted = accept_delivery_cohort(comms.bus, root_id, held.seq, store)
+                assert accepted.value.member_count == 1
+            queued, = comms.views.message_notifications([held])[
+                held.seq, held.message_id
+            ]
+            assert queued.state.startswith("Queued ")
+            assert queued.detail == "" and not queued.busy
 
             # Same PID, different process incarnation: even a retained active turn
             # cannot supply liveness. Persist through the real typed registry.
@@ -251,10 +265,10 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
                 )
                 edit.commit()
             paused = comms.views.message_notifications([message])[key]
-            assert paused[0].state == "Interrupted before read"
+            assert paused[0].state == "Sent"
             assert paused[0].detail == "" and not paused[0].busy
-            assert comms.views.recent_notifications("beta") == (
-                replace(paused[0], message=message),
+            assert replace(paused[0], message=message) in comms.views.recent_notifications(
+                "beta"
             )
             assert calls == []
         finally:

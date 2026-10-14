@@ -951,7 +951,12 @@ class AckCliCommand(CliCommand):
     thread: str = option("--thread")
 
     def apply(self, ctx: Comms) -> Any:
-        return {"acknowledged": ctx.messaging.acknowledge(self.thread)}
+        messages = ctx.bus.inbox(self.thread)
+        return {
+            "acknowledged": ctx.messaging.acknowledge(
+                self.thread, tuple(message.reference for message in messages)
+            )
+        }
 
 
 @dataclass(frozen=True, kw_only=True)
