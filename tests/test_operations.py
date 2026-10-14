@@ -184,13 +184,16 @@ class TestThreadOps:
         assert [message.body for message in wired.bus.inbox(claimed.name)] == ["after claim"]
 
     def test_runtime_info_is_exposed_in_presence(self, wired):
+        wired.threads.set_thread_configuration("fixer", model="configured/model")
         wired.agents.set_agent_info(
-            "fixer", model="openrouter/model", context_used=25, context_size=100
+            "fixer", model="observed/model", context_used=25, context_size=100
         )
         row = next(row for row in wired.views.who() if row["name"] == "fixer")
-        assert row["model"] == "openrouter/model"
+        assert row["model"] == "configured/model"
         assert row["context_percent"] == 25
-        assert wired.agents.agent_info_of("fixer").context_used == 25
+        info = wired.agents.agent_info_of("fixer")
+        assert info.model == "configured/model"
+        assert info.context_used == 25
 
     def test_presence_omits_expensive_viewer_pending_counts(self, wired):
         rows = {row["name"]: row for row in wired.views.presence()}
