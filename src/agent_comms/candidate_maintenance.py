@@ -11,6 +11,8 @@ import logging
 import threading
 from pathlib import Path
 
+from .bus_route_counts import BusRouteCounts
+from .routing import DeliveryMessage
 from .wire_log import WireLog
 from .wake_candidate_index import WakeCandidateIndex
 
@@ -32,8 +34,6 @@ def schedule_candidate_catchup(log: WireLog, through_bytes: int) -> None:
     """Prepare writer indexes, then signal their existing maintenance worker."""
     if type(log) is not WireLog or type(through_bytes) is not int or through_bytes <= 0:
         raise ValueError("candidate notification needs an actual committed byte position")
-    from .bus_route_counts import BusRouteCounts
-
     BusRouteCounts(log.path).prepare()
     root = log.path.parent
     with _guard:
@@ -65,9 +65,6 @@ def _drain_candidate(root: Path) -> None:
         with log.locked():
             metadata = log._private_marker_unlocked()
         root_id = metadata.root_id
-        from .bus_route_counts import BusRouteCounts
-        from .routing import DeliveryMessage
-
         index = WakeCandidateIndex(log)
         routes = BusRouteCounts(log.path)
         while True:
@@ -83,7 +80,7 @@ def _drain_candidate(root: Path) -> None:
                     source.revision,
                     lambda record: DeliveryMessage.from_wire(record, root_id=source.metadata.root_id),
                 )
-            if result.caught_up and route_result.complete():
+            if result.caught_up and route_result.complete:
                 with _guard:
                     if _pending[root][1] <= result.checkpoint_bytes:
                         # Retire this worker once, atomically with its final

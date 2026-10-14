@@ -22,7 +22,7 @@ from .read_basis import (
     MessageDisplayScope,
     ViewUnread,
 )
-from .routing import DeliveryScope, PendingCounts
+from .routing import DeliveryMessage, DeliveryScope, PendingCounts
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -155,26 +155,23 @@ class MessageBus:
         selection = delivery.selection(target, snapshot, self._channels.read())
         seen = self.reads.seen_sequences(delivery.actor, snapshot)
         with self.log._opened_wire_snapshot(need_sequence=False) as source:
-            unread = self._from_route_index(
+            rows, appended = self._from_route_index(
                 source, snapshot, {delivery.actor: delivery},
                 lambda index, requests: index.unseen_deliveries(requests, seen),
             )
-            if unread is None:
-                return [
-                    item.message
-                    for item in self._scanned_deliveries(source)
-                    if delivery.current(item, snapshot)
-                    and selection.includes(item.message)
-                    and item.message.seq not in seen
-                ]
+            unread = [(row.seq, row.target) for row in rows] + [
+                (item.message.seq, item.message.target)
+                for item in appended
+                if delivery.current(item, snapshot) and item.message.seq not in seen
+            ]
             if not unread:
                 return []
             listed = ListedDeliveries(
                 selection,
-                frozenset(row.seq for row in unread),
-                frozenset(row.target for row in unread),
+                frozenset(seq for seq, _target in unread),
+                frozenset(target for _seq, target in unread),
             )
-            page = MessagePageRequest.every(listed, after=unread[0].seq - 1).read_opened(
+            page = MessagePageRequest.every(listed, after=min(listed.sequences) - 1).read_opened(
                 self.log, source.metadata, source.revision, source.stream,
                 source.public_records(),
             )
@@ -285,15 +282,19 @@ class MessageBus:
         self, source: OpenedWireSnapshot, snapshot: RegistrySnapshot,
         deliveries: Mapping[str, DeliveryScope], read,
     ):
-        """Answer ``read(index, requests)`` from the route index synced to this cut.
+        """Answer ``read(index, requests)`` from the committed route index.
 
-        ``requests`` are the routes currently delivered to these actors. None
-        means the index cannot cover the cut, and the caller reads the log.
+        ``requests`` are the routes currently delivered to these actors. The
+        rows this cut appended after the index's committed position come back
+        decoded beside the answer; the caller applies the same delivery rule.
         """
         recipients = self._route_recipients(snapshot, deliveries)
 
+        def decode(record):
+            return DeliveryMessage.from_wire(record, root_id=source.metadata.root_id)
+
         with BusRouteCounts(self.log.path) as index:
-            index.require_cut(source.stream, source.revision)
+            appended = index.appended(source.stream, source.revision, decode)
             requests = []
             for route in index.routes():
                 for actor in recipients(route.target):
@@ -304,7 +305,7 @@ class MessageBus:
                         requests.append(PendingRoute(
                             actor, route.target, route.sender, route.sender_lookup, since,
                         ))
-            return read(index, requests)
+            return read(index, requests), appended
 
     def _pending_counts(
         self, source: OpenedWireSnapshot, snapshot: RegistrySnapshot,
@@ -318,7 +319,7 @@ class MessageBus:
                 conversation = deliveries[actor].conversation(sender, target)
                 counts[actor][conversation] = counts[actor].get(conversation, 0) + count
 
-        rows = self._from_route_index(
+        rows, appended = self._from_route_index(
             source, snapshot, deliveries,
             lambda index, requests: index.unseen_counts(
                 requests, [ActorSeen(actor, sequences) for actor, sequences in seen.items()]
@@ -326,6 +327,11 @@ class MessageBus:
         )
         for row in rows:
             add(row.actor, row.sender, row.target, row.count)
+        for item in appended:
+            message = item.message
+            for actor in recipients(message.target):
+                if deliveries[actor].current(item, snapshot) and message.seq not in seen[actor]:
+                    add(actor, message.sender, message.target, 1)
         return counts
 
     def mark_delivered(

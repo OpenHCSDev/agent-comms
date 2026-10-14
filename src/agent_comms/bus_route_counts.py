@@ -85,21 +85,27 @@ class UnseenDelivery(TypedRow):
     target: str
 
 
+@dataclass(frozen=True)
 class RouteIndexState:
-    def complete(self) -> bool:
-        raise NotImplementedError
+    """How far one writer sync left the committed index behind its cut."""
+
+    complete: ClassVar[bool]
 
 
+@dataclass(frozen=True)
 class RouteIndexReady(RouteIndexState):
-    def complete(self) -> bool:
-        return True
+    complete: ClassVar[bool] = True
 
 
-class RouteIndexRebuilding(CoordinationReadUnavailable, RouteIndexState):
-    """The writer has not committed route counts through the requested cut."""
+@dataclass(frozen=True)
+class RouteIndexBehind(RouteIndexState):
+    complete: ClassVar[bool] = False
+    through: int
+    size: int
 
-    def complete(self) -> bool:
-        return False
+
+class RouteIndexRebuilding(CoordinationReadUnavailable):
+    """The committed index is too far behind this cut to read its remainder."""
 
     def __init__(self, through: int, size: int) -> None:
         self.through = through
@@ -116,21 +122,12 @@ class BusRouteCounts:
 
     def __enter__(self) -> BusRouteCounts:
         """Open one committed WAL snapshot without taking the writer lock."""
-        if not self.path.exists():
-            raise RouteIndexRebuilding(0, self.bus_path.stat().st_size if self.bus_path.exists() else 0)
+        self._initialize()
         self.connection = sqlite3.connect(
             self.path.resolve().as_uri() + "?mode=ro", uri=True, timeout=0
         )
         self.connection.execute("PRAGMA query_only=ON")
         self.connection.execute("BEGIN")
-        if not self.connection.execute(
-            f"SELECT 1 FROM sqlite_master WHERE type='table' "
-            f"AND name='{RouteSourceRow.declared_name}'"
-        ).fetchone():
-            self.connection.close()
-            raise RouteIndexRebuilding(
-                0, self.bus_path.stat().st_size if self.bus_path.exists() else 0
-            )
         return self
 
     def __exit__(self, _error_type, _error, _traceback) -> None:
@@ -142,15 +139,45 @@ class BusRouteCounts:
         source.seek(start)
         return sha256(source.read(offset - start)).hexdigest()
 
-    def require_cut(self, source: BinaryIO | None, revision: FileRevision | None) -> None:
+    @staticmethod
+    def _decoded(
+        source: BinaryIO, start: int, stop: int,
+        decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
+    ):
+        """Deliveries of the complete original rows in [start, stop)."""
+        source.seek(start)
+        while source.tell() < stop:
+            raw = source.readline(stop - source.tell())
+            if not raw.endswith(b"\n"):
+                raise RelationViolationError("Route projection source has an incomplete original row")
+            if raw.strip():
+                yield from decode(json.loads(raw))
+
+    def appended(
+        self, source: BinaryIO | None, revision: FileRevision | None,
+        decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
+    ) -> tuple[DeliveryMessage, ...]:
+        """Deliveries this cut holds past the committed index, decoded lock-free.
+
+        The append worker commits each append shortly after it lands, so the
+        remainder is normally one or a few rows. A remainder above the rebuild
+        bound, or a source whose bytes no longer match the index, is rebuilding.
+        """
+        size = revision.size if revision is not None else 0
         records = RouteSourceRow.select(self.connection)
         recorded = records[0] if records else None
-        size = revision.size if revision is not None else 0
         through = recorded.revision.size if recorded and recorded.revision else 0
-        if recorded is None or through < size:
-            raise RouteIndexRebuilding(through, size)
-        if source is not None and through and self._tail(source, through) != recorded.tail_digest:
+        if source is None:
+            if through:
+                raise RouteIndexRebuilding(0, size)
+            return ()
+        if through and self._tail(source, through) != recorded.tail_digest:
             raise RouteIndexRebuilding(0, size)
+        if size - through > self.rebuild_bytes:
+            raise RouteIndexRebuilding(through, size)
+        if through >= size:
+            return ()
+        return tuple(self._decoded(source, through, size, decode))
 
     def _initialize(self) -> None:
         """The writer alone creates the WAL store; no source bytes are decoded here."""
@@ -179,12 +206,6 @@ class BusRouteCounts:
     def prepare(self) -> None:
         """Create the writer-owned WAL store after its publication lock releases."""
         self._initialize()
-
-    def through(self) -> int:
-        """Read the committed append position without taking the writer lock."""
-        with self:
-            rows = RouteSourceRow.select(self.connection)
-            return rows[0].revision.size if rows and rows[0].revision else 0
 
     def _recorded(self) -> RouteSourceRow | None:
         with self:
@@ -221,25 +242,20 @@ class BusRouteCounts:
         totals: dict[tuple[str, str, str], tuple[int, float]] = {}
         through = size
         if source is not None:
-            source.seek(offset)
-            limit = min(size, offset + self.rebuild_bytes)
-            while source.tell() < size and source.tell() < limit:
-                raw = source.readline(size - source.tell())
-                if not raw.endswith(b"\n"):
-                    raise RelationViolationError("Route projection source has an incomplete original row")
-                if not raw.strip():
-                    continue
-                for delivery in decode(json.loads(raw)):
-                    message = delivery.message
-                    row = RouteEntryRow(
-                        message.seq, message.target, message.sender,
-                        delivery.sender_lookup, message.timestamp,
-                    )
-                    rows.append(row)
-                    key = row.target, row.sender, row.sender_lookup
-                    count, oldest = totals.get(key, (0, row.timestamp))
-                    totals[key] = count + 1, min(oldest, row.timestamp)
-            through = source.tell()
+            through = min(size, offset + self.rebuild_bytes)
+            if through < size:
+                source.seek(through)
+                through += len(source.readline(size - through))
+            for delivery in self._decoded(source, offset, through, decode):
+                message = delivery.message
+                row = RouteEntryRow(
+                    message.seq, message.target, message.sender,
+                    delivery.sender_lookup, message.timestamp,
+                )
+                rows.append(row)
+                key = row.target, row.sender, row.sender_lookup
+                count, oldest = totals.get(key, (0, row.timestamp))
+                totals[key] = count + 1, min(oldest, row.timestamp)
         tail_digest = self._tail(source, through) if source is not None else None
         checkpoint = replace(revision, size=through) if revision is not None else None
 
@@ -252,7 +268,7 @@ class BusRouteCounts:
                 connection.rollback()
                 current_through = current.revision.size if current and current.revision else 0
                 return (RouteIndexReady() if current_through >= size
-                        else RouteIndexRebuilding(current_through, size))
+                        else RouteIndexBehind(current_through, size))
             if rebuild:
                 for owner in TypedTable.members_with(RouteTable):
                     connection.execute(f'DELETE FROM "{owner.declared_name}"')
@@ -269,7 +285,7 @@ class BusRouteCounts:
             connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
             RouteSourceRow(1, checkpoint, tail_digest).insert(connection)
             connection.commit()
-        return RouteIndexReady() if through == size else RouteIndexRebuilding(through, size)
+        return RouteIndexReady() if through == size else RouteIndexBehind(through, size)
 
     _requests = """requests AS (
                 SELECT json_extract(value, '$.actor') AS actor,
