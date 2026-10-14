@@ -19,7 +19,7 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_session import CoordinationSession
+from agent_comms.coordination_session import CoordinationSession, NativeBoundary
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
@@ -213,7 +213,7 @@ class AttemptStore:
         fence: OwnerFence,
         *,
         expected_pointer_revision: int,
-        boundary=None,
+        boundary: NativeBoundary | None = None,
     ) -> Applied[RecoverySnapshot]:
         """Atomically fail a fenced, reaped backend; UNKNOWN is never replayable.
 

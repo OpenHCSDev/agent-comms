@@ -6,8 +6,12 @@ import pytest
 
 from agent_comms.attempt_states import SucceededAttempt
 
-from agent_comms.coordination_session import CoordinationSession, NativeCoordinationSession
-from agent_comms.coordinator import StandaloneCoordination
+from agent_comms.coordination_session import (
+    CoordinationSession,
+    NativeBoundary,
+    NativeCoordinationSession,
+)
+from agent_comms.coordinator import Coordination, StandaloneCoordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.claim_admission import publish_selected_resource_claim
 from agent_comms.threads import Thread
@@ -44,7 +48,8 @@ def test_historical_terminal_release_keeps_recorded_incarnation_and_path(monkeyp
             store.session.release_resources(terminal, boundary)
         assert dict(comms.bus.log.claim_projection()) == {str(later_file): later}
         release = comms.views.full_history()[-1]
-        assert release.target == "#all" and release.notice
+        assert release.target == terminal.assignments[0].lifecycle.exact_target
+        assert release.notice
         assert release.claim_transition.incarnation == claimed.incarnation
         assert release.claim_transition.releases[0].generation == claimed.generation
 
@@ -62,6 +67,30 @@ def test_old_terminal_cleanup_preserves_later_generation_of_same_file(monkeypatc
             store.session.release_resources(terminal, boundary)
         assert (comms.root / "bus.jsonl").read_bytes() == before
         assert dict(comms.bus.log.claim_projection()) == {str(resource): later}
+
+
+def test_native_boundary_preserves_the_lock_owner_default_wait_policy():
+    assert NativeBoundary(object()).contention is None
+    assert NativeBoundary(object(), blocking=False).contention is None
+
+
+def test_native_coordination_defers_registry_read_until_bus_use(tmp_path, monkeypatch):
+    from agent_comms.registration import Registration
+
+    reads = []
+    original = Registration.__init__
+
+    def observed(registration, path):
+        reads.append(path)
+        original(registration, path)
+
+    monkeypatch.setattr(Registration, "__init__", observed)
+    with Coordination(tmp_path / "coordination.sqlite3") as store:
+        assert reads == []
+        assert store.session.bus.log.path == tmp_path / "bus.jsonl"
+        assert reads == [tmp_path / "registry.json"]
+        assert store.session.bus is store.session.bus
+        assert reads == [tmp_path / "registry.json"]
 
 
 def test_standalone_session_never_guesses_native_resources_from_bus_file(tmp_path):

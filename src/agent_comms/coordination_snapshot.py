@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
+from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import (
     IntegrityViolationError,
@@ -20,6 +21,9 @@ from agent_comms.coordination_tables.publications import PublicationIntents, Pub
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import projected
+
+if TYPE_CHECKING:
+    from .coordination_session import NativeBoundary
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,7 +215,10 @@ class RecoverySnapshot:
             is_current=self.is_current,
         )
 
-    def settle(self, session, outcome, reason_code: str | None, boundary=None) -> None:
+    def settle(
+        self, session, outcome, reason_code: str | None,
+        boundary: NativeBoundary | None = None,
+    ) -> None:
         from .coordination_tables.attempts import AttemptRecord
         from .coordination_tables.assignments import WakeAssignment
         from .coordination_tables.executions import ExecutionRecord, CurrentExecutions
@@ -280,7 +287,7 @@ class RecoverySnapshot:
             pointer_revision=self.pointer_revision + 1,
         )
 
-    def finish_publications(self, session, boundary) -> None:
+    def finish_publications(self, session, boundary: NativeBoundary) -> None:
         """Release this one native attempt only when every original route settled."""
         from .attempt_states import SucceededAttempt
         from .execution_states import CompletedExecution
@@ -319,7 +326,7 @@ class RecoverySnapshot:
             execution_id=None, attempt_ordinal=None, pointer_revision=self.pointer_revision + 1,
         )
 
-    def release_resources(self, boundary) -> None:
+    def release_resources(self, boundary: NativeBoundary) -> None:
         """Release the durable generations acquired by this exact final attempt.
 
         No live selected turn or in-memory tool claim list is needed. A claim
@@ -328,8 +335,8 @@ class RecoverySnapshot:
         """
         from .envelope_claim_transitions import ClaimRelease, project_verified_transitions
         from .messages import InfoKind, Message
-        from .channel_targets import BuiltinChannel
         from itertools import groupby
+        from operator import itemgetter
 
         bus, bus_lock, registry = boundary.bus, boundary.bus_lock, boundary.registry
         attempt = self.require_attempt()
@@ -346,14 +353,28 @@ class RecoverySnapshot:
         if not owned:
             return
         owner = registry.threads[registry.canonical_name(attempt.owner_thread)]
+        assignment_targets = {
+            assignment.assignment_id: assignment.lifecycle.exact_target
+            for assignment in self.assignments
+        }
+        routed = []
+        for claim in owned:
+            admission = claim.admission
+            assert admission is not None
+            target = assignment_targets.get(admission.wake_assignment_id)
+            if not isinstance(target, str) or not target:
+                raise IntegrityViolationError(
+                    "terminal claim has no original wake assignment route"
+                )
+            routed.append((claim.incarnation, target, claim))
         from pathlib import Path
 
-        for incarnation, records in groupby(sorted(owned, key=lambda claim: claim.incarnation),
-                                            key=lambda claim: claim.incarnation):
-            recorded = tuple(records)
+        route = itemgetter(0, 1)
+        for (incarnation, target), records in groupby(sorted(routed, key=route), key=route):
+            recorded = tuple(item[2] for item in records)
             for offset in range(0, len(recorded), 32):
                 bus.publisher.publish_claim_envelope(
-                    Message(owner.name, BuiltinChannel.ALL.value,
+                    Message(owner.name, target,
                             "Terminal attempt file claims released", InfoKind, notice=True),
                     worktree=Path(owner.worktree), incarnation=incarnation,
                     releases=tuple(ClaimRelease(claim.resource, claim.generation)

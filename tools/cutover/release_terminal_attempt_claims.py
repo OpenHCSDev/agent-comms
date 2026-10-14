@@ -23,8 +23,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.attempts import AttemptRecord
 from agent_comms.coordination_tables.executions import ExecutionRecord
-from agent_comms.store_files import _store_lock, StoreLockContention
-from agent_comms.coordination_session import NativeBoundary
+from agent_comms.store_files import _store_lock
 from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair
 from agent_comms.wire_log import WireLog
 from agent_comms.envelope_claim_transitions import ClaimOwner, project_verified_transitions
@@ -128,11 +127,10 @@ def plan(root: Path, execution_id: str) -> TerminalClaimManifest:
         if not (root / f".{name}.lock").is_file():
             raise RecoveryBlocked(f"existing {name} lock is required for read-only planning")
     log = WireLog(root / "bus.jsonl")
-    contention = StoreLockContention(NativeBoundary.lock_wait_seconds)
     with (
-        _store_lock(root / "wire", shared=True, contention=contention),
-        _store_lock(log.path, shared=True, contention=contention) as bus_lock,
-        _store_lock(root / "registry.json", shared=True, contention=contention),
+        _store_lock(root / "wire", shared=True, blocking=False),
+        _store_lock(log.path, shared=True, blocking=False) as bus_lock,
+        _store_lock(root / "registry.json", shared=True, blocking=False),
         CoordinationStore.observing(root / "coordination.sqlite3", lock_timeout=0) as db,
     ):
         execution = ExecutionRecord.one(db, execution_id=execution_id)

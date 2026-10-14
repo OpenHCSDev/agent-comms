@@ -6,11 +6,16 @@ import sqlite3
 import time
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager, nullcontext
+from functools import cached_property
+from typing import TYPE_CHECKING
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import (
     IntegrityViolationError,
 )
+
+if TYPE_CHECKING:
+    from .message_bus import MessageBus
 
 
 class CoordinationSession(CoordinationStore):
@@ -33,12 +38,14 @@ class CoordinationSession(CoordinationStore):
             yield db
 
     @contextmanager
-    def settlement(self, boundary=None):
+    def settlement(
+        self, boundary: NativeBoundary | None = None
+    ) -> Iterator[None]:
         """Standalone settlement owns SQL only, never native file resources."""
         with self.transaction():
             yield None
 
-    def release_resources(self, snapshot, boundary) -> None:
+    def release_resources(self, snapshot, boundary: NativeBoundary | None) -> None:
         """Standalone attempts cannot acquire native file claims."""
 
     @contextmanager
@@ -85,17 +92,14 @@ class CoordinationSession(CoordinationStore):
 class NativeBoundary(ExitStack):
     """One acquired wire/bus/registry lifetime, explicitly borrowed by SQL."""
 
-    lock_wait_seconds = 2.0
-
     def __init__(self, bus, *, blocking=True, contention=None, measurements=None):
         super().__init__()
         from .diagnostics import PublicationMeasurements
-        from .store_files import StoreLockContention
 
         self.bus, self.blocking = bus, blocking
-        self.contention = contention if contention is not None else StoreLockContention(
-            self.lock_wait_seconds if blocking else 0.0
-        )
+        # None preserves the physical lock owner's established policy:
+        # blocking calls wait indefinitely and nonblocking calls fail immediately.
+        self.contention = contention
         self.measurements = measurements if measurements is not None else PublicationMeasurements()
 
     def __enter__(self):
@@ -123,14 +127,17 @@ class NativeBoundary(ExitStack):
 class NativeCoordinationSession(CoordinationSession):
     """Native sessions declare their bus boundary, independent of file existence."""
 
-    def __init__(self, path, **options):
-        super().__init__(path, **options)
+    @cached_property
+    def bus(self) -> MessageBus:
+        """Create native bus owners only when this session first needs a boundary."""
         from .message_bus import MessageBus
         from .registration import Registration
 
-        self.bus = MessageBus(self.path.parent / "bus.jsonl",
-                              Registration(self.path.parent / "registry.json"),
-                              private_claim_writes=True)
+        return MessageBus(
+            self.path.parent / "bus.jsonl",
+            Registration(self.path.parent / "registry.json"),
+            private_claim_writes=True,
+        )
 
     def boundary(self, bus=None, **options):
         selected = self.bus if bus is None else bus
@@ -139,7 +146,9 @@ class NativeCoordinationSession(CoordinationSession):
         return NativeBoundary(selected, **options)
 
     @contextmanager
-    def settlement(self, boundary=None):
+    def settlement(
+        self, boundary: NativeBoundary | None = None
+    ) -> Iterator[NativeBoundary]:
         """Acquire a native boundary, or borrow the caller's already held one."""
         with self.boundary() if boundary is None else nullcontext(boundary) as acquired:
             if acquired.bus.log.path.parent.resolve() != self.path.parent.resolve():
@@ -147,7 +156,7 @@ class NativeCoordinationSession(CoordinationSession):
             with self.transaction():
                 yield acquired
 
-    def release_resources(self, snapshot, boundary) -> None:
+    def release_resources(self, snapshot, boundary: NativeBoundary | None) -> None:
         if not isinstance(boundary, NativeBoundary):
             raise IntegrityViolationError("native release requires an acquired boundary")
         snapshot.release_resources(boundary)
