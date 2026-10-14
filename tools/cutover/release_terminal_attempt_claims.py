@@ -25,6 +25,7 @@ from agent_comms.coordination_tables.attempts import AttemptRecord
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.store_files import _store_lock, StoreLockContention
 from agent_comms.coordination_session import NativeBoundary
+from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair
 from agent_comms.wire_log import WireLog
 from agent_comms.envelope_claim_transitions import ClaimOwner, project_verified_transitions
 
@@ -155,6 +156,17 @@ def repair(
     """Refuse release-set drift before append; verify while all locks remain held."""
     if expected.execution_id != execution_id or not expected.claims:
         raise RecoveryBlocked("a nonempty matching plan is required")
+    # Refuse a stale manifest before Coordination or NativeBoundary can create,
+    # initialize or recover any store. plan() accepts only pre-existing lock
+    # files and holds shared locks throughout its certified, read-only view.
+    try:
+        observed = plan(root, execution_id)
+    except CheckpointNeedsRepair as error:
+        raise RecoveryBlocked(
+            "read-only preflight requires a final checkpoint; nothing changed"
+        ) from error
+    if observed != expected:
+        raise RecoveryBlocked("complete release set differs from the plan; nothing changed")
     database = root / "coordination.sqlite3"
     with (
         Coordination(str(database), lock_timeout=0) as store,
