@@ -20,7 +20,8 @@ from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.tracked_turn import TrackedTurnSession
-from agent_comms.turn_phase import ResponseOutputPhase
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
 from delivery_owner_fixture import canonical_delivery_owner, native_model
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -175,14 +176,24 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             key = message.seq, message.message_id
             notices = comms.views.message_notifications([message])[key]
             assert len(notices) == 1
-            assert notices[0].state == "Responding…" and notices[0].busy
+            assert notices[0].state == "Starting response" and notices[0].busy
             assert comms.views.recent_notifications("beta") == (
                 replace(notices[0], message=message),
             )
             assert calls == []  # Projection never launches or resends an input.
 
-            lease = comms.registry.require("beta").require_turn_lease()
-            comms.agents.transition_turn(lease, ResponseOutputPhase())
+            with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+                assignment = next(
+                    row for row in WakeAssignment.select(
+                        store.session._connection, where="wire_seq=?", parameters=(message.seq,)
+                    ) if row.recipient == "beta"
+                )
+                with store.session.transaction():
+                    ReplayAssessments.accumulate(
+                        store.session._connection,
+                        assignment.lifecycle.execution_id,
+                        ReplayFact.ASSISTANT_OUTPUT,
+                    )
             working = comms.views.message_notifications([message])[key]
             assert working[0].state == "Read - working" and working[0].busy
 
@@ -197,7 +208,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
                 )
                 edit.commit()
             paused = comms.views.message_notifications([message])[key]
-            assert paused[0].state == "Paused" and not paused[0].busy
+            assert paused[0].state == "Read — interrupted, outcome unknown" and not paused[0].busy
             assert comms.views.recent_notifications("beta") == (
                 replace(paused[0], message=message),
             )
