@@ -149,21 +149,36 @@ class QueuedInput:
         return item, owner, document.lookup(item.key)
 
     @staticmethod
-    async def capacity(inputs: InputDrain, session_id: str) -> int:
-        """How many more follow-ups this turn can hold before their own user start."""
-        document = await Coordination.run_worker(inputs.dispositions.read)
+    def _remaining(inputs: InputDrain, session_id: str, document) -> int:
+        """One owner for the follow-up allowance: threshold and count live here."""
         return 32 - sum(
             not document.all_started(source.keys)
             for source in inputs.following_sources.get(session_id, {}).values()
         )
 
+    @staticmethod
+    def _refuse_over_capacity() -> None:
+        raise RequestError.invalid_params(
+            {"reason": "Too many follow-up inputs awaiting their own user start."}
+        )
+
+    @classmethod
+    async def capacity(cls, inputs: InputDrain, session_id: str) -> int:
+        """How many more follow-ups this turn can hold before their own user start."""
+        document = await Coordination.run_worker(inputs.dispositions.read)
+        return cls._remaining(inputs, session_id, document)
+
     @classmethod
     async def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
         """Follow-ups cannot exceed the original live awaiting-start allowance."""
         if await cls.capacity(inputs, session_id) <= 0:
-            raise RequestError.invalid_params(
-                {"reason": "Too many follow-up inputs awaiting their own user start."}
-            )
+            cls._refuse_over_capacity()
+
+    @classmethod
+    def require_capacity_unlocked(cls, inputs: InputDrain, session_id: str) -> None:
+        """Recheck synchronously under wire custody; the pre-check can race."""
+        if cls._remaining(inputs, session_id, inputs.dispositions.read()) <= 0:
+            cls._refuse_over_capacity()
 
     @classmethod
     @asynccontextmanager
@@ -182,8 +197,10 @@ class QueuedInput:
         async with _async_store_lock(inputs.comms._wire_lock_path), AsyncExitStack() as rollback:
             custody = ExitStack()
             rollback.push_async_callback(Coordination.run_worker, custody.close)
-            # No await while holding the wire lock: capacity was checked before
-            # acquisition and capture is synchronous file work under custody.
+            # No await while holding the wire lock. The pre-check above is an
+            # advisory fast path; the binding recheck runs under custody, so
+            # two concurrent reservations cannot both pass a stale count.
+            cls.require_capacity_unlocked(inputs, session_id)
             item, owner, row = cls.capture(
                 inputs, name, text=text, prompt=prompt, echo=echo,
                 images=images, controller=controller, input_id=input_id,
