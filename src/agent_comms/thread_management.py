@@ -72,7 +72,19 @@ class ForkSpec:
     def initial_prompt(self) -> str:
         return self.task if self.prompt is None else self.prompt
 
-
+    def child(self, parent: Thread, session_file: str) -> Thread:
+        """Derive the child declaration from the exact parent and fork result."""
+        return Thread(
+            name=self.name,
+            tags=parent.tags if self.tags is None else self.tags,
+            worktree=parent.worktree,
+            parent=parent.name,
+            task=self.task,
+            session_file=session_file,
+            process_identity=None,
+            model=parent.model,
+            thinking_level=parent.thinking_level,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -584,7 +596,7 @@ class ThreadManagement:
         resolved_bin = NativeArguments.configured_binary(pi_bin)
         parent = self._fork_parent(spec)
         self.registry.require_declaration_available(
-            self._fork_child(spec, parent, parent.require_saved_session())
+            spec.child(parent, parent.require_saved_session())
         )
         location = asyncio.run(parent.backend.fork(parent, resolved_bin))
         with _store_lock(self._wire_lock_path):
@@ -603,21 +615,6 @@ class ThreadManagement:
             )
         return parent
 
-    @staticmethod
-    def _fork_child(spec: ForkSpec, parent: Thread, session_file: str) -> Thread:
-        """Derive the child declaration from the exact parent and fork result."""
-        return Thread(
-            name=spec.name,
-            tags=parent.tags if spec.tags is None else spec.tags,
-            worktree=parent.worktree,
-            parent=parent.name,
-            task=spec.task,
-            session_file=session_file,
-            process_identity=None,
-            model=parent.model,
-            thinking_level=parent.thinking_level,
-        )
-
     def _fork_unlocked(self, spec: ForkSpec, pi_bin: str, forked_from: str, location) -> Thread:
         """Declare and launch the forked child under the wire lock.
 
@@ -632,7 +629,7 @@ class ThreadManagement:
                 f"Parent thread {spec.parent!r} changed its saved session during the fork; "
                 f"the created fork {location.path} was not registered."
             )
-        child = self._fork_child(spec, parent, location.path)
+        child = spec.child(parent, location.path)
         # A new incarnation's inbox already starts at its creation time
         # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
         child = self.registry._declare_unlocked(child)
