@@ -118,6 +118,7 @@ def native_rpc_fixture(monkeypatch):
     from agent_comms.native_pi import NativePiRpcLaunch
 
     original = NativePiRpcLaunch.managed
+    original_retained = NativePiRpcLaunch.retained_managed
 
     def prepare(
         command, arguments, *, worktree, environment=None, session_file=None
@@ -150,4 +151,26 @@ def native_rpc_fixture(monkeypatch):
             configuration=RestartEnvironment.inherit(env),
         )
 
+    def retained(
+        launch, command, arguments, *, worktree, environment=None, session_file=None
+    ):
+        if (
+            Path(command).is_file()
+            and Path(command).resolve() == Path(launch.argv[0]).resolve()
+            and Path(worktree).resolve() == launch.cwd.resolve()
+            and (
+                Path(session_file).resolve() if session_file is not None else None
+            ) == launch.session.path
+        ):
+            return launch
+        return original_retained(
+            launch,
+            command,
+            arguments,
+            worktree=worktree,
+            environment=environment,
+            session_file=session_file,
+        )
+
     monkeypatch.setattr(NativePiRpcLaunch, "managed", prepare)
+    monkeypatch.setattr(NativePiRpcLaunch, "retained_managed", retained)

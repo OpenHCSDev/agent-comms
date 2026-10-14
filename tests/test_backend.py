@@ -2252,6 +2252,8 @@ prompt = json.loads(sys.stdin.readline())
 send({{"type":"response", "command":"prompt", "id":prompt["id"], "success":True}})
 send({{"type":"message_start", "message":{{"role":"user", "content":prompt["message"],
        "inputId":prompt["inputId"]}}}})
+mode = json.loads(sys.stdin.readline())
+assert mode["type"] == "set_steering_mode"
 steer = json.loads(sys.stdin.readline())
 assert steer["streamingBehavior"] == "steer" and steer["message"] == "inbox update"
 case = {case!r}
@@ -2270,8 +2272,6 @@ send({{"type":"message_end", "message":{{
     "role":"assistant", "content":[], "stopReason":"stop",
 }}}})
 send({{"type":"agent_settled"}})
-sys.stdin.readline()  # postturn get_state
-sys.stdin.readline()  # get_session_stats
 send({{"type":"response", "command":"get_session_stats", "success":True,
        "data":{{"contextUsage":{{"tokens":33}}}}}})
 """,
@@ -2294,7 +2294,7 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
             assert "original only" not in events[-1].text
         assert not backend.TurnSession.active
 
-    async def test_inbox_queued_at_settled_but_not_dispatched_is_not_success(self, tmp_path):
+    async def test_inbox_queued_after_settled_stays_outside_completed_turn(self, tmp_path):
         stub = _stub(
             tmp_path,
             f"#!{sys.executable}\n"
@@ -2330,8 +2330,8 @@ for line in sys.stdin:
                 if isinstance(event, ae.StreamSettled):
                     queue.put_nowait(steer("late inbox update"))
                     finish.set()
-        assert events[-1].ok is False
-        assert events[-1].reason_code == "queued_input_start_missing"
+        assert events[-1].ok is True
+        assert not [event for event in events if isinstance(event, ae.InputStarted)]
         assert [event for event in events if isinstance(event, ae.Done)] == [events[-1]]
 
     async def test_stock_pi_capability_preflight_sends_no_prompt(self, tmp_path):
@@ -2389,7 +2389,7 @@ sys.exit(1)
         assert done.reason_code == "pi_input_id_unavailable"
         assert done.diagnostic["reason"] == "native_preflight_exit"
         assert cause in done.text
-        assert "prompt was not sent" in done.text
+        assert "ended before attestation" in done.text
         assert "private unsent prompt" not in done.text
         assert cause not in str(done.diagnostic)
         assert not received.exists()
@@ -2398,7 +2398,11 @@ sys.exit(1)
         self, tmp_path, monkeypatch
     ):
         session_file = tmp_path / "session.jsonl"
-        session_file.write_bytes(b"x" * 123)
+        session_file.write_text(json.dumps({
+            "type": "session", "version": 3, "id": "saved",
+            "timestamp": "2026-10-14T00:00:00.000Z", "cwd": str(tmp_path),
+        }) + "\n")
+        session_size = session_file.stat().st_size
         received = tmp_path / "received-prompt"
         stub = _stub(
             tmp_path,
@@ -2425,9 +2429,9 @@ if select.select([sys.stdin], [], [], 0)[0]:
         assert done.ok is False
         assert done.reason_code == "pi_input_id_unavailable"
         assert "phase=await_get_state" in done.text
-        assert "session_bytes=123" in done.text
+        assert f"session_bytes={session_size}" in done.text
         assert done.diagnostic["reason"] == "native_preflight_timeout"
-        assert done.diagnostic["session_bytes"] == 123
+        assert done.diagnostic["session_bytes"] == session_size
         assert done.diagnostic["wait_ms"] >= 0
         assert "elapsed_ms=" in done.text
         assert "wait_ms=" in done.text
@@ -2441,9 +2445,15 @@ if select.select([sys.stdin], [], [], 0)[0]:
     ):
         from agent_comms.native_startup import NativeStartupAdmission, NativeStartupPolicy
 
+        session = tmp_path / "session.jsonl"
+        session.write_text(json.dumps({
+            "type": "session", "version": 3, "id": "saved",
+            "timestamp": "2026-10-14T00:00:00.000Z", "cwd": str(tmp_path),
+        }) + "\n")
+        initial_size = session.stat().st_size
         policy = NativeStartupPolicy(
             readiness_seconds=0.05,
-            readiness_step_bytes=64,
+            readiness_step_bytes=initial_size,
             readiness_step_seconds=0.2,
             readiness_max_seconds=0.4,
         )
@@ -2460,14 +2470,13 @@ assert state["type"] == "get_state"
 time.sleep(0.12)
 print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
                   "success":True, "data":{{"nativeInputProofCapability":
-                  {CAPABILITY!r}}}}}), flush=True)
+                  {CAPABILITY!r}, "sessionId":"saved",
+                  "sessionFile":{str(session)!r}}}}}), flush=True)
 if select.select([sys.stdin], [], [], 0.15)[0]:
     line = sys.stdin.readline()
     if line: open({str(received)!r}, "w").write(line)
 """,
         )
-        session = tmp_path / "session.jsonl"
-        session.write_bytes(b"x" * 64)
         small = [
             event
             async for event in one_turn_events(
@@ -2481,7 +2490,11 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
         ]
         assert small[-1].diagnostic["budget_ms"] == 50
         assert small[-1].diagnostic["reason"] == "native_preflight_timeout"
-        session.write_bytes(b"x" * 65)
+        session.write_text(session.read_text() + json.dumps({
+            "type": "message", "id": "new", "parentId": None,
+            "timestamp": "2026-10-14T00:00:01.000Z",
+            "message": {"role": "user", "content": "changed"},
+        }) + "\n")
         # The send-boundary probe must not inherit the deliberate timeout delay.
         fast_stub = _stub(
             tmp_path,
@@ -2492,7 +2505,8 @@ state = json.loads(sys.stdin.readline())
 assert state["type"] == "get_state"
 print(json.dumps({{"type":"response", "command":"get_state", "id":state["id"],
                   "success":True, "data":{{"nativeInputProofCapability":
-                  {CAPABILITY!r}}}}}), flush=True)
+                  {CAPABILITY!r}, "sessionId":"saved",
+                  "sessionFile":{str(session)!r}}}}}), flush=True)
 if select.select([sys.stdin], [], [], 0.15)[0]:
     line = sys.stdin.readline()
     if line: open({str(received)!r}, "w").write(line)
@@ -2514,20 +2528,17 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
         assert large[-1].ok is False
         assert "Input authority changed before Pi prompt send" in large[-1].text
         assert not received.exists()
-        # A denied send and a timeout both release every real startup slot.
-        leases = [NativeStartupAdmission(tmp_path) for _ in range(4)]
-        try:
-            for lease in leases:
-                await asyncio.wait_for(lease.acquire(), 0.5)
-        finally:
-            for lease in leases:
-                lease.release()
+        # Startup is independently owned per native child; no global slot remains.
+        assert NativeStartupAdmission(tmp_path).root == tmp_path
 
     async def test_persistent_pi_reuses_one_child_with_fresh_prompt_receipts(
         self, tmp_path, monkeypatch
     ):
         session_file = tmp_path / "session.jsonl"
-        session_file.write_text("session\n")
+        session_file.write_text(json.dumps({
+            "type": "session", "version": 3, "id": "fixed-session",
+            "timestamp": "2026-10-14T00:00:00.000Z", "cwd": str(tmp_path),
+        }) + "\n")
         proof_file = tmp_path / "session.jsonl.input-proof"
         proof_file.write_text("proof\n")
         ids_file = tmp_path / "prompt-ids"
@@ -2543,9 +2554,10 @@ for line in sys.stdin:
     command = json.loads(line)
     kind = command["type"]
     if kind == "get_state":
+        session_id = json.loads(open({str(session_file)!r}).readline())["id"]
         send({{"type":"response","command":kind,"id":command.get("id"),
                "success":True,"data":{{"nativeInputProofCapability":
-               "pi-native-input-v1-live-only","sessionId":"fixed-session",
+               "pi-native-input-v1-live-only","sessionId":session_id,
                "sessionFile":{str(session_file)!r}}}}})
     elif kind == "prompt":
         with open({str(ids_file)!r}, "a") as output:
@@ -2602,13 +2614,16 @@ for line in sys.stdin:
                     persistent_session=persistent,
                 )
             ]
-            assert first[-1].ok is True and second[-1].ok is True
+            assert first[-1].ok is True and second[-1].ok is True, second
             assert persistent.custody.child.proc is first_proc and first_proc is not None
             assert first_proc.returncode is None
             ids = [line.split() for line in ids_file.read_text().splitlines()]
             assert len(ids) == 2
             assert ids[0][0] != ids[1][0] and ids[0][1] != ids[1][1]
-            session_file.write_text("outside writer changed the saved branch\n")
+            session_file.write_text(json.dumps({
+                "type": "session", "version": 3, "id": "changed-session",
+                "timestamp": "2026-10-14T00:00:01.000Z", "cwd": str(tmp_path),
+            }) + "\n")
             third = [
                 event
                 async for event in backend.stream_agent_events(
@@ -2809,6 +2824,8 @@ initial = {{"type":"message_start","message":{{"role":"user","content":"same tex
 if {case!r} != "foreign_identical_initial": initial["message"]["inputId"] = first_id
 send(initial)
 if {case!r} in ("valid_steer", "wrong_steer_id"):
+    mode = json.loads(sys.stdin.readline())
+    assert mode["type"] == "set_steering_mode"
     steer = json.loads(sys.stdin.readline())
     assert steer["message"] == "peer" and len(steer["inputId"]) == 32
     send({{"type":"response","command":"prompt","id":steer["id"],"success":True}})
@@ -2851,6 +2868,8 @@ prompt = json.loads(sys.stdin.readline())
 send({"type":"response","command":"prompt","id":prompt["id"],"success":True})
 send({"type":"message_start","message":{"role":"user","content":prompt["message"],
       "inputId":prompt["inputId"]}})
+mode = json.loads(sys.stdin.readline())
+assert mode["type"] == "set_steering_mode"
 steer = json.loads(sys.stdin.readline())
 send({"type":"message_start","message":{"role":"user","content":steer["message"],
       "inputId":steer["inputId"]}})
@@ -2996,8 +3015,6 @@ class TestPrRpcParsing:
     async def test_rpc_model_and_context_metadata(self, tmp_path):
         rpc_lines = "\n".join(
             [
-                '{"type":"response","command":"prompt","id":"agent-comms-prompt","success":true}',
-                '{"type":"message_start","message":{"role":"user","content":"t"}}',
                 '{"type":"response","command":"get_state","success":true,"data":'
                 '{"model":{"provider":"openrouter","id":"z-ai/glm","contextWindow":1000},'
                 '"sessionName":"work","sessionFile":"/tmp/pi-session.jsonl"}}',
@@ -3033,6 +3050,7 @@ IFS= read -r state
 IFS= read -r prompt
 printf '%s' "$prompt" | {sys.executable} -c 'import json, sys; print(json.dumps({{"type": "response", "command": "prompt", "id": json.load(sys.stdin)["id"], "success": True}}))'
 echo '{{"type":"message_start","message":{{"role":"user","content":"parent task"}}}}'
+IFS= read -r mode
 IFS= read -r steering
 printf '%s' "$steering" > '{steering_path}'
 cat <<'EOF'
@@ -3076,6 +3094,7 @@ IFS= read -r prompt
 printf '%s' "$prompt" | {sys.executable} -c 'import json, sys; print(json.dumps({{"type": "response", "command": "prompt", "id": json.load(sys.stdin)["id"], "success": True}}))'
 echo '{{"type":"message_start","message":{{"role":"user","content":"coordinate"}}}}'
 echo '{{"type":"agent_settled"}}'
+IFS= read -r mode
 IFS= read -r steering
 echo '{{"type":"message_update","assistantMessageEvent":{{"type":"text_delta","delta":"pong"}}}}'
 echo '{{"type":"agent_settled"}}'
@@ -3111,9 +3130,11 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
     ):
         summary = "recap " * 900
         rpc_events = [
-            {"type": "response", "command": "prompt", "id": "agent-comms-prompt", "success": True},
-            {"type": "message_start", "message": {"role": "user", "content": "work"}},
-            {"type": "message_update", "usage": {"totalTokens": 83}},
+            {
+                "type": "message_update",
+                "message": {"role": "assistant", "content": []},
+                "usage": {"totalTokens": 83},
+            },
             {"type": "compaction_start", "reason": "threshold"},
             {
                 "type": "compaction_end",
@@ -3131,15 +3152,7 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
                 "data": {"contextUsage": {}},
             },
         ]
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\nimport json, sys\n"
-            "sys.stdin.readline(); sys.stdin.readline()\n"
-            f"for event in {rpc_events!r}: print(json.dumps(event), flush=True)\n",
-        )
-        events = [
-            event async for event in one_turn_events(stub, [], "work", str(tmp_path))
-        ]
+        events = await _rpc_events(tmp_path, rpc_events)
         assert next(
             event
             for event in events
@@ -3182,8 +3195,8 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
             (["t", "t"], ["stop"], "unrecognized_followup_input"),
             (["t"], [], "assistant_final_stop_missing"),
             (["t"], ["toolUse"], "assistant_final_stop_missing"),
-            (["t"], ["error"], "assistant_final_stop_missing"),
-            (["t"], ["aborted"], "assistant_final_stop_missing"),
+            (["t"], ["error"], "model_request_failed"),
+            (["t"], ["aborted"], "model_request_failed"),
             (["t"], ["toolUse", "stop"], None),
         ],
     )
@@ -3274,6 +3287,8 @@ if {foreign_first}:
     send({{"type": "message_start", "message": {{"role": "user", "content": "t"}}}})
 else:
     send({{"type": "message_start", "message": {{"role": "user", "content": "t"}}}})
+    mode = json.loads(sys.stdin.readline())
+    assert mode["type"] == "set_steering_mode"
     steer = json.loads(sys.stdin.readline())
     assert steer["message"] == f'[agent-comms input-id: {{steer["id"]}}]\\npeer'
     assert steer["streamingBehavior"] == "steer"
@@ -3312,6 +3327,8 @@ sys.stdin.readline()
 prompt = json.loads(sys.stdin.readline())
 send({"type": "response", "command": "prompt", "id": prompt["id"], "success": True})
 send({"type": "message_start", "message": {"role": "user", "content": "t"}})
+mode = json.loads(sys.stdin.readline())
+assert mode["type"] == "set_steering_mode"
 steer = json.loads(sys.stdin.readline())
 assert steer["message"] == f'[agent-comms input-id: {steer["id"]}]\\npeer'
 # Pi's ACK can mean queued or handled by an extension; no user start is promised.
