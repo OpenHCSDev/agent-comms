@@ -46,15 +46,19 @@ class SelectedWakeSegment(InstructionSegment):
         sent_outcomes = tuple(sent_outcomes)
         if len(sent_outcomes) > cls.sent_limit:
             raise ValueError("Selected wake sent outcomes exceed their bounded window")
-        if any(not outcome.changed or outcome.message is None for outcome in sent_outcomes):
-            raise ValueError("Selected wake requires changed authored-message outcomes")
+        sent_messages = []
+        for outcome in sent_outcomes:
+            changed, message = outcome.changed, outcome.message
+            if not changed or message is None:
+                raise ValueError("Selected wake requires changed authored-message outcomes")
+            sent_messages.append(message)
         return cls(
             provenance=(
                 instruction.source,
                 relevance.source,
                 OwnerProvenance(owner.incarnation, NextContextTurn().source_revision(owner)),
                 *(WireProvenance(initial.message.reference) for initial, _ in sources),
-                *(WireProvenance(outcome.message.reference) for outcome in sent_outcomes),
+                *(WireProvenance(message.reference) for message in sent_messages),
             ),
             instruction=instruction,
             sources=tuple(sources),
@@ -105,21 +109,23 @@ class SelectedWakeSegment(InstructionSegment):
             ensure_ascii=True,
             separators=(",", ":"),
         )
+        sent_values = []
+        for outcome in self.sent_outcomes:
+            message, reference = outcome.message, outcome.reply_reference
+            if message is None:
+                raise ValueError("Selected wake outcome lost its authored message")
+            sent_values.append({
+                "source_seq": message.seq,
+                "target": message.target,
+                "recipient": outcome.recipient,
+                "state": outcome.state,
+                "detail": outcome.detail,
+                "reply_reference": (
+                    FieldCodec.encode(reference) if reference is not None else None
+                ),
+            })
         sent_outcomes = json.dumps(
-            [
-                {
-                    "source_seq": outcome.message.seq,
-                    "target": outcome.message.target,
-                    "recipient": outcome.recipient,
-                    "state": outcome.state,
-                    "detail": outcome.detail,
-                    "reply_reference": (
-                        FieldCodec.encode(outcome.reply_reference)
-                        if outcome.reply_reference is not None else None
-                    ),
-                }
-                for outcome in self.sent_outcomes
-            ],
+            sent_values,
             ensure_ascii=True,
             separators=(",", ":"),
         )
