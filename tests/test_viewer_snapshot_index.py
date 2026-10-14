@@ -124,6 +124,46 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
     assert len(opened) == 1 and opened[0].stream.closed
 
 
+def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
+    """A changed opened cut is stale observation work, not an observer failure."""
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    comms.messaging.send("bob", "#team", "first")
+
+    class Results:
+        def __init__(self):
+            self.values = []
+
+        def send(self, value):
+            self.values.append(value)
+
+    results = Results()
+    service = ObservationService(comms, results)
+    request = ObserveSidebar(str(tmp_path), True, False)
+    service.interest = request.apply(service.interest)
+    service.observe()  # The cheap roster stage completes first.
+
+    original = comms.views.presentation.display_view_metrics
+
+    def change_source(*args, **kwargs):
+        metrics = original(*args, **kwargs)
+        source = comms.bus.log.path
+        observed = source.stat()
+        os.utime(source, ns=(observed.st_atime_ns, observed.st_mtime_ns + 1))
+        return metrics
+
+    monkeypatch.setattr(comms.views.presentation, "display_view_metrics", change_source)
+    service.observe()
+    assert len([value for value in results.values if isinstance(value, SidebarObserved)]) == 1
+
+    monkeypatch.setattr(comms.views.presentation, "display_view_metrics", original)
+    comms.messaging.send("bob", "#team", "second")
+    service.observe()
+    snapshots = [value.snapshot for value in results.values if isinstance(value, SidebarObserved)]
+    assert len(snapshots) == 2
+    assert snapshots[-1].channel_unread["#team"] == 2
+
+
 def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))

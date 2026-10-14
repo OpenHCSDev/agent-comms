@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex
+from .coordination_errors import StaleRevision
 from .private_path import FileRevision
 from .errors import RelationViolationError
 
@@ -47,7 +48,7 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
         if source is None:
             return {}, {}
         if not source.opened_by(stream):
-            raise RelationViolationError("Activity source changed before its captured read")
+            raise StaleRevision("Activity source changed before its captured read")
         if source.size:
             stream.seek(source.size - 1)
             if stream.read(1) != b"\n":
