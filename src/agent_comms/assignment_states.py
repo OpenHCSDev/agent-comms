@@ -411,12 +411,7 @@ class CompletedAssignment(BoundAssignment):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        reference = activity.response_reference
-        if reference is None:
-            return activity.progress.read_notification(notification)
-        return activity.progress.answered_notification(
-            notification, reference, activity.response_received_at_ms
-        )
+        return activity.completed_notification(notification)
 
     def require_completion(self) -> Engagement:
         return self.decision

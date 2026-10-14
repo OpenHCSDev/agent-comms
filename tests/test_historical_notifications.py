@@ -102,15 +102,15 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.log.read_delivery_cohort(root_id, messages[0].seq).audience.recipients
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
-    from agent_comms.notification_assignment import AssignmentActivity, ShownToModelProgress
+    from agent_comms.notification_assignment import (
+        ShownToModelProgress,
+        UnansweredAssignmentActivity,
+    )
 
-    activity = AssignmentActivity(
+    activity = UnansweredAssignmentActivity(
         triage_inflight=False,
         current_execution_id=None,
         context_progress=ShownToModelProgress(1),
-        response_seq=None,
-        response_message_id=None,
-        response_received_at_ms=None,
     )
     with pytest.raises(TypeError, match="activity"):
         assignment.notification(
@@ -139,26 +139,33 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     recipient, = old.bus.log.read_delivery_cohort(
         root_id, messages[0].seq
     ).audience.recipients
+    from agent_comms.message_reference import MessageReference
     from agent_comms.notification_assignment import (
-        AssignmentActivity,
+        AnsweredAssignmentActivity,
         NotShownProgress,
         RemovedContextProgress,
         ShownToModelProgress,
+        UndatedContextProgress,
+        UnansweredAssignmentActivity,
     )
 
-    sent_activity = AssignmentActivity(
+    sent_activity = UnansweredAssignmentActivity(
         triage_inflight=False,
         current_execution_id=None,
         context_progress=NotShownProgress(),
-        response_seq=None,
-        response_message_id=None,
-        response_received_at_ms=None,
     )
     engagement = EngagedAssignment.build(FullWake(), "durable-execution", "sender")
     sent = engagement.notification(
         recipient,
         observation=RecordedRecipientActivity(),
         activity=sent_activity,
+        updated_at_ms=1_000,
+    )
+    undated_activity = replace(sent_activity, context_progress=UndatedContextProgress())
+    undated = engagement.notification(
+        recipient,
+        observation=RecordedRecipientActivity(),
+        activity=undated_activity,
         updated_at_ms=1_000,
     )
     read_activity = replace(sent_activity, context_progress=ShownToModelProgress(2_000))
@@ -168,11 +175,12 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         activity=read_activity,
         updated_at_ms=1_000,
     )
-    answered_activity = replace(
-        read_activity,
-        response_seq=99,
-        response_message_id="durable-reply",
-        response_received_at_ms=3_000,
+    answered_activity = AnsweredAssignmentActivity(
+        read_activity.triage_inflight,
+        read_activity.current_execution_id,
+        read_activity.context_progress,
+        MessageReference(99, "durable-reply"),
+        3_000,
     )
     answered = CompletedAssignment.build(
         FullWake(), "durable-execution", "sender"
@@ -195,16 +203,18 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     ).notification(
         recipient,
         observation=RecordedRecipientActivity(),
-        activity=replace(
-            removed_activity,
-            response_seq=99,
-            response_message_id="durable-reply",
-            response_received_at_ms=3_000,
+        activity=AnsweredAssignmentActivity(
+            removed_activity.triage_inflight,
+            removed_activity.current_execution_id,
+            removed_activity.context_progress,
+            MessageReference(99, "durable-reply"),
+            3_000,
         ),
         updated_at_ms=3_000,
     )
 
     assert sent.state == "Sent" and sent.read_at_ms is None
+    assert undated.state == "Read" and undated.read_at_ms is None
     assert read.state.startswith("Read ") and read.read_at_ms == 2_000
     assert answered.state.startswith("Answered ") and answered.answered_at_ms == 3_000
     assert removed.state == "Removed"
