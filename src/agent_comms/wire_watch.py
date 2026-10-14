@@ -59,6 +59,13 @@ class WatchSource:
         return cls(path.parent, frozenset({os.fsencode(path.name)}), modified)
 
 
+@dataclass(frozen=True)
+class WatchedDirectory:
+    names: frozenset[bytes]
+    modified: bool
+    reopen: frozenset[bytes]
+
+
 class WireWatch(ABC):
     """One change-driven observation lifetime, including notification loss."""
 
@@ -170,20 +177,17 @@ def open_wire_watcher(*sources: WatchSource) -> WireWatch:
         raise ValueError("Wire watcher requires at least one source")
     if sys.platform != "linux":
         return PollingWireWatch()
-    try:
-        libc = ctypes.CDLL(None, use_errno=True)
-        init = libc.inotify_init1
-        add = libc.inotify_add_watch
-    except (AttributeError, OSError):
-        return PollingWireWatch()
+    libc = ctypes.CDLL(None, use_errno=True)
+    init = libc.inotify_init1
+    add = libc.inotify_add_watch
     init.argtypes = [ctypes.c_int]
     init.restype = ctypes.c_int
     add.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
     add.restype = ctypes.c_int
     fd = init(os.O_NONBLOCK | os.O_CLOEXEC)
     if fd < 0:
-        return PollingWireWatch()
-    grouped: dict[Path, tuple[frozenset[bytes], bool, frozenset[bytes]]] = {}
+        raise OSError(ctypes.get_errno(), "inotify_init1 failed")
+    grouped: dict[Path, WatchedDirectory] = {}
     for source in sources:
         directory = source.directory
         names, reopen = source.names, frozenset()
@@ -191,26 +195,29 @@ def open_wire_watcher(*sources: WatchSource) -> WireWatch:
             names = frozenset({os.fsencode(directory.name)})
             reopen = names
             directory = directory.parent
-        current_names, modified, current_reopen = grouped.get(
-            directory, (frozenset(), False, frozenset())
+        current = grouped.get(
+            directory, WatchedDirectory(frozenset(), False, frozenset())
         )
-        grouped[directory] = (
-            current_names | names,
-            modified or (source.modified and not reopen),
-            current_reopen | reopen,
+        grouped[directory] = WatchedDirectory(
+            current.names | names,
+            current.modified or (source.modified and not reopen),
+            current.reopen | reopen,
         )
     names_by_watch = {}
     reopen_by_watch = {}
-    for directory, (names, modified, reopen) in grouped.items():
+    for directory, watched in grouped.items():
         watch = add(
             fd, os.fsencode(directory),
-            _MASK | (_IN_MODIFY if modified else 0) | (_IN_CREATE if reopen else 0),
+            _MASK
+            | (_IN_MODIFY if watched.modified else 0)
+            | (_IN_CREATE if watched.reopen else 0),
         )
         if watch < 0:
+            error = OSError(ctypes.get_errno(), f"inotify_add_watch failed for {directory}")
             os.close(fd)
-            return PollingWireWatch()
-        names_by_watch[watch] = names
-        reopen_by_watch[watch] = reopen
+            raise error
+        names_by_watch[watch] = watched.names
+        reopen_by_watch[watch] = watched.reopen
     try:
         return WireChangeWatch(
             fd, asyncio.get_running_loop(), tuple(sources),
@@ -218,4 +225,4 @@ def open_wire_watcher(*sources: WatchSource) -> WireWatch:
         )
     except (NotImplementedError, OSError):
         os.close(fd)
-        return PollingWireWatch()
+        raise
