@@ -98,18 +98,17 @@ async def test_attached_declaration_publishes_membership_without_acquiring_execu
         await attachment.shutdown()
 
 
-def test_thread_model_request_configuration_round_trips_legacy_rows():
+def test_thread_service_tier_round_trips_legacy_rows():
     from agent_comms.field_codec import FieldCodec
+    from agent_comms.pi_vocabulary import ServiceTier
     from agent_comms.threads import Thread
 
     encoded = FieldCodec.encode(Thread("legacy", frozenset(), "."))
     assert encoded.pop("service_tier") == "priority"
-    assert encoded.pop("max_output_tokens") is None
     restored = FieldCodec.decode(Thread, encoded)
-    assert restored.service_tier.value == "priority"
-    assert restored.max_output_tokens is None
-    with pytest.raises(ValueError, match="maximum output tokens"):
-        Thread("invalid", frozenset(), ".", max_output_tokens=0)
+    assert restored.service_tier is ServiceTier.PRIORITY
+    standard = Thread("standard", frozenset(), ".", service_tier=ServiceTier.STANDARD)
+    assert FieldCodec.decode(Thread, FieldCodec.encode(standard)).service_tier is ServiceTier.STANDARD
 
 
 async def test_native_observation_only_initializes_unset_configuration(owner, tmp_path):
@@ -117,31 +116,26 @@ async def test_native_observation_only_initializes_unset_configuration(owner, tm
     thread = owner._comms.registry.require(session.session_id)
     assert thread.thinking_level is None
     assert thread.service_tier.value == "priority"
-    assert thread.max_output_tokens is None
     await owner.sessions.observe_native_configuration(
         session.session_id, thread.name, events.AgentInfo(
-            model="test/two", thinking_level="high", max_output_tokens=128_000
+            model="test/two", thinking_level="high"
         )
     )
     observed = owner._comms.registry.require(thread.name)
     assert observed.model == "test/one"
     assert observed.thinking_level is HighThinkingLevel
-    assert observed.max_output_tokens == 128_000
     environment = observed.native_environment(
         owner._comms.root, owner._comms.registry.snapshot(), observed.worktree
     )
     assert environment["AGENT_COMMS_SERVICE_TIER"] == "priority"
-    assert environment["AGENT_COMMS_MAX_OUTPUT_TOKENS"] == "128000"
     owner._comms.threads.set_thread_configuration(owner._comms.registry.require(thread.name), thinking_level='off')
     before = (owner._comms.root / "registry.json").read_bytes()
     await owner.sessions.observe_native_configuration(
         session.session_id, thread.name, events.AgentInfo(
-            model="test/two", thinking_level="high", max_output_tokens=256_000
+            model="test/two", thinking_level="high"
         )
     )
-    retained = owner._comms.registry.require(thread.name)
-    assert retained.thinking_level is OffThinkingLevel
-    assert retained.max_output_tokens == 128_000
+    assert owner._comms.registry.require(thread.name).thinking_level is OffThinkingLevel
     assert (owner._comms.root / "registry.json").read_bytes() == before
 
 

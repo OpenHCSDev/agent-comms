@@ -147,6 +147,7 @@ class UnknownCompactionReason(CompactionReason):
 class ServiceTier(StrEnum):
     """Provider request service selected with a thread's model configuration."""
 
+    STANDARD = "standard"
     PRIORITY = "priority"
 
 

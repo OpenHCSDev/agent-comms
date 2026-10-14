@@ -260,7 +260,6 @@ class AgentInfo(AgentEvent):
     context_used: int | None = None
     context_size: int | None = None
     thinking_level: str | None = None
-    max_output_tokens: int | None = None
 
 
 @dataclass(frozen=True)
