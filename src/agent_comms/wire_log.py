@@ -25,7 +25,13 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
-from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
+from .bus_projection import (
+    AppendCheckpoint,
+    BusAppendIndex,
+    Checkpoint,
+    PreparedCheckpoint,
+    StoredCheckpoint,
+)
 from .envelope_claim_transitions import (
     ClaimProjection,
     project_verified_transitions,
@@ -67,28 +73,28 @@ class OpenedWireSnapshot:
     through: int
     stream: BinaryIO | None
     revision: FileRevision | None
-    _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | None] = field(
+    _append_checkpoints: dict[BusAppendIndex, PreparedCheckpoint] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
 
     def capture_append_indexes(
-        self, prepared: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...],
+        self, prepared: tuple[tuple[BusAppendIndex, PreparedCheckpoint], ...],
     ) -> None:
         self._append_checkpoints.update(prepared)
 
     def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
         """Validate the captured candidate only when a consumer reads this cut."""
-        record = index.capture(self._append_checkpoints.get(index), self.stream, self.revision)
-        self._append_checkpoints[index] = record
-        return record
+        return index.capture(self._append_checkpoints.get(index), self.stream, self.revision)
 
     def remember_append_checkpoint(
         self, index: BusAppendIndex[Checkpoint], record: Checkpoint,
-    ) -> None:
+    ) -> StoredCheckpoint[Checkpoint]:
         """Keep a computed exact-cut value with this existing source resource."""
         if record.source != self.revision:
             raise ValueError("Computed append checkpoint belongs to another source cut")
-        self._append_checkpoints[index] = index.remember(record)
+        stored = index.remember(record)
+        self._append_checkpoints[index] = stored
+        return stored
 
     @property
     def boundary(self) -> int:
@@ -603,7 +609,7 @@ class WireLog:
             matched, _, _ = self._keyed_receipt_unlocked(intent)
             return matched
 
-    def prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...]:
+    def prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, PreparedCheckpoint], ...]:
         """Read registered index candidates before taking any source locks."""
         return tuple((index, index.prepare()) for index in self._append_indexes)
 

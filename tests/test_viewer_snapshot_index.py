@@ -150,7 +150,22 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     assert fresh.views.viewer_snapshot(str(tmp_path)) == wire(tmp_path).views.viewer_snapshot(str(tmp_path))
 
 
-def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
+def test_display_checkpoint_reads_raw_signed_payload_without_encoding(tmp_path):
+    from agent_comms.field_codec import FieldCodec
+
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    comms.messaging.send("bob", "#team", "retained")
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
+
+    index = BusDisplayIndex(comms.bus.log.path, viewer)
+    with patch.object(FieldCodec, "encode", side_effect=AssertionError("read re-encoded")):
+        stored = index.prepare()
+    assert stored is not None and stored.record.counts["#team"] == 1
+
+
+def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path, caplog):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
@@ -160,9 +175,14 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
 
     checkpoint = BusDisplayIndex(comms.bus.log.path, comms.messaging.user_identity(str(tmp_path)).name).path
     cached = json.loads(checkpoint.read_text())
-    cached["counts"]["#team"] = 0
+    cached["payload"]["counts"]["#team"] = 0
     checkpoint.write_text(json.dumps(cached))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+    fresh = wire(tmp_path)
+    with caplog.at_level("WARNING", logger="agent_comms.bus_projection"):
+        assert fresh.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+        assert fresh.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+    damaged = [record for record in caplog.records if "damaged disposable bus index" in record.message]
+    assert len(damaged) == 1 and str(checkpoint) in damaged[0].message
 
     bus_path = comms.bus.log.path
     replacement = bus_path.with_name("replacement.jsonl")
@@ -333,7 +353,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     checkpoint = BusDisplayIndex(comms.bus.log.path, viewer).path
     current = json.loads(checkpoint.read_text())
-    assert next(scope for scope in current['semantics']['scopes']
+    assert next(scope for scope in current['payload']['semantics']['scopes']
                 if scope['channel'] == '#team')['any_mode'] is True
 
 

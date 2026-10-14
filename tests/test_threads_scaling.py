@@ -13,7 +13,6 @@ from agent_comms.bus_projection import AppendCheckpoint
 from agent_comms.private_path import FileRevision
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.messages import Message
 
@@ -240,7 +239,9 @@ def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monk
 
     monkeypatch.setattr(BusAppendIndex, "_read", observed_read)
     monkeypatch.setattr(AppendCheckpoint, "accepts", observed_accepts)
-    wired.views.viewer_snapshot("/lock-scope-viewer")
+    # A new observer reads the persisted projection. The original owner keeps
+    # its already-decoded current revision and does no proportional work.
+    wire(wired.root).views.viewer_snapshot("/lock-scope-viewer")
     assert reads and checks
 
 
@@ -256,8 +257,8 @@ def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix
         )
     wired.messaging.send_message("PR111", "#base", "later source row")
     index.write(first)
-    saved = FieldCodec.decode(ActivityCheckpoint, json.loads(index.path.read_text()))
-    assert saved.offset == first.offset
+    saved = index.prepare()
+    assert saved is not None and saved.record.offset == first.offset
     with bus.open("rb") as stream:
         latest_source = FileRevision.from_stat(os.fstat(stream.fileno()))
         latest = ActivityCheckpoint(
@@ -266,8 +267,8 @@ def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix
         )
     index.write(latest)
     index.write(first)
-    saved = FieldCodec.decode(ActivityCheckpoint, json.loads(index.path.read_text()))
-    assert saved.offset == latest.offset
+    saved = index.prepare()
+    assert saved is not None and saved.record.offset == latest.offset
 
 
 def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacement(wired):
@@ -282,8 +283,8 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
     # A valid JSON file can also lose projection values after local damage.
     # The bus is still authoritative when the checkpoint shape survives.
     cached = json.loads(checkpoint.read_text())
-    cached["channels"]["#base"] = [0.0, 0.0]
-    cached["sent"]["fixer"] = 0.0
+    cached["payload"]["channels"]["#base"] = [0.0, 0.0]
+    cached["payload"]["sent"]["fixer"] = 0.0
     checkpoint.write_text(json.dumps(cached))
     reopened = wire(wired.root)
     assert reopened.views.coordination_snapshot().last_sent["fixer"] > 0.0
