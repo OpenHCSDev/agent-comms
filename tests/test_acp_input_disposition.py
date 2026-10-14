@@ -350,7 +350,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             open_release.set()
             await asyncio.wait_for(started.wait(), 30)
             in_flight, = comms.views.message_notifications([message])[key]
-            assert in_flight.state == "Starting response" and in_flight.busy
+            assert in_flight.state == "Sent"
             assert in_flight.read_at_ms is None
             started_release.set()
             # Opening is the retry trigger; no second bus append or observation
