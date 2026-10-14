@@ -81,7 +81,7 @@ async def test_quiet_native_watch_wakes_when_auth_file_disappears(tmp_path, acti
 async def test_relevant_write_burst_cannot_postpone_owner_wake(tmp_path):
     source = tmp_path / "shared-state"
     source.write_text("0")
-    watcher = open_wire_watcher(WatchSource.file(source, modified=True))
+    watcher = open_wire_watcher(WatchSource.modified_file(source))
     if not isinstance(watcher, WireChangeWatch):
         watcher.close()
         pytest.skip("Native file notifications are unavailable")
