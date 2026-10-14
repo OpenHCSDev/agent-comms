@@ -179,9 +179,9 @@ class BusRouteCounts(SQLiteProjection, BusAppendIndex[AppendCheckpoint]):
         return TypedTable.members_with(RouteTable)
 
     def initialize_projection(self, connection: sqlite3.Connection) -> None:
-        # Touch the state page during one-time WAL creation; no sentinel row persists.
-        RouteSourceRow(1, None, None).insert(connection)
-        connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
+        # Touch owned table pages during one-time WAL creation; no sentinel row persists.
+        for table in self.sqlite_tables:
+            connection.execute(f'DELETE FROM "{table.declared_name}"')
 
     @staticmethod
     def _checkpoint(connection: sqlite3.Connection) -> RouteCheckpoint:

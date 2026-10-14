@@ -28,9 +28,9 @@ Parse omissions: zero. Unresolved dynamic calls: the externally supplied `decode
 
 - Focused two-worker suite: 50 passed in 11.09 s.
 - Source-selected installed `agent-comms` entry point over an isolated private root: `threads` returned recipient pending=1 and sender pending=0.
-- Synthetic sparse 1 GiB source while replay was blocked outside projection custody, 40 reader samples: p95 0.36 ms (repeat 0.42 ms), max 0.64 ms.
-- Commit lock, 41 samples: inclusive p99 2.36 ms, max 2.39 ms.
-- One-row sync, 40 samples: p95 2.61 ms, max 3.52 ms.
+- Synthetic sparse 1 GiB source while replay was blocked outside projection custody, 40 reader samples: p95 0.35 ms, max 0.66 ms.
+- Commit lock, 41 samples: inclusive p99 1.99 ms, max 3.10 ms.
+- One-row sync, 40 samples: p95 1.35 ms, max 2.42 ms.
 - Benchmark receipt: `/home/ts/.cache/agent-scratch/slop-census-route-bench/results.json`. The source had a 1 GiB logical size and 4.0 MiB physical allocation; only the bounded first segment was valid JSON and replayed.
 
 ## Line count
