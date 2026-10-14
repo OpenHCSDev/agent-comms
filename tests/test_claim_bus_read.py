@@ -34,6 +34,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from agent_comms.messages import ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.read_basis import DMDisplayScope
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
@@ -167,15 +168,25 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert resource.read_bytes() == b"value = 2\n"
         # The strict whole-bus reader agrees with what the claim path left.
         assert dict(log.claim_projection()) == {}
-        claims = [m for m in log.full_history() if m.claim_transition is not None]
+        claims = [m for m in comms.views.full_history() if m.claim_transition is not None]
         assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
             ((str(resource),), 0), ((), 1),
         ]
         assert all(message.type is ClaimNoticeKind for message in claims)
-        assert comms.views.dm_history_page("Alice", "sender").messages == ()
-        channel = comms.views.channel_history_page("#team").messages
+        snapshot = comms.registry.snapshot()
+        dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
+        assert comms.bus.conversation_page(dm_scope).messages == ()
+        raw_channel = comms.views.channel_history_page("#team").messages
+        assert [message.body for message in raw_channel] == [
+            "@Alice investigate", "Terminal attempt file claims released",
+        ]
+        channel = comms.views.channel_display_page("#team").messages
         assert [message.body for message in channel] == ["@Alice investigate"]
         assert all(message.notification_references() for message in channel)
+        with pytest.raises(ValueError, match="not generically sendable"):
+            comms.messaging.send_message(
+                "Alice", "sender", "Invented claim notice", ClaimNoticeKind
+            )
 
 
 def test_claim_operation_is_refused_after_its_claim_was_released() -> None:

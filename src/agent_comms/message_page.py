@@ -236,7 +236,7 @@ class MessagePageRequest:
         return cls(scope, NewerTraversal(after), sys.maxsize, sys.maxsize)
 
     def includes(self, message: Message) -> bool:
-        return message.type.conversation_message and self.scope.includes(message)
+        return self.scope.includes(message)
 
     def collect(self, records: Iterator[tuple[Message, int]]) -> MessagePage:
         return self.traversal.collect(self, records)
@@ -292,3 +292,10 @@ class MessagePageRequest:
                     break
                 self.traversal.append(window, message, size)
         return self.traversal.result(window, more, opposite)
+
+
+class ConversationMessagePageRequest(MessagePageRequest):
+    """A presented conversation excludes declaration-owned state records."""
+
+    def includes(self, message: Message) -> bool:
+        return message.type.conversation_message and super().includes(message)

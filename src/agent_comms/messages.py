@@ -34,6 +34,10 @@ if TYPE_CHECKING:
     from .historical_views import HistoryCursor
 
 
+class SendableMessageKind:
+    """Capability for kinds accepted by generic message commands."""
+
+
 class MessageKind(DeclaredFamily, affix="Kind"):
     """A declared message kind; each member owns the validation it requires.
 
@@ -43,6 +47,15 @@ class MessageKind(DeclaredFamily, affix="Kind"):
     """
 
     conversation_message: ClassVar[bool] = True
+
+    @classmethod
+    def sendable_names(cls) -> tuple[str, ...]:
+        return tuple(member.declared_name for member in cls.members_with(SendableMessageKind))
+
+    @classmethod
+    def require_sendable(cls) -> None:
+        if not issubclass(cls, SendableMessageKind):
+            raise ValueError(f"Message kind {cls.declared_name!r} is not generically sendable")
 
     @classmethod
     def require_publishable(cls, message: Message, worktree: Path) -> None:
@@ -55,19 +68,19 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     conversation_message = False
 
 
-class InfoKind(MessageKind):
+class InfoKind(SendableMessageKind, MessageKind):
     pass
 
 
-class QuestionKind(MessageKind):
+class QuestionKind(SendableMessageKind, MessageKind):
     pass
 
 
-class AckKind(MessageKind):
+class AckKind(SendableMessageKind, MessageKind):
     pass
 
 
-class HandoffKind(MessageKind):
+class HandoffKind(SendableMessageKind, MessageKind):
     """A handoff declares its evidence; completion claims carry references."""
 
     CLAIMS = ("fixed", "single owner", "no other callers")
@@ -88,11 +101,11 @@ class HandoffKind(MessageKind):
         )
 
 
-class AlertKind(MessageKind):
+class AlertKind(SendableMessageKind, MessageKind):
     pass
 
 
-class ChangeReportKind(MessageKind, declared_name="change-report"):
+class ChangeReportKind(SendableMessageKind, MessageKind, declared_name="change-report"):
     """A review request declares each touched fact with its single owner."""
 
     @classmethod
