@@ -173,12 +173,15 @@ class SelectedAttempt:
         participant = self.participant
         try:
             action = BatchSelectedAction(tuple(
-                (assignment, write_authority.select(
+                (
                     assignment,
-                    participant.owner.thread,
-                    participant.owner.admission_generation,
-                    action,
-                ))
+                    write_authority.select(
+                        assignment,
+                        participant.owner.thread,
+                        participant.owner.admission_generation,
+                        action,
+                    ).prepare(participant.owner.thread),
+                )
                 for assignment in self.stage.assignments
             ))
             prompt = await SelectedPrompt(participant).full(

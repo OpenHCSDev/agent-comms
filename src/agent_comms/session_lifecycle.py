@@ -66,6 +66,7 @@ class SessionLifecycle:
         self.worktrees: dict[str, str] = {}
         self.proxies: dict[str, RuntimeProxy] = {}
         self._attachment_lock = asyncio.Lock()
+        self._identity_lock = asyncio.Lock()
         self.transcript = TranscriptReplay(comms, runtime)
         self.config = SessionConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
 
@@ -278,33 +279,35 @@ class SessionLifecycle:
             )
 
     async def sync_identity(self, session_id: str) -> str:
-        cached_name = self.require(session_id)
-        snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
-        thread = snapshot.require(cached_name)
-        name = thread.name
-        if (
-            name != cached_name
-            or thread.pid != os.getpid()
-            or not snapshot.status(name).running
-        ):
-            await self.effects.turns.close_idle_backend(session_id, thread)
-        self.bindings[session_id] = name
-        if (
-            self.titles.get(session_id) != name
-            or self.display_titles.get(session_id) != thread.title
-            or self.worktrees.get(session_id) != thread.worktree
-        ):
-            await self.runtime.session_update(
-                session_id=session_id,
-                update=SessionInfoUpdate(
-                    session_update="session_info_update",
-                    title=thread.title or name,
-                    field_meta=await self.metadata(name, session_id=session_id),
-                ),
-            )
-            self.titles[session_id], self.display_titles[session_id] = name, thread.title
-            self.worktrees[session_id] = thread.worktree
-        return name
+        """Publish each observed identity generation once across concurrent consumers."""
+        async with self._identity_lock:
+            cached_name = self.require(session_id)
+            snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
+            thread = snapshot.require(cached_name)
+            name = thread.name
+            if (
+                name != cached_name
+                or thread.pid != os.getpid()
+                or not snapshot.status(name).running
+            ):
+                await self.effects.turns.close_idle_backend(session_id, thread)
+            self.bindings[session_id] = name
+            if (
+                self.titles.get(session_id) != name
+                or self.display_titles.get(session_id) != thread.title
+                or self.worktrees.get(session_id) != thread.worktree
+            ):
+                await self.runtime.session_update(
+                    session_id=session_id,
+                    update=SessionInfoUpdate(
+                        session_update="session_info_update",
+                        title=thread.title or name,
+                        field_meta=await self.metadata(name, session_id=session_id),
+                    ),
+                )
+                self.titles[session_id], self.display_titles[session_id] = name, thread.title
+                self.worktrees[session_id] = thread.worktree
+            return name
 
     async def observe_native_configuration(
         self, session_id: str, thread_name: str, event: events.AgentInfo

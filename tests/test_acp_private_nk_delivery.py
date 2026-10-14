@@ -24,7 +24,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import PublicationActivationBlocked, StaleFence
+from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
@@ -43,6 +43,7 @@ from test_backend_native_lifecycle import native_backend as native_backend
 from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
 
 tmp_path = private_root_fixture
+pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
 def _session(tmp_path, *, package=True):
@@ -386,6 +387,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
     agent.on_connect(Client())
     async with asyncio.timeout(30):
         assert await agent.inputs.drain_inbox(sid) == 1
+        await reply_turn_finished(agent, sid)
     current = cursor_envelope((await agent.sessions.metadata(sid)))
     assert current.status == "proven"
     (reply,) = comms.bus.inbox("sender")
@@ -747,7 +749,11 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     assert agent.inputs.pending_turns == {}
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         rows = NativeRuntimeInput.select(store.session._connection)
-        assert len(rows) == 1 and rows[0].session_id is None
+        assert (
+            len(rows) == 1
+            and rows[0].session_id == "isolated-session"
+            and rows[0].session_entry_id is None
+        )
 
 
 async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
@@ -779,22 +785,21 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
     running = asyncio.create_task(first.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     try:
-        with pytest.raises(StaleFence, match="busy"):
-            await second.inputs.drain_inbox("beta")
+        assert await second.inputs.drain_inbox("beta") == 0
         assert len(calls) == 1
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             assert (
                 store.session._connection.execute(
                     "SELECT COUNT(*) FROM wake_claims WHERE disposition='engaged'"
                 ).fetchone()[0]
-                == 1
+                == 2
             )
             assert len(NativeRuntimeInput.select(store.session._connection)) == 1
     finally:
         release.set()
         assert await asyncio.wait_for(running, timeout=5) == 1
-    assert await second.inputs.drain_inbox("beta") == 1
-    assert len(calls) == 2
+    assert await second.inputs.drain_inbox("beta") == 0
+    assert len(calls) == 1
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
@@ -818,18 +823,18 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     comms.agents.begin_turn("beta", "human-live-turn")
-    with pytest.raises(StaleFence, match="busy"):
-        await agent.inputs.drain_inbox("beta")
+    assert await agent.inputs.drain_inbox("beta") == 0
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
-                "SELECT COUNT(*) FROM claim_batch_receipts"
+                "SELECT COUNT(*) FROM claim_batch_receipts WHERE sealed=1"
             ).fetchone()[0]
-            == 0
+            == 1
         )
     assert calls == []
     comms.agents.finish_turn(comms.registry.require("beta").turn_lease)
     assert await agent.inputs.drain_inbox("beta") == 1
+    await reply_turn_finished(agent, "beta")
     assert len(calls) == 1
 
 
@@ -886,14 +891,18 @@ async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path,
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     original = comms.bus.log.message_by_id(sent["id"])
     agent._private_nk_wire_root_id = "f" * 32
-    with pytest.raises(PublicationActivationBlocked, match="root does not match configuration"):
+    with pytest.raises(IdentityConflict, match="original root changed"):
         await agent.inputs.drain_inbox("beta")
     agent._private_nk_wire_root_id = root_id
     # Preflight must run before any SQL acceptance, not only before reservation.
     monkeypatch.setattr(
-        cohort_foreground,
-        "_trusted_package",
-        lambda _: (_ for _ in ()).throw(PublicationActivationBlocked("unreviewed Pi")),
+        native_pi.NativePiRpcLaunch,
+        "acquire_tracked",
+        classmethod(
+            lambda _cls, _package: (_ for _ in ()).throw(
+                PublicationActivationBlocked("unreviewed Pi")
+            )
+        ),
     )
     with pytest.raises(PublicationActivationBlocked, match="unreviewed Pi"):
         await agent.inputs.drain_inbox("beta")

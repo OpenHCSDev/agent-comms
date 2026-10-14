@@ -24,7 +24,7 @@ from .coordination_errors import (
 from .coordinator import Coordination
 from .following_inputs import FollowingInputs
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
-from .selected_actions import SelectedAction, SelectedExistingFileWrite
+from .selected_actions import SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
@@ -44,7 +44,7 @@ class SelectedExecution:
     session_file: Path | None = None
     fresh_private_enrollment: bool = False
     selected_thinking_level: str | None = None
-    selected_existing_file_write: SelectedExistingFileWrite | None = None
+    selected_existing_file_write: SelectedAction | None = None
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
     # The worker verifies its pinned package once (packages never change in
@@ -106,11 +106,6 @@ class SelectedExecution:
                 raise IdentityConflict(
                     "Selected level requires explicitly supported fresh enrollment"
                 )
-        if (
-            self.selected_existing_file_write is not None
-            and type(self.selected_existing_file_write) is not SelectedExistingFileWrite
-        ):
-            raise TypeError("selected write requires an explicit trusted plan")
         if self.selected_tool_intent is not None:
             if type(self.selected_tool_intent) is not SelectedToolIntent:
                 raise TypeError("selected tool requires a nominal owner intent")
