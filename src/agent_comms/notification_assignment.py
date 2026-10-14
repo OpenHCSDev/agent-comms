@@ -91,7 +91,7 @@ class AssignmentContext:
         result: dict[AssignmentContext, int | None] = {}
         for path, selected in grouped.items():
             _, entries = NativeEntry.read_evidence(path)
-            by_id = {entry.id: entry for entry in entries if entry.id is not None}
+            by_id = dict(item for entry in entries for item in entry.identified())
             for context in selected:
                 entry = by_id.get(context.session_entry_id)
                 recorded = entry.recorded_at if entry is not None else None
@@ -258,7 +258,10 @@ class NotificationAssignment(NotificationSource):
                 ),
                 AssignmentActivityEvidence,
             )
-        contexts = {activity.context for _, activity in rows if activity.context is not None}
+        contexts = {
+            context for _, activity in rows
+            if (context := activity.context) is not None
+        }
         recorded_times = AssignmentContext.recorded_times(contexts)
         return tuple(
             cls(assignment, activity.resolve(recorded_times))
