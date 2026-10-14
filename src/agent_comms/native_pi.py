@@ -366,7 +366,7 @@ class NativePiTerminalFailure(NativePiUnavailable):
             flags=re.IGNORECASE,
         )
         self.public_message = (
-            f"{provider}/{model}: {match.group(1) if match else 'provider request failed'}."
+            f"{provider}/{model}: {match.group(1) if match else 'request failed'}."
         )
 
 

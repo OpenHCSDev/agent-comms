@@ -19,7 +19,9 @@ export class NativeProofJournal {
         if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 ||
             info.uid !== process.getuid() || (info.mode & 0o077) !== 0)
             throw new Error('Native proof journal must be a private owner file');
-        const db = new DatabaseSync(this.file);
+        // Core reads this journal while turns run. A commit waits out such a
+        // read, as Core's readers wait out a commit, instead of failing the turn.
+        const db = new DatabaseSync(this.file, { timeout: 5000 });
         try {
             // DELETE has recovery work bounded by the current context transaction,
             // independent of total journal history. EXTRA syncs directory removal.
