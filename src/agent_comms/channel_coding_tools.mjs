@@ -1,5 +1,5 @@
 // Pi owns the normal coding tools. The existing owner socket admits each call.
-import { createConnection } from "node:net";
+import { requestOwnerTool } from "./owner_tool_socket.mjs";
 
 export default function channelCodingTools(pi) {
   pi.on("tool_call", async (event) => {
@@ -12,23 +12,12 @@ export default function channelCodingTools(pi) {
       name: event.toolName, arguments: event.input }) + "\n", "utf8");
     if (request.length > 1024 * 1024) return { block: true, reason: "Coding tool request exceeds the native RPC record bound." };
     try {
-      const response = await new Promise((resolve, reject) => {
-        const socket = createConnection(path);
-        let received = Buffer.alloc(0);
-        const fail = () => { socket.destroy(); reject(new Error("Tool admission outcome UNKNOWN; inspect before retrying.")); };
-        socket.setTimeout(12000, fail);
-        socket.once("error", fail);
-        socket.once("connect", () => socket.write(request));
-        socket.on("data", (part) => {
-          received = Buffer.concat([received, part]);
-          if (received.length > 16384) return fail();
-          if (received.includes(10)) {
-            socket.end();
-            try { resolve(JSON.parse(received.toString("utf8"))); } catch { fail(); }
-          }
-        });
-        socket.once("end", () => { if (!received.includes(10)) fail(); });
-      });
+      const response = await requestOwnerTool(
+        path,
+        request,
+        16384,
+        "Tool admission outcome UNKNOWN; inspect before retrying.",
+      );
       if (response?.ok !== true) return { block: true, reason: response?.error ?? "Coding tool admission denied." };
     } catch (error) {
       return { block: true, reason: error.message };
