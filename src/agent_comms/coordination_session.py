@@ -90,7 +90,7 @@ class CoordinationSession(CoordinationStore):
 
 
 class NativeBoundary(ExitStack):
-    """One acquired wire/bus/registry lifetime, explicitly borrowed by SQL."""
+    """Total lock order: shared wire -> bus -> registry -> sidecar -> SQLite."""
 
     def __init__(self, bus, *, blocking=True, contention=None, measurements=None):
         super().__init__()
