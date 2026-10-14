@@ -386,7 +386,7 @@ def test_foreground_cli_passes_bounded_source_to_explicit_selected_write_entry(
             ],
             capture_output=True,
             text=True,
-            timeout=8,
+            timeout=2,
             env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")},
         )
         assert probe.returncode == 0, probe.stderr
@@ -452,38 +452,14 @@ async def test_foreground_two_recipients_one_no_wake_and_no_model(
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
         _patch_package_acquisition(monkeypatch)
-        selected_model = _fake_pi(calls)
-        reply_allowed = asyncio.Event()
-
-        async def reply_after_observer_settles(*args, **kwargs):
-            await reply_allowed.wait()
-            return await selected_model(*args, **kwargs)
-
-        monkeypatch.setattr(TrackedTurnSession, "execute", reply_after_observer_settles)
+        monkeypatch.setattr(TrackedTurnSession, "execute", _fake_pi(calls))
         ready_names: set[str] = set()
-        beta_ready = asyncio.Event()
 
         def ready(thread: Thread) -> None:
             ready_names.add(thread.name)
-            if thread.name == "beta":
-                beta_ready.set()
             if len(ready_names) == 2:
                 comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25")
 
-        beta = asyncio.create_task(
-            foreground.run_foreground_once(
-                root,
-                wire_root_id=root_id,
-                name="beta",
-                worktree=base,
-                tags=frozenset({"team"}),
-                native_package=tmp_path,
-                opt_in=True,
-                wait_seconds=2,
-                ready=ready,
-            )
-        )
-        await beta_ready.wait()
         alpha = asyncio.create_task(
             foreground.run_foreground_once(
                 root,
@@ -493,11 +469,23 @@ async def test_foreground_two_recipients_one_no_wake_and_no_model(
                 tags=frozenset({"team"}),
                 native_package=tmp_path,
                 opt_in=True,
-                wait_seconds=0,
+                wait_seconds=0.25,
                 ready=ready,
             )
         )
-        alpha.add_done_callback(lambda _done: reply_allowed.set())
+        beta = asyncio.create_task(
+            foreground.run_foreground_once(
+                root,
+                wire_root_id=root_id,
+                name="beta",
+                worktree=base,
+                tags=frozenset({"team"}),
+                native_package=tmp_path,
+                opt_in=True,
+                wait_seconds=0.25,
+                ready=ready,
+            )
+        )
         alpha_result, beta_result = await asyncio.gather(alpha, beta)
         assert isinstance(alpha_result, foreground.NoWakeReceipt)
         assert beta_result is not None and beta_result.publications
@@ -624,7 +612,7 @@ raise SystemExit(f.main(sys.argv[1:]))
                 "--native-package",
                 str(tmp_path),
                 "--wait-seconds",
-                "8",
+                "2",
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -666,10 +654,9 @@ raise SystemExit(f.main(sys.argv[1:]))
                 env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")},
             )
             assert json.loads(sender.stdout)["wire_seq"] == 1
-            out, err = child.communicate(timeout=20)
+            out, err = child.communicate(timeout=12)
             assert child.returncode == 0, (out, err)
             response = json.loads(out.strip())
-            assert "publications" in response, (response, err)
             assert response["publications"], (response, err)
             assert comms.registry.status("beta") == StoppedThreadStatus()
             assert comms.views.dm_history("sender", "beta")[-1].body == "42"
