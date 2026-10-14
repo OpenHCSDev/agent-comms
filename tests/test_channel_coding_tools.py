@@ -45,15 +45,16 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         assert c.bus.log.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
 
 
-def test_create_claim_preserves_physical_worktree_scope(tmp_path):
+def test_create_claim_preserves_physical_paths_without_aliases(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
     root = tmp_path / "work"
     root.mkdir()
     (root / "link").symlink_to(outside, target_is_directory=True)
-    for path in ("../outside/x", "link/missing.py", str(outside / "x"), "."):
+    for path in ("../outside/x", "link/missing.py", ".", outside):
         with pytest.raises(ClaimTransitionError):
             WritableFileClaim(Path(path)).normalized(root)
+    assert WritableFileClaim(outside / "x").normalized(root) == str(outside / "x")
     with pytest.raises(ClaimTransitionError):
         ExistingFileClaim(Path("new.py")).normalized(root)
     (root / "existing").write_text("a")
