@@ -161,6 +161,10 @@ async def start_owned_input(execution, progress):
     with admission(None, native_id, execution.original.prompt) as admitted:
         assert admitted is True
     assert admission.native_start(None, native_id, execution.original.prompt)
+    lease = execution.runner.comms.registry.require(execution.thread.name).require_turn_lease()
+    assert tuple(item.reference for item in lease.reply_inputs) == tuple(
+        origin.reference for origin in execution.original.origins
+    )
     await progress.consume(ae.InputStarted(None))
 
 

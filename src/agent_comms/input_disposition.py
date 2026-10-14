@@ -197,22 +197,30 @@ class InputDispositions:
             InputDispositions._payload(row),
         )
 
-    def read(self) -> InputDocument:
+    def _select(self, where: str = "", parameters: tuple[object, ...] = ()) -> InputDocument:
+        sql = "SELECT payload FROM input_dispositions"
+        if where:
+            sql += f" WHERE {where}"
+        sql += " ORDER BY sequence IS NULL, sequence, rowid"
         with self._connect() as db:
-            payloads = tuple(db.execute(
-                "SELECT payload FROM input_dispositions "
-                "ORDER BY sequence IS NULL, sequence, rowid"
-            ))
+            payloads = tuple(db.execute(sql, parameters))
         rows = tuple(self._decode(payload) for payload, in payloads)
         return InputDocument({row.key: row for row in rows})
+
+    def read(self) -> InputDocument:
+        return self._select()
+
+    def rows(self, keys: tuple[str, ...]) -> InputDocument:
+        if not keys:
+            return InputDocument()
+        placeholders = ",".join("?" for _ in keys)
+        return self._select(f"key IN ({placeholders})", keys)
 
     @contextmanager
     def reading(self):
         yield self.read()
 
-    def update(self, change) -> InputDocument:
-        original = self.read()
-        changed = change(original)
+    def _publish(self, original: InputDocument, changed: InputDocument) -> InputDocument:
         if changed is original or changed == original:
             return original
         before, after = original.rows, changed.rows
@@ -248,6 +256,14 @@ class InputDispositions:
                     )
         return changed
 
+    def update(self, change) -> InputDocument:
+        original = self.read()
+        return self._publish(original, change(original))
+
+    def update_rows(self, keys: tuple[str, ...], change) -> InputDocument:
+        original = self.rows(keys)
+        return self._publish(original, change(original))
+
     @staticmethod
     def bus_key(message: Message, owner: Thread) -> str:
         return message.response_policy.disposition_key(message, owner)
@@ -275,7 +291,7 @@ class InputDispositions:
                 )
             return changed
 
-        return self.update(reserve)
+        return self.update_rows(tuple(row.key for row in originals), reserve)
 
     def reserve_turn(
         self, owner: str, turn: TurnId, admission: int, text: str, *, custody: ExitStack,
@@ -308,7 +324,7 @@ class InputDispositions:
             changed = True
             return replace(document, rows={**document.rows, key: next_row})
 
-        self.update(update)
+        self.update_rows((key,), update)
         return changed
 
     def bind(self, key: str, *, admission: int, turn_id: str, native_id: str, text: str) -> bool:
@@ -324,7 +340,7 @@ class InputDispositions:
 
         ``already_bound`` (a send-now re-send) requires the existing binding to match.
         """
-        document = self.read()
+        document = self.rows(keys)
         if any(not document.lookup(key).unresolved
                or not document.lookup(key).matches_admission(admission) for key in keys):
             return False
@@ -354,7 +370,7 @@ class InputDispositions:
             bound = True
             return replace(document, rows={**document.rows, **dict(zip(keys, successors, strict=True))})
 
-        self.update(change)
+        self.update_rows(keys, change)
         return bound
 
     def started(self, key: str, *, turn_id: str, native_id: str, text: str) -> bool:
@@ -363,8 +379,8 @@ class InputDispositions:
         )
 
     def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
-        """Publish one complete retirement and return that exact document cut."""
-        return self.update(lambda document: document.settle_unbound(keys))
+        """Publish one complete retirement and return that exact selected cut."""
+        return self.update_rows(keys, lambda document: document.settle_unbound(keys))
 
     def review_for_goal(
         self,
@@ -396,7 +412,7 @@ class InputDispositions:
                 rows={**rows, **{key: rows[key].review(goal_id, decision) for key in keys}},
             )
 
-        self.update(review)
+        self.update_rows(tuple(dict.fromkeys((*keys, *(row.key for row in observed)))), review)
 
     def dismiss_historical(
         self,
@@ -404,12 +420,19 @@ class InputDispositions:
         *,
         awaiting_keys: frozenset[str] | None = None,
     ) -> dict:
-        def dismiss(document: InputDocument) -> InputDocument:
-            changed = {
-                row.key: replace(row, notice_dismissed=True)
-                for row in document.unknown(owners)
-                if row.historical_notice(awaiting_keys) and not row.notice_dismissed
-            }
-            return replace(document, rows={**document.rows, **changed}) if changed else document
-
-        return self.update(dismiss).delivery_overview(owners, awaiting_keys=awaiting_keys)
+        if not owners:
+            return InputDocument().delivery_overview(owners, awaiting_keys=awaiting_keys)
+        placeholders = ",".join("?" for _ in owners)
+        original = self._select(
+            f"owner IN ({placeholders}) AND unresolved = 1", tuple(owners)
+        )
+        changed = {
+            row.key: replace(row, notice_dismissed=True)
+            for row in original.unknown(owners)
+            if row.historical_notice(awaiting_keys) and not row.notice_dismissed
+        }
+        document = self._publish(
+            original,
+            replace(original, rows={**original.rows, **changed}) if changed else original,
+        )
+        return document.delivery_overview(owners, awaiting_keys=awaiting_keys)

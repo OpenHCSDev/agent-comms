@@ -42,7 +42,7 @@ def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custo
         assert document.rows["prior"] == prior.rows["prior"]
         assert document.rows["unknown"] == prior.rows["unknown"]
         saved = store.path.read_bytes()
-        assert store.record_originals() == document
+        assert not store.record_originals().rows
         assert not store.record("first", **args)
         assert store.path.read_bytes() == saved
     retired = store.read()
@@ -220,20 +220,23 @@ def test_batch_retirement_returns_published_cut_without_changing_native_evidence
     original = store.read()
     selected = (*keys[:-1], "acp:missing")
     published = store.settle_unbound(selected)
-    assert published == InputDispositions(store.path).read()
+    complete = InputDispositions(store.path).read()
+    assert published.rows == {
+        key: complete.rows[key] for key in selected if key in complete.rows
+    }
     assert isinstance(published.lookup("acp:reserved"), NotSentInput)
     assert published.lookup("acp:reserved").context_provenance() == (
         original.lookup("acp:reserved").context_provenance()
     )
     assert published.lookup("acp:reserved").source_text == "acp:reserved"
-    assert {key: published.lookup(key) for key in keys[1:]} == {
+    assert {key: complete.lookup(key) for key in keys[1:]} == {
         key: original.lookup(key) for key in keys[1:]
     }
     assert isinstance(published.lookup("acp:missing"), MissingInput)
     assert "acp:missing" not in published.rows
     saved = store.path.read_bytes(), store.path.stat().st_ino
     assert store.settle_unbound(selected) == published
-    assert store.settle_unbound(()) == published
+    assert not store.settle_unbound(()).rows
     assert (store.path.read_bytes(), store.path.stat().st_ino) == saved
 
 
