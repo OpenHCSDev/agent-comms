@@ -110,14 +110,53 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
                           ("execution_id", "exact_target")),)
 
     def matches(self, wire_root_id: str, fence: OwnerFence, exact_target: str) -> bool:
+        return self.matches_attempt(
+            wire_root_id, fence.execution_id, fence.owner_generation,
+            fence.attempt_ordinal, exact_target,
+        )
+
+    def matches_attempt(
+        self, wire_root_id: str, execution_id: str, owner_generation: int,
+        attempt_ordinal: int, exact_target: str,
+    ) -> bool:
         return self == PublicationAppendDispatches(
-            execution_id=fence.execution_id,
+            execution_id=execution_id,
             exact_target=exact_target,
             wire_root_id=wire_root_id,
-            owner_generation=fence.owner_generation,
-            attempt_ordinal=fence.attempt_ordinal,
+            owner_generation=owner_generation,
+            attempt_ordinal=attempt_ordinal,
             dispatched_at_ms=self.dispatched_at_ms,
         )
+
+    def complete(
+        self, store: Coordination, boundary, snapshot: RecoverySnapshot,
+        intent: PublicationIntents, obligation: ResponseObligation, matched: Message,
+    ) -> RecoverySnapshot:
+        """Record one exact durable keyed row and finish its original attempt."""
+        attempt = snapshot.require_current_attempt()
+        if not self.matches_attempt(
+            self.wire_root_id, snapshot.execution.execution_id,
+            attempt.owner_generation, attempt.attempt_ordinal, intent.exact_target,
+        ):
+            raise IdentityConflict("response dispatch belongs to another root or owner")
+        now = store.session.now(max(snapshot.execution.updated_at_ms, attempt.updated_at_ms))
+        PublicationReceipts(
+            execution_id=intent.execution_id,
+            exact_target=intent.exact_target,
+            seq=matched.seq,
+            message_id=matched.message_id,
+            received_at_ms=now,
+        ).insert(store.session._connection)
+        ResponseObligation.update(
+            store.session._connection,
+            where="execution_id=? AND exact_target=? AND revision=?",
+            parameters=(intent.execution_id, intent.exact_target, obligation.revision),
+            lifecycle=PublishedResponse(matched.message_id, matched.seq),
+            revision=obligation.revision + 1,
+            updated_at_ms=store.session.now(obligation.updated_at_ms),
+        )
+        store.snapshots.get(intent.execution_id).finish_publications(store.session, boundary)
+        return store.snapshots.get(intent.execution_id)
 
 
 @dataclass(frozen=True)
@@ -231,6 +270,68 @@ class LiveResponseOwner(RegistryOwner):
         return await Coordination.run_async(
             store_path, partial(self._publish_owned, bus, fence, replies)
         )
+
+    def resolve_retained(self, store: Coordination, bus: MessageBus) -> tuple[RecoverySnapshot, ...]:
+        """Complete saved keyed replies before this owner can start fresh work.
+
+        Only an existing exact bus row may complete its frozen dispatch. Missing
+        or mismatched evidence refuses admission without another append.
+        """
+        _require_bound_stores(bus, store)
+        completed: list[RecoverySnapshot] = []
+        with store.session.boundary(bus) as boundary:
+            self.require_snapshot(
+                boundary.registry, "response owner changed before retained resolution"
+            )
+            wire_root_id = bus.log._private_marker_unlocked().root_id
+            with store.session.read():
+                execution_ids = tuple(
+                    row[0]
+                    for row in store.session._connection.execute(
+                        "SELECT DISTINCT i.execution_id FROM publication_intents i "
+                        "JOIN executions e ON e.execution_id=i.execution_id "
+                        "WHERE e.owner_lookup=? AND NOT EXISTS "
+                        "(SELECT 1 FROM publication_receipts r "
+                        "WHERE r.execution_id=i.execution_id "
+                        "AND r.exact_target=i.exact_target) ORDER BY i.execution_id",
+                        (self.recipient_lookup,),
+                    )
+                )
+            for execution_id in execution_ids:
+                snapshot = store.snapshots.get(execution_id)
+                if snapshot.execution.owner_thread != self.thread.name:
+                    raise StaleFence("retained response belongs to another owner")
+                for frozen in snapshot.publication_intents:
+                    if ResponseObligation.response_record(
+                        snapshot.publication_receipts, frozen.exact_target
+                    ) is not None:
+                        continue
+                    with store.session.transaction() as db:
+                        snapshot = store.snapshots.get(execution_id)
+                        _require_cohort_assignments(store, bus, snapshot, wire_root_id)
+                        intent, obligation = snapshot.require_publishing_intent(
+                            frozen.exact_target
+                        )
+                        attempt = snapshot.require_current_attempt()
+                        dispatch = PublicationAppendDispatches.one(
+                            db, execution_id=execution_id, exact_target=frozen.exact_target
+                        )
+                        if dispatch is None or not dispatch.matches_attempt(
+                            wire_root_id, execution_id, attempt.owner_generation,
+                            attempt.attempt_ordinal, frozen.exact_target,
+                        ):
+                            raise PublicationUncertain("no matching durable append dispatch")
+                        matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
+                        if matched is None:
+                            raise PublicationUncertain(
+                                "no keyed bus receipt; no resend authorized"
+                            )
+                        completed.append(
+                            dispatch.complete(
+                                store, boundary, snapshot, intent, obligation, matched
+                            )
+                        )
+        return tuple(completed)
 
     def _publish_owned(
         self, bus: MessageBus, fence: OwnerFence,
@@ -510,7 +611,6 @@ def _settle_fenced_response(
             if terminal is not None:
                 return terminal
             snapshot = _require_final_owner(store, bus, fence, wire_root_id, owner_witness, exact_target)
-            attempt = snapshot.require_attempt()
             intent, obligation = snapshot.require_publishing_intent(exact_target)
             dispatch = PublicationAppendDispatches.one(db, execution_id=fence.execution_id, exact_target=exact_target)
             if dispatch is None or not dispatch.matches(wire_root_id, fence, exact_target):
@@ -527,24 +627,9 @@ def _settle_fenced_response(
                 matched = bus.publisher._publish_keyed_response_unlocked(
                     intent, conversation=conversation, registry_snapshot=registry_snapshot
                 )
-            now = store.session.now(max(snapshot.execution.updated_at_ms, attempt.updated_at_ms))
-            PublicationReceipts(
-                execution_id=intent.execution_id,
-                exact_target=intent.exact_target,
-                seq=matched.seq,
-                message_id=matched.message_id,
-                received_at_ms=now,
-            ).insert(db)
-            ResponseObligation.update(
-                db,
-                where="execution_id=? AND exact_target=? AND revision=?",
-                parameters=(intent.execution_id, exact_target, obligation.revision),
-                lifecycle=PublishedResponse(matched.message_id, matched.seq),
-                revision=obligation.revision + 1,
-                updated_at_ms=store.session.now(obligation.updated_at_ms),
+            return Applied(
+                dispatch.complete(store, boundary, snapshot, intent, obligation, matched)
             )
-            store.snapshots.get(intent.execution_id).finish_publications(store.session, boundary)
-            return Applied(store.snapshots.get(intent.execution_id))
 
 
 def publish_fenced_response(
