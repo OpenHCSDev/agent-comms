@@ -673,6 +673,7 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
     wire_tag = "type"
     opaque: ClassVar[bool] = False
     progress: ClassVar[bool] = False
+    response_progress: ClassVar[bool] = False
 
     @classmethod
     def wire_member(cls, value):
@@ -688,6 +689,7 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
 @dataclass(frozen=True)
 class TextDelta(PiDelta, declared_name="text_delta"):
     delta: str
+    response_progress = True
 
     @property
     def progress(self):
@@ -718,6 +720,7 @@ class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
 
 class ToolDelta:
     progress = True
+    response_progress = True
 
     def emit(self, session):
         return ()

@@ -579,6 +579,14 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     def fail_terminal(self, text: str):
         self.terminal = self.terminal.fail(text)
 
+    @handles(pi.NativeRetryEnd)
+    async def native_retry_finished(self, event: pi.NativeRetryEnd) -> None:
+        if event.success:
+            # Native emits success when the recovered request first produces.
+            # Its output, not the retained refusal from the prior request, owns
+            # this tracked turn's terminal result.
+            self.request_retried()
+
     def request_retried(self) -> None:
         super().request_retried()
         self.terminal = PendingTrackedTerminal()
