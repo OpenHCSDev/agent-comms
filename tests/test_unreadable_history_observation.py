@@ -88,7 +88,7 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
 @pytest.mark.parametrize(
     "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision]
 )
-def test_store_read_keeps_schema_failure_distinct_from_deferred_read(comms, error_type):
+def test_store_read_only_retains_the_named_busy_state(comms, error_type):
     @dataclass(frozen=True)
     class FailingRead(ReadRequest):
         error: Exception
@@ -97,24 +97,20 @@ def test_store_read_keeps_schema_failure_distinct_from_deferred_read(comms, erro
             raise self.error
 
     error = error_type("original store read explanation")
-    answer = FailingRead(str(comms.root), error).answer(comms)
-    if error_type is CoordinationReadUnavailable:
-        assert isinstance(answer, ReadBusy)
-        assert answer.title == "History loading"
-        assert pickle.loads(pickle.dumps(answer)) == answer
+    if error_type is not CoordinationReadUnavailable:
+        with pytest.raises(error_type, match="original store read explanation"):
+            FailingRead(str(comms.root), error).answer(comms)
         return
-    assert isinstance(answer, ReadRefused)
-    if error_type is SchemaVersionError:
-        assert isinstance(answer.error, UnreadableHistory)
-        assert str(error) in str(pickle.loads(pickle.dumps(answer)).error)
-    else:
-        assert answer.error is error  # The original deferred operation, not broken history.
+    answer = FailingRead(str(comms.root), error).answer(comms)
+    assert isinstance(answer, ReadBusy)
+    assert answer.title == "History loading"
+    assert pickle.loads(pickle.dumps(answer)) == answer
 
 
 @pytest.mark.parametrize(
     "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision]
 )
-async def test_owner_reply_uses_the_same_refusal_boundary(comms, error_type):
+async def test_owner_reply_preserves_its_own_failure_type(comms, error_type):
     @dataclass(frozen=True)
     class FailingOwnerRead(OwnerRead):
         async def read(self, owner):
@@ -128,8 +124,8 @@ async def test_owner_reply_uses_the_same_refusal_boundary(comms, error_type):
         str(comms.root), comms.registry.require("saved").incarnation
     ).answer(comms)
     assert isinstance(answer, ReadRefused)
-    expected_type = UnreadableHistory if error_type is SchemaVersionError else error_type
-    assert isinstance(answer.error, expected_type)
+    assert isinstance(answer.error, error_type)
+    assert not isinstance(answer.error, UnreadableHistory)
 
 
 @pytest.mark.parametrize("error_type", [CoordinationReadUnavailable, StaleRevision])

@@ -136,11 +136,7 @@ class AwaitedRead(ObservationRequest):
             raise StaleRevision("The read belongs to another Comms root than the observed one")
 
     def refused(self, error: Exception) -> ReadRefused:
-        # Store reads and owner replies share this boundary. Keep currentness
-        # and contention unchanged; neither means the saved data is broken.
-        if (isinstance(error, UnreadableHistory.READ_ERRORS)
-                and not isinstance(error, UnreadableHistory.DEFERRED_READS)):
-            error = UnreadableHistory.capture(error)
+        """Return the read owner's named failure without reclassifying it."""
         return ReadRefused(self.request_id, error, traceback.format_exc())
 
 
@@ -160,7 +156,7 @@ class ReadRequest(AwaitedRead):
             return ReadAnswered(self.request_id, self.read(comms))
         except CoordinationReadUnavailable:
             return ReadBusy(self.request_id)
-        except Exception as error:
+        except UnreadableHistory as error:
             return self.refused(error)
 
 
@@ -204,13 +200,9 @@ class OwnerRead(AwaitedRead):
         return RuntimeConnection(comms, owner.name, socket_path(comms.root, owner.pid))
 
     async def ask(self, comms: Comms) -> object:
-        from acp.exceptions import RequestError
-
         connection = await asyncio.to_thread(self.connect, comms)
         try:
             return await self.read(connection)
-        except (RuntimeError, RequestError) as error:
-            raise ValueError(str(error)) from error
         finally:
             await connection.close()
 
@@ -248,17 +240,24 @@ class ReadTranscript(ReadRequest):
     def read(self, comms: Comms) -> TranscriptSnapshotUpdate:
         from agent_comms.acp_extension import TranscriptSnapshotUpdate
 
-        transcripts = comms.transcripts
-        window = dict(before=self.before, after=self.after, through=self.through)
-        if self.read_identity is None:
-            read = transcripts.capture_page_read(self.thread, historical_source=self.historical_source, **window)
-        else:
-            if (self.historical_source is not None
-                    and self.historical_source != self.read_identity.historical_source):
-                raise StaleRevision("Published transcript belongs to another recorded source")
-            read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
-        # The read checks its witness before and after preparing the page.
-        return TranscriptSnapshotUpdate(read.read(), read.identity)
+        try:
+            transcripts = comms.transcripts
+            window = dict(before=self.before, after=self.after, through=self.through)
+            if self.read_identity is None:
+                read = transcripts.capture_page_read(
+                    self.thread, historical_source=self.historical_source, **window
+                )
+            else:
+                if (self.historical_source is not None
+                        and self.historical_source != self.read_identity.historical_source):
+                    raise StaleRevision("Published transcript belongs to another recorded source")
+                read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
+            # The read checks its witness before and after preparing the page.
+            return TranscriptSnapshotUpdate(read.read(), read.identity)
+        except UnreadableHistory.DEFERRED_READS:
+            raise
+        except UnreadableHistory.READ_ERRORS as error:
+            raise UnreadableHistory.capture(error) from error
 
 
 @dataclass(frozen=True)
