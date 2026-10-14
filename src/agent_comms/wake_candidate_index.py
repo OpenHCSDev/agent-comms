@@ -33,7 +33,8 @@ from .wake import NoWakeDecision, WakeDecision
 from .wake_policy import WakePolicy
 
 _MAX_ROW = 8 * 1024 * 1024
-_TIMEOUT = 0.05  # Busy readers/writers must not stall a wake for seconds.
+_TIMEOUT = 0.05  # Read-only projection queries must not stall a wake for seconds.
+_MAINTENANCE_BUSY_MS = 1_000  # One bounded replay transaction may hold the writer.
 
 
 class ProjectionUnavailableError(RuntimeError):
@@ -165,14 +166,14 @@ class WakeCandidateIndex:
             db = sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, timeout=_TIMEOUT)
             db.execute("PRAGMA query_only=ON")
         else:
-            db = sqlite3.connect(path, timeout=_TIMEOUT)
+            db = sqlite3.connect(path, timeout=_MAINTENANCE_BUSY_MS / 1_000)
             if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode=WAL")) != [
                 SQLiteJournalMode("wal")
             ]:
                 db.close()
                 raise ProjectionUnavailableError("candidate index requires WAL")
             db.execute("PRAGMA synchronous=FULL")
-        db.execute("PRAGMA busy_timeout=50")
+        db.execute(f"PRAGMA busy_timeout={_TIMEOUT * 1_000 if readonly else _MAINTENANCE_BUSY_MS:g}")
         return db
 
     @staticmethod
@@ -319,30 +320,26 @@ class WakeCandidateIndex:
         *,
         rebuild: bool,
     ) -> None:
-        """Replace derived rows and checkpoint together, or expose neither."""
-        with db:
-            if rebuild:
-                db.execute(f'DELETE FROM "{Candidate.declared_name}"')
-                db.execute(f'DELETE FROM "{CandidateResponseKey.declared_name}"')
-            for row in batch.recipients:
-                row.insert(db)
-            try:
-                for row in batch.response_keys:
-                    row.insert(db)
-            except sqlite3.IntegrityError as error:
-                raise ProjectionUnavailableError(
-                    "duplicate private response publication key"
-                ) from error
-            CandidateCheckpoint(
-                1,
-                3,
-                root_id,
-                stat.st_dev,
-                stat.st_ino,
-                batch.next_offset,
-                tail,
-                batch.last_seq,
-            ).upsert(db)
+        """Replace derived rows and checkpoint inside the caller's transaction."""
+        if rebuild:
+            db.execute(f'DELETE FROM "{Candidate.declared_name}"')
+            db.execute(f'DELETE FROM "{CandidateResponseKey.declared_name}"')
+        for row in batch.recipients:
+            row.insert(db)
+        for row in batch.response_keys:
+            if CandidateResponseKey.one(db, publication_key=row.publication_key) is not None:
+                raise ProjectionUnavailableError("duplicate private response publication key")
+            row.insert(db)
+        CandidateCheckpoint(
+            1,
+            3,
+            root_id,
+            stat.st_dev,
+            stat.st_ino,
+            batch.next_offset,
+            tail,
+            batch.last_seq,
+        ).upsert(db)
 
     def maintain(
         self, *, rebuild: bool = False, max_rows: int = 64, max_bytes: int = 256 * 1024
@@ -358,20 +355,26 @@ class WakeCandidateIndex:
                     # Rebuild replays current-format projections only; old schemas
                     # require the explicit store reset outside runtime code.
                     self._schema(db, create=True)
-                    checkpoint = self._checkpoint_start(
-                        db, stream, stat, root_id, rebuild=rebuild
-                    )
-                    offset, last_seq = checkpoint.byte_offset, checkpoint.last_seq
-                    batch = self._replay_prefix(
-                        stream,
-                        offset,
-                        last_seq,
-                        root_id,
-                        max_rows=max_rows,
-                        max_bytes=max_bytes,
-                    )
-                    after, tail = self._source_end(stream, batch.next_offset)
-                    self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
+                    db.execute("BEGIN IMMEDIATE")
+                    try:
+                        checkpoint = self._checkpoint_start(
+                            db, stream, stat, root_id, rebuild=rebuild
+                        )
+                        offset, last_seq = checkpoint.byte_offset, checkpoint.last_seq
+                        batch = self._replay_prefix(
+                            stream,
+                            offset,
+                            last_seq,
+                            root_id,
+                            max_rows=max_rows,
+                            max_bytes=max_bytes,
+                        )
+                        after, tail = self._source_end(stream, batch.next_offset)
+                        self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
+                        db.commit()
+                    except BaseException:
+                        db.rollback()
+                        raise
                     return batch.next_offset == after.st_size
         except (
             OSError,
