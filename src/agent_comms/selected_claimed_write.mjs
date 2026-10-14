@@ -1,6 +1,6 @@
 // Explicit, separately gated native Pi tool. This process never writes a file.
 // The owner supplies and verifies all wake/attempt authority across private IPC.
-import { createConnection } from "node:net";
+import { requestOwnerTool } from "./owner_tool_socket.mjs";
 
 const TOOL = "selected_claimed_write";
 const MAX_CONTENT = 128 * 1024; // Existing native RPC records are limited to 1 MiB.
@@ -33,23 +33,12 @@ export default function registerSelectedClaimedWrite(pi) {
       if (!path || !/^[0-9a-f]{64}$/.test(token ?? "")) throw new Error("Selected tool owner bridge unavailable");
       const request = Buffer.from(JSON.stringify({ token, request: { call_id: callId, arguments: params } }) + "\n", "utf8");
       if (request.byteLength > MAX_CONTENT + 8192) throw new Error("Selected tool request exceeds bound");
-      const response = await new Promise((resolve, reject) => {
-        const socket = createConnection(path);
-        let received = Buffer.alloc(0);
-        const fail = () => { socket.destroy(); reject(new Error("Selected tool outcome UNKNOWN; no retry")); };
-        socket.setTimeout(12000, fail);
-        socket.once("error", fail);
-        socket.on("data", (part) => {
-          received = Buffer.concat([received, part]);
-          if (received.length > MAX_RESPONSE) return fail();
-          if (received.includes(10)) {
-            socket.end();
-            try { resolve(JSON.parse(received.toString("utf8"))); } catch { fail(); }
-          }
-        });
-        socket.once("connect", () => socket.write(request));
-        socket.once("end", () => { if (!received.includes(10)) fail(); });
-      });
+      const response = await requestOwnerTool(
+        path,
+        request,
+        MAX_RESPONSE,
+        "Selected tool outcome UNKNOWN; no retry",
+      );
       if (response?.ok !== true) throw new Error("Selected tool denied or outcome UNKNOWN; no retry");
       return { content: [{ type: "text", text: "Owner committed one selected existing-file replacement." }], details: {} };
     },

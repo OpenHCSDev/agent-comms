@@ -924,7 +924,7 @@ async def run(arguments):
                             ['sudo','-n','/home/ts/.local/bin/py-spy','dump','--pid',
                              str(owner.pid),'--nonblocking'],capture_output=True,text=True,timeout=3)
                         frames = stack.stdout
-                        if ('acquire_posix (' in frames and '_response_boundary (' in frames
+                        if ('acquire_posix (' in frames and 'coordination_session.py' in frames
                                 and 'native_source_cursor.py' in frames):
                             (stage/'cursor-busy-original-scope.txt').write_text(frames)
                             contention_observations.append({

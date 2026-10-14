@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict, StaleFence
-from .coordination_response import _response_boundary
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .diagnostics import PublicationMeasurements
@@ -147,13 +146,13 @@ class SelectedSession:
             # Original wire→bus→registry→store→journal order spans exclusive file
             # creation, fsync and enrollment. No historical-file coverage inference.
             with (
-                _response_boundary(participant.bus) as registry,
+                participant.store.session.boundary(participant.bus) as boundary,
                 Coordination(str(participant.store.session.path)) as resource,
                 resource.session.read(),
             ):
                 try:
                     participant.owner.require_snapshot(
-                        registry, "fresh-session owner changed before enrollment"
+                        boundary.registry, "fresh-session owner changed before enrollment"
                     )
                 except RelationViolationError as error:
                     raise StaleFence("fresh-session owner changed before enrollment") from error

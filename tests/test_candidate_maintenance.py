@@ -110,6 +110,22 @@ def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send
         assert committed.seq == 1 and comms.bus.log.latest_sequence() == 1
 
 
+def test_failed_drain_is_named_and_retires_pending_state(monkeypatch, tmp_path, caplog) -> None:
+    comms, _root_id = _wire(tmp_path)
+    root = comms.bus.log.path.parent
+    maintenance._pending[root] = (comms.bus.log, 1)
+
+    def fail(*args, **kwargs):
+        raise ValueError("synthetic index failure")
+
+    monkeypatch.setattr(WakeCandidateIndex, "catch_up_committed_append", fail)
+    with pytest.raises(maintenance.CandidateMaintenanceFailed) as failed:
+        maintenance._drain_candidate(root)
+    assert failed.value.root == root
+    assert root not in maintenance._pending
+    assert "Candidate maintenance failed for" in caplog.text
+
+
 def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
     monkeypatch, tmp_path
 ) -> None:

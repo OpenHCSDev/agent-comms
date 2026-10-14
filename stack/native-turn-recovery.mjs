@@ -13,6 +13,7 @@ class NativeRunState {
     constructor(owner, attempt = 1) { this.owner = owner; this.attempt = attempt; }
     get retrying() { return false; }
     refusal() { return undefined; }
+    started() { return this; }
     produced() { return this; }
     finished() { return this; }
     close() {}
@@ -24,13 +25,13 @@ class NothingProduced extends NativeRunState {
     terminal() { return new ClosedNothingProduced(this.owner, this.attempt); }
     finished(message) {
         // One decision constructs the state for this refusal. Retryable and
-        // exhausted states then own disjoint behavior without checking a flag.
+        // terminal states then own disjoint behavior without checking a flag.
         if (!this.owner.tracked) return this;
-        if (!this.owner.retryable(message)) return this.terminal(message);
-        const reason = message.errorMessage || 'Provider request failed';
+        const reason = this.owner.retryReason(message);
+        if (reason === undefined) return this.terminal(message);
         return (this.attempt < RecoveryBudget.attempts
             ? new RefusedNothingProduced(this.owner, this.attempt, reason)
-            : new ExhaustedNothingProduced(this.owner, this.attempt, reason)
+            : new FailedProviderRequest(this.owner, this.attempt, reason)
         ).enter(message);
     }
 }
@@ -38,17 +39,20 @@ class NothingProduced extends NativeRunState {
 /** Every live recovery state shares completion and retirement behavior. */
 class RecoveringNothingProduced extends NothingProduced {
     produced() {
-        this.owner.finishRetry(true);
+        this.owner.finishRetry(true, undefined, this.attempt - 1);
         return super.produced();
     }
     terminal(message) {
-        this.owner.finishRetry(false, message?.errorMessage);
+        this.owner.finishRetry(false, message?.errorMessage, this.attempt - 1);
         return super.terminal();
     }
     close() { this.owner.state = this.terminal(); }
 }
 
-class OutputProduced extends NativeRunState {}
+/** A completed request does not make later provider requests unsafe to retry. */
+class OutputProduced extends NativeRunState {
+    started() { return new NothingProduced(this.owner); }
+}
 class ClosedNothingProduced extends NativeRunState {}
 
 class RefusedNothingProduced extends RecoveringNothingProduced {
@@ -67,8 +71,13 @@ class RefusedNothingProduced extends RecoveringNothingProduced {
     }
 }
 
-class ExhaustedNothingProduced extends RecoveringNothingProduced {
-    enter(message) { return this.terminal(message); }
+/** Typed terminal state after the provider used every owned re-request. */
+class FailedProviderRequest extends NativeRunState {
+    constructor(owner, attempt, reason) { super(owner, attempt); this.reason = reason; }
+    enter() {
+        this.owner.finishRetry(false, this.reason, this.attempt - 1);
+        return this;
+    }
 }
 
 class BackoffNothingProduced extends RefusedNothingProduced {
@@ -121,7 +130,7 @@ export class InactiveNativeTurnRun {
     close() {}
 }
 
-/** Replaces the native tracked-input flag and owns monotonic whole-run production. */
+/** Replaces the native tracked-input flag and owns per-request production and recovery. */
 export class NativeTurnRun {
     constructor(agent, emit, retryable) {
         this.agent = agent;
@@ -132,14 +141,19 @@ export class NativeTurnRun {
         this.inputs = new Set();
         this.state = new NothingProduced(this);
     }
-    finishRetry(success, finalError) {
+    finishRetry(success, finalError, attempt) {
         // The request index increments only after an admitted backoff. A
         // cancelled first backoff therefore reports zero actual re-requests.
         this.emit({ type: 'native_retry_end', success,
-            attempt: this.state.attempt - 1, ...(finalError ? { finalError } : {}) });
+            attempt, ...(finalError ? { finalError } : {}) });
     }
     get tracked() { return this.inputs.size > 0; }
     get retrying() { return this.state.retrying; }
+    retryReason(message) {
+        if (this.retryable(message)) return message.errorMessage || 'Provider request failed';
+        if (message.stopReason === 'stop') return 'Provider returned no authoritative response';
+        return undefined;
+    }
     include(messages, claims) {
         for (const message of messages) {
             if (message.role === 'user' && claims.has(message.inputId)) this.inputs.add(message.inputId);
@@ -147,7 +161,10 @@ export class NativeTurnRun {
         return this;
     }
     observe(event, claims) {
-        if (event.type === 'message_start') this.include([event.message], claims);
+        if (event.type === 'message_start') {
+            this.include([event.message], claims);
+            if (event.message.role === 'assistant') this.state = this.state.started();
+        }
         // Observe the original assistant event BEFORE extension callbacks or UI projection.
         if (event.type === 'tool_execution_start') this.state = this.state.produced();
         if (event.type === 'message_update') {
@@ -157,7 +174,7 @@ export class NativeTurnRun {
         }
         if (event.type === 'message_end' && event.message.role === 'assistant') {
             const content = event.message.content;
-            if (content.some(block => block.type === 'toolCall' || block.text?.length || block.thinking?.length)) {
+            if (content.some(block => block.type === 'toolCall' || block.text?.length)) {
                 this.state = this.state.produced();
             }
             this.state = this.state.finished(event.message);

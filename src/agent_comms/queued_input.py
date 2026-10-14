@@ -7,7 +7,7 @@ incarnation birth and admission; the registry resolves its name before compariso
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from functools import partial
 from dataclasses import dataclass, fields, replace
@@ -22,7 +22,7 @@ from .image_inputs import ImageInput
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .bus_publication import stable_thread_lookup
 from .coordination_cohort import pending_sealed_assignments
-from .coordination_errors import IdentityConflict
+from .coordination_errors import IdentityConflict, StaleRevision
 from .input_attempt import ACPInputIdText, InputAttempt, ReservedInput
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
@@ -149,18 +149,18 @@ class QueuedInput:
         return item, owner, document.lookup(item.key)
 
     @staticmethod
-    async def capacity(inputs: InputDrain, session_id: str) -> int:
-        """How many more follow-ups this turn can hold before their own user start."""
-        document = await Coordination.run_worker(inputs.dispositions.read)
+    def remaining_capacity(inputs: InputDrain, session_id: str) -> int:
+        """How many follow-ups the current locked transaction may still place."""
+        document = inputs.dispositions.read()
         return 32 - sum(
             not document.all_started(source.keys)
             for source in inputs.following_sources.get(session_id, {}).values()
         )
 
     @classmethod
-    async def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
+    def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
         """Follow-ups cannot exceed the original live awaiting-start allowance."""
-        if await cls.capacity(inputs, session_id) <= 0:
+        if cls.remaining_capacity(inputs, session_id) <= 0:
             raise RequestError.invalid_params(
                 {"reason": "Too many follow-up inputs awaiting their own user start."}
             )
@@ -178,16 +178,17 @@ class QueuedInput:
         The consumer transfers this original ExitStack only after binding its
         live input, or into its existing longer turn-acquisition lifetime.
         """
-        async with _async_store_lock(inputs.comms._wire_lock_path), AsyncExitStack() as rollback:
+        async with AsyncExitStack() as rollback:
             custody = ExitStack()
             rollback.push_async_callback(Coordination.run_worker, custody.close)
-            await cls.require_capacity(inputs, session_id)
-            item, owner, row = await Coordination.run_worker(partial(
-                cls.capture, inputs, name, text=text, prompt=prompt, echo=echo,
-                images=images, controller=controller, input_id=input_id,
-                origin=origin, custody=custody,
-            ))
-            yield item, owner, row, custody
+            async with _async_store_lock(inputs.comms._wire_lock_path):
+                cls.require_capacity(inputs, session_id)
+                item, owner, row = cls.capture(
+                    inputs, name, text=text, prompt=prompt, echo=echo,
+                    images=images, controller=controller, input_id=input_id,
+                    origin=origin, custody=custody,
+                )
+                yield item, owner, row, custody
 
     def place(
         self, inputs: InputDrain, session_id: str,
@@ -224,14 +225,11 @@ class QueuedInput:
         try:
             async with _async_store_lock(inputs.comms._wire_lock_path):
                 self.require_live_source(inputs, session_id)
-                def require_handoff():
-                    snapshot = inputs.comms.registry.snapshot()
-                    canonical = snapshot.canonical_name(name)
-                    self.require_handoff(
-                        snapshot, canonical, inputs.dispositions.read().lookup(self.key), self.input_id,
-                    )
-                    return canonical
-                canonical = await Coordination.run_worker(require_handoff)
+                snapshot = inputs.comms.registry.snapshot()
+                canonical = snapshot.canonical_name(name)
+                self.require_handoff(
+                    snapshot, canonical, inputs.dispositions.read().lookup(self.key), self.input_id,
+                )
         except RelationViolationError as error:
             raise InputHandoffRefused(str(error)) from error
         await turns.run_agent_turn(
@@ -369,6 +367,61 @@ class DeliveredInput(QueuedInput):
         return tuple(reserved)
 
     @classmethod
+    async def recover_before_drain(
+        cls,
+        inputs: InputDrain,
+        session_id: str,
+        root_id: str,
+        drain: Callable[[str, str], Awaitable[int]],
+    ) -> int:
+        """Restore positively unsent delivery before the ordinary selector reads work."""
+        await cls.recover_interrupted(inputs, session_id, root_id)
+        return await drain(session_id, root_id)
+
+    @classmethod
+    async def recover_interrupted(
+        cls, inputs: InputDrain, session_id: str, root_id: str,
+    ) -> int:
+        """Requeue only deliveries positively proved absent from native input.
+
+        A killed owner can lose the live ``DeliveredInput`` which normally
+        restores its paused assignment. The durable input row and native source
+        membership replace that lost object: any send binding or native row
+        keeps the assignment deferred and therefore never replayed.
+        """
+        async with _async_store_lock(inputs.comms._wire_lock_path):
+            snapshot = inputs.comms.registry.snapshot()
+            owner = snapshot.require(inputs.sessions.require(session_id))
+            lookup = stable_thread_lookup(owner.created_at)
+            document = inputs.dispositions.read()
+            live_keys = {
+                item.key for item in inputs.queued_inputs.get(session_id, {}).values()
+            }
+            rows = {
+                reference: row
+                for reference, row in document.unbound_wire_inputs(root_id).items()
+                if row.key not in live_keys
+            }
+            with Coordination(str(inputs.comms.root / "coordination.sqlite3")) as store:
+                assignments = store.assignments.recoverable_unbound_deliveries(
+                    lookup, frozenset(rows)
+                )
+                recoverable = tuple(
+                    (rows[assignment.source], assignment) for assignment in assignments
+                )
+                if not recoverable:
+                    return 0
+                inputs.dispositions.settle_unbound(tuple(row.key for row, _ in recoverable))
+                restored = 0
+                for _row, assignment in recoverable:
+                    try:
+                        store.assignments.restore_unbound_delivery(assignment)
+                    except StaleRevision:
+                        continue
+                    restored += 1
+                return restored
+
+    @classmethod
     async def deliver_pending(
         cls, inputs: InputDrain, session_id: str, owner: Thread, bus: MessageBus, root_id: str, after_seq: int,
     ) -> None:
@@ -397,14 +450,16 @@ class DeliveredInput(QueuedInput):
             return tuple(zip(originals, assignments, strict=True))
 
         pending = await Coordination.run_async(store_path, read)
-        pending = pending[:max(await cls.capacity(inputs, session_id), 0)]
         if not pending:
             return
         unplaced: tuple[Self, ...] = ()
         async with _async_store_lock(inputs.comms._wire_lock_path):
-            reserved = await Coordination.run_async(store_path, partial(
-                cls.reserve_pending, inputs, owner.name, root_id, pending,
-            ))
+            # Placement owns asyncio.Queue and the live input maps, so it must
+            # remain on their event-loop thread. The lock acquisition alone is
+            # asynchronous; this complete transaction contains no await.
+            with Coordination(str(store_path)) as store:
+                accepted = pending[:max(cls.remaining_capacity(inputs, session_id), 0)]
+                reserved = cls.reserve_pending(inputs, owner.name, root_id, accepted, store)
             for index, (item, content) in enumerate(reserved):
                 try:
                     item.place(inputs, session_id, inbox, content)
@@ -447,7 +502,7 @@ class DeliveredInput(QueuedInput):
 
 class InitialInput(QueuedInput):
     @classmethod
-    async def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
+    def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
         """A new original is not a following input in the live native queue."""
 
     @classmethod

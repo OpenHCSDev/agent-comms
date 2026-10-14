@@ -18,6 +18,7 @@ from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
+    TurnChangedUpdate,
     VerifiedCursorObservation,
     decode_updates,
 )
@@ -363,6 +364,12 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             )
         assert reply.message_id in [pointer.message_id for pointer in pointers]
 
+        def selected_turn_finished():
+            states = [fact.state for fact in facts if isinstance(fact, TurnChangedUpdate)]
+            active = {state.managed_id for state in states if state.busy}
+            return any(not state.busy and state.finished_turn_id in active for state in states)
+
+        await until(selected_turn_finished, "Selected turn end published to the open session")
         await until(
             lambda: any(
                 isinstance(fact, CursorAdvancedUpdate)

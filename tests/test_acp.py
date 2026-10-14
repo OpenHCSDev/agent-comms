@@ -215,7 +215,7 @@ class TestHandlers:
                     async def session_update(self, session_id=None, update=None, **kwargs):
                         updates.append(update)
 
-                await agent.turns.replay_turn_state(session, client=Client())
+                await agent.turns.publish_turn_state(session, client=Client())
                 assert facts(updates[0].field_meta, TurnChangedUpdate) == (TurnChangedUpdate(state),)
                 assert state.started_at == started_at and state.managed_id == turn.turn_id
                 assert state.busy and state.activity == "Compacting context"

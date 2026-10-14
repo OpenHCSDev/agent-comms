@@ -32,6 +32,7 @@ from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, TypedTab
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
 from .thread_identity import ThreadIncarnation
+from .turn_context import ContextEntryManifest, RecordedContextManifest
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
@@ -39,7 +40,6 @@ if TYPE_CHECKING:
     from .messages import Message
     from .message_reference import MessageReference
     from .coordination_tables.publications import PublicationIntents
-    from .turn_context import ContextManifest
     from .retained_task_facts import ExactTaskFact
 
 OriginalSource = TypeVar("OriginalSource")
@@ -151,8 +151,10 @@ class CertifiedSourceRead:
         self.require_open_prefix()
         try:
             context_rows = self.connection.execute(
-                f'SELECT "offset", length FROM "{ContextManifestSources.declared_name}" '
-                'WHERE "offset" < ? ORDER BY "offset"',
+                f'SELECT DISTINCT offset,length FROM ('
+                f'SELECT offset,length FROM "{ContextEntrySources.declared_name}" '
+                f'UNION ALL SELECT offset,length FROM "{RecordedContextManifestSources.declared_name}"'
+                f') WHERE offset < ? ORDER BY offset',
                 (self.witness.offset,),
             ).fetchall()
         except sqlite3.Error as error:
@@ -377,28 +379,100 @@ class CertifiedSourceRead:
             for fact in message.retained_task_facts()
         )
 
-    def indexed_context_resources(self, incarnation: ThreadIncarnation, snapshot, *, previous=()):
-        """Capture only original observations of this recorded incarnation.
+    def context_entry_rows(self, references):
+        """Look up only the candidate entry identities for this turn."""
+        requested = tuple(dict.fromkeys(references))
+        rows = []
+        for start in range(0, len(requested), 200):
+            batch = requested[start:start + 200]
+            where = "(session_id,session_file,entry_id) IN (" + ",".join(
+                "(?,?,?)" for _ in batch
+            ) + ")"
+            parameters = tuple(
+                value
+                for reference in batch
+                for value in (
+                    reference.identity.session_id,
+                    reference.identity.session_file,
+                    reference.entry_id,
+                )
+            )
+            rows.extend(ContextEntrySources.select(
+                self.connection, where=where, parameters=parameters
+            ))
+        return tuple(rows)
 
-        The index stores byte ranges and original owner identity, never manifest
-        contents. Retained aliases select the same birth; a reused name cannot
-        import another incarnation's observations. Wire order owns diff order.
-        """
+    def context_entry_references(self, references):
+        """Candidate entry identities already recorded in this certified cut."""
+        self.require_current()
+        return frozenset(row.reference for row in self.context_entry_rows(references))
+
+    def context_records(self, manifest):
+        """Choose new entry rows and one turn row from this certified index."""
+        from .wire_record import (
+            ContextEntryManifestWireObservation,
+            ObservationWireRecord,
+            RecordedContextManifestWireObservation,
+        )
+
+        recorded, entries = RecordedContextManifest.capture(manifest)
+        known = self.context_entry_references(
+            tuple(entry.reference for entry in entries)
+        )
+        new_entries = tuple(entry for entry in entries if entry.reference not in known)
+        records = (
+            (ObservationWireRecord(ContextEntryManifestWireObservation(new_entries)),)
+            if new_entries else ()
+        )
+        return (*records, ObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
+
+    def indexed_context_resources(self, incarnation: ThreadIncarnation, snapshot, *, previous=()):
+        """Resolve compact turn records through entry manifests recorded once."""
         self.require_current()
         storage = SqlStorage.for_type(ThreadIncarnation)
         parameters = tuple(storage.to_sql(FieldCodec.encode(recorded))
                            for recorded in incarnation.recorded_names(snapshot))
-        rows = tuple(ContextManifestSources.select(
+        rows = tuple(RecordedContextManifestSources.select(
             self.connection, where="thread IN (" + ",".join("?" for _ in parameters) + ")",
             parameters=parameters, order_by=("offset",),
         ))
-        captured = self.capture_resources(rows, previous=previous)
+        retained = {resource.pointer: resource for resource in previous}
+        recorded_previous = tuple(
+            replace(
+                resource,
+                value=RecordedContextManifest.capture(resource.value)[0],
+            )
+            for resource in previous
+        )
+        captured = tuple(self.capture_resources(rows, previous=recorded_previous))
+        references = {
+            reference
+            for resource in captured
+            for segment in resource.value.segments
+            for reference in segment.entries
+        }
+        entry_rows = self.context_entry_rows(references)
+        entries = {}
+        geometries = {(row.offset, row.length): row for row in entry_rows}
+        for row in geometries.values():
+            raw = row.read_bytes(self.stream)
+            record = WireRecord.from_wire(json.loads(raw), self.witness.root_id)
+            for entry in record.context_entries():
+                if entry.reference in references:
+                    entries[entry.reference] = entry.manifest
+        if entries.keys() != references:
+            raise RelationViolationError("Recorded context entries are incomplete")
 
         def decoded():
             for resource in captured:
-                if resource.value.thread.resolved(snapshot) != incarnation:
+                prior = retained.get(resource.pointer)
+                if prior is not None and prior.raw == resource.raw:
+                    yield prior
+                    continue
+                manifest = resource.value.restore(entries)
+                if manifest.thread.resolved(snapshot) != incarnation:
                     raise RelationViolationError("Context source differs from recorded owner.")
-                yield resource
+                yield replace(resource, value=manifest)
 
         return decoded()
 
@@ -500,18 +574,56 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
 
 
 @dataclass(frozen=True)
-class ContextManifestSources(WireSourcePointer["ContextManifest"], CheckpointTable, TypedTable):
+class ContextEntrySources(WireSourcePointer[ContextEntryManifest], CheckpointTable, TypedTable):
+    session_id: str = field(metadata={"sql": Column(primary_key=True)})
+    session_file: str = field(metadata={"sql": Column(primary_key=True)})
+    entry_id: str = field(metadata={"sql": Column(primary_key=True)})
+
+    @classmethod
+    def for_entry(cls, entry, *, offset: int, length: int):
+        reference = entry.reference
+        return cls(
+            reference.identity.session_id,
+            reference.identity.session_file,
+            reference.entry_id,
+            offset=offset,
+            length=length,
+        )
+
+    @property
+    def reference(self):
+        from .native_session_reopen import NativeSessionIdentity
+        from .turn_context import ContextEntryReference
+
+        return ContextEntryReference(
+            NativeSessionIdentity(self.session_id, self.session_file), self.entry_id
+        )
+
+    def decode_bytes(self, raw: bytes, root_id: str):
+        from .wire_record import WireRecord
+
+        record = WireRecord.from_wire(json.loads(raw), root_id)
+        entries = record.context_entries()
+        matches = tuple(entry for entry in entries if entry.reference == self.reference)
+        if len(matches) != 1:
+            raise RelationViolationError("Context entry pointer differs from original observation")
+        return matches[0]
+
+
+@dataclass(frozen=True)
+class RecordedContextManifestSources(
+    WireSourcePointer[RecordedContextManifest], CheckpointTable, TypedTable
+):
     thread: ThreadIncarnation
     indexes = (Index(("thread", "offset")), Index(("offset",), unique=True))
 
-    def decode_bytes(self, raw: bytes, root_id: str) -> ContextManifest:
-        """The original typed observation proves the pointer's recorded owner."""
-        from .bus_publication import unique_wire_object
+    def decode_bytes(self, raw: bytes, root_id: str):
+        from .wire_record import WireRecord
 
-        record = WireRecord.from_wire(json.loads(raw, object_pairs_hook=unique_wire_object), root_id)
-        manifests = record.context_manifests()
+        record = WireRecord.from_wire(json.loads(raw), root_id)
+        manifests = record.recorded_context_manifests()
         if len(manifests) != 1 or manifests[0].thread != self.thread:
-            raise RelationViolationError("Certified context pointer differs from original observation.")
+            raise RelationViolationError("Recorded context pointer differs from original observation")
         return manifests[0]
 
 

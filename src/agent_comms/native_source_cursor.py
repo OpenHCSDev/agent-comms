@@ -14,7 +14,6 @@ from functools import partial
 from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, StaleFence
-from .coordination_response import _response_boundary
 from .coordinator import Coordination
 from .cursor_owner import CursorOwner
 from .historical_native_inputs import HistoricalNativeInput
@@ -39,15 +38,20 @@ class NativeSourceCursor:
         self.bus, self.store, self.wire_root_id = bus, store, wire_root_id
 
     @classmethod
-    async def read_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str):
+    async def read_async(
+        cls, bus: MessageBus, *, wire_root_id: str, owner_name: str,
+        source_reads: NativeEvidenceScope | None = None,
+    ):
         return await Coordination.run_async(
             bus.log.path.parent / "coordination.sqlite3",
-            partial(cls._read_owned, bus, wire_root_id, owner_name),
+            partial(cls._read_owned, bus, wire_root_id, owner_name, source_reads),
         )
 
     @classmethod
-    def _read_owned(cls, bus, wire_root_id, owner_name, store):
-        return cls(bus, store, wire_root_id=wire_root_id).read(owner_name=owner_name)
+    def _read_owned(cls, bus, wire_root_id, owner_name, source_reads, store):
+        return cls(bus, store, wire_root_id=wire_root_id).read(
+            owner_name=owner_name, source_reads=source_reads
+        )
 
     @classmethod
     async def advance_async(
@@ -62,25 +66,33 @@ class NativeSourceCursor:
         )
 
     @classmethod
-    def _advance_owned(cls, bus, wire_root_id, owner, admission, generation, input_id, store):
+    def _advance_owned(
+        cls, bus, wire_root_id, owner, admission, generation, input_id, store, *,
+        source_reads: NativeEvidenceScope | None = None,
+    ):
         return cls(bus, store, wire_root_id=wire_root_id).advance(
             owner=owner, owner_admission_generation=admission,
             owner_generation=generation, committed_input_id=input_id,
+            source_reads=source_reads,
         )
 
     @classmethod
-    async def refresh_async(cls, bus: MessageBus, *, wire_root_id: str, owner_name: str):
+    async def refresh_async(
+        cls, bus: MessageBus, *, wire_root_id: str, owner_name: str,
+        source_reads: NativeEvidenceScope | None = None,
+    ):
         return await Coordination.run_async(
             bus.log.path.parent / "coordination.sqlite3",
-            partial(cls._refresh_owned, bus, wire_root_id, owner_name),
+            partial(cls._refresh_owned, bus, wire_root_id, owner_name, source_reads),
         )
 
     @classmethod
-    def _refresh_owned(cls, bus, wire_root_id, owner_name, store):
+    def _refresh_owned(cls, bus, wire_root_id, owner_name, source_reads, store):
         owner, admission = bus._registry.live_owner_with_admission(owner_name)
         person = store.participants.get(stable_thread_lookup(owner.created_at))
         return cls._advance_owned(
-            bus, wire_root_id, owner, admission, person.participant_generation, None, store
+            bus, wire_root_id, owner, admission, person.participant_generation, None,
+            store, source_reads=source_reads,
         )
 
     def _coverage(self, lookup: str, contention: StoreLockContention | None = None) -> SourceCoverage:
@@ -96,6 +108,7 @@ class NativeSourceCursor:
         owner_admission_generation: int,
         owner_generation: int,
         committed_input_id: str | None,
+        source_reads: NativeEvidenceScope | None = None,
     ) -> CurrentNativeCursor | None:
         from .native_entries import NativeEvidenceScope
 
@@ -106,7 +119,7 @@ class NativeSourceCursor:
             generation=owner_generation,
             admission_generation=owner_admission_generation,
         )
-        with NativeEvidenceScope() as source_reads:
+        with NativeEvidenceScope.borrow(source_reads) as source_reads:
             return self._advance_proven(identity, committed_input_id, source_reads,
                 StoreLockContention(2.0) if committed_input_id is not None else None)
 
@@ -122,9 +135,10 @@ class NativeSourceCursor:
         )
         evidence = coverage.evidence()
         with (
-            _response_boundary(self.bus, blocking=False, contention=contention) as registry,
+            self.store.session.boundary(self.bus, blocking=False, contention=contention) as boundary,
             self.store.session.transaction() as db,
         ):
+            registry = boundary.registry
             if sources.witness_unlocked() != coverage.source_witness:
                 raise IdentityConflict("current cursor canonical source changed before commit")
             identity.require_live(
@@ -202,8 +216,11 @@ class NativeSourceCursor:
             return prior
         return cursor
 
-    def read(self, *, owner_name: str) -> CurrentNativeCursor | None:
-        with _response_boundary(self.bus, blocking=False) as registry:
+    def read(
+        self, *, owner_name: str, source_reads: NativeEvidenceScope | None = None
+    ) -> CurrentNativeCursor | None:
+        with self.store.session.boundary(self.bus, blocking=False) as boundary:
+            registry = boundary.registry
             reason = "current native cursor has no matching live owner"
             if self.bus.log._private_marker_unlocked().root_id != self.wire_root_id:
                 raise StaleFence(reason)
@@ -230,10 +247,11 @@ class NativeSourceCursor:
         if cursor is not None:
             from .native_entries import NativeEvidenceScope
 
-            with NativeEvidenceScope() as source_reads:
+            with NativeEvidenceScope.borrow(source_reads) as source_reads:
                 coverage = self._require_source(identity, cursor, sources, source_reads)
                 witness = coverage.source_witness
-        with _response_boundary(self.bus, blocking=False) as registry:
+        with self.store.session.boundary(self.bus, blocking=False) as boundary:
+            registry = boundary.registry
             if cursor is not None and sources.witness_unlocked() != witness:
                 raise IdentityConflict("current cursor canonical source changed while reading")
             identity.require_live(

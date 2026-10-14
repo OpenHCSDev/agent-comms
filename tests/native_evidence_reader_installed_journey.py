@@ -35,7 +35,7 @@ from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.proven_source_coverage import ProvenSourceCoverage, SourceCoverage
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 import agent_comms.native_package as native_package
-import agent_comms.selected_session as session_module
+from agent_comms.coordination_session import NativeCoordinationSession
 
 PACKAGE = Path(os.environ['AC_NATIVE_COPIED_PACKAGE'])
 SOURCE = Path(os.environ['NATIVE_EVIDENCE_SOURCE'])
@@ -163,7 +163,7 @@ async def main():
                 (OptionalAwarenessProjection,('for_selected','segments')),
                 (native_package,('verify_native_package',))):
                 for name in names:instrument(resources,target,name)
-            instrument(resources,session_module,'_response_boundary',scope=True)
+            instrument(resources,NativeCoordinationSession,'boundary',scope=True)
             async with asyncio.timeout(90):
                 result=await SelectedExecution(root=root,wire_root_id=rid,owner_name='beta',
                                               native_package=PACKAGE,session_file=saved).run()
