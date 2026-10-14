@@ -230,6 +230,17 @@ class UnavailableCursorObservation(CursorObservation):
 
 
 @dataclass(frozen=True)
+class BusyCursorObservation(CursorObservation):
+    @property
+    def needs_refresh(self) -> bool:
+        return True
+
+    @property
+    def status(self) -> str:
+        return "busy"
+
+
+@dataclass(frozen=True)
 class EmptyCursorObservation(CursorObservation):
     @property
     def needs_refresh(self) -> bool:

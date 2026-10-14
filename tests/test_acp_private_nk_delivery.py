@@ -24,7 +24,11 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from agent_comms.coordination_errors import (
+    IdentityConflict,
+    PublicationActivationBlocked,
+    StaleFence,
+)
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
@@ -529,16 +533,12 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
     assert len(calls) == 2  # no old-epoch native input can initialize new proof
 
 
-async def test_unavailable_cursor_metadata_retains_owner_scope(tmp_path):
+async def test_invalid_cursor_schema_is_not_published_as_availability(tmp_path):
     comms, agent, _ = _session(tmp_path)
-    before = cursor_envelope((await agent.sessions.metadata("beta")))
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
-    unavailable = cursor_envelope((await agent.sessions.metadata("beta")))
-    assert unavailable.status == "unavailable"
-    assert unavailable.scope == before.scope
-    assert unavailable.revision > before.revision
-    assert not isinstance(unavailable.observation, VerifiedCursorObservation)
+    with pytest.raises(PublicationActivationBlocked):
+        await agent.sessions.metadata("beta")
 
 
 async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
@@ -578,7 +578,7 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
             for update in (await agent.cursors.trusted_metadata("beta", "beta"))
             if isinstance(update, CursorAdvancedUpdate)
         )
-        assert loaded.status == "unavailable"
+        assert loaded.status == "busy"
         await agent.cursors.publish("beta", "beta")
     assert len(updates) == before
     await agent.cursors.publish("beta", "beta")
@@ -589,13 +589,8 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     assert updates[-1].revision > loaded.revision
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_schema_meta")
-    await agent.cursors.publish("beta", "beta")
-    assert updates[-1].status == "unavailable"
-    assert updates[-1].scope == loaded.scope
-    before = len(updates)
-    await agent.cursors.refresh("beta", "beta")
-    await agent.cursors.refresh("beta", "beta")
-    assert len(updates) == before, "Unchanged unavailable observation was republished"
+    with pytest.raises(PublicationActivationBlocked):
+        await agent.cursors.publish("beta", "beta")
     assert len(calls) == 1  # Observation never initiates or replays an input.
 
 
@@ -620,7 +615,7 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
         "agent_comms.cursor_publication.NativeSourceCursor.read", replacement_during_read
     )
     await agent.cursors.publish("beta", "beta")
-    assert updates[-1].status == "unavailable"
+    assert updates[-1].status == "busy"
     assert updates[-1].scope.admission_generation > scope.admission_generation
 
 

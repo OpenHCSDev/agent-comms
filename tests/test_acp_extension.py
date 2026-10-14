@@ -6,6 +6,7 @@ import pytest
 from agent_comms.acp_extension import (
     AgentCommsUpdate,
     AvailableQueueProjection,
+    BusyCursorObservation,
     CompactionChangedUpdate,
     CompactionCommittedUpdate,
     CoordinationChangedUpdate,
@@ -106,6 +107,20 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     ):
         with pytest.raises(ValueError):
             decode_updates(invalid)
+
+
+def test_busy_cursor_observation_roundtrip():
+    owner = AdmissionIdentity(ThreadIncarnation("pilot", 1.0), 1)
+    update = CursorAdvancedUpdate(
+        CursorEnvelope(
+            CursorScope("pilot", "a" * 32, owner, 123),
+            1,
+            BusyCursorObservation(),
+        )
+    )
+    assert decode_updates(encode_updates(update)) == (update,)
+    assert update.envelope.observation.needs_refresh
+    assert update.envelope.status == "busy"
 
 
 def test_request_family_strict_boundary():

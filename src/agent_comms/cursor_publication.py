@@ -15,6 +15,7 @@ from functools import partial
 from acp.schema import SessionInfoUpdate
 
 from .acp_extension import (
+    BusyCursorObservation,
     CursorAdvancedUpdate,
     CursorEnvelope,
     CursorScope,
@@ -24,7 +25,11 @@ from .acp_extension import (
     encode_updates,
 )
 from .comms import Comms
-from .coordination_errors import CoordinationError
+from .coordination_errors import (
+    CoordinationReadUnavailable,
+    IdentityConflict,
+    StaleFence,
+)
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
@@ -124,16 +129,22 @@ class CursorPublication:
             read_cursor = (
                 NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
             )
-            cursor = await read_cursor(
-                bus, wire_root_id=self.root_id, owner_name=thread_name,
-                source_reads=delivery.source_reads,
-            )
+            try:
+                cursor = await read_cursor(
+                    bus, wire_root_id=self.root_id, owner_name=thread_name,
+                    source_reads=delivery.source_reads,
+                )
+            except sqlite3.OperationalError as error:
+                CoordinationReadUnavailable.raise_from(error)
         except BlockingIOError:
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             if defer_busy and current == scope:
                 raise
-            return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):
+            return CursorEnvelope(current, revision, BusyCursorObservation())
+        except CoordinationReadUnavailable:
+            current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
+            return CursorEnvelope(current, revision, BusyCursorObservation())
+        except (IdentityConflict, StaleFence):
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
         current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))

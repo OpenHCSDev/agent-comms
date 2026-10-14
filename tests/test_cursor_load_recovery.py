@@ -113,7 +113,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
                 for update in (await agent.cursors.trusted_metadata(owner.name, owner.name))
                 if isinstance(update, CursorAdvancedUpdate)
             )
-            assert loaded.observation.status == "unavailable"
+            assert loaded.observation.status == "busy"
             assert loaded.scope == before.scope
             await agent.cursors.publish(owner.name, owner.name)
         agent.inputs.ensure_live_drain(owner.name)
