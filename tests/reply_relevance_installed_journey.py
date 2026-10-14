@@ -74,7 +74,7 @@ async def run(stage, package):
         PATH=str(binary.parent) + os.pathsep + environment.get('PATH', ''),
         VIRTUAL_ENV=str(binary.parent.parent),
         AGENT_COMMS_DEBUG_LOG=str(stage / 'acp.log'))
-    for key in ('PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID',
+    for key in ('PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK',
                 'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY', 'PYTHONPATH'):
         environment.pop(key, None)
     os.environ.clear()

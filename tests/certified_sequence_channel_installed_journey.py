@@ -54,7 +54,7 @@ def main():
     os.environ['AGENT_COMMS_RUNTIME_ROOT'] = str(candidate / 'bin')
     os.environ['AGENT_COMMS_ACP_LAUNCHER'] = str(candidate / 'bin/agent-comms-acp')
     for key in ('PYTHONPATH', 'AGENT_COMMS_ROOT', 'AGENT_COMMS_THREAD', 'AGENT_COMMS_MANAGED',
-                'PI_AGENT_ID', 'PI_PARENT_ID', 'PI_TASK', 'PI_WORKTREE', 'PI_PROMPT'):
+                'PI_PARENT_ID', 'PI_TASK', 'PI_WORKTREE', 'PI_PROMPT'):
         os.environ.pop(key, None)
 
     from agent_comms.comms import wire

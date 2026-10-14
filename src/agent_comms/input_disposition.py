@@ -105,6 +105,13 @@ class InputDocument:
             bound for row in self.rows.values() if (bound := row.bound_bus_input()) is not None
         )
 
+    def active_reply_references(self, lease, root_id, snapshot) -> tuple[MessageReference, ...]:
+        return tuple(
+            reference
+            for row in sorted(self.rows.values(), key=lambda item: item.order)
+            if (reference := row.active_reply_reference(lease, root_id, snapshot)) is not None
+        )
+
     def unbound_wire_inputs(self, root_id: str) -> dict[MessageReference, StoredInput]:
         """Original bus deliveries with positive evidence that Pi never received them."""
         return {

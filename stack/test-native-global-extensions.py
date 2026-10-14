@@ -41,7 +41,7 @@ def main():
                        AGENT_COMMS_MANAGED="1", AGENT_COMMS_ROOT=str(root / "wire"),
                        PI_OFFLINE="1",
                        NODE_DISABLE_COMPILE_CACHE="1", PATH=f"{commands}:{os.environ['PATH']}")
-    for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE", "PI_PARENT_ID", "PI_AGENT_ID",
+    for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE", "PI_PARENT_ID",
                  "AGENT_COMMS_THREAD", "PYTHONPATH", "AGENT_COMMS_PRIVATE_NK_ROOT_ID", "AGENT_COMMS_PRIVATE_NK_PACKAGE"):
         environment.pop(name, None)
     environment["AGENT_COMMS_THREAD"] = "native-startup-fixture"

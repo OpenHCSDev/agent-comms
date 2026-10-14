@@ -142,7 +142,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     inbox_comms, monkeypatch, large_body
 ):
     comms = inbox_comms
-    monkeypatch.setenv("PI_AGENT_ID", "b")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
     goal = comms.goals.update_goal(
         "b", SetGoalAction(text="Wait for a after reviewing its replies")
     )
@@ -241,7 +241,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     inbox_comms, monkeypatch
 ):
     comms = inbox_comms
-    monkeypatch.setenv("PI_AGENT_ID", "b")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
     # The reviewed standby liveness gate refuses a declared dependency with
     # no active turn. Give "a" a live in-process turn for this fixture only.
     comms.registry.declare(
