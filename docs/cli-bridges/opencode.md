@@ -1,7 +1,7 @@
 # OpenCode comms
 
 `agent-comms-opencode-bridge` connects an OpenCode session to Core using the
-same `CliBridge`, `Inbox`, `Send` and `DeliveryJournal` as Claude and Codex.
+same `TranscriptBridge`, `Watch`, `Send` and `DeliveryJournal` as Claude and Codex.
 OpenCode retains ownership of its session, selected model, tools and turn runner.
 
 ## Connect a window
@@ -22,7 +22,7 @@ Register the intended external thread through Core's existing registration
 command. Bind that thread and the actual OpenCode session ID on first use:
 
 ```sh
-agent-comms-opencode-bridge inbox \
+agent-comms-opencode-bridge watch \
   --server http://127.0.0.1:4096 --directory /path/to/project \
   --root /path/to/comms-root --bus-thread opencode --session ses_ACTUAL_ID
 ```
@@ -65,13 +65,23 @@ Event declarations supply confirmation behavior. Unrelated native event types
 are ignored at the protocol boundary; malformed recognized events fail.
 SSE framing and HTTP authentication belong to the OpenCode transport.
 
-## Remaining scope
+## Live output
 
-Automatic assistant/tool transcript export into Toad depends on the unfinished
-Core external-transcript integration. This adapter currently exposes `inbox`
-and `send`. Claude's Monitor emits lines, Codex acknowledges inputs through its
-API, and OpenCode confirms persisted inputs through its API. These concrete
-transport results remain explicit in the shared design.
+`watch` runs inbox delivery and output publication together. OpenCode's native
+session status drives Working, Thinking, the current tool preview and Ready.
+Text/reasoning deltas grow the current draft; completed native parts append
+finished history. Tool previews and results use Core's shared `ToolCall` and
+`NativeTool`, the same declarations used by Codex. No Toad-specific adapter exists.
+
+The subscription starts before reading the latest 20 messages and current
+status. Finished identities cover snapshot/event overlap. Parts already running
+when the subscription begins appear when their complete native part arrives;
+a suffix received without its start cannot reconstruct the missing prefix.
+Restarting the watch does not retry inputs or append duplicate finished items.
+`inbox` remains available for input-only use.
+
+Automatic window startup and server selection are the next delivery; the manual
+connection command above still applies.
 
 Protocol references: [OpenCode server](https://opencode.ai/docs/server/) and the
 installed OpenCode 1.18.32 `/doc` schema. Its prompt handler saves user messages
@@ -80,7 +90,7 @@ before emitting `server.connected`.
 
 ## Installed check, 2026-10-14
 
-The `opencode-comms` command is linked in `~/.local/bin`. The running user unit
+The original inbox-only check used the user unit
 `opencode-comms-inbox.service` connects the `opencode` Core thread to the window
 at `http://127.0.0.1:4096`, directory `/home/ts`, session
 `ses_ec410d51afferhTC4MtUR24HWO`. It is not enabled at login. It reconnects only

@@ -8,53 +8,24 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import replace
 import json
-from typing import Annotated, ClassVar, Generic, Literal, TypeVar, Union
+from typing import ClassVar, Generic, Literal, TypeVar
 
 from metaclass_registry import RegistryConfig
 from pydantic import (
-    Discriminator, Field, JsonValue, Tag, TypeAdapter,
-    computed_field,
+    Field, JsonValue, TypeAdapter,
 )
 
 from agent_comms.activity import ActivityState
-from agent_comms.native_tools import NativeTool
 from agent_comms.transcript_events import (
-    AssistantTranscript, ThinkingTranscript, ToolStartTranscript, ToolEndTranscript,
+    AssistantTranscript, ThinkingTranscript, ToolEndTranscript,
     TranscriptEvent, UserTranscript, NoticeTranscript,
 )
 
 
 from .shared import (
     ActiveItem, DraftItem, FinishedItem, RegisteredWireMeta, TranscriptUpdate,
-    TurnEnded, TurnStarted, WireModel,
+    TurnEnded, TurnStarted, WireModel, TaggedWire, ToolCall,
 )
-
-
-class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
-    """A Codex object whose JSON ``type`` names its declared class."""
-    wire_tag: ClassVar[str]
-
-    @computed_field
-    @property
-    def type(self) -> str:
-        return self.wire_tag
-
-    @classmethod
-    def declared_union(cls) -> object:
-        """The wire grammar of every declared member, discriminated by its tag."""
-        def tag(value: object) -> str:
-            if isinstance(value, cls):
-                return value.wire_tag
-            return WireHeader.model_validate(value).type
-        return Annotated[
-            Union[tuple(Annotated[member, Tag(member.wire_tag)]
-                        for member in cls.__registry_config__.registry_dict.values())],
-            Discriminator(tag),
-        ]
-
-
-class WireHeader(WireModel):
-    type: str
 
 
 class UserInput(TaggedWire, ABC):
@@ -202,8 +173,8 @@ class ThreadStatus(TaggedWire, ABC):
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
     )
 
-    def update(self, turn_id: str) -> TranscriptUpdate:
-        return TurnEnded(turn_id)
+    def update(self) -> TranscriptUpdate:
+        return TurnEnded()
 
 
 class NotLoadedStatus(ThreadStatus):
@@ -221,8 +192,8 @@ class SystemErrorStatus(ThreadStatus):
 class ActiveStatus(ThreadStatus):
     wire_tag = 'active'
 
-    def update(self, turn_id: str) -> TranscriptUpdate:
-        return TurnStarted(turn_id)
+    def update(self) -> TranscriptUpdate:
+        return TurnStarted()
 
 
 class ResumedThreadState(WireModel):
@@ -345,17 +316,16 @@ class ToolItem(Item, ABC):
     @abstractmethod
     def succeeded(self) -> bool: ...
 
+    @property
+    def call(self) -> ToolCall:
+        return ToolCall(self.id, self.tool_name, self.arguments)
+
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.tool_name,
-                                    raw_input=self.arguments),
-                ToolEndTranscript(tool_call_id=self.id, tool_name=self.tool_name,
-                                  text=self.output, ok=self.succeeded))
+        return self.call.finished(self.output, self.succeeded)
 
     @property
     def activity_detail(self) -> str:
-        # Core's tool declarations own the action text native tools show.
-        arguments = self.arguments if isinstance(self.arguments, dict) else {}
-        return NativeTool.start(self.id, self.tool_name, arguments).title
+        return self.call.title
 
 
 class CommandItem(ToolItem):
@@ -686,7 +656,7 @@ class TurnBegan(TranscriptNotification):
     turn: TurnHeader
 
     def apply(self, stream: ItemStream) -> TranscriptUpdate:
-        return TurnStarted(self.turn.id)
+        return TurnStarted()
 
 
 class TurnFinished(TranscriptNotification):
@@ -698,7 +668,7 @@ class TurnFinished(TranscriptNotification):
             del stream.started[key]
             stream.drafts.pop(key, None)
             stream.summary_indices.pop(key, None)
-        return TurnEnded(self.turn.id)
+        return TurnEnded()
 
 
 class ItemNotification(TranscriptNotification, ABC):

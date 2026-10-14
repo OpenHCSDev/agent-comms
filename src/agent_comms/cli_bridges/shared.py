@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import builtins
 import argparse
 from contextlib import suppress
 import asyncio
@@ -14,16 +15,17 @@ from pathlib import Path
 import signal
 import sqlite3
 import sys
-from typing import AsyncIterator, ClassVar, Generic, TypeVar
+from typing import Annotated, AsyncIterator, ClassVar, Generic, TypeVar, Union
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter
+from pydantic import BaseModel, ConfigDict, TypeAdapter, Discriminator, Tag, JsonValue, computed_field
 from metaclass_registry import AutoRegisterMeta
 from agent_comms.messages import Message, MessageKind
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.transcript_events import TranscriptEvent
+from agent_comms.native_tools import NativeTool
+from agent_comms.transcript_events import TranscriptEvent, ToolStartTranscript, ToolEndTranscript
 
 
 class WireModel(BaseModel):
@@ -33,6 +35,34 @@ class WireModel(BaseModel):
 class RegisteredWireMeta(AutoRegisterMeta, type(WireModel)):
     """Compose declaration registration with external-field validation."""
 
+class WireHeader(WireModel):
+    type: str
+
+
+class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
+    """An external object whose JSON ``type`` names its declared class."""
+    wire_tag: ClassVar[str]
+    header: ClassVar[builtins.type[WireHeader]] = WireHeader
+
+    @computed_field
+    @property
+    def type(self) -> str:
+        return self.wire_tag
+
+    @classmethod
+    def declared_union(cls) -> object:
+        """The wire grammar of every declared member, discriminated by its tag."""
+        def tag(value: object) -> str:
+            if isinstance(value, cls):
+                return value.wire_tag
+            return cls.header.model_validate(value).type
+        return Annotated[
+            Union[tuple(Annotated[member, Tag(member.wire_tag)]
+                        for member in cls.__registry_config__.registry_dict.values())],
+            Discriminator(tag),
+        ]
+
+
 class CoreError(WireModel):
     error: str
 
@@ -41,6 +71,27 @@ class SendResult(WireModel):
 
 class WatchDatabaseBusy(RuntimeError):
     """Only a failed Core read stream may be reconnected automatically."""
+
+@dataclass(frozen=True)
+class ToolCall:
+    """A CLI invocation uses the same preview and history as a native tool."""
+    id: str
+    name: str
+    arguments: JsonValue
+
+    @property
+    def title(self) -> str:
+        # Some external tools accept a scalar. Native previews only inspect objects.
+        if isinstance(self.arguments, dict):
+            return NativeTool.start(self.id, self.name, self.arguments).title
+        return self.name
+
+    def finished(self, text: str, ok: bool) -> tuple[TranscriptEvent, ...]:
+        return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
+                                    raw_input=self.arguments),
+                ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
+                                  text=text, ok=ok))
+
 
 @dataclass(frozen=True)
 class Binding:
@@ -64,8 +115,6 @@ class ThreadOutput:
 @dataclass(frozen=True)
 class TranscriptUpdate(ABC):
     """One change a CLI reports about its thread."""
-    turn_id: str
-
     @abstractmethod
     def publish(self, output: ThreadOutput) -> None: ...
 
@@ -82,8 +131,10 @@ class TranscriptUpdate(ABC):
 
 @dataclass(frozen=True)
 class TurnStarted(TranscriptUpdate):
+    detail: str = ''
+
     def publish(self, output: ThreadOutput) -> None:
-        output.status(ActivityState.WORKING)
+        output.status(ActivityState.WORKING, self.detail)
 
 
 @dataclass(frozen=True)
@@ -96,6 +147,7 @@ class TurnEnded(TranscriptUpdate):
 @dataclass(frozen=True)
 class ActiveItem(TranscriptUpdate):
     """An item the CLI started producing: what it is doing now."""
+    turn_id: str
     item_id: str
     state: ActivityState
     detail: str
@@ -107,6 +159,7 @@ class ActiveItem(TranscriptUpdate):
 @dataclass(frozen=True)
 class FinishedItem(TranscriptUpdate):
     """One CLI item's complete presentation, identified by its producer."""
+    turn_id: str
     item_id: str
     events: tuple[TranscriptEvent, ...]
 
@@ -121,6 +174,7 @@ class FinishedItem(TranscriptUpdate):
 @dataclass(frozen=True)
 class DraftItem(TranscriptUpdate):
     """Current text, superseded by a newer draft or the same item's completion."""
+    turn_id: str
     item_id: str
     events: tuple[TranscriptEvent, ...]
 

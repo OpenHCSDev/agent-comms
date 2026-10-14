@@ -33,7 +33,7 @@ def test_codex_stream_reports_activity_and_finishes_items():
     def receive(method, **params):
         return stream.receive(RpcNotification(method=method, params={"threadId": "th", **params}))
 
-    assert receive("turn/started", turn={"id": "t1"}) == TurnStarted("t1")
+    assert receive("turn/started", turn={"id": "t1"}) == TurnStarted()
     assert receive("item/started", turnId="t1", item=command, startedAtMs=1000) \
         == ActiveItem("t1", "c1", ActivityState.WORKING, "Run ls -la")
     assert receive("item/commandExecution/outputDelta", turnId="t1", itemId="c1",
@@ -50,7 +50,7 @@ def test_codex_stream_reports_activity_and_finishes_items():
     assert receive("item/started", turnId="t1", item=thinking, startedAtMs=3000) \
         == ActiveItem("t1", "r1", ActivityState.THINKING, "")
     assert receive("item/completed", turnId="t1", item=thinking, completedAtMs=4000).events == ()
-    assert receive("turn/completed", turn={"id": "t1", "status": "completed"}) == TurnEnded("t1")
+    assert receive("turn/completed", turn={"id": "t1", "status": "completed"}) == TurnEnded()
 
 
 def test_attaching_reports_the_status_codex_gives_its_thread():
@@ -60,8 +60,8 @@ def test_attaching_reports_the_status_codex_gives_its_thread():
     def resumed(status):
         return ResumedThread.model_validate({"thread": {"id": "th", "status": status}})
 
-    assert resumed({"type": "active", "activeFlags": []}).thread.status.update("t9") == TurnStarted("t9")
-    assert resumed({"type": "idle"}).thread.status.update("t9") == TurnEnded("t9")
+    assert resumed({"type": "active", "activeFlags": []}).thread.status.update() == TurnStarted()
+    assert resumed({"type": "idle"}).thread.status.update() == TurnEnded()
 
 
 def test_deltas_require_start_and_finish_retires_the_assembly():
@@ -100,6 +100,6 @@ def test_coalescing_preserves_completion_and_unrelated_updates():
     newer = DraftItem("t", "a", (AssistantTranscript("Hello"),))
     other = DraftItem("t", "b", (AssistantTranscript("Other"),))
     final = FinishedItem("t", "a", (AssistantTranscript("Hello!"),))
-    end = TurnEnded("t")
+    end = TurnEnded()
     assert TranscriptUpdate.coalesced([first, other, newer]) == [other, newer]
     assert TranscriptUpdate.coalesced([first, other, newer, final, end]) == [other, final, end]

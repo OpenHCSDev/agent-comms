@@ -14,11 +14,13 @@ import aiohttp
 from agent_comms.messages import Message
 
 from .shared import (
-    CliBridge, Options, Outcome, SendResult, parse_options, run_bridge, shared_parser,
+    TranscriptBridge, TranscriptUpdate, Options, Outcome, SendResult, parse_options, run_bridge, shared_parser,
 )
 from .opencode_protocol import (
-    Connected, OpenCodeEvent, Prompt, SavedInput, Session, TextInput, Toast, UserMessage,
+    Connected, OpenCodeEvent, OpenCodeStream, Prompt, SavedInput, Session, TextInput, Toast,
+    SESSION_STATUSES, MESSAGES, IdleStatus,
 )
+from .opencode_parts import SavedMessage, UserMessage
 
 
 async def event_payloads(response: aiohttp.ClientResponse) -> AsyncIterator[str]:
@@ -38,7 +40,7 @@ async def event_payloads(response: aiohttp.ClientResponse) -> AsyncIterator[str]
             field, separator, value = line.partition(b':')
             if field == b'data':
                 data.append(value.removeprefix(b' ') if separator else b'')
-    raise ConnectionError('OpenCode event stream ended before input confirmation')
+    raise ConnectionError('OpenCode event stream ended')
 
 
 @dataclass
@@ -80,6 +82,33 @@ class OpenCodeConnection:
             raise ValueError('OpenCode returned a different saved message')
         return saved.info
 
+    async def message(self, message_id: str) -> SavedMessage:
+        async with self.http.get(self.path + '/message/' + quote(message_id, safe='')) as response:
+            saved = SavedMessage.model_validate_json(await response.read())
+        if saved.info.id != message_id or saved.info.sessionID != self.session:
+            raise ValueError('OpenCode returned a different saved message')
+        return saved
+
+    async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
+        # Subscribe before taking snapshots; the HTTP stream retains the overlap.
+        # Finished identities prevent buffered parts reopening a finished draft.
+        async with self.http.get('/event', timeout=aiohttp.ClientTimeout(total=None)) as response:
+            payloads = event_payloads(response)
+            Connected.model_validate_json(await anext(payloads))
+            stream = OpenCodeStream(self)
+            async with self.http.get(self.path + '/message', params={'limit': '20'}) as history:
+                messages = MESSAGES.validate_json(await history.read())
+            for saved in messages:
+                for update in stream.snapshot(saved):
+                    yield update
+            async with self.http.get('/session/status') as status_response:
+                statuses = SESSION_STATUSES.validate_json(await status_response.read())
+            # OpenCode omits idle sessions from its status map.
+            yield (statuses[self.session] if self.session in statuses else IdleStatus()).publication()
+            async for payload in payloads:
+                for update in await OpenCodeEvent.decode(payload).receive(stream):
+                    yield update
+
     async def deliver(self, text: str) -> UserMessage:
         async with asyncio.timeout(30):
             async with self.http.get('/event') as response:
@@ -106,11 +135,16 @@ class OpenCodeConnection:
             await response.read()
 
 
-class OpenCodeBridge(CliBridge[OpenCodeOptions]):
+class OpenCodeBridge(TranscriptBridge[OpenCodeOptions]):
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--server', required=True, help='HTTP address of the running OpenCode TUI/server')
         parser.add_argument('--directory', type=Path, default=Path.cwd(), help='OpenCode session working directory')
+
+    async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
+        async with OpenCodeConnection.open(self.options, self.binding.thread) as connection:
+            async for update in connection.transcript():
+                yield update
 
     async def deliver(self, message: Message) -> Outcome:
         async with OpenCodeConnection.open(self.options, self.binding.thread) as connection:

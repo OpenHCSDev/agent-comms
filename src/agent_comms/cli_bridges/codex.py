@@ -103,8 +103,7 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
                 if entry.completed:
                     yield entry.publication()
             # Codex's own thread status says whether its newest turn still runs.
-            if page.data:
-                yield resumed.thread.status.update(page.data[0].turnId)
+            yield resumed.thread.status.update()
             stream = ItemStream(self.binding.thread)
             buffered = tuple(codex.pending)
             codex.pending.clear()
