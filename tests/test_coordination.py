@@ -13,14 +13,12 @@ from dataclasses import FrozenInstanceError, replace
 import pytest
 
 from agent_comms.assignment_states import (
-    AssignmentState,
     CompletedAssignment,
     EngagedAssignment,
 )
 from agent_comms.attempt_states import (
     AbortingAttempt,
     AttemptFailedAttempt,
-    AttemptState,
     PromptStartingAttempt,
     RetryingAttempt,
     SucceededAttempt,
@@ -39,9 +37,11 @@ from agent_comms.coordination_tables.assignments import (
 )
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
 from agent_comms.coordination_tables.executions import (
+    CurrentExecutions,
     ExecutionOrigin,
     ExecutionRecord,
 )
+from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
     canonical_publication_key,
@@ -57,7 +57,7 @@ from agent_comms.execution_states import (
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.typed_table import JsonStorage
-from agent_comms.messages import InfoKind, Message, MessageKind
+from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import (
     PendingResponse,
     PublishedResponse,
@@ -77,7 +77,6 @@ def execution(*, status=PendingExecution, ordinal=None, origin=ExecutionOrigin.A
         reason_code=None,
         created_at_ms=100,
         updated_at_ms=100,
-        exact_target="requester" if origin is ExecutionOrigin.WIRE else None,
         lifecycle=status.load(ordinal),
     )
 
@@ -149,25 +148,21 @@ def snapshot(
                 (
                     replace(
                         assignment(),
-                        lifecycle=AssignmentState.decode(record.lifecycle.declared_name).load(
+                        lifecycle=record.lifecycle.assignment_state().build(
                             assignment().lifecycle.mode,
-                            assignment().lifecycle.verdict,
-                            assignment().lifecycle.execution_id,
+                            record.execution_id,
                             assignment().lifecycle.exact_target,
                         ),
                     )
-                    if type(record.lifecycle)
-                    in {DeferredExecution, CompletedExecution, FailedExecution}
-                    else assignment()
                 ),
             )
             if record.origin is ExecutionOrigin.WIRE
             else ()
         ),
         replay=replay or ReplayAssessments(record.execution_id, ReplayFact.NONE, True, False, 1),
-        obligation=response if record.origin is ExecutionOrigin.WIRE else None,
-        publication_intent=None,
-        publication_receipt=None,
+        obligations=(response,) if record.origin is ExecutionOrigin.WIRE and response else (),
+        publication_intents=(),
+        publication_receipts=(),
         connectivity=None,
         last_recovery=None,
         current_execution_id=record.execution_id if current else None,
@@ -182,50 +177,30 @@ def sql_execution(
     name="e",
     status="pending",
     origin="acp",
-    target=None,
     ordinal=None,
     max_attempts=3,
     owner="p",
     thread="worker",
 ):
-    db.execute(
-        "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thread,"
-        "owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) "
-        "VALUES (?,?,?,?,?,?,1,?,NULL,0,0)",
-        (
-            name,
-            origin,
-            json.dumps({"kind": status, **({"ordinal": ordinal} if ordinal is not None else {})}),
-            target,
-            thread,
-            owner,
-            max_attempts,
-        ),
-    )
+    ExecutionRecord(
+        execution_id=name, origin=ExecutionOrigin(origin),
+        lifecycle=ExecutionState.decode(status).load(ordinal),
+        owner_thread=thread, owner_lookup=owner, revision=1,
+        max_attempts=max_attempts, reason_code=None, created_at_ms=0, updated_at_ms=0,
+    ).insert(db)
 
 
 def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
     db.execute("BEGIN IMMEDIATE")
-    sql_execution(db, name=name, status="queued", origin="wire", target=target)
-    db.execute(
-        (
-            "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
-            "ated_at_ms,updated_at_ms,revision) VALUES (?,?,json_object('kind','pending')"
-            ",NULL,0,0,1)"
-        ),
-        (name, target),
-    )
-    db.execute(
-        (
-        'INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m'
-        'essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,'
-        "updated_at_ms,revision) VALUES ('a','worker','p',2,'m',json_object('kind','e"
-        "ngaged','decision',json_object('kind','full','exact_target',?,'execution_id'"
-        ",?)),'direct','resolver-v1','policy-v1',0,0,1)"
-        ),
-        (target, name),
-    )
-    db.execute("INSERT INTO execution_claims VALUES (?,'a',0)", (name,))
+    sql_execution(db, name=name, status="queued", origin="wire")
+    ResponseObligation(name, target, PendingResponse(), None, 0, 0, 1).insert(db)
+    WakeAssignment(
+        assignment_id="a", recipient="worker", recipient_lookup="p",
+        wire_seq=2, message_id="m", audience=MessageAudience.DIRECT,
+        lifecycle=EngagedAssignment.build(FullWake(), name, target),
+        accepted_at_ms=0, updated_at_ms=0, revision=1,
+    ).insert(db)
+    ExecutionAssignmentLink(name, "a", 0).insert(db)
     if pending:
         db.execute(
             (
@@ -238,28 +213,19 @@ def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
 
 
 def sql_attempt(db, name="e", ordinal=1, generation=1, owner="p", thread="worker", digest=None):
-    db.execute(
-        (
-            "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,owner_generation,owner_token_digest,lifecycle,revision,last_progress_at_ms,reason_code,created_at_ms,updated_at_ms) VALUES (?,?,?,?,?,?,json_object('kind','prompt_starting','lease_expires_at_ms',500,'backend_done',json('false'),'process_dead',json('false')),1,NULL,NULL,0,0)"
-        ),
-        (
-            name,
-            ordinal,
-            owner,
-            thread,
-            generation,
-            digest if digest is not None else f"digest-{generation}",
-        ),
-    )
+    AttemptRecord(
+        execution_id=name, attempt_ordinal=ordinal, owner_lookup=owner,
+        owner_thread=thread, owner_generation=generation,
+        owner_token_digest=digest if digest is not None else f"digest-{generation}",
+        lifecycle=PromptStartingAttempt.load(500, False, False), revision=1,
+        last_progress_at_ms=None, reason_code=None, created_at_ms=0, updated_at_ms=0,
+    ).insert(db)
 
 
 def owner(db):
-    db.execute("INSERT INTO participants VALUES ('p','worker',1)")
-    db.execute("INSERT INTO owner_generations VALUES ('p','worker',1)")
-    db.execute(
-        "INSERT INTO current_executions (owner_lookup,execution_id,"
-        "attempt_ordinal,pointer_revision) VALUES ('p',NULL,NULL,0)"
-    )
+    Participants("p", "worker", True).insert(db)
+    OwnerGenerations("p", "worker", 1).insert(db)
+    CurrentExecutions("p", None, None, 0).insert(db)
 
 
 def activate(db, name="e", ordinal=1, generation=1):
@@ -989,56 +955,22 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
     )
     c.execute("COMMIT")
     with CoordinationStore(path) as reopened:
-        row = reopened._connection.execute(
-            "SELECT * FROM executions WHERE execution_id='e'"
-        ).fetchone()
-        terminal = reopened._connection.execute(
-            "SELECT * FROM attempts WHERE execution_id='e'"
-        ).fetchone()
         assert (
             reopened._connection.execute("SELECT count(*) FROM replay_assessments").fetchone()[0]
             == 0
         )
-        execution_record = ExecutionRecord(
-            execution_id=row["execution_id"],
-            origin=ExecutionOrigin(row["origin"]),
-            owner_thread=row["owner_thread"],
-            owner_lookup=row["owner_lookup"],
-            revision=row["revision"],
-            max_attempts=row["max_attempts"],
-            reason_code=row["reason_code"],
-            created_at_ms=row["created_at_ms"],
-            updated_at_ms=row["updated_at_ms"],
-            exact_target=row["exact_target"],
-            lifecycle=ExecutionState.decode(row["status"]).load(row["current_attempt_ordinal"]),
-        )
-        attempt_record = AttemptRecord(
-            execution_id=terminal["execution_id"],
-            attempt_ordinal=terminal["attempt_ordinal"],
-            owner_lookup=terminal["owner_lookup"],
-            owner_thread=terminal["owner_thread"],
-            owner_generation=terminal["owner_generation"],
-            owner_token_digest=terminal["owner_token_digest"],
-            revision=terminal["revision"],
-            last_progress_at_ms=terminal["last_progress_at_ms"],
-            reason_code=terminal["reason_code"],
-            created_at_ms=terminal["created_at_ms"],
-            updated_at_ms=terminal["updated_at_ms"],
-            lifecycle=AttemptState.decode(terminal["phase"]).load(
-                terminal["lease_expires_at_ms"],
-                bool(terminal["backend_done"]),
-                bool(terminal["process_dead"]),
-            ),
-        )
+        execution_record = ExecutionRecord.one(reopened._connection, execution_id="e")
+        attempt_record = AttemptRecord.one(reopened._connection, execution_id="e", attempt_ordinal=1)
+        assert execution_record is not None and attempt_record is not None
         absent = RecoverySnapshot(
             execution=execution_record,
             attempt=attempt_record,
             assignments=(),
             links=(),
             replay=None,
-            obligation=None,
-            publication_intent=None,
-            publication_receipt=None,
+            obligations=(),
+            publication_intents=(),
+            publication_receipts=(),
             connectivity=None,
             last_recovery=None,
             current_execution_id=None,
@@ -1117,7 +1049,7 @@ def test_direct_sql_immutable_attempt_identity_and_monotonic_evidence(db):
 def test_wire_execution_requires_claim_and_obligation_at_commit(db):
     c, path = db
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
-        sql_execution(c, origin="wire", target="requester")
+        sql_execution(c, origin="wire")
     assert c.execute("SELECT count(*) FROM executions").fetchone()[0] == 0
     sql_wire_execution(c)
     with CoordinationStore(path) as reopened:
@@ -1274,17 +1206,11 @@ def test_membership_ordinals_contiguous_and_frozen_after_activation(db):
     c, path = db
     sql_wire_execution(c, pending=False)
 
+    original = WakeAssignment.one(c, assignment_id="a")
+    assert original is not None
+
     def bind(identifier, seq):
-        c.execute(
-            (
-            'INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m'
-            'essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,'
-            "updated_at_ms,revision) VALUES (?,'worker','p',?,'m',json_object('kind','eng"
-            "aged','decision',json_object('kind','full','exact_target','requester','execu"
-            "tion_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
-            ),
-            (identifier, seq),
-        )
+        replace(original, assignment_id=identifier, wire_seq=seq).insert(c)
 
     c.execute("BEGIN IMMEDIATE")
     bind("b", 3)
@@ -1352,12 +1278,9 @@ def test_fence_digest_is_globally_unique_across_executions(db):
     c, path = db
     sql_execution(c)
     activate(c)
-    c.execute("INSERT INTO participants VALUES ('q','other-worker',1)")
-    c.execute("INSERT INTO owner_generations VALUES ('q','other-worker',1)")
-    c.execute(
-        "INSERT INTO current_executions (owner_lookup,execution_id,"
-        "attempt_ordinal,pointer_revision) VALUES ('q',NULL,NULL,0)"
-    )
+    Participants("q", "other-worker", True).insert(c)
+    OwnerGenerations("q", "other-worker", 1).insert(c)
+    CurrentExecutions("q", None, None, 0).insert(c)
     sql_execution(c, name="other-e", owner="q", thread="other-worker")
     c.execute("BEGIN IMMEDIATE")
     with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
@@ -1372,17 +1295,12 @@ def test_fence_digest_is_globally_unique_across_executions(db):
 def test_claim_target_and_recipient_lineage_is_immutable(db):
     c, path = db
     sql_wire_execution(c, pending=False)
-    c.execute("INSERT INTO participants VALUES ('other','other-worker',1)")
+    Participants("other", "other-worker", True).insert(c)
+    original = WakeAssignment.one(c, assignment_id="a")
+    assert original is not None
     c.execute("BEGIN IMMEDIATE")
-    c.execute(
-        (
-        'INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m'
-        'essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,'
-        "updated_at_ms,revision) VALUES ('b','other-worker','other',3,'m',json_object"
-        "('kind','engaged','decision',json_object('kind','full','exact_target','reque"
-        "ster','execution_id','e')),'direct','resolver-v1','policy-v1',0,0,1)"
-        )
-    )
+    replace(original, assignment_id="b", recipient="other-worker",
+            recipient_lookup="other", wire_seq=3).insert(c)
     with pytest.raises(sqlite3.IntegrityError, match="claim target"):
         c.execute("INSERT INTO execution_claims VALUES ('e','b',1)")
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):

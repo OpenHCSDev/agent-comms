@@ -1,7 +1,7 @@
 """Original S3 predicates executed through current families and real SQLite snapshots."""
 
 import hashlib
-from dataclasses import fields, replace
+from dataclasses import replace
 from itertools import product
 
 import pytest
@@ -24,7 +24,7 @@ from agent_comms.execution_states import (
     FailedExecution,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import InfoKind, Message, MessageKind, QuestionKind
+from agent_comms.messages import InfoKind, Message, QuestionKind
 from agent_comms.obligation_states import PublishedResponse, PublishingResponse, ResponseState
 from agent_comms.wake_policy import WakePolicy
 from test_coordination_store import ready, started
@@ -115,11 +115,11 @@ def test_execution_numeric_time_and_route_boundaries(pending):
         rejected(row, "must be positive", **{field: 0})
     rejected(row, "timestamps", created_at_ms=-1)
     rejected(row, "timestamps", updated_at_ms=row.created_at_ms - 1)
-    rejected(row, "requires an exact target", exact_target=None)
     for origin in ExecutionOrigin:
-        if origin is not ExecutionOrigin.WIRE:
-            rejected(row, "claimless execution requires null target", origin=origin)
-            assert replace(row, origin=origin, exact_target=None).exact_target is None
+        assert replace(row, origin=origin).origin is origin
+    route = pending.obligations[0]
+    rejected(route, "exact_target", exact_target=None)
+    rejected(route, "exact_target", exact_target="")
 
 
 def test_replay_bits_revision_and_ambiguity(pending):
@@ -167,7 +167,7 @@ def test_response_receipt_and_publication_constraints(owner, pending):
                 state.validate_publication(
                     object() if has_intent else None, object() if has_receipt else None
                 )
-    row = pending.obligation
+    row = pending.obligations[0]
     rejected(row, "revision must be positive", revision=0)
     rejected(row, "timestamps", created_at_ms=-1)
     rejected(row, "timestamps", updated_at_ms=row.created_at_ms - 1)
@@ -175,7 +175,8 @@ def test_response_receipt_and_publication_constraints(owner, pending):
 
 def test_snapshot_membership_order_owner_and_disposition(pending):
     rejected(
-        pending, "another execution", obligation=replace(pending.obligation, execution_id="other")
+        pending, "another execution",
+        obligations=(replace(pending.obligations[0], execution_id="other"),)
     )
     claim = pending.assignments[0]
     rejected(
@@ -227,22 +228,22 @@ def test_snapshot_attempt_identity_pointer_and_version(active, pending):
 
 
 def test_snapshot_wire_claimless_and_exact_routes(pending):
-    rejected(pending, "wire snapshots require an obligation", obligation=None)
-    rejected(pending, "wire snapshots require an obligation", assignments=(), links=())
+    rejected(pending, "wire snapshots require original obligations", obligations=())
+    rejected(pending, "wire snapshots require original obligations", assignments=(), links=())
     rejected(
         pending,
         "claimless snapshots",
-        execution=replace(pending.execution, origin=ExecutionOrigin.ACP, exact_target=None),
+        execution=replace(pending.execution, origin=ExecutionOrigin.ACP),
     )
     rejected(
         pending,
-        "exact targets disagree",
-        obligation=replace(pending.obligation, exact_target="other"),
+        "response obligations differ from original claim routes",
+        obligations=(replace(pending.obligations[0], exact_target="other"),),
     )
     claim = pending.assignments[0]
     rejected(
         pending,
-        "exact targets disagree",
+        "response obligations differ from original claim routes",
         assignments=(
             replace(
                 claim, lifecycle=type(claim.lifecycle).build(claim.lifecycle.mode, "exec", "other")
@@ -267,7 +268,7 @@ def terminal_snapshot(active, execution_owner, attempt_owner, response_owner, *,
         execution=execution,
         attempt=replace(active.attempt, lifecycle=phase),
         assignments=claims,
-        obligation=replace(active.obligation, lifecycle=response_owner.load(None, None)),
+        obligations=(replace(active.obligations[0], lifecycle=response_owner.load(None, None)),),
         replay=replay,
         current_execution_id=None,
         current_attempt_ordinal=None,
@@ -331,59 +332,48 @@ def published_snapshot(pending):
     )
     return replace(
         pending,
-        obligation=replace(pending.obligation, lifecycle=PublishedResponse(message.message_id, 1)),
-        publication_intent=intent,
-        publication_receipt=receipt,
+        obligations=(replace(pending.obligations[0], lifecycle=PublishedResponse(message.message_id, 1)),),
+        publication_intents=(intent,),
+        publication_receipts=(receipt,),
     )
 
 
 def test_snapshot_publication_parent_receipt_and_frozen_envelope(pending):
     value = published_snapshot(pending)
     assert FieldCodec.decode(RecoverySnapshot, FieldCodec.encode(value)) == value
-    rejected(value, "require intent", publication_intent=None)
+    rejected(value, "require intent", publication_intents=())
     rejected(
-        value, "publication intent is invalid for obligation state", obligation=pending.obligation
+        value, "publication intent is invalid for obligation state", obligations=pending.obligations
     )
-    rejected(value, "receipt exists iff published", publication_receipt=None)
+    rejected(value, "receipt exists iff published", publication_receipts=())
     # Claimless targets reject a parentless publication before receipt validation.
     rejected(
         value,
-        "snapshot exact targets disagree",
-        execution=replace(value.execution, origin=ExecutionOrigin.ACP, exact_target=None),
+        "publication routes differ from original obligations",
+        execution=replace(value.execution, origin=ExecutionOrigin.ACP),
         assignments=(),
         links=(),
-        obligation=None,
+        obligations=(),
     )
     rejected(
         value,
         "obligation receipt does not match",
-        obligation=replace(value.obligation, lifecycle=PublishedResponse("other", 1)),
+        obligations=(replace(value.obligations[0], lifecycle=PublishedResponse("other", 1)),),
     )
-    rejected(value.publication_receipt, "publication key is not canonical", publication_key="other")
-    # Derive every frozen envelope component from receipt fields, excluding identity/seq
-    # already validated by membership and receipt coupling.
-    for field in fields(value.publication_receipt):
-        if field.name in ("execution_id", "seq", "message_id", "exact_target", "publication_key"):
-            continue
-        original = getattr(value.publication_receipt, field.name)
-        changed = (
-            not original
-            if type(original) is bool
-            else original + 1
-            if type(original) is float
-            else QuestionKind
-            if isinstance(original, type) and issubclass(original, MessageKind)
-            else original + "-other"
-        )
-        rejected(
-            value,
-            "receipt envelope does not match",
-            publication_receipt=replace(value.publication_receipt, **{field.name: changed}),
-        )
+    intent = value.publication_intents[0]
+    rejected(intent, "publication key is not canonical", publication_key="other")
+    # Message now owns the frozen envelope; receipts only bind its exact identity.
+    # Preserve each old envelope-mismatch case at that owner, not deleted copies.
+    for changes in (
+        {"sender": "other-worker"}, {"target": "other-owner"}, {"type": QuestionKind},
+        {"notice": True}, {"timestamp": 2.0}, {"body": "different payload"},
+    ):
+        assert not intent.matches_publication(replace(intent.message, **changes))
+    assert intent.matches_publication(intent.message)
     rejected(
         value,
         "receipt exists iff published",
-        obligation=replace(value.obligation, lifecycle=PublishingResponse()),
+        obligations=(replace(value.obligations[0], lifecycle=PublishingResponse()),),
     )
     failed_execution = replace(value.execution, lifecycle=FailedExecution.load(None))
     failed_claims = tuple(
@@ -400,4 +390,4 @@ def test_snapshot_publication_parent_receipt_and_frozen_envelope(pending):
         assignments=failed_claims,
     )
     # Wire origin's mandatory parent rejects this before the later receipt guard.
-    rejected(value, "wire snapshots require an obligation", obligation=None)
+    rejected(value, "wire snapshots require original obligations", obligations=())
