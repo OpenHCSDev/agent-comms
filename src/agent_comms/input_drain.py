@@ -677,8 +677,6 @@ class InputDrain:
         )
         self.queued_inputs.get(session_id, {}).pop(input_id or "", None)
         await self.emit_queue_state(session_id)
-        from .following_inputs import FollowingInputs
-        await FollowingInputs.ready(self, session_id)
 
     async def input_refused(self, session_id: str, input_id: str | None) -> None:
         if input_id is None:
