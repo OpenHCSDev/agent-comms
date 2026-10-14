@@ -194,6 +194,25 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
             yield from super().public_records_for(sequences, before_offset=before_offset)
 
 
+@dataclass(frozen=True, slots=True)
+class ConversationSourceWindowRequest:
+    """One bounded indexed conversation selection from a certified wire cut."""
+
+    predicate: str
+    parameters: tuple
+    limit: int
+    ascending: bool
+
+    def capture(self, source, lookup: str):
+        return source.conversation_sources(
+            lookup,
+            self.predicate,
+            self.parameters,
+            limit=self.limit,
+            ascending=self.ascending,
+        )
+
+
 class WireLog:
     def __init__(self, path: Path):
         # Construction is read-only and needs no registry or publication settings.
@@ -271,35 +290,20 @@ class WireLog:
 
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Read an original window through its existing canonical barrier."""
-        return self._conversation_source_windows(
-            lookup, ((predicate, parameters, limit, ascending),)
-        )[0]
+        request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending)
+        return self.conversation_source_windows(lookup, (request,))[0]
 
-    def conversation_sources_with_sent(
-        self, lookup, predicate, parameters, *, limit, ascending, sent_limit
+    def conversation_source_windows(
+        self, lookup: str, requests: tuple[ConversationSourceWindowRequest, ...]
     ):
-        """Read conversation and authored windows through one canonical barrier."""
-        return self._conversation_source_windows(
-            lookup,
-            (
-                (predicate, parameters, limit, ascending),
-                ("w.sender_lookup=?", (lookup,), sent_limit, False),
-            ),
-        )
-
-    def _conversation_source_windows(self, lookup, windows):
+        """Read named original windows through one canonical barrier."""
         with _store_lock(self.path) as lock:
             if not self.path.exists():
-                return tuple(() for _ in windows)
+                return tuple(() for _ in requests)
             marker = self._private_marker_unlocked()
             source = lock.certified_read()
             source.require_marker(marker)
-            originals = tuple(
-                source.conversation_sources(
-                    lookup, predicate, parameters, limit=limit, ascending=ascending
-                )
-                for predicate, parameters, limit, ascending in windows
-            )
+            originals = tuple(request.capture(source, lookup) for request in requests)
             source.require_current()
         return tuple(tuple(window) for window in originals)
 
