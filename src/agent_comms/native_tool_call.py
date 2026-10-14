@@ -205,6 +205,12 @@ class NativeToolCall(ABC):
     def complete(self) -> bool:
         return self.observation.complete
 
+    def accepts_current_request(self, candidate: NativeToolCall) -> bool:
+        if self.complete:
+            return False
+        self.correlate(candidate)
+        return True
+
     def assert_complete(self) -> None:
         self.observation.assert_complete()
 

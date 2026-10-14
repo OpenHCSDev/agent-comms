@@ -461,8 +461,7 @@ class NativeToolCallTable(Generic[Call]):
         if self.rounds:
             current_identity = ToolCallIdentity(self.rounds[-1].number, candidate.call_id)
             current = self._calls.get(current_identity)
-            if current is not None and not current.complete:
-                current.correlate(candidate)
+            if current is not None and current.accepts_current_request(candidate):
                 return current_identity, current
         identity = ToolCallIdentity(len(self.rounds), candidate.call_id)
         existing = self._calls.get(identity)
