@@ -188,7 +188,7 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
             context = NativeContextProof(
                 input_id, session.session_id, "entry", 7, "c" * 64, session.path
             )
-            settled = stage.fail_terminal(store, selected.identity, input_id, token_digest, context)
+            settled = stage.fail_decision(store, selected.identity, input_id, token_digest, context)
             assert all(type(row.lifecycle) is FailedAssignment for row in settled)
             with store.session.read():
                 db = store.session._connection
@@ -196,4 +196,4 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
                 assert row.reference.recorded and row.verdict is None
             # The failed input is settled once; it is never sent or settled again.
             with TestCase().assertRaises(StaleFence):
-                stage.fail_terminal(store, selected.identity, input_id, token_digest, context)
+                stage.fail_decision(store, selected.identity, input_id, token_digest, context)

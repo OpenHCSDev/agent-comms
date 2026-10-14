@@ -41,8 +41,17 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         session.usage.provisional = False
 
     @classmethod
+    def declared_failure(cls, message):
+        from .turn_failure import ModelRequestFailed
+
+        text = (message.error_message or "").strip() or cls.tracked_failure
+        return ModelRequestFailed.from_diagnostics(text, message.diagnostics)
+
+    @classmethod
     def tracked(cls, session, message):
-        session.fail_terminal(message.error_message or cls.tracked_failure)
+        failure = cls.declared_failure(message)
+        session.output.record_failure(failure)
+        session.fail_terminal(failure.text)
 
 
 class PendingStopReason(PiStopReason):
@@ -58,6 +67,7 @@ class StopStopReason(PiStopReason):
 
 
 class LengthStopReason(PiStopReason):
+    failed = True
     tracked_failure = "Model output limit reached"
 
 
@@ -96,9 +106,6 @@ class ErrorStopReason(PiStopReason):
             message.diagnostics, source=NativeMessageFailureSource(message),
         )
         if not (session.explicit_interrupt and cls.explicit_abort):
-            from .turn_failure import ModelRequestFailed
-
-            session.output.record_failure(ModelRequestFailed(error.text))
             yield error
 
 

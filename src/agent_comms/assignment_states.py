@@ -41,6 +41,19 @@ class PendingDecision:
 
 @dataclass(frozen=True)
 class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
+    @classmethod
+    def selection_predicate(cls, capability: type, alias: str) -> str:
+        states = ",".join(
+            sql_literal(member) for member in cls.members_with(capability)
+        )
+        return capability.extend_selection(
+            f"{alias}.disposition IN ({states})", alias
+        )
+
+    @classmethod
+    def extend_selection(cls, predicate: str, alias: str) -> str:
+        return predicate
+
     def rejected_triage_history(self, execution, **source):
         raise ValueError("Recorded triage lacks a decision or a terminal failed claim")
 
@@ -179,6 +192,17 @@ class PassiveAssignment(AssignmentState):
 
 class PendingNotification:
     """Pending relevance/full execution membership, not another display state."""
+
+    @classmethod
+    def extend_selection(cls, predicate: str, alias: str) -> str:
+        # A bound deferred claim was settled with replay proof and remains the
+        # original source of its next execution attempt. Unbound UNKNOWN input
+        # never enters this selection.
+        deferred = sql_literal(DeferredAssignment)
+        return (
+            f"({predicate} OR ({alias}.disposition={deferred} "
+            f"AND {alias}.execution_id IS NOT NULL))"
+        )
 
     def notification(
         self,
@@ -447,6 +471,11 @@ class InterruptedAssignment(AssignmentDecision, AssignmentState):
 
 
 class DeferredAssignment(InterruptedAssignment):
+    def requires_selected_triage(self) -> bool:
+        if self.execution_id is not None:
+            return False
+        return super().requires_selected_triage()
+
     def notification(
         self,
         recipient,
