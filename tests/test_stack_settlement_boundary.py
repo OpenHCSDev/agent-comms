@@ -117,7 +117,6 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
                 delay_settlement=old_settled,
             )
         for key in (
-            "PI_AGENT_ID",
             "PI_PARENT_ID",
             "PI_TASK",
             "PI_WORKTREE",

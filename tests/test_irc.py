@@ -181,11 +181,3 @@ class TestCurrentThreadEnvironment:
         from agent_comms.threads import current_thread
 
         assert current_thread().name == "me"
-
-    def test_pi_agent_id_is_not_an_owner_identity(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("PI_AGENT_ID", "pi-thread")
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-        monkeypatch.chdir(tmp_path)
-        from agent_comms.threads import current_thread
-
-        assert current_thread().name == "owner"

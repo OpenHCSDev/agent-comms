@@ -91,11 +91,8 @@ class RestartEnvironment:
         *,
         environment: Mapping[str, str] = os.environ,
     ) -> bool:
-        try:
-            caller = cls.calling_thread(environment)
-        except CallingThreadUnavailable:
-            return False
-        return canonicalize(caller) == name
+        caller = environment.get(cls.owner_key)
+        return caller is not None and canonicalize(caller) == name
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.absolute(self.native_config))

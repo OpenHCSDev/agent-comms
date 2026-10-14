@@ -18,10 +18,10 @@ from agent_comms.threads import Thread
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
     assert RestartEnvironment.calling_thread(
-        {"AGENT_COMMS_THREAD": "owner", "PI_AGENT_ID": "other"}
+        {"AGENT_COMMS_THREAD": "owner"}
     ) == "owner"
     with pytest.raises(CallingThreadUnavailable, match="AGENT_COMMS_THREAD"):
-        RestartEnvironment.calling_thread({"PI_AGENT_ID": "legacy"})
+        RestartEnvironment.calling_thread({})
     assert not RestartEnvironment.called_by("owner", lambda caller: caller, environment={})
 
 
@@ -613,7 +613,6 @@ class TestReDeclarationPreservesProvenance:
     def test_current_thread_reads_agent_comms_tags(self, monkeypatch, tmp_path):
         from agent_comms.threads import current_thread
 
-        monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
         monkeypatch.setenv("AGENT_COMMS_TAGS", "ci, docs")
         monkeypatch.chdir(tmp_path)

@@ -173,7 +173,7 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
 
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
-    monkeypatch.setenv("PI_AGENT_ID", "owner")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     result = invoke_tool(comms, "comms_model", {"model": "openrouter/own"})
     assert result == {
         "thread": "owner",

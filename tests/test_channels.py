@@ -397,7 +397,7 @@ def test_channel_metadata_and_saved_views_have_typed_tool_surfaces(tmp_path):
 def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatch):
     comms = setup_wire(tmp_path)
     original = comms.registry.require("other")
-    monkeypatch.setenv("PI_AGENT_ID", "other")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "other")
     invoke_tool(comms, "comms_tags", {"action": "create", "name": "new"})
     assert "#new" in comms.channels.channels()
     invoke_tool(comms, "comms_thread_tags", {"add": "new,api", "remove": "ui"})
