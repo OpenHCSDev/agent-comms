@@ -64,6 +64,9 @@ class ProgressWatchdog:
         self.input_timeout = input_timeout
         self.preflight_timeout = preflight_timeout
         self.input_wait: OwnedWait | None = None
+        self.model_wait = (
+            OwnedWait(model_wait_timeout) if model_wait_timeout is not None else None
+        )
         self.prompt_accepted = False
         self.phase: phases.TurnPhase = phases.PromptAcceptancePhase()
         self.retry_recovery_pending = False
@@ -98,6 +101,8 @@ class ProgressWatchdog:
 
     def progress(self) -> None:
         self.last_model_progress = self.now
+        if self.model_wait is not None:
+            self.model_wait.restart()
 
     async def observe(
         self, event: PiEvent, session: TurnSession
@@ -128,6 +133,13 @@ class ProgressWatchdog:
             and not self.phase.pauses_input_clock
         ):
             return self.input_wait
+        if (
+            self.model_wait is not None
+            and not session.stats.requested
+            and not session.active_tools
+            and self.phase.model_wait(self.model_wait_timeout) is not None
+        ):
+            return self.model_wait
         return None
 
     def read_timeout(
@@ -145,10 +157,11 @@ class ProgressWatchdog:
             # wait and a short model lease must not race the pipe reader.
             assert owned_timeout is not None
             timeout = owned_timeout
-        elif session.active_tools or (wait := self.phase.model_wait(self.model_wait_timeout)) is None:
+        elif session.active_tools or self.phase.model_wait(self.model_wait_timeout) is None:
             timeout = None
         else:
-            timeout = max(0.0, self.last_model_progress + wait - self.clock())
+            assert owned_timeout is not None
+            timeout = owned_timeout
         return timeout
 
     def state(
@@ -232,7 +245,11 @@ class ProgressWatchdog:
         else:
             stalled = self.phase.stalled(self.prompt_accepted)
             reason, phase = stalled.stall_reason, stalled.declared_name
-            elapsed = self.clock() - self.last_model_progress
+            elapsed = (
+                self.model_wait.elapsed
+                if self.model_wait is not None
+                else self.clock() - self.last_model_progress
+            )
         return TimeoutError(
             f"{reason}: phase={phase}; no progress for "
             f"{elapsed:.3f}s; input_started={session.started_input}"
@@ -277,7 +294,9 @@ class ProgressWatchdog:
         if session.stats.requested:
             session.finished = True
             return
-        elapsed_ms = round((self.clock() - self.last_model_progress) * 1000)
+        elapsed_ms = round(
+            (self.model_wait.elapsed if self.model_wait is not None else 0.0) * 1000
+        )
         stalled_phase = self.phase.stalled(self.prompt_accepted)
         reason_code = stalled_phase.stall_reason
         if self.prompt_accepted:
@@ -288,7 +307,9 @@ class ProgressWatchdog:
         await session.abort_stalled_rpc()
         for input_id in session.started_during_abort:
             yield events.InputStarted(id=input_id)
-        failed_elapsed_ms = round((self.clock() - self.last_model_progress) * 1000)
+        failed_elapsed_ms = round(
+            (self.model_wait.elapsed if self.model_wait is not None else 0.0) * 1000
+        )
         yield self.state("failed", reason_code, failed_elapsed_ms, phase=phases.ShutdownPhase())
         session.output.record_failure(
             failures.ModelStalled(
