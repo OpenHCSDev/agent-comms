@@ -17,6 +17,7 @@ import os
 import stat
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
@@ -205,6 +206,140 @@ def write_native_manifest(root: Path) -> None:
             replacement.unlink(missing_ok=True)
 
 
+@dataclass(frozen=True)
+class NativeSource:
+    """One manifest-owned deployment source and its verified snapshot bytes."""
+
+    destination: Path
+    content: bytes
+
+    @classmethod
+    def declared(cls, value: object, snapshot_root: Path) -> NativeSource:
+        if not isinstance(value, dict):
+            raise NativePackageError("Native extension source declaration is invalid")
+        path = value.get("path")
+        snapshot = value.get("snapshot")
+        digest = value.get("sha256")
+        byte_count = value.get("bytes")
+        if not isinstance(path, str) or not Path(path).is_absolute():
+            raise NativePackageError("Native extension source declaration is invalid")
+        if not isinstance(snapshot, str) or Path(snapshot).is_absolute():
+            raise NativePackageError("Native extension source declaration is invalid")
+        if not isinstance(digest, str) or len(digest) != 64:
+            raise NativePackageError("Native extension source declaration is invalid")
+        if any(character not in "0123456789abcdef" for character in digest):
+            raise NativePackageError("Native extension source declaration is invalid")
+        if not isinstance(byte_count, int) or isinstance(byte_count, bool):
+            raise NativePackageError("Native extension source declaration is invalid")
+        if byte_count < 0:
+            raise NativePackageError("Native extension source declaration is invalid")
+        try:
+            snapshot_path = (snapshot_root / snapshot).resolve(strict=True)
+            snapshot_path.relative_to(snapshot_root)
+            content = snapshot_path.read_bytes()
+        except (OSError, ValueError) as error:
+            raise NativePackageError("Native extension source snapshot is unavailable") from error
+        if len(content) != byte_count:
+            raise NativePackageError(
+                "Native extension source snapshot differs from its declaration"
+            )
+        if hashlib.sha256(content).hexdigest() != digest:
+            raise NativePackageError(
+                "Native extension source snapshot differs from its declaration"
+            )
+        return cls(Path(path), content)
+
+    def is_installed(self) -> bool:
+        try:
+            info = self.destination.lstat()
+            return (
+                stat.S_ISREG(info.st_mode)
+                and info.st_nlink == 1
+                and self.destination.read_bytes() == self.content
+            )
+        except (FileNotFoundError, PermissionError, IsADirectoryError):
+            return False
+
+    def stage(self) -> Path:
+        self.destination.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, name = tempfile.mkstemp(
+            dir=self.destination.parent,
+            prefix=f".{self.destination.name}.native-source-",
+        )
+        temporary = Path(name)
+        complete = False
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(self.content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temporary, 0o600)
+            if temporary.stat().st_nlink != 1:
+                raise NativePackageError("Native extension source staging file is shared")
+            complete = True
+            return temporary
+        finally:
+            if not complete:
+                temporary.unlink(missing_ok=True)
+
+    def verify_installed(self) -> None:
+        info = self.destination.lstat()
+        if not stat.S_ISREG(info.st_mode):
+            raise NativePackageError("Installed native extension source could not be verified")
+        if info.st_nlink != 1 or info.st_size != len(self.content):
+            raise NativePackageError("Installed native extension source could not be verified")
+        if self.destination.read_bytes() != self.content:
+            raise NativePackageError("Installed native extension source could not be verified")
+
+
+def install_declared_sources(root: Path, snapshot_root: Path) -> None:
+    """Install the source snapshots committed by a verified native package."""
+    try:
+        manifest = json.loads((root / "dist/agent-comms-imports.json").read_text())
+        snapshot_root = snapshot_root.resolve(strict=True)
+    except (OSError, json.JSONDecodeError) as error:
+        raise NativePackageError("Native extension source manifest is unavailable") from error
+    declarations = manifest.get("extensionEntries")
+    if not isinstance(declarations, list):
+        raise NativePackageError("Native extension source declarations are invalid")
+
+    sources: list[NativeSource] = []
+    destinations: set[Path] = set()
+    for declaration in declarations:
+        if not isinstance(declaration, dict):
+            raise NativePackageError("Native extension source declaration is invalid")
+        values = declaration.get("sources", [])
+        if not isinstance(values, list):
+            raise NativePackageError("Native extension source declaration is invalid")
+        for value in values:
+            source = NativeSource.declared(value, snapshot_root)
+            if source.destination in destinations:
+                raise NativePackageError("Native extension source destination is declared twice")
+            destinations.add(source.destination)
+            sources.append(source)
+
+    replacements: list[tuple[Path, NativeSource]] = []
+    try:
+        for source in sources:
+            if not source.is_installed():
+                replacements.append((source.stage(), source))
+        for temporary, source in replacements:
+            os.replace(temporary, source.destination)
+        for source in sources:
+            source.verify_installed()
+        for parent in {source.destination.parent for source in sources}:
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+    except OSError as error:
+        raise NativePackageError("Native extension source could not be installed") from error
+    finally:
+        for temporary, _ in replacements:
+            temporary.unlink(missing_ok=True)
+
+
 def verify_native_package(root: Path) -> None:
     """Verify the entire copied package against the repository-owned commitment."""
     pins = [
@@ -221,6 +356,8 @@ def verify_native_package(root: Path) -> None:
 if __name__ == "__main__":
     if len(sys.argv) == 4 and sys.argv[1] == "--share-resources":
         print(json.dumps(share_native_resources(Path(sys.argv[2]), Path(sys.argv[3]))), file=sys.stderr)
+    elif len(sys.argv) == 4 and sys.argv[1] == "--install-sources":
+        install_declared_sources(Path(sys.argv[2]), Path(sys.argv[3]))
     elif len(sys.argv) == 3 and sys.argv[1] == "--digest":
         print(package_tree_digest(Path(sys.argv[2])))
     elif len(sys.argv) == 3 and sys.argv[1] == "--write-manifest":
@@ -228,4 +365,8 @@ if __name__ == "__main__":
     elif len(sys.argv) == 2:
         verify_native_package(Path(sys.argv[1]))
     else:
-        raise SystemExit("Usage: native_package.py [--digest|--write-manifest] PACKAGE_DIR | --share-resources NEW_PACKAGE DEPLOYMENTS")
+        raise SystemExit(
+            "Usage: native_package.py [--digest|--write-manifest] PACKAGE_DIR | "
+            "--share-resources NEW_PACKAGE DEPLOYMENTS | "
+            "--install-sources PACKAGE_DIR SNAPSHOT_ROOT"
+        )
