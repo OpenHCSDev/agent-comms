@@ -111,7 +111,7 @@ class ExecutionStore:
                 owner_lookup,
                 owner_thread,
                 max_attempts,
-                tuple(sorted({source.delivery.message.reply_target for source in sources})),
+                tuple(sorted({source.delivery.message.exact_reply_target for source in sources})),
                 assignment_ids,
             ):
                 raise IdentityConflict("execution identity conflicts")
@@ -139,7 +139,7 @@ class ExecutionStore:
         routes = {}
         for ordinal, (source, assignment) in enumerate(zip(sources, assignments, strict=True)):
             assignment_id = source.assignment_id
-            exact_target = source.delivery.message.reply_target
+            exact_target = source.delivery.message.exact_reply_target
             routes.setdefault(exact_target, None)
             if (
                 assignment.recipient_lookup != owner_lookup

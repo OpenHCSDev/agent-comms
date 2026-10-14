@@ -100,7 +100,8 @@ def test_direct_is_full_only_for_frozen_lookup_and_route_ignores_sender_role(
         "lookup-alpha", MessageAudience.DIRECT, FullWake()
     )
     assert decide(message, "lookup-beta", members) is None
-    assert message.reply_target == "sender"
+    assert message.exact_reply_target == "sender"
+    assert message.reply_target == ("sender" if sender_role is ThreadRole.USER else None)
 
 
 def test_valid_mention_selects_canonical_name_and_leaves_other_member_unaddressed() -> None:
@@ -111,9 +112,10 @@ def test_valid_mention_selects_canonical_name_and_leaves_other_member_unaddresse
     assert decide(message, "lookup-alpha") == NoWakeDecision("lookup-alpha")
     assert decide(message, "lookup-outsider") is None  # Not in the frozen audience.
     assert MEMBERS[0] in audience(message).recipients  # The bus must retain both identities.
+    assert message.exact_reply_target == "#team"
     assert message.response_policy is MentionedOnlyPolicy.instance()
     assert message.starts_turn_for("beta") and not message.starts_turn_for("alpha")
-    assert message.reply_target == "#team"
+    assert message.reply_target is None
 
 
 def test_renamed_mentioned_member_preserves_stable_lookup_not_old_alias() -> None:
@@ -376,7 +378,7 @@ def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
     broadcast = comms.messaging.send_message("sender", "#all", "everyone please respond")
     dm = comms.messaging.send_message("sender", "alpha", "direct note")
     assert broadcast.target == "#all"
-    assert [item.reply_target for item in (channel, broadcast, dm)] == [
+    assert [item.exact_reply_target for item in (channel, broadcast, dm)] == [
         "#team",
         "#all",
         "sender",
@@ -385,7 +387,7 @@ def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
         "lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake()
     )
     assert SilentResponse.declared_name == "silent"  # Existing explicit disposition type.
-    assert channel.reply_target == "#team"
+    assert channel.exact_reply_target == "#team"
 
 
 def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Path) -> None:
@@ -407,7 +409,7 @@ def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Pat
         frozen_audience=manifest,
         control=ControlClassification.ORDINARY,
     ) == WakeDecision("lookup-alpha", MessageAudience.COLLECTIVE, BoundedTriageWake())
-    assert message.reply_target == "#team"
+    assert message.exact_reply_target == "#team"
     assert message.to_wire() == before
     assert comms.bus.log.path.read_bytes() == bus_before
     assert comms.bus.log.latest_sequence() == high_water

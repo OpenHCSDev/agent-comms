@@ -104,7 +104,7 @@ class Provider(LoopbackProvider):
             assert original.stage is FullNativeExecution
             message=Comms(self.root).bus.log.message_by_id(assignment.message_id)
             assert message.reference==assignment.source
-            response=Message(original.owner_thread, message.reply_target,
+            response=Message(original.owner_thread, message.exact_reply_target,
                              self.text,InfoKind,timestamp=0)
             yield {'content':json.dumps(FieldCodec.encode((response,)))},None
             yield {},'stop'

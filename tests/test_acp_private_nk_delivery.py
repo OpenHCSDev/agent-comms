@@ -635,7 +635,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         async with native.original_input(agent, session, "Current human input") as turn:
             sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
             native.provider.text = json.dumps(FieldCodec.encode((Message(
-                session, sent.reply_target, "Selected input acknowledged",
+                session, sent.exact_reply_target, "Selected input acknowledged",
                 InfoKind, timestamp=0,
             ),)))
             assert await agent.inputs.drain_inbox(session) == 0

@@ -151,7 +151,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
 
             def reply(message):
                 return json.dumps(FieldCodec.encode((Message(
-                    session, message.reply_target, f"Reply {len(sent)}",
+                    session, message.exact_reply_target, f"Reply {len(sent)}",
                     InfoKind, timestamp=0,
                 ),)))
 

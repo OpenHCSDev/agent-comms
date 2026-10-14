@@ -142,7 +142,7 @@ async def test_native_full_four_tools_publish_and_release(
                         assert 'CANONICAL_TOOL_RUNNING' in str(tools[-1]['content'])
                     assert phase.declared_name == 'model_wait'
                     assert 'participant' not in comms.registry.snapshot().threads
-                    answer = Message("beta", initial.message.reply_target,
+                    answer = Message("beta", initial.message.exact_reply_target,
                                      "CODING_TOOLS_OK", InfoKind, timestamp=0)
                     delta = {"role": "assistant", "content": json.dumps(FieldCodec.encode((answer,)))}
                     reason = "stop"

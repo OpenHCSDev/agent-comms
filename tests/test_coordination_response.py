@@ -109,7 +109,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
         receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
         (extra_assignment,) = receipt.assignments
         sources.append(SelectedSource(extra_assignment.assignment_id, store.assignments, delivery))
-    reply_target = original.reply_target
+    reply_target = original.exact_reply_target
     assert reply_target is not None
     store.executions.create(
         "exec",

@@ -64,7 +64,7 @@ class OwnedTurn:
 
     @property
     def reply_targets(self) -> tuple[str, ...]:
-        return tuple(dict.fromkeys(origin.reply_target for origin in self.origins))
+        return tuple(dict.fromkeys(origin.exact_reply_target for origin in self.origins))
 
     async def attach_native_session(self, session_file):
         """Publish through the owner returned by this original begin operation."""

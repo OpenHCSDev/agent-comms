@@ -431,7 +431,7 @@ def _require_cohort_assignments(
             if terminal
             else assignment.lifecycle.require_engagement()
         )
-        if engagement.exact_target != initial.message.reply_target:
+        if engagement.exact_target != initial.message.exact_reply_target:
             raise IdentityConflict("response claim conflicts with original selected bus route")
 
 

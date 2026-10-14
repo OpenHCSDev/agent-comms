@@ -67,7 +67,7 @@ class SelectedSourceBatch:
         """
         routes: dict[str | None, list[SelectedSource]] = {}
         for source in sources:
-            routes.setdefault(source.delivery.message.reply_target, []).append(source)
+            routes.setdefault(source.delivery.message.exact_reply_target, []).append(source)
         if None in routes:
             # The original refusal covers the whole wave; no source is answered.
             return cls(sources)
@@ -97,7 +97,7 @@ class SelectedSourceBatch:
     @property
     def target(self) -> str:
         """The batch's one original reply route, never a second route store."""
-        return self.sources[0].delivery.message.reply_target
+        return self.sources[0].delivery.message.exact_reply_target
 
     def response_segment(self):
         """The reply route belongs to the original owners; no answer format is

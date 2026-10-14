@@ -366,7 +366,7 @@ class EngagedAssignment(BoundAssignment):
         obligation.lifecycle.require_preparation()
         if (obligation.execution_id, obligation.exact_target) != (
             self.decision.execution_id,
-            source.reply_target,
+            source.exact_reply_target,
         ):
             raise IdentityConflict("full wake frame requires the current response obligation")
         return self.mode.full_expectation(), "you owe a response: " + json.dumps(
