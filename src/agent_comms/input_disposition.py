@@ -23,6 +23,7 @@ from .input_attempt import (
 )
 from .message_reference import MessageReference
 from .messages import Message
+from .store_files import _store_lock
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -151,31 +152,39 @@ class InputDispositions:
     filename: ClassVar[str] = "input_dispositions.sqlite3"
 
     def __post_init__(self) -> None:
-        with self._connect() as db:
-            db.execute("PRAGMA journal_mode=WAL")
-            db.execute(
-                """CREATE TABLE IF NOT EXISTS input_dispositions (
-                    key TEXT PRIMARY KEY,
-                    owner TEXT NOT NULL,
-                    admission INTEGER NOT NULL,
-                    turn_id TEXT,
-                    unresolved INTEGER NOT NULL,
-                    sequence INTEGER,
-                    payload TEXT NOT NULL
-                )"""
-            )
-            db.execute(
-                "CREATE INDEX IF NOT EXISTS input_dispositions_lease "
-                "ON input_dispositions(owner, admission, turn_id)"
-            )
-            db.execute(
-                "CREATE INDEX IF NOT EXISTS input_dispositions_pending "
-                "ON input_dispositions(owner, unresolved, sequence)"
-            )
+        if self.path.exists():
+            return
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with _store_lock(self.path):
+            if self.path.exists():
+                return
+            with self._connect() as db:
+                db.execute("PRAGMA journal_mode=WAL")
+                db.execute(
+                    """CREATE TABLE input_dispositions (
+                        key TEXT PRIMARY KEY,
+                        owner TEXT NOT NULL,
+                        admission INTEGER NOT NULL,
+                        turn_id TEXT,
+                        unresolved INTEGER NOT NULL,
+                        sequence INTEGER,
+                        payload TEXT NOT NULL
+                    )"""
+                )
+                db.execute(
+                    "CREATE INDEX input_dispositions_lease "
+                    "ON input_dispositions(owner, admission, turn_id)"
+                )
+                db.execute(
+                    "CREATE INDEX input_dispositions_pending "
+                    "ON input_dispositions(owner, unresolved, sequence)"
+                )
 
     def _connect(self) -> sqlite3.Connection:
-        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         return sqlite3.connect(self.path, timeout=5)
+
+    def _read_connection(self) -> sqlite3.Connection:
+        return sqlite3.connect(f"{self.path.resolve().as_uri()}?mode=ro", uri=True, timeout=0)
 
     @staticmethod
     def _payload(row: StoredInput) -> str:
@@ -202,7 +211,7 @@ class InputDispositions:
         if where:
             sql += f" WHERE {where}"
         sql += " ORDER BY sequence IS NULL, sequence, rowid"
-        with self._connect() as db:
+        with self._read_connection() as db:
             payloads = tuple(db.execute(sql, parameters))
         rows = tuple(self._decode(payload) for payload, in payloads)
         return InputDocument({row.key: row for row in rows})
