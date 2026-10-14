@@ -512,20 +512,16 @@ class NotificationAssignment(NotificationSource):
             )
         resolved = []
         for row in rows:
-            if not row.assignment.lifecycle.records_conversation_response:
-                resolved.append(row)
-                continue
-            response = row.assignment.lifecycle.recorded_response(
-                originals[row.assignment.source],
-                candidates[row.assignment.recipient_lookup],
-                row.assignment.recipient_lookup,
-                row.assignment.updated_at_ms,
-            )
-            resolved.append(
-                replace(row, activity=row.activity.recorded_response(response))
-                if response is not None
-                else row
-            )
+            if row.assignment.lifecycle.records_conversation_response:
+                response = row.assignment.lifecycle.recorded_response(
+                    originals[row.assignment.source],
+                    candidates[row.assignment.recipient_lookup],
+                    row.assignment.recipient_lookup,
+                    row.assignment.updated_at_ms,
+                )
+                if response is not None:
+                    row = replace(row, activity=row.activity.recorded_response(response))
+            resolved.append(row)
         return tuple(resolved)
 
     @classmethod
