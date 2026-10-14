@@ -39,7 +39,13 @@ class AssignmentProgress(DeclaredFamily, affix="Progress"):
 
 class NotShownProgress(AssignmentProgress):
     def selected_notification(self, notification, read_at_ms, *, busy):
-        return replace(notification, state="Not read yet", detail="", busy=busy)
+        return replace(
+            notification,
+            state="Starting response" if busy else "Interrupted before read",
+            detail="",
+            busy=busy,
+            priority=notification.priority if busy else 3,
+        )
 
     def interrupted_notification(self, notification, read_at_ms):
         return replace(
@@ -55,7 +61,7 @@ class ShownToModelProgress(AssignmentProgress):
     def selected_notification(self, notification, read_at_ms, *, busy):
         return replace(
             notification,
-            state="Read",
+            state=notification.receipt_state("Read", read_at_ms),
             detail="",
             busy=busy,
             read_at_ms=read_at_ms,
@@ -64,7 +70,7 @@ class ShownToModelProgress(AssignmentProgress):
     def interrupted_notification(self, notification, read_at_ms):
         return replace(
             notification,
-            state="Read",
+            state=notification.receipt_state("Read", read_at_ms),
             detail="",
             busy=False,
             priority=3,

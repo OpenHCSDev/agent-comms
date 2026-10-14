@@ -77,9 +77,9 @@ class ExternalRecipientActivity(RecipientActivity):
         if self.incarnation.current(snapshot) and source.message.seq in reads.seen_sequences(
             self.incarnation.name, snapshot, document=document
         ):
-            return replace(notification, state="Checked by CLI",
-                           detail="The external participant acknowledged this original inbox message.",
-                           priority=2, busy=False)
+            return replace(
+                notification, state="Acknowledged", detail="", priority=2, busy=False
+            )
         return notification
 
 

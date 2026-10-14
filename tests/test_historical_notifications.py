@@ -49,7 +49,7 @@ def test_recorded_notifications_do_not_decode_registry_or_acquire_activity(archi
     results = source.notification_references(live.bus.history, tuple(message.reference for message in messages))
     notification, = results[messages[0].seq, messages[0].message_id]
     assert notification.recipient == "agent"
-    assert notification.state == "Not read yet" and not notification.busy
+    assert notification.state == "Sent" and not notification.busy
     assert "stopped" not in notification.detail
     assert notification.displayed_to == ()
     assert not (Path(source.root) / "coordination.sqlite3").exists()
@@ -107,7 +107,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     activity = AssignmentActivity(
         triage_inflight=False,
         model_context=True,
-        read_at_ms=None,
+        read_at_ms=1,
         response_seq=None,
         response_message_id=None,
         response_received_at_ms=None,
@@ -122,7 +122,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         activity=activity,
         updated_at_ms=1,
     )
-    assert recorded.state == "Read" and not recorded.busy
+    assert recorded.state.startswith("Read ") and not recorded.busy
     assert recorded.detail == ""
     live = assignment.notification(
         recipient,
@@ -130,7 +130,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         activity=activity,
         updated_at_ms=1,
     )
-    assert live.state == "Read" and not live.busy
+    assert live.state.startswith("Read ") and not live.busy
     assert live.detail == ""
 
 
@@ -145,9 +145,9 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
     current, = old.views.message_notifications_for_references((messages[0].reference,))[
         messages[0].seq, messages[0].message_id
     ]
-    assert current.state == "Checked by CLI" and not current.displayed_to
+    assert current.state == "Acknowledged" and not current.displayed_to
     archived, = source.notification_references(live.bus.history, (messages[0].reference,))[
         messages[0].seq, messages[0].message_id
     ]
-    assert archived.state == "Not read yet" and not archived.displayed_to
+    assert archived.state == "Sent" and not archived.displayed_to
     assert FieldCodec.decode(RecipientActivity, FieldCodec.encode(RecordedRecipientActivity())) == RecordedRecipientActivity()

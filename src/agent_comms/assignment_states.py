@@ -60,7 +60,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     def require_completion(self) -> Engagement:
         raise IdentityConflict("wake assignment is not completed")
 
-    notification_state: ClassVar[str] = "Not read yet"
+    notification_state: ClassVar[str] = "Sent"
     notification_detail: ClassVar[str] = ""
     notification_priority: ClassVar[int] = 3
     notification_busy: ClassVar[bool] = False
@@ -180,7 +180,7 @@ class PendingNotification:
     """Pending relevance/full execution membership, not another display state.
 
     Sealed work selection derives this membership from the declarations;
-    presentation remains the lifecycle's plain ``Not read yet`` fact.
+    presentation remains the lifecycle's plain ``Sent`` fact.
     """
 
 
@@ -190,7 +190,7 @@ class TriagePendingAssignment(PendingNotification, AssignmentState):
             raise IdentityConflict("bounded triage cannot inherit a response obligation")
         return self.mode.triage_expectation(), "No response obligation exists until triage engages."
 
-    notification_state = "Not read yet"
+    notification_state = "Sent"
     notification_detail = ""
 
     triage_pending = True
@@ -207,7 +207,7 @@ class TriagePendingAssignment(PendingNotification, AssignmentState):
 
 
 class FullPendingAssignment(PendingNotification, AssignmentState):
-    notification_state = "Not read yet"
+    notification_state = "Sent"
     notification_detail = ""
 
     full_pending = True
@@ -237,15 +237,16 @@ class IgnoredAssignment(AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
+        read_at_ms = activity.read_at_ms or updated_at_ms
         return replace(
             notification,
-            state="Checked",
+            state=notification.receipt_state("Read", read_at_ms),
             detail="",
-            read_at_ms=activity.read_at_ms,
+            read_at_ms=read_at_ms,
         )
 
     notification_priority = 2
-    notification_state = "Checked"
+    notification_state = "Read"
     notification_detail = ""
 
     terminal = True
@@ -378,7 +379,7 @@ class EngagedAssignment(BoundAssignment):
     def require_engagement(self) -> Engagement:
         return self.decision
 
-    notification_state = "Not read yet"
+    notification_state = "Sent"
     notification_detail = ""
     notification_priority = 1
     notification_busy = True
@@ -408,7 +409,7 @@ class CompletedAssignment(BoundAssignment):
         if reference is None:
             return replace(
                 notification,
-                state="Read",
+                state=notification.receipt_state("Read", activity.read_at_ms),
                 detail="",
                 priority=2,
                 busy=False,
@@ -416,7 +417,9 @@ class CompletedAssignment(BoundAssignment):
             )
         return replace(
             notification,
-            state="Answered",
+            state=notification.receipt_state(
+                "Answered", activity.response_received_at_ms
+            ),
             detail="",
             reply_reference=reference,
             read_at_ms=activity.read_at_ms,
@@ -461,17 +464,11 @@ class DeferredAssignment(InterruptedAssignment):
         triage_inflight=False,
         blocked_by_prior=False,
     ):
-        from .presentation import MessageNotification
-
-        if observation.turn_started_by(updated_at_ms) and triage_inflight:
-            return MessageNotification(recipient, "Not read yet", "", priority=0, busy=True)
-        if triage_inflight:
-            return MessageNotification(recipient, "Interrupted before read", "")
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return activity.progress.interrupted_notification(
-            notification, activity.read_at_ms
+        return observation.selected_response(
+            notification, updated_at_ms, activity.progress, activity.read_at_ms
         )
 
     notification_state = "Interrupted before read"
@@ -519,8 +516,12 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return activity.progress.selected_notification(
-            notification, activity.read_at_ms, busy=False
+        return replace(
+            notification,
+            state=notification.receipt_state("Read", updated_at_ms),
+            detail="",
+            busy=False,
+            read_at_ms=updated_at_ms,
         )
 
     notification_priority = 2

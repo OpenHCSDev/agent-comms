@@ -16,7 +16,7 @@ def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F81
     assert receipt.message == message
     assert receipt.message.target == '#team'
     assert replace(receipt, message=None) in per_message[(message.seq, message.message_id)]
-    assert receipt.state == 'Not read yet'
+    assert receipt.state == 'Sent'
     view = next(v for v in comms.views.thread_views() if v.thread.name == 'beta')
     assert comms.views.thread_presentation('beta') == replace(
         view.presentation,
