@@ -98,6 +98,34 @@ class TranscriptPage:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class NativeFileRevision:
+    """The native source revision and its append-only captured-cut rule."""
+
+    inode: int
+    size: int
+    mtime_ns: int
+    ctime_ns: int
+
+    @classmethod
+    def capture(cls, path: Path) -> NativeFileRevision | None:
+        try:
+            observed = path.stat()
+        except FileNotFoundError:
+            return None
+        return cls(observed.st_ino, observed.st_size, observed.st_mtime_ns, observed.st_ctime_ns)
+
+    def holds_cut(self, current: NativeFileRevision, cut: int) -> bool:
+        return (
+            self.inode == current.inode
+            and current.size >= cut
+            and (
+                current.size > self.size
+                or (current.mtime_ns, current.ctime_ns) == (self.mtime_ns, self.ctime_ns)
+            )
+        )
+
+
 @dataclass(frozen=True)
 class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     """All canonical inputs to a bounded native page, including annotations."""
@@ -106,9 +134,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     requested_name: str
     thread: ThreadProvenance = field(metadata={"content_exclude": True})
     session_file: str
-    native_revision: tuple[int, int, int, int] | None = field(
-        metadata={"content_exclude": True}
-    )
+    native_revision: NativeFileRevision | None = field(metadata={"content_exclude": True})
     route_revision: TranscriptRouteRevision
     bus_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
     coordination_revision: tuple[int, int, int, int] | None = field(
@@ -176,7 +202,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         """The original witnessed byte/receipt bound owns page preparation."""
         return self.through or TranscriptCursor(
             self.session_file,
-            self.native_revision[1] if self.native_revision is not None else 0,
+            self.native_revision.size if self.native_revision is not None else 0,
             self.receipt_frontier,
         )
 
@@ -191,17 +217,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         captured, current = self.native_revision, other.native_revision
         if captured is None or current is None:
             return captured == current
-        captured_inode, captured_size, captured_mtime, captured_ctime = captured
-        current_inode, current_size, current_mtime, current_ctime = current
-        cut = self.page_bound.offset
-        return (
-            captured_inode == current_inode
-            and current_size >= cut
-            and (
-                current_size > captured_size
-                or (current_mtime, current_ctime) == (captured_mtime, captured_ctime)
-            )
-        )
+        return captured.holds_cut(current, self.page_bound.offset)
 
     def same_content(self, other: TranscriptReadIdentity) -> bool:
         """Fence the captured cut and its original publication proof.
@@ -418,7 +434,7 @@ class Transcripts:
                 name,
                 thread,
                 session_file,
-                file_revision(Path(session_file)) if session_file else None,
+                NativeFileRevision.capture(Path(session_file)) if session_file else None,
                 routes.revision(),
                 file_revision(log.path),
                 file_revision(root / "coordination.sqlite3"),
