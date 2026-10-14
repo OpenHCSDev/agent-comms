@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import os
 import shlex
+import shutil
+import sys
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 from typing import ClassVar
 
 from .declared_family import DeclaredFamily
@@ -159,6 +162,15 @@ class NativeArguments:
     default: ClassVar[tuple[str, ...]] = (
         "--provider", "openrouter", "--model", "z-ai/glm-5.3-flash",
     )
+
+    @classmethod
+    def running_entrypoint(cls) -> str:
+        """This owner's installed native launcher, fixed by its Python invocation."""
+        invocation = Path(shutil.which(sys.orig_argv[0]) or sys.orig_argv[0]).absolute()
+        launcher = invocation.with_name("pi-comms-native")
+        if not launcher.is_file():
+            raise ValueError("Owner runtime has no native Pi launcher; restart in a complete runtime")
+        return str(launcher)
 
     @classmethod
     def configured_binary(

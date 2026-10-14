@@ -11,6 +11,7 @@ from contextlib import suppress
 from .acp import CommsAgent
 from .comms import wire
 from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
+from .native_arguments import NativeArguments
 
 
 async def run() -> None:
@@ -33,6 +34,7 @@ async def run() -> None:
         private_nk_native_package=private_nk.native_package if private_nk else None,
         private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
         private_nk_verified_cli=verified_cli,
+        agent_bin=NativeArguments.running_entrypoint(),
     )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()

@@ -438,6 +438,7 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         allowed = (
             Path(sys.executable).with_name("pi-comms-native").resolve(),
+            Path(NativeArguments.running_entrypoint()).resolve(),
             stack_launcher.resolve(),
             (package / "dist" / "cli.js").resolve(),
         )
