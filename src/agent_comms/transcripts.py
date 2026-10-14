@@ -340,7 +340,7 @@ class Transcripts:
         through: TranscriptCursor | None = None,
         historical_source: str | None = None,
     ) -> TranscriptRead:
-        read, _sources = self.capture_page_window(
+        read, _sources, _sent_sources = self.capture_page_window(
             name, before=before, after=after, through=through, historical_source=historical_source,
         )
         return read
@@ -350,11 +350,16 @@ class Transcripts:
         name: str,
         *,
         source_limit: int = 1,
+        sent_source_limit: int = 0,
         before: TranscriptCursor | None = None,
         after: TranscriptCursor | None = None,
         through: TranscriptCursor | None = None,
         historical_source: str | None = None,
-    ) -> tuple[TranscriptRead, tuple[CommittedDelivery, ...]]:
+    ) -> tuple[
+        TranscriptRead,
+        tuple[CommittedDelivery, ...],
+        tuple[CommittedDelivery, ...],
+    ]:
         """Expose the source owner's complete identity without parsing its page.
 
         Native bytes alone are insufficient: input display/routing and older
@@ -365,6 +370,8 @@ class Transcripts:
 
         if not 1 <= source_limit <= MessageNotification.window_limit:
             raise ValueError("Transcript source capture requires a bounded window")
+        if not 0 <= sent_source_limit <= MessageNotification.window_limit:
+            raise ValueError("Sent source capture requires a bounded window")
         from .native_transcript import NativeTranscript
 
         registry, thread, session_file, _, root, log, routes, constructor = self._page_source(
@@ -372,9 +379,14 @@ class Transcripts:
         )
         from .transcript_receipts import AssignedTranscriptSource
 
-        receipt_frontier, sources = AssignedTranscriptSource.for_thread(
-            root, thread, log
-        ).window(limit=source_limit)
+        source = AssignedTranscriptSource.for_thread(root, thread, log)
+        if sent_source_limit:
+            receipt_frontier, sources, sent_sources = source.presentation_window(
+                limit=source_limit, sent_limit=sent_source_limit
+            )
+        else:
+            receipt_frontier, sources = source.window(limit=source_limit)
+            sent_sources = ()
         read = TranscriptRead(
             self,
             constructor(
@@ -403,7 +415,7 @@ class Transcripts:
                 through,
             ),
         )
-        return read, sources
+        return read, sources, sent_sources
 
     def _page_source(self, name, through, historical_source):
         member = (LiveTranscriptReadIdentity if historical_source is None

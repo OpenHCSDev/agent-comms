@@ -231,7 +231,18 @@ class AssignedTranscriptSource:
 
     def window(self, *, limit=1):
         """One certified original window owns both rows and its frontier."""
-        rows = self.rows(limit=limit)
+        return self._window(self.rows(limit=limit))
+
+    def presentation_window(self, *, limit=1, sent_limit=5):
+        """Conversation and authored rows from one certified original cut."""
+        lookup = stable_thread_lookup(self.recipient.created_at)
+        rows, sent = self.log.conversation_sources_with_sent(
+            lookup, "1", (), limit=limit, ascending=False, sent_limit=sent_limit
+        )
+        cursor, rows = self._window(rows)
+        return cursor, rows, sent
+
+    def _window(self, rows):
         return AssignedSourceCursor(
             str(self.root), self.recipient, rows[0].message.seq if rows else 0
         ), rows

@@ -271,17 +271,37 @@ class WireLog:
 
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Read an original window through its existing canonical barrier."""
+        return self._conversation_source_windows(
+            lookup, ((predicate, parameters, limit, ascending),)
+        )[0]
+
+    def conversation_sources_with_sent(
+        self, lookup, predicate, parameters, *, limit, ascending, sent_limit
+    ):
+        """Read conversation and authored windows through one canonical barrier."""
+        return self._conversation_source_windows(
+            lookup,
+            (
+                (predicate, parameters, limit, ascending),
+                ("w.sender_lookup=?", (lookup,), sent_limit, False),
+            ),
+        )
+
+    def _conversation_source_windows(self, lookup, windows):
         with _store_lock(self.path) as lock:
             if not self.path.exists():
-                return ()
+                return tuple(() for _ in windows)
             marker = self._private_marker_unlocked()
             source = lock.certified_read()
             source.require_marker(marker)
-            originals = source.conversation_sources(
-                lookup, predicate, parameters, limit=limit, ascending=ascending
+            originals = tuple(
+                source.conversation_sources(
+                    lookup, predicate, parameters, limit=limit, ascending=ascending
+                )
+                for predicate, parameters, limit, ascending in windows
             )
             source.require_current()
-        return tuple(originals)
+        return tuple(tuple(window) for window in originals)
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.
