@@ -232,8 +232,8 @@ class FullPendingAssignment(PendingNotification, AssignmentState):
 
 class IgnoredAssignment(AssignmentState):
     notification_priority = 2
-    notification_state = "Checked — no response"
-    notification_detail = "The agent checked this message and chose not to respond."
+    notification_state = "Checked — no reply needed"
+    notification_detail = ""
 
     terminal = True
     preengagement_target = True
@@ -365,8 +365,8 @@ class EngagedAssignment(BoundAssignment):
     def require_engagement(self) -> Engagement:
         return self.decision
 
-    notification_state = "Read — preparing response"
-    notification_detail = "The agent chose to respond; work is in progress."
+    notification_state = "Working — will reply"
+    notification_detail = ""
     notification_priority = 1
     notification_busy = True
 
@@ -465,7 +465,7 @@ class DeferredAssignment(InterruptedAssignment):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return activity.progress.notification(notification, running=False)
+        return activity.progress.interrupted_notification(notification)
 
     notification_state = "Interrupted — outcome unknown"
     notification_detail = (

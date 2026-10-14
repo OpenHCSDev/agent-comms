@@ -46,6 +46,10 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def summary(self) -> str:
         return self.detail or self.label
 
+    @property
+    def progress_activity(self) -> str:
+        return self.summary.lower()
+
     def model_wait(self, backstop: float | None) -> float | None:
         """Core's no-event backstop for this phase; None where nothing bounds it here."""
         return backstop
@@ -249,6 +253,16 @@ class ToolRunningPhase(Excursion):
     @property
     def summary(self) -> str:
         return self.detail or (self.tools[-1][1] if self.tools else self.label)
+
+    @property
+    def progress_activity(self) -> str:
+        if self.detail:
+            return self.detail.lower()
+        if not self.tools:
+            return super().progress_activity
+        from .native_tools import NativeTool
+
+        return NativeTool.activity_description(self.tools[-1][1])
 
     def tool_started(self, tool_id: str, title: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)

@@ -131,7 +131,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         updated_at_ms=1,
     )
     assert live.state == "Read — interrupted, outcome unknown"
-    assert "response turn ended" in live.detail
+    assert live.detail == ""
 
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):

@@ -57,9 +57,7 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
         updated_at_ms: int,
         progress: AssignmentProgress,
     ) -> MessageNotification:
-        return progress.notification(
-            notification, running=self.turn_started_by(updated_at_ms)
-        )
+        return progress.interrupted_notification(notification)
 
     def delivered_response(
         self, notification: MessageNotification, updated_at_ms: int
@@ -130,6 +128,18 @@ class LiveRecipientActivity(RecipientActivity):
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return self.thread.turn_started_by(updated_at_ms)
+
+    def selected_response(
+        self,
+        notification: MessageNotification,
+        updated_at_ms: int,
+        progress: AssignmentProgress,
+    ) -> MessageNotification:
+        if not self.turn_started_by(updated_at_ms):
+            return super().selected_response(notification, updated_at_ms, progress)
+        turn = self.thread.active_turn
+        assert turn is not None
+        return progress.running_notification(notification, turn.progress_description())
 
     def delivered_response(
         self, notification: MessageNotification, updated_at_ms: int

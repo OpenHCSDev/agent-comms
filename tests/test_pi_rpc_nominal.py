@@ -18,6 +18,7 @@ from agent_comms.backend import TurnSession
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.turn_lease import ActiveTurn
 from agent_comms.turn_phase import (
     CompactionPhase,
     Excursion,
@@ -59,6 +60,22 @@ def test_new_excursion_declares_both_transitions_without_dispatch_edits():
     assert isinstance(phase.on(AuditPauseEnd(), set()), ModelWaitPhase)
     assert issubclass(AuditPausePhase, StallExempt)
     assert AuditPausePhase in TurnPhase.members_with(StallExempt)
+
+
+def test_active_turn_describes_current_activity_and_elapsed_time():
+    waiting = ActiveTurn("turn", 123, started_at=100.0, phase=ModelWaitPhase())
+    shell = ActiveTurn(
+        "turn", 123, started_at=100.0,
+        phase=ToolRunningPhase(tools=(("call", "bash"),)),
+    )
+    editing = ActiveTurn(
+        "turn", 123, started_at=100.0,
+        phase=ToolRunningPhase(tools=(("call", "edit"),)),
+    )
+
+    assert waiting.progress_description(observed_at=140.0) == "waiting for model (40s)"
+    assert shell.progress_description(observed_at=280.0) == "running shell command (3m)"
+    assert editing.progress_description(observed_at=3_700.0) == "editing files (1h)"
 
 
 def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():

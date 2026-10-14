@@ -338,7 +338,8 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     target_outcome = next(
         item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
     )
-    assert target_outcome.state == "Checked — no response"
+    assert target_outcome.state == "Checked — no reply needed"
+    assert target_outcome.detail == ""
 
 
 def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa: F811

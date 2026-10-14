@@ -29,53 +29,42 @@ class AssignmentProgress(DeclaredFamily, affix="Progress"):
     """How far one assignment got, derived once from its durable evidence."""
 
     running_state: str
-    running_detail: str
     interrupted_state: str
-    interrupted_detail: str
 
-    def notification(self, notification: MessageNotification, *, running: bool):
+    def running_notification(self, notification: MessageNotification, activity: str):
         return replace(
             notification,
-            state=self.running_state if running else self.interrupted_state,
-            detail=self.running_detail if running else self.interrupted_detail,
-            busy=running,
-            priority=notification.priority if running else 3,
+            state=f"{self.running_state} — {activity} — will reply",
+            detail="",
+            busy=True,
+        )
+
+    def interrupted_notification(self, notification: MessageNotification):
+        return replace(
+            notification,
+            state=self.interrupted_state,
+            detail="",
+            busy=False,
+            priority=3,
         )
 
 
 class NotShownProgress(AssignmentProgress):
     running_state = "Starting response"
-    running_detail = (
-        "The message was selected for this turn; model-context receipt is still pending."
-    )
     interrupted_state = "Interrupted before read — outcome unknown"
-    interrupted_detail = (
-        "The response turn ended before a model-context receipt was recorded. "
-        "Do not automatically retry."
-    )
 
 
 class _ReadAssignmentProgress:
+    running_state = "Working"
     interrupted_state = "Read — interrupted, outcome unknown"
-    interrupted_detail = (
-        "The message reached model context, but its response turn ended without a terminal "
-        "outcome. Do not automatically retry."
-    )
 
 
 class ShownToModelProgress(_ReadAssignmentProgress, AssignmentProgress):
-    running_state = "Read — preparing response"
-    running_detail = (
-        "The agent read this message and started its response turn; no response output is "
-        "recorded yet."
-    )
+    pass
 
 
 class ProducedOutputProgress(_ReadAssignmentProgress, AssignmentProgress):
-    running_state = "Read - working"
-    running_detail = (
-        "The agent read this message and produced response output or started a tool."
-    )
+    pass
 
 
 @dataclass(frozen=True)

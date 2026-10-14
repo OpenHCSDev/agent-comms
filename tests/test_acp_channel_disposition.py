@@ -99,7 +99,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
         assert (len(alpha_calls), len(beta_calls)) == before
         outcomes = comms.views.message_notifications([first])[(first.seq, first.message_id)]
         assert {row.recipient: row.state for row in outcomes} == {
-            "alpha": "Checked — no response",
+            "alpha": "Checked — no reply needed",
             "beta": "Answered",
         }
         assert not any(row.busy for row in outcomes)
@@ -139,7 +139,7 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
             )
         notices = comms.views.message_notifications([message])[(message.seq, message.message_id)]
         alpha = next(row for row in notices if row.recipient == "alpha")
-        assert alpha.state not in {"Responded", "Checked — no response"}
+        assert alpha.state not in {"Responded", "Checked — no reply needed"}
         assert not alpha.busy
 
 
@@ -215,7 +215,9 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             key = message.seq, message.message_id
             notices = comms.views.message_notifications([message])[key]
             assert len(notices) == 1
-            assert notices[0].state == "Starting response" and notices[0].busy
+            assert notices[0].state.startswith("Starting response — ")
+            assert notices[0].state.endswith(" — will reply")
+            assert notices[0].detail == "" and notices[0].busy
             assert comms.views.recent_notifications("beta") == (
                 replace(notices[0], message=message),
             )
@@ -234,7 +236,9 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
                         ReplayFact.ASSISTANT_OUTPUT,
                     )
             working = comms.views.message_notifications([message])[key]
-            assert working[0].state == "Read - working" and working[0].busy
+            assert working[0].state.startswith("Working — ")
+            assert working[0].state.endswith(" — will reply")
+            assert working[0].detail == "" and working[0].busy
 
             # Same PID, different process incarnation: even a retained active turn
             # cannot supply liveness. Persist through the real typed registry.
@@ -247,7 +251,8 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
                 )
                 edit.commit()
             paused = comms.views.message_notifications([message])[key]
-            assert paused[0].state == "Read — interrupted, outcome unknown" and not paused[0].busy
+            assert paused[0].state == "Read — interrupted, outcome unknown"
+            assert paused[0].detail == "" and not paused[0].busy
             assert comms.views.recent_notifications("beta") == (
                 replace(paused[0], message=message),
             )

@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 class NativeTool(DeclaredFamily, affix="Tool"):
     acp_kind: ClassVar[str] = "other"
     action: ClassVar[str] = ""
+    activity: ClassVar[str] = ""
 
     @classmethod
     def for_name(cls, name: str) -> type[NativeTool]:
@@ -31,6 +32,11 @@ class NativeTool(DeclaredFamily, affix="Tool"):
             return cls.decode(name.lower())
         except ValueError:
             return cls
+
+    @classmethod
+    def activity_description(cls, name: str) -> str:
+        declaration = cls.for_name(name)
+        return declaration.activity or f"running {name.replace('_', ' ')}"
 
     @classmethod
     def start(cls, call_id: str, name: str, arguments: dict[str, Any]) -> ToolStart:
@@ -89,6 +95,7 @@ class CodingTool(NativeTool):
 
 class ReadTool(PathTool, CodingTool):
     acp_kind = "read"
+    activity = "reading files"
 
     def _parse_resource(self) -> None:
         return None
@@ -97,6 +104,7 @@ class ReadTool(PathTool, CodingTool):
 class BashTool(CodingTool):
     acp_kind = "execute"
     action = "Run"
+    activity = "running shell command"
 
     @classmethod
     def detail(cls, arguments: dict[str, Any]) -> object:
@@ -108,6 +116,7 @@ class BashTool(CodingTool):
 
 class EditTool(PathTool, CodingTool):
     acp_kind = "edit"
+    activity = "editing files"
 
     @classmethod
     def result_diff(cls, result, ok):
@@ -119,6 +128,7 @@ class EditTool(PathTool, CodingTool):
 
 class WriteTool(PathTool, CodingTool):
     acp_kind = "edit"
+    activity = "writing files"
 
     def _parse_resource(self) -> FileClaimPath:
         return WritableFileClaim(Path(self.arguments["path"]))
@@ -127,6 +137,7 @@ class WriteTool(PathTool, CodingTool):
 class GrepTool(NativeTool):
     acp_kind = "search"
     action = "Search"
+    activity = "searching files"
 
     @classmethod
     def detail(cls, arguments: dict[str, Any]) -> object:
@@ -138,6 +149,7 @@ class GrepTool(NativeTool):
 class GlobTool(NativeTool):
     acp_kind = "search"
     action = "Find"
+    activity = "searching files"
 
     @classmethod
     def detail(cls, arguments: dict[str, Any]) -> object:
