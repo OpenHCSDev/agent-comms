@@ -129,7 +129,7 @@ class MessageNotification:
         from .notification_assignment import NotificationAssignment
 
         projected = cls.delivery_window(
-            root, registry, sources, NotificationAssignment.read_window(root, sources)
+            root, registry, sources, NotificationAssignment.read(root, sources)
         )
         return {(message.seq,message.message_id):projected.get((message.seq,message.message_id), ())
                 for message in messages}
@@ -146,7 +146,7 @@ class MessageNotification:
             log,
             references,
             lambda sources: cls.delivery_window(
-                root, registry, sources, NotificationAssignment.read_window(root, sources)
+                root, registry, sources, NotificationAssignment.read(root, sources)
             ),
         )
 
@@ -204,7 +204,7 @@ class MessageNotification:
         }
         return cls.project_delivery_window(
             root, namespace, sources, observations,
-            assignment_read=NotificationAssignment.read_window(root, sources),
+            assignment_read=NotificationAssignment.read(root, sources),
         )
 
     @classmethod
@@ -305,7 +305,7 @@ class MessageNotification:
 
         return cls.for_sources(
             root, registry, owner, sources,
-            assignment_read=NotificationAssignment.read_window(root, sources),
+            assignment_read=NotificationAssignment.read(root, sources),
         )
 
     @classmethod

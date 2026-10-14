@@ -29,14 +29,13 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
     lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
-    predicate, parameters = "w.wire_seq=?", (initial.message.seq,)
-    original = NotificationAssignment.select(root, predicate, parameters)
+    original = NotificationAssignment.read(root, (initial,)).resolve(root)
     wire_before = comms.bus.log.path.read_bytes()
     assert original
     with Coordination(str(database)) as writer:
         with writer.session.irreversible_admission():
             for read in (
-                lambda: NotificationAssignment.select(root, predicate, parameters),
+                lambda: NotificationAssignment.read(root, (initial,)),
                 lambda: _snapshot(root, database, "beta"),
             ):
                 with pytest.raises(CoordinationReadUnavailable) as unavailable:
@@ -50,7 +49,7 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
             assert read_recovery_projection(
                 database, owner_lookup=lookup, owner_thread="beta"
             ) == UnavailableRecoveryProjection("busy")
-    assert NotificationAssignment.select(root, predicate, parameters) == original
+    assert NotificationAssignment.read(root, (initial,)).resolve(root) == original
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
     assert comms.bus.log.path.read_bytes() == wire_before
@@ -216,7 +215,7 @@ def test_capture_page_window_names_zero_and_nonzero_sent_windows(tmp_path):  # n
 
 def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp_path):  # noqa: F811
     root, _root_id, comms, initial, _people = _root(tmp_path)
-    records = NotificationAssignment.select(root, "w.wire_seq=?", (initial.message.seq,))
+    records = NotificationAssignment.read(root, (initial,)).resolve(root)
     assert records
     projected = tuple(NotificationAssignment.for_deliveries((initial,), records))
     assert projected[0][0] is initial
@@ -300,10 +299,10 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     receipts = comms.views.recent_notifications("sender")
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
     assert beta.message.reference == message.reference and beta.state == "Sent"
-    assignments = NotificationAssignment.select(
-        root, "w.wire_seq=? AND w.recipient_lookup=?", (message.seq, lookup)
+    original = next(
+        row.assignment for row in NotificationAssignment.read(root, (initial,)).resolve(root)
+        if row.assignment.recipient_lookup == lookup
     )
-    original = assignments[0].assignment
     # Both views are already open. Later messages move this original beyond the
     # bounded recent-notification window before its handling changes.
     for index in range(6):

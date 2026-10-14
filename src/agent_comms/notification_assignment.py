@@ -310,6 +310,7 @@ class UnrecordedNotificationSource(NotificationSource):
 class NotificationAssignmentRead:
     """Assignment rows captured from one caller-owned coordination snapshot."""
 
+    sources: tuple[CommittedDelivery, ...]
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
 
     def resolve(self, root: Path) -> tuple[NotificationAssignment, ...]:
@@ -319,7 +320,9 @@ class NotificationAssignmentRead:
             )
             for assignment, activity in self.rows
         )
-        return NotificationAssignment._recorded_conversation_responses(root, resolved)
+        return NotificationAssignment._recorded_conversation_responses(
+            root, self.sources, resolved
+        )
 
 
 @dataclass(frozen=True)
@@ -365,7 +368,8 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def _recorded_conversation_responses(
-        cls, root: Path, rows: tuple[NotificationAssignment, ...]
+        cls, root: Path, sources: tuple[CommittedDelivery, ...],
+        rows: tuple[NotificationAssignment, ...],
     ) -> tuple[NotificationAssignment, ...]:
         eligible = tuple(
             row for row in rows if row.assignment.lifecycle.records_conversation_response
@@ -376,12 +380,7 @@ class NotificationAssignment(NotificationSource):
         from .wire_log import WireLog
 
         bus = WireLog(root / "bus.jsonl")
-        originals = {
-            original.message.reference: original
-            for original in bus.deliveries_for_references(
-                tuple(row.assignment.source for row in eligible)
-            )
-        }
+        originals = {original.message.reference: original for original in sources}
         candidates = {}
         for lookup in {row.assignment.recipient_lookup for row in eligible}:
             after_seq = min(
@@ -413,15 +412,17 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def capture(
-        cls,
-        connection: sqlite3.Connection,
-        predicate: str,
-        parameters: tuple,
-        *,
-        limit: int = 0,
-        ascending: bool = False,
+        cls, connection: sqlite3.Connection, sources: Sequence[CommittedDelivery]
     ) -> NotificationAssignmentRead:
-        """Capture detached assignment evidence from the caller's SQLite snapshot."""
+        """Capture detached assignment evidence for one bounded window of originals
+        from the caller's SQLite snapshot."""
+        from .presentation import MessageNotification
+
+        sources = tuple(sources)
+        if len(sources) > MessageNotification.window_limit:
+            raise ValueError("Notification reads require a bounded visible message window")
+        if not sources:
+            return NotificationAssignmentRead((), ())
         from .coordination_tables.executions import CurrentExecutions
         from .native_input_record import TriageNativeExecution
         from .native_runtime_input import NativeRuntimeInput
@@ -431,23 +432,27 @@ class NotificationAssignment(NotificationSource):
         ]:
             raise ValueError("Channel notification status has an unsupported schema")
         columns = ",".join(f"w.{name}" for name in WakeAssignment.columns())
-        membership = NativeRuntimeInput.source_membership_sql()
         triage_stage = sql_literal(TriageNativeExecution)
-        context = (
-            f"SELECT n.{{column}} FROM {NativeRuntimeInput.declared_name} n "
-            f"JOIN ({membership}) member ON member.input_id=n.input_id "
-            "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
-            f"ORDER BY CASE n.stage WHEN {triage_stage} THEN 0 ELSE 1 END,"
-            "member.ordinal,n.input_id LIMIT 1"
-        )
+        selected = f"w.wire_seq IN ({','.join('?' for _ in sources)})"
+        sequences = tuple(source.message.seq for source in sources)
+        # The membership relation has no assignment index; build it once for
+        # the selected assignments instead of once per row and per column.
         rows = WakeAssignment.joined(
             connection.execute(
+                "WITH member AS MATERIALIZED (SELECT m.input_id,m.assignment_id,m.ordinal "
+                f"FROM ({NativeRuntimeInput.source_membership_sql()}) m "
+                f"WHERE m.assignment_id IN (SELECT w.assignment_id "
+                f"FROM {WakeAssignment.declared_name} w WHERE {selected})) "
                 f"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n "
-                f"JOIN ({membership}) member ON member.input_id=n.input_id "
+                "JOIN member ON member.input_id=n.input_id "
                 "WHERE member.assignment_id=w.assignment_id "
                 f"AND n.stage={triage_stage} AND n.session_entry_id IS NULL) "
                 "AS triage_inflight, pointer.execution_id AS current_execution_id, "
-                f"({context.format(column='committed_at_ms')}) AS context_committed_at_ms, "
+                f"(SELECT n.committed_at_ms FROM {NativeRuntimeInput.declared_name} n "
+                "JOIN member ON member.input_id=n.input_id "
+                "WHERE member.assignment_id=w.assignment_id AND n.session_entry_id IS NOT NULL "
+                f"ORDER BY CASE n.stage WHEN {triage_stage} THEN 0 ELSE 1 END,"
+                "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms, "
                 "p.seq AS response_seq, p.message_id AS response_message_id, "
                 "p.received_at_ms AS response_received_at_ms "
                 f"FROM {WakeAssignment.declared_name} w "
@@ -455,40 +460,16 @@ class NotificationAssignment(NotificationSource):
                 "ON pointer.owner_lookup=w.recipient_lookup "
                 f"LEFT JOIN {PublicationReceipts.declared_name} p "
                 "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target "
-                f"WHERE {predicate} ORDER BY w.wire_seq {'ASC' if ascending else 'DESC'},w.recipient"
-                + (" LIMIT ?" if limit else ""),
-                (*parameters, limit) if limit else parameters,
+                f"WHERE {selected} ORDER BY w.wire_seq DESC,w.recipient",
+                sequences + sequences,
             ),
             AssignmentActivityEvidence,
         )
-        return NotificationAssignmentRead(tuple(rows))
-
-    @classmethod
-    def capture_window(
-        cls, connection: sqlite3.Connection, sources: Sequence[CommittedDelivery]
-    ) -> NotificationAssignmentRead:
-        from .presentation import MessageNotification
-
-        if len(sources) > MessageNotification.window_limit:
-            raise ValueError("Notification reads require a bounded visible message window")
-        if not sources:
-            return NotificationAssignmentRead(())
-        placeholders = ",".join("?" for _ in sources)
-        return cls.capture(
-            connection,
-            f"w.wire_seq IN ({placeholders})",
-            tuple(source.message.seq for source in sources),
-        )
+        return NotificationAssignmentRead(sources, tuple(rows))
 
     @classmethod
     def read(
-        cls,
-        root: Path,
-        predicate: str,
-        parameters: tuple,
-        *,
-        limit: int = 0,
-        ascending: bool = False,
+        cls, root: Path, sources: Sequence[CommittedDelivery]
     ) -> NotificationAssignmentRead:
         """Capture assignment evidence through the single observing connection owner."""
         from .coordination_database import CoordinationStore
@@ -497,44 +478,11 @@ class NotificationAssignment(NotificationSource):
         database = cls.database_path(root)
         failure = _preflight(database)
         if failure == "missing":
-            return NotificationAssignmentRead(())
+            return NotificationAssignmentRead(tuple(sources), ())
         if failure:
             raise ValueError(f"Channel notification status unavailable: {failure}")
         with CoordinationStore.observing(database, lock_timeout=0.05) as connection:
-            return cls.capture(
-                connection, predicate, parameters, limit=limit, ascending=ascending
-            )
-
-    @classmethod
-    def read_window(
-        cls, root: Path, sources: Sequence[CommittedDelivery]
-    ) -> NotificationAssignmentRead:
-        from .presentation import MessageNotification
-
-        if len(sources) > MessageNotification.window_limit:
-            raise ValueError("Notification reads require a bounded visible message window")
-        if not sources:
-            return NotificationAssignmentRead(())
-        placeholders = ",".join("?" for _ in sources)
-        return cls.read(
-            root,
-            f"w.wire_seq IN ({placeholders})",
-            tuple(source.message.seq for source in sources),
-        )
-
-    @classmethod
-    def select(
-        cls,
-        root: Path,
-        predicate: str,
-        parameters: tuple,
-        *,
-        limit: int = 0,
-        ascending: bool = False,
-    ) -> tuple[NotificationAssignment, ...]:
-        return cls.read(
-            root, predicate, parameters, limit=limit, ascending=ascending
-        ).resolve(root)
+            return cls.capture(connection, sources)
 
     @property
     def recipient(self) -> FrozenRecipient:

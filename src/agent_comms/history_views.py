@@ -344,7 +344,7 @@ class HistoryViews:
         owner = captured.read.identity.thread
         if not owner.incarnation.current(snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
-        assignment_read = NotificationAssignment.read_window(
+        assignment_read = NotificationAssignment.read(
             self.root, (*captured.sources, *captured.sent_sources))
         return replace(
             view.presentation,
