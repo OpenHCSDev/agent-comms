@@ -333,6 +333,20 @@ class FieldCodec(Sealed):
         return cast(T, cls._decode(target, data))
 
     @classmethod
+    def decode_projection(cls, target: type[T], data: object) -> T:
+        """Decode only a record's declared fields from a wider external object.
+
+        The target declaration still owns names, aliases, defaults and types.
+        This is a read-only boundary projection; persistence decoding remains
+        strict about unknown fields.
+        """
+        if not isinstance(data, dict) or not is_dataclass(target):
+            raise ValueError("Expected a record projection from an object.")
+        plan = cls._record_plan(target)
+        selected = {key: data[key] for key in plan.accepted_keys if key in data}
+        return cls.decode(target, selected)
+
+    @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
         """Instance values carry their selector inside the encoded object."""
         alternatives = []

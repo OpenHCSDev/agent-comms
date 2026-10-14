@@ -158,23 +158,44 @@ class NativeTranscript:
                 raise ValueError("Native publication has no committed context inclusion")
             return proof.corroborate(self.path.absolute(), header, {user.input_id: user})
 
-    def input_ancestor(self, record: NativeRecord):
-        """Follow original parent IDs to the input boundary, without an index.
+    @staticmethod
+    def input_ancestors(records):
+        """Resolve every parent chain represented by one bounded page fragment.
 
-        The reverse reader visits each intervening record once, with fixed scan
-        buffers. A user boundary ends the walk even when it is not tracked.
-        Tool rounds and branches cannot lend another input's publication proof.
+        One chronological pass shares ancestry between children. A chain that
+        starts before the fragment remains unresolved; opening history never
+        walks beyond the page budget.
+        """
+        records = tuple(records)
+        inputs_by_entry, resolved = {}, [None] * len(records)
+        for index, record in sorted(enumerate(records), key=lambda item: item[1].start):
+            entry = record.entry
+            if entry is None:
+                continue
+            user = entry if entry.input_boundary else inputs_by_entry.get(entry.parent_id)
+            resolved[index] = user
+            if entry.id is not None:
+                inputs_by_entry[entry.id] = user
+        return tuple(resolved)
+
+    def input_ancestor(self, record: NativeRecord):
+        """Follow one publication chain with header-only decoding.
+
+        Publication proof is independent of page opening and retains its bounded
+        turn checkpoint. Only its discovered input boundary needs full decoding.
         """
         parent = record.entry.parent_id
         if parent is None:
             return None
-        for ancestor in self.reverse(record.start):
-            entry = ancestor.entry
-            if entry is None or entry.id != parent:
+        for _start, _end, raw in _reverse_records(self.path, record.start):
+            if not raw.endswith(b"\n"):
                 continue
-            if entry.input_boundary:
-                return entry
-            parent = entry.parent_id
+            header = NativeEntry.read_header(raw)
+            if header.id != parent:
+                continue
+            if header.input_boundary:
+                return NativeEntry.read(raw)
+            parent = header.parent_id
             if parent is None:
                 return None
         return None

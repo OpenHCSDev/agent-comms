@@ -14,6 +14,7 @@ from typing import Any, ClassVar, Literal
 from .pi_vocabulary import ThinkingLevel
 from . import agent_backend as pivot
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .pi_payloads import PiMessage, PiPayload
 from .pi_rpc import unique_fields
 from .routing import TurnRouting
@@ -39,6 +40,22 @@ class NativeEntryCoordinates(PiPayload):
         if not self.id:
             raise ValueError("Native publication requires an original entry ID")
         return self.id
+
+
+@dataclass(frozen=True, slots=True)
+class NativeEntryHeader:
+    """Only the declared fields required to join one parent chain."""
+
+    id: str | None
+    parent_id: str | None
+    input_boundary: bool = False
+
+
+@dataclass(frozen=True)
+class NativeMessageEnvelope:
+    """The message member selected by an entry, without decoding its payload."""
+
+    message: dict[str, Any]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -70,6 +87,17 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     @classmethod
     def read(cls, raw: bytes) -> NativeEntry:
         return cls.from_wire(json.loads(raw))
+
+    @classmethod
+    def read_header(cls, raw: bytes) -> NativeEntryHeader:
+        value = json.loads(raw)
+        member = cls.wire_member(value)
+        coordinates = FieldCodec.decode_projection(NativeEntryCoordinates, value)
+        return member.ancestry_header(value, coordinates)
+
+    @classmethod
+    def ancestry_header(cls, value, coordinates) -> NativeEntryHeader:
+        return NativeEntryHeader(coordinates.id, coordinates.parent_id)
 
     @classmethod
     def from_evidence(cls, raw: dict) -> NativeEntry:
@@ -427,6 +455,12 @@ class SessionEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class MessageEntry(NativeEntry):
+    @classmethod
+    def ancestry_header(cls, value, coordinates) -> NativeEntryHeader:
+        envelope = FieldCodec.decode_projection(NativeMessageEnvelope, value)
+        message = PiMessage.wire_member(envelope.message)
+        return NativeEntryHeader(coordinates.id, coordinates.parent_id, message.user)
+
     @classmethod
     def input_evidence(cls, raw: dict) -> NativeEntry | None:
         message = raw["message"]
