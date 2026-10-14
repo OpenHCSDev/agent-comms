@@ -19,7 +19,7 @@ from native_backend_fixture import native_backend_fixture
 
 def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
     owner = Thread("owner", frozenset(), str(tmp_path))
-    ledger = InputDispositions(tmp_path / InputDispositions.filename)
+    ledger = InputDispositions.create(tmp_path / InputDispositions.filename)
     origins = tuple(
         Message("peer", "#comms", f"text {seq}", InfoKind, seq=seq) for seq in (1, 2)
     )
@@ -34,7 +34,7 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
             text=message.body,
         )
     prompt = "text 1\n\ntext 2"
-    document = ledger.read()
+    document = ledger.rows(keys)
     assert InputBatch.capture(origins, keys, prompt, owner, document).admits_multiple
     for messages, input_keys, text in (
         (origins[:1], keys[:1], "text 1"),
@@ -107,9 +107,8 @@ async def test_captured_originals_reach_context_reservation_and_unbound_retireme
                 assert not any(isinstance(item, InputProvenance) for item in segment.provenance)
                 assert turn.original.batch.prompt == turn.context.render().text
 
-            originals = agent.inputs.dispositions.read().originals(
-                (*direct_keys, *channel_keys, *scheduled_keys)
-            )
+            all_keys = (*direct_keys, *channel_keys, *scheduled_keys)
+            originals = agent.inputs.dispositions.rows(all_keys).originals(all_keys)
             assert all(isinstance(row, NotSentInput) and not row.has_native_binding
                        for row in originals)
             assert comms.registry.require(agent.sessions.require(session_id)).active_turn is None

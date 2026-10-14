@@ -9,10 +9,10 @@ from agent_comms.input_disposition import InputDispositions
 
 
 def test_batch_sources_are_one_snapshot_in_requested_order(tmp_path):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     for seq, text in ((7, "first admitted name"), (8, "second admitted name")):
         store.record(f"bus:{seq}", seq=seq, owner="kid", admission=1, target="#team", text=text)
-    document = store.read()
+    document = store.rows(("bus:7", "bus:8"))
     assert tuple(row.source_text for row in document.originals(("bus:8", "bus:7"))) == (
         "second admitted name",
         "first admitted name",
@@ -24,25 +24,25 @@ def test_batch_sources_are_one_snapshot_in_requested_order(tmp_path):
 def test_batch_sources_use_ledger_validation(tmp_path):
     import sqlite3
 
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     store.record("bus:7", seq=7, owner="kid", admission=1, target="#team", text="admitted")
     with sqlite3.connect(store.path) as db:
         payload, = db.execute(
-            "SELECT payload FROM input_dispositions WHERE key='bus:7'"
+            "SELECT payload FROM input_disposition WHERE key='bus:7'"
         ).fetchone()
         damaged = json.loads(payload)
         damaged["source_text"] = None
         db.execute(
-            "UPDATE input_dispositions SET payload=? WHERE key='bus:7'",
+            "UPDATE input_disposition SET payload=? WHERE key='bus:7'",
             (json.dumps(damaged),),
         )
     with pytest.raises(ValueError, match="Expected"):
-        store.read()
+        store.lookup("bus:7")
 
 
 @pytest.mark.parametrize("invalid_text", [["list"], [], {"text": "dict"}, 7, False, None])
 def test_record_rejects_nonstring_before_durable_unknown(tmp_path: Path, invalid_text) -> None:
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     with pytest.raises(ValueError, match="Invalid ACP input identity"):
         store.record(
             "acp:" + "f" * 32,
@@ -52,16 +52,16 @@ def test_record_rejects_nonstring_before_durable_unknown(tmp_path: Path, invalid
             target="kid",
             text=invalid_text,
         )
-    assert not store.read().rows
+    assert not store.rows(("acp:" + "f" * 32,)).rows
 
 
 def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     assert store.record("bus:7", seq=7, owner="kid", admission=3, target="kid", text="ask")
     assert not store.record("bus:7", seq=7, owner="kid", admission=3, target="kid", text="ask")
     assert (
         InputDispositions(tmp_path / InputDispositions.filename)
-        .read()
+        .unresolved_for("kid")
         .unknown(frozenset({"kid"}))[0]
         .sequence
         == 7
@@ -74,7 +74,7 @@ def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:
     assert store.started("bus:7", turn_id="turn-1", native_id=native_id, text="full ask")
     assert not store.started("bus:7", turn_id="turn-1", native_id=native_id, text="full ask")
     assert (
-        InputDispositions(tmp_path / InputDispositions.filename).read().unknown(frozenset({"kid"}))
+        InputDispositions(tmp_path / InputDispositions.filename).unresolved_for("kid").unknown(frozenset({"kid"}))
         == ()
     )
 

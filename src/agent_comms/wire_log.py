@@ -408,10 +408,12 @@ class WireLog:
             with self.certified_read() as source:
                 snapshot = registry.snapshot()
                 owner = snapshot.require(name)
-                inputs = InputDispositions(self.path.parent / InputDispositions.filename).read()
-                captured = source.retained_task_facts(owner.incarnation)
+                facts = RetainedTaskFacts(tuple(source.retained_task_facts(owner.incarnation)))
+                inputs = InputDispositions(
+                    self.path.parent / InputDispositions.filename
+                ).rows(facts.original_input_keys())
                 export = WireExportBoundary(source.marker.last_seq, time.time())
-        yield owner, snapshot, RetainedTaskFacts(tuple(captured)), inputs, export
+        yield owner, snapshot, facts, inputs, export
 
     def retained_context(self, name: str, registry):
         """Authored retained context; also the source of instruction export.

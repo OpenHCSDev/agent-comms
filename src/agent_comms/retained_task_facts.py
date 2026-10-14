@@ -225,6 +225,14 @@ class RetainedTaskFacts:
         """Describe this exact captured payload, never unrelated bus activity."""
         return TextDigest.of(self.canonical_bytes(FieldCodec.encode(self)).decode())
 
+    def original_input_keys(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(
+            key
+            for fact in self.facts
+            for message in fact.wire_sources()
+            for key in message.task.original_input_keys()
+        ))
+
     def original_input_facts(self, inputs: InputDocument) -> tuple[ExactTaskFact, ...]:
         """Resolve pins through their original declarations and input owner.
 

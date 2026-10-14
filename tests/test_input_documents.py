@@ -21,13 +21,13 @@ from agent_comms.input_disposition import InputDispositions, InputDocument
 
 
 def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custody(tmp_path):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     args = dict(seq=None, owner="worker", admission=1, target="worker", text="Prior input")
     assert store.record("prior", **args)
     assert store.record("unknown", **args)
     assert store.bind("unknown", admission=1, turn_id="old", native_id="a" * 32,
                       text="Original sent input")
-    prior = store.read()
+    prior = store.rows(("prior", "unknown"))
     first = ReservedInput("first", None, "worker", 1, "worker", "First input")
     second = ReservedInput("second", None, "worker", 1, "worker", "Second input")
     with ExitStack() as custody:
@@ -45,7 +45,7 @@ def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custo
         assert not store.record_originals().rows
         assert not store.record("first", **args)
         assert store.path.read_bytes() == saved
-    retired = store.read()
+    retired = store.rows(("prior", "unknown", first.key, second.key))
     assert isinstance(retired.rows[first.key], NotSentInput)
     assert isinstance(retired.rows[second.key], NotSentInput)
     assert retired.rows["prior"] == prior.rows["prior"]
@@ -66,7 +66,7 @@ def test_codec_reuses_declared_schema_but_decodes_each_changed_value():
 
 
 def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_path):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     reserved = ReservedInput("acp:old", None, "worker", 1, "worker", "Retain me")
     row = reserved.bind(
         admission=1, turn_id="turn", native_id="a" * 32, text="Exact sent text"
@@ -77,14 +77,14 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
         notice_dismissed=True,
         goal_reviews={"goal": GoalInputDecision(7, "review")},
     )
-    store.update(lambda _: InputDocument({row.key: row}))
-    document = store.read()
+    store.update_rows((row.key,), lambda _: InputDocument({row.key: row}))
+    document = store.rows((row.key,))
     restored = document.rows[row.key]
     assert restored == row and restored.reviewed_for_goal("goal")
     assert not store.bind(row.key, admission=1, turn_id="again", native_id="b" * 32, text="again")
     assert not store.started(row.key, turn_id="wrong", native_id="a" * 32, text="Exact sent text")
     assert store.started(row.key, turn_id="turn", native_id="a" * 32, text="Exact sent text")
-    assert isinstance(store.read().rows[row.key], StartedInput)
+    assert isinstance(store.lookup(row.key), StartedInput)
     assert not store.started(row.key, turn_id="turn", native_id="a" * 32, text="Exact sent text")
     assert row.unresolved
 
@@ -105,7 +105,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     registry.lease_local_turn("worker", "turn")
     lease = registry.require("worker").turn_lease
     admission = lease.admission_generation
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     for key, sequence, text in (("bus:1", 1, "First original"), ("bus:2", 2, "Second original")):
         assert store.record(key, seq=sequence, owner="worker", admission=admission,
                             target="worker", text=text)
@@ -120,7 +120,7 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
                       text="Actual corrected native user")
     assert store.started("acp:correction", turn_id="turn", native_id="b" * 32,
                          text="Actual corrected native user")
-    document = store.read()
+    document = store.rows(("bus:1", "bus:2", "acp:correction"))
     original_bytes = store.path.read_bytes()
     snapshot = registry.snapshot()
     group = document.started_for_native(
@@ -176,16 +176,16 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
 
     from agent_comms.thread_identity import ThreadIncarnation
 
-    store = InputDispositions(tmp_path / InputDispositions.filename)
-    missing = store.read().lookup("acp:missing")
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
+    missing = store.lookup("acp:missing")
     assert isinstance(missing, MissingInput) and fields(missing) == ()
     assert not missing.exists and not missing.accepts_reservation and not missing.has_started
     assert not store.bind("acp:missing", admission=1, turn_id="t", native_id="a" * 32, text="text")
-    assert not store.read().all_started(("acp:missing",))
+    assert not store.rows(("acp:missing",)).all_started(("acp:missing",))
     assert store.record(
         "acp:input", seq=None, owner="owner", admission=4, target="owner", text="keep"
     )
-    reserved = store.read().lookup("acp:input")
+    reserved = store.lookup("acp:input")
     assert isinstance(reserved, ReservedInput) and reserved.exists and reserved.accepts_reservation
     assert reserved.matches_owner(ThreadIncarnation("owner", 10.0))
     # Existing input rows attest name/admission only, never a historical birth.
@@ -206,7 +206,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
 
 
 def test_batch_retirement_returns_published_cut_without_changing_native_evidence(tmp_path):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     keys = ("acp:reserved", "acp:bound", "acp:started", "acp:unsent", "acp:unrelated")
     for key in keys:
         assert store.record(key, seq=None, owner="owner", admission=1,
@@ -217,10 +217,10 @@ def test_batch_retirement_returns_published_cut_without_changing_native_evidence
     assert store.started("acp:started", turn_id="original-turn", native_id="a" * 32,
                          text="acp:started")
     store.settle_unbound(("acp:unsent",))
-    original = store.read()
+    original = store.rows(keys)
     selected = (*keys[:-1], "acp:missing")
     published = store.settle_unbound(selected)
-    complete = InputDispositions(store.path).read()
+    complete = InputDispositions(store.path).rows(keys)
     assert published.rows == {
         key: complete.rows[key] for key in selected if key in complete.rows
     }
@@ -242,7 +242,7 @@ def test_batch_retirement_returns_published_cut_without_changing_native_evidence
 
 @pytest.mark.parametrize("native_id", ["invalid", "b" * 31])
 def test_invalid_bind_keeps_durable_reservation_intact(tmp_path, native_id):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     store.record("acp:x", seq=None, owner="owner", admission=1, target="owner", text="retained")
     before = store.path.read_bytes()
     with pytest.raises(ValueError, match="native input"):
@@ -251,13 +251,13 @@ def test_invalid_bind_keeps_durable_reservation_intact(tmp_path, native_id):
 
 
 def test_current_reservation_wire_has_only_declared_fields(tmp_path):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     store.record("acp:x", seq=None, owner="owner", admission=1, target="owner", text="retained")
-    record = FieldCodec.encode(store.read().rows["acp:x"])
+    record = FieldCodec.encode(store.lookup("acp:x"))
     assert record["kind"] == "reserved"
     assert not {"status", "native_id", "turn_id", "sent_text"}.intersection(record)
     assert isinstance(store.settle_unbound(("acp:x",)).lookup("acp:x"), NotSentInput)
-    record = FieldCodec.encode(store.read().rows["acp:x"])
+    record = FieldCodec.encode(store.lookup("acp:x"))
     assert record["kind"] == "not_sent"
     assert not {"native_id", "turn_id", "sent_text"}.intersection(record)
 
@@ -283,13 +283,13 @@ def test_reserved_input_is_queued_only_for_its_own_owner_admission_and_text():
 def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
     tmp_path, key, sequence, target
 ):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions.create(tmp_path / InputDispositions.filename)
     assert store.record(
         key, seq=sequence, owner="owner", admission=1, target=target, text="original"
     )
     assert store.bind(key, admission=1, turn_id="turn", native_id="a" * 32, text="wrapped input")
     assert store.started(key, turn_id="turn", native_id="a" * 32, text="wrapped input")
-    assert store.read().lookup(key).has_started
+    assert store.lookup(key).has_started
     original_bytes = store.path.read_bytes()
     # Routing cannot be rewritten by recording another target at the original
     # key. That ownership belongs to first durable acceptance, not start proof.
@@ -297,5 +297,5 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
         key, seq=sequence, owner="owner", admission=1, target="#foreign", text="original"
     )
     assert store.path.read_bytes() == original_bytes
-    assert store.read().lookup(key).target == target
-    assert store.read().lookup(key).has_started
+    assert store.lookup(key).target == target
+    assert store.lookup(key).has_started

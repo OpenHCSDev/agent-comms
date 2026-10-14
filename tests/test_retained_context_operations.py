@@ -34,8 +34,9 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
         code = main(["--root", str(comms.root), *args])
         return code, json.loads(capsys.readouterr().out)
 
-    protected = (saved, inputs.path, comms.registry.store.path, comms.root / "bus.jsonl")
+    protected = (saved, comms.registry.store.path, comms.root / "bus.jsonl")
     hashes = {file: hashlib.sha256(file.read_bytes()).hexdigest() for file in protected}
+    original_input = inputs.lookup("acp:original-unknown")
     destination = tmp_path / "authored-export.md"
     code, exported = command("export-retained", owner.name, "--output", str(destination))
     assert code == 0 and exported["exported_messages"] == 1
@@ -43,6 +44,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     assert wording in text and goal.text not in text
     assert "Unpinned original UNKNOWN input" not in text
     assert all(hashlib.sha256(file.read_bytes()).hexdigest() == digest for file, digest in hashes.items())
+    assert inputs.lookup("acp:original-unknown") == original_input
 
 
 def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
@@ -135,17 +137,18 @@ def original_input_consumer_journey(tmp_path, command):
                     agent.inputs, "beta", text=wording, prompt=wording, echo=True,
                     images=(), controller=Client(), origin=origin, custody=custody)
                 custody.pop_all()
-            originals.append(agent.inputs.dispositions.read().lookup(queued.key))
+            originals.append(agent.inputs.dispositions.lookup(queued.key))
         assert agent.inputs.dispositions.record(
             "neutral-original", seq=None, owner="beta",
             admission=origin.admission.admission_generation, target="beta", text=wording)
     inputs = agent.inputs.dispositions
-    original_inputs = inputs.path.read_bytes()
+    input_keys = (*tuple(row.key for row in originals), "neutral-original")
+    original_inputs = inputs.rows(input_keys)
     other = comms.registry.declare(Thread("unaddressed", frozenset(), origin.project))
 
     def invoke(*args):
         result = command(comms.root, args)
-        assert inputs.path.read_bytes() == original_inputs
+        assert inputs.rows(input_keys) == original_inputs
         assert comms.registry.require("beta").turn_lease is None
         return result
 
@@ -219,7 +222,7 @@ def original_input_consumer_journey(tmp_path, command):
     reopened = Comms(comms.root)
     assert reopened.bus.log.retained_context("renamed-beta", reopened.registry).text() == (
         comms.bus.log.retained_context("renamed-beta", comms.registry).text())
-    assert all(inputs.read().lookup(row.key) == row and row.unresolved for row in originals)
+    assert all(inputs.lookup(row.key) == row and row.unresolved for row in originals)
     return {"original_inputs": 2, "distinct_equal_wording": True, "pins": 3,
             "refusals": 4, "rename_correction_drop_reopen": True,
             "original_input_bytes_preserved": True, "native_inputs": 0,

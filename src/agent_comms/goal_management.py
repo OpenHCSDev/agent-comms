@@ -74,10 +74,11 @@ class Goals:
 
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
+            aliases = self.registry.aliases_for(name)
             rows = (
                 InputDispositions(self.root / InputDispositions.filename)
-                .read()
-                .unknown(self.registry.aliases_for(name))
+                .unknown_for(aliases)
+                .unknown(aliases)
             )
             return [row.public() for row in rows]
 
@@ -96,7 +97,7 @@ class Goals:
             aliases = self.registry.aliases_for(name)
             return (
                 InputDispositions(self.root / InputDispositions.filename)
-                .read()
+                .unknown_for(aliases)
                 .delivery_overview(
                     aliases, include_history=include_history, awaiting_keys=awaiting_keys
                 )
@@ -135,7 +136,9 @@ class Goals:
             dict.fromkeys(GoalWaitTarget(target.name, target.created_at) for target in resolved)
         )
         owners = self.registry.aliases_for(thread.name)
-        document = InputDispositions(self.root / InputDispositions.filename).read()
+        document = InputDispositions(
+            self.root / InputDispositions.filename
+        ).unknown_for(owners)
         unknown = {row.key: row for row in document.unknown(owners)}
         eligible = set()
         snapshot = self.registry.snapshot()

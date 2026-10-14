@@ -188,10 +188,10 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.Done)
     async def done(self, event: events.Done) -> events.Done:
-        document = await Coordination.run_worker(self.inputs.dispositions.read)
-        unknown_attempts = not document.all_started(
-            self.inputs.input_keys(self.session_id)
-        )
+        input_keys = self.inputs.input_keys(self.session_id)
+        keys = tuple(dict.fromkeys((*input_keys, *self.original.keys)))
+        document = await Coordination.run_worker(lambda: self.inputs.dispositions.rows(keys))
+        unknown_attempts = not document.all_started(input_keys)
         if event.ok is True and unknown_attempts:
             # A final assistant stop can prove the original turn,
             # not an ACKed follow-up lacking its own user start.

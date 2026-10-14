@@ -224,9 +224,11 @@ class TranscriptRoutes:
         except (ValueError, TypeError) as error:
             raise RelationViolationError("Native publication evidence is invalid") from error
         ids = routing.annotation_ids(reader, checkpoint, str(path), final.end)
-        inputs = InputDispositions(log.path.parent / InputDispositions.filename)
+        attempts = InputDispositions(
+            log.path.parent / InputDispositions.filename
+        ).for_lease(lease)
         lookup = stable_thread_lookup(incarnation.created_at)
-        with log.certified_read() as source, registry.store.reading() as document, inputs.reading() as attempts:
+        with log.certified_read() as source, registry.store.reading() as document:
             snapshot = document.snapshot()
             incarnation = lease.identity.incarnation.resolved(snapshot)
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread

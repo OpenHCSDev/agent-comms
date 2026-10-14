@@ -811,12 +811,12 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
         from .input_disposition import InputDispositions
         from .errors import RelationViolationError
 
-        with InputDispositions(ctx.root / InputDispositions.filename).reading() as inputs:
-            try:
-                original = inputs.rows[self.source]
-            except KeyError as error:
-                raise RelationViolationError("Constraint lacks its original input") from error
-            return original.context_provenance().require_human_input()
+        original = InputDispositions(
+            ctx.root / InputDispositions.filename
+        ).lookup(self.source)
+        if not original.exists:
+            raise RelationViolationError("Constraint lacks its original input")
+        return original.context_provenance().require_human_input()
 
     def pin_original(self, ctx: Comms, source):
         return ctx.messaging.pin_input_constraint(self.thread, source, worktree=self.worktree)

@@ -207,6 +207,9 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
     def original_wording_context_source(self, original: Message) -> Provenance:
         return WireProvenance(original.reference)
 
+    def original_input_keys(self) -> tuple[str, ...]:
+        return ()
+
     def original_input_sources(self, inputs: InputDocument) -> tuple[StoredInput, ...]:
         return ()
 
@@ -537,6 +540,9 @@ class NativeInputConstraintPin(HumanConstraintPin):
     def original_wording_context_source(self, original: StoredInput) -> Provenance:
         return original.context_provenance()
 
+    def original_input_keys(self) -> tuple[str, ...]:
+        return (self.subject.require_human_input().key,)
+
     def original_input_sources(self, inputs: InputDocument) -> tuple[StoredInput, ...]:
         return (self.subject.require_human_input().require_original(inputs),)
 
@@ -549,8 +555,11 @@ class NativeInputConstraintPin(HumanConstraintPin):
         from .input_disposition import InputDispositions
 
         original_source.require_current()
-        with InputDispositions(original_source.path.parent / InputDispositions.filename).reading() as inputs:
-            row = self.subject.require_human_input().require_original(inputs)
+        key = self.subject.require_human_input().key
+        inputs = InputDispositions(
+            original_source.path.parent / InputDispositions.filename
+        ).rows((key,))
+        row = self.subject.require_human_input().require_original(inputs)
         origin = row.origin.require_human()
         if origin.root_id != original_source.witness.root_id:
             raise RelationViolationError("USER input pin belongs to another wire root")

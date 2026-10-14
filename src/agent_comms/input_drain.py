@@ -262,7 +262,7 @@ class InputDrain(InputObservation):
         self.queue_revisions: dict[str, int] = {}
         self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}
         self.original_sources: dict[str, OriginalTurnInput] = {}
-        self.dispositions = InputDispositions(comms.root / InputDispositions.filename)
+        self.dispositions = comms.input_dispositions
         self.auto_wake = auto_wake
         self.pending_turns: dict[str, list[ScheduledTurn]] = {}
         self.drain_locks: dict[str, asyncio.Lock] = {}
@@ -783,7 +783,8 @@ class InputDrain(InputObservation):
         input_id = input_id if input_id is not None else original.accepted_id
         source = self.following_sources.get(session_id, {}).get(input_id)
         started_keys = original.keys if input_id is None else source.keys if source else ()
-        document = await Coordination.run_worker(self.dispositions.read)
+        keys = tuple(dict.fromkeys((*started_keys, *original.notice_keys)))
+        document = await Coordination.run_worker(lambda: self.dispositions.rows(keys))
         for key in started_keys:
             row = document.rows.get(key)
             if row is not None and not row.unresolved:

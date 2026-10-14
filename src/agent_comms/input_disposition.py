@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from contextlib import ExitStack, contextmanager
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
@@ -25,6 +25,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .store_files import _store_lock
 from .threads import Thread
+from .typed_table import Column, Index, TypedTable
 
 if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
@@ -144,6 +145,42 @@ class InputDocument:
         }
 
 
+class InputDispositionTable:
+    """Schema family for the durable input store."""
+
+
+@dataclass(frozen=True)
+class InputDispositionRow(InputDispositionTable, TypedTable):
+    key: str = field(metadata={"sql": Column(primary_key=True)})
+    owner: str
+    admission: int
+    turn_id: str | None
+    unresolved: bool
+    sequence: int | None
+    payload: str
+    indexes = (
+        Index(("owner", "admission", "turn_id")),
+        Index(("owner", "unresolved", "sequence")),
+        Index(("turn_id", "admission"), where="turn_id IS NOT NULL"),
+        Index(("turn_id", "sequence"), where="turn_id IS NOT NULL AND sequence IS NOT NULL"),
+    )
+
+    @classmethod
+    def capture(cls, row: StoredInput) -> InputDispositionRow:
+        return cls(
+            row.key,
+            row.owner,
+            row.admission,
+            row.bound_turn_id,
+            row.unresolved,
+            row.sequence,
+            json.dumps(FieldCodec.encode(row), sort_keys=True, separators=(",", ":")),
+        )
+
+    def decode(self) -> StoredInput:
+        return FieldCodec.decode(StoredInput, json.loads(self.payload))
+
+
 @dataclass(frozen=True, slots=True)
 class InputDispositions:
     """Key-addressed durable input rows; decoding never holds the SQLite lock."""
@@ -151,34 +188,16 @@ class InputDispositions:
     path: Path
     filename: ClassVar[str] = "input_dispositions.sqlite3"
 
-    def __post_init__(self) -> None:
-        if self.path.exists():
-            return
-        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with _store_lock(self.path):
-            if self.path.exists():
-                return
-            with self._connect() as db:
-                db.execute("PRAGMA journal_mode=WAL")
-                db.execute(
-                    """CREATE TABLE input_dispositions (
-                        key TEXT PRIMARY KEY,
-                        owner TEXT NOT NULL,
-                        admission INTEGER NOT NULL,
-                        turn_id TEXT,
-                        unresolved INTEGER NOT NULL,
-                        sequence INTEGER,
-                        payload TEXT NOT NULL
-                    )"""
-                )
-                db.execute(
-                    "CREATE INDEX input_dispositions_lease "
-                    "ON input_dispositions(owner, admission, turn_id)"
-                )
-                db.execute(
-                    "CREATE INDEX input_dispositions_pending "
-                    "ON input_dispositions(owner, unresolved, sequence)"
-                )
+    @classmethod
+    def create(cls, path: Path) -> InputDispositions:
+        """Create this root's sole store before consumers open pure handles."""
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        with _store_lock(path):
+            if not path.exists():
+                with sqlite3.connect(path, timeout=5) as db:
+                    db.execute("PRAGMA journal_mode=WAL")
+                    InputDispositionRow.create(db)
+        return cls(path)
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(self.path, timeout=5)
@@ -186,38 +205,11 @@ class InputDispositions:
     def _read_connection(self) -> sqlite3.Connection:
         return sqlite3.connect(f"{self.path.resolve().as_uri()}?mode=ro", uri=True, timeout=0)
 
-    @staticmethod
-    def _payload(row: StoredInput) -> str:
-        return json.dumps(FieldCodec.encode(row), sort_keys=True, separators=(",", ":"))
-
-    @staticmethod
-    def _decode(payload: str) -> StoredInput:
-        return FieldCodec.decode(StoredInput, json.loads(payload))
-
-    @staticmethod
-    def _columns(row: StoredInput) -> tuple[object, ...]:
-        return (
-            row.key,
-            row.owner,
-            row.admission,
-            row.bound_turn_id,
-            int(row.unresolved),
-            row.sequence,
-            InputDispositions._payload(row),
-        )
-
-    def _select(self, where: str = "", parameters: tuple[object, ...] = ()) -> InputDocument:
-        sql = "SELECT payload FROM input_dispositions"
-        if where:
-            sql += f" WHERE {where}"
-        sql += " ORDER BY sequence IS NULL, sequence, rowid"
+    def _select(self, where: str = "1", parameters: tuple[object, ...] = ()) -> InputDocument:
         with self._read_connection() as db:
-            payloads = tuple(db.execute(sql, parameters))
-        rows = tuple(self._decode(payload) for payload, in payloads)
+            stored = tuple(InputDispositionRow.select(db, where=where, parameters=parameters))
+        rows = tuple(row.decode() for row in stored)
         return InputDocument({row.key: row for row in rows})
-
-    def read(self) -> InputDocument:
-        return self._select()
 
     def rows(self, keys: tuple[str, ...]) -> InputDocument:
         if not keys:
@@ -231,9 +223,24 @@ class InputDispositions:
     def unresolved_for(self, owner: str) -> InputDocument:
         return self._select("owner = ? AND unresolved = 1", (owner,))
 
-    @contextmanager
-    def reading(self):
-        yield self.read()
+    def unknown_for(self, owners: frozenset[str]) -> InputDocument:
+        if not owners:
+            return InputDocument()
+        placeholders = ",".join("?" for _ in owners)
+        return self._select(
+            f"owner IN ({placeholders}) AND unresolved = 1", tuple(owners)
+        )
+
+    def for_lease(self, lease: TurnLeaseFence) -> InputDocument:
+        return self._select(
+            "turn_id = ? AND admission = ?",
+            (lease.turn_id, lease.admission_generation),
+        )
+
+    def bound_bus_inputs(self) -> tuple[SentInput, ...]:
+        return self._select(
+            "turn_id IS NOT NULL AND sequence IS NOT NULL"
+        ).bound_bus_inputs()
 
     def _publish(self, original: InputDocument, changed: InputDocument) -> InputDocument:
         if changed is original or changed == original:
@@ -244,36 +251,32 @@ class InputDispositions:
         with self._connect() as db:
             db.execute("BEGIN IMMEDIATE")
             for key in removed:
-                cursor = db.execute(
-                    "DELETE FROM input_dispositions WHERE key = ? AND payload = ?",
-                    (key, self._payload(before[key])),
+                current = InputDispositionRow.capture(before[key])
+                cursor = InputDispositionRow.delete(
+                    db, where="payload = ?", parameters=(current.payload,), key=key
                 )
                 if cursor.rowcount != 1:
                     raise RelationViolationError("Input disposition changed during update")
             for key in replaced:
-                row = after[key]
-                columns = self._columns(row)
+                row = InputDispositionRow.capture(after[key])
                 if key in before:
-                    cursor = db.execute(
-                        """UPDATE input_dispositions
-                           SET owner=?, admission=?, turn_id=?, unresolved=?, sequence=?, payload=?
-                           WHERE key=? AND payload=?""",
-                        (*columns[1:], key, self._payload(before[key])),
+                    previous = InputDispositionRow.capture(before[key])
+                    cursor = InputDispositionRow.update(
+                        db,
+                        where="payload = ? AND key = ?",
+                        parameters=(previous.payload, key),
+                        owner=row.owner,
+                        admission=row.admission,
+                        turn_id=row.turn_id,
+                        unresolved=row.unresolved,
+                        sequence=row.sequence,
+                        payload=row.payload,
                     )
                     if cursor.rowcount != 1:
                         raise RelationViolationError("Input disposition changed during update")
                 else:
-                    db.execute(
-                        "INSERT INTO input_dispositions "
-                        "(key, owner, admission, turn_id, unresolved, sequence, payload) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        columns,
-                    )
+                    row.insert(db)
         return changed
-
-    def update(self, change) -> InputDocument:
-        original = self.read()
-        return self._publish(original, change(original))
 
     def update_rows(self, keys: tuple[str, ...], change) -> InputDocument:
         original = self.rows(keys)

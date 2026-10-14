@@ -11,6 +11,7 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .goal_management import Goals
 from .history_views import HistoryViews
+from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
@@ -29,6 +30,9 @@ class Comms:
         if private_initial_writes or private_claim_writes:
             self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._wire_lock_path = self.root / "wire"
+        self.input_dispositions = InputDispositions.create(
+            self.root / InputDispositions.filename
+        )
         self.registry = Registration(self.root / "registry.json")
         self.bus = MessageBus(
             self.root / "bus.jsonl",

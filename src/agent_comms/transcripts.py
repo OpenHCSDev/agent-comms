@@ -583,7 +583,9 @@ class Transcripts:
         from .input_disposition import InputDispositions
         from .routing import ScheduledTurn
 
-        rows = InputDispositions(self.root / InputDispositions.filename).read().bound_bus_inputs()
+        rows = InputDispositions(
+            self.root / InputDispositions.filename
+        ).bound_bus_inputs()
         existing = self.routes.input_bindings()
         groups: dict[str, list[SentInput]] = {}
         needed = {row.sequence for row in rows}

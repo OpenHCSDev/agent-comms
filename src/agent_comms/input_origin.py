@@ -60,7 +60,9 @@ class InputProvenance(Provenance):
     def public_text(self, comms) -> str:
         from .input_disposition import InputDispositions
 
-        inputs = InputDispositions(comms.root / InputDispositions.filename).read()
+        inputs = InputDispositions(
+            comms.root / InputDispositions.filename
+        ).rows((self.key,))
         return self.require_original(inputs).source_text
 
     def require_human_input(self):

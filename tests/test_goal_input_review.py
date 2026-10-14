@@ -98,12 +98,12 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     assert again["reviewed_inputs"] == []
     assert [row["inputId"] for row in again["already_reviewed_inputs"]] == keys
     for message, key in zip(messages, keys, strict=True):
-        row = ledger.read().rows[key]
+        row = ledger.lookup(key)
         assert row.unresolved and row.accepts_reservation
         assert not hasattr(row, "native_id") and not hasattr(row, "turn_id")
         assert row.source_text == message.body and not hasattr(row, "sent_text")
         assert row.admission == admission and row.reviewed_for_goal(goal.id)
-    assert not ledger.read().rows["acp:owner-input"].goal_reviews
+    assert not ledger.lookup("acp:owner-input").goal_reviews
     generation = comms.goals.open_goal_store().snapshot(goal.id)
     assert generation is not None and generation.lifecycle.ready
     assert generation.attempt_id is None

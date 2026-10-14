@@ -578,6 +578,24 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return db.execute(statement, values)
 
     @classmethod
+    def delete(
+        cls,
+        db: sqlite3.Connection,
+        *,
+        where: str = "1",
+        parameters: tuple = (),
+        **key: object,
+    ) -> sqlite3.Cursor:
+        selected = cls._fields_named(tuple(key))
+        if selected:
+            where = "(" + where + ") AND " + " AND ".join(
+                f"{_identifier(item.name)} IS ?" for item in selected)
+            parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
+        return db.execute(
+            f"DELETE FROM {_identifier(cls.declared_name)} WHERE {where}", parameters
+        )
+
+    @classmethod
     def update(
         cls,
         db: sqlite3.Connection,

@@ -340,7 +340,9 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
         assert session.session_id not in owner.inputs.backend_inboxes
         if provider_status == 200:
             assert native.provider.posts == (2 if committed_progress else 1)
-        inputs = InputDispositions(comms.root / InputDispositions.filename).read().rows
+        inputs = InputDispositions(
+            comms.root / InputDispositions.filename
+        ).rows(execution.original.keys).rows
         assert len(inputs) == 1 and all(row.has_started for row in inputs.values())
         rows = comms.bus.log.full_history()
         replies = [row for row in rows if row.sender == name]
