@@ -18,7 +18,7 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
@@ -656,6 +656,14 @@ class NativeEvidencePrefixChanged(NativePiUnavailable):
     """The retained verified prefix must be reacquired from byte zero."""
 
 
+class NativeEvidenceDigest(Protocol):
+    def copy(self) -> NativeEvidenceDigest: ...
+
+    def update(self, value: bytes) -> None: ...
+
+    def digest(self) -> bytes: ...
+
+
 class UnverifiedNativeEvidencePrefix:
     """Named start state: no byte from the currently opened inode is trusted."""
 
@@ -671,7 +679,7 @@ class VerifiedNativeEvidencePrefix:
     """The sole retained position and hash state for one opened native source."""
 
     size: int
-    digest: Any
+    digest: NativeEvidenceDigest
 
     def copy_digest(self):
         return self.digest.copy()
