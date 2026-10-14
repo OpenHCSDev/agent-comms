@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 from agent_comms.native_attestation import KnownSessionAttestation, PendingAttestation
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.selected_session import SavedSelectedSession, SelectedSession
+from agent_comms.selected_session import EnrolledSelectedSession, SavedSelectedSession, SelectedSession
 from agent_comms.tracked_turn import TrackedTurnSession
 
 
@@ -17,6 +17,8 @@ def test_only_saved_tracked_session_uses_known_identity(tmp_path: Path):
     assert isinstance(known, KnownSessionAttestation)
     assert known.require_identity() == identity
     assert SelectedSession(tmp_path).tracked_attestation(pending) is pending
+    enrolled = object.__new__(EnrolledSelectedSession)
+    assert enrolled.tracked_attestation(pending) is pending
 
 
 async def test_saved_tracked_attestation_sends_no_get_state(tmp_path: Path):

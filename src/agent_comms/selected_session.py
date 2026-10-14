@@ -169,7 +169,7 @@ class SelectedSession:
             if thinking_level is not None:
                 return FirstSelectedSession(directory,
                     identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
-            return SavedSelectedSession(directory,
+            return EnrolledSelectedSession(directory,
                 identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
 
         return await Coordination.run_worker(acquire)
@@ -221,13 +221,17 @@ class SavedSelectedSession(SelectedSession):
 
 
 @dataclass(frozen=True)
-class FirstSelectedSession(SavedSelectedSession):
+class EnrolledSelectedSession(SavedSelectedSession):
+    """A newly created source must publish its first native identity observation."""
+
     creation: FreshPrivateSession = field(kw_only=True)
 
     def tracked_attestation(self, current):
-        # First enrollment still attests model, empty history and generated source.
         return current
 
+
+@dataclass(frozen=True)
+class FirstSelectedSession(EnrolledSelectedSession):
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()
 
