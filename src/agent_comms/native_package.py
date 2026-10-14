@@ -240,9 +240,13 @@ class NativeSource:
         except (OSError, ValueError) as error:
             raise NativePackageError("Native extension source snapshot is unavailable") from error
         if len(content) != byte_count:
-            raise NativePackageError("Native extension source snapshot differs from its declaration")
+            raise NativePackageError(
+                "Native extension source snapshot differs from its declaration"
+            )
         if hashlib.sha256(content).hexdigest() != digest:
-            raise NativePackageError("Native extension source snapshot differs from its declaration")
+            raise NativePackageError(
+                "Native extension source snapshot differs from its declaration"
+            )
         return cls(Path(path), content)
 
     def is_installed(self) -> bool:
