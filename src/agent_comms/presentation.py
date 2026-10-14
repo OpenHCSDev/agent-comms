@@ -62,6 +62,7 @@ class MessageNotification:
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
     reply_reference: MessageReference | None = None
+    read_at_ms: int | None = None
 
     @property
     def recipient(self) -> str:

@@ -58,6 +58,7 @@ class ShownToModelProgress(AssignmentProgress):
             state=notification.state_at("Read", read_at_ms),
             detail="",
             busy=busy,
+            read_at_ms=read_at_ms,
         )
 
     def interrupted_notification(self, notification, read_at_ms):
@@ -67,6 +68,7 @@ class ShownToModelProgress(AssignmentProgress):
             detail="",
             busy=False,
             priority=3,
+            read_at_ms=read_at_ms,
         )
 
 

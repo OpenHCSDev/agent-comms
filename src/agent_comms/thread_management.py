@@ -33,6 +33,7 @@ from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
 from .owner_lifecycle import OwnerLifecycle
+from .pi_vocabulary import ServiceTier
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
@@ -444,7 +445,7 @@ class ThreadManagement:
 
     def set_thread_configuration(
         self, original: Thread, *, model: str | None = None,
-        thinking_level: str | None = None,
+        thinking_level: str | None = None, service_tier: ServiceTier | None = None,
     ) -> Thread:
         """Publish next-turn settings together against their acquired declaration.
 
@@ -454,28 +455,23 @@ class ThreadManagement:
         Thread.require_declaration(original)
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(original.name)
-            if (thread.incarnation, thread.worktree, thread.model, thread.thinking_level) != (
-                original.incarnation, original.worktree, original.model, original.thinking_level,
-            ):
-                raise RelationViolationError("Thread configuration changed before publication")
+            thread.require_original_model_configuration(original)
             thread.execution.require_native()
-            updated = replace(
-                thread,
-                model=thread.model if model is None else model.strip(),
-                thinking_level=thread.thinking_level if thinking_level is None else thinking_level,
+            updated = thread.with_model_configuration(
+                model=model, thinking_level=thinking_level, service_tier=service_tier,
             )
             if updated != thread:
                 self.registry.register(updated, self.registry.status(thread.name))
             return updated
 
     def initialize_native_configuration(
-        self, name: str, *, model: str | None, thinking_level: str | None
+        self, name: str, *, model: str | None, thinking_level: str | None,
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             updated = thread.initialized_native_configuration(
-                model=model, thinking_level=thinking_level
+                model=model, thinking_level=thinking_level,
             )
             if updated != thread:
                 self.registry.register(updated, self.registry.status(thread.name))

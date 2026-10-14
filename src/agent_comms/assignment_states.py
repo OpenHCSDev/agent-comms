@@ -242,6 +242,7 @@ class IgnoredAssignment(AssignmentState):
             notification,
             state=notification.state_at("Checked", checked_at_ms),
             detail="",
+            read_at_ms=checked_at_ms,
         )
 
     notification_priority = 2
@@ -412,12 +413,14 @@ class CompletedAssignment(BoundAssignment):
                 detail="",
                 priority=2,
                 busy=False,
+                read_at_ms=activity.read_at_ms,
             )
         return replace(
             notification,
             state=notification.state_at("Answered", activity.response_received_at_ms),
             detail="",
             reply_reference=reference,
+            read_at_ms=activity.read_at_ms,
         )
 
     def require_completion(self) -> Engagement:
@@ -521,6 +524,7 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
             state=notification.state_at("Read", updated_at_ms),
             detail="",
             busy=False,
+            read_at_ms=updated_at_ms,
         )
 
     notification_priority = 2

@@ -11,7 +11,7 @@ from .acp_extension import QueueScope
 from .agent_backend import TurnInboxItem
 from .coordinator import Coordination
 from .owned_send_admission import OwnedSendAdmission
-from .queued_input import InputHandoffRefused
+from .queued_input import DeliveredInput, InputHandoffRefused
 from .thread_identity import AdmissionIdentity, TurnId
 from .turn_input_source import SelectedOriginalInput
 
@@ -24,6 +24,19 @@ if TYPE_CHECKING:
 
 class FollowingInputs:
     """A selected turn run outside an owner process: nothing can follow its first input."""
+
+    @staticmethod
+    async def ready(inputs: InputDrain, session_id: str, after_seq: int = 0) -> None:
+        """Take accepted work when a running turn opens or frees following capacity."""
+        async with inputs.drain_locks.setdefault(session_id, asyncio.Lock()):
+            inputs._idle_private_revisions.pop(session_id, None)
+            owner = await Coordination.run_worker(partial(
+                inputs.comms.registry.require, inputs.sessions.require(session_id),
+            ))
+            await DeliveredInput.deliver_pending(
+                inputs, session_id, owner, inputs.comms.bus,
+                inputs.effects._configured_root_id(), after_seq=after_seq,
+            )
 
     async def open(self, session: TrackedTurnSession) -> None:
         return None
@@ -92,9 +105,14 @@ class OwnerFollowingInputs(FollowingInputs):
         )
         inputs.original_sources[self.session_id] = original
         session.forward_inbox(self.inbox, admission)
+        await self.ready(
+            inputs, self.session_id,
+            after_seq=session.prompt_send_boundary.following_after_seq,  # type: ignore[union-attr]
+        )
 
     async def started(self, input_id: str) -> None:
         await self.inputs.input_started(self.session_id, input_id, self.scope)
+        await self.ready(self.inputs, self.session_id)
 
     async def refused(self, input_id: str | None) -> None:
         await self.inputs.input_refused(self.session_id, input_id)
