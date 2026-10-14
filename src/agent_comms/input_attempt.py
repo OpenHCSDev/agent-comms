@@ -49,6 +49,7 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     accepts_reservation: ClassVar[bool] = False
     has_started: ClassVar[bool] = False
     has_native_binding: ClassVar[bool] = False
+    proves_no_native_send: ClassVar[bool] = False
     unresolved: ClassVar[bool] = False
     cancellation_feedback: ClassVar[str] = (
         "Delivery unconfirmed. Inspect delivery before deciding whether to send a new message."
@@ -207,6 +208,7 @@ class StoredInput(InputAttempt):
 
 class ReservedInput(StoredInput):
     unresolved = True
+    proves_no_native_send = True
     public_status = "unknown"
 
     accepts_reservation = True
@@ -305,6 +307,7 @@ class StartedInput(SentInput):
 
 class NotSentInput(StoredInput):
     unresolved = True
+    proves_no_native_send = True
     public_status = "not_sent"
     cancellation_feedback = (
         "Not sent — cancellation completed before native delivery."
