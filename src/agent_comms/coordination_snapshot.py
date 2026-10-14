@@ -336,7 +336,6 @@ class RecoverySnapshot:
         from .envelope_claim_transitions import ClaimRelease, project_verified_transitions
         from .messages import InfoKind, Message
         from itertools import groupby
-        from operator import itemgetter
 
         bus, bus_lock, registry = boundary.bus, boundary.bus_lock, boundary.registry
         attempt = self.require_attempt()
@@ -357,8 +356,7 @@ class RecoverySnapshot:
             assignment.assignment_id: assignment.lifecycle.exact_target
             for assignment in self.assignments
         }
-        routed = []
-        for claim in owned:
+        def target_of(claim) -> str:
             admission = claim.admission
             assert admission is not None
             target = assignment_targets.get(admission.wake_assignment_id)
@@ -366,12 +364,17 @@ class RecoverySnapshot:
                 raise IntegrityViolationError(
                     "terminal claim has no original wake assignment route"
                 )
-            routed.append((claim.incarnation, target, claim))
+            return target
+
         from pathlib import Path
 
-        route = itemgetter(0, 1)
-        for (incarnation, target), records in groupby(sorted(routed, key=route), key=route):
-            recorded = tuple(item[2] for item in records)
+        ordered = sorted(
+            owned, key=lambda claim: (claim.incarnation, target_of(claim))
+        )
+        for (incarnation, target), records in groupby(
+            ordered, key=lambda claim: (claim.incarnation, target_of(claim))
+        ):
+            recorded = tuple(records)
             for offset in range(0, len(recorded), 32):
                 bus.publisher.publish_claim_envelope(
                     Message(owner.name, target,
