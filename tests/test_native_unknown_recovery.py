@@ -34,7 +34,9 @@ def unknown_owner(directory, admitted, output, exit_allowed):
     # Both recorded and unrecorded original inputs remain UNKNOWN; no obsolete
     # failure hook or fabricated owner-loss grant is used.
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
-    runtime._trusted_package = lambda path: path
+    from agent_comms import native_pi
+
+    native_pi._trusted_package = lambda path: path
     fake, _calls = _fake_model()
 
     async def fail(*args, **kwargs):
@@ -118,7 +120,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
         assert not result.replay.replay_safe and result.replay.side_effects_possible
         assert all(type(row.lifecycle) is FailedAssignment for row in result.assignments)
         assert result.execution.reason_code == "released_native_unknown"
-        assert result.publication_intent is result.publication_receipt is None
+        assert result.publication_intents == result.publication_receipts == ()
         assert input_evidence(store) == before
         assert (root / "bus.jsonl").read_bytes() == before_bus
         with pytest.raises(RecoveryBlocked):
@@ -239,6 +241,7 @@ async def test_real_local_rpc_failure_reaps_child_and_releases_slot(tmp_path, mo
     from agent_comms.durable_turn import DurableTurn
 
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
+    (root / "runtime").mkdir(mode=0o700)
     processes = []
     from agent_comms.child_process import AttachedChild
 
@@ -265,9 +268,9 @@ print(json.dumps({"type":"response", "id":request["id"],
 
     original_failure = DurableTurn.fail_unknown
 
-    def after_reap(self):
+    def after_reap(self, boundary):
         assert len(processes) == 1 and processes[0].returncode is not None
-        return original_failure(self)
+        return original_failure(self, boundary)
 
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda path: path)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda path: Path("/bin/true"))

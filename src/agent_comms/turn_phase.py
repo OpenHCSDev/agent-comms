@@ -96,6 +96,10 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def model_progress(self) -> TurnPhase:
         return ModelWaitPhase()
 
+    def response_output(self) -> TurnPhase:
+        """Response deltas are progress evidence, not a persisted control phase."""
+        return self
+
     def stalled(self, accepted: bool) -> TurnPhase:
         return self if accepted else PromptAcceptancePhase()
 

@@ -2,6 +2,7 @@ import pytest
 
 from agent_comms import MentionQuery
 from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
@@ -168,22 +169,35 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     assert Message.from_wire(notice.to_wire()) == notice
 
 
-def test_model_tool_changes_own_and_another_thread(tmp_path, monkeypatch):
+def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch):
     from agent_comms import invoke_tool
 
-    comms = wire(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     monkeypatch.setenv("PI_AGENT_ID", "owner")
     result = invoke_tool(comms, "comms_model", {"model": "openrouter/own"})
-    assert result == {"thread": "owner", "model": "openrouter/own", "thinking_level": None}
-    result = invoke_tool(
-        comms,
-        "comms_model",
-        {"thread": "peer", "model": "openai-codex/gpt-5.6-sol", "thinking_level": "high"},
-    )
+    assert result == {
+        "thread": "owner",
+        "model": "openrouter/own",
+        "thinking_level": None,
+        "service_tier": "priority",
+    }
+    peer_configuration = {
+        "thread": "peer",
+        "model": "openai-codex/gpt-5.6-sol",
+        "thinking_level": "high",
+        "service_tier": "standard",
+    }
+    with pytest.raises(RelationViolationError, match="through its own session"):
+        invoke_tool(comms, "comms_model", peer_configuration)
+    comms.registry.unregister("peer")
+    result = invoke_tool(comms, "comms_model", peer_configuration)
     assert result["thread"] == "peer" and result["thinking_level"] == "high"
-    assert wire(tmp_path).registry.require("peer").model == "openai-codex/gpt-5.6-sol"
+    configured = comms.registry.require("peer")
+    assert configured.model == "openai-codex/gpt-5.6-sol"
+    assert configured.service_tier.value == "standard"
+    with pytest.raises(ValueError, match="not a valid ServiceTier"):
+        invoke_tool(comms, "comms_model", {"model": "openrouter/own", "service_tier": "fast"})
 
 
 def test_dismiss_reports_mentions_and_advances_only_own_cursor(tmp_path, monkeypatch):

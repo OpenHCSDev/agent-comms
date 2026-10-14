@@ -33,6 +33,7 @@ from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 if TYPE_CHECKING:
     from agent_comms.owner_lifecycle import OwnerReleaseReceipt
+    from agent_comms.coordination_session import NativeBoundary
 
 _OWNER_LOSS_ISSUER = object()
 
@@ -47,6 +48,7 @@ class VerifiedOwnerLoss:
     _issuer: object = field(repr=False)
     _active: bool = field(repr=False)
     _store: Coordination = field(repr=False)
+    boundary: NativeBoundary = field(repr=False)
 
     def __init__(self, **_unsupported: object) -> None:
         raise RecoveryBlocked("owner-loss proof requires an observed native owner release")
@@ -67,12 +69,12 @@ class VerifiedOwnerLoss:
         """
         from agent_comms.comms import Comms
         from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
-        from agent_comms.coordination_response import _response_boundary
 
         if store.session.path.name != "coordination.sqlite3":
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
         comms = Comms(store.session.path.parent)
-        with _response_boundary(comms.bus, session=store.session) as registry:
+        with store.session.boundary(comms.bus) as boundary:
+            registry = boundary.registry
             assert_native_runtime_schema(store.session._connection)
             snapshot = store.snapshots.get(execution_id)
             attempt = snapshot.attempt
@@ -103,6 +105,7 @@ class VerifiedOwnerLoss:
                 ("_issuer", _OWNER_LOSS_ISSUER),
                 ("_active", True),
                 ("_store", store),
+                ("boundary", boundary),
             ):
                 object.__setattr__(proof, name, value)
             try:
@@ -111,14 +114,17 @@ class VerifiedOwnerLoss:
                 object.__setattr__(proof, "_active", False)
 
 
+    def issued_for(self, store: Coordination) -> bool:
+        """Whether this live proof was issued while excluding this store's owner."""
+        return self._issuer is _OWNER_LOSS_ISSUER and self._active and self._store is store
+
     def owns(self, store: Coordination, attempt: AttemptRecord) -> bool:
         """Only this acquired, unexpired observer attests the original attempt."""
-        try:
-            if self._issuer is not _OWNER_LOSS_ISSUER or not self._active or self._store is not store:
-                return False
-            return self.attempt.authority == attempt.authority and self.attempt.owner_identity == attempt.owner_identity
-        except AttributeError:
-            return False  # Uninitialized objects have no acquired issuer/custody.
+        return (
+            self.issued_for(store)
+            and self.attempt.authority == attempt.authority
+            and self.attempt.owner_identity == attempt.owner_identity
+        )
 
     def require_native_exit(self) -> None:
         """Inspect the original launch resources while owner exclusion is held.
@@ -349,7 +355,13 @@ class RecoveryMonitorCapability:
             raise RecoveryBlocked("monitor cannot record a live Pi RPC subprocess as dead")
         store = self._store
         replay_facts = ReplayFact(replay_facts)
-        with store.session.settlement() as db:
+        if (
+            not isinstance(owner_loss, VerifiedOwnerLoss)
+            or not owner_loss.issued_for(store)
+        ):
+            raise RecoveryBlocked("monitor requires an observed release of this exact owner")
+        with store.session.settlement(owner_loss.boundary) as boundary:
+            db = store.session._connection
             snapshot = store.snapshots.get(execution_id)
             attempt = snapshot.attempt
             if (
@@ -365,7 +377,7 @@ class RecoveryMonitorCapability:
                 expected_pointer_revision,
             ):
                 raise StaleRevision("monitor CAS is stale")
-            if not isinstance(owner_loss, VerifiedOwnerLoss) or not owner_loss.owns(store, attempt):
+            if not owner_loss.owns(store, attempt):
                 raise RecoveryBlocked("monitor requires an observed release of this exact owner")
             now = store.session.now(max(attempt.updated_at_ms, evidence.observed_at_ms))
             self._record_replay_observation(snapshot, evidence, replay_facts)
@@ -387,7 +399,7 @@ class RecoveryMonitorCapability:
                 from .attempt_states import AttemptFailedAttempt
 
                 store.snapshots.get(execution_id).settle(
-                    store.session, AttemptFailedAttempt(), evidence.reason_code
+                    store.session, AttemptFailedAttempt(), evidence.reason_code, boundary
                 )
                 settled = store.snapshots.get(execution_id)
                 kind = DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery

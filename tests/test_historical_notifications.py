@@ -102,11 +102,36 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.log.read_delivery_cohort(root_id, messages[0].seq).audience.recipients
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
-    recorded = assignment.notification(recipient, observation=RecordedRecipientActivity(), updated_at_ms=1)
+    from agent_comms.notification_assignment import AssignmentActivity
+
+    activity = AssignmentActivity(
+        triage_inflight=False,
+        current_execution_id=None,
+        model_context=True,
+        replay_facts=0,
+        response_seq=None,
+        response_message_id=None,
+    )
+    with pytest.raises(TypeError, match="activity"):
+        assignment.notification(
+            recipient, observation=RecordedRecipientActivity(), updated_at_ms=1
+        )
+    recorded = assignment.notification(
+        recipient,
+        observation=RecordedRecipientActivity(),
+        activity=activity,
+        updated_at_ms=1,
+    )
     assert recorded.state == "Response selected" and not recorded.busy
     assert "completion is not recorded" in recorded.detail
-    live = assignment.notification(recipient, observation=UnavailableRecipientActivity(), updated_at_ms=1)
-    assert live.state == "Paused" and "no matching active turn" in live.detail
+    live = assignment.notification(
+        recipient,
+        observation=UnavailableRecipientActivity(),
+        activity=activity,
+        updated_at_ms=1,
+    )
+    assert live.state == "Read — interrupted, outcome unknown"
+    assert "response turn ended" in live.detail
 
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):

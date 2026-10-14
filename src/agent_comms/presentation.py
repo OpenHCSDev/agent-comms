@@ -20,6 +20,7 @@ from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .message_page import MessagePage, MessagePageRequest
+from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
@@ -37,7 +38,6 @@ if TYPE_CHECKING:
     from .catalog_store import ChannelCatalog
     from .goal_waits import GoalWait
     from .message_bus import MessageBus
-    from .message_reference import MessageReference
     from .messages import Message
     from .read_ledger import ReadLedger
     from .read_ledger import ReadDocument
@@ -60,6 +60,8 @@ class MessageNotification:
     busy: bool = False
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
+    reply_reference: MessageReference | None = None
+    read_at_ms: int | None = None
 
     @property
     def recipient(self) -> str:
@@ -281,10 +283,14 @@ class DisplaySelection:
 
 
 class BusPresentation:
-    def __init__(self, bus: MessageBus, registry: Registration, catalog: ChannelCatalog):
+    def __init__(
+        self, bus: MessageBus, registry: Registration, catalog: ChannelCatalog,
+        agents: AgentActivity,
+    ):
         self.bus = bus
         self.registry = registry
         self.catalog = catalog
+        self.agents = agents
         self._path = bus.log.path
         self._wire_lock_path = bus.log.path.parent / "wire"
         self._display_indexes: dict[str, BusDisplayIndex] = {}
@@ -295,6 +301,24 @@ class BusPresentation:
             index = self.bus.log.register_append_index(BusDisplayIndex(self._path, viewer))
             self._display_indexes[viewer] = index
         return index
+
+    def roster(
+        self, viewer: str, *, show_stopped: bool = True, show_archived: bool = False
+    ) -> CoordinationSnapshot:
+        """Current sidebar rows without advancing whole-bus derived indexes."""
+        with DisplaySelection.reading(
+            self.registry, self.catalog, self.bus.reads, viewer
+        ) as basis:
+            snapshot = CoordinationSnapshot.capture(
+                self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
+                {}, {}, unread={}, channel_unread={}, show_stopped=show_stopped,
+                show_archived=show_archived, read_marker_notice=basis.notice,
+            )
+        pending = {
+            *(view.thread.name for view in snapshot.threads),
+            *(view.channel.name for view in snapshot.channels),
+        }
+        return replace(snapshot, unread_pending=frozenset(pending))
 
     @contextmanager
     def snapshot(
@@ -625,7 +649,7 @@ class CoordinationSnapshot:
     channel_unread: Mapping[str, int] = field(default_factory=dict)
     channel_order: ChannelSort = ChannelSort.NAME
     thread_unread: Mapping[str, int] = field(default_factory=dict)
-    thread_unread_pending: frozenset[str] = frozenset()
+    unread_pending: frozenset[str] = frozenset()
     show_stopped: bool = True
     show_archived: bool = False
     read_marker_notice: str | None = None

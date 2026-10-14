@@ -34,9 +34,10 @@ from agent_comms.ui_model.observation import (
     UnreadableHistory,
 )
 from agent_comms.ui_model.status import OpenThreadStatus
+from agent_comms.turn_context import RecordedContextManifest
 from agent_comms.wire_record import (
-    ContextManifestWireObservation,
     ObservationWireRecord,
+    RecordedContextManifestWireObservation,
     WireRecord,
 )
 from test_observer_death import readable
@@ -48,17 +49,18 @@ def saved_row(comms):
     comms.registry.declare(owner)
     comms.messaging.initialize_private_initial_protocol()
     comms.bus.log.path.touch(mode=0o600)
-    row = ObservationWireRecord(ContextManifestWireObservation(manifest(owner))).to_wire()
+    recorded, _entries = RecordedContextManifest.capture(manifest(owner))
+    row = ObservationWireRecord(RecordedContextManifestWireObservation(recorded)).to_wire()
     return row
 
 
 def test_recorded_selected_response_remains_a_strict_codec_member(comms):
     row = saved_row(comms)
-    segment = row["observation"]["manifest"]["segments"][0]
+    segment = row["observation"]["manifest"]["segments"][0]["manifest"]
     segment["kind"] = "selected_response"
     decoded = WireRecord.public_from_wire(row)
-    recorded = decoded.context_manifests()[0]
-    assert recorded.segments[0].kind is SelectedResponseSegment
+    recorded = decoded.recorded_context_manifests()[0]
+    assert recorded.segments[0].manifest.kind is SelectedResponseSegment
     assert FieldCodec.encode(decoded) == row
     # Unknown names still fail, not skipped, substituted or rendered as a
     # guessed current producer. The saved declaration is the real decoder.
@@ -69,7 +71,7 @@ def test_recorded_selected_response_remains_a_strict_codec_member(comms):
 
 def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(comms):
     row = saved_row(comms)
-    row["observation"]["manifest"]["segments"][0]["kind"] = "unavailable_future_segment"
+    row["observation"]["manifest"]["segments"][0]["manifest"]["kind"] = "unavailable_future_segment"
     comms.bus.log.path.write_text(json.dumps(row) + "\n")
     answer = ReadTranscript(str(comms.root), "saved", request_id=7).answer(comms)
     assert isinstance(answer, ReadRefused)
@@ -146,7 +148,7 @@ def test_sidebar_deferred_read_does_not_replace_its_original_interest(
 
 async def test_unknown_saved_member_does_not_kill_the_real_observation_process(comms):
     row = saved_row(comms)
-    row["observation"]["manifest"]["segments"][0]["kind"] = "unavailable_future_segment"
+    row["observation"]["manifest"]["segments"][0]["manifest"]["kind"] = "unavailable_future_segment"
     comms.bus.log.path.write_text(json.dumps(row) + "\n")
     original = comms.bus.log.path.read_bytes()
     process = ObservationProcess(comms.root)

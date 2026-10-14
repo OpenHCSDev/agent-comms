@@ -63,6 +63,11 @@ class PrivateSendAdmission:
         return self.selected.bus
 
     @property
+    def following_after_seq(self) -> int:
+        """The selected sources which cannot also become following input."""
+        return max(assignment.wire_seq for assignment in self.stage.assignments)
+
+    @property
     def store_path(self) -> Path:
         return self.selected.store.session.path
 
@@ -210,13 +215,13 @@ class PrivateSendAdmission:
                     )
                 with self._measurements.operation("registry_snapshot"):
                     registry = document.snapshot()
-                with self._measurements.operation("coordinator_exclusive"):
-                    db = authority.enter_context(store.session.irreversible_admission())
                 with self._measurements.operation("prompt_binding"):
                     authority.enter_context(self.stage.bound_prompt(
                         store, self.input_id, self.participant, self.wire_root_id,
                         self.prompt.text, blocking=False,
                     ))
+                with self._measurements.operation("coordinator_exclusive"):
+                    db = authority.enter_context(store.session.irreversible_admission())
                 with self._measurements.operation("selected_source_admission"):
                     self.session.admit(identity, selected_runtime_revision)
             except BlockingIOError as error:

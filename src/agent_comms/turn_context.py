@@ -50,6 +50,12 @@ class Provenance(DeclaredFamily, affix="Provenance"):
     def journal_entries(self, identity: NativeSessionIdentity) -> tuple[str, ...]:
         return ()
 
+    def turn_recording(self) -> tuple[Provenance, ...]:
+        return (self,)
+
+    def entry_membership(self) -> tuple[Provenance, ...]:
+        return ()
+
     def require_human_input(self):
         from .errors import RelationViolationError
 
@@ -137,6 +143,12 @@ class JournalProvenance(Provenance):
     def journal_entries(self, identity: NativeSessionIdentity) -> tuple[str, ...]:
         identity.require_session(self.path)
         return self.entries
+
+    def turn_recording(self) -> tuple[Provenance, ...]:
+        return ()
+
+    def entry_membership(self) -> tuple[Provenance, ...]:
+        return (self,)
 
 
 @dataclass(frozen=True)
@@ -327,6 +339,60 @@ class SegmentManifest:
         return bool(parts) and all(part.public_text_recorded for part in parts)
 
 
+@dataclass(frozen=True)
+class ContextEntryReference:
+    """One native journal entry whose manifest is recorded independently."""
+
+    identity: NativeSessionIdentity
+    entry_id: str
+
+    @classmethod
+    def from_manifest(cls, manifest: SegmentManifest) -> ContextEntryReference:
+        entries = manifest.journal_entries()
+        if len(entries) != 1:
+            raise ValueError("A context entry manifest must name exactly one journal entry")
+        return cls(manifest.native_identity(), entries[0])
+
+
+@dataclass(frozen=True)
+class ContextEntryManifest:
+    """The one recorded manifest for a native transcript entry."""
+
+    manifest: SegmentManifest
+
+    @property
+    def reference(self) -> ContextEntryReference:
+        return ContextEntryReference.from_manifest(self.manifest)
+
+
+@dataclass(frozen=True)
+class RecordedSegmentManifest:
+    """A turn segment with transcript contributors held by entry reference."""
+
+    manifest: SegmentManifest
+    entries: tuple[ContextEntryReference, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.entries and self.manifest.contributors:
+            raise ValueError("Recorded segment cannot inline and reference contributors")
+
+    def restore(self, entries: dict[ContextEntryReference, SegmentManifest]) -> SegmentManifest:
+        if not self.entries:
+            return self.manifest
+        contributors = tuple(entries[reference] for reference in self.entries)
+        membership = tuple(
+            source
+            for contributor in contributors
+            for source in contributor.provenance
+            for source in source.entry_membership()
+        )
+        return replace(
+            self.manifest,
+            provenance=(*self.manifest.provenance, *membership),
+            contributors=contributors,
+        )
+
+
 @dataclass(frozen=True, kw_only=True)
 class ContextSegment(
     DeclaredFamily, affix="Segment", discovery_package="agent_comms.context_segments"
@@ -354,6 +420,12 @@ class ContextSegment(
     def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
         # Source annotations do not partition a complete provider value.
         return ()
+
+    @classmethod
+    def record_manifest(
+        cls, original: SegmentManifest
+    ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
+        return RecordedSegmentManifest(original), ()
 
     def public_text(self) -> str:
         return self.text()
@@ -633,7 +705,19 @@ class NativeMessages:
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
-    pass
+    @classmethod
+    def record_manifest(
+        cls, original: SegmentManifest
+    ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
+        entries = tuple(ContextEntryManifest(child) for child in original.contributors)
+        references = tuple(entry.reference for entry in entries)
+        provenance = tuple(source for source in original.provenance for source in source.turn_recording())
+        return (
+            RecordedSegmentManifest(
+                replace(original, provenance=provenance, contributors=()), references
+            ),
+            entries,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -952,6 +1036,45 @@ class ContextManifest:
             "removed": [FieldCodec.encode(s) for s in previous.segments if s not in self.segments],
             "added": [FieldCodec.encode(s) for s in self.segments if s not in previous.segments],
         }
+
+
+@dataclass(frozen=True)
+class RecordedContextManifest:
+    """One turn's context identity and references to separately recorded entries."""
+
+    thread: ThreadIncarnation
+    turn: ContextTurn
+    segments: tuple[RecordedSegmentManifest, ...]
+    counter: str
+    request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
+
+    @classmethod
+    def capture(
+        cls, manifest: ContextManifest
+    ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
+        recorded, entries = zip(
+            *(segment.kind.record_manifest(segment) for segment in manifest.segments),
+            strict=True,
+        )
+        return (
+            cls(
+                manifest.thread,
+                manifest.turn,
+                tuple(recorded),
+                manifest.counter,
+                manifest.request_id,
+            ),
+            tuple(entry for group in entries for entry in group),
+        )
+
+    def restore(self, entries: dict[ContextEntryReference, SegmentManifest]) -> ContextManifest:
+        return ContextManifest(
+            self.thread,
+            self.turn,
+            tuple(segment.restore(entries) for segment in self.segments),
+            self.counter,
+            self.request_id,
+        )
 
 
 @dataclass(frozen=True)

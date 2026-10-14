@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
@@ -70,6 +70,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
         recipient,
         *,
         observation: RecipientActivity,
+        activity=None,
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
         blocked_by_prior: bool = False,
@@ -182,9 +183,11 @@ class PendingNotification:
     the same declarations; settled history belongs to neither operation.
     """
 
-    def notification(self, recipient, *, observation, updated_at_ms=0,
+    def notification(self, recipient, *, observation, activity=None, updated_at_ms=0,
                      triage_inflight=False, blocked_by_prior=False):
-        ordinary = super().notification(recipient, observation=observation)
+        ordinary = super().notification(
+            recipient, observation=observation, activity=activity
+        )
         return observation.pending_notification(ordinary, blocked_by_prior=blocked_by_prior)
 
 
@@ -297,6 +300,20 @@ class AssignmentDecision:
 class BoundAssignment(AssignmentDecision, AssignmentState):
     decision: Engagement
 
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+        blocked_by_prior=False,
+    ):
+        return super().notification(
+            recipient, observation=observation, activity=activity
+        )
+
     @classmethod
     def binding_expression(cls) -> str:
         return "execution_id IS NOT NULL AND exact_target IS NOT NULL"
@@ -307,6 +324,23 @@ class BoundAssignment(AssignmentDecision, AssignmentState):
 
 
 class EngagedAssignment(BoundAssignment):
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+        blocked_by_prior=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return observation.selected_response(
+            notification, updated_at_ms, activity.progress
+        )
+
     def wake_frame(self, source, obligation) -> tuple[str, str]:
         from .wake import derive_exact_reply_target
 
@@ -331,20 +365,7 @@ class EngagedAssignment(BoundAssignment):
     def require_engagement(self) -> Engagement:
         return self.decision
 
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        updated_at_ms=0,
-        triage_inflight=False,
-        blocked_by_prior=False,
-    ):
-        return observation.selected_response(
-            super().notification(recipient, observation=observation), updated_at_ms
-        )
-
-    notification_state = "Responding…"
+    notification_state = "Read — preparing response"
     notification_detail = "The agent chose to respond; work is in progress."
     notification_priority = 1
     notification_busy = True
@@ -357,11 +378,40 @@ class EngagedAssignment(BoundAssignment):
 
 
 class CompletedAssignment(BoundAssignment):
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+        blocked_by_prior=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        reference = activity.response_reference
+        if reference is None:
+            return replace(
+                notification,
+                state="Read — no reply",
+                detail="The response turn ended without a published reply.",
+                priority=2,
+                busy=False,
+            )
+        return replace(
+            notification,
+            state="Answered",
+            detail=f"Reply published as message {reference.seq}.",
+            reply_reference=reference,
+        )
+
     def require_completion(self) -> Engagement:
         return self.decision
 
     notification_priority = 2
-    notification_state = "Responded"
+    notification_state = "Answered"
     notification_detail = "The response workflow completed."
 
     terminal = True
@@ -390,6 +440,7 @@ class DeferredAssignment(InterruptedAssignment):
         recipient,
         *,
         observation,
+        activity,
         updated_at_ms=0,
         triage_inflight=False,
         blocked_by_prior=False,
@@ -411,10 +462,17 @@ class DeferredAssignment(InterruptedAssignment):
                 "The check was attempted but no decision was confirmed. "
                 "Do not automatically retry.",
             )
-        return super().notification(recipient, observation=observation)
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return observation.selected_response(
+            notification, updated_at_ms, activity.progress,
+        )
 
-    notification_state = "Paused"
-    notification_detail = "Processing was deferred; this is not a successful receipt."
+    notification_state = "Interrupted — outcome unknown"
+    notification_detail = (
+        "Processing was interrupted without a terminal outcome. The message may not have reached the model; do not automatically retry."
+    )
 
     deferred = True
     engageable = True
@@ -444,6 +502,24 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
     """
 
     decision: PendingDecision
+
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+        blocked_by_prior=False,
+    ):
+        notification = super().notification(
+            recipient, observation=observation, activity=activity
+        )
+        return replace(
+            observation.delivered_response(notification, updated_at_ms),
+            read_at_ms=updated_at_ms,
+        )
 
     notification_priority = 2
     notification_state = "Delivered"

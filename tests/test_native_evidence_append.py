@@ -1,12 +1,19 @@
 """Original private prefix verification permits append, not changed evidence."""
 
 import asyncio
+import hashlib
+import io
 import json
-import threading
+import os
 
 import pytest
 
-from agent_comms.native_pi import NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.native_pi import (
+    NativePiUnavailable,
+    PrivateEvidenceRead,
+    VerifiedNativeEvidencePrefix,
+)
+from agent_comms.private_path import FileRevision
 from test_native_pi import _evidence
 from test_backend_native_lifecycle import native_backend
 
@@ -19,91 +26,67 @@ def append_to(path):
         stream.write(APPEND)
 
 
-@pytest.mark.parametrize("phase", ["capture", "hash_before", "hash_after"])
-@pytest.mark.parametrize("padding", [0, 300_000])
-@pytest.mark.parametrize("change", ["append", "prefix_and_append", "truncate", "replace", "permissions", "rewrite"])
-def test_source_change_during_original_read(tmp_path, monkeypatch, phase, padding, change):
+def test_unchanged_verified_revision_reads_no_bytes(tmp_path, monkeypatch):
     session = _evidence(tmp_path)
-    session.write_bytes(session.read_bytes().replace(b"separate", b"x" * padding + b"separate"))
-    original = session.read_bytes()
-    entered, finished = threading.Event(), threading.Event()
-    failures = []
-
-    def writer():
-        try:
-            assert entered.wait(5)
-            if change == "append":
-                append_to(session)
-            elif change == "prefix_and_append":
-                session.write_bytes(original.replace(b"separate", b"changed!") + APPEND)
-            elif change == "truncate":
-                session.write_bytes(original[:10])
-            elif change == "replace":
-                replacement = session.with_suffix(".replacement")
-                replacement.write_bytes(original + APPEND)
-                replacement.chmod(0o600)
-                replacement.replace(session)
-            elif change == "permissions":
-                session.chmod(0o644)
-            else:
-                session.write_bytes(original)
-        except BaseException as error:
-            failures.append(error)
-        finally:
-            finished.set()
-
     with PrivateEvidenceRead.open(session) as source:
-        real_read = source.stream.read
-        passes = 0
+        assert len(tuple(source.rows())) == 2
 
-        def reading(size):
-            nonlocal passes
-            start = source.stream.tell()
-            # FileIO.readline() reads individual bytes while decoding rows.
-            # Count only PrivateEvidenceRead's bounded capture/hash chunks.
-            if size > 1 and start == 0:
-                passes += 1
-            if passes == 2 and start == 0 and phase == "hash_before":
-                entered.set()
-                assert finished.wait(5)
-            data = real_read(size)
-            # The shepherd's case: mutate after bytes from the observed
-            # revision were returned, including a multi-chunk prefix.
-            if (passes == 1 and phase == "capture" or
-                    passes > 1 and phase == "hash_after") and size > 1 and (
-                    source.stream.tell() == len(original) and not entered.is_set()
-            ):
-                entered.set()
-                assert finished.wait(5)
-            return data
+        def unexpected_read(*_args):
+            raise AssertionError("unchanged verified prefix must not be read again")
 
-        monkeypatch.setattr(source.stream, "read", reading)
-        thread = threading.Thread(target=writer)
-        thread.start()
-        try:
-            changed_before_hash = phase == "hash_before" and change in {
-                "prefix_and_append", "truncate",
-            }
-            if phase == "capture" or changed_before_hash:
-                with pytest.raises(NativePiUnavailable):
-                    tuple(source.rows())
-                assert source.stream.closed
-            else:
-                assert len(tuple(source.rows())) == 2
-                assert source.size == len(original)
-                if change == "append":
-                    assert tuple(source.rows())[0]["id"] == "concurrent-append"
-                elif change == "rewrite":
-                    assert tuple(source.rows()) == ()  # same bytes are unchanged evidence
-                else:
-                    # A mutation after this observation is fenced by the next
-                    # observation, not by a racy final stat.
-                    with pytest.raises(NativePiUnavailable):
-                        tuple(source.rows())
-        finally:
-            entered.set()
-            thread.join(5)
-        assert not thread.is_alive() and not failures
+        monkeypatch.setattr(os, "pread", unexpected_read)
+        assert tuple(source.rows()) == ()
+
+
+def test_append_hashes_only_new_bytes(tmp_path, monkeypatch):
+    session = _evidence(tmp_path)
+    with PrivateEvidenceRead.open(session) as source:
+        assert len(tuple(source.rows())) == 2
+        append_to(session)
+        real_pread = os.pread
+        read = []
+
+        def counted(fd, size, offset):
+            raw = real_pread(fd, size, offset)
+            read.append((offset, len(raw)))
+            return raw
+
+        monkeypatch.setattr(os, "pread", counted)
+        assert tuple(source.rows())[0]["id"] == "concurrent-append"
+        assert read == [(source.size - len(APPEND), len(APPEND))]
+
+
+def test_non_growth_revision_change_reverifies_prefix(tmp_path):
+    session = _evidence(tmp_path)
+    with PrivateEvidenceRead.open(session) as source:
+        assert len(tuple(source.rows())) == 2
+        session.write_bytes(session.read_bytes().replace(b"separate", b"changed!"))
+        with pytest.raises(NativePiUnavailable, match="prefix changed"):
+            tuple(source.rows())
+        assert source.stream.closed
+
+
+def test_decode_uses_buffered_reader(tmp_path):
+    session = _evidence(tmp_path)
+    with PrivateEvidenceRead.open(session) as source:
+        assert isinstance(source.stream, io.BufferedReader)
+        assert len(tuple(source.rows())) == 2
+
+
+def test_next_decode_cannot_reuse_prefetched_bytes(tmp_path):
+    session = _evidence(tmp_path)
+    first, old, new = b'{"id":"first"}\n', b'{"id":"old"}\n', b'{"id":"new"}\n'
+    session.write_bytes(first + old)
+    with PrivateEvidenceRead.open(session) as source:
+        assert tuple(source._decode_captured(len(first)))[0]["id"] == "first"
+        with session.open("r+b", buffering=0) as writer:
+            os.pwrite(writer.fileno(), new, len(first))
+        source.prefix = VerifiedNativeEvidencePrefix(
+            len(first),
+            hashlib.sha256(first),
+            FileRevision.from_stat(os.fstat(source.stream.fileno())),
+        )
+        assert tuple(source._decode_captured(len(first + new)))[0]["id"] == "new"
 
 
 def test_append_during_decoding_is_read_on_the_next_observation(tmp_path):

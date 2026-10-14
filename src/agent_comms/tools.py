@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from typing import ClassVar, Literal, Type
 
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
 from .channel_targets import is_channel_target
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
@@ -15,6 +15,7 @@ from .command import Command
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
+from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .goal_actions import (
     ActiveGoalAction,
@@ -252,8 +253,8 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
     label = "Change Thread Model"
     description = (
         "Change this thread's model, or another thread's model, for its future turns. "
-        "Optionally change its thinking level too. Applies from that thread's next "
-        "turn."
+        "Optionally change its thinking level and provider service tier too. Applies "
+        "from that thread's next turn."
     )
     thread: str | None = tool_field(
         "Thread to change (defaults to the executing thread)", default=None, binding=SubjectBinding
@@ -262,20 +263,31 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
     thinking_level: str = tool_field(
         "Optional Pi thinking level", default="", choices=ThinkingLevel.names
     )
+    service_tier: ServiceTier | None = tool_field(
+        "Optional provider request service tier", default=None
+    )
 
     def apply(self, comms: Comms) -> JsonObject:
         """Change this thread's model or another thread's model for future turns."""
         thread_name = self.thread or _executing_thread()
+        original = comms.registry.require(thread_name)
+        if comms.registry.status(thread_name).active and thread_name != _executing_thread():
+            raise RelationViolationError(
+                f"{thread_name} is running; change its settings through its own session"
+            )
         model = self.model.strip()
         thinking_level = (self.thinking_level or "").strip()
         thread = comms.threads.set_thread_configuration(
-            comms.registry.require(thread_name),
-            model=model or None, thinking_level=thinking_level or None,
+            original,
+            model=model or None,
+            thinking_level=thinking_level or None,
+            service_tier=self.service_tier,
         )
         return {
             "thread": thread.name,
             "model": thread.model,
             "thinking_level": ThinkingLevel.optional_name(thread.thinking_level),
+            "service_tier": thread.service_tier.value,
         }
 
 
