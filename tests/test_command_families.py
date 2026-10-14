@@ -12,14 +12,13 @@ import pytest
 
 from agent_comms.cli import build_parser, main
 from agent_comms.cli_commands import CliCommand, option
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.messages import InfoKind
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,
     RuntimeRequest,
-    SubscribeRuntimeRequest,
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
@@ -87,7 +86,7 @@ def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, caps
 @pytest.mark.parametrize(
     "parameters",
     [
-        {"action": "subscribe", "transcriptSnapshots": True},
+        {"action": "subscribe"},
         {
             "action": "prompt",
             "prompt": [{"type": "text", "text": "hello"}],
@@ -154,9 +153,20 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
         async def result(self, ctx):
             return {"amount": self.amount + 1, "session": ctx.session_id, "owner": ctx.name}
 
-    comms = wire(tmp_path)
+    comms = Comms(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
-    agent = SimpleNamespace(_comms=comms, sessions=SimpleNamespace(bindings={"session": "owner"}))
+    def require_owned_session(owner, snapshot):
+        assert owner.name == "owner"
+        assert snapshot.require(owner.name) == owner
+        return "session"
+
+    agent = SimpleNamespace(
+        _comms=comms,
+        sessions=SimpleNamespace(
+            bindings={"session": "owner"},
+            require_owned_session=require_owned_session,
+        ),
+    )
     server = RuntimeServer(agent)
     await server.start()
     proxy = RuntimeProxy(agent, "owner", server.path)
@@ -185,14 +195,6 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
     finally:
         await proxy.close()
         await server.close()
-
-
-def test_subscribe_packet_keeps_external_camel_case_fields():
-    assert SubscribeRuntimeRequest(thread="a", transcript_snapshots=True).to_wire() == {
-        "action": "subscribe",
-        "thread": "a",
-        "transcriptSnapshots": True,
-    }
 
 
 @pytest.mark.parametrize(

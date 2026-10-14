@@ -200,10 +200,9 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
         invoke_tool(comms, "comms_model", {"model": "openrouter/own", "service_tier": "fast"})
 
 
-def test_dismiss_reports_mentions_and_advances_only_own_cursor(tmp_path, monkeypatch):
+def test_dismiss_reports_mentions_and_advances_only_own_cursor(comms, tmp_path, monkeypatch):
     from agent_comms import invoke_tool
 
-    comms = wire(tmp_path)
     for name in ("alpha", "beta"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))
@@ -215,7 +214,7 @@ def test_dismiss_reports_mentions_and_advances_only_own_cursor(tmp_path, monkeyp
         "thread": "beta",
         "target": "#team",
         "acknowledged": 1,
-        "mentioned": ("alpha",),
+        "mentioned": ["alpha"],
         "dismissed": True,
     }
     # beta no longer sees the ping; alpha's delivery is untouched.

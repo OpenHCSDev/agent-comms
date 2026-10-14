@@ -10,7 +10,7 @@ from acp.schema import SessionConfigSelectOption
 from agent_comms.acp import CommsClient
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.config_options import (
@@ -40,8 +40,10 @@ async def owner(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ModelConfigOption, "discover", models)
     monkeypatch.setattr(ThinkingLevelConfigOption, "discover", levels)
+    monkeypatch.delenv("PI_AGENT_ID", raising=False)
+    monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     agent = canonical_agent(
-        wire(tmp_path / "wire"),
+        Comms(tmp_path / "wire"),
         agent_bin="pi",
         agent_args=["--model", "test/one"],
         auto_wake=False,
@@ -161,7 +163,7 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
                 for value in ("medium", "high")
             ]
 
-        async def apply(self, config, session_id, thread, value):
+        async def apply(self, config, thread, value):
             config.comms.registry.register(replace(thread, task=value))
 
     router = build_agent_router(owner)
@@ -179,7 +181,7 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
         False,
     )
     assert changed["configOptions"][-1]["currentValue"] == "high"
-    assert wire(owner._comms.root).registry.require(response.session_id).task == "high"
+    assert Comms(owner._comms.root).registry.require(response.session_id).task == "high"
 
     # Polling must use the same declaration catalog as parser/set dispatch.
     # A newly declared option backed by another Thread field is not invisible.
