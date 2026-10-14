@@ -25,7 +25,7 @@ class SessionBridge {
       const child = spawn("agent-comms-opencode-bridge", [
         "attach", "--server", this.server, "--directory", this.api.state.path.directory,
         "--session", session, "--pid", String(process.pid),
-      ], { stdio: ["ignore", log.fd, log.fd] })
+      ], { detached: true, stdio: ["ignore", log.fd, log.fd] })
       this.child = child
       this.stopped = new Promise<void>((resolve, reject) => {
         child.once("error", reject)

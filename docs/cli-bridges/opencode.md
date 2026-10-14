@@ -106,7 +106,7 @@ completion; the finished Core events matched the native message snapshots.
 The bridge continues to retain the earlier unconfirmed input without replay.
 
 The current unit uses `watch`, with session
-`ses_ec353e0c8ffeb9Z133TPKUCLBj`. Automatic startup is still pending. The following
+`ses_ec353e0c8ffeb9Z133TPKUCLBj`. The following
 paragraphs describe the earlier inbox-only check, before live output was added.
 
 The original inbox-only check used the user unit
@@ -127,3 +127,24 @@ All six bridge modules parse and import; the existing audit Package reported
 zero parse omissions. `RegisteredWireMeta` moved from Codex's protocol to the
 shared wire boundary; its two Codex consumers and the OpenCode event family use
 that implementation. Existing inbox/send behavior is inherited unchanged.
+
+Automatic startup was also exercised in a real isolated native window: its
+server selected port 34593, selecting a second empty session joined the first
+bridge and started the second, and closing the window left neither child running.
+The installed ordinary `opencode` launcher and global TUI config were then used
+to reopen that session on port 34929. These checks submitted no model input.
+
+On this machine `~/bin/opencode` points to the installed `opencode-comms` entrypoint;
+`~/.config/opencode/tui.json` loads the packaged plugin through the publication
+symlink. `/usr/bin/opencode` and the existing OpenCode settings are preserved.
+The publication script advances the launcher and plugin with the runtime.
+
+## Next controls
+
+Model selection, permission questions, supported slash commands, goals and queue
+state are requested for the attached CLI view. These are not implemented yet.
+Each CLI must supply its actual capabilities and state through Core; Toad renders
+those answers and sends actions back to that CLI. In particular, a saved input,
+a queued input and a running turn are distinct facts; transcript mirroring alone
+does not establish execution or queue status. Goals must retain the owning CLI's
+meaning rather than treating every CLI's task list as the same execution contract.
