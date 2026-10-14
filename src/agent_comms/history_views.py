@@ -43,6 +43,7 @@ from .messaging import Messaging
 from .presentation import (
     ChannelView,
     CoordinationSnapshot,
+    DisplaySelection,
     MessageNotification,
     ThreadView,
     WireRevision,
@@ -370,6 +371,25 @@ class HistoryViews:
             show_stopped=show_stopped, show_archived=show_archived,
         )
 
+    def viewer_roster(
+        self, worktree: str, *, show_stopped: bool = True, show_archived: bool = False
+    ) -> CoordinationSnapshot:
+        """Current sidebar rows without advancing whole-bus derived indexes."""
+        viewer = self.messaging.user_identity(worktree).name
+        with DisplaySelection.reading(
+            self.registry, self.channels.catalog, self.bus.reads, viewer
+        ) as basis:
+            snapshot = CoordinationSnapshot.capture(
+                self.root, basis.registry, basis.catalog, self.agents, basis.channels,
+                {}, {}, unread={}, channel_unread={}, show_stopped=show_stopped,
+                show_archived=show_archived, read_marker_notice=basis.notice,
+            )
+        pending = {
+            *(view.thread.name for view in snapshot.threads),
+            *(view.channel.name for view in snapshot.channels),
+        }
+        return replace(snapshot, unread_pending=frozenset(pending))
+
     def viewer_snapshot(
         self, worktree: str, *, show_stopped: bool = True, show_archived: bool = False
     ) -> CoordinationSnapshot:
@@ -394,7 +414,7 @@ class HistoryViews:
             captured_viewer,
             {view.thread.name: view.thread.session_file or "" for view in snapshot.threads},
         )
-        return replace(snapshot, thread_unread=unread.counts, thread_unread_pending=unread.pending)
+        return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge only the native transcript boundary actually displayed."""
