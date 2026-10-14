@@ -21,7 +21,9 @@ from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio
-async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pending(tmp_path):
+async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay_pending(
+    tmp_path, monkeypatch,
+):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     comms = Comms(root, private_initial_writes=True)
@@ -51,6 +53,18 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
         published = []
         async def publish_compaction(event):
             published.append(event)
+
+        original_capture = SelectedParticipant.capture_sent_outcomes
+
+        def capture_before_turn(selected_comms, name):
+            assert not selected_comms.registry.require(name).turn_state.busy
+            return original_capture(selected_comms, name)
+
+        def forbid_full_presentation(*_args, **_kwargs):
+            raise AssertionError("selected outcome capture prepared a full thread presentation")
+
+        monkeypatch.setattr(SelectedParticipant, "capture_sent_outcomes", capture_before_turn)
+        monkeypatch.setattr(comms.views, "thread_presentation", forbid_full_presentation)
         async with SelectedParticipant.select(comms, store, root_id, "receiver", 0,
                                               on_compaction=publish_compaction) as selected:
             from agent_comms.agent_events import CompactionStart, CompactionEnd

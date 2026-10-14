@@ -10,7 +10,12 @@ from typing import TYPE_CHECKING
 
 from .channels import Channel
 from .field_codec import FieldCodec
-from .message_page import MessagePage, MessagePageRequest, PageTraversal
+from .message_page import (
+    ConversationMessagePageRequest,
+    MessagePage,
+    MessagePageRequest,
+    PageTraversal,
+)
 from .message_reference import MessageReference
 from .messages import Message
 from .private_registry_guard import PrivateRegistryGuard
@@ -68,6 +73,16 @@ class HistoryView(ABC):
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
         """Retain the source's aliases/membership without borrowing live identity."""
 
+    def page_request(self, scope, traversal, limit, max_bytes) -> MessagePageRequest:
+        return MessagePageRequest(scope, traversal, limit, max_bytes)
+
+
+class ConversationHistoryView:
+    """Historical views that present conversation content, not owner state."""
+
+    def page_request(self, scope, traversal, limit, max_bytes) -> MessagePageRequest:
+        return ConversationMessagePageRequest(scope, traversal, limit, max_bytes)
+
 
 @dataclass(frozen=True, slots=True)
 class ChannelHistory(HistoryView):
@@ -82,7 +97,7 @@ class ChannelHistory(HistoryView):
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelDisplayHistory(HistoryView):
+class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     channel: Channel
     viewer: str | None = None
 
@@ -106,7 +121,7 @@ class DMHistory(HistoryView):
 
 
 @dataclass(frozen=True, slots=True)
-class DMDisplayHistory(DMHistory):
+class DMDisplayHistory(ConversationHistoryView, DMHistory):
     worktree: str
 
     @property
@@ -448,7 +463,7 @@ class HistoryArchive:
             source = sources[index]
             source.validate()
             snapshot = source.provenance
-            request = MessagePageRequest(
+            request = view.page_request(
                 view.capture(snapshot), traversal.for_source(index == start), limit, max_bytes
             )
             page = request.read(WireLog(Path(source.root) / "bus.jsonl"))

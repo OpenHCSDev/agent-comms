@@ -253,13 +253,7 @@ class IgnoredAssignment(AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        read_at_ms = activity.read_at_ms or updated_at_ms
-        return replace(
-            notification,
-            state=notification.receipt_state("Read", read_at_ms),
-            detail="",
-            read_at_ms=read_at_ms,
-        )
+        return activity.progress.read_notification(notification)
 
     notification_priority = 2
     notification_state = "Read"
@@ -367,7 +361,7 @@ class EngagedAssignment(BoundAssignment):
             recipient, observation=observation, activity=activity
         )
         return observation.selected_response(
-            notification, updated_at_ms, activity.progress, activity.read_at_ms
+            notification, updated_at_ms, activity.progress
         )
 
     def wake_frame(self, source, obligation) -> tuple[str, str]:
@@ -419,23 +413,9 @@ class CompletedAssignment(BoundAssignment):
         )
         reference = activity.response_reference
         if reference is None:
-            return replace(
-                notification,
-                state=notification.receipt_state("Read", activity.read_at_ms),
-                detail="",
-                priority=2,
-                busy=False,
-                read_at_ms=activity.read_at_ms,
-            )
-        return replace(
-            notification,
-            state=notification.receipt_state(
-                "Answered", activity.response_received_at_ms
-            ),
-            detail="",
-            reply_reference=reference,
-            read_at_ms=activity.read_at_ms,
-            answered_at_ms=activity.response_received_at_ms,
+            return activity.progress.read_notification(notification)
+        return activity.progress.answered_notification(
+            notification, reference, activity.response_received_at_ms
         )
 
     def require_completion(self) -> Engagement:
@@ -480,7 +460,7 @@ class DeferredAssignment(InterruptedAssignment):
             recipient, observation=observation, activity=activity
         )
         return observation.selected_response(
-            notification, updated_at_ms, activity.progress, activity.read_at_ms
+            notification, updated_at_ms, activity.progress
         )
 
     notification_state = "Interrupted before read"

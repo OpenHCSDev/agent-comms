@@ -28,17 +28,23 @@ class AssignmentProgress(DeclaredFamily, affix="Progress"):
 
     @abstractmethod
     def selected_notification(
-        self, notification: MessageNotification, read_at_ms: int | None, *, busy: bool
+        self, notification: MessageNotification, *, busy: bool
     ) -> MessageNotification: ...
 
     @abstractmethod
-    def interrupted_notification(
-        self, notification: MessageNotification, read_at_ms: int | None
+    def interrupted_notification(self, notification: MessageNotification) -> MessageNotification: ...
+
+    @abstractmethod
+    def read_notification(self, notification: MessageNotification) -> MessageNotification: ...
+
+    @abstractmethod
+    def answered_notification(
+        self, notification: MessageNotification, reference: MessageReference, answered_at_ms: int
     ) -> MessageNotification: ...
 
 
 class NotShownProgress(AssignmentProgress):
-    def selected_notification(self, notification, read_at_ms, *, busy):
+    def selected_notification(self, notification, *, busy):
         return replace(
             notification,
             state="Sent",
@@ -47,7 +53,7 @@ class NotShownProgress(AssignmentProgress):
             priority=notification.priority if busy else 3,
         )
 
-    def interrupted_notification(self, notification, read_at_ms):
+    def interrupted_notification(self, notification):
         return replace(
             notification,
             state="Interrupted before read",
@@ -56,25 +62,85 @@ class NotShownProgress(AssignmentProgress):
             priority=3,
         )
 
+    def read_notification(self, notification):
+        raise ValueError("Read notification has no model-context receipt")
 
-class ShownToModelProgress(AssignmentProgress):
-    def selected_notification(self, notification, read_at_ms, *, busy):
+    def answered_notification(self, notification, reference, answered_at_ms):
         return replace(
             notification,
-            state=notification.receipt_state("Read", read_at_ms),
+            state=notification.receipt_state("Answered", answered_at_ms),
             detail="",
-            busy=busy,
-            read_at_ms=read_at_ms,
+            reply_reference=reference,
+            answered_at_ms=answered_at_ms,
         )
 
-    def interrupted_notification(self, notification, read_at_ms):
+
+@dataclass(frozen=True)
+class ShownToModelProgress(AssignmentProgress):
+    read_at_ms: int | None
+
+    def selected_notification(self, notification, *, busy):
         return replace(
             notification,
-            state=notification.receipt_state("Read", read_at_ms),
+            state=notification.receipt_state("Read", self.read_at_ms),
+            detail="",
+            busy=busy,
+            read_at_ms=self.read_at_ms,
+        )
+
+    def interrupted_notification(self, notification):
+        return replace(
+            notification,
+            state=notification.receipt_state("Read", self.read_at_ms),
             detail="",
             busy=False,
             priority=3,
-            read_at_ms=read_at_ms,
+            read_at_ms=self.read_at_ms,
+        )
+
+    def read_notification(self, notification):
+        return replace(
+            notification,
+            state=notification.receipt_state("Read", self.read_at_ms),
+            detail="",
+            priority=2,
+            busy=False,
+            read_at_ms=self.read_at_ms,
+        )
+
+    def answered_notification(self, notification, reference, answered_at_ms):
+        return replace(
+            notification,
+            state=notification.receipt_state("Answered", answered_at_ms),
+            detail="",
+            reply_reference=reference,
+            read_at_ms=self.read_at_ms,
+            answered_at_ms=answered_at_ms,
+        )
+
+
+class RemovedContextProgress(AssignmentProgress):
+    """The proved context survives, but its recipient session was removed."""
+
+    state = "Removed"
+    detail = "Recipient session removed"
+
+    def selected_notification(self, notification, *, busy):
+        return replace(notification, state=self.state, detail=self.detail, busy=busy, priority=3)
+
+    def interrupted_notification(self, notification):
+        return replace(notification, state=self.state, detail=self.detail, busy=False, priority=3)
+
+    def read_notification(self, notification):
+        return replace(notification, state=self.state, detail=self.detail, busy=False, priority=3)
+
+    def answered_notification(self, notification, reference, answered_at_ms):
+        return replace(
+            notification,
+            state=notification.receipt_state("Answered", answered_at_ms),
+            detail=self.detail,
+            reply_reference=reference,
+            answered_at_ms=answered_at_ms,
         )
 
 
@@ -86,23 +152,28 @@ class AssignmentContext:
     session_entry_id: str
 
     @classmethod
-    def recorded_times(
+    def recorded_progress(
         cls, contexts: Iterable[AssignmentContext]
-    ) -> dict[AssignmentContext, int | None]:
+    ) -> dict[AssignmentContext, AssignmentProgress]:
         from .native_entries import NativeEntry
+        from .native_pi import NativeEvidenceRemoved
 
         grouped: dict[Path, set[AssignmentContext]] = {}
         for context in contexts:
             grouped.setdefault(Path(context.session_file), set()).add(context)
-        result: dict[AssignmentContext, int | None] = {}
+        result: dict[AssignmentContext, AssignmentProgress] = {}
         for path, selected in grouped.items():
-            _, entries = NativeEntry.read_evidence(path)
-            by_id = dict(item for entry in entries for item in entry.identified())
-            for context in selected:
-                entry = by_id.get(context.session_entry_id)
-                recorded = entry.recorded_at if entry is not None else None
-                result[context] = (
-                    int(recorded.timestamp() * 1000) if recorded is not None else None
+            try:
+                with NativeEntry.open_evidence(path) as evidence:
+                    recorded = evidence.recorded_times(
+                        {item.session_entry_id for item in selected}
+                    )
+            except NativeEvidenceRemoved:
+                result.update((context, RemovedContextProgress()) for context in selected)
+            else:
+                result.update(
+                    (context, ShownToModelProgress(recorded[context.session_entry_id]))
+                    for context in selected
                 )
         return result
 
@@ -127,12 +198,14 @@ class AssignmentActivityEvidence(TypedRow):
         session_file, session_entry_id = values
         return AssignmentContext(session_file, session_entry_id)
 
-    def resolve(self, recorded_times: dict[AssignmentContext, int | None]):
+    def resolve(self, recorded_progress: dict[AssignmentContext, AssignmentProgress]):
         context = self.context
         return AssignmentActivity(
             triage_inflight=self.triage_inflight,
             current_execution_id=self.current_execution_id,
-            read_at_ms=recorded_times.get(context) if context is not None else None,
+            context_progress=(
+                recorded_progress[context] if context is not None else NotShownProgress()
+            ),
             response_seq=self.response_seq,
             response_message_id=self.response_message_id,
             response_received_at_ms=self.response_received_at_ms,
@@ -143,14 +216,14 @@ class AssignmentActivityEvidence(TypedRow):
 class AssignmentActivity:
     triage_inflight: bool
     current_execution_id: str | None
-    read_at_ms: int | None
+    context_progress: AssignmentProgress
     response_seq: int | None
     response_message_id: str | None
     response_received_at_ms: int | None
 
     @property
     def progress(self) -> AssignmentProgress:
-        return ShownToModelProgress() if self.read_at_ms is not None else NotShownProgress()
+        return self.context_progress
 
     def pending_notification(self, notification, queued_at_ms):
         """Project custody behind the recipient's canonical unresolved execution."""
@@ -283,9 +356,9 @@ class NotificationAssignment(NotificationSource):
             context for _, activity in rows
             if (context := activity.context) is not None
         }
-        recorded_times = AssignmentContext.recorded_times(contexts)
+        recorded_progress = AssignmentContext.recorded_progress(contexts)
         return tuple(
-            cls(assignment, activity.resolve(recorded_times))
+            cls(assignment, activity.resolve(recorded_progress))
             for assignment, activity in rows
         )
 

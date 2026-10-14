@@ -20,7 +20,7 @@ from .display_order import ChannelSort
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
-from .message_page import MessagePage, MessagePageRequest
+from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope
@@ -257,6 +257,21 @@ class MessageNotification:
         return cls.for_sources(root, registry, owner, sources)
 
     @classmethod
+    def recent_sent(
+        cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
+    ) -> tuple[MessageNotification, ...]:
+        """Project one sender's bounded outcome cut without preparing its transcript."""
+        if not 1 <= limit <= cls.window_limit:
+            raise ValueError("Sent notification limit must fit one bounded window")
+        owner = registry.require(name)
+        from .transcript_receipts import AssignedTranscriptSource
+
+        captured = AssignedTranscriptSource.for_thread(root, owner, log).window(
+            limit=0, sent_limit=limit
+        )
+        return cls.for_sources(root, registry, owner, captured.sent_sources)
+
+    @classmethod
     def for_sources(
         cls, root: Path, registry: Registration, owner: Thread, sources: Sequence[CommittedDelivery]
     ) -> tuple[MessageNotification, ...]:
@@ -432,7 +447,7 @@ class BusPresentation:
                     scope = basis.scope(target)
             # Identity capture does not grant custody over page preparation. Both
             # DM and channel pages borrow the same original reader and source cut.
-            page = MessagePageRequest.capture(
+            page = ConversationMessagePageRequest.capture(
                 scope, before=before, after=after, limit=limit, max_bytes=max_bytes
             ).read_opened(self.bus.log, marker, source, stream, records)
             if viewer is not None:

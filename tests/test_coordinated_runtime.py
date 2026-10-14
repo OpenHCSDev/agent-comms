@@ -468,6 +468,38 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
         )
 
 
+async def test_removed_sent_session_is_context_not_a_model_start_blocker(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from agent_comms.notification_assignment import RemovedContextProgress
+    from agent_comms.presentation import MessageNotification
+    from agent_comms.selected_participant import SelectedParticipant
+
+    root, root_id, _comms, initial, people = _root(tmp_path, direct=True)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+    removed = RemovedContextProgress().read_notification(
+        MessageNotification(
+            initial.audience.recipients[0], "Sent", "", message=initial.message, changed=True
+        )
+    )
+    monkeypatch.setattr(
+        SelectedParticipant,
+        "capture_sent_outcomes",
+        lambda _comms, _name: (removed,),
+    )
+    runner, calls = _fake_model()
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
+
+    outcome = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+    ).run()
+
+    assert outcome is not None
+    assert len(calls) == 1
+    assert '"state":"Removed"' in calls[0][1]
+    assert '"detail":"Recipient session removed"' in calls[0][1]
+
+
 async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch) -> None:
     root, root_id, comms, initial, people = _root(tmp_path, direct=True)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)

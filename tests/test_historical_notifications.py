@@ -102,12 +102,12 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.log.read_delivery_cohort(root_id, messages[0].seq).audience.recipients
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
-    from agent_comms.notification_assignment import AssignmentActivity
+    from agent_comms.notification_assignment import AssignmentActivity, ShownToModelProgress
 
     activity = AssignmentActivity(
         triage_inflight=False,
         current_execution_id=None,
-        read_at_ms=1,
+        context_progress=ShownToModelProgress(1),
         response_seq=None,
         response_message_id=None,
         response_received_at_ms=None,
@@ -139,12 +139,17 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     recipient, = old.bus.log.read_delivery_cohort(
         root_id, messages[0].seq
     ).audience.recipients
-    from agent_comms.notification_assignment import AssignmentActivity
+    from agent_comms.notification_assignment import (
+        AssignmentActivity,
+        NotShownProgress,
+        RemovedContextProgress,
+        ShownToModelProgress,
+    )
 
     sent_activity = AssignmentActivity(
         triage_inflight=False,
         current_execution_id=None,
-        read_at_ms=None,
+        context_progress=NotShownProgress(),
         response_seq=None,
         response_message_id=None,
         response_received_at_ms=None,
@@ -156,7 +161,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         activity=sent_activity,
         updated_at_ms=1_000,
     )
-    read_activity = replace(sent_activity, read_at_ms=2_000)
+    read_activity = replace(sent_activity, context_progress=ShownToModelProgress(2_000))
     read = engagement.notification(
         recipient,
         observation=RecordedRecipientActivity(),
@@ -178,9 +183,34 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         updated_at_ms=3_000,
     )
 
+    removed_activity = replace(read_activity, context_progress=RemovedContextProgress())
+    removed = engagement.notification(
+        recipient,
+        observation=RecordedRecipientActivity(),
+        activity=removed_activity,
+        updated_at_ms=1_000,
+    )
+    removed_answer = CompletedAssignment.build(
+        FullWake(), "durable-execution", "sender"
+    ).notification(
+        recipient,
+        observation=RecordedRecipientActivity(),
+        activity=replace(
+            removed_activity,
+            response_seq=99,
+            response_message_id="durable-reply",
+            response_received_at_ms=3_000,
+        ),
+        updated_at_ms=3_000,
+    )
+
     assert sent.state == "Sent" and sent.read_at_ms is None
     assert read.state.startswith("Read ") and read.read_at_ms == 2_000
     assert answered.state.startswith("Answered ") and answered.answered_at_ms == 3_000
+    assert removed.state == "Removed"
+    assert removed.detail == "Recipient session removed"
+    assert removed_answer.state.startswith("Answered ")
+    assert removed_answer.detail == "Recipient session removed"
     assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
 
 
