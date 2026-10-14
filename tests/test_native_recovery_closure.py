@@ -44,9 +44,13 @@ function prepare(events) {{
     return {{agent,run}};
 }}
 const refused={{role:'assistant',content:[],stopReason:'error',errorMessage:'503 overloaded'}};
+const codexRefusal={{role:'assistant',content:[],stopReason:'error',errorMessage:
+    'Codex error: An error occurred while processing your request. You can retry your request, or contact us through our help center at help.openai.com if the error persists.'}};
 function finished(owner, events, message) {{
     owner.agent.state.messages.push(message);
-    events.push({{type:'message_start',message:{{role:'assistant',content:[]}}}});
+    const start={{type:'message_start',message:{{role:'assistant',content:[]}}}};
+    owner.run.observe(start,claims);
+    events.push(start);
     owner.run.observe({{type:'message_end',message}},claims);
     events.push({{type:'message_end',message}});
 }}
@@ -83,6 +87,25 @@ async function exhausted() {{
     assert.deepEqual(events.filter(e=>e.type==='native_retry_end'),[
         {{type:'native_retry_end',success:false,attempt:3,finalError:refused.errorMessage}}]);
 }}
+async function toolThenCodexRefusals() {{
+    const events=[]; const owner=prepare(events);
+    const tool={{role:'assistant',content:[{{type:'toolCall',id:'call-1',name:'read',arguments:{{}}}}],
+        stopReason:'toolUse'}};
+    finished(owner,events,tool);
+    owner.run.observe({{type:'tool_execution_start'}},claims);
+    for (let attempt=1; attempt<=3; attempt++) {{
+        const message={{...codexRefusal}};
+        finished(owner,events,message);
+        assert.equal(await owner.run.recover(message),true);
+    }}
+    const answer={{role:'assistant',content:[{{type:'text',text:'recovered after tools'}}],stopReason:'stop'}};
+    finished(owner,events,answer);
+    owner.run.close();
+    assert.deepEqual(events.filter(e=>e.type==='native_retry_start').map(e=>e.attempt),[1,2,3]);
+    assert.deepEqual(events.filter(e=>e.type==='native_retry_end'),[
+        {{type:'native_retry_end',success:true,attempt:3}}]);
+    return {{tries:4,retries:3,answer:answer.content[0].text}};
+}}
 async function retiredDuringBackoff() {{
     const events=[]; const owner=prepare(events);
     owner.agent.state.messages.push(refused);
@@ -95,10 +118,10 @@ async function retiredDuringBackoff() {{
         {{type:'native_retry_end',success:false,attempt:0}}]);
     assert.equal(owner.agent.state.messages.length,1);
 }}
-const [events] = await Promise.all([
-    differentTerminal(), answered(), exhausted(), retiredDuringBackoff(),
+const [events,,,,proof] = await Promise.all([
+    differentTerminal(), answered(), exhausted(), retiredDuringBackoff(), toolThenCodexRefusals(),
 ]);
-console.log(JSON.stringify(events));
+console.log(JSON.stringify({{events,proof}}));
 """
     process = await asyncio.create_subprocess_exec(
         "node", "--input-type=module", "-e", program,
@@ -116,7 +139,12 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
 ):
     # Retry/end events are produced by the compiled native owner and classifier,
     # not invented by Core. The rest is the existing recorded RPC transport.
-    records = await native_records()
+    result = await native_records()
+    records = result["events"]
+    assert result["proof"] == {
+        "tries": 4, "retries": 3, "answer": "recovered after tools",
+    }
+    print(json.dumps(result["proof"], sort_keys=True))
     stub = _stub_with(tmp_path, [*records, *_settled_records()])
     agent = canonical_agent(wired, agent_bin="pi", agent_args=[], runtime_enabled=True)
     original_stream = backend.stream_agent_events
