@@ -155,8 +155,11 @@ class ProgressWatchdog:
             # Prompt acceptance is not model work. Until Pi publishes the
             # matching user start, the dedicated input-start budget owns the
             # wait and a short model lease must not race the pipe reader.
-            assert owned_timeout is not None
-            timeout = owned_timeout
+            if self.phase.pauses_input_clock:
+                timeout = None
+            else:
+                assert owned_timeout is not None
+                timeout = owned_timeout
         elif session.active_tools or self.phase.model_wait(self.model_wait_timeout) is None:
             timeout = None
         else:
