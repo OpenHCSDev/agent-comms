@@ -540,7 +540,7 @@ class TestAgentTurn:
     )
 
     def _agent_with_events(self, tmp_path: Path, wired) -> CommsAgent:
-        return canonical_agent(wired, agent_bin="pi", agent_args=[])
+        return canonical_agent(wired, agent_bin="pi", agent_args=[], auto_wake=False)
 
     def _authorize_test_goal(self, agent: CommsAgent, wired, goal) -> None:
         """Check the generation created by Goals; tests never add launch records."""
@@ -642,7 +642,7 @@ class TestAgentTurn:
         assert not wired.registry.require("proj").executing
 
     @pytest.mark.parametrize("completed_in_turn", [False, True])
-    async def test_missing_terminal_blocks_only_still_active_goal(
+    async def test_missing_terminal_blocks_goal_with_canonical_failure_progress(
         self, wired, tmp_path, monkeypatch, completed_in_turn
     ):
         agent = self._agent_with_events(tmp_path, wired)
