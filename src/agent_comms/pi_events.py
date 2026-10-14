@@ -681,6 +681,10 @@ class MessageUpdate(PiEvent):
     def delta_progress(self) -> bool:
         return self.assistant_message_event is not None and self.assistant_message_event.progress
 
+    def observed_phase(self, phase):
+        delta = self.assistant_message_event
+        return phase.response_output() if delta is not None and delta.response_progress else phase
+
 
 @dataclass(frozen=True, kw_only=True)
 class Response(PiEvent):
