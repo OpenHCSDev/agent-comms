@@ -270,11 +270,6 @@ class TurnSession:
         return self.admission.started and self.inputs.permits_admission
 
     @property
-    def awaiting_input_start(self):
-        """Whether the original input owner still awaits Pi's matching user start."""
-        return not self.started_input
-
-    @property
     def awaiting_native_attestation(self):
         return self.require_input_id and not self.native.attestation.observed
 
