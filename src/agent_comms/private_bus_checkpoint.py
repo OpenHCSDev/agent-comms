@@ -507,8 +507,14 @@ class ContextManifestSources(WireSourcePointer["ContextManifest"], CheckpointTab
     def decode_bytes(self, raw: bytes, root_id: str) -> ContextManifest:
         """The original typed observation proves the pointer's recorded owner."""
         from .bus_publication import unique_wire_object
+        from .errors import StoredHistoryUnreadable
 
-        record = WireRecord.from_wire(json.loads(raw, object_pairs_hook=unique_wire_object), root_id)
+        try:
+            record = WireRecord.from_wire(
+                json.loads(raw, object_pairs_hook=unique_wire_object), root_id
+            )
+        except (TypeError, ValueError) as error:
+            raise StoredHistoryUnreadable("Stored context history cannot be decoded") from error
         manifests = record.context_manifests()
         if len(manifests) != 1 or manifests[0].thread != self.thread:
             raise RelationViolationError("Certified context pointer differs from original observation.")

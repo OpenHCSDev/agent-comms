@@ -66,7 +66,12 @@ class OpenedWireSnapshot:
 
     @staticmethod
     def messages(record: Mapping) -> tuple[Message, ...]:
-        return WireRecord.public_from_wire(record).messages()
+        from .errors import StoredHistoryUnreadable
+
+        try:
+            return WireRecord.public_from_wire(record).messages()
+        except (TypeError, ValueError) as error:
+            raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
 
     def public_records(self, offset: int = 0, *, before_offset: int | None = None
                        ) -> Iterator[tuple[Message, int]]:

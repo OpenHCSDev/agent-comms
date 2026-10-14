@@ -34,6 +34,7 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     StaleRevision,
 )
+from agent_comms.errors import StoredHistoryUnreadable
 
 if TYPE_CHECKING:
     from multiprocessing.connection import Connection
@@ -93,9 +94,8 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     """
 
     # Currentness and contention defer the existing read; they do not show
-    # broken saved data. Every store-read consumer uses this same boundary.
+    # broken saved data.
     DEFERRED_READS = (CoordinationReadUnavailable, StaleRevision)
-    READ_ERRORS = (OSError, ValueError, RuntimeError)
 
     def __init__(self, reader_runtime: str, reason: str):
         self.reader_runtime = reader_runtime
@@ -254,9 +254,7 @@ class ReadTranscript(ReadRequest):
                 read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
             # The read checks its witness before and after preparing the page.
             return TranscriptSnapshotUpdate(read.read(), read.identity)
-        except UnreadableHistory.DEFERRED_READS:
-            raise
-        except UnreadableHistory.READ_ERRORS as error:
+        except StoredHistoryUnreadable as error:
             raise UnreadableHistory.capture(error) from error
 
 
@@ -331,7 +329,7 @@ class ObserveSidebar(InterestRequest):
             return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
         except UnreadableHistory.DEFERRED_READS:
             return None  # No new snapshot; keep the original interest for the next observation.
-        except UnreadableHistory.READ_ERRORS as error:
+        except StoredHistoryUnreadable as error:
             return SidebarUnreadable(revision, self, UnreadableHistory.capture(error))
 
 
@@ -547,7 +545,7 @@ class ObservationService:
                     presentations[name] = views.thread_presentation(name)
                 except UnreadableHistory.DEFERRED_READS:
                     busy.add(name)
-                except UnreadableHistory.READ_ERRORS as error:
+                except StoredHistoryUnreadable as error:
                     unavailable[name] = UnreadableHistory.capture(error)
             self.connection.send(ThreadsObserved(
                 revision, presentations, unavailable, frozenset(busy)
