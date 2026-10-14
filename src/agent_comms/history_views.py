@@ -465,6 +465,7 @@ class HistoryViews:
 
     def revision_paths(self) -> dict[str, Path | tuple[Path, ...]]:
         """The stores a view derives from, by WireRevision part: what to stat and to watch."""
+        from .external_transcript import ExternalTranscript
         from .notification_assignment import NotificationAssignment
         from .relationships import RelationshipStore
 
@@ -479,6 +480,7 @@ class HistoryViews:
             "goal_waits": self.root / GoalWaits.filename,
             "relationships": self.root / RelationshipStore.filename,
             "notifications": tuple(NotificationAssignment.source_paths(self.root)),
+            "external_transcripts": ExternalTranscript.source_paths(self.root),
         }
 
     def latest_sequence(self) -> int:

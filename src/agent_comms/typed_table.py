@@ -8,13 +8,16 @@ fresh store, and readers accept exactly the declared columns and field types.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import types
 from abc import abstractmethod
-from collections.abc import Generator, Mapping
+from collections.abc import Generator, Iterator, Mapping
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, fields
 from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
+from pathlib import Path
 from typing import (
     Annotated,
     ClassVar,
@@ -28,6 +31,7 @@ from typing import (
 )
 
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
 from .field_codec import FieldCodec, ValueDecoder, compile_decoder
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
@@ -519,6 +523,24 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             db.execute(statement)
 
     @classmethod
+    def _query(cls, db: sqlite3.Connection, where: str, parameters: tuple,
+               order_by: tuple[str, ...], descending: bool, key: dict[str, object]) -> sqlite3.Cursor:
+        selected = cls._fields_named(tuple(key))
+        if selected:
+            where = "(" + where + ") AND " + " AND ".join(
+                f"{_identifier(item.name)} IS ?" for item in selected)
+            parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
+        cls._fields_named(order_by)
+        direction = " DESC" if descending else ""
+        return db.execute(
+            f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
+            f"WHERE {where}"
+            + (" ORDER BY " + ", ".join(_identifier(name) + direction for name in order_by)
+               if order_by else ""),
+            parameters,
+        )
+
+    @classmethod
     def select(
         cls,
         db: sqlite3.Connection,
@@ -526,20 +548,24 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         where: str = "1",
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
+        descending: bool = False,
         **key: object,
     ) -> list[Self]:
-        selected = cls._fields_named(tuple(key))
-        if selected:
-            where = "(" + where + ") AND " + " AND ".join(
-                f"{_identifier(item.name)} IS ?" for item in selected)
-            parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
-        return cls.read(
-            db.execute(
-                f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
-                f"WHERE {where}" + (f" ORDER BY {cls._column_list(order_by)}" if order_by else ""),
-                parameters,
-            )
-        )
+        return cls.read(cls._query(db, where, parameters, order_by, descending, key))
+
+    @classmethod
+    def stream(
+        cls,
+        db: sqlite3.Connection,
+        *,
+        where: str = "1",
+        parameters: tuple = (),
+        order_by: tuple[str, ...] = (),
+        descending: bool = False,
+        **key: object,
+    ) -> Generator[Self, None, None]:
+        """Rows decoded as the caller consumes them; close it to release the query."""
+        return cls.iterate(cls._query(db, where, parameters, order_by, descending, key))
 
     @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
@@ -598,3 +624,66 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             + f" WHERE {where}",
             tuple(item.encode(changes[item.name]) for item in selected) + parameters,
         )
+
+
+class TypedStore:
+    """One owner-only SQLite file whose schema its TypedTable rows declare.
+
+    Members name the file and their rows. A transaction installs an absent
+    store, so members answer reads of an absent store without opening one; a
+    store whose schema differs from its declaration raises.
+    """
+
+    filename: ClassVar[str]
+    rows: ClassVar[tuple[type[TypedTable], ...]]
+    synchronous: ClassVar[str] = "FULL"
+    root: Path
+
+    @property
+    def path(self) -> Path:
+        return self.root / self.filename
+
+    @classmethod
+    def declared_schema(cls) -> dict[str, str]:
+        return {name: sql for row in cls.rows for name, sql in row.schema_objects().items()}
+
+    @staticmethod
+    def _schema(connection: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        return SQLiteSchemaObject.read(connection.execute(
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
+
+    def _install(self) -> None:
+        os.close(os.open(self.path, os.O_CREAT | os.O_RDWR, 0o600))
+        with closing(sqlite3.connect(self.path, timeout=5, isolation_level=None)) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            if not self._schema(connection):
+                for row in self.rows:
+                    row.create(connection)
+            connection.execute("COMMIT")
+            # Readers never wait out a writer, nor a writer its readers.
+            connection.execute("PRAGMA journal_mode=WAL")
+
+    @contextmanager
+    def transaction(self, *, write: bool) -> Iterator[sqlite3.Connection]:
+        if not self.path.exists():
+            self._install()  # owner-only before SQLite could create it world-readable
+        connection = sqlite3.connect(self.path, timeout=5, isolation_level=None)
+        try:
+            connection.execute(f"PRAGMA synchronous={self.synchronous}")
+            connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+            actual = self._schema(connection)
+            if not actual:
+                connection.execute("ROLLBACK")
+                self._install()
+                connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+                actual = self._schema(connection)
+            if SQLiteSchemaObject.differences(actual, self.declared_schema()):
+                raise RelationViolationError(f"{self.filename} differs from its declaration")
+            yield connection
+            connection.execute("COMMIT")
+        except BaseException:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+        finally:
+            connection.close()

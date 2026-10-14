@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import sqlite3
-from collections.abc import Iterator
-from contextlib import ExitStack, closing, contextmanager
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -25,7 +23,7 @@ from .input_attempt import (
 from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable, sql_literal
+from .typed_table import Column, Index, TypedStore, TypedTable, sql_literal
 
 if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
@@ -190,55 +188,12 @@ def _members(column: str, values) -> tuple[str, tuple]:
 
 
 @dataclass(frozen=True, slots=True)
-class InputDispositions:
+class InputDispositions(TypedStore):
     """Indexed durable input rows; each operation reads only the rows it names."""
 
     root: Path
     filename: ClassVar[str] = "input_dispositions.sqlite3"
-
-    @property
-    def path(self) -> Path:
-        return self.root / self.filename
-
-    def _install(self) -> None:
-        os.close(os.open(self.path, os.O_CREAT | os.O_RDWR, 0o600))
-        with closing(sqlite3.connect(self.path, timeout=5, isolation_level=None)) as connection:
-            connection.execute("BEGIN IMMEDIATE")
-            if not self._schema(connection):
-                InputDispositionRow.create(connection)
-            connection.execute("COMMIT")
-            # Readers never wait out a writer, nor a writer its readers.
-            connection.execute("PRAGMA journal_mode=WAL")
-
-    @staticmethod
-    def _schema(connection: sqlite3.Connection) -> list[SQLiteSchemaObject]:
-        return SQLiteSchemaObject.read(connection.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
-
-    @contextmanager
-    def _transaction(self, *, write: bool) -> Iterator[sqlite3.Connection]:
-        if not self.path.exists():
-            self._install()  # owner-only before SQLite could create it world-readable
-        connection = sqlite3.connect(self.path, timeout=5, isolation_level=None)
-        try:
-            connection.execute("PRAGMA synchronous=FULL")
-            connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
-            actual = self._schema(connection)
-            if not actual:
-                connection.execute("ROLLBACK")
-                self._install()
-                connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
-                actual = self._schema(connection)
-            if SQLiteSchemaObject.differences(actual, InputDispositionRow.schema_objects()):
-                raise RelationViolationError("Input dispositions store differs from its declaration")
-            yield connection
-            connection.execute("COMMIT")
-        except BaseException:
-            if connection.in_transaction:
-                connection.execute("ROLLBACK")
-            raise
-        finally:
-            connection.close()
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (InputDispositionRow,)
 
     @staticmethod
     def _document(connection: sqlite3.Connection, where: str, parameters: tuple) -> InputDocument:
@@ -248,12 +203,12 @@ class InputDispositions:
     def _select(self, where: str, parameters: tuple = ()) -> InputDocument:
         if not self.path.exists():
             return InputDocument({})  # nothing was ever recorded; a read creates nothing
-        with self._transaction(write=False) as connection:
+        with self.transaction(write=False) as connection:
             return self._document(connection, where, parameters)
 
     def _update(self, where: str, parameters: tuple, change) -> InputDocument:
         """Change only the selected rows; the callback returns the original to skip writing."""
-        with self._transaction(write=True) as connection:
+        with self.transaction(write=True) as connection:
             original = self._document(connection, where, parameters)
             changed = change(original)
             for key, row in changed.rows.items():

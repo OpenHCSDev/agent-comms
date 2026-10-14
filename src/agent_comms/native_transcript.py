@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from abc import ABC, abstractmethod
 from collections.abc import Generator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from .native_entries import NativeEntry, SessionEntry
+from .private_path import FileRevision
 
 
 def _reverse_records(
@@ -37,6 +40,38 @@ def _reverse_records(
         if floor == 0 and end:
             stream.seek(0)
             yield 0, end, stream.read(end)
+
+
+class RecordsCut(ABC):
+    """How far a thread's own records reached when its page was read.
+
+    Members supply ``offset``: the page position just after their last record.
+    """
+
+    offset: int
+
+    def holds(self, current: RecordsCut, through: int) -> bool:
+        """Whether ``current`` still contains the records this page read through."""
+        return type(current) is type(self) and self.contains(current, through)
+
+    @abstractmethod
+    def contains(self, current, through: int) -> bool: ...
+
+
+@dataclass(frozen=True)
+class SessionCut(RecordsCut):
+    revision: FileRevision | None  # None until the native session file exists
+
+    @property
+    def offset(self) -> int:
+        return self.revision.size if self.revision is not None else 0
+
+    def contains(self, current: SessionCut, through: int) -> bool:
+        # A session is append-only within one inode: later bytes belong to the
+        # next update. Replacement, truncation or a rewrite changes the cut.
+        if self.revision is None or current.revision is None:
+            return self.revision == current.revision
+        return self.revision.holds_cut(current.revision, through)
 
 
 @dataclass(frozen=True)
@@ -107,6 +142,29 @@ class NativeTranscript:
         if not revision.current(str(self.path)):
             raise ValueError("Imported context saved source changed while reading")
         return tuple(sources)
+
+    def cut(self) -> SessionCut:
+        return SessionCut(FileRevision.capture(self.path))
+
+    def reply_revision(self, root: Path, thread):
+        from .bus_publication import stable_thread_lookup
+        from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+
+        if not self.path.is_file():
+            return PublishedReplyRevision(0, 0)
+        return NativeRuntimeInput.publication_revision(
+            root, self, stable_thread_lookup(thread.created_at))
+
+    @contextmanager
+    def projection(self, receipts, routes):
+        """Project records through their native input and the session's routes."""
+        with routes.for_session(str(self.path)) as session_routes:
+            def project(records, *, max_records, max_bytes):
+                return receipts.native_records(
+                    self.fragments(records, max_records=max_records, max_bytes=max_bytes),
+                    routes=session_routes, reader=self)
+
+            yield project
 
     def fragments(self, records, *, max_records, max_bytes):
         """Borrow original decoded records within the caller's page budget.

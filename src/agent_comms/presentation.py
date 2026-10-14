@@ -850,6 +850,7 @@ class WireRevision:
     goal_waits: FileRevision | None
     relationships: FileRevision | None
     notifications: tuple[FileRevision | None, ...]
+    external_transcripts: tuple[FileRevision | None, ...]
     expiry_tick: int
 
     def registrations_changed_since(self, earlier: WireRevision) -> bool:

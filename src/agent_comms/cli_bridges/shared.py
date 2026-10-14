@@ -329,12 +329,11 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
     async def publish_transcript(self) -> None:
         from agent_comms.comms import Comms
 
-        transcripts = Comms(Path(self.binding.root)).transcripts
-        identity = await asyncio.to_thread(
-            transcripts.bind_external, self.binding.bus, self.binding.thread)
+        transcript = await asyncio.to_thread(
+            Comms(Path(self.binding.root)).transcripts.external, self.binding.bus)
         async for update in self.transcript():
             await asyncio.to_thread(
-                transcripts.publish_external, identity, turn_id=update.turn_id,
+                transcript.publish, turn_id=update.turn_id,
                 item_id=update.item_id, events=update.events)
 
 class LineMonitorBridge(CliBridge[Options]):

@@ -102,7 +102,7 @@ class TranscriptTraversal(ABC):
             {event.tool_call_id for event in batch if isinstance(event, closing)},
         )
 
-    def read_records(self, reader, project_native, receipts, initial, frontier,
+    def read_records(self, reader, project, receipts, initial, frontier,
                      *, max_messages, max_bytes):
         """Consume each original source coordinate only when its record is read."""
         consumed, records, used = initial, [], 0
@@ -112,9 +112,7 @@ class TranscriptTraversal(ABC):
         open_rounds: set[str] = set()
         round_grace = 0
         native = self.native(reader, initial, frontier) if frontier.offset else (record for record in ())
-        projected = project_native(reader.fragments(
-            native, max_records=max_messages + 1, max_bytes=max_bytes,
-        ))
+        projected = project(native, max_records=max_messages + 1, max_bytes=max_bytes)
         try:
             record, events = next(projected, (None, ()))
             source_rows = iter(
