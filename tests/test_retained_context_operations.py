@@ -193,7 +193,7 @@ def original_input_consumer_journey(tmp_path, command):
 
     def renamed(*args):
         result = command(comms.root, args)
-        assert inputs.path.read_bytes() == original_inputs
+        assert inputs.rows(input_keys) == original_inputs
         assert comms.registry.require("renamed-beta").turn_lease is None
         return result
 
