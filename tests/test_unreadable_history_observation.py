@@ -97,14 +97,18 @@ def test_store_read_only_retains_the_named_busy_state(comms, error_type):
             raise self.error
 
     error = error_type("original store read explanation")
-    if error_type is not CoordinationReadUnavailable:
+    if error_type is SchemaVersionError:
         with pytest.raises(error_type, match="original store read explanation"):
             FailingRead(str(comms.root), error).answer(comms)
         return
     answer = FailingRead(str(comms.root), error).answer(comms)
-    assert isinstance(answer, ReadBusy)
-    assert answer.title == "History loading"
-    assert pickle.loads(pickle.dumps(answer)) == answer
+    if error_type is CoordinationReadUnavailable:
+        assert isinstance(answer, ReadBusy)
+        assert answer.title == "History loading"
+        assert pickle.loads(pickle.dumps(answer)) == answer
+    else:
+        assert isinstance(answer, ReadRefused)
+        assert answer.error is error
 
 
 @pytest.mark.parametrize(
