@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
+from .declared_family import DeclaredFamily
 from .native_entries import NativeEntry, SessionEntry
 from .private_path import FileRevision
 
@@ -42,7 +43,7 @@ def _reverse_records(
             yield 0, end, stream.read(end)
 
 
-class RecordsCut(ABC):
+class RecordsCut(DeclaredFamily, affix="Cut"):
     """How far a thread's own records reached when its page was read.
 
     Members supply ``offset``: the page position just after their last record.

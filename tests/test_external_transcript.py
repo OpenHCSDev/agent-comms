@@ -1,8 +1,10 @@
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
+from agent_comms.transcripts import TranscriptReadIdentity
 
 
 def test_cli_items_page_in_place_and_stale_the_read_that_saw_them(tmp_path):
@@ -15,6 +17,9 @@ def test_cli_items_page_in_place_and_stale_the_read_that_saw_them(tmp_path):
                        events=(NoticeTranscript("Compacting context…", timestamp=2.0),))
     read = comms.transcripts.capture_page_read("codex")
     assert read.content_current()
+    # The identity crosses the ACP and observation wires.
+    wired = FieldCodec.decode(TranscriptReadIdentity, FieldCodec.encode(read.identity))
+    assert wired == read.identity
 
     transcript.publish(turn_id="t1", item_id="reply",
                        events=(AssistantTranscript("Hello", timestamp=1.0),))
