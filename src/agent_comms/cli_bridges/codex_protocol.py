@@ -29,7 +29,8 @@ from .shared import RegisteredWireMeta, WireModel, TranscriptUpdate
 class TextInput(WireModel):
     type: Literal['text'] = 'text'
     text: str
-    text_elements: tuple[JsonValue, ...] = ()
+    # Codex sends this back inside items, decoded from JSON as an array.
+    text_elements: list[JsonValue] = Field(default_factory=list)
 
 
 class RequestParams(WireModel):
