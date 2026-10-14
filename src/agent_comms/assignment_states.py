@@ -300,6 +300,20 @@ class AssignmentDecision:
 class BoundAssignment(AssignmentDecision, AssignmentState):
     decision: Engagement
 
+    def notification(
+        self,
+        recipient,
+        *,
+        observation,
+        activity,
+        updated_at_ms=0,
+        triage_inflight=False,
+        blocked_by_prior=False,
+    ):
+        return super().notification(
+            recipient, observation=observation, activity=activity
+        )
+
     @classmethod
     def binding_expression(cls) -> str:
         return "execution_id IS NOT NULL AND exact_target IS NOT NULL"
@@ -315,7 +329,7 @@ class EngagedAssignment(BoundAssignment):
         recipient,
         *,
         observation,
-        activity=None,
+        activity,
         updated_at_ms=0,
         triage_inflight=False,
         blocked_by_prior=False,
@@ -323,12 +337,8 @@ class EngagedAssignment(BoundAssignment):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return (
-            notification
-            if activity is None
-            else observation.selected_response(
-                notification, updated_at_ms, activity.progress
-            )
+        return observation.selected_response(
+            notification, updated_at_ms, activity.progress
         )
 
     def wake_frame(self, source, obligation) -> tuple[str, str]:
@@ -373,7 +383,7 @@ class CompletedAssignment(BoundAssignment):
         recipient,
         *,
         observation,
-        activity=None,
+        activity,
         updated_at_ms=0,
         triage_inflight=False,
         blocked_by_prior=False,
@@ -381,8 +391,6 @@ class CompletedAssignment(BoundAssignment):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        if activity is None:
-            return notification
         reference = activity.response_reference
         if reference is None:
             return replace(
@@ -432,7 +440,7 @@ class DeferredAssignment(InterruptedAssignment):
         recipient,
         *,
         observation,
-        activity=None,
+        activity,
         updated_at_ms=0,
         triage_inflight=False,
         blocked_by_prior=False,
@@ -457,11 +465,7 @@ class DeferredAssignment(InterruptedAssignment):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return (
-            notification
-            if activity is None
-            else activity.progress.notification(notification, running=False)
-        )
+        return activity.progress.notification(notification, running=False)
 
     notification_state = "Interrupted — outcome unknown"
     notification_detail = (
@@ -502,7 +506,7 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         recipient,
         *,
         observation,
-        activity=None,
+        activity,
         updated_at_ms=0,
         triage_inflight=False,
         blocked_by_prior=False,
@@ -510,11 +514,7 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return (
-            notification
-            if activity is None
-            else observation.delivered_response(notification, updated_at_ms)
-        )
+        return observation.delivered_response(notification, updated_at_ms)
 
     notification_priority = 2
     notification_state = "Delivered"
