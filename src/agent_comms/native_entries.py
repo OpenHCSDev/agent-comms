@@ -261,6 +261,48 @@ class NativeEvidenceRead:
     def observe(self):
         return self._observe(reverified=False)
 
+    def recorded_times(self, entry_ids: set[str]) -> dict[str, int | None]:
+        """Read clocks for selected context entries without decoding unrelated payloads.
+
+        The source still verifies and JSON-decodes its captured byte cut. Only
+        the header and requested entries cross the much heavier Pi payload
+        codec, and every row is consumed so the source can commit that cut.
+        """
+        from .native_pi import NativePiUnavailable, _private_session_dir
+
+        selected: dict[str, NativeEntry] = {}
+        header = None
+        try:
+            _private_session_dir(self.source.path.parent)
+            for index, row in enumerate(self.source.rows()):
+                if index == 0:
+                    header = NativeEntry.from_evidence(row)
+                    continue
+                entry_id = row.get("id")
+                if entry_id in entry_ids:
+                    if entry_id in selected:
+                        raise ValueError("duplicate selected native context entry")
+                    selected[entry_id] = NativeEntry.from_evidence(row)
+            if not isinstance(header, SessionEntry):
+                raise ValueError("Native Pi session header is invalid")
+            header.require_header()
+            _private_session_dir(self.source.path.parent)
+        except NativePiUnavailable:
+            self.close()
+            raise
+        except (ValueError, TypeError, KeyError) as error:
+            self.close()
+            raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
+        return {
+            entry_id: (
+                int(recorded.timestamp() * 1000)
+                if (entry := selected.get(entry_id)) is not None
+                and (recorded := entry.recorded_at) is not None
+                else None
+            )
+            for entry_id in entry_ids
+        }
+
     def _reverify(self):
         self.entries = ()
         self.source.reverify_from_start()

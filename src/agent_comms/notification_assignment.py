@@ -96,14 +96,11 @@ class AssignmentContext:
             grouped.setdefault(Path(context.session_file), set()).add(context)
         result: dict[AssignmentContext, int | None] = {}
         for path, selected in grouped.items():
-            _, entries = NativeEntry.read_evidence(path)
-            by_id = dict(item for entry in entries for item in entry.identified())
-            for context in selected:
-                entry = by_id.get(context.session_entry_id)
-                recorded = entry.recorded_at if entry is not None else None
-                result[context] = (
-                    int(recorded.timestamp() * 1000) if recorded is not None else None
-                )
+            with NativeEntry.open_evidence(path) as evidence:
+                recorded = evidence.recorded_times({item.session_entry_id for item in selected})
+            result.update(
+                (context, recorded[context.session_entry_id]) for context in selected
+            )
         return result
 
 

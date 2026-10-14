@@ -215,7 +215,9 @@ async def test_native_steer_keeps_original_input_and_turn_custody(native_backend
                for child in native.children)
 
 
-async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native_backend):
+async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
+    native_backend, monkeypatch,
+):
     native = native_backend
     await native.author_history()
     held = asyncio.Event()
@@ -260,6 +262,13 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native
             (assignment,) = await Coordination.run_worker(assignments)
             assert assignment.wire_seq == message.seq
             assert type(assignment.lifecycle) is DeliveredAssignment
+            def forbid_native_evidence(*_args, **_kwargs):
+                raise AssertionError("notification projection decoded native evidence")
+
+            monkeypatch.setattr(
+                "agent_comms.native_entries.NativeEntry.read_evidence",
+                forbid_native_evidence,
+            )
             sender_view = comms.views.thread_presentation("sender")
             assert sender_view is not None
             sent_read = next(
