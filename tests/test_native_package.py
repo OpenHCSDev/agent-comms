@@ -273,6 +273,59 @@ def test_launcher_uses_only_verified_copied_bootstrap(launcher, tmp_path):
     assert not marker.exists()
 
 
+def test_native_publication_installs_declared_source_with_one_link(launcher, tmp_path):
+    stack, package = launcher
+    snapshot = tmp_path / "extensions/global/index.ts"
+    snapshot.parent.mkdir(parents=True)
+    content = b"export default function declaredSource() {}\n"
+    snapshot.write_bytes(content)
+    destination = tmp_path / "global/extensions/index.ts"
+    destination.parent.mkdir(parents=True)
+    stale_link = tmp_path / "stale-extension-source"
+    stale_link.write_bytes(b"stale\n")
+    os.link(stale_link, destination)
+
+    imports = package / "dist/agent-comms-imports.json"
+    imports.write_text(json.dumps({
+        "version": 2,
+        "extensionEntries": [{
+            "entry": "agent-comms-extensions/global/index.mjs",
+            "sources": [{
+                "path": str(destination),
+                "snapshot": str(snapshot.relative_to(tmp_path)),
+                "sha256": hashlib.sha256(content).hexdigest(),
+                "bytes": len(content),
+            }],
+        }],
+        "peerAliases": {},
+    }))
+    pin = (
+        hashlib.sha256((package / "dist/cli.js").read_bytes()).hexdigest()
+        + "  dist/cli.js\n"
+        + native_package.TREE_PREFIX
+        + package_tree_digest(package)
+        + "\n"
+    )
+    (stack / "pi-native.sha256").write_text(pin)
+    build = hashlib.sha256(pin.encode()).hexdigest()[:16]
+    prepared = stack / f".pi-native-{build}"
+    package.parents[2].rename(prepared)
+    deployments = tmp_path / "deployments"
+
+    result = subprocess.run(
+        [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (deployments / f"native-current-{build}").is_dir()
+    assert destination.read_bytes() == content
+    assert destination.stat().st_nlink == 1
+    assert stale_link.read_bytes() == b"stale\n"
+
+
 @pytest.mark.parametrize("script", ["pi-native", "prepare-pi-native"])
 def test_launch_and_existing_prepare_refuse_unlisted_dependency_drift(launcher, script):
     stack, package = launcher
