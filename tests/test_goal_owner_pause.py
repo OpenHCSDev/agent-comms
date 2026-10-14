@@ -29,7 +29,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     assert reopened.registry.require("worker").goal.state.pause_source.declared_name == "owner"
     assert "paused_by" not in paused.to_wire()
     assert reopened.views.list_threads()[0]["goal"]["state"]["source"]["kind"] == "owner"
-    monkeypatch.setenv("PI_AGENT_ID", "worker")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     report = next(
         tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
     )
@@ -54,7 +54,7 @@ def test_model_cannot_pause(tmp_path, monkeypatch):
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
-    monkeypatch.setenv("PI_AGENT_ID", "worker")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     with pytest.raises(ValueError, match="actor cannot"):
         comms.goals.update_goal(
             "worker",

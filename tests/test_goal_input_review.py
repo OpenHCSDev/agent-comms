@@ -20,7 +20,7 @@ from agent_comms.tools import ToolRequest
 
 
 def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path, monkeypatch):
-    monkeypatch.setenv("PI_AGENT_ID", "worker")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     comms = wire(tmp_path / "wire")
     for name in ("worker", "parent", "other"):
         comms.registry.declare(

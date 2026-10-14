@@ -279,7 +279,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
 
 
 def test_delivered_assignment_uses_its_recorded_conversation_response(
-    archived_notification,
+    archived_notification, monkeypatch
 ):
     from agent_comms.assignment_states import DeferredAssignment
     from agent_comms.coordination_cohort import accept_delivery_cohort
@@ -301,12 +301,60 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(
             DeliveredAssignment,
             expected_revision=paused.revision,
         )
+    unrelated = old.messaging.send_message("agent", "sender", "unrelated later message")
+    notification, = old.views.message_notifications_for_references(
+        (original.reference,)
+    )[original.seq, original.message_id]
+    assert unrelated.reply_reference is None
+    assert notification.state.startswith("Read ")
+    assert notification.reply_reference is None
+
+    import os
+    from uuid import uuid4
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.input_origin import WireInputOrigin
+
+    owner = old.registry.require("agent")
+    old.registry.register(
+        replace(owner, process_identity=ProcessIdentity.capture(os.getpid()))
+    )
+    owner, generation = old.registry.live_owner_with_admission("agent")
+    owner, _ = old.registry.lease_live_turn_with_admission(
+        owner, "reply-turn", expected_generation=generation
+    )
+    lease = owner.require_turn_lease()
+    inputs = InputDispositions(old.root / InputDispositions.filename)
+    key = inputs.bus_key(original, owner)
+    source_text = "delivered original"
+    assert inputs.record(
+        key,
+        seq=original.seq,
+        owner=owner.name,
+        admission=lease.admission_generation,
+        target=original.target,
+        text=source_text,
+        origin=WireInputOrigin(root_id, original.reference),
+    )
+    native_id = uuid4().hex
+    assert inputs.bind(
+        key,
+        admission=lease.admission_generation,
+        turn_id=lease.turn_id,
+        native_id=native_id,
+        text=source_text,
+    )
+    assert inputs.started(
+        key, turn_id=lease.turn_id, native_id=native_id, text=source_text
+    )
+    monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     response = old.messaging.send_message("agent", "sender", "recorded reply")
 
     notification, = old.views.message_notifications_for_references(
         (original.reference,)
     )[original.seq, original.message_id]
 
+    assert response.reply_reference == original.reference
     assert notification.state.startswith("Answered ")
     assert notification.reply_reference == response.reference
     assert notification.answered_at_ms == int(response.timestamp * 1000)

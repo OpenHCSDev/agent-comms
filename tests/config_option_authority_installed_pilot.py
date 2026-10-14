@@ -129,7 +129,7 @@ async def run(stage, package, models, ui, menu_contention=False):
         AGENT_COMMS_ROOT=str(service.root), AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
         AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
     )
-    for key in ('PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID',
+    for key in ('PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK',
                 'AGENT_COMMS_STARTUP_INPUT_KEY', 'AGENT_COMMS_AGENT_MODELS'):
         environment.pop(key, None)
     os.environ.clear()
