@@ -39,6 +39,9 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     def matches_owner(self, recorded_name, incarnation):
         return recorded_name == incarnation.name
 
+    def delivery_reference(self, root_id: str) -> MessageReference | None:
+        return None
+
 
 @dataclass(frozen=True)
 class InputProvenance(Provenance):
@@ -73,6 +76,9 @@ class UnattributedInputOrigin(InputOrigin):
 class WireInputOrigin(InputOrigin):
     root_id: Annotated[str, WireRootIdText]
     reference: MessageReference
+
+    def delivery_reference(self, root_id: str) -> MessageReference | None:
+        return self.reference if self.root_id == root_id else None
 
     def require_ingress(self, comms, snapshot, admission, controller):
         raise RelationViolationError("Wire input provenance belongs to its original routed producer")

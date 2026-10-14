@@ -6,13 +6,12 @@ import hashlib
 import json
 import re
 from abc import abstractmethod
-from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Self, get_args
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, FieldRepresentation
+from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
@@ -31,29 +30,8 @@ if TYPE_CHECKING:
 class Provenance(DeclaredFamily, affix="Provenance"):
     """A source coordinate, not permission to execute or replay it."""
 
-    # Fields whose values one recorded manifest repeats for every contribution.
-    # Each row records each distinct value once and references it by index.
-    shared_fields: ClassVar[tuple[tuple[str, str], ...]] = ()
-
     @abstractmethod
     def public_description(self) -> str: ...
-
-    def compact_form(self, sources: ManifestSources) -> dict[str, Any]:
-        """The row's compact source form: shared fields recorded once per row."""
-        form = FieldCodec.encode(self)
-        for name, table in self.shared_fields:
-            form[name] = sources.record(table, getattr(self, name))
-        return form
-
-    @classmethod
-    def expanded_form(cls, form: Mapping[str, Any], sources: ManifestSources) -> dict[str, Any]:
-        """Resolve row-local references; FieldCodec validates the declaration."""
-        expanded = FieldCodec.decode(dict[str, Any], form)
-        member = cls.decode(FieldCodec.decode(str, expanded.get("kind")))
-        for name, table in member.shared_fields:
-            if name in expanded:
-                expanded[name] = FieldCodec.encode(sources.value(table, expanded[name]))
-        return expanded
 
     def public_text(self, comms) -> str:
         """Read an authenticated source, never reconstruct request wording.
@@ -72,6 +50,12 @@ class Provenance(DeclaredFamily, affix="Provenance"):
     def journal_entries(self, identity: NativeSessionIdentity) -> tuple[str, ...]:
         return ()
 
+    def turn_recording(self) -> tuple[Provenance, ...]:
+        return (self,)
+
+    def entry_membership(self) -> tuple[Provenance, ...]:
+        return ()
+
     def require_human_input(self):
         from .errors import RelationViolationError
 
@@ -82,8 +66,6 @@ class Provenance(DeclaredFamily, affix="Provenance"):
 class FileProvenance(Provenance):
     path: str
     sha256: str
-
-    shared_fields = (("path", "paths"),)
 
     def public_description(self) -> str:
         return f"File {self.path} · SHA256 {self.sha256}"
@@ -104,8 +86,6 @@ class CodexRolloutProvenance(Provenance):
     length: int
     sha256: str
     instruction: int
-
-    shared_fields = (("path", "paths"),)
 
     def public_description(self) -> str:
         return (f"Historical Codex instruction · {self.path} · record bytes "
@@ -157,8 +137,6 @@ class JournalProvenance(Provenance):
     path: str
     entries: tuple[str, ...]
 
-    shared_fields = (("path", "paths"),)
-
     def public_description(self) -> str:
         return f"Native journal {self.path} · entries {', '.join(self.entries)}"
 
@@ -166,14 +144,18 @@ class JournalProvenance(Provenance):
         identity.require_session(self.path)
         return self.entries
 
+    def turn_recording(self) -> tuple[Provenance, ...]:
+        return ()
+
+    def entry_membership(self) -> tuple[Provenance, ...]:
+        return (self,)
+
 
 @dataclass(frozen=True)
 class NativeProvenance(Provenance):
     identity: NativeSessionIdentity
     request_generation: int
     context_digest: str
-
-    shared_fields = (("identity", "sessions"),)
 
     def public_description(self) -> str:
         return (f"Native request {self.identity.session_id} · generation {self.request_generation} "
@@ -187,8 +169,6 @@ class NativeProvenance(Provenance):
 class PreviewProvenance(Provenance):
     identity: NativeSessionIdentity
     context_digest: str
-
-    shared_fields = (("identity", "sessions"),)
 
     def public_description(self) -> str:
         return f"Current native preview {self.identity.session_id} · context {self.context_digest}"
@@ -207,8 +187,6 @@ class ResourceProvenance(Provenance):
     sha256: str
     representation: str
 
-    shared_fields = (("path", "paths"),)
-
     def public_description(self) -> str:
         return f"Resource {self.path} · {self.representation} · SHA256 {self.sha256}"
 
@@ -219,83 +197,6 @@ class UnattributedProvenance(Provenance):
 
     def public_description(self) -> str:
         return "Unattributed captured text · original source was not observed"
-
-
-@dataclass
-class ManifestSources:
-    """The row's shared tables, typed and decoded by the canonical codec."""
-
-    sources: list[dict[str, Any]] = field(default_factory=list)
-    sessions: list[NativeSessionIdentity] = field(default_factory=list)
-    paths: list[str] = field(default_factory=list)
-
-    def __post_init__(self):
-        self._index = {key: {} for _, key in FieldCodec._fields(type(self))}
-
-    @classmethod
-    def empty(cls) -> ManifestSources:
-        return cls([], [], [])
-
-    def record(self, table: str, value: Any) -> int:
-        values = getattr(self, table)
-        key = json.dumps(FieldCodec.encode(value), sort_keys=True)
-        index = self._index[table].setdefault(key, len(values))
-        if index == len(values):
-            values.append(value)
-        return index
-
-    def value(self, table: str, index: Any) -> Any:
-        values = getattr(self, table)
-        if type(index) is not int or not 0 <= index < len(values):
-            raise ValueError(f"Shared {table} index is outside the recorded manifest row")
-        return values[index]
-
-    def source(self, value: Provenance) -> int:
-        return self.record("sources", value.compact_form(self))
-
-    def source_form(self, index: int) -> dict[str, Any]:
-        return Provenance.expanded_form(self.value("sources", index), self)
-
-
-class ContextManifestWire(FieldRepresentation):
-    """The manifest's compact row form: each distinct fact recorded once.
-
-    A recorded request repeats the same native cut and journal path for every
-    context message, and once named every contribution's sources in full, so a
-    long session multiplied its provenance into megabytes per request. This
-    representation records each distinct fact once per manifest and references
-    it by index. The decoded value is the original full manifest; every reader
-    keeps its existing contract, and no reader needs the journal to close the
-    manifest: the row carries every source it names.
-    """
-
-    external_json_shape = True
-
-    @classmethod
-    def encode(cls, value: ContextManifest) -> Any:
-        sources = ManifestSources.empty()
-        form = FieldCodec.encode(value)
-        form["segments"] = [segment.compact_form(sources) for segment in value.segments]
-        return form | FieldCodec.encode(sources)
-
-    @classmethod
-    def from_wire(cls, data: Any) -> ContextManifest:
-        form = FieldCodec.decode(dict[str, Any], data)
-        tables = {key: form.pop(key) for _, key in FieldCodec._fields(ManifestSources) if key in form}
-        sources = FieldCodec.decode(ManifestSources, tables)
-        for index in range(len(sources.sources)):
-            FieldCodec.decode(Provenance, sources.source_form(index))
-        segments = FieldCodec.decode(list[dict[str, Any]], form.get("segments"))
-        form["segments"] = [SegmentManifest.expanded_form(segment, sources) for segment in segments]
-        return FieldCodec.decode(ContextManifest, form)
-
-    @classmethod
-    def decode(cls, value: object) -> object:
-        return cls.from_wire(value)
-
-    @classmethod
-    def schema(cls) -> dict[str, Any]:
-        return {"type": "object"}
 
 
 @dataclass(frozen=True)
@@ -323,45 +224,17 @@ class InstructionFile:
         return self.content.format_map(values)
 
 
-class ManifestPart:
-    """Source references and nested parts share one row-normalization algorithm."""
-
-    def compact_form(self, sources: ManifestSources) -> dict[str, Any]:
-        form = FieldCodec.encode(self)
-        form.pop("provenance")
-        form["sources"] = [sources.source(value) for value in self.provenance]
-        for declared, key in FieldCodec._fields(type(self)):
-            if declared.metadata.get("manifest_parts") and key in form:
-                form[key] = [part.compact_form(sources) for part in getattr(self, declared.name)]
-        return form
-
-    @classmethod
-    def expanded_form(cls, form: Mapping[str, Any], sources: ManifestSources) -> dict[str, Any]:
-        expanded = FieldCodec.decode(dict[str, Any], form)
-        if "provenance" in expanded:
-            return expanded
-        indexes = FieldCodec.decode(tuple[int, ...], expanded.pop("sources", None))
-        expanded["provenance"] = [sources.source_form(index) for index in indexes]
-        for declared, key in FieldCodec._fields(cls):
-            if declared.metadata.get("manifest_parts") and key in expanded:
-                owner = get_args(FieldCodec._types(cls)[declared.name])[0]
-                parts = FieldCodec.decode(list[dict[str, Any]], expanded[key])
-                expanded[key] = [owner.expanded_form(part, sources) for part in parts]
-        return expanded
-
-
 @dataclass(frozen=True)
-class SegmentManifest(ManifestPart):
+class SegmentManifest:
     kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
     sha256: str
     utf8_bytes: int
     tokens: int
-    contributors: tuple[SegmentManifest, ...] = field(
-        default=(), metadata={"wire_omit_default": True, "manifest_parts": True})
+    contributors: tuple[SegmentManifest, ...] = ()
     captured_text: tuple[str, ...] = field(default=(), metadata={"wire_omit_default": True})
     source_spans: tuple[ContributionCoordinates, ...] = field(
-        default=(), metadata={"wire_omit_default": True, "manifest_parts": True})
+        default=(), metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.provenance or min(self.utf8_bytes, self.tokens) < 0:
@@ -466,6 +339,60 @@ class SegmentManifest(ManifestPart):
         return bool(parts) and all(part.public_text_recorded for part in parts)
 
 
+@dataclass(frozen=True)
+class ContextEntryReference:
+    """One native journal entry whose manifest is recorded independently."""
+
+    identity: NativeSessionIdentity
+    entry_id: str
+
+    @classmethod
+    def from_manifest(cls, manifest: SegmentManifest) -> ContextEntryReference:
+        entries = manifest.journal_entries()
+        if len(entries) != 1:
+            raise ValueError("A context entry manifest must name exactly one journal entry")
+        return cls(manifest.native_identity(), entries[0])
+
+
+@dataclass(frozen=True)
+class ContextEntryManifest:
+    """The one recorded manifest for a native transcript entry."""
+
+    manifest: SegmentManifest
+
+    @property
+    def reference(self) -> ContextEntryReference:
+        return ContextEntryReference.from_manifest(self.manifest)
+
+
+@dataclass(frozen=True)
+class RecordedSegmentManifest:
+    """A turn segment with transcript contributors held by entry reference."""
+
+    manifest: SegmentManifest
+    entries: tuple[ContextEntryReference, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.entries and self.manifest.contributors:
+            raise ValueError("Recorded segment cannot inline and reference contributors")
+
+    def restore(self, entries: dict[ContextEntryReference, SegmentManifest]) -> SegmentManifest:
+        if not self.entries:
+            return self.manifest
+        contributors = tuple(entries[reference] for reference in self.entries)
+        membership = tuple(
+            source
+            for contributor in contributors
+            for source in contributor.provenance
+            for source in source.entry_membership()
+        )
+        return replace(
+            self.manifest,
+            provenance=(*self.manifest.provenance, *membership),
+            contributors=contributors,
+        )
+
+
 @dataclass(frozen=True, kw_only=True)
 class ContextSegment(
     DeclaredFamily, affix="Segment", discovery_package="agent_comms.context_segments"
@@ -493,6 +420,12 @@ class ContextSegment(
     def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
         # Source annotations do not partition a complete provider value.
         return ()
+
+    @classmethod
+    def record_manifest(
+        cls, original: SegmentManifest
+    ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
+        return RecordedSegmentManifest(original), ()
 
     def public_text(self) -> str:
         return self.text()
@@ -542,7 +475,7 @@ class ContextSegment(
 
 
 @dataclass(frozen=True)
-class ContributionCoordinates(ManifestPart):
+class ContributionCoordinates:
     """Byte coordinates and proof in one owner's rendered public value."""
     kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
@@ -772,7 +705,19 @@ class NativeMessages:
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
-    pass
+    @classmethod
+    def record_manifest(
+        cls, original: SegmentManifest
+    ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
+        entries = tuple(ContextEntryManifest(child) for child in original.contributors)
+        references = tuple(entry.reference for entry in entries)
+        provenance = tuple(source for source in original.provenance for source in source.turn_recording())
+        return (
+            RecordedSegmentManifest(
+                replace(original, provenance=provenance, contributors=()), references
+            ),
+            entries,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1091,6 +1036,45 @@ class ContextManifest:
             "removed": [FieldCodec.encode(s) for s in previous.segments if s not in self.segments],
             "added": [FieldCodec.encode(s) for s in self.segments if s not in previous.segments],
         }
+
+
+@dataclass(frozen=True)
+class RecordedContextManifest:
+    """One turn's context identity and references to separately recorded entries."""
+
+    thread: ThreadIncarnation
+    turn: ContextTurn
+    segments: tuple[RecordedSegmentManifest, ...]
+    counter: str
+    request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
+
+    @classmethod
+    def capture(
+        cls, manifest: ContextManifest
+    ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
+        recorded, entries = zip(
+            *(segment.kind.record_manifest(segment) for segment in manifest.segments),
+            strict=True,
+        )
+        return (
+            cls(
+                manifest.thread,
+                manifest.turn,
+                tuple(recorded),
+                manifest.counter,
+                manifest.request_id,
+            ),
+            tuple(entry for group in entries for entry in group),
+        )
+
+    def restore(self, entries: dict[ContextEntryReference, SegmentManifest]) -> ContextManifest:
+        return ContextManifest(
+            self.thread,
+            self.turn,
+            tuple(segment.restore(entries) for segment in self.segments),
+            self.counter,
+            self.request_id,
+        )
 
 
 @dataclass(frozen=True)

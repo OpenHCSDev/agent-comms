@@ -45,4 +45,3 @@ coverage.xml
 /.proof-runtime/
 /.focused-tests/
 /.orphan-cleanup-receipt.json
-.test-artifacts/

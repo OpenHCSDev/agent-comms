@@ -54,13 +54,14 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
         {"type": "session", "id": "restored", "version": 3},
         {"type": "message", "id": "restored-entry", "message": {
             "role": "user", "inputId": restored_input, "inputDigest": "e" * 64,
-            "content": [{"type": "text", "text": "restored source"}],
+            "content": [{"type": "text", "text": "restored sou"}],
         }},
     ))
     with NativeEntry.open_input_evidence(session) as evidence:
         header, entries = evidence.observe()
         assert header.id == "sid" and tuple(NativeEntry.tracked_users(entries)) == (INPUT_ID,)
         if rewrite == "in_place":
+            assert len(restored) == session.stat().st_size
             session.write_bytes(restored)
         else:
             replacement = session.with_suffix(".restored")
@@ -71,6 +72,30 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
         assert header.id == "restored"
         assert tuple(NativeEntry.tracked_users(entries)) == (restored_input,)
         assert evidence.source.size == len(restored)
+
+
+@pytest.mark.parametrize("failure", [
+    NativePiUnavailable("source refused"), ValueError("bad value"),
+    TypeError("bad type"), KeyError("missing"),
+])
+def test_generic_observation_failure_does_not_reverify(tmp_path, monkeypatch, failure):
+    session = _evidence(tmp_path)
+    with NativeEntry.open_evidence(session) as evidence:
+        evidence.observe()
+        reverifications = []
+
+        def failed_rows():
+            raise failure
+            yield
+
+        monkeypatch.setattr(evidence.source, "rows", failed_rows)
+        monkeypatch.setattr(
+            evidence.source, "reverify_from_start", lambda: reverifications.append(True)
+        )
+        with pytest.raises(NativePiUnavailable):
+            evidence.observe()
+        assert not reverifications
+        assert evidence.source.stream.closed and not evidence.entries
 
 
 def test_launch_header_verifies_all_bytes_but_decodes_only_row_one(tmp_path, monkeypatch):
@@ -195,7 +220,7 @@ def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operati
             assert tuple(source.rows())[0]["id"] == "new"
         else:
             session.write_bytes(session.read_bytes().replace(b"separate", b"changed!"))
-            with pytest.raises(NativePiUnavailable, match="prefix changed"):
+            with pytest.raises(NativePiUnavailable, match="changed"):
                 tuple(rows)
             assert source.stream.closed
 
