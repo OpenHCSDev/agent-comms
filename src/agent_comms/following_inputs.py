@@ -90,8 +90,14 @@ class OwnerFollowingInputs(FollowingInputs):
             AdmissionIdentity(lease.identity.incarnation, lease.admission_generation),
             thread.pid,
         )
+        selected_admission = session.prompt_send_boundary
+        if selected_admission is None:
+            raise AssertionError("Selected following input requires its private admission")
         inputs.original_sources[self.session_id] = original
         session.forward_inbox(self.inbox, admission)
+        await inputs.following_ready(
+            self.session_id, after_seq=selected_admission.following_after_seq,
+        )
 
     async def started(self, input_id: str) -> None:
         await self.inputs.input_started(self.session_id, input_id, self.scope)

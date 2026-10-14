@@ -98,7 +98,22 @@ class SettledTick:
     admission_after_seq: int | None = None
 
 
-class InputDrain:
+class FollowingInputDrain:
+    """Running-turn readiness invalidates only its settled delivery observation."""
+
+    async def following_ready(self, session_id: str, *, after_seq: int = 0) -> None:
+        async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
+            self._idle_private_revisions.pop(session_id, None)
+            owner = await Coordination.run_worker(partial(
+                self.comms.registry.require, self.sessions.require(session_id),
+            ))
+            await DeliveredInput.deliver_pending(
+                self, session_id, owner, self.comms.bus,
+                self.effects._configured_root_id(), after_seq=after_seq,
+            )
+
+
+class InputDrain(FollowingInputDrain):
     def __init__(
         self,
         comms: Comms,
@@ -677,6 +692,7 @@ class InputDrain:
         )
         self.queued_inputs.get(session_id, {}).pop(input_id or "", None)
         await self.emit_queue_state(session_id)
+        await self.following_ready(session_id)
 
     async def input_refused(self, session_id: str, input_id: str | None) -> None:
         if input_id is None:
