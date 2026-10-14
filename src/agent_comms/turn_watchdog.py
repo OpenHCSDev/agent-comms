@@ -20,6 +20,14 @@ if TYPE_CHECKING:
     from .pi_events import PiEvent, RetryAttemptEvent
 
 
+class TurnWaitExpired(TimeoutError):
+    """The selected wait ran out; it alone owns the expiry that follows."""
+
+    def __init__(self, wait: TurnWait, message: str):
+        super().__init__(message)
+        self.wait = wait
+
+
 class TurnWait(DeclaredFamily, affix="Wait"):
     """Own the wait's budget, charging, diagnostic and terminal behaviour."""
 
@@ -48,17 +56,18 @@ class TurnWait(DeclaredFamily, affix="Wait"):
     def failure_context(self, session: TurnSession) -> tuple[str, str]:
         return self.reason, self.phase
 
-    def expired(self, session: TurnSession) -> TimeoutError:
+    def expired(self, session: TurnSession) -> TurnWaitExpired:
         reason, phase = self.failure_context(session)
-        return TimeoutError(
+        return TurnWaitExpired(
+            self,
             f"{reason}: phase={phase}; no progress for "
             f"{self.elapsed:.3f}s; input_started={session.started_input}"
         )
 
     async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.finished = True
-        if False:
-            yield
+        return
+        yield  # an expiry without events is still this event stream
 
 
 class PreflightWait(TurnWait):
@@ -182,7 +191,8 @@ class ProgressWatchdog:
         self.launch_started_at = clock()
         self.session_bytes: int | None = None
         if session_file:
-            with suppress(OSError):
+            # A new session has no file yet; any other stat failure is real.
+            with suppress(FileNotFoundError):
                 self.session_bytes = Path(session_file).stat().st_size
 
     def spawned(self, reused: bool) -> None:
@@ -206,8 +216,11 @@ class ProgressWatchdog:
         self.now = self.clock()
 
     def progress(self) -> None:
+        # Both budgets measure native silence: an input queued behind a run
+        # that keeps producing events is waiting its turn, not lost.
         self.last_model_progress = self.now
         self.model_wait.restart()
+        self.input_wait.restart()
 
     async def observe(
         self, event: PiEvent, session: TurnSession
@@ -234,8 +247,8 @@ class ProgressWatchdog:
             return self.preflight_wait
         if session.stats.requested:
             return self.poll_wait
-        if session.admission.awaiting_start:
-            return self.unbounded_wait if self.phase.pauses_input_clock else self.input_wait
+        if session.admission.awaiting_start and not self.phase.pauses_input_clock:
+            return self.input_wait
         if session.active_tools:
             return self.unbounded_wait
         if self.phase.model_wait(self.model_wait.timeout()) is None:
@@ -299,7 +312,3 @@ class ProgressWatchdog:
                 if not pending.done():
                     pending.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
-
-    async def expire(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        async for event in self.wait_for(session).expire(session):
-            yield event

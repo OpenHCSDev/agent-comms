@@ -37,6 +37,9 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     """
     detail: str = ""
     stall_reason: ClassVar[str] = "model_no_progress"
+    # An excursion (tool, retry, compaction) runs without RPC events; an input
+    # queued behind it cannot start yet, so its start budget waits and the
+    # excursion's own backstop bounds the stall instead.
     pauses_input_clock: ClassVar[bool] = False
     busy: ClassVar[bool] = True
     accepts_prompt: ClassVar[bool] = False
@@ -121,6 +124,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
 
 
 class Excursion(TurnPhase):
+    pauses_input_clock = True
+
     @classmethod
     @abstractmethod
     def starts(cls, event: pi.PiEvent) -> bool:
@@ -202,7 +207,6 @@ class CompactionPhase(LabeledActivity, StallExempt, Excursion):
     def ends(self, event: pi.PiEvent) -> bool:
         from . import pi_events as pi
         return isinstance(event, pi.CompactionEnd)
-    pauses_input_clock = True
     activity_state = ActivityState.WORKING
     label = "Compacting context"
 
