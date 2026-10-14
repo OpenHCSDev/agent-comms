@@ -77,7 +77,6 @@ def execution(*, status=PendingExecution, ordinal=None, origin=ExecutionOrigin.A
         reason_code=None,
         created_at_ms=100,
         updated_at_ms=100,
-        exact_target="requester" if origin is ExecutionOrigin.WIRE else None,
         lifecycle=status.load(ordinal),
     )
 
@@ -165,9 +164,9 @@ def snapshot(
             else ()
         ),
         replay=replay or ReplayAssessments(record.execution_id, ReplayFact.NONE, True, False, 1),
-        obligation=response if record.origin is ExecutionOrigin.WIRE else None,
-        publication_intent=None,
-        publication_receipt=None,
+        obligations=(response,) if record.origin is ExecutionOrigin.WIRE and response else (),
+        publication_intents=(),
+        publication_receipts=(),
         connectivity=None,
         last_recovery=None,
         current_execution_id=record.execution_id if current else None,
@@ -188,44 +187,33 @@ def sql_execution(
     owner="p",
     thread="worker",
 ):
-    db.execute(
-        "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thread,"
-        "owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_ms) "
-        "VALUES (?,?,?,?,?,?,1,?,NULL,0,0)",
-        (
-            name,
-            origin,
-            json.dumps({"kind": status, **({"ordinal": ordinal} if ordinal is not None else {})}),
-            target,
-            thread,
-            owner,
-            max_attempts,
-        ),
-    )
+    ExecutionRecord(
+        execution_id=name,
+        origin=ExecutionOrigin(origin),
+        lifecycle=ExecutionState.decode(status).load(ordinal),
+        owner_thread=thread,
+        owner_lookup=owner,
+        revision=1,
+        max_attempts=max_attempts,
+        reason_code=None,
+        created_at_ms=0,
+        updated_at_ms=0,
+    ).insert(db)
 
 
 def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
     db.execute("BEGIN IMMEDIATE")
     sql_execution(db, name=name, status="queued", origin="wire", target=target)
-    db.execute(
-        (
-            "INSERT INTO obligations (execution_id,exact_target,lifecycle,reason_code,cre"
-            "ated_at_ms,updated_at_ms,revision) VALUES (?,?,json_object('kind','pending')"
-            ",NULL,0,0,1)"
-        ),
-        (name, target),
-    )
-    db.execute(
-        (
-        'INSERT INTO wake_claims (assignment_id,recipient,recipient_lookup,wire_seq,m'
-        'essage_id,lifecycle,audience,resolver_version,policy_version,accepted_at_ms,'
-        "updated_at_ms,revision) VALUES ('a','worker','p',2,'m',json_object('kind','e"
-        "ngaged','decision',json_object('kind','full','exact_target',?,'execution_id'"
-        ",?)),'direct','resolver-v1','policy-v1',0,0,1)"
-        ),
-        (target, name),
-    )
-    db.execute("INSERT INTO execution_claims VALUES (?,'a',0)", (name,))
+    ResponseObligation(
+        name, target, PendingResponse(), None, 0, 0, 1
+    ).insert(db)
+    WakeAssignment(
+        assignment_id="a", recipient="worker", recipient_lookup="p",
+        wire_seq=2, message_id="m", audience=MessageAudience.DIRECT,
+        lifecycle=EngagedAssignment.build(FullWake(), name, target),
+        accepted_at_ms=0, updated_at_ms=0, revision=1,
+    ).insert(db)
+    ExecutionAssignmentLink(name, "a", 0).insert(db)
     if pending:
         db.execute(
             (
@@ -238,19 +226,13 @@ def sql_wire_execution(db, *, pending=True, name="e", target="requester"):
 
 
 def sql_attempt(db, name="e", ordinal=1, generation=1, owner="p", thread="worker", digest=None):
-    db.execute(
-        (
-            "INSERT INTO attempts (execution_id,attempt_ordinal,owner_lookup,owner_thread,owner_generation,owner_token_digest,lifecycle,revision,last_progress_at_ms,reason_code,created_at_ms,updated_at_ms) VALUES (?,?,?,?,?,?,json_object('kind','prompt_starting','lease_expires_at_ms',500,'backend_done',json('false'),'process_dead',json('false')),1,NULL,NULL,0,0)"
-        ),
-        (
-            name,
-            ordinal,
-            owner,
-            thread,
-            generation,
-            digest if digest is not None else f"digest-{generation}",
-        ),
-    )
+    AttemptRecord(
+        execution_id=name, attempt_ordinal=ordinal, owner_lookup=owner,
+        owner_thread=thread, owner_generation=generation,
+        owner_token_digest=digest if digest is not None else f"digest-{generation}",
+        lifecycle=PromptStartingAttempt.load(500, False, False), revision=1,
+        last_progress_at_ms=None, reason_code=None, created_at_ms=0, updated_at_ms=0,
+    ).insert(db)
 
 
 def owner(db):
@@ -1015,7 +997,6 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
             reason_code=row["reason_code"],
             created_at_ms=row["created_at_ms"],
             updated_at_ms=row["updated_at_ms"],
-            exact_target=row["exact_target"],
             lifecycle=ExecutionState.decode(row["status"]).load(row["current_attempt_ordinal"]),
         )
         attempt_record = AttemptRecord(
@@ -1042,9 +1023,9 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
             assignments=(),
             links=(),
             replay=None,
-            obligation=None,
-            publication_intent=None,
-            publication_receipt=None,
+            obligations=(),
+            publication_intents=(),
+            publication_receipts=(),
             connectivity=None,
             last_recovery=None,
             current_execution_id=None,
@@ -1818,13 +1799,13 @@ def test_notice_canonicalizes_through_sql_reopen_and_snapshot(db, raw_notice, ex
             ),
             links=(ExecutionAssignmentLink("e", "a", 0),),
             replay=None,
-            obligation=replace(
+            obligations=(replace(
                 obligation(),
                 execution_id="e",
                 lifecycle=PublishedResponse.load(receipt.message_id, 1),
-            ),
-            publication_intent=recovered_intent,
-            publication_receipt=recovered_receipt,
+            ),),
+            publication_intents=(recovered_intent,),
+            publication_receipts=(recovered_receipt,),
             connectivity=None,
             last_recovery=None,
             current_execution_id=None,
@@ -1832,8 +1813,8 @@ def test_notice_canonicalizes_through_sql_reopen_and_snapshot(db, raw_notice, ex
             pointer_revision=0,
             is_current=False,
         )
-        assert projected.publication_intent.notice is expected_notice
-        assert projected.publication_receipt.notice is expected_notice
+        assert projected.publication_intents[0].notice is expected_notice
+        assert projected.publication_receipts[0].notice is expected_notice
 
 
 def test_integer_timestamps_canonicalize_through_message_authority(db):
