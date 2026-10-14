@@ -200,8 +200,9 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
 class NativeEvidenceRead:
     """Decoded original entries live only inside the acquired file resource.
 
-    Every observation verifies all previously read bytes before decoding the
-    append. No context proof, disposition or owner authority is retained here.
+    The source owner verifies initial bytes, pinned revisions, and each append
+    before decoding it. No context proof, disposition or owner authority is
+    retained here.
     """
 
     def __init__(self, source):
@@ -256,6 +257,11 @@ class NativeEvidenceRead:
     def observe(self):
         return self._observe(reverified=False)
 
+    def _reverify(self):
+        self.entries = ()
+        self.source.reverify_from_start()
+        return self._observe(reverified=True)
+
     def _observe(self, *, reverified: bool):
         from .native_pi import (
             NativeEvidencePrefixChanged,
@@ -278,9 +284,7 @@ class NativeEvidenceRead:
             # Replacement, truncation or a changed prior hash enters the
             # source owner's named unverified state. Reopen once and decode
             # from byte zero; no stale entry or offset survives the transition.
-            self.entries = ()
-            self.source.reverify_from_start()
-            return self._observe(reverified=True)
+            return self._reverify()
         except NativePiUnavailable:
             self.close()
             raise
