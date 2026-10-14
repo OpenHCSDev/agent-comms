@@ -27,6 +27,7 @@ from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, StaleFence
@@ -158,7 +159,8 @@ async def test_uncertain_binding_commit_denies_native_send_and_retry(tmp_path, m
 def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
     calls: list[tuple[str, str]] = []
 
-    async def fake(package, *, input_id, prompt, worktree, session_dir, session_file=None, **_):
+    async def fake(package, *, input_id, prompt, worktree, session, **_):
+        session_dir, session_file = session.directory, session.path
         fresh = session_file is None
         if fresh:
             session_file = session_dir / f"{input_id}.jsonl"
@@ -169,7 +171,10 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         assert session_file is not None
 
         def admitted():
-            with _["prompt_send_boundary"](session_file):
+            identity = NativeSessionIdentity(
+                json.loads(session_file.read_text().splitlines()[0])["id"], str(session_file)
+            )
+            with _["prompt_send_boundary"](identity):
                 calls.append((input_id, prompt))
 
         await asyncio.to_thread(admitted)

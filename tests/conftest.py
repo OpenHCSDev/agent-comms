@@ -10,6 +10,32 @@ from agent_comms.comms import Comms
 from agent_comms.threads import Thread
 
 
+_MANAGED_RUNTIME_ENVIRONMENT = frozenset({
+    "AGENT_COMMS_MANAGED",
+    "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE",
+    "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID",
+    "AGENT_COMMS_PROJECT_REQUEST",
+    "AGENT_COMMS_PROJECT_SOCKET",
+    "AGENT_COMMS_ROOT",
+    "AGENT_COMMS_SELECTED_TOOL_SOCKET",
+    "AGENT_COMMS_SELECTED_TOOL_TOKEN",
+    "AGENT_COMMS_THREAD",
+    "PI_AGENT_ID",
+    "PI_PARENT_ID",
+    "PI_SESSION_FILE",
+    "PI_SESSION_ID",
+    "PI_TASK",
+    "PI_WORKTREE",
+})
+
+
+@pytest.fixture(autouse=True)
+def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A developer's live managed process is not a test wire or native child."""
+    for name in _MANAGED_RUNTIME_ENVIRONMENT:
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture(autouse=True)
 def _deferred_candidate_scheduler_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep optional background WAL workers out of unrelated test temp cleanup.
@@ -19,6 +45,37 @@ def _deferred_candidate_scheduler_is_explicit(monkeypatch: pytest.MonkeyPatch) -
     """
     monkeypatch.setattr(
         "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
+    )
+
+
+@pytest.fixture
+def fake_native_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Declared native choices for tests whose child/provider edge is controlled."""
+    from agent_comms.pi_payloads import ThinkingLevelsData
+    from agent_comms.pi_vocabulary import ThinkingLevel
+
+    monkeypatch.setenv(
+        "AGENT_COMMS_AGENT_MODELS",
+        ",".join((
+            "openrouter/z-ai/glm-5.3-flash",
+            "openrouter/deepseek/deepseek-v4.1-flash",
+            "response-local/fixture",
+            "response-local/second",
+            "test/model",
+        )),
+    )
+
+    async def thinking_levels(*_args, **_kwargs):
+        return ThinkingLevelsData(
+            levels=tuple(
+                member
+                for member in ThinkingLevel.members_with(ThinkingLevel)
+                if member.ordinary_choice
+            )
+        )
+
+    monkeypatch.setattr(
+        "agent_comms.pi_commands.GetAvailableThinkingLevels.discover", thinking_levels
     )
 
 

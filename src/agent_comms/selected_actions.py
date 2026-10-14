@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
@@ -29,6 +30,10 @@ class SelectedAction(ABC):
 
     def apply(self, owner: CodingToolOwner) -> None:
         return None
+
+    def prepare(self, thread: Thread) -> SelectedAction:
+        """Validate and bind action-owned resources before any native request."""
+        return self
 
     def operation_id(self) -> str:
         import secrets
@@ -102,6 +107,17 @@ class SelectedExistingFileWrite(NoSelectedTools):
 
     def with_plan(self, authority, plan, assignment, thread):
         raise IdentityConflict("Selected write has conflicting authority")
+
+    def prepare(self, thread: Thread) -> SelectedAction:
+        worktree = Path(thread.worktree).absolute()
+        normalized = self.resource.normalized(worktree)
+        try:
+            Path(normalized).relative_to(worktree)
+        except ValueError as error:
+            raise ValueError(
+                "Selected write is outside this thread's project directory"
+            ) from error
+        return SelectedExistingFileWrite(ExistingFileClaim(Path(normalized)), self.contents)
 
     def apply(self, owner: CodingToolOwner) -> None:
         from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file

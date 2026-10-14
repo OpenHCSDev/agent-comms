@@ -180,6 +180,9 @@ async def run_foreground_once(
                 comms.registry.unregister(name)
 
     def admit(resources):
+        thread = Thread(
+            name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
+        )
         if selected_existing_file_write is not None:
             # Refuse an uninitialized claim protocol or permanently invalid
             # resource before owner registration or an irreversible native send.
@@ -187,10 +190,7 @@ async def run_foreground_once(
                 marker = comms.bus.log._private_marker_unlocked()
             if not marker.claims:
                 raise PublicationActivationBlocked("selected file write needs a private claim protocol")
-            selected_existing_file_write.resource.normalized(worktree)
-        thread = Thread(
-            name, tags, str(worktree), process_identity=ProcessIdentity.capture(os.getpid())
-        )
+            selected_existing_file_write.prepare(thread)
         # The registry name reservation and registration must be ONE wire-locked
         # operation; `claim_thread` silently chooses a suffix on a collision.
         with _store_lock(comms._wire_lock_path):

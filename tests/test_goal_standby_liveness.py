@@ -29,6 +29,8 @@ from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import activate_empty_source, canonical_goal_wire
 from test_backend_native_lifecycle import native_backend as native_backend
 
+pytestmark = pytest.mark.usefixtures("fake_native_catalog")
+
 
 @pytest.fixture
 async def retained_native_acp_owner(native_backend, monkeypatch):
@@ -59,7 +61,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
         drain.cancel()
         await asyncio.gather(drain, return_exceptions=True)
         comms.registry.register(replace(comms.registry.require(child), auto_title_pending=False))
-        comms.threads.attach_session(child, str(native.session))
+        comms.threads.attach_session(comms.registry.require(child), str(native.session))
         yield native, comms, agent, child
     finally:
         await agent.shutdown()
