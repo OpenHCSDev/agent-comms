@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.threads import Thread
 
 
@@ -15,6 +15,23 @@ def prepared(root):
     for name, tags in (("alice", {"team"}), ("bob", set())):
         comms.registry.declare(Thread(name, frozenset(tags), str(root)))
     return comms
+
+
+def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
+    comms = Comms(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    notice = "Read positions were reset; reopen conversations to review them."
+    comms.bus.reads.replace(replace(comms.bus.reads.read(), notice=notice))
+    assert comms.bus.reads.take_notice(None) is None
+    assert comms.bus.reads.read().notice == notice
+
+    first = comms.views.presentation.roster(viewer)
+    assert first.read_marker_notice == notice
+    assert comms.bus.reads.read().notice is None
+
+    second = Comms(tmp_path).views.presentation.roster(viewer)
+    assert second.read_marker_notice is None
 
 
 def test_bounded_page_marks_only_shown_messages(tmp_path):

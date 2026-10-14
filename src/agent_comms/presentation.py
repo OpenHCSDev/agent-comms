@@ -332,6 +332,9 @@ class BusPresentation:
             *(view.thread.name for view in snapshot.threads),
             *(view.channel.name for view in snapshot.channels),
         }
+        snapshot = replace(
+            snapshot, read_marker_notice=self.bus.reads.take_notice(basis.notice)
+        )
         return replace(snapshot, unread_pending=frozenset(pending))
 
     @contextmanager
