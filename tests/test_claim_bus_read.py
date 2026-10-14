@@ -9,7 +9,6 @@ the owner's event loop with the wire, bus and registry locks held.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import sys
 from contextlib import contextmanager
@@ -33,8 +32,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
-from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.thread_identity import TurnId, TurnIdentity
@@ -169,10 +167,15 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert resource.read_bytes() == b"value = 2\n"
         # The strict whole-bus reader agrees with what the claim path left.
         assert dict(log.claim_projection()) == {}
-        claims = [m for m in comms.views.full_history() if m.claim_transition is not None]
+        claims = [m for m in log.full_history() if m.claim_transition is not None]
         assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
             ((str(resource),), 0), ((), 1),
         ]
+        assert all(message.type is ClaimNoticeKind for message in claims)
+        assert comms.views.dm_history_page("Alice", "sender").messages == ()
+        channel = comms.views.channel_history_page("#team").messages
+        assert [message.body for message in channel] == ["@Alice investigate"]
+        assert all(message.notification_references() for message in channel)
 
 
 def test_claim_operation_is_refused_after_its_claim_was_released() -> None:

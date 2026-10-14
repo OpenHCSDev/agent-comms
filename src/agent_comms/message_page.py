@@ -129,7 +129,7 @@ class OlderTraversal(PageTraversal):
         window = PageWindow(request.limit, request.max_bytes)
         more = opposite = False
         for message, size in records:
-            if not request.scope.includes(message):
+            if not request.includes(message):
                 continue
             if self.cursor is not None and message.seq >= self.cursor:
                 opposite = True
@@ -172,7 +172,7 @@ class NewerTraversal(PageTraversal):
         window = PageWindow(request.limit, request.max_bytes)
         opposite = False
         for message, size in records:
-            if not request.scope.includes(message):
+            if not request.includes(message):
                 continue
             if message.seq <= self.cursor:
                 opposite = True
@@ -235,6 +235,9 @@ class MessagePageRequest:
         """
         return cls(scope, NewerTraversal(after), sys.maxsize, sys.maxsize)
 
+    def includes(self, message: Message) -> bool:
+        return message.type.conversation_message and self.scope.includes(message)
+
     def collect(self, records: Iterator[tuple[Message, int]]) -> MessagePage:
         return self.traversal.collect(self, records)
 
@@ -274,7 +277,7 @@ class MessagePageRequest:
                 (message, _), = OpenedWireSnapshot.public_page_records(
                     *index.record(stream, row, max_bytes=source.size - row.offset), marker
                 )
-                if self.scope.includes(message):
+                if self.includes(message):
                     opposite = True
                     break
         with closing(self.traversal.offsets(index, targets, source.size)) as rows:
@@ -282,7 +285,7 @@ class MessagePageRequest:
                 (message, size), = OpenedWireSnapshot.public_page_records(
                     *index.record(stream, row, max_bytes=source.size - row.offset), marker
                 )
-                if not self.scope.includes(message):
+                if not self.includes(message):
                     continue
                 if window.full_with(size):
                     more = True

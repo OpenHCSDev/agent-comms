@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, ClassVar, Type
 
 from .channel_targets import _TAG_CHARS, BuiltinChannel, is_channel_target
 from .change_report import FileLine, ChangeReport
@@ -42,9 +42,17 @@ class MessageKind(DeclaredFamily, affix="Kind"):
     stored it. Publication-time checks run once, from the single commit path.
     """
 
+    conversation_message: ClassVar[bool] = True
+
     @classmethod
     def require_publishable(cls, message: Message, worktree: Path) -> None:
         """Checks a send must pass before publication; base kinds declare none."""
+
+
+class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
+    """A claim-owner state transition, not conversation content."""
+
+    conversation_message = False
 
 
 class InfoKind(MessageKind):
