@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from agent_comms.bus_page_index import BusPageRow
+from agent_comms.bus_page_index import BusPageIndex, BusPageRow
 from agent_comms.comms import Comms
 from agent_comms.messages import Message, InfoKind
+from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
 from agent_comms.wire_metadata import ArchivedAccess
 from agent_comms.wire_log import OpenedWireSnapshot
@@ -25,6 +26,13 @@ def retained_source(root, count):
     comms.bus.log.path.chmod(0o600)
     marker = comms.bus.log.read_metadata_unlocked(required=True)
     marker.last_seq = marker.admission_after_seq = count
+    marker.checkpoint_version = marker.checkpoint_seal = None
+    comms.bus.log.write_metadata_unlocked(marker)
+    (root / "private_bus_checkpoint.sqlite3").unlink()
+    install_private_bus_checkpoint(comms.bus.log)
+    with BusPageIndex(comms.bus.log.path) as index:
+        assert index.sync()
+    marker = comms.bus.log.read_metadata_unlocked(required=True)
     marker.access = ArchivedAccess()
     comms.bus.log.write_metadata_unlocked(marker)
     return comms.bus

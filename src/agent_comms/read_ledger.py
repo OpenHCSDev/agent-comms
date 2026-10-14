@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from .locked_store import LockedStore
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
 from .sealed import Sealed
+from .store_files import file_revision
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 
@@ -56,6 +57,10 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         except FileNotFoundError:
             return None
         return info.st_dev, info.st_ino
+
+    def revision(self) -> tuple | None:
+        """Identify the read state used while a display page is prepared."""
+        return file_revision(self.path)
 
     @staticmethod
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
