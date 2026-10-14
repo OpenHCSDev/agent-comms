@@ -41,7 +41,7 @@ def run_python(
     env = {
         "PATH": "",
         "PYTHONPATH": str(SRC),
-        "PI_AGENT_ID": thread,
+        "AGENT_COMMS_THREAD": thread,
         "PI_PARENT_ID": parent,
         "PI_WORKTREE": str(root),
         "AGENT_COMMS_ROOT": str(root),

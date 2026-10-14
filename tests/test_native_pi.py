@@ -624,7 +624,7 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_resources(
     worktree = tmp_path / "project"
     worktree.mkdir()
     sessions = tmp_path / "sessions"
-    monkeypatch.setenv("PI_AGENT_ID", "must-not-leak")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "must-not-leak")
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "wrong-global"))
     launch = NativePiRpcLaunch.tracked(Path(selected), worktree=worktree, session=SelectedSession(sessions))
     assert str(_trusted_package(Path(selected))) in launch.argv
@@ -633,7 +633,7 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_resources(
     assert launch.cwd == worktree
     assert launch.session.directory == sessions
     assert launch.session.path is None
-    assert "PI_AGENT_ID" not in launch.env
+    assert "AGENT_COMMS_THREAD" not in launch.env
     assert launch.env["PI_OFFLINE"] == "1"
     assert launch.env["PI_CODING_AGENT_DIR"] == str(sessions / ".native-pi-agent")
     assert stat.S_IMODE((sessions / ".native-pi-agent").stat().st_mode) == 0o700

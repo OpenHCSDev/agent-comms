@@ -228,6 +228,21 @@ async def run_foreground_once(
                 return result
             remaining = deadline - time.monotonic()
             if remaining <= 0:
+                # Linearize the timeout against one final certified source cut.
+                # A delivery appended after the prior empty scan but before the
+                # deadline decision still owns its selected execution.
+                final_cursor = await _accept_visible_deliveries(
+                    bus,
+                    wire_root_id,
+                    root / "coordination.sqlite3",
+                    lookup,
+                    cursor,
+                    owner_name=thread.name,
+                )
+                if final_cursor > cursor:
+                    cursor = final_cursor
+                    continue
+
                 def read_observers(store):
                     with store.session.read():
                         observers = CohortDeliveryReceipts.read(

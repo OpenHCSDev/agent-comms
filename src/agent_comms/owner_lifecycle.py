@@ -309,8 +309,10 @@ class OwnerLifecycle:
             if not snapshot.statuses[thread.name].active:
                 return
             if thread.pid == os.getpid():
-                caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-                if caller and self.registry.require(caller).name == thread.name:
+                if RestartEnvironment.called_by(
+                    thread.name,
+                    canonicalize=lambda caller: self.registry.require(caller).name,
+                ):
                     self._release_current_owner_unlocked(thread.name)
                 else:
                     self.registry.unregister(thread.name)
@@ -392,8 +394,7 @@ class OwnerLifecycle:
                 )
         env.update(
             {
-                "PI_AGENT_ID": thread.name,
-                "AGENT_COMMS_THREAD": thread.name,
+                RestartEnvironment.owner_key: thread.name,
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
@@ -465,11 +466,7 @@ class OwnerLifecycle:
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
-        caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-        if not caller:
-            raise RelationViolationError(
-                "Voluntary release requires PI_AGENT_ID or AGENT_COMMS_THREAD."
-            )
+        caller = RestartEnvironment.calling_thread()
         with _store_lock(self._wire_lock_path):
             canonical = self.registry.require(name).name
             if self.registry.require(caller).name != canonical:

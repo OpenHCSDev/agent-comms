@@ -30,7 +30,7 @@ async function project(socket: string, request: string) {
 }
 
 export default function (pi: ExtensionAPI) {
-  const thread = process.env.PI_AGENT_ID || process.env.AGENT_COMMS_THREAD;
+  const thread = process.env.AGENT_COMMS_THREAD;
   if (!thread || process.env.AGENT_COMMS_MANAGED !== "1") return;
   const socket = process.env.AGENT_COMMS_PROJECT_SOCKET;
   const request = process.env.AGENT_COMMS_PROJECT_REQUEST;

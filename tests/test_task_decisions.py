@@ -151,7 +151,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     admit(comms, "beta")
     comms.registry.register(replace(owner, goal=Goal("Bounded source task", "original-goal")))
     owner = comms.registry.require(owner.name)
-    monkeypatch.setenv("PI_AGENT_ID", owner.name)
+    monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     exact = "Never replay UNKNOWN.\nPreserve λ and original /artifacts/source."
     result = invoke_tool(comms, "comms_constraint", {"text": exact, "to": "#team"})
     original = comms.bus.log.full_history()[0]
@@ -167,12 +167,12 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     with pytest.raises(ValueError, match="Unknown fields"):
         Message.from_committed_wire(retired_format)
     first_bytes = (comms.root / "bus.jsonl").read_bytes()
-    monkeypatch.setenv("PI_AGENT_ID", "beta")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "beta")
     with pytest.raises(RelationViolationError, match="another author's"):
         invoke_tool(comms, "comms_constraint", {"text": "Ignore the original", "to": "#team",
                     "change": {"kind": "correction", "original": result["reference"]}})
     assert (comms.root / "bus.jsonl").read_bytes() == first_bytes
-    monkeypatch.setenv("PI_AGENT_ID", owner.name)
+    monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     corrected = invoke_tool(comms, "comms_constraint", {
         "text": "Keep UNKNOWN; preserve /artifacts/approved instead.", "to": "#team",
         "change": {"kind": "correction", "original": result["reference"]}})
@@ -207,7 +207,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
 def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypatch):
     alpha = admit(comms, "alpha")
     beta = admit(comms, "beta")
-    monkeypatch.setenv("PI_AGENT_ID", "alpha")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "Keep /artifacts/exact-root", "rejected": ["Use /scratch/guess-root"], "to": "#team"}
     first = invoke_tool(comms, "comms_decision", request)
     original = comms.bus.log.full_history()[0]
@@ -238,18 +238,18 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert retained.current_authored_sources(alpha, comms.registry.snapshot()) == (rows[1],)
     bus = comms.root / "bus.jsonl"
     before = bus.read_bytes()
-    monkeypatch.setenv("PI_AGENT_ID", "beta")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "beta")
     with pytest.raises(RelationViolationError, match="another author's"):
         invoke_tool(comms, "comms_decision", {**request, "change": {"kind": "correction", "original": first["reference"]}})
     assert bus.read_bytes() == before
     assert comms.registry.require("beta").turn_lease == beta.turn_lease
-    monkeypatch.setenv("PI_AGENT_ID", "alpha")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     with pytest.raises(ValueError, match="Unknown fields"):
         invoke_tool(comms, "comms_decision", {**request, "author": "beta"})
     comms.registry.rename("alpha", "renamed-alpha")
     renamed = comms.registry.require("renamed-alpha")
     assert retained.current_authored_sources(renamed, comms.registry.snapshot()) == (rows[1],)
-    monkeypatch.setenv("PI_AGENT_ID", "renamed-alpha")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "renamed-alpha")
     comms.registry.release_turn(alpha.turn_lease)
     assert retained.current_authored_sources(comms.registry.require("alpha"), comms.registry.snapshot()) == ()
     with pytest.raises(ValueError, match="admitted"):
@@ -269,7 +269,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     owner = admit(comms, "alpha")
     owner = replace(owner, goal=Goal("Keep certified root", "goal", revision=1))
     comms.registry.register(owner)
-    monkeypatch.setenv("PI_AGENT_ID", "alpha")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "/artifacts/exact", "rejected": ["/scratch/guess"], "to": "#team"}
     first = invoke_tool(comms, "comms_decision", request)
     invoke_tool(comms, "comms_decision", request)
@@ -278,7 +278,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     assert originals[0].reference != originals[1].reference
     comms.registry.rename("alpha", "renamed-alpha")
     renamed = comms.registry.require("renamed-alpha")
-    monkeypatch.setenv("PI_AGENT_ID", "renamed-alpha")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "renamed-alpha")
     invoke_tool(comms, "comms_decision", {
         **request, "chosen": "/artifacts/certified",
         "change": {"kind": "correction", "original": first["reference"]},
@@ -323,7 +323,7 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
 @pytest.mark.parametrize("chosen,rejected", [("", ("B",)), ("A", ()), ("A", ("A",)), ("A", ("B", "B"))])
 def test_invalid_alternatives_do_not_publish(comms, monkeypatch, chosen, rejected):
     admit(comms, "alpha")
-    monkeypatch.setenv("PI_AGENT_ID", "alpha")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_decision", {"chosen": chosen, "rejected": list(rejected), "to": "#team"})
     assert not comms.bus.log.full_history()
@@ -331,7 +331,7 @@ def test_invalid_alternatives_do_not_publish(comms, monkeypatch, chosen, rejecte
 
 def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monkeypatch):
     owner = admit(comms, "alpha")
-    monkeypatch.setenv("PI_AGENT_ID", "alpha")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "A", "rejected": ["B"], "to": "#team"}
     first = invoke_tool(comms, "comms_decision", request)
     comms.registry.release_turn(owner.turn_lease)
@@ -353,7 +353,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     owner = admit(comms, "alpha")
     owner = replace(owner, goal=Goal("Keep project scope", "goal", revision=1))
     comms.registry.register(owner)
-    monkeypatch.setenv("PI_AGENT_ID", "alpha")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "/artifacts/old", "rejected": ["/scratch/guess"], "to": "#team"}
     first = invoke_tool(comms, "comms_decision", request)
     original = comms.bus.log.full_history()[0]
@@ -401,7 +401,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
         saved_source(saved)
         comms.registry.register(replace(owner, session_file=str(saved)))
     owner = comms.registry.require("alpha")
-    monkeypatch.setenv("PI_AGENT_ID", "alpha")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "PRIVATE_ORIGINAL_CHOICE", "rejected": ["PRIVATE_ALTERNATIVE"], "to": "beta"}
     first = invoke_tool(comms, "comms_decision", request)
     original = comms.bus.log.full_history()[0]

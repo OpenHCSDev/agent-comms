@@ -39,7 +39,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
         )
     )
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep this objective"))
-    monkeypatch.setenv("PI_AGENT_ID", "worker")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     result = invoke_tool(comms, "comms_set_project", {"path": "../new project"})
     assert result["current"] == str(new) and result["changed"]
     thread = comms.registry.require("worker")
@@ -57,7 +57,9 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     with pytest.raises(ValueError, match="not a directory"):
         comms.threads.set_project("worker", str(file))
     comms.threads.rename_self("renamed")
-    comms.threads.attach_session("worker", str(old / "session.jsonl"))
+    comms.threads.attach_session(
+        comms.registry.require("worker"), str(old / "session.jsonl")
+    )
     restored = wire(comms.root).registry.require("worker")
     assert restored.worktree == str(new) and restored.previous_worktrees == (str(old),)
     assert len(comms.registry.all_threads()) == 1

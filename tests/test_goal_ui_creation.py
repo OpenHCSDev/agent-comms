@@ -63,7 +63,7 @@ async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, mon
 
 async def test_model_goal_has_authority_before_tool_return_and_ui_retry(tmp_path, monkeypatch):
     comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
-    monkeypatch.setenv("PI_AGENT_ID", session)
+    monkeypatch.setenv("AGENT_COMMS_THREAD", session)
     try:
         result = invoke_tool(comms, "comms_set_goal", {"text": "Model-authored objective"})
         goal = FieldCodec.decode(Goal, result["goal"])

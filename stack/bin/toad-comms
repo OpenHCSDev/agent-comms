@@ -50,7 +50,7 @@ fi
 # Inherited roots from the old stack must not send Toad to a stale bus.
 unset AGENT_COMMS_ROOT AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE
 unset PYTHONPATH
-unset AGENT_COMMS_THREAD AGENT_COMMS_MANAGED PI_AGENT_ID PI_PARENT_ID PI_TASK PI_WORKTREE PI_PROMPT
+unset AGENT_COMMS_THREAD AGENT_COMMS_MANAGED PI_PARENT_ID PI_TASK PI_WORKTREE PI_PROMPT
 
 thread="${1:-agent-comms-ux}"
 project="$("$python" -c 'import sys; from agent_comms.comms import wire; print(wire().registry.require(sys.argv[1]).worktree)' "$thread")"

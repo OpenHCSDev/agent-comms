@@ -177,7 +177,6 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         )
         shim.chmod(0o700)
         for key in (
-            "PI_AGENT_ID",
             "PI_PARENT_ID",
             "PI_WORKTREE",
             "AGENT_COMMS_THREAD",

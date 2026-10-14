@@ -51,7 +51,7 @@ function run(args: string[], timeout = 30_000): Record<string, unknown> {
 }
 
 export default function (pi: ExtensionAPI) {
-	const currentThread = process.env.PI_AGENT_ID || process.env.AGENT_COMMS_THREAD;
+	const currentThread = process.env.AGENT_COMMS_THREAD;
 	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
 	const task = process.env.PI_TASK || "";
 	const managed = process.env.AGENT_COMMS_MANAGED === "1";

@@ -107,7 +107,7 @@ async def run(arguments):
         AGENT_COMMS_RUNTIME_ROOT=str(Path(sys.executable).parent),
         TOAD_TEST_ATTEMPT=stage.name,
         PATH=str(Path(sys.executable).parent) + os.pathsep + os.environ.get("PATH", ""))
-    for name in ("PYTHONPATH", "PI_PROMPT", "PI_TASK", "PI_AGENT_ID", "PI_PARENT_ID", "AGENT_COMMS_STARTUP_INPUT_KEY"):
+    for name in ("PYTHONPATH", "PI_PROMPT", "PI_TASK", "PI_PARENT_ID", "AGENT_COMMS_STARTUP_INPUT_KEY"):
         environment.pop(name, None)
     os.environ.clear(); os.environ.update(environment)
     service.registry.declare(Thread("wait-native", frozenset(), str(project),

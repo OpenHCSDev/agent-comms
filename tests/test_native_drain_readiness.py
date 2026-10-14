@@ -15,7 +15,9 @@ from agent_comms.thread_identity import OwnerIdentity, ThreadIncarnation
 
 def test_native_warning_keeps_fresh_notifications_and_active_paint_available():
     owner = OwnerIdentity(ThreadIncarnation('receiver', 1.0), 2)
-    diagnostic = NativeInputDrainDiagnostic(owner, 'NativePiTerminalFailure', 'known provider failure')
+    diagnostic = NativeInputDrainDiagnostic(
+        owner, 'NativePiTerminalFailure', 'known provider failure', recorded_at=1.0
+    )
     event = Activity('receiver', ActivityState.IDLE, diagnostic=diagnostic)
     acquired = ObservedActivity.acquire(event, owner)
     ready = acquired.readiness
@@ -36,7 +38,9 @@ def test_native_warning_keeps_fresh_notifications_and_active_paint_available():
 @pytest.mark.parametrize('kind', [UnavailableDrainDiagnostic, StoppedDrainDiagnostic])
 def test_real_inbox_failures_refuse_without_owning_message_labels(kind):
     owner = OwnerIdentity(ThreadIncarnation('receiver', 1.0), 2)
-    ready = DrainReadiness.acquire(kind(owner, 'OSError', 'real read failure'), owner)
+    ready = DrainReadiness.acquire(
+        kind(owner, 'OSError', 'real read failure', recorded_at=1.0), owner
+    )
     assert isinstance(ready, UnavailableDrainReadiness)
     with pytest.raises(RelationViolationError, match='real read failure'):
         ready.require_available()
@@ -63,7 +67,9 @@ async def test_real_saved_native_failure_then_distinct_fresh_input(native_backen
         # The warning is the original observer's retained diagnostic. Its presence
         # must not alter the actual saved ACP/native entrypoint for a later input.
         comms.agents.set_drain_diagnostic(session_id, owner,
-            NativeInputDrainDiagnostic(owner, 'NativePiTerminalFailure', 'controlled HTTP 503'))
+            NativeInputDrainDiagnostic(
+                owner, 'NativePiTerminalFailure', 'controlled HTTP 503', recorded_at=1.0
+            ))
         native.provider.status = 200
         native.provider.text = 'Distinct fresh native reply.'
         fresh = await agent.prompt(session_id, [TextContentBlock(type='text', text='isolated fresh input')])
