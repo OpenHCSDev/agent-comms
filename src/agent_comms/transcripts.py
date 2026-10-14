@@ -23,6 +23,7 @@ from .messages import Message
 from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from .private_path import FileRevision
 from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .registration import Registration
 from .routing import TurnRouting
@@ -98,34 +99,6 @@ class TranscriptPage:
         }
 
 
-@dataclass(frozen=True, slots=True)
-class NativeFileRevision:
-    """The native source revision and its append-only captured-cut rule."""
-
-    inode: int
-    size: int
-    mtime_ns: int
-    ctime_ns: int
-
-    @classmethod
-    def capture(cls, path: Path) -> NativeFileRevision | None:
-        try:
-            observed = path.stat()
-        except FileNotFoundError:
-            return None
-        return cls(observed.st_ino, observed.st_size, observed.st_mtime_ns, observed.st_ctime_ns)
-
-    def holds_cut(self, current: NativeFileRevision, cut: int) -> bool:
-        return (
-            self.inode == current.inode
-            and current.size >= cut
-            and (
-                current.size > self.size
-                or (current.mtime_ns, current.ctime_ns) == (self.mtime_ns, self.ctime_ns)
-            )
-        )
-
-
 @dataclass(frozen=True)
 class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     """All canonical inputs to a bounded native page, including annotations."""
@@ -134,7 +107,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     requested_name: str
     thread: ThreadProvenance = field(metadata={"content_exclude": True})
     session_file: str
-    native_revision: NativeFileRevision | None = field(metadata={"content_exclude": True})
+    native_revision: FileRevision | None = field(metadata={"content_exclude": True})
     route_revision: TranscriptRouteRevision
     bus_revision: tuple[int, int, int, int] | None = field(metadata={"content_exclude": True})
     coordination_revision: tuple[int, int, int, int] | None = field(
@@ -434,7 +407,7 @@ class Transcripts:
                 name,
                 thread,
                 session_file,
-                NativeFileRevision.capture(Path(session_file)) if session_file else None,
+                FileRevision.capture(Path(session_file)) if session_file else None,
                 routes.revision(),
                 file_revision(log.path),
                 file_revision(root / "coordination.sqlite3"),
