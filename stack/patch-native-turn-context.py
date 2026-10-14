@@ -35,9 +35,10 @@ def extend_input_claim(session, rpc, core):
                      f'await session.{method}(command.message, command.images, command.inputId, command.contextContributions);')
     replace_once(rpc,'                    inputId: command.inputId,',
                  '                    inputId: command.inputId,\n                    contextContributions: command.contextContributions,')
-    replace_once(session,'        for (const { inputId, sessionEntryId } of tracked) {\n',
+    replace_once(session,'        for (const record of records) {\n            const { inputId, sessionEntryId } = record;\n',
         '''        const contributors=[];
-        for (const { inputId, sessionEntryId } of tracked) {
+        for (const record of records) {
+            const { inputId, sessionEntryId } = record;
             const claim=this._nativeInputClaims.get(inputId);
             if (claim) contributors.push({input_id:inputId,contributors:claim.observe(
                 llmContext.messages.find(message=>message.inputId===inputId),
@@ -307,10 +308,10 @@ def main(package):
         };''')
     source=session.read_text()
     session.write_text('import { TurnContext, NativeInputClaim, SystemLayerSegment } from "./turn-context.js";\n'+source)
-    replace_once(session, '''                llmContextDigest: digest });
+    replace_once(session, '''            this._emit(record);
         }
     }
-    get modelRuntime()''','''                llmContextDigest: digest });
+    get modelRuntime()''','''            this._emit(record);
         }
         return {request_generation:generation, context_digest:digest};
     }

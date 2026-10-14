@@ -142,13 +142,14 @@ def _fake_pi(calls: list[str]):
             session_file,
             [
                 {
-                    "schema": 1,
+                    "schema": 2,
                     "type": "context_committed",
                     "sessionId": "foreground",
                     "inputId": input_id,
                     "sessionEntryId": entry_id,
                     "requestGeneration": 1,
                     "llmContextDigest": digest,
+                    "committedAtMs": 1_791_964_800_000,
                 }
             ],
         )
@@ -167,7 +168,9 @@ def _fake_pi(calls: list[str]):
         )
         await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
         return NativeTurnResult(
-            "42", NativeContextProof(input_id, "foreground", entry_id, 1, digest, session_file)
+            "42", NativeContextProof(
+                input_id, "foreground", entry_id, 1, digest, 1_791_964_800_000, session_file
+            )
         )
 
     return run

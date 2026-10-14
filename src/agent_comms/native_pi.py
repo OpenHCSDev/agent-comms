@@ -138,6 +138,14 @@ class NativeContextRecord:
             ),
         }
     )
+    # The native writer stamps the moment this context was committed for a
+    # model request: the time the input was shown to the model.
+    committed_at_ms: int = field(
+        metadata={
+            "wire_name": "committedAtMs",
+            "sql": Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991"),
+        }
+    )
 
     @classmethod
     def from_events(cls, input_id, session_id, input_event, context_event):
@@ -168,6 +176,8 @@ class NativeContextRecord:
             raise ValueError("Native context lacks committed session identity")
         if not 0 < self.request_generation <= 2**53 - 1:
             raise ValueError("Native context generation is outside its native range")
+        if not 0 < self.committed_at_ms <= 2**53 - 1:
+            raise ValueError("Native context commit time is outside its native range")
 
     def at(self, session_file: Path) -> NativeContextProof:
         """Locate recorded facts; this does not grant acceptance or replay."""
@@ -177,6 +187,7 @@ class NativeContextRecord:
             self.session_entry_id,
             self.request_generation,
             self.llm_context_digest,
+            self.committed_at_ms,
             session_file,
         )
 
@@ -185,7 +196,7 @@ class NativeContextRecord:
 class NativeContextJournal(NativeContextRecord, TypedTable):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
-    schema: Literal[1]
+    schema: Literal[2]
     type: Literal["context_committed"]
 
     without_rowid = True
@@ -198,7 +209,8 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
             f"{table}_append": f"""CREATE TRIGGER {table}_append BEFORE INSERT ON {table}
             WHEN NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM {table}), 0)
               OR EXISTS(SELECT 1 FROM {table} WHERE request_generation=NEW.request_generation
-                        AND llm_context_digest != NEW.llm_context_digest)
+                        AND (llm_context_digest != NEW.llm_context_digest
+                             OR committed_at_ms != NEW.committed_at_ms))
               OR NEW.session_id != (SELECT session_id FROM {table} ORDER BY session_id LIMIT 1)
             BEGIN SELECT RAISE(ABORT,'native proof lineage differs'); END""",
             **{
