@@ -150,7 +150,7 @@ def _root(
         assert accepted.value.member_count == len(initial.audience.recipients)
     # The global fixture deliberately disables background candidate workers.
     # Tests that consume selected awareness own their deterministic projection.
-    assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
+    assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
     return root, root_id, comms, initial, people
 
 
