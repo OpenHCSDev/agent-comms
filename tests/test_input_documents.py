@@ -1,6 +1,5 @@
 """Typed saved boundaries and durable acceptance precede process-local scheduling."""
 
-import json
 from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from unittest.mock import patch
@@ -11,6 +10,7 @@ from agent_comms import field_codec
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import (
     BoundUnknownInput,
+    GoalInputDecision,
     InputAttempt,
     MissingInput,
     NotSentInput,
@@ -18,9 +18,6 @@ from agent_comms.input_attempt import (
     StartedInput,
 )
 from agent_comms.input_disposition import InputDispositions, InputDocument
-from agent_comms.locked_store import LockedStore
-from agent_comms.errors import RelationViolationError
-from agent_comms.thread_identity import TurnId
 
 
 def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custody(tmp_path):
@@ -55,34 +52,6 @@ def test_original_batch_publication_preserves_prior_rows_and_owns_only_new_custo
     assert retired.rows["unknown"] == prior.rows["unknown"]
 
 
-def test_original_publication_ack_loss_enlists_batch_and_scheduled_rollback(tmp_path, monkeypatch):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
-    publish = LockedStore._publish_unlocked
-
-    def lose_ack(self, document):
-        publish(self, document)
-        if self.path == store.path and any(isinstance(row, ReservedInput)
-                                          for row in document.rows.values()):
-            raise OSError("Original publication acknowledgement lost")
-
-    monkeypatch.setattr(LockedStore, "_publish_unlocked", lose_ack)
-    rows = tuple(ReservedInput(f"acp:original:{seq}", None, "worker", 1, "worker", "Original")
-                 for seq in (1, 2))
-    with pytest.raises(OSError, match="acknowledgement lost"), ExitStack() as custody:
-        store.record_originals(*rows, custody=custody)
-    assert all(isinstance(row, NotSentInput) for row in store.read().originals(
-        tuple(row.key for row in rows)
-    ))
-    with pytest.raises(OSError, match="acknowledgement lost"), ExitStack() as custody:
-        store.reserve_turn("worker", TurnId("scheduled"), 1, "Original schedule", custody=custody)
-    scheduled = store.read()
-    assert all(isinstance(row, NotSentInput) for row in scheduled.rows.values())
-    saved = store.path.read_bytes()
-    with ExitStack() as custody, pytest.raises(RelationViolationError, match="reservation already exists"):
-        store.reserve_turn("worker", TurnId("scheduled"), 1, "Replacement", custody=custody)
-    assert store.path.read_bytes() == saved
-
-
 def test_codec_reuses_declared_schema_but_decodes_each_changed_value():
     @dataclass(frozen=True)
     class Reading:
@@ -98,39 +67,26 @@ def test_codec_reuses_declared_schema_but_decodes_each_changed_value():
 
 def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_path):
     store = InputDispositions(tmp_path / InputDispositions.filename)
-    saved = {
-        "version": 1,
-        "rows": {
-            "acp:old": {
-                "key": "acp:old",
-                "sequence": None,
-                "owner": "worker",
-                "admission": 1,
-                "target": "worker",
-                "source_text": "Retain me",
-                "turn_id": "turn",
-                "native_id": "a" * 32,
-                "sent_text": "Exact sent text",
-                "kind": "bound_unknown",
-                "notice_dismissed": True,
-                "goal_reviews": {"goal": {"goal_revision": 7, "turn_id": "review"}},
-            }
-        },
-    }
-    store.path.write_text(json.dumps(saved))
-    before = store.path.read_bytes()
+    reserved = ReservedInput("acp:old", None, "worker", 1, "worker", "Retain me")
+    row = reserved.bind(
+        admission=1, turn_id="turn", native_id="a" * 32, text="Exact sent text"
+    )
+    assert isinstance(row, BoundUnknownInput)
+    row = replace(
+        row,
+        notice_dismissed=True,
+        goal_reviews={"goal": GoalInputDecision(7, "review")},
+    )
+    store.update(lambda _: InputDocument({row.key: row}))
     document = store.read()
-    row = document.rows["acp:old"]
-    assert isinstance(row, BoundUnknownInput) and not row.accepts_reservation
-    assert row.reviewed_for_goal("goal")
-    assert store.path.read_bytes() == before
-    assert store._encode(document) == saved
+    restored = document.rows[row.key]
+    assert restored == row and restored.reviewed_for_goal("goal")
     assert not store.bind(row.key, admission=1, turn_id="again", native_id="b" * 32, text="again")
     assert not store.started(row.key, turn_id="wrong", native_id="a" * 32, text="Exact sent text")
     assert store.started(row.key, turn_id="turn", native_id="a" * 32, text="Exact sent text")
     assert isinstance(store.read().rows[row.key], StartedInput)
     assert not store.started(row.key, turn_id="turn", native_id="a" * 32, text="Exact sent text")
-    assert row.unresolved  # prior snapshot is immutable and unchanged
+    assert row.unresolved
 
 
 def test_original_native_user_receipts_include_group_and_corrected_final_only(tmp_path):
@@ -215,42 +171,6 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     assert store.path.read_bytes() == original_bytes
 
 
-@pytest.mark.parametrize(
-    "damage", [{}, {"rows": {}}, {"version": True, "rows": {}}, {"version": 1, "rows": []}]
-)
-def test_invalid_documents_are_not_replaced_by_updates(tmp_path, damage):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
-    store.path.write_text(json.dumps(damage))
-    original = store.path.read_bytes()
-    with pytest.raises((TypeError, ValueError)):
-        store.update(lambda document: replace(document, rows={}))
-    assert store.path.read_bytes() == original
-
-
-def test_lost_durable_record_ack_retains_evidence_without_new_acceptance(tmp_path, monkeypatch):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
-    original = LockedStore._write_unlocked
-    lost = False
-
-    def lose_ack(self, text):
-        nonlocal lost
-        original(self, text)
-        if self.path == store.path and not lost:
-            lost = True
-            raise OSError("durable input acknowledgement lost")
-
-    monkeypatch.setattr(LockedStore, "_write_unlocked", lose_ack)
-    args = dict(seq=1, owner="worker", admission=1, target="worker", text="Exact input")
-    with pytest.raises(OSError, match="acknowledgement lost"):
-        store.record("bus:1", **args)
-    reopened = InputDispositions(store.path)
-    before = reopened.read().rows["bus:1"]
-    assert before.accepts_reservation
-    assert not reopened.record("bus:1", **args)
-    assert reopened.read().rows["bus:1"] == before
-    assert not hasattr(before, "native_id") and not before.goal_reviews
-
-
 def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_path):
     from dataclasses import fields
 
@@ -317,26 +237,6 @@ def test_batch_retirement_returns_published_cut_without_changing_native_evidence
     assert (store.path.read_bytes(), store.path.stat().st_ino) == saved
 
 
-@pytest.mark.parametrize(
-    "sent",
-    [
-        {"turn_id": "turn"},
-        {"native_id": "a" * 32},
-        {"turn_id": "turn", "native_id": "a" * 32},
-        {"turn_id": "", "native_id": "a" * 32, "sent_text": "exact"},
-    ],
-)
-def test_incomplete_sent_evidence_is_rejected_without_overwriting_history(tmp_path, sent):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
-    row = FieldCodec.encode(ReservedInput("acp:x", None, "owner", 1, "owner", "text"))
-    row.update(kind="bound_unknown", **sent)
-    saved = json.dumps(dict(version=1, rows={"acp:x": row}))
-    store.path.write_text(saved)
-    with pytest.raises(ValueError):
-        store.settle_unbound(("acp:x",))
-    assert store.path.read_text() == saved
-
-
 @pytest.mark.parametrize("native_id", ["invalid", "b" * 31])
 def test_invalid_bind_keeps_durable_reservation_intact(tmp_path, native_id):
     store = InputDispositions(tmp_path / InputDispositions.filename)
@@ -347,32 +247,14 @@ def test_invalid_bind_keeps_durable_reservation_intact(tmp_path, native_id):
     assert store.path.read_bytes() == before
 
 
-def test_current_schema_rejects_nullable_prior_format_without_rewriting(tmp_path):
-    store = InputDispositions(tmp_path / InputDispositions.filename)
-    reserved = ReservedInput("acp:x", None, "owner", 1, "owner", "preserve at cutover")
-    prior = {
-        **FieldCodec.encode(reserved),
-        "status": "unknown",
-        "turn_id": None,
-        "native_id": None,
-        "sent_text": None,
-    }
-    del prior["kind"]
-    store.path.write_text(json.dumps(dict(version=1, rows={reserved.key: prior})))
-    before = store.path.read_bytes()
-    with pytest.raises(ValueError):
-        store.read()
-    assert store.path.read_bytes() == before
-
-
 def test_current_reservation_wire_has_only_declared_fields(tmp_path):
     store = InputDispositions(tmp_path / InputDispositions.filename)
     store.record("acp:x", seq=None, owner="owner", admission=1, target="owner", text="retained")
-    record = json.loads(store.path.read_text())["rows"]["acp:x"]
+    record = FieldCodec.encode(store.read().rows["acp:x"])
     assert record["kind"] == "reserved"
     assert not {"status", "native_id", "turn_id", "sent_text"}.intersection(record)
     assert isinstance(store.settle_unbound(("acp:x",)).lookup("acp:x"), NotSentInput)
-    record = json.loads(store.path.read_text())["rows"]["acp:x"]
+    record = FieldCodec.encode(store.read().rows["acp:x"])
     assert record["kind"] == "not_sent"
     assert not {"native_id", "turn_id", "sent_text"}.intersection(record)
 

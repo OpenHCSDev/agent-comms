@@ -314,6 +314,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.input_origin import WireInputOrigin
+    from agent_comms.turn_lease import TurnReplyInput
 
     owner = old.registry.require("agent")
     old.registry.register(
@@ -347,6 +348,10 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(
     assert inputs.started(
         key, turn_id=lease.turn_id, native_id=native_id, text=source_text
     )
+    assert old.registry.record_turn_reply_inputs(
+        lease,
+        (TurnReplyInput(original.reference, original.exact_reply_target),),
+    ) is not None
     monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     response = old.messaging.send_message("agent", "sender", "recorded reply")
 

@@ -22,6 +22,7 @@ from .ordinary_admission_rules import (
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
 from .thread_identity import TurnId
+from .turn_lease import TurnReplyInput
 from .turn_input_source import (
     OriginalTurnInput,
     RoutedFollowingInput,
@@ -163,9 +164,19 @@ class OwnedSendAdmission:
 
     def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
         source = self.source(public_id)
-        return source.valid_keys(sent_text) and all(
+        started = source.valid_keys(sent_text) and all(
             self.inputs.dispositions.started(
                 key, turn_id=self.turn.value, native_id=native_id, text=sent_text
             )
             for key in source.keys
         )
+        if not started:
+            return False
+        lease = self.comms.registry.record_turn_reply_inputs(
+            self.thread.require_turn_lease(),
+            tuple(
+                TurnReplyInput(origin.reference, origin.exact_reply_target)
+                for origin in source.origins
+            ),
+        )
+        return lease is not None

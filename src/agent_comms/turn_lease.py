@@ -8,8 +8,17 @@ from dataclasses import dataclass, field, replace
 
 from .routing import TurnRouting
 from .field_codec import FieldCodec
+from .message_reference import MessageReference
 from .thread_identity import TurnIdentity
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
+
+
+@dataclass(frozen=True, slots=True)
+class TurnReplyInput:
+    """One started delivery this turn may answer without another store read."""
+
+    reference: MessageReference
+    target: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +30,7 @@ class ActiveTurn:
     admission_generation: int | None = None
     turn_generation: int | None = None
     phase: TurnPhase = field(default_factory=PreparingPhase)
+    reply_inputs: tuple[TurnReplyInput, ...] = ()
 
     def owned_by(self, pid: int, admission_generation: int) -> bool:
         """This turn's local process and registry admission witness agree."""
@@ -129,8 +139,11 @@ class TurnFence:
         )
 
 
+@dataclass(frozen=True, slots=True)
 class TurnLeaseFence(TurnFence):
     """Exact local begin-turn lease; a reused turn ID is not this lease."""
+
+    reply_inputs: tuple[TurnReplyInput, ...] = field(default=(), compare=False)
 
 
 class FinishedTurnFence(TurnFence):

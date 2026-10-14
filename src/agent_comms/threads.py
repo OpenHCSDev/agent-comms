@@ -419,6 +419,7 @@ class Thread(ThreadProvenance):
             identity=identity,
             turn_id=self.active_turn.id,
             admission_generation=self.active_turn.admission_generation,
+            reply_inputs=self.active_turn.reply_inputs,
         )
 
     def require_turn_lease(self) -> TurnLeaseFence:

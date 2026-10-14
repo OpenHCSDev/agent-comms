@@ -27,7 +27,7 @@ from .thread_status import (
 )
 from .threads import Thread
 from .registry_provenance import RegistryNames, RegistryProvenance
-from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnState
+from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnReplyInput, TurnState
 from .turn_phase import TurnPhase
 
 if TYPE_CHECKING:
@@ -484,6 +484,23 @@ class RegistryDocument(RegistryPresence):
         for state in effects:
             self.threads[name] = replace(current, active_turn=state.active)
         return effects
+
+    def record_turn_reply_inputs(
+        self, lease: TurnLeaseFence, inputs: tuple[TurnReplyInput, ...]
+    ) -> TurnLeaseFence | None:
+        name = self.canonical_name(lease.identity.incarnation.name)
+        current = self.threads.get(name)
+        if current is None or current.turn_lease != lease.renamed(name):
+            return None
+        assert current.active_turn is not None
+        self.threads[name] = replace(
+            current,
+            active_turn=replace(
+                current.active_turn,
+                reply_inputs=(*current.active_turn.reply_inputs, *inputs),
+            ),
+        )
+        return self.threads[name].require_turn_lease()
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         return self._turn_effects(lease, lambda state: state.phase_effects(phase))

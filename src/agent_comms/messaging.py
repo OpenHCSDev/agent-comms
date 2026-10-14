@@ -102,26 +102,20 @@ class Messaging:
         lease = owner.turn_lease
         if lease is None:
             return None
-        from .input_disposition import InputDispositions
-
         snapshot = self.registry.snapshot()
         if not RestartEnvironment.called_by(
             owner.name, canonicalize=snapshot.canonical_name
         ):
             return None
-        inputs = InputDispositions(self.root / InputDispositions.filename).read()
-        with self.bus.log.certified_read() as source:
-            references = inputs.active_reply_references(
-                lease, source.marker.root_id, snapshot
-            )
-            originals = tuple(source.references(references))
         canonical_target = target if is_channel_target(target) else snapshot.canonical_name(target)
-        matching = tuple(
-            original.message.reference
-            for original in originals
-            if original.message.exact_reply_target == canonical_target
+        return next(
+            (
+                started.reference
+                for started in reversed(lease.reply_inputs)
+                if started.target == canonical_target
+            ),
+            None,
         )
-        return matching[-1] if matching else None
 
     def initialize_private_initial_protocol(self) -> str:
         """Initialize the private protocol on a fresh owner-only root."""

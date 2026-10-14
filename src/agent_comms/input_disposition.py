@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from contextlib import ExitStack
+import json
+import sqlite3
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .input_attempt import (
     GoalInputDecision,
@@ -17,7 +21,6 @@ from .input_attempt import (
     StartedInput,
     StoredInput,
 )
-from .locked_store import LockedStore
 from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
@@ -105,13 +108,6 @@ class InputDocument:
             bound for row in self.rows.values() if (bound := row.bound_bus_input()) is not None
         )
 
-    def active_reply_references(self, lease, root_id, snapshot) -> tuple[MessageReference, ...]:
-        return tuple(
-            reference
-            for row in sorted(self.rows.values(), key=lambda item: item.order)
-            if (reference := row.active_reply_reference(lease, root_id, snapshot)) is not None
-        )
-
     def unbound_wire_inputs(self, root_id: str) -> dict[MessageReference, StoredInput]:
         """Original bus deliveries with positive evidence that Pi never received them."""
         return {
@@ -148,16 +144,109 @@ class InputDocument:
 
 
 @dataclass(frozen=True, slots=True)
-class InputDispositions(LockedStore[InputDocument]):
-    filename: ClassVar[str] = "input_dispositions.json"
-    json_sort_keys = True
+class InputDispositions:
+    """Key-addressed durable input rows; decoding never holds the SQLite lock."""
 
-    @property
-    def record_type(self) -> type[InputDocument]:
-        return InputDocument
+    path: Path
+    filename: ClassVar[str] = "input_dispositions.sqlite3"
 
-    def empty(self) -> InputDocument:
-        return InputDocument()
+    def __post_init__(self) -> None:
+        with self._connect() as db:
+            db.execute("PRAGMA journal_mode=WAL")
+            db.execute(
+                """CREATE TABLE IF NOT EXISTS input_dispositions (
+                    key TEXT PRIMARY KEY,
+                    owner TEXT NOT NULL,
+                    admission INTEGER NOT NULL,
+                    turn_id TEXT,
+                    unresolved INTEGER NOT NULL,
+                    sequence INTEGER,
+                    payload TEXT NOT NULL
+                )"""
+            )
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS input_dispositions_lease "
+                "ON input_dispositions(owner, admission, turn_id)"
+            )
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS input_dispositions_pending "
+                "ON input_dispositions(owner, unresolved, sequence)"
+            )
+
+    def _connect(self) -> sqlite3.Connection:
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        return sqlite3.connect(self.path, timeout=5)
+
+    @staticmethod
+    def _payload(row: StoredInput) -> str:
+        return json.dumps(FieldCodec.encode(row), sort_keys=True, separators=(",", ":"))
+
+    @staticmethod
+    def _decode(payload: str) -> StoredInput:
+        return FieldCodec.decode(StoredInput, json.loads(payload))
+
+    @staticmethod
+    def _columns(row: StoredInput) -> tuple[object, ...]:
+        return (
+            row.key,
+            row.owner,
+            row.admission,
+            getattr(row, "turn_id", None),
+            int(row.unresolved),
+            row.sequence,
+            InputDispositions._payload(row),
+        )
+
+    def read(self) -> InputDocument:
+        with self._connect() as db:
+            payloads = tuple(db.execute(
+                "SELECT payload FROM input_dispositions "
+                "ORDER BY sequence IS NULL, sequence, rowid"
+            ))
+        rows = tuple(self._decode(payload) for payload, in payloads)
+        return InputDocument({row.key: row for row in rows})
+
+    @contextmanager
+    def reading(self):
+        yield self.read()
+
+    def update(self, change) -> InputDocument:
+        original = self.read()
+        changed = change(original)
+        if changed is original or changed == original:
+            return original
+        before, after = original.rows, changed.rows
+        removed = before.keys() - after.keys()
+        replaced = {key for key in after if key not in before or after[key] != before[key]}
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            for key in removed:
+                cursor = db.execute(
+                    "DELETE FROM input_dispositions WHERE key = ? AND payload = ?",
+                    (key, self._payload(before[key])),
+                )
+                if cursor.rowcount != 1:
+                    raise RelationViolationError("Input disposition changed during update")
+            for key in replaced:
+                row = after[key]
+                columns = self._columns(row)
+                if key in before:
+                    cursor = db.execute(
+                        """UPDATE input_dispositions
+                           SET owner=?, admission=?, turn_id=?, unresolved=?, sequence=?, payload=?
+                           WHERE key=? AND payload=?""",
+                        (*columns[1:], key, self._payload(before[key])),
+                    )
+                    if cursor.rowcount != 1:
+                        raise RelationViolationError("Input disposition changed during update")
+                else:
+                    db.execute(
+                        "INSERT INTO input_dispositions "
+                        "(key, owner, admission, turn_id, unresolved, sequence, payload) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        columns,
+                    )
+        return changed
 
     @staticmethod
     def bus_key(message: Message, owner: Thread) -> str:

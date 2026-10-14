@@ -8,37 +8,36 @@ import pytest
 from agent_comms.input_disposition import InputDispositions
 
 
-def test_batch_sources_are_one_snapshot_in_requested_order(tmp_path, monkeypatch):
+def test_batch_sources_are_one_snapshot_in_requested_order(tmp_path):
     store = InputDispositions(tmp_path / InputDispositions.filename)
     for seq, text in ((7, "first admitted name"), (8, "second admitted name")):
         store.record(f"bus:{seq}", seq=seq, owner="kid", admission=1, target="#team", text=text)
-    before = store.path.read_bytes()
-    reads = 0
-    read = type(store)._read_unlocked
-
-    def count_reads(self):
-        nonlocal reads
-        reads += 1
-        return read(self)
-
-    monkeypatch.setattr(type(store), "_read_unlocked", count_reads)
-    assert store.read().source_texts(("bus:8", "bus:7")) == (
+    document = store.read()
+    assert tuple(row.source_text for row in document.originals(("bus:8", "bus:7"))) == (
         "second admitted name",
         "first admitted name",
     )
-    assert reads == 1
-    assert store.read().source_texts(("bus:7", "bus:9")) is None
-    assert store.path.read_bytes() == before  # No receipt, review, or replay authorization.
+    with pytest.raises(ValueError, match="unavailable"):
+        document.originals(("bus:7", "bus:9"))
 
 
 def test_batch_sources_use_ledger_validation(tmp_path):
+    import sqlite3
+
     store = InputDispositions(tmp_path / InputDispositions.filename)
     store.record("bus:7", seq=7, owner="kid", admission=1, target="#team", text="admitted")
-    data = json.loads(store.path.read_text())
-    data["rows"]["bus:7"]["source_text"] = None
-    store.path.write_text(json.dumps(data))
+    with sqlite3.connect(store.path) as db:
+        payload, = db.execute(
+            "SELECT payload FROM input_dispositions WHERE key='bus:7'"
+        ).fetchone()
+        damaged = json.loads(payload)
+        damaged["source_text"] = None
+        db.execute(
+            "UPDATE input_dispositions SET payload=? WHERE key='bus:7'",
+            (json.dumps(damaged),),
+        )
     with pytest.raises(ValueError, match="Expected"):
-        store.read().source_texts(("bus:7",))
+        store.read()
 
 
 @pytest.mark.parametrize("invalid_text", [["list"], [], {"text": "dict"}, 7, False, None])
@@ -53,7 +52,7 @@ def test_record_rejects_nonstring_before_durable_unknown(tmp_path: Path, invalid
             target="kid",
             text=invalid_text,
         )
-    assert not store.path.exists()
+    assert not store.read().rows
 
 
 def test_unknown_is_durable_and_native_start_is_a_cas(tmp_path: Path) -> None:

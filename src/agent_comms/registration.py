@@ -18,7 +18,7 @@ from .store_files import _store_lock
 from .thread_identity import GenerationCounter, TurnId
 from .thread_status import RunningThreadStatus, ThreadStatus
 from .threads import Thread
-from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
+from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnReplyInput, TurnState
 from .turn_phase import TurnPhase
 
 _RUNNING_STATUS = RunningThreadStatus()
@@ -201,6 +201,14 @@ class Registration:
             result = edit.document.release_turn(lease)
             edit.commit()
             return result
+
+    def record_turn_reply_inputs(
+        self, lease: TurnLeaseFence, inputs: tuple[TurnReplyInput, ...]
+    ) -> TurnLeaseFence | None:
+        with self.store.editing() as edit:
+            current = edit.document.record_turn_reply_inputs(lease, inputs)
+            edit.commit()
+            return current
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with self.store.editing() as edit:
