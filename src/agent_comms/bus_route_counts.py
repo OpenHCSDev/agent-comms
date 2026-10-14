@@ -180,6 +180,12 @@ class BusRouteCounts:
         """Create the writer-owned WAL store after its publication lock releases."""
         self._initialize()
 
+    def through(self) -> int:
+        """Read the committed append position without taking the writer lock."""
+        with self:
+            rows = RouteSourceRow.select(self.connection)
+            return rows[0].revision.size if rows and rows[0].revision else 0
+
     def _recorded(self) -> RouteSourceRow | None:
         with self:
             rows = RouteSourceRow.select(self.connection)
