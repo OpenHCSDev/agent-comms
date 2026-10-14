@@ -151,8 +151,8 @@ class BusRouteCounts:
             connection.execute("PRAGMA synchronous=FULL")
             connection.execute("BEGIN IMMEDIATE")
             if not connection.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
-                (RouteSourceRow.declared_name,),
+                f"SELECT 1 FROM sqlite_master WHERE type='table' "
+                f"AND name='{RouteSourceRow.declared_name}'"
             ).fetchone():
                 for owner in TypedTable.members_with(RouteTable):
                     owner.create(connection)
