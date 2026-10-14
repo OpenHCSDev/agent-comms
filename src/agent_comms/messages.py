@@ -164,8 +164,8 @@ class Message:
         return MessageReference(self.seq, self.message_id)
 
     def notification_references(self) -> tuple[MessageReference, ...]:
-        """This live original may read current handling through its exact source."""
-        return (self.reference,)
+        """Only an admitted delivery has recipient-handling outcomes to project."""
+        return () if self.notice else (self.reference,)
 
     def require_decision(self) -> Decision:
         return self.task.require_decision()

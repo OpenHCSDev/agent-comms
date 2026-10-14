@@ -27,6 +27,11 @@ def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F81
     wrong = replace(message, body='Different source bytes')
     with pytest.raises(RelationViolationError, match="original source"):
         comms.views.message_notifications((wrong,))
+    notice = replace(message, notice=True)
+    assert notice.notification_references() == ()
+    assert comms.views.message_notifications((notice,)) == {
+        (notice.seq, notice.message_id): ()
+    }
 
 
 def test_legacy_bus_has_no_fabricated_receipts(tmp_path):  # noqa: F811

@@ -413,6 +413,14 @@ class OptionalAwarenessProjection:
                 parameters=claims,
             )
         }
+        proof_domains = (
+            (set(receipts), set(sequences)),
+            (set(deliveries), set(sequences)),
+            (set(members), set(claims)),
+            (set(generations), set(claims)),
+        )
+        if any(actual != expected for actual, expected in proof_domains):
+            raise ProjectionUnavailableError("selected decision proof is incomplete")
         return [
             _SelectedDecision.capture(
                 row,
