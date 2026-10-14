@@ -17,7 +17,7 @@ from agent_comms.threads import Thread
 from agent_comms.wire_watch import WatchSource, WireChangeWatch, open_wire_watcher
 
 
-def test_tick_revision_paths_are_the_watched_sources(tmp_path, monkeypatch):
+def test_tick_revision_paths_watch_final_bus_publication(tmp_path, monkeypatch):
     config = tmp_path / "native-config"
     config.mkdir()
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
@@ -26,8 +26,7 @@ def test_tick_revision_paths_are_the_watched_sources(tmp_path, monkeypatch):
     declared = {
         *paths.registry,
         *paths.coordination,
-        *paths.bus,
-        paths.checkpoint,
+        *paths.bus[1:],
         *paths.other,
     }
     watched = {
@@ -36,6 +35,7 @@ def test_tick_revision_paths_are_the_watched_sources(tmp_path, monkeypatch):
         for name in source.names
     }
     assert watched == declared
+    assert paths.bus[0] not in watched and paths.checkpoint not in watched
 
 
 @pytest.mark.asyncio
@@ -119,6 +119,15 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
+    comms.registry.declare(
+        Thread(
+            "sender",
+            frozenset(),
+            str(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        )
+    )
+    comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(comms, runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     calls = 0
@@ -130,7 +139,7 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
 
     async def require_calls(expected):
         async with asyncio.timeout(1):
-            while calls != expected:
+            while calls < expected:
                 await asyncio.sleep(0.01)
 
     async def noop(_session_id=None):
@@ -161,10 +170,12 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
         await require_calls(3)
         with (tmp_path / "private_bus_checkpoint.sqlite3").open("ab"):
             pass
+        with (tmp_path / "bus.jsonl").open("ab"):
+            pass
+        await asyncio.sleep(0.1)
+        assert calls == 3  # Intermediate bus files publish through the marker.
+        comms.messaging.send_message("sender", "owner", "wake on final marker")
         await require_calls(4)
-        with (tmp_path / "bus.jsonl").open("ab") as output:
-            output.write(b"{}\n")
-        await require_calls(5)
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)

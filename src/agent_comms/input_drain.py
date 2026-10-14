@@ -113,7 +113,10 @@ class TickRevisionPaths:
 
     @property
     def watch_sources(self) -> tuple[WatchSource, ...]:
-        paths = (*self.registry, *self.coordination, *self.bus, self.checkpoint, *self.other)
+        # The marker is the final durable publication for bus bytes and their
+        # checkpoint. Watching the intermediate files wakes readers before the
+        # append is complete and repeats the same observation several times.
+        paths = (*self.registry, *self.coordination, *self.bus[1:], *self.other)
         return tuple(
             WatchSource.file(path, modified=path.name.endswith((".sqlite3", ".sqlite3-wal")))
             for path in paths
