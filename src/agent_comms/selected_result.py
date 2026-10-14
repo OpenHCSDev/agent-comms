@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 
 from .assignment_states import AssignmentState
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
-from .coordination_tables.publications import PublicationReceipt
+from .coordination_tables.publications import PublicationReceipts
 from .diagnostics import record_terminal_failure
 from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession
@@ -21,14 +21,14 @@ class CoordinatedTurn:
     assignment_ids: tuple[str, ...] = field(metadata={"wire_name": "claim_ids"})
     disposition: type[AssignmentState]
     input_id: str
-    publications: tuple[PublicationReceipt, ...]
+    publications: tuple[PublicationReceipts, ...]
     cursor_status: str = "unavailable"
     fresh_session: FreshPrivateSession | None = None
 
     @classmethod
     async def capture(
         cls, participant, session, input_id, disposition: type[AssignmentState],
-        publications: tuple[PublicationReceipt, ...] = (),
+        publications: tuple[PublicationReceipts, ...] = (),
     ):
         return cls(
             participant.batch.assignment_ids,

@@ -60,7 +60,7 @@ class SentMessageOutcome:
     recipient_identity: FrozenRecipient
     state: str
     detail: str
-    reply_reference: MessageReference | None = None
+    answer: MessageReference | None = None
 
     @property
     def recipient(self) -> str:
@@ -79,7 +79,7 @@ class MessageNotification:
     busy: bool = False
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
-    reply_reference: MessageReference | None = None
+    answer: MessageReference | None = None
     read_at_ms: int | None = None
     answered_at_ms: int | None = None
     changed: bool = False
@@ -96,7 +96,7 @@ class MessageNotification:
             self.recipient_identity,
             self.state,
             self.detail,
-            self.reply_reference,
+            self.answer,
         )
 
     @staticmethod

@@ -44,7 +44,6 @@ from agent_comms.coordination_tables.executions import (
 )
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    PublicationReceipt,
     canonical_publication_key,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
@@ -57,6 +56,7 @@ from agent_comms.execution_states import (
     PendingExecution,
 )
 from agent_comms.field_codec import FieldCodec
+from agent_comms.typed_table import JsonStorage
 from agent_comms.messages import InfoKind, Message, MessageKind
 from agent_comms.obligation_states import (
     PendingResponse,
@@ -453,17 +453,11 @@ def test_wire_claim_obligation_and_publication_contract():
     )
     intent = PublicationIntents(
         execution_id="execution-1",
-        sender="worker",
         exact_target="requester",
-        message_type=InfoKind,
-        notice=False,
-        timestamp=1.0,
-        payload=body,
-        payload_digest=hashlib.sha256(body.encode()).hexdigest(),
+        message=message,
         publication_key=canonical_publication_key("execution-1", "requester"),
         expected_message_id=message.message_id,
     )
-    assert intent.expected_message.message_id == message.message_id
     with pytest.raises(IntegrityViolationError):
         replace(intent, expected_message_id="fabricated")
 
@@ -1440,74 +1434,48 @@ def test_populated_durable_authorities_reject_delete_and_survive_reopen(db):
             assert reopened._connection.execute(f"SELECT count(*) FROM {table}").fetchone()[0] == 1
 
 
-def sql_intent_envelope(*, payload="hello", digest=None, expected_id=None):
-    valid = Message(
+def sql_intent_envelope(*, body="hello", target="requester", expected_id=None, message_json=None):
+    message = Message(
         sender="worker",
         target="requester",
-        body="hello",
+        body=body,
         type=InfoKind,
         timestamp=1.0,
         notice=False,
     )
     return (
         "e",
-        "worker",
-        "requester",
-        "info",
-        0,
-        1.0,
-        payload,
-        (
-            digest
-            if digest is not None
-            else hashlib.sha256(
-                payload.encode("utf-8") if isinstance(payload, str) else payload
-            ).hexdigest()
-        ),
+        target,
+        message_json if message_json is not None else JsonStorage.to_sql(message),
         canonical_publication_key("e", "requester"),
-        expected_id if expected_id is not None else valid.message_id,
+        expected_id if expected_id is not None else message.message_id,
     )
+
+
+INSERT_INTENT = "INSERT INTO publication_intents VALUES (?,?,?,?,?)"
 
 
 @pytest.mark.parametrize(
     "mutation",
-    [
-        "blob_payload",
-        "false_digest",
-        "uppercase_digest",
-        "wrong_digest_value",
-        "invented_message_id",
-        "byte_cap",
-        "infinite_timestamp",
-        "invalid_target",
-    ],
+    ["invented_message_id", "byte_cap", "infinite_timestamp", "route_not_message_target", "not_json"],
 )
 def test_sql_publication_envelope_rejects_invalid_commits_and_reopens(db, mutation):
     c, path = db
     sql_wire_execution(c)
-    envelope = sql_intent_envelope()
-    if mutation == "blob_payload":
-        envelope = sql_intent_envelope(payload=b"hello")
-    elif mutation == "false_digest":
-        envelope = sql_intent_envelope(digest="not-sha")
-    elif mutation == "uppercase_digest":
-        envelope = sql_intent_envelope(digest=envelope[7].upper())
-    elif mutation == "wrong_digest_value":
-        envelope = sql_intent_envelope(digest="0" * 64)
-    elif mutation == "invented_message_id":
-        envelope = sql_intent_envelope(expected_id="not-message-id")
-    elif mutation == "byte_cap":
-        envelope = sql_intent_envelope(payload="界" * 40001)
-    elif mutation == "infinite_timestamp":
-        envelope = (*envelope[:5], float("inf"), *envelope[6:])
-    else:
-        envelope = (envelope[0], "requester", *envelope[2:])  # Message forbids self-DM.
-    statement = "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)"
+    envelope = {
+        "invented_message_id": lambda: sql_intent_envelope(expected_id="not-message-id"),
+        "byte_cap": lambda: sql_intent_envelope(body="界" * 40001),
+        "infinite_timestamp": lambda: sql_intent_envelope(
+            message_json=sql_intent_envelope()[2].replace('"ts":1.0', '"ts":1e999')
+        ),
+        "route_not_message_target": lambda: sql_intent_envelope(target="other"),
+        "not_json": lambda: sql_intent_envelope(message_json="{"),
+    }[mutation]()
     with pytest.raises(sqlite3.IntegrityError):
-        c.execute(statement, envelope)
+        c.execute(INSERT_INTENT, envelope)
     c.execute("BEGIN IMMEDIATE")
     with pytest.raises(sqlite3.IntegrityError):
-        c.execute(statement, envelope)
+        c.execute(INSERT_INTENT, envelope)
     c.execute("ROLLBACK")
     with CoordinationStore(path) as reopened:
         assert (
@@ -1519,108 +1487,17 @@ def test_sql_publication_envelope_rejects_invalid_commits_and_reopens(db, mutati
         )
 
 
-def test_sql_invalid_utf8_cast_as_text_fails_closed(db):
-    c, path = db
-    sql_wire_execution(c)
-    statement = (
-        "INSERT INTO publication_intents VALUES ('e','worker','requester',"
-        "'info',0,1.0,CAST(x'FF' AS TEXT),?,"
-        "'publication:v1:e:requester',?)"
-    )
-    envelope = sql_intent_envelope()
-    with pytest.raises((sqlite3.IntegrityError, sqlite3.OperationalError)):
-        c.execute(statement, (envelope[7], envelope[9]))
-    with CoordinationStore(path) as reopened:
-        assert (
-            reopened._connection.execute("SELECT count(*) FROM publication_intents").fetchone()[0]
-            == 0
-        )
-
-
-@pytest.mark.parametrize("payload,text", [(123, "123"), (1.25, "1.25"), (True, "1")])
-def test_strict_any_publication_rejects_nontext_even_with_matching_identity(db, payload, text):
-    c, path = db
-    sql_wire_execution(c)
-    message = Message(
-        sender="worker",
-        target="requester",
-        body=text,
-        type=InfoKind,
-        timestamp=1.0,
-        notice=False,
-    )
-    envelope = (
-        "e",
-        "worker",
-        "requester",
-        "info",
-        0,
-        1.0,
-        payload,
-        hashlib.sha256(text.encode()).hexdigest(),
-        canonical_publication_key("e", "requester"),
-        message.message_id,
-    )
-    with pytest.raises(sqlite3.IntegrityError):
-        c.execute("INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)", envelope)
-    with CoordinationStore(path) as reopened:
-        assert (
-            reopened._connection.execute("SELECT count(*) FROM publication_intents").fetchone()[0]
-            == 0
-        )
-
-
 @pytest.mark.parametrize(
-    "field,value,text",
-    [
-        ("execution_id", 123, "123"),
-        ("sender", 123, "123"),
-        ("sender", 1.25, "1.25"),
-        ("sender", True, "1"),
-        ("exact_target", 123, "123"),
-        ("exact_target", True, "1"),
-        ("message_type", 123, "info"),
-        ("payload_digest", 123, "123"),
-        ("publication_key", 123, "123"),
-    ],
+    "position,value",
+    [(0, 123), (1, 123), (1, True), (3, 123), (4, 123)],
 )
-def test_publication_text_columns_reject_numeric_affinity_mirrors(db, field, value, text):
+def test_publication_text_columns_reject_numeric_affinity(db, position, value):
     c, path = db
-    name = text if field == "execution_id" else "e"
-    target = text if field == "exact_target" else "requester"
-    sender = text if field == "sender" else "worker"
-    sql_wire_execution(c, name=name, target=target)
-    message = Message(
-        sender=sender,
-        target=target,
-        body="hello",
-        type=InfoKind,
-        timestamp=1.0,
-        notice=False,
-    )
-    envelope = [
-        name,
-        sender,
-        target,
-        "info",
-        0,
-        1.0,
-        "hello",
-        hashlib.sha256(b"hello").hexdigest(),
-        canonical_publication_key(name, target),
-        message.message_id,
-    ]
-    positions = {
-        "execution_id": 0,
-        "sender": 1,
-        "exact_target": 2,
-        "message_type": 3,
-        "payload_digest": 7,
-        "publication_key": 8,
-    }
-    envelope[positions[field]] = value
+    sql_wire_execution(c)
+    envelope = list(sql_intent_envelope())
+    envelope[position] = value
     with pytest.raises(sqlite3.IntegrityError):
-        c.execute("INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)", envelope)
+        c.execute(INSERT_INTENT, envelope)
     with CoordinationStore(path) as reopened:
         assert (
             reopened._connection.execute("SELECT count(*) FROM publication_intents").fetchone()[0]
@@ -1645,30 +1522,16 @@ def test_numeric_only_message_id_input_is_not_text(db):
             break
     else:
         raise AssertionError("no numeric-only Message ID in bounded search")
-    envelope = (
-        "e",
-        "worker",
-        "requester",
-        "info",
-        0,
-        1.0,
-        body,
-        hashlib.sha256(body.encode()).hexdigest(),
-        canonical_publication_key("e", "requester"),
-        int(message.message_id),
-    )
+    envelope = sql_intent_envelope(body=body, expected_id=int(message.message_id))
     with pytest.raises(sqlite3.IntegrityError):
-        c.execute("INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)", envelope)
+        c.execute(INSERT_INTENT, envelope)
     with CoordinationStore(path) as reopened:
         assert (
             reopened._connection.execute("SELECT count(*) FROM publication_intents").fetchone()[0]
             == 0
         )
     c.execute("BEGIN IMMEDIATE")
-    c.execute(
-        "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (*envelope[:-1], message.message_id),
-    )
+    c.execute(INSERT_INTENT, (*envelope[:-1], message.message_id))
     c.execute(
         (
             "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
@@ -1699,273 +1562,21 @@ def test_numeric_only_message_id_input_is_not_text(db):
         )
 
 
-@pytest.mark.parametrize(
-    "raw_notice,expected_notice",
-    [(0, False), (1, True), (2, True), ("", False), ("false", True)],
-)
-def test_notice_canonicalizes_through_sql_reopen_and_snapshot(db, raw_notice, expected_notice):
-    c, path = db
-    sql_wire_execution(c)
-    message = Message(
-        sender="worker",
-        target="requester",
-        body="hello",
-        type=InfoKind,
-        timestamp=1.0,
-        notice=expected_notice,
-    )
-    digest = hashlib.sha256(b"hello").hexdigest()
-    key = canonical_publication_key("e", "requester")
-    intent = PublicationIntents(
-        execution_id="e",
-        sender="worker",
-        exact_target="requester",
-        message_type=InfoKind,
-        notice=raw_notice,
-        timestamp=1.0,
-        payload="hello",
-        payload_digest=digest,
-        publication_key=key,
-        expected_message_id=message.message_id,
-    )
-    receipt = PublicationReceipt(
-        execution_id="e",
-        publication_key=key,
-        seq=1,
-        message_id=message.message_id,
-        sender="worker",
-        exact_target="requester",
-        message_type=InfoKind,
-        notice=raw_notice,
-        timestamp=1.0,
-        payload_digest=digest,
-    )
-    assert intent.notice is expected_notice and receipt.notice is expected_notice
-    c.execute("BEGIN IMMEDIATE")
-    c.execute(
-        "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (
-            "e",
-            intent.sender,
-            intent.exact_target,
-            intent.message_type.value,
-            int(intent.notice),
-            intent.timestamp,
-            intent.payload,
-            intent.payload_digest,
-            intent.publication_key,
-            intent.expected_message_id,
-        ),
-    )
-    c.execute(
-        (
-            "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
-            " WHERE execution_id='e'"
-        )
-    )
-    c.execute("COMMIT")
-    c.execute("BEGIN IMMEDIATE")
-    c.execute("INSERT INTO publication_receipts VALUES ('e',1,?,100)", (receipt.message_id,))
-    c.execute(
-        (
-            "UPDATE obligations SET lifecycle=json_object('kind','published','message_id'"
-            ",?,'seq',1),revision=3 WHERE execution_id='e'"
-        ),
-        (receipt.message_id,),
-    )
-    c.execute("COMMIT")
-    with CoordinationStore(path) as reopened:
-        row = reopened._connection.execute("SELECT * FROM publication_intents").fetchone()
-        assert row[4] == int(expected_notice) and type(row[4]) is int
-        recovered_intent = PublicationIntents(
-            execution_id=row[0],
-            sender=row[1],
-            exact_target=row[2],
-            message_type=MessageKind.decode(row[3]),
-            notice=row[4],
-            timestamp=row[5],
-            payload=row[6],
-            payload_digest=row[7],
-            publication_key=row[8],
-            expected_message_id=row[9],
-        )
-        receipt_row = reopened._connection.execute(
-            "SELECT seq,message_id FROM publication_receipts"
-        ).fetchone()
-        recovered_receipt = replace(
-            receipt, seq=receipt_row[0], message_id=receipt_row[1], notice=row[4]
-        )
-        assert recovered_intent == intent and recovered_receipt == receipt
-        assert recovered_intent.notice is expected_notice
-        assert recovered_receipt.notice is expected_notice
-        projected = RecoverySnapshot(
-            execution=replace(
-                execution(origin=ExecutionOrigin.WIRE), execution_id="e", owner_lookup="p"
-            ),
-            attempt=None,
-            assignments=(
-                replace(
-                    assignment(),
-                    assignment_id="a",
-                    recipient_lookup="p",
-                    lifecycle=type(assignment().lifecycle).load(
-                        assignment().lifecycle.mode,
-                        assignment().lifecycle.verdict,
-                        "e",
-                        assignment().lifecycle.exact_target,
-                    ),
-                ),
-            ),
-            links=(ExecutionAssignmentLink("e", "a", 0),),
-            replay=None,
-            obligation=replace(
-                obligation(),
-                execution_id="e",
-                lifecycle=PublishedResponse.load(receipt.message_id, 1),
-            ),
-            publication_intent=recovered_intent,
-            publication_receipt=recovered_receipt,
-            connectivity=None,
-            last_recovery=None,
-            current_execution_id=None,
-            current_attempt_ordinal=None,
-            pointer_revision=0,
-            is_current=False,
-        )
-        assert projected.publication_intent.notice is expected_notice
-        assert projected.publication_receipt.notice is expected_notice
-
-
-def test_integer_timestamps_canonicalize_through_message_authority(db):
-    c, path = db
-    sql_wire_execution(c)
-    envelope = sql_intent_envelope()
-    message = Message(
-        sender="worker",
-        target="requester",
-        body="hello",
-        type=InfoKind,
-        timestamp=1.0,
-        notice=False,
-    )
-    typed = PublicationIntents(
-        execution_id="e",
-        sender="worker",
-        exact_target="requester",
-        message_type=InfoKind,
-        notice=False,
-        timestamp=1,
-        payload="hello",
-        payload_digest=envelope[7],
-        publication_key=envelope[8],
-        expected_message_id=message.message_id,
-    )
-    assert isinstance(typed.timestamp, float) and typed.timestamp == 1.0
-    receipt = PublicationReceipt(
-        execution_id="e",
-        publication_key=envelope[8],
-        seq=1,
-        message_id=message.message_id,
-        sender="worker",
-        exact_target="requester",
-        message_type=InfoKind,
-        notice=False,
-        timestamp=1,
-        payload_digest=envelope[7],
-    )
-    assert isinstance(receipt.timestamp, float) and receipt.timestamp == typed.timestamp
-    c.execute("BEGIN IMMEDIATE")
-    c.execute(
-        "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)",
-        (*envelope[:5], 1, *envelope[6:]),
-    )
-    c.execute(
-        (
-            "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
-            " WHERE execution_id='e'"
-        )
-    )
-    c.execute("COMMIT")
-    with CoordinationStore(path) as reopened:
-        stored = reopened._connection.execute(
-            "SELECT timestamp,expected_message_id FROM publication_intents"
-        ).fetchone()
-        assert (stored[0], stored[1]) == (1.0, message.message_id)
-
-
-def test_signed_zero_timestamps_canonicalize_through_message_authority(db):
-    c, path = db
-    sql_wire_execution(c)
-    message = Message(
-        sender="worker",
-        target="requester",
-        body="hello",
-        type=InfoKind,
-        timestamp=0.0,
-        notice=False,
-    )
-    digest = hashlib.sha256(b"hello").hexdigest()
-    key = canonical_publication_key("e", "requester")
-    intent = PublicationIntents(
-        execution_id="e",
-        sender="worker",
-        exact_target="requester",
-        message_type=InfoKind,
-        notice=False,
-        timestamp=-0.0,
-        payload="hello",
-        payload_digest=digest,
-        publication_key=key,
-        expected_message_id=message.message_id,
-    )
-    assert repr(intent.timestamp) == "0.0"
-    receipt = PublicationReceipt(
-        execution_id="e",
-        publication_key=key,
-        seq=1,
-        message_id=message.message_id,
-        sender="worker",
-        exact_target="requester",
-        message_type=InfoKind,
-        notice=False,
-        timestamp=-0.0,
-        payload_digest=digest,
-    )
-    assert repr(receipt.timestamp) == "0.0"
-    c.execute("BEGIN IMMEDIATE")
-    c.execute(
-        "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)",
-        ("e", "worker", "requester", "info", 0, -0.0, "hello", digest, key, message.message_id),
-    )
-    c.execute(
-        (
-            "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=2"
-            " WHERE execution_id='e'"
-        )
-    )
-    c.execute("COMMIT")
-    with CoordinationStore(path) as reopened:
-        row = reopened._connection.execute(
-            "SELECT timestamp,expected_message_id FROM publication_intents"
-        ).fetchone()
-        assert repr(row[0]) == "0.0" and row[1] == message.message_id
-
-
 def test_publication_sql_validator_two_stores_raw_connection_and_process(db):
     c, path = db
     sql_wire_execution(c)
     envelope = sql_intent_envelope()
-    statement = "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)"
+    statement = INSERT_INTENT
     with sqlite3.connect(path) as raw:
         raw.execute("PRAGMA foreign_keys=ON")
         with pytest.raises(sqlite3.OperationalError, match="no such function"):
             raw.execute(statement, envelope)
     with CoordinationStore(path) as second:
         with pytest.raises(sqlite3.IntegrityError, match="envelope is invalid"):
-            second._connection.execute(statement, sql_intent_envelope(digest="fake"))
+            second._connection.execute(statement, sql_intent_envelope(expected_id="fake"))
         assert (
             second._connection.execute(
-                "SELECT coordination_validate_publication_intent(?,?,?,?,?,?,?,?,?,?)", envelope
+                "SELECT coordination_validate_publication_intent(?,?,?,?,?)", envelope
             ).fetchone()[0]
             == 1
         )
@@ -1977,12 +1588,10 @@ from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 with CoordinationStore(sys.argv[1]) as store:
     db = store._connection
     assert db.execute("SELECT coordination_validate_publication_intent("
-        "'e','worker','requester','info',0,1.0,'hello',"
-        "'not-sha','publication:v1:e:requester','not-message-id')").fetchone()[0] == 0
+        "'e','requester','{}','publication:v1:e:requester','not-message-id')").fetchone()[0] == 0
     try:
         db.execute("INSERT INTO publication_intents VALUES ("
-            "'e','worker','requester','info',0,1.0,'hello',"
-            "'not-sha','publication:v1:e:requester','not-message-id')")
+            "'e','requester','{}','publication:v1:e:requester','not-message-id')")
     except sqlite3.IntegrityError:
         pass
     else:
@@ -2046,19 +1655,8 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
         notice=False,
     )
     key = canonical_publication_key("e", "requester")
-    insert_intent = "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)"
-    envelope = (
-        "e",
-        "worker",
-        "requester",
-        "info",
-        0,
-        1.0,
-        body,
-        hashlib.sha256(body.encode()).hexdigest(),
-        key,
-        message.message_id,
-    )
+    insert_intent = INSERT_INTENT
+    envelope = sql_intent_envelope(body=body)
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
         c.execute(insert_intent, envelope)  # PENDING cannot retain frozen intent at COMMIT.
     assert c.execute("SELECT count(*) FROM publication_intents").fetchone()[0] == 0

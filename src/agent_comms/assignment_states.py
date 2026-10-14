@@ -531,7 +531,6 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
                 reply.message
                 for reply in replies
                 if reply.audience.sender_lookup == recipient_lookup
-                and reply.message.target == original.message.exact_reply_target
             ),
             None,
         )

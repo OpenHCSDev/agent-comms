@@ -6,6 +6,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Literal
 
+from .channel_targets import is_channel_target
 from .errors import RelationViolationError
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .input_attempt import (
@@ -105,11 +106,18 @@ class InputDocument:
             bound for row in self.rows.values() if (bound := row.bound_bus_input()) is not None
         )
 
-    def active_reply_references(self, lease, root_id, snapshot) -> tuple[MessageReference, ...]:
-        return tuple(
+    def answered_by(self, lease, source, snapshot, target: str) -> tuple[MessageReference, ...]:
+        """The bus messages the lease's turn took in that a message to target answers."""
+        delivered = tuple(
             reference
             for row in sorted(self.rows.values(), key=lambda item: item.order)
-            if (reference := row.active_reply_reference(lease, root_id, snapshot)) is not None
+            if (reference := row.delivered_in(lease, source.marker.root_id, snapshot)) is not None
+        )
+        route = target if is_channel_target(target) else snapshot.canonical_name(target)
+        return tuple(
+            original.message.reference
+            for original in source.references(delivered)
+            if original.message.exact_reply_target == route
         )
 
     def unbound_wire_inputs(self, root_id: str) -> dict[MessageReference, StoredInput]:

@@ -105,14 +105,14 @@ class SelectedWakeSegment(InstructionSegment):
         )
         sent_values = []
         for outcome in self.sent_outcomes:
-            message, reference = outcome.message, outcome.reply_reference
+            message, reference = outcome.message, outcome.answer
             sent_values.append({
                 "source_seq": message.seq,
                 "target": message.target,
                 "recipient": outcome.recipient,
                 "state": outcome.state,
                 "detail": outcome.detail,
-                "reply_reference": (
+                "answer": (
                     FieldCodec.encode(reference) if reference is not None else None
                 ),
             })

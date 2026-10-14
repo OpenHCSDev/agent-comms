@@ -15,7 +15,6 @@ from agent_comms.coordination_tables.executions import (
 )
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    PublicationReceipt,
     PublicationReceipts,
 )
 from agent_comms.coordination_tables.recovery import (
@@ -61,16 +60,8 @@ class RecoveryReader:
                 parameters=(execution_id,), order_by=("exact_target",)))
             intents = tuple(PublicationIntents.select(db, where="execution_id=?",
                 parameters=(execution_id,), order_by=("exact_target",)))
-            projection = ", ".join(
-                f"{'r' if name in PublicationReceipts.columns() else 'i'}.{name}"
-                for name in PublicationReceipt.columns()
-            )
-            receipts = tuple(PublicationReceipt.read(db.execute(
-                f"SELECT {projection} FROM {PublicationReceipts.declared_name} r "
-                f"JOIN {PublicationIntents.declared_name} i "
-                "ON r.execution_id=i.execution_id AND r.exact_target=i.exact_target "
-                "WHERE r.execution_id=? ORDER BY r.exact_target", (execution_id,),
-            )))
+            receipts = tuple(PublicationReceipts.select(db, where="execution_id=?",
+                parameters=(execution_id,), order_by=("exact_target",)))
             connectivity = ConnectivityFacet.one(db, execution_id=execution_id)
             audit = next(
                 iter(

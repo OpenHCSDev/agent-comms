@@ -243,13 +243,11 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     assert answered.state.startswith("Answered ") and answered.answered_at_ms == 3_000
     assert delivered.state.startswith("Read ") and delivered.read_at_ms == 2_000
     assert delivered_answer.state.startswith("Answered ")
-    assert delivered_answer.reply_reference == MessageReference(99, "durable-reply")
+    assert delivered_answer.answer == MessageReference(99, "durable-reply")
     assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
 
 
-def test_delivered_assignment_uses_its_recorded_conversation_response(
-    archived_notification, monkeypatch
-):
+def test_delivered_assignment_uses_its_recorded_conversation_response(archived_notification):
     from agent_comms.assignment_states import DeferredAssignment
     from agent_comms.coordination_cohort import accept_delivery_cohort
     from agent_comms.coordinator import Coordination
@@ -274,9 +272,9 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(
     notification, = old.views.message_notifications_for_references(
         (original.reference,)
     )[original.seq, original.message_id]
-    assert unrelated.reply_reference is None
+    assert unrelated.answers == ()
     assert notification.state.startswith("Read ")
-    assert notification.reply_reference is None
+    assert notification.answer is None
 
     import os
     from uuid import uuid4
@@ -316,16 +314,15 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(
     assert inputs.started(
         key, turn_id=lease.turn_id, native_id=native_id, text=source_text
     )
-    monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     response = old.messaging.send_message("agent", "sender", "recorded reply")
 
     notification, = old.views.message_notifications_for_references(
         (original.reference,)
     )[original.seq, original.message_id]
 
-    assert response.reply_reference == original.reference
+    assert response.answers == (original.reference,)
     assert notification.state.startswith("Answered ")
-    assert notification.reply_reference == response.reference
+    assert notification.answer == response.reference
     assert notification.answered_at_ms == int(response.timestamp * 1000)
 
 
