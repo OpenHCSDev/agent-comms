@@ -486,7 +486,7 @@ async def test_removed_sent_session_is_context_not_a_model_start_blocker(
     monkeypatch.setattr(
         SelectedParticipant,
         "capture_sent_outcomes",
-        lambda _comms, _name: (removed_outcome,),
+        lambda _comms, _owner, _sources, _assignment_read: (removed_outcome,),
     )
     runner, calls = _fake_model()
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
@@ -499,6 +499,31 @@ async def test_removed_sent_session_is_context_not_a_model_start_blocker(
     assert len(calls) == 1
     assert '"state":"Removed"' in calls[0][1]
     assert '"detail":"Recipient session removed"' in calls[0][1]
+
+
+async def test_unavailable_sent_outcomes_propagate_before_model_start(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.presentation import MessageNotification
+
+    root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+
+    def unavailable(*_args, **_kwargs):
+        raise NativePiUnavailable("optional sent outcome unavailable")
+
+    monkeypatch.setattr(MessageNotification, "for_sources", unavailable)
+    runner, calls = _fake_model()
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
+
+    with pytest.raises(NativePiUnavailable, match="optional sent outcome unavailable"):
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="beta",
+            native_package=tmp_path, opt_in=True,
+        ).run()
+
+    assert calls == []
 
 
 async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, monkeypatch) -> None:

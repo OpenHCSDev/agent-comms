@@ -1,15 +1,18 @@
 """Canonical original-bus batch capture and one-use native reservation."""
 
+import asyncio
 import json
 import os
-import pytest
-
+import sqlite3
 from unittest import TestCase
+
+import pytest
 
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.native_prompt_binding import bind_expected_prompt, read_expected_prompt_binding
@@ -56,18 +59,33 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
 
         original_capture = SelectedParticipant.capture_sent_outcomes
 
-        def capture_before_turn(selected_comms, name):
-            assert not selected_comms.registry.require(name).turn_state.busy
-            return original_capture(selected_comms, name)
+        def capture_before_turn(selected_comms, owner, sources, assignment_read):
+            assert not selected_comms.registry.require(owner.name).turn_state.busy
+            return original_capture(selected_comms, owner, sources, assignment_read)
 
         def forbid_full_presentation(*_args, **_kwargs):
             raise AssertionError("selected outcome capture prepared a full thread presentation")
 
         monkeypatch.setattr(SelectedParticipant, "capture_sent_outcomes", capture_before_turn)
         monkeypatch.setattr(comms.views, "thread_presentation", forbid_full_presentation)
+        monkeypatch.setattr(
+            CoordinationStore, "observing",
+            staticmethod(lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("claim path opened a second coordination reader")
+            )),
+        )
+        blocker = sqlite3.connect(root / "coordination.sqlite3", isolation_level=None)
+        blocker.execute("BEGIN EXCLUSIVE")
+
+        async def release_blocker():
+            await asyncio.sleep(0.1)
+            blocker.execute("ROLLBACK")
+            blocker.close()
+
+        release = asyncio.create_task(release_blocker())
         async with SelectedParticipant.select(comms, store, root_id, "receiver", 0,
                                               on_compaction=publish_compaction) as selected:
-            from agent_comms.agent_events import CompactionStart, CompactionEnd
+            from agent_comms.agent_events import CompactionEnd, CompactionStart
             observations = (CompactionStart(), CompactionEnd(summary="Committed original summary"))
             for observation in observations:
                 await selected.dispatch(observation)
@@ -108,6 +126,7 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
             assert tuple(row.wire_seq for row in pending) == (late.seq,)
             with TestCase().assertRaises(IdentityConflict):
                 stage.reserve(store, selected.identity, token_digest)
+        await release
 
 
 @pytest.mark.asyncio

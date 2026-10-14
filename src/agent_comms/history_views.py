@@ -10,11 +10,10 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .thread_identity import ThreadIncarnation
-
 from .catalog_store import ChannelCatalog
 from .goal_waits import GoalWaits
 from .registration import Registration
+from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
@@ -25,6 +24,7 @@ from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
 from .channel_targets import BuiltinChannel, is_channel_target
 from .collaboration_ledger import CollaborationLedger
+from .coordination_errors import StaleRevision
 from .exporting import (
     WireExportBoundary,
     WireExportFormat,
@@ -40,6 +40,7 @@ from .message_page import MessagePage
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
+from .notification_assignment import NotificationAssignment
 from .presentation import (
     ChannelView,
     CoordinationSnapshot,
@@ -47,13 +48,12 @@ from .presentation import (
     ThreadView,
     WireRevision,
 )
-from .read_basis import ChannelDisplayScope, DMDisplayBasis
 from .private_path import FileRevision
+from .read_basis import ChannelDisplayScope, DMDisplayBasis
 from .store_files import _store_lock
 from .thread_presentation import ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
-from .coordination_errors import StaleRevision
 
 _LOG = logging.getLogger(__name__)
 
@@ -344,14 +344,16 @@ class HistoryViews:
         owner = captured.read.identity.thread
         if not owner.incarnation.current(snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
+        assignment_read = NotificationAssignment.read_window(
+            self.root, (*captured.sources, *captured.sent_sources))
         return replace(
             view.presentation,
             notifications=MessageNotification.for_sources(
-                self.root, self.registry, owner, captured.sources
-            ),
+                self.root, self.registry, owner, captured.sources,
+                assignment_read=assignment_read),
             sent_notifications=MessageNotification.for_sources(
-                self.root, self.registry, owner, captured.sent_sources
-            ),
+                self.root, self.registry, owner, captured.sent_sources,
+                assignment_read=assignment_read),
             read_identity=captured.read.identity,
         )
 

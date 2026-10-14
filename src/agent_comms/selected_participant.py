@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import secrets
-from collections.abc import Awaitable, Callable, Generator
+from collections.abc import Awaitable, Callable, Generator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from functools import partial
 
 from .agent_events import CompactionEvent, NativePhaseChanged
-from .pi_events import TurnContextObserved
-from .bus_publication import stable_thread_lookup
+from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -24,13 +23,16 @@ from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
-from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_attestation import ObservedAttestation
-from .private_registry_guard import _require_no_private_owner_rename
+from .native_input_owner import ParticipantOwner, RegistryOwner
+from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
+from .pi_events import TurnContextObserved
 from .presentation import MessageNotification, SentMessageOutcome
-from .turn_phase import PreparingPhase, TurnPhase
+from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
+from .threads import Thread
+from .turn_phase import PreparingPhase, TurnPhase
 
 
 @dataclass
@@ -122,7 +124,7 @@ class SelectedParticipant(MroDispatch):
             comms.root / "bus.jsonl", comms.registry, private_response_writes=True,
             private_claim_writes=comms.bus.publisher._private_claim_writes,
         )
-        owner, participant, pending = await Coordination.run_async(
+        owner, participant, pending, sent_outcomes = await Coordination.run_async(
             store.session.path,
             lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
         )
@@ -131,13 +133,6 @@ class SelectedParticipant(MroDispatch):
             return
         identity = ParticipantOwner(owner.thread, participant.participant_generation)
         provider, model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
-        # Authored outcomes are optional prompt context, not a started turn.
-        # Capture their bounded source cut before acquiring the live turn lease:
-        # projection failure is then the drain's named unavailable state instead
-        # of a succession of Preparing turns which never reach native Pi.
-        sent_outcomes = await Coordination.run_worker(
-            lambda: cls.capture_sent_outcomes(comms, name)
-        )
         lease = cls.lease(comms, owner)
         try:
             leased = await Coordination.run_worker(lambda: next(lease))
@@ -169,14 +164,12 @@ class SelectedParticipant(MroDispatch):
 
     @staticmethod
     def capture_sent_outcomes(
-        comms: Comms, name: str
+        comms: Comms, owner: Thread, sources: Sequence[CommittedDelivery],
+        assignment_read: NotificationAssignmentRead,
     ) -> tuple[SentMessageOutcome, ...]:
-        notifications = MessageNotification.recent_sent(
-            comms.root,
-            comms.registry,
-            comms.bus.log,
-            name,
-            limit=MessageNotification.window_limit,
+        """Project optional prompt context from the drain's captured source and SQL cuts."""
+        notifications = MessageNotification.for_sources(
+            comms.root, comms.registry, owner, sources, assignment_read=assignment_read,
         )
         return tuple(
             outcome
@@ -188,18 +181,17 @@ class SelectedParticipant(MroDispatch):
     def prepare(
         comms: Comms, bus: MessageBus, store: Coordination,
         root_id: str, name: str, after_seq: int,
-    ) -> tuple[RegistryOwner, ParticipantSnapshot, tuple[WakeAssignment, ...]]:
-        """Capture detached original registry/participant rows in one worker."""
+    ) -> tuple[
+        RegistryOwner, ParticipantSnapshot, tuple[WakeAssignment, ...],
+        tuple[MessageNotification, ...],
+    ]:
+        """Capture detached registry, participant and optional context in one worker."""
         with bus.log.locked():
             _require_no_private_owner_rename(comms.root)
             marker = bus.log._private_marker_unlocked()
             if marker.root_id != root_id:
                 raise IdentityConflict("selected admission wire root changed")
             after_seq = max(after_seq, marker.admission_after_seq)
-        with store.session.read():
-            assert_cohort_schema(store.session._connection)
-            _assert_response_schema(store.session._connection)
-            assert_native_runtime_schema(store.session._connection)
         try:
             thread, generation = comms.registry.live_owner_with_admission(name)
         except (RelationViolationError, ValueError) as error:
@@ -207,17 +199,32 @@ class SelectedParticipant(MroDispatch):
         owner = RegistryOwner(thread=thread, admission_generation=generation)
         owner.require_registry(comms.registry)
         lookup = stable_thread_lookup(thread.created_at)
+        sent_owner, sent_sources = MessageNotification.sent_sources(
+            comms.root, comms.registry, comms.bus.log, name,
+            limit=MessageNotification.window_limit,
+        )
         LiveResponseOwner(
             thread=thread, admission_generation=generation
         ).resolve_retained(store, bus)
-        participant = store.participants.get(lookup)
-        identity = ParticipantOwner(thread, participant.participant_generation)
         with store.session.read():
+            assert_cohort_schema(store.session._connection)
+            _assert_response_schema(store.session._connection)
+            assert_native_runtime_schema(store.session._connection)
+            participant = store.participants.get(lookup)
+            identity = ParticipantOwner(thread, participant.participant_generation)
             identity.require(store, lookup)
-        pending = pending_sealed_assignments(store, lookup, thread.name, after_seq=after_seq)
+            pending = pending_sealed_assignments(
+                store, lookup, thread.name, after_seq=after_seq
+            )
+            sent_read = NotificationAssignment.capture_window(
+                store.session._connection, sent_sources
+            )
         if pending:
             participant.pointer.require_idle()
-        return owner, participant, pending
+        sent_outcomes = SelectedParticipant.capture_sent_outcomes(
+            comms, sent_owner, sent_sources, sent_read
+        )
+        return owner, participant, pending, sent_outcomes
 
     @staticmethod
     def configured_model(comms: Comms, name: str) -> tuple[str, str]:
