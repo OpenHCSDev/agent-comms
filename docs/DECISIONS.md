@@ -1,5 +1,21 @@
 # Owner decisions
 
+## 2026-10-14 — Constant cost: nothing scales with history size or throughput
+
+Tristan: "it shuold decode from latest to oldest or jsut decode what it needs so that tis always fast and doesn't get longer with theard size"
+
+Tristan: "that shoudl eb the philslophy iwth comms and its Iu impelmeantaions, nothing scales with size or throuhgput, we keep everythign cosntant costs as much as possible"
+
+Core and every UI over it keep per-operation cost constant. Opening, switching,
+scrolling, sending and status updates do work bounded by what is shown or
+changed, never by thread length, bus length or message rate. Read newest to
+oldest and decode only the fields the current viewport needs. Aggregates
+(unread, activity, counts) are maintained incrementally by their owner when
+the source changes; readers take the current value. A walk to an unbounded
+ancestor, a full-bus scan or a decode-then-re-encode on a read path is a
+defect. Acceptance for performance work compares a short and the longest
+thread or bus on the same build: the costs must match.
+
 ## 2026-09-29 — Ship useful performance progress
 
 Owner: "regrding eprformance, we can merge prs once substantia lprogress is made even thoug its not the final taarget so at least the live intal lcan make sue of it and anothe pr contining hte work can be opened"
