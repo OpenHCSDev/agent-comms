@@ -183,7 +183,9 @@ def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
     assert isinstance(completed.tool_round(), PendingTrackedTerminal)
     failed = completed.fail("original provider rejection")
     assert failed.tool_round() is failed and failed.append("later text") is failed
-    proof = NativeContextProof("a" * 32, "session", "entry", 1, "b" * 64, Path("original-session.jsonl"))
+    proof = NativeContextProof(
+        "a" * 32, "session", "entry", 1, "b" * 64, 1_791_964_800_001, Path("original-session.jsonl")
+    )
     with pytest.raises(NativePiTerminalFailure, match="original provider rejection") as failure:
         failed.raise_failure(proof, "configured", "model")
     assert failure.value.context is proof

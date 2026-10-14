@@ -90,14 +90,6 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
                                                 newer_namespace, document=document) == ()
 
 
-def test_context_evidence_rejects_mixed_sql_columns():
-    from agent_comms.notification_assignment import AssignmentContextEvidence
-
-    for values in (("session.jsonl", None), (None, "entry-id")):
-        with pytest.raises(ValueError, match="model-context location is incomplete"):
-            AssignmentContextEvidence.from_columns(*values)
-
-
 def test_response_evidence_rejects_mixed_sql_columns():
     from agent_comms.notification_assignment import AssignmentResponse
 
@@ -117,10 +109,10 @@ def test_unshown_assignment_resolves_running_turn_as_timed_queue():
 
     pending = AssignmentActivityEvidence(
         False, None, NotShownContextEvidence(), UnansweredResponse()
-    ).resolve({}, pending_at_ms=1_000)
+    ).resolve(pending_at_ms=1_000)
     queued = AssignmentActivityEvidence(
         False, "running-execution", NotShownContextEvidence(), UnansweredResponse()
-    ).resolve({}, pending_at_ms=1_000)
+    ).resolve(pending_at_ms=1_000)
 
     assert pending.progress == SentProgress(1_000)
     assert queued.progress == QueuedProgress(1_000)
@@ -185,7 +177,6 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         AnsweredResponse,
         AssignmentActivity,
         QueuedProgress,
-        RemovedContextProgress,
         SentProgress,
         ShownToModelProgress,
         UnansweredResponse,
@@ -245,24 +236,6 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         ),
         updated_at_ms=2_000,
     )
-    removed_activity = replace(read_activity, context_progress=RemovedContextProgress())
-    removed = engagement.notification(
-        recipient,
-        observation=RecordedRecipientActivity(),
-        activity=removed_activity,
-        updated_at_ms=1_000,
-    )
-    removed_answer = CompletedAssignment.build(
-        FullWake(), "durable-execution", "sender"
-    ).notification(
-        recipient,
-        observation=RecordedRecipientActivity(),
-        activity=replace(
-            removed_activity,
-            response=AnsweredResponse(MessageReference(99, "durable-reply"), 3_000),
-        ),
-        updated_at_ms=3_000,
-    )
 
     assert sent.state.startswith("Sent ") and sent.read_at_ms is None
     assert queued.state.startswith("Queued ") and queued.read_at_ms is None
@@ -271,10 +244,6 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     assert delivered.state.startswith("Read ") and delivered.read_at_ms == 2_000
     assert delivered_answer.state.startswith("Answered ")
     assert delivered_answer.reply_reference == MessageReference(99, "durable-reply")
-    assert removed.state == "Removed"
-    assert removed.detail == "Recipient session removed"
-    assert removed_answer.state.startswith("Answered ")
-    assert removed_answer.detail == "Recipient session removed"
     assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
 
 

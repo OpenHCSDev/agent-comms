@@ -220,13 +220,14 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         context_digest = hashlib.sha256((input_id + str(generation)).encode()).hexdigest()
         proof_rows.append(
             {
-                "schema": 1,
+                "schema": 2,
                 "type": "context_committed",
                 "sessionId": "isolated-session",
                 "inputId": input_id,
                 "sessionEntryId": entry_id,
                 "requestGeneration": generation,
                 "llmContextDigest": context_digest,
+                "committedAtMs": 1_791_964_800_000 + generation,
             }
         )
         proof_file = Path(str(session_file) + ".input-proof")
@@ -252,7 +253,8 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         return NativeTurnResult(
             reply,
             NativeContextProof(
-                input_id, "isolated-session", entry_id, generation, context_digest, session_file
+                input_id, "isolated-session", entry_id, generation, context_digest,
+                1_791_964_800_000 + generation, session_file,
             ),
         )
 

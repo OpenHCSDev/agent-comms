@@ -8,6 +8,7 @@ import subprocess
 import time
 from contextlib import closing
 from pathlib import Path
+from typing import get_args, get_type_hints
 
 import pytest
 
@@ -31,8 +32,8 @@ def grow_proof(session, original, target_bytes):
     row = NativeContextJournal(
         **{
             **{name: getattr(original, name) for name in columns if name not in {"schema", "type"}},
-            "schema": 1,
-            "type": "context_committed",
+            # The journal envelope comes from its declaration, not a test copy.
+            **{name: get_args(get_type_hints(NativeContextJournal)[name])[0] for name in ("schema", "type")},
         }
     )
     query, values = row._insertion()

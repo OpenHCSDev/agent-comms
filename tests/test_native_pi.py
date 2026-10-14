@@ -61,13 +61,14 @@ def _evidence(tmp_path: Path) -> Path:
     ]
     journal = [
         {
-            "schema": 1,
+            "schema": 2,
             "type": "context_committed",
             "sessionId": "sid",
             "inputId": INPUT_ID,
             "sessionEntryId": "entry",
             "requestGeneration": 1,
             "llmContextDigest": "c" * 64,
+            "committedAtMs": 1_791_964_800_001,
         }
     ]
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
@@ -146,7 +147,8 @@ def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_f
     assert decoded.at(session) == NativeContextProof.read_evidence(session, INPUT_ID)
     for changed in (
         {**row, "schema": True},
-        {**row, "schema": 2},
+        {**row, "schema": 1},
+        {**row, "committedAtMs": 0},
         {**row, "type": "input_committed"},
         {**row, "requestGeneration": True},
         {**row, "requestGeneration": 0},
@@ -457,9 +459,9 @@ input_id = command['inputId']
 entry = {'type':'message','id':'entry','message':{'role':'user',
     'inputId':input_id,'inputDigest':'b'*64}}
 file.write_text(json.dumps({'type':'session','id':'sid'})+'\\n'+json.dumps(entry)+'\\n')
-proof = {'schema':1,'type':'context_committed','sessionId':'sid',
+proof = {'schema':2,'type':'context_committed','sessionId':'sid',
     'inputId':input_id,'sessionEntryId':'entry','requestGeneration':1,
-    'llmContextDigest':'c'*64}
+    'llmContextDigest':'c'*64,'committedAtMs':1_791_964_800_001}
 write_proof_rows(file, [proof])
 os.chmod(file,0o600)
 os.chmod(str(file)+'.input-proof',0o600)
@@ -1155,7 +1157,7 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
     from agent_comms.turn_failure import ModelRequestFailed
 
     context = NativeContextProof(
-        INPUT_ID, "session", "entry", 1, DIGEST, tmp_path / "session.jsonl"
+        INPUT_ID, "session", "entry", 1, DIGEST, 1_791_964_800_001, tmp_path / "session.jsonl"
     )
     failed = NativePiTerminalFailure(
         "SECRET provider response including prompt data", context, "provider", "model",

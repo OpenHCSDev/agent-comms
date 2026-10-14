@@ -391,6 +391,7 @@ class ContextCommitted(PiEvent):
         default=None, metadata={"wire_name": "requestGeneration"}
     )
     llm_context_digest: str | None = field(default=None, metadata={"wire_name": "llmContextDigest"})
+    committed_at_ms: int | None = field(default=None, metadata={"wire_name": "committedAtMs"})
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -99,17 +99,19 @@ export class NativeProofJournal {
         try {
             db.exec('BEGIN IMMEDIATE');
             const generation = db.prepare(nativeProofSchema.head).get().generation + 1;
+            const committedAtMs = Date.now();
             const insert = db.prepare(nativeProofSchema.insert);
-            for (const {inputId, sessionEntryId} of tracked) {
-                const record = {schema:1, type:'context_committed', sessionId:this.sessionId,
-                    inputId, sessionEntryId, requestGeneration:generation, llmContextDigest:digest};
+            // Each journal row is also the live context_committed event, unchanged.
+            const records = tracked.map(({inputId, sessionEntryId}) => ({
+                schema:2, type:'context_committed', sessionId:this.sessionId, inputId,
+                sessionEntryId, requestGeneration:generation, llmContextDigest:digest, committedAtMs}));
+            for (const record of records)
                 insert.run(...nativeProofSchema.columns.map(column => record[column.wire]));
-            }
             db.exec('COMMIT');
             // An exception here is still UNKNOWN to the live observer. On reopen
             // the committed generation is reserved, never re-emitted as a receipt.
             this.#syncDirectory();
-            return generation;
+            return records;
         } finally {
             db.close(); // An interrupted transaction rolls back; never retry here.
         }
