@@ -12,6 +12,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -136,12 +137,9 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def require_available(self) -> None:
         pass
 
-    def retire(self, agents: AgentActivity, thread: str) -> None:
+    async def retire(self, agents: AgentActivity, thread: str) -> DrainReadiness:
         """A healthy readiness has no retained failure to retire."""
-
-    @classmethod
-    def retire_current(cls, agents: AgentActivity, thread: str) -> None:
-        agents.activity_of(thread).readiness.retire(agents, thread)
+        return self
 
     def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
         """An ordinary preparation has no earlier request failure to display."""
@@ -170,8 +168,13 @@ class DiagnosticDrainReadiness(DrainReadiness):
         return ThreadPresentation(ordinary.title, "!", self.diagnostic.summary,
                                   busy=busy, attention=True)
 
-    def retire(self, agents, thread):
-        agents.set_drain_diagnostic(thread, self.diagnostic.owner, None)
+    async def retire(self, agents, thread):
+        from .coordinator import Coordination
+
+        await Coordination.run_worker(
+            partial(agents.set_drain_diagnostic, thread, self.diagnostic.owner, None)
+        )
+        return ReadyDrainReadiness()
 
 
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
@@ -193,7 +196,7 @@ class FailedPreparingDrainReadiness(NativeInputDrainReadiness):
         return replace(
             ordinary,
             marker="!",
-            summary=f"Failed {when}\n{self.diagnostic.summary}",
+            summary=f"Failed {when}",
             busy=busy,
             attention=True,
         )

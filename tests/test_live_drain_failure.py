@@ -14,6 +14,7 @@ from agent_comms.activity import StoppedDrainDiagnostic, UnavailableDrainDiagnos
 from agent_comms.cohort_schema import CohortSchemaMeta
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
+from agent_comms.drain_failures import DrainFailureState, drain_failures
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -103,19 +104,24 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
 async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
     comms, agent, _ = _session(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
-    diagnostic = UnavailableDrainDiagnostic(
-        owner, "OSError", "past drain failed", recorded_at=time.time()
-    )
-    assert comms.agents.set_drain_diagnostic("beta", owner, diagnostic)
+    state = DrainFailureState()
+
+    async def retry():
+        return None
+
+    async with drain_failures(comms, "beta", owner, retry, state):
+        raise OSError("past drain failed")
     lease = comms.agents.begin_turn("beta", "later-successful-turn").turn_lease
     try:
-        await agent.inputs.drain_inbox("beta")
+        async with drain_failures(comms, "beta", owner, retry, state):
+            await agent.inputs.drain_inbox("beta")
         current = owner_view(comms)
         assert current.activity.readiness.source_diagnostic() is None
         assert current.thread.executing
         assert current.presentation.busy and not current.presentation.attention
         activity = (comms.root / "activity.jsonl").read_bytes()
-        await agent.inputs.drain_inbox("beta")
+        async with drain_failures(comms, "beta", owner, retry, state):
+            await agent.inputs.drain_inbox("beta")
         assert (comms.root / "activity.jsonl").read_bytes() == activity
     finally:
         comms.agents.finish_turn(lease)

@@ -22,11 +22,10 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
-from .activity import DrainReadiness
 from .agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
-from .drain_failures import drain_failures
+from .drain_failures import DrainFailureState, drain_failures
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
 from .bus_publication import stable_thread_lookup
@@ -434,6 +433,7 @@ class InputDrain(InputObservation):
 
     async def observe(self, session_id: str) -> None:
         settled: SettledTick | None = None
+        failure_state = DrainFailureState()
         paths = self._tick_paths()
         async with aclosing(WireWatch.observations(*paths.watch_sources)) as observations:
             async for watcher in observations:
@@ -497,7 +497,8 @@ class InputDrain(InputObservation):
                     entry = read.entry
                 owner = entry.owner_identity
                 async with drain_failures(
-                    self.comms, thread, owner, partial(self.retry_observer, session_id)
+                    self.comms, thread, owner, partial(self.retry_observer, session_id),
+                    failure_state,
                 ):
                     # A stored model change precedes the messages the same tick hands over.
                     await self.sessions.config.sync_thread(session_id)
@@ -518,7 +519,7 @@ class InputDrain(InputObservation):
                         and session_id not in self.effects.turns.turn_tasks
                         and session_id not in self.backend_inboxes
                     ):
-                        if self._quiescent(session_id):
+                        if not current.executing and self._quiescent(session_id):
                             marker = await Coordination.run_worker(self._bus_marker)
                             settled = SettledTick(
                                 revision, entry, marker.admission_after_seq, marker.last_seq,
@@ -534,14 +535,9 @@ class InputDrain(InputObservation):
                             watcher.notify()
 
     async def drain_inbox(self, session_id: str) -> int:
-        """Push undelivered messages and retire an older failure on success."""
+        """Push undelivered messages to the client; returns count pushed."""
         async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
-            count = await self.drain_owned_inbox(session_id)
-            await Coordination.run_worker(partial(
-                DrainReadiness.retire_current,
-                self.comms.agents, self.sessions.require(session_id),
-            ))
-            return count
+            return await self.drain_owned_inbox(session_id)
 
     def _bus_marker(self):
         return self.comms.bus.log._private_marker_unlocked()
@@ -699,6 +695,9 @@ class InputDrain(InputObservation):
     @property
     def background_wakes_disabled(self) -> bool:
         return not self.auto_wake or not self.sessions.runtime_enabled
+
+    async def drain_count(self, session_id: str) -> int:
+        return await self.drain_inbox(session_id)
 
     async def accept_followup(
         self,
