@@ -18,6 +18,7 @@ from .input_attempt import (
     StoredInput,
 )
 from .locked_store import LockedStore
+from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
 
@@ -104,16 +105,14 @@ class InputDocument:
             bound for row in self.rows.values() if (bound := row.bound_bus_input()) is not None
         )
 
-    def unbound_wire_inputs(self, root_id: str) -> tuple[StoredInput, ...]:
+    def unbound_wire_inputs(self, root_id: str) -> dict[MessageReference, StoredInput]:
         """Original bus deliveries with positive evidence that Pi never received them."""
-        from .input_origin import WireInputOrigin
-
-        return tuple(
-            row for row in self.rows.values()
-            if not row.has_native_binding
-            and isinstance(row.origin, WireInputOrigin)
-            and row.origin.root_id == root_id
-        )
+        return {
+            reference: row
+            for row in self.rows.values()
+            if row.proves_no_native_send
+            and (reference := row.origin.delivery_reference(root_id)) is not None
+        }
 
     def delivery_overview(
         self,

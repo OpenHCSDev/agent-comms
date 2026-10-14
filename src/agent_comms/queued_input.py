@@ -7,7 +7,7 @@ incarnation birth and admission; the registry resolves its name before compariso
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from functools import partial
 from dataclasses import dataclass, fields, replace
@@ -367,6 +367,18 @@ class DeliveredInput(QueuedInput):
         return tuple(reserved)
 
     @classmethod
+    async def recover_before_drain(
+        cls,
+        inputs: InputDrain,
+        session_id: str,
+        root_id: str,
+        drain: Callable[[str, str], Awaitable[int]],
+    ) -> int:
+        """Restore positively unsent delivery before the ordinary selector reads work."""
+        await cls.recover_interrupted(inputs, session_id, root_id)
+        return await drain(session_id, root_id)
+
+    @classmethod
     async def recover_interrupted(
         cls, inputs: InputDrain, session_id: str, root_id: str,
     ) -> int:
@@ -386,8 +398,8 @@ class DeliveredInput(QueuedInput):
                 item.key for item in inputs.queued_inputs.get(session_id, {}).values()
             }
             rows = {
-                row.origin.reference: row
-                for row in document.unbound_wire_inputs(root_id)
+                reference: row
+                for reference, row in document.unbound_wire_inputs(root_id).items()
                 if row.key not in live_keys
             }
             with Coordination(str(inputs.comms.root / "coordination.sqlite3")) as store:

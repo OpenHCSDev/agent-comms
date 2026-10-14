@@ -35,7 +35,7 @@ from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
-from .queued_input import InputHandoffRefused, QueuedInput
+from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .errors import RelationViolationError
 from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
@@ -562,8 +562,7 @@ class InputDrain:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
         private_root = self.effects._configured_root_id()
-        await DeliveredInput.recover_interrupted(self, session_id, private_root)
-        pushed = await self._drain_private_if_changed(session_id, private_root)
+        pushed = await DeliveredInput.recover_before_drain(self, session_id, private_root, self._drain_private_if_changed)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
         return pushed
 
