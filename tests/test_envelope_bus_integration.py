@@ -188,6 +188,28 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     assert fresh.views.full_history() == [sent]
 
 
+def test_absolute_claim_outside_worktree_uses_one_global_key(tmp_path: Path) -> None:
+    comms, worktree = _participants(tmp_path)
+    outside = tmp_path / "shared" / "module.py"
+    outside.parent.mkdir()
+    outside.write_text("shared")
+    claimed = comms.messaging.send_message(
+        "alice", "bob", "Claim shared file", claims=[ExistingFileClaim(outside)]
+    )
+    assert claimed.claim_transition is not None
+    assert claimed.claim_transition.claims == (str(outside),)
+    projection = Comms(comms.root).bus.log.claim_projection()
+    assert list(projection) == [str(outside)]
+    assert projection[str(outside)].owner == "alice"
+    with pytest.raises(ClaimConflict):
+        comms.messaging.send_message(
+            "bob", "alice", "Competing shared claim", claims=[ExistingFileClaim(outside)]
+        )
+    comms.messaging.send_message("alice", "bob", "Release shared file", releases=[outside])
+    assert not comms.bus.log.claim_projection()
+    assert worktree != outside.parent
+
+
 def test_whole_set_rejects_conflict_without_partial_ownership(tmp_path: Path) -> None:
     comms, worktree = _participants(tmp_path)
     comms.messaging.send_message(

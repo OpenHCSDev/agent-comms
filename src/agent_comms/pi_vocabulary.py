@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 
 from .declared_family import DeclaredFamily
 
@@ -141,6 +142,16 @@ class ThresholdCompactionReason(CompactionReason):
 
 class UnknownCompactionReason(CompactionReason):
     pass
+
+
+class ServiceTier(StrEnum):
+    """Provider request service selected with a thread's model configuration."""
+
+    STANDARD = "standard"
+    PRIORITY = "priority"
+
+
+SERVICE_TIER_ENVIRONMENT = "AGENT_COMMS_SERVICE_TIER"
 
 
 class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
