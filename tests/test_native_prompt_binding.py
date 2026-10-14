@@ -282,6 +282,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
             recipient_lookup=stable_thread_lookup(people[1].created_at),
         ).read()
         assert current.covered_seq == coverage.covered_seq
+        assert coverage.covered_seq >= initial.message.seq
         assert coverage.covered_seq == coverage.source_witness.latest_source_seq
         evidence = read_historical_native_inputs(
             store,
@@ -336,6 +337,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     assert second_turn is not None and second_turn.cursor_status == "proven"
     with Coordination(str(root / "coordination.sqlite3")) as store:
         after = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
+        assert after.covered_seq >= second.seq
         assert after.covered_seq == after.source_witness.latest_source_seq
         assert after.injected_source_seqs == (first.message.seq, second.seq)
         assert after.blocked_seq is None
@@ -417,6 +419,7 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
             wire_root_id=root_id,
             recipient_lookup=stable_thread_lookup(people[1].created_at),
         ).read()
+        assert coverage.covered_seq >= second.seq
         assert coverage.covered_seq == coverage.source_witness.latest_source_seq
         assert coverage.injected_source_seqs == (first.message.seq,)
         assert coverage.no_wake_seqs == (second.seq,)
