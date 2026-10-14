@@ -267,14 +267,16 @@ class AssignedTranscriptSource:
 
         lookup = stable_thread_lookup(self.recipient.created_at)
         for fragment in fragments:
-            selected = tuple(zip(fragment, reader.input_ancestors(fragment), strict=True))
             with TranscriptRead.publication_source(self.root) as db:
-                # Missing coordination remains detached native history. Do not
-                # introduce header failures where no SQL source was selected.
-                session_id = (reader.session_id
-                              if db is not None and any(
-                                  user is not None and user.input_id is not None
-                                  for _, user in selected) else None)
+                # Only page-referenced stored inputs seed the bounded walk.
+                session_id = reader.session_id if db is not None else None
+                stored = (NativeRuntimeInput.for_page_parents(
+                    db, reader, reader.input_parent_ids(fragment),
+                    owner_lookup=lookup, session_id=session_id,
+                ) if db is not None else ())
+                selected = tuple(zip(
+                    fragment, reader.input_ancestors(fragment, stored), strict=True,
+                ))
                 capture = partial(
                     NativeRuntimeInput.transcript_projection,
                     db, reader, owner_lookup=lookup, session_id=session_id,

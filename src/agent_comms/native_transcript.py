@@ -6,7 +6,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from pathlib import Path
 
-from .native_entries import NativeEntry, SessionEntry
+from .native_entries import DetachedPageInput, NativeEntry, SessionEntry
 
 
 def _reverse_records(
@@ -60,12 +60,15 @@ class NativeRecord:
     def extend_input_ancestry(self, inputs_by_entry):
         """Add this record's bounded parent answer to one fragment walk."""
         entry = self.entry
-        if entry is None:
-            return None
-        user = entry if entry.input_boundary else inputs_by_entry.get(entry.parent_id)
-        if entry.id is not None:
-            inputs_by_entry[entry.id] = user
-        return user
+        if entry is not None:
+            return entry.carry_input(inputs_by_entry)
+        return DetachedPageInput()
+
+    def entry_ids(self):
+        return self.project(lambda record: record.entry.identified())
+
+    def parent_references(self):
+        return self.project(lambda record: record.entry.parent_references())
 
     def incomplete_tail(self, through: int) -> bool:
         return self.end == through and not self.complete and self.entry is None
@@ -169,15 +172,20 @@ class NativeTranscript:
             return proof.corroborate(self.path.absolute(), header, {user.input_id: user})
 
     @staticmethod
-    def input_ancestors(records):
-        """Resolve every parent chain represented by one bounded page fragment.
+    def input_parent_ids(records):
+        """Names referenced by the page but not represented inside it."""
+        represented = {identity for record in records for identity, _entry in record.entry_ids()}
+        return tuple(dict.fromkeys(
+            parent for record in records for parent in record.parent_references()
+            if parent not in represented
+        ))
 
-        One chronological pass shares ancestry between children. A chain that
-        starts before the fragment remains unresolved; opening history never
-        walks beyond the page budget.
-        """
+    @staticmethod
+    def input_ancestors(records, stored=()):
+        """Resolve one page from its records and exact stored input identities."""
         records = tuple(records)
-        inputs_by_entry, resolved = {}, [None] * len(records)
+        inputs_by_entry = {row.session_entry_id: row for row in stored}
+        resolved = [DetachedPageInput()] * len(records)
         for index, record in sorted(enumerate(records), key=lambda item: item[1].start):
             resolved[index] = record.extend_input_ancestry(inputs_by_entry)
         return tuple(resolved)

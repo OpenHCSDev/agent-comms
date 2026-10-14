@@ -29,6 +29,39 @@ class TranscriptProjection:
     input_display: InputDisplay | None = None
 
 
+class PageInput:
+    """The input answer carried while projecting one bounded native page."""
+
+    input_id = None
+
+    def following_input(self):
+        return self
+
+    def page_events(self, entry, projection):
+        return entry.events(projection)
+
+    def runtime_inputs(self, db, reader, session_id):
+        return ()
+
+
+class DetachedPageInput(PageInput):
+    """A native record with no parent input."""
+
+
+@dataclass(frozen=True)
+class EarlierPageInput(PageInput):
+    """A parent before the page remains visible instead of being guessed."""
+
+    announce: bool = True
+
+    def following_input(self):
+        return type(self)(False)
+
+    def page_events(self, entry, projection):
+        notice = [NoticeTranscript("[Input boundary precedes this page]")] if self.announce else []
+        return [*notice, *super().page_events(entry, projection)]
+
+
 @dataclass(frozen=True, kw_only=True)
 class NativeEntryCoordinates(PiPayload):
     """Original external ancestry fields; opaque entries project this same owner."""
@@ -42,13 +75,30 @@ class NativeEntryCoordinates(PiPayload):
         return self.id
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class NativeEntryHeader:
     """Only the declared fields required to join one parent chain."""
 
-    id: str | None
-    parent_id: str | None
-    input_boundary: bool = False
+    id: str | None = field(default=None, metadata={"wire_projection": True})
+    parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
+
+    @property
+    def input_boundary(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NativeMessageHeader:
+    role: type[PiMessage] = field(metadata={"wire_projection": True})
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NativeMessageEntryHeader(NativeEntryHeader):
+    message: NativeMessageHeader
+
+    @property
+    def input_boundary(self) -> bool:
+        return self.message.role.user
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -60,6 +110,13 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     assistant_message: ClassVar[bool] = False
     input_boundary: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
+    header_type: ClassVar[type[NativeEntryHeader]] = NativeEntryHeader
+
+    def following_input(self):
+        return self
+
+    def page_events(self, entry, projection):
+        return entry.events(projection)
 
     def imported_sources(self):
         return ()
@@ -84,13 +141,7 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     @classmethod
     def read_header(cls, raw: bytes) -> NativeEntryHeader:
         value = json.loads(raw)
-        member = cls.wire_member(value)
-        coordinates = FieldCodec.decode_projection(NativeEntryCoordinates, value)
-        return member.ancestry_header(value, coordinates)
-
-    @classmethod
-    def ancestry_header(cls, value, coordinates) -> NativeEntryHeader:
-        return NativeEntryHeader(coordinates.id, coordinates.parent_id)
+        return FieldCodec.decode(cls.wire_member(value).header_type, value)
 
     @classmethod
     def from_evidence(cls, raw: dict) -> NativeEntry:
@@ -166,6 +217,25 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     def identified(self):
         """Yield this entry's stable key only when the external entry supplied one."""
         return ((self.id, self),) if self.id else ()
+
+    def parent_references(self):
+        return (self.parent_id,) if self.parent_id else ()
+
+    def carry_input(self, inputs_by_entry):
+        """Carry this entry's input through one bounded chronological walk."""
+        if self.input_boundary:
+            user = self
+        elif self.parent_id is None:
+            user = DetachedPageInput()
+        else:
+            user = inputs_by_entry.get(self.parent_id, EarlierPageInput()).following_input()
+        inputs_by_entry.update((identity, user) for identity, _entry in self.identified())
+        return user
+
+    def runtime_inputs(self, db, reader, session_id):
+        from .native_runtime_input import NativeRuntimeInput
+
+        return NativeRuntimeInput.for_native_user(db, reader, self, session_id=session_id)
 
     @property
     def source_coordinates(self):
@@ -448,12 +518,7 @@ class SessionEntry(NativeEntry):
 
 @dataclass(frozen=True, kw_only=True)
 class MessageEntry(NativeEntry):
-    @classmethod
-    def ancestry_header(cls, value, coordinates) -> NativeEntryHeader:
-        message_field = next(field for field in FieldCodec._record_plan(cls).fields
-                             if field.name == "message")
-        message = PiMessage.wire_member(value.get(message_field.key))
-        return NativeEntryHeader(coordinates.id, coordinates.parent_id, message.user)
+    header_type = NativeMessageEntryHeader
 
     @classmethod
     def input_evidence(cls, raw: dict) -> NativeEntry | None:

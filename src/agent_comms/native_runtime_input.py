@@ -122,6 +122,29 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         except (TypeError, ValueError) as error:
             raise IdentityConflict("Native input execution columns conflict with their stage") from error
 
+    def following_input(self):
+        return self
+
+    def page_events(self, entry, projection):
+        return entry.events(projection)
+
+    def runtime_inputs(self, db, reader, session_id):
+        return (self,)
+
+    @classmethod
+    def for_page_parents(cls, db, reader, parent_ids, *, owner_lookup, session_id):
+        """Read only stored input identities referenced from this bounded page."""
+        parent_ids = tuple(dict.fromkeys(parent_ids))
+        if not parent_ids:
+            return ()
+        marks = ",".join("?" for _ in parent_ids)
+        return cls.select(
+            db,
+            where=("owner_lookup=? AND session_file=? AND session_id=? "
+                   f"AND session_entry_id IN ({marks})"),
+            parameters=(owner_lookup, str(reader.path), session_id, *parent_ids),
+        )
+
     @classmethod
     def for_native_user(cls, db, reader, user, *, session_id):
         """The original admitted native file/input owns stage and publication.
@@ -149,15 +172,16 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         """
         entry = record.entry
         originals, publications = (), ()
-        if user is not None and user.input_id is not None and db is not None:
-            originals = cls.for_native_user(db, reader, user, session_id=session_id)
+        if user.input_id is not None and db is not None:
+            originals = user.runtime_inputs(db, reader, session_id)
             if entry.final_reply:
                 for original in originals:
                     publications = original.published_replies(db, user, owner_lookup)
         for original in originals:
             return partial(original.execution.transcript_events, entry, user=user), publications
-        # Untracked/detached history is not classified by text or native role.
-        return entry.events, publications
+        # A bounded page names an earlier boundary explicitly instead of
+        # guessing another input or walking outside its source window.
+        return partial(user.page_events, entry), publications
 
     @classmethod
     def publication_revision(cls, root, reader, owner_lookup):

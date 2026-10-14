@@ -333,14 +333,6 @@ class FieldCodec(Sealed):
         return cast(T, cls._decode(target, data))
 
     @classmethod
-    def decode_projection(cls, target: type[T], data: object) -> T:
-        """Decode a declaration's fields from a wider read-only object."""
-        if not isinstance(data, dict) or not is_dataclass(target):
-            raise ValueError("Expected a record projection from an object.")
-        plan = cls._record_plan(target)
-        return cls.decode(target, {key: data[key] for key in plan.accepted_keys if key in data})
-
-    @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
         """Instance values carry their selector inside the encoded object."""
         alternatives = []
@@ -659,7 +651,9 @@ class FieldCodec(Sealed):
                     f"Missing required fields for {target.__name__}: {', '.join(init_missing)}"
                 )
             unknown = data.keys() - plan.accepted_keys
-            if unknown:
+            if unknown and not any(
+                field.metadata.get("wire_projection") for field, _ in cls._fields(target)
+            ):
                 raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
             null = plan.reject_null_keys & data.keys()
             if any(data[key] is None for key in null):

@@ -196,14 +196,10 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
             finally:
                 active.pop()
 
-    def traced_ancestors(_reader, records):
-        assert not active
-        # A real zero-timeout writer commits while the bounded page join runs.
-        with Coordination(str(database), lock_timeout=0) as writer:
-            generation = writer.participants.get(lookup).participant_generation
-            writer.participants.advance_generation(lookup, thread.name, expected_generation=generation)
+    def traced_ancestors(_reader, records, stored):
+        assert active
         walks.append(tuple(record.entry.id for record in records))
-        return ancestors(records)
+        return ancestors(records, stored)
 
     def traced_header(self):
         headers.append(self.path)
@@ -224,3 +220,21 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     assert tuple(event for _, events in projected for event in events) == (
         UserTranscript("request", native_id="a" * 32), AssistantTranscript("answer"),
     )
+
+
+def test_page_ancestry_starts_from_an_exact_stored_input(tmp_path):
+    path = tmp_path / "session.jsonl"
+    path.write_bytes(encoded({
+        "type": "message", "id": "reply", "parentId": "user",
+        "message": {"role": "assistant", "content": [], "stopReason": "stop"},
+    }))
+    record = next(NativeTranscript(path).forward(0, path.stat().st_size))
+
+    class StoredInput:
+        session_entry_id = "user"
+
+        def following_input(self):
+            return self
+
+    stored = StoredInput()
+    assert NativeTranscript.input_ancestors((record,), (stored,)) == (stored,)
