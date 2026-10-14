@@ -107,6 +107,8 @@ class PollingWireWatch(WireWatch):
 
 
 class WireChangeWatch(WireWatch):
+    event_settle_seconds = 0.025
+
     def __init__(
         self, fd: int, loop: asyncio.AbstractEventLoop,
         sources: tuple[WatchSource, ...],
@@ -120,6 +122,7 @@ class WireChangeWatch(WireWatch):
         self.loop = loop
         self.changed = asyncio.Event()
         self.invalid = False
+        self._pending_change: asyncio.TimerHandle | None = None
         loop.add_reader(fd, self._on_ready)
 
     async def prepare(self) -> None:
@@ -135,6 +138,17 @@ class WireChangeWatch(WireWatch):
     def notify(self) -> None:
         self.changed.set()
 
+    def _schedule_changed(self) -> None:
+        if self._pending_change is not None:
+            self._pending_change.cancel()
+        self._pending_change = self.loop.call_later(
+            self.event_settle_seconds, self._publish_changed
+        )
+
+    def _publish_changed(self) -> None:
+        self._pending_change = None
+        self.changed.set()
+
     def _on_ready(self) -> None:
         try:
             while raw := os.read(self.fd, 65536):
@@ -147,7 +161,7 @@ class WireChangeWatch(WireWatch):
                     if name in self.names_by_watch.get(watch, ()) or mask & (
                         _IN_Q_OVERFLOW | _IN_IGNORED | _IN_DELETE_SELF | _IN_MOVE_SELF
                     ):
-                        self.changed.set()
+                        self._schedule_changed()
                     if (
                         name in self.reopen_by_watch.get(watch, ())
                         or mask & (_IN_IGNORED | _IN_DELETE_SELF | _IN_MOVE_SELF)
@@ -160,6 +174,9 @@ class WireChangeWatch(WireWatch):
             self.changed.set()
 
     def close(self) -> None:
+        if self._pending_change is not None:
+            self._pending_change.cancel()
+            self._pending_change = None
         if self.fd >= 0:
             self.loop.remove_reader(self.fd)
             os.close(self.fd)
