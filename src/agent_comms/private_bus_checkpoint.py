@@ -32,6 +32,7 @@ from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, TypedTab
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
 from .thread_identity import ThreadIncarnation
+from .turn_context import ContextEntryManifest, RecordedContextManifest
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
@@ -39,7 +40,6 @@ if TYPE_CHECKING:
     from .messages import Message
     from .message_reference import MessageReference
     from .coordination_tables.publications import PublicationIntents
-    from .turn_context import ContextEntryManifest, RecordedContextManifest
     from .retained_task_facts import ExactTaskFact
 
 OriginalSource = TypeVar("OriginalSource")
@@ -407,6 +407,25 @@ class CertifiedSourceRead:
         self.require_current()
         return frozenset(row.reference for row in self.context_entry_rows(references))
 
+    def context_records(self, manifest):
+        """Choose new entry rows and one turn row from this certified index."""
+        from .wire_record import (
+            ContextEntryManifestWireObservation,
+            ObservationWireRecord,
+            RecordedContextManifestWireObservation,
+        )
+
+        recorded, entries = RecordedContextManifest.capture(manifest)
+        known = self.context_entry_references(
+            tuple(entry.reference for entry in entries)
+        )
+        new_entries = tuple(entry for entry in entries if entry.reference not in known)
+        records = (
+            (ObservationWireRecord(ContextEntryManifestWireObservation(new_entries)),)
+            if new_entries else ()
+        )
+        return (*records, ObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
+
     def indexed_context_resources(self, incarnation: ThreadIncarnation, snapshot, *, previous=()):
         """Resolve compact turn records through entry manifests recorded once."""
         self.require_current()
@@ -417,8 +436,6 @@ class CertifiedSourceRead:
             self.connection, where="thread IN (" + ",".join("?" for _ in parameters) + ")",
             parameters=parameters, order_by=("offset",),
         ))
-        from .turn_context import RecordedContextManifest
-
         retained = {resource.pointer: resource for resource in previous}
         recorded_previous = tuple(
             replace(
@@ -557,7 +574,7 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
 
 
 @dataclass(frozen=True)
-class ContextEntrySources(WireSourcePointer["ContextEntryManifest"], CheckpointTable, TypedTable):
+class ContextEntrySources(WireSourcePointer[ContextEntryManifest], CheckpointTable, TypedTable):
     session_id: str = field(metadata={"sql": Column(primary_key=True)})
     session_file: str = field(metadata={"sql": Column(primary_key=True)})
     entry_id: str = field(metadata={"sql": Column(primary_key=True)})
@@ -595,7 +612,7 @@ class ContextEntrySources(WireSourcePointer["ContextEntryManifest"], CheckpointT
 
 @dataclass(frozen=True)
 class RecordedContextManifestSources(
-    WireSourcePointer["RecordedContextManifest"], CheckpointTable, TypedTable
+    WireSourcePointer[RecordedContextManifest], CheckpointTable, TypedTable
 ):
     thread: ThreadIncarnation
     indexes = (Index(("thread", "offset")), Index(("offset",), unique=True))

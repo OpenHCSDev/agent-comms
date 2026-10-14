@@ -307,35 +307,11 @@ class WireLog:
             return [message for record in records for message in record.messages()]
 
     def record_context(self, manifest) -> None:
-        """Record new transcript entries once, then this turn's references."""
-        from .turn_context import RecordedContextManifest
-        from .wire_record import (
-            ContextEntryManifestWireObservation,
-            ObservationWireRecord,
-            RecordedContextManifestWireObservation,
-        )
-
-        recorded, entries = RecordedContextManifest.capture(manifest)
+        """Append the context records chosen by the certified entry owner."""
         with self.locked() as lock:
             marker = self._private_marker_unlocked()
-            source = lock.certified_read()
-            known = source.context_entry_references(
-                tuple(entry.reference for entry in entries)
-            )
-            new_entries = tuple(entry for entry in entries if entry.reference not in known)
-            if new_entries:
-                self._append_private_unlocked(
-                    marker,
-                    ObservationWireRecord(
-                        ContextEntryManifestWireObservation(new_entries)
-                    ).to_wire(),
-                )
-            self._append_private_unlocked(
-                marker,
-                ObservationWireRecord(
-                    RecordedContextManifestWireObservation(recorded)
-                ).to_wire(),
-            )
+            for record in lock.certified_read().context_records(manifest):
+                self._append_private_unlocked(marker, record.to_wire())
 
     def context_manifests(self, name: str, registry):
         return tuple(resource.value for resource in self.context_manifest_resources(name, registry))
