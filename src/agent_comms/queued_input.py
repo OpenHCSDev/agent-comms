@@ -22,7 +22,7 @@ from .image_inputs import ImageInput
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .bus_publication import stable_thread_lookup
 from .coordination_cohort import pending_sealed_assignments
-from .coordination_errors import IdentityConflict
+from .coordination_errors import IdentityConflict, StaleRevision
 from .input_attempt import ACPInputIdText, InputAttempt, ReservedInput
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
@@ -365,6 +365,49 @@ class DeliveredInput(QueuedInput):
                 InputContent(text=rendered.text, contributions=rendered.contributions),
             ))
         return tuple(reserved)
+
+    @classmethod
+    async def recover_interrupted(
+        cls, inputs: InputDrain, session_id: str, root_id: str,
+    ) -> int:
+        """Requeue only deliveries positively proved absent from native input.
+
+        A killed owner can lose the live ``DeliveredInput`` which normally
+        restores its paused assignment. The durable input row and native source
+        membership replace that lost object: any send binding or native row
+        keeps the assignment deferred and therefore never replayed.
+        """
+        async with _async_store_lock(inputs.comms._wire_lock_path):
+            snapshot = inputs.comms.registry.snapshot()
+            owner = snapshot.require(inputs.sessions.require(session_id))
+            lookup = stable_thread_lookup(owner.created_at)
+            document = inputs.dispositions.read()
+            live_keys = {
+                item.key for item in inputs.queued_inputs.get(session_id, {}).values()
+            }
+            rows = {
+                row.origin.reference: row
+                for row in document.unbound_wire_inputs(root_id)
+                if row.key not in live_keys
+            }
+            with Coordination(str(inputs.comms.root / "coordination.sqlite3")) as store:
+                assignments = store.assignments.recoverable_unbound_deliveries(
+                    lookup, frozenset(rows)
+                )
+                recoverable = tuple(
+                    (rows[assignment.source], assignment) for assignment in assignments
+                )
+                if not recoverable:
+                    return 0
+                inputs.dispositions.settle_unbound(tuple(row.key for row, _ in recoverable))
+                restored = 0
+                for _row, assignment in recoverable:
+                    try:
+                        store.assignments.restore_unbound_delivery(assignment)
+                    except StaleRevision:
+                        continue
+                    restored += 1
+                return restored
 
     @classmethod
     async def deliver_pending(

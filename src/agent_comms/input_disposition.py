@@ -104,6 +104,17 @@ class InputDocument:
             bound for row in self.rows.values() if (bound := row.bound_bus_input()) is not None
         )
 
+    def unbound_wire_inputs(self, root_id: str) -> tuple[StoredInput, ...]:
+        """Original bus deliveries with positive evidence that Pi never received them."""
+        from .input_origin import WireInputOrigin
+
+        return tuple(
+            row for row in self.rows.values()
+            if not row.has_native_binding
+            and isinstance(row.origin, WireInputOrigin)
+            and row.origin.root_id == root_id
+        )
+
     def delivery_overview(
         self,
         owners: frozenset[str],

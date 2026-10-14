@@ -562,6 +562,7 @@ class InputDrain:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
         private_root = self.effects._configured_root_id()
+        await DeliveredInput.recover_interrupted(self, session_id, private_root)
         pushed = await self._drain_private_if_changed(session_id, private_root)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
         return pushed
