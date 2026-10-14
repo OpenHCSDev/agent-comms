@@ -1,6 +1,8 @@
 # Provider service tier
 
-A thread owns its requested service tier with its model and thinking selection. New and legacy rows default to `priority`; `standard` is an explicit supported value. The Pi extension adds `service_tier: "priority"` only for Pi models whose declared API selects an OpenAI Responses request serializer. It does not infer support from provider names. Standard requests omit the field and retain provider defaults.
+A thread owns its requested service tier with its model and thinking selection. New and legacy rows default to `priority`; `standard` is an explicit supported value. Stopped threads can select either value with `agent-comms configure --service-tier` or the `comms_model` tool. Both boundaries return the stored tier with the model and thinking level.
+
+The Pi extension adds `service_tier: "priority"` only for Pi models whose declared API selects an OpenAI Responses request serializer. It does not infer support from provider names. Standard requests omit the field and retain provider defaults.
 
 ## Output limits remain Pi-owned
 
