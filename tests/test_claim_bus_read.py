@@ -178,7 +178,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert comms.bus.conversation_page(dm_scope).messages == ()
         raw_channel = comms.views.channel_history_page("#team").messages
         assert [message.body for message in raw_channel] == [
-            "@Alice investigate", "Terminal attempt file claims released",
+            "@Alice investigate", "Released files after a failed turn: module.py",
         ]
         channel = comms.views.channel_display_page("#team").messages
         assert [message.body for message in channel] == ["@Alice investigate"]
