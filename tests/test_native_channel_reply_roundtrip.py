@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import sqlite3
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,8 +28,6 @@ from agent_comms.comms import Comms
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
-from agent_comms.messages import Message, InfoKind
-from agent_comms.field_codec import FieldCodec
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 # Reuse the existing sealed-runtime persistent /var/tmp test root.
@@ -64,22 +63,33 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 requests.append(request)
                 request_times.append(time.monotonic())
                 assert len(requests) <= (8 if broadcast else 2 + seed_count + restart_after_reply + 2 * reject_triage), "Reply observation caused replay or ping-pong"
-                serialized = json.dumps(request)
-                if broadcast:
-                    # The current original native reservation owns stage. Join
-                    # its exact ID to the actual saved input, never prior text.
-                    from agent_comms.coordination_tables.assignments import WakeAssignment
-                    from agent_comms.coordinator import Coordination
-                    from agent_comms.native_runtime_input import NativeRuntimeInput
-                    from agent_comms.native_transcript import NativeTranscript
+                # The current original native reservation owns stage. Join its
+                # exact ID to the saved input; prompt prose is not a stage codec.
+                from agent_comms.coordination_tables.assignments import WakeAssignment
+                from agent_comms.coordinator import Coordination
+                from agent_comms.native_runtime_input import NativeRuntimeInput
+                from agent_comms.native_transcript import NativeTranscript
 
-                    with Coordination(comms.root / "coordination.sqlite3") as store:
-                        with store.session.read():
-                            pending = NativeRuntimeInput.select(
-                                store.session._connection,
-                                where="owner_thread=? AND session_entry_id IS NULL",
-                                parameters=(request["model"],),
+                with Coordination(comms.root / "coordination.sqlite3") as store:
+                    with store.session.read():
+                        pending = NativeRuntimeInput.select(
+                            store.session._connection,
+                            where=(
+                                "owner_thread=? AND session_entry_id IS NULL"
+                                if broadcast else "session_entry_id IS NULL"
+                            ),
+                            parameters=((request["model"],) if broadcast else ()),
+                        )
+                        if not pending:
+                            assert not broadcast
+                            request_text = json.dumps(request.get("messages", ()))
+                            assert (
+                                "RETAINED_NATIVE_HISTORY_" in request_text
+                                or "CONTINUITY_HUMAN_INPUT" in request_text
                             )
+                            original = None
+                            is_triage = requires_answer = False
+                        else:
                             assert len(pending) == 1
                             original = pending[0]
                             user = next(entry for entry in NativeTranscript(
@@ -92,12 +102,14 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                             ) for identity in original.execution.source_assignment_ids(
                                 store.session._connection, original.input_id
                             ))
-                            requires_answer = any(row.source == question.reference for row in assignments)
+                            requires_answer = any(
+                                row.source == question.reference for row in assignments
+                            ) if broadcast else False
+                if broadcast:
+                    assert original is not None
                     request_inputs.append({"input_id": original.input_id,
                                            "stage": original.stage.declared_name,
                                            "owner": original.owner_thread})
-                else:
-                    is_triage = "bounded triage" in serialized
                 if broadcast and len(requests) <= 2:
                     # Both actual owners must reach the endpoint while the
                     # first request is still open. No model turn may retain
@@ -111,11 +123,6 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                     if is_triage
                     else "ROUNDTRIP_NATIVE_REPLY"
                 )
-                if broadcast and not is_triage:
-                    text = json.dumps(FieldCodec.encode((Message(
-                        request["model"], "#team", "ROUNDTRIP_NATIVE_REPLY",
-                        InfoKind, timestamp=0,
-                    ),)))
                 if reject_triage and len(requests) == 2:
                     # Actual successful native output from the live failure:
                     # bare IGNORE violates the required JSON decision contract.
@@ -198,7 +205,14 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
     for key, value in {
         "PI_CODING_AGENT_DIR": str(config),
         "AGENT_COMMS_NATIVE_CONFIG_DIR": str(config),
-        "AGENT_COMMS_AGENT_MODELS": "roundtrip-local/fixture",
+        "AGENT_COMMS_AGENT_BIN": str(Path(sys.executable).with_name("pi-comms-native")),
+        "PYTHONPATH": os.pathsep.join(
+            str(Path(__file__).parents[1] / name) for name in ("src", "tests", "")
+        ),
+        "AGENT_COMMS_AGENT_MODELS": (
+            "roundtrip-local/questioner,roundtrip-local/answerer,roundtrip-local/answerer2"
+            if broadcast else "roundtrip-local/fixture"
+        ),
         "AGENT_COMMS_AGENT_ARGS": "--offline --no-extensions --no-skills --no-context-files",
     }.items():
         monkeypatch.setenv(key, value)
@@ -363,8 +377,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
 
         def selected_turn_finished():
             states = [fact.state for fact in facts if isinstance(fact, TurnChangedUpdate)]
-            active = {state.managed_id for state in states if state.busy}
-            return any(not state.busy and state.finished_turn_id in active for state in states)
+            return any(state.active is None and state.finished_turn_id for state in states)
 
         await until(selected_turn_finished, "Selected turn end published to the open session")
         await until(
