@@ -445,7 +445,7 @@ class ThreadManagement:
 
     def set_thread_configuration(
         self, original: Thread, *, model: str | None = None,
-        thinking_level: str | None = None, service_tier: str | ServiceTier | None = None,
+        thinking_level: str | None = None, service_tier: ServiceTier | None = None,
     ) -> Thread:
         """Publish next-turn settings together against their acquired declaration.
 

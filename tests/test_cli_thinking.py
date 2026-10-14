@@ -8,7 +8,7 @@ from agent_comms.native_arguments import NativeArguments
 from agent_comms.owner_launch import RestartEnvironment
 from agent_comms.pi_commands import GetAvailableModels, GetAvailableThinkingLevels
 from agent_comms.pi_payloads import ModelsData, ReportedModel, ThinkingLevelsData
-from agent_comms.pi_vocabulary import HighThinkingLevel, OffThinkingLevel
+from agent_comms.pi_vocabulary import HighThinkingLevel, OffThinkingLevel, ServiceTier
 from agent_comms.threads import Thread
 
 
@@ -76,7 +76,7 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     monkeypatch.setattr(GetAvailableModels, "discover", discover_models)
     monkeypatch.setattr(GetAvailableThinkingLevels, "discover", discover_levels)
     result = ConfigureCliCommand(
-        name="worker", thinking="high", service_tier="standard"
+        name="worker", thinking="high", service_tier=ServiceTier.STANDARD
     ).apply(comms)
     assert result["thinking_level"] == "high"
     assert result["service_tier"] == "standard"
