@@ -60,7 +60,14 @@ try {
     const runtime=await pi.ModelRuntime.create({authPath:join(root,'auth.json'),modelsPath:join(root,'models.json'),modelsStorePath:join(root,'models-store.json')});
     await runtime.setRuntimeApiKey('compaction-local','local-only');
     const model=runtime.getModel('compaction-local','pi-compaction');
-    const settings=pi.SettingsManager.inMemory({compaction:{enabled:true,reserveTokens:16384,keepRecentTokens:2000},retry:{enabled:false}});
+    const settings=pi.SettingsManager.inMemory({compaction:{enabled:mode!=='cap',reserveTokens:16384,keepRecentTokens:2000},retry:{enabled:false}});
+    if(mode==='cap'){
+        const budget=settings.getCompactionSettings();
+        assert.equal(settings.getCompactionEnabled(),true,'the Core budget cannot be disabled per thread');
+        assert.equal(budget.retainedContextTokens,300000,'the payload budget owns the one global threshold');
+        assert.equal(pi.shouldCompact(300000,1000000,budget),false,'the exact threshold still fits');
+        assert.equal(pi.shouldCompact(300001,1000000,budget),true,'one token over the threshold compacts');
+    }
     const loader=new pi.DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:settings,noExtensions:true,noSkills:true,noPromptTemplates:true});
     await loader.reload();
     const sessions=join(root,'sessions');mkdirSync(sessions,{mode:0o700});
@@ -99,8 +106,8 @@ try {
         await session.prompt('UNDER_CAP',{inputId:randomBytes(16).toString('hex')});
         assert.equal(compactions().length,0,'context under the declared cap does not compact');
         assert.ok(!requests.at(-1).text.includes('SUMMARY_FIXTURE'),'the request used the full session');
-        // The second reply's own usage crosses the declared cap (still far
-        // below the window); the cap compacts right after that response.
+        // The second reply's own usage crosses the retained-context threshold
+        // (still far below the model window); Pi compacts after that response.
         await session.prompt('OVER_CAP',{inputId:randomBytes(16).toString('hex')});
         assert.equal(compactions().length,1,'the declared cap compacts right after the crossing response');
         assert.ok(compactions()[0].summary.trimEnd().endsWith('SUMMARY_FIXTURE'),'the generated summary follows whatever the cap carries');
