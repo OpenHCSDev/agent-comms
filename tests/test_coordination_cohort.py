@@ -19,7 +19,7 @@ from agent_comms.assignment_states import (
     FullPendingAssignment,
 )
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
-from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.cohort_schema import CohortDeliveryReceipts, install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import (
     accept_delivery_cohort,
@@ -184,6 +184,28 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     assert (
         recovered.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 2
     )
+
+
+def test_sealed_receipts_follow_recipient_progress(tmp_path: Path) -> None:
+    comms, store, root_id, lookups = _root(tmp_path)
+    alice_first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+    bob = comms.messaging.send_initial_cohort("sender", "Bob", "other recipient")
+    alice_second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
+    for message in (alice_first, bob, alice_second):
+        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+
+    assert CohortDeliveryReceipts.sealed_sequences_after(
+        store.session._connection,
+        wire_root_id=root_id,
+        recipient_lookup=lookups["Alice"],
+        after_seq=alice_first.seq,
+    ) == frozenset({alice_second.seq})
+    assert CohortDeliveryReceipts.sealed_sequences_after(
+        store.session._connection,
+        wire_root_id=root_id,
+        recipient_lookup=lookups["Bob"],
+        after_seq=0,
+    ) == frozenset({bob.seq})
 
 
 def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
