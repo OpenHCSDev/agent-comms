@@ -235,6 +235,7 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             {
                 "type": "message",
                 "id": entry_id,
+                "timestamp": "2026-09-26T00:00:00.000Z",
                 "message": {
                     "role": "user",
                     "inputId": input_id,

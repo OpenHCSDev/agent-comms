@@ -65,6 +65,10 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
     notification_priority: ClassVar[int] = 3
     notification_busy: ClassVar[bool] = False
     notification_changed: ClassVar[bool] = False
+    records_conversation_response: ClassVar[bool] = False
+
+    def recorded_response(self, original, candidates, recipient_lookup, delivered_at_ms):
+        return None
 
     def notification(
         self,
@@ -490,6 +494,20 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
 
     decision: PendingDecision
     notification_changed = True
+    records_conversation_response = True
+
+    def recorded_response(self, original, candidates, recipient_lookup, delivered_at_ms):
+        target = original.message.exact_reply_target
+        return next(
+            (
+                candidate.message
+                for candidate in candidates
+                if candidate.audience.sender_lookup == recipient_lookup
+                and candidate.message.target == target
+                and candidate.message.timestamp * 1000 >= delivered_at_ms
+            ),
+            None,
+        )
 
     def notification(
         self,
@@ -503,13 +521,7 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return replace(
-            notification,
-            state=notification.receipt_state("Read", updated_at_ms),
-            detail="",
-            busy=False,
-            read_at_ms=updated_at_ms,
-        )
+        return activity.delivered_notification(notification, updated_at_ms)
 
     notification_priority = 2
     notification_state = "Read"
