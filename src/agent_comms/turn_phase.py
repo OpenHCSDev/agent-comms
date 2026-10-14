@@ -58,6 +58,10 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def activity_detail(self) -> str:
         return self.detail
 
+    def project_activity(self, activity):
+        """Display this phase while preserving the acquired drain readiness."""
+        return replace(activity, state=self.activity_state, detail=self.activity_detail)
+
     def model_wait(self, backstop: float | None) -> float | None:
         """Core's no-event backstop for this phase; None where nothing bounds it here."""
         return backstop
