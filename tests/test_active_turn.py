@@ -1,5 +1,6 @@
 import os
 import time
+from datetime import datetime
 
 import pytest
 
@@ -95,6 +96,12 @@ async def test_repeated_turn_preparation_displays_real_native_drain_failure(tmp_
 
     failure = comms.agents.activity_of("worker").readiness.source_diagnostic()
     assert isinstance(failure, NativeInputDrainDiagnostic)
+    comms.agents.activity.emit(Activity(
+        "worker",
+        ActivityState.IDLE,
+        timestamp=failure.recorded_at + 3600,
+        diagnostic=failure,
+    ))
     failed_generation = comms.registry.require("worker").turn_generation
     repeated = comms.agents.begin_turn("worker", "repeated-failure", "Preparing queued input")
     assert retried == 1
@@ -102,7 +109,8 @@ async def test_repeated_turn_preparation_displays_real_native_drain_failure(tmp_
 
     view = comms.views.thread_views()[0]
     assert isinstance(view.activity.readiness, FailedPreparingDrainReadiness)
-    assert view.presentation.summary.startswith("Failed ")
+    recorded = datetime.fromtimestamp(failure.recorded_at).astimezone().strftime("%H:%M")
+    assert view.presentation.summary.startswith(f"Failed {recorded}")
     assert "native request never opened" in view.presentation.summary
     assert view.presentation.attention and view.presentation.busy
     comms.agents.finish_turn(repeated.turn_lease)

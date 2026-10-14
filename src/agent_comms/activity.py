@@ -65,6 +65,7 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     owner: OwnerIdentity
     error_type: str
     reason: str
+    recorded_at: float = field(default_factory=time.time, compare=False)
 
     @property
     @abstractmethod
@@ -163,20 +164,15 @@ class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
         return ordinary if busy or ordinary.busy else super().presentation(ordinary, busy=busy)
 
     def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
-        return replace(
-            activity,
-            readiness=FailedPreparingDrainReadiness(self.diagnostic, activity.timestamp),
-        )
+        return replace(activity, readiness=FailedPreparingDrainReadiness(self.diagnostic))
 
 
 @dataclass(frozen=True)
 class FailedPreparingDrainReadiness(NativeInputDrainReadiness):
     """A retained native failure while the next turn has not reached its request."""
 
-    failed_at: float
-
     def presentation(self, ordinary, *, busy):
-        when = datetime.fromtimestamp(self.failed_at).astimezone().strftime("%H:%M")
+        when = datetime.fromtimestamp(self.diagnostic.recorded_at).astimezone().strftime("%H:%M")
         return replace(
             ordinary,
             marker="!",
