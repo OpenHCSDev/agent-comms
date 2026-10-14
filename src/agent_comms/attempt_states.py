@@ -96,6 +96,10 @@ class TerminalAttempt(AttemptState):
     def retry_finality(self) -> bool:
         return self.failed
 
+    @property
+    @abstractmethod
+    def release_wording(self) -> str: ...
+
     @abstractmethod
     def disposition(self, snapshot, attempt): ...
 
@@ -257,6 +261,10 @@ class ProviderUnavailableAttempt(LiveAttempt):
 
 
 class SucceededAttempt(TerminalAttempt):
+    @property
+    def release_wording(self) -> str:
+        return "Released files after a completed turn"
+
     def disposition(self, snapshot, attempt):
         from .execution_states import CompletedExecution
         from .obligation_states import SilentResponse
@@ -272,7 +280,18 @@ class SucceededAttempt(TerminalAttempt):
         return ()
 
 
+@dataclass(frozen=True)
 class AttemptFailedAttempt(TerminalAttempt):
+    unknown: bool = False
+
+    @property
+    def release_wording(self) -> str:
+        return (
+            "Released files after a turn with unknown outcome; read them before editing"
+            if self.unknown
+            else "Released files after a failed turn"
+        )
+
     def disposition(self, snapshot, attempt):
         from .execution_states import DeferredExecution, FailedExecution
         from .obligation_states import DeferredResponse, FailedResponse

@@ -235,6 +235,6 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
                 ("sender", session, "Change the value"),
                 (session, "sender", "Resource claim admitted"),
                 (session, "sender", "Changed it."),
-                (session, "sender", "Terminal attempt file claims released"),
+                (session, "sender", "Released files after a completed turn: module.py"),
             ]
             assert dict(comms.bus.log.claim_projection()) == {}

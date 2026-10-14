@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.attempt_start import AttemptStart
-from agent_comms.attempt_states import AttemptFailedAttempt, AttemptState, TerminalAttempt
+from agent_comms.attempt_states import AttemptState, TerminalAttempt
 from agent_comms.coordination_contracts import (
     MAX_SANITIZED_DETAIL_CHARS,
     _bounded_reason,
@@ -238,8 +238,10 @@ class AttemptStore:
                     progress=False,
                     reason_code="native_unknown",
                 )
+            from .attempt_states import AttemptFailedAttempt
+
             self.snapshots.get(fence.execution_id).settle(
-                self.session, AttemptFailedAttempt(), "native_unknown", acquired
+                self.session, AttemptFailedAttempt(unknown=True), "native_unknown", acquired
             )
             return Applied(self.snapshots.get(fence.execution_id))
 

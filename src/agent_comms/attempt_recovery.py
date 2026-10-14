@@ -398,8 +398,9 @@ class RecoveryMonitorCapability:
             if (attempt.lifecycle.backend_done or evidence.backend_done) and not unresolved:
                 from .attempt_states import AttemptFailedAttempt
 
+                outcome = AttemptFailedAttempt(unknown=evidence.unknown_effects)
                 store.snapshots.get(execution_id).settle(
-                    store.session, AttemptFailedAttempt(), evidence.reason_code, boundary
+                    store.session, outcome, evidence.reason_code, boundary
                 )
                 settled = store.snapshots.get(execution_id)
                 kind = DeferredRecovery if settled.execution.lifecycle.retry else FailedRecovery
