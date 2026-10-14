@@ -446,7 +446,6 @@ class ThreadManagement:
     def set_thread_configuration(
         self, original: Thread, *, model: str | None = None,
         thinking_level: str | None = None, service_tier: str | ServiceTier | None = None,
-        max_output_tokens: int | None = None,
     ) -> Thread:
         """Publish next-turn settings together against their acquired declaration.
 
@@ -460,7 +459,6 @@ class ThreadManagement:
             thread.execution.require_native()
             updated = thread.with_model_configuration(
                 model=model, thinking_level=thinking_level, service_tier=service_tier,
-                max_output_tokens=max_output_tokens,
             )
             if updated != thread:
                 self.registry.register(updated, self.registry.status(thread.name))
@@ -468,14 +466,12 @@ class ThreadManagement:
 
     def initialize_native_configuration(
         self, name: str, *, model: str | None, thinking_level: str | None,
-        max_output_tokens: int | None = None,
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             updated = thread.initialized_native_configuration(
                 model=model, thinking_level=thinking_level,
-                max_output_tokens=max_output_tokens,
             )
             if updated != thread:
                 self.registry.register(updated, self.registry.status(thread.name))
