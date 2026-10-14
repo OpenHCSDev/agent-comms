@@ -200,95 +200,42 @@ class NativeOwnerCommand:
         return thread.execution.native_command_available(cls, status, owner_pid=thread.pid)
 
 
-class ChannelArrangement(DeclaredFamily, affix="Arrangement"):
-    """One external channel/member ordering action with its own required fields."""
+@dataclass(frozen=True, kw_only=True)
+class CommsPinChannelTool(ToolRequest):
+    label = "Pin Channel"
+    description = (
+        "Persist whether a channel is pinned. Pinned channels sort before unpinned "
+        "channels; the selected channel sort remains the secondary order."
+    )
+    name: str = tool_field("Channel name")
+    pinned: bool = tool_field("True to pin; false to unpin")
 
-    @classmethod
-    @abstractmethod
-    def apply(
-        cls, comms: Comms, *, channel: str, thread: str, pinned: bool | None,
-        channel_order: ChannelSort | None, thread_order: ThreadSort | None,
-    ) -> JsonObject: ...
-
-    @staticmethod
-    def require_channel(channel: str) -> str:
-        if not channel.strip():
-            raise ValueError("A channel name is required.")
-        return channel
-
-
-class PinChannelArrangement(ChannelArrangement):
-    @classmethod
-    def apply(cls, comms, *, channel, thread, pinned, channel_order, thread_order):
+    def apply(self, comms: Comms) -> JsonObject:
         from .cli_commands import PinChannelCliCommand
 
-        if pinned is None:
-            raise ValueError("Pin channel requires pinned.")
-        return PinChannelCliCommand(
-            name=cls.require_channel(channel), pinned=pinned
-        ).apply(comms)
-
-
-class PinThreadArrangement(ChannelArrangement):
-    @classmethod
-    def apply(cls, comms, *, channel, thread, pinned, channel_order, thread_order):
-        from .cli_commands import PinThreadCliCommand
-
-        channel = cls.require_channel(channel)
-        if not thread.strip() or pinned is None:
-            raise ValueError("Pin thread requires thread and pinned.")
-        PinThreadCliCommand(channel=channel, name=thread, pinned=pinned).apply(comms)
-        canonical = channel if channel.startswith("#") else f"#{channel}"
-        return next(
-            view.to_wire() for view in comms.views.channel_views() if view.channel.name == canonical
-        )
-
-
-class SortChannelsArrangement(ChannelArrangement):
-    @classmethod
-    def apply(cls, comms, *, channel, thread, pinned, channel_order, thread_order):
-        if channel_order is None:
-            raise ValueError("Sort channels requires channel_order.")
-        order = comms.channels.set_channel_order(channel_order)
-        return {"order": order.value}
-
-
-class SortChannelArrangement(ChannelArrangement):
-    @classmethod
-    def apply(cls, comms, *, channel, thread, pinned, channel_order, thread_order):
-        if thread_order is None:
-            raise ValueError("Sort channel requires thread_order.")
-        return comms.channels.set_channel_sort(
-            cls.require_channel(channel), thread_order
-        ).to_wire()
+        return PinChannelCliCommand(name=self.name, pinned=self.pinned).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderTool(ToolRequest):
-    label = "Arrange channels and members"
+class CommsPinThreadTool(ToolRequest):
+    label = "Pin Thread in Channel"
     description = (
-        "Pin/unpin a channel or member, set the global channel order, or set one "
-        "channel's member order. Supply only the fields named by the selected action."
+        "Persist whether a member is pinned within one channel. Pins do not change "
+        "membership or ordering in other channels. The selected member sort remains the"
+        " secondary order."
     )
-    action: type[ChannelArrangement] = tool_field("Ordering action")
-    channel: str = tool_field("Channel name for channel/member actions", default="")
-    thread: str = tool_field("Member thread for pin_thread", default="")
-    pinned: bool | None = tool_field("Pin state for pin actions", default=None)
-    channel_order: ChannelSort | None = tool_field(
-        "Global channel order for sort_channels", default=None
-    )
-    thread_order: ThreadSort | None = tool_field(
-        "Member order for sort_channel", default=None
-    )
+    channel: str = tool_field("Channel containing the thread")
+    name: str = tool_field("Member thread name")
+    pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms) -> JsonObject:
-        return self.action.apply(
-            comms,
-            channel=self.channel,
-            thread=self.thread,
-            pinned=self.pinned,
-            channel_order=self.channel_order,
-            thread_order=self.thread_order,
+        from .cli_commands import PinThreadCliCommand
+
+        channel = self.channel
+        PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
+        canonical = channel if channel.startswith("#") else f"#{channel}"
+        return next(
+            view.to_wire() for view in comms.views.channel_views() if view.channel.name == canonical
         )
 
 
@@ -333,6 +280,20 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
             "thinking_level": ThinkingLevel.optional_name(thread.thinking_level),
             "service_tier": thread.service_tier.value,
         }
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSortChannelsTool(ToolRequest):
+    label = "Sort Channels"
+    description = (
+        "Persist channel-list ordering independently of member ordering. Pinned "
+        "channels stay first, with built-in channels first within each pin group."
+    )
+    order: ChannelSort = tool_field("Channel list order")
+
+    def apply(self, comms: Comms) -> JsonObject:
+        order = comms.channels.set_channel_order(self.order)
+        return {"order": order.value}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -440,6 +401,17 @@ class CommsDeleteViewTool(ToolRequest):
 
         DeleteViewCliCommand(name=self.name).apply(comms)
         return CommsChannelsTool().apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSortChannelTool(ToolRequest):
+    label = "Sort channel members"
+    description = "Persist one channel's member ordering, shared by all attached views."
+    name: str = tool_field("Channel name")
+    order: ThreadSort = tool_field("Member ordering")
+
+    def apply(self, comms: Comms) -> JsonObject:
+        return comms.channels.set_channel_sort(self.name, self.order).to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)

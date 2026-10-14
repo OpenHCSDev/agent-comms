@@ -67,7 +67,6 @@ class TestToolCatalog:
             "comms_set_goal",
             "comms_stop",
             "comms_archive",
-            "comms_order",
         } <= set(names)
         assert all(tool["parameters"]["additionalProperties"] is False for tool in catalog)
 
