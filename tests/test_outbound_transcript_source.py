@@ -149,7 +149,9 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
 
     _path, _root_id, comms, initial, _people = _root(tmp_path, direct=direct)
     owner = comms.registry.snapshot().owner_identity('beta')
-    diagnostic = StoppedDrainDiagnostic(owner, 'NativePiUnavailable', 'Original outcome uncertain')
+    diagnostic = StoppedDrainDiagnostic(
+        owner, 'NativePiUnavailable', 'Original outcome uncertain', recorded_at=1.0
+    )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     notice = next(item for item in comms.views.recent_notifications('sender')
                   if item.recipient=='beta')
@@ -173,7 +175,9 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
 
     root, _root_id, comms, _initial, _people = _root(tmp_path)
     owner = comms.registry.snapshot().owner_identity('beta')
-    diagnostic = StoppedDrainDiagnostic(owner, 'NativePiUnavailable', 'Original uncertain outcome')
+    diagnostic = StoppedDrainDiagnostic(
+        owner, 'NativePiUnavailable', 'Original uncertain outcome', recorded_at=1.0
+    )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     message = comms.messaging.send_user_message('#team', 'Independent saved original',
                                                worktree=str(tmp_path))

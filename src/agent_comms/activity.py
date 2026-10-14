@@ -10,13 +10,15 @@ from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from enum import Enum
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, projected
 from .private_path import FileRevision
 from .store_files import (
     _append_jsonl,
@@ -29,6 +31,7 @@ from .thread_owned_state import ThreadOwnedState
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
+    from .agent_activity import AgentActivity
     from .threads import Thread
 
 
@@ -64,6 +67,9 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     owner: OwnerIdentity
     error_type: str
     reason: str
+    recorded_at: float = field(
+        compare=False, metadata={"artifact_exclude": True}
+    )
 
     @property
     @abstractmethod
@@ -76,6 +82,10 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     @property
     def summary(self) -> str:
         return f"{self.headline} · {self.error_type}: {self.reason} · {self.recovery}"
+
+    @projected(view="artifact", name="kind")
+    def artifact_kind(self) -> str:
+        return FieldCodec.encode(type(self))
 
     def readiness(self) -> DrainReadiness:
         return UnavailableDrainReadiness(self)
@@ -127,6 +137,14 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def require_available(self) -> None:
         pass
 
+    async def retire(self, agents: AgentActivity, thread: str) -> DrainReadiness:
+        """A healthy readiness has no retained failure to retire."""
+        return self
+
+    def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
+        """An ordinary preparation has no earlier request failure to display."""
+        return activity
+
 
 @dataclass(frozen=True)
 class ReadyDrainReadiness(DrainReadiness):
@@ -150,12 +168,38 @@ class DiagnosticDrainReadiness(DrainReadiness):
         return ThreadPresentation(ordinary.title, "!", self.diagnostic.summary,
                                   busy=busy, attention=True)
 
+    async def retire(self, agents, thread):
+        from .coordinator import Coordination
+
+        await Coordination.run_worker(
+            partial(agents.set_drain_diagnostic, thread, self.diagnostic.owner, None)
+        )
+        return ReadyDrainReadiness()
+
 
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
     """Retain the failed request warning; new messages keep ordinary availability."""
 
     def presentation(self, ordinary, *, busy):
         return ordinary if busy or ordinary.busy else super().presentation(ordinary, busy=busy)
+
+    def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
+        return replace(activity, readiness=FailedPreparingDrainReadiness(self.diagnostic))
+
+
+@dataclass(frozen=True)
+class FailedPreparingDrainReadiness(NativeInputDrainReadiness):
+    """A retained native failure while the next turn has not reached its request."""
+
+    def presentation(self, ordinary, *, busy):
+        when = datetime.fromtimestamp(self.diagnostic.recorded_at).astimezone().strftime("%H:%M")
+        return replace(
+            ordinary,
+            marker="!",
+            summary=f"Failed {when}",
+            busy=busy,
+            attention=True,
+        )
 
 
 class UnavailableDrainReadiness(DiagnosticDrainReadiness):
