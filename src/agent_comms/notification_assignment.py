@@ -14,6 +14,7 @@ from .coordination_schema import COORDINATION_SCHEMA_VERSION
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.publications import PublicationReceipts
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .typed_table import BooleanStorage, SQLiteUserVersion, TypedRow, sql_literal
@@ -512,16 +513,19 @@ class NotificationAssignment(NotificationSource):
             )
         resolved = []
         for row in rows:
+            if not row.assignment.lifecycle.records_conversation_response:
+                resolved.append(row)
+                continue
             original = originals.get(row.assignment.source)
-            response = (
-                row.assignment.lifecycle.recorded_response(
-                    original,
-                    candidates[row.assignment.recipient_lookup],
-                    row.assignment.recipient_lookup,
-                    row.assignment.updated_at_ms,
+            if original is None:
+                raise RelationViolationError(
+                    "Delivered assignment source is absent from the bus"
                 )
-                if original is not None
-                else None
+            response = row.assignment.lifecycle.recorded_response(
+                original,
+                candidates[row.assignment.recipient_lookup],
+                row.assignment.recipient_lookup,
+                row.assignment.updated_at_ms,
             )
             resolved.append(
                 replace(row, activity=row.activity.recorded_response(response))
