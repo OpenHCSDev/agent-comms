@@ -286,16 +286,9 @@ class NativeEvidenceRead:
             # from byte zero; no stale entry or offset survives the transition.
             return self._reverify()
         except NativePiUnavailable:
-            if self.entries and not reverified:
-                return self._reverify()
             self.close()
             raise
         except (ValueError, TypeError, KeyError) as error:
-            # A retained offset that no longer lands on valid appended rows is
-            # evidence of an in-place rewrite. Reacquire once from byte zero;
-            # a genuinely malformed append fails again in that named state.
-            if self.entries and not reverified:
-                return self._reverify()
             self.close()
             raise NativePiUnavailable(f"Native Pi session evidence is invalid: {error}") from error
         self.entries = entries
