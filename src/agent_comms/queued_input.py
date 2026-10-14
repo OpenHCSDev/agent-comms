@@ -178,15 +178,17 @@ class QueuedInput:
         The consumer transfers this original ExitStack only after binding its
         live input, or into its existing longer turn-acquisition lifetime.
         """
+        await cls.require_capacity(inputs, session_id)
         async with _async_store_lock(inputs.comms._wire_lock_path), AsyncExitStack() as rollback:
             custody = ExitStack()
             rollback.push_async_callback(Coordination.run_worker, custody.close)
-            await cls.require_capacity(inputs, session_id)
-            item, owner, row = await Coordination.run_worker(partial(
-                cls.capture, inputs, name, text=text, prompt=prompt, echo=echo,
+            # No await while holding the wire lock: capacity was checked before
+            # acquisition and capture is synchronous file work under custody.
+            item, owner, row = cls.capture(
+                inputs, name, text=text, prompt=prompt, echo=echo,
                 images=images, controller=controller, input_id=input_id,
                 origin=origin, custody=custody,
-            ))
+            )
             yield item, owner, row, custody
 
     def place(
@@ -223,15 +225,14 @@ class QueuedInput:
         inputs = turns.inputs
         try:
             async with _async_store_lock(inputs.comms._wire_lock_path):
+                # No await while holding the wire lock: every check below is
+                # synchronous file work under the acquired physical custody.
                 self.require_live_source(inputs, session_id)
-                def require_handoff():
-                    snapshot = inputs.comms.registry.snapshot()
-                    canonical = snapshot.canonical_name(name)
-                    self.require_handoff(
-                        snapshot, canonical, inputs.dispositions.read().lookup(self.key), self.input_id,
-                    )
-                    return canonical
-                canonical = await Coordination.run_worker(require_handoff)
+                snapshot = inputs.comms.registry.snapshot()
+                canonical = snapshot.canonical_name(name)
+                self.require_handoff(
+                    snapshot, canonical, inputs.dispositions.read().lookup(self.key), self.input_id,
+                )
         except RelationViolationError as error:
             raise InputHandoffRefused(str(error)) from error
         await turns.run_agent_turn(
@@ -317,16 +318,14 @@ class DeliveredInput(QueuedInput):
         )
 
     @classmethod
-    def reserve_pending(
+    def _prepared_pending(
         cls,
         inputs: InputDrain,
         name: str,
         root_id: str,
         pending: tuple[tuple[CommittedDelivery, WakeAssignment], ...],
-        store: Coordination,
-    ) -> tuple[tuple[Self, InputContent], ...]:
-        """Called inside the wire boundary: reserve each input, then pause its assignment."""
-        from .agent_backend import InputContent
+    ) -> tuple[Thread, Any, Any, tuple[tuple[str, ReservedInput, Any, Message, WakeAssignment], ...]]:
+        """Synchronous preparation outside the wire lock: no reservation yet."""
         from .context_segments.wake import DeliveredMessageSegment
         from .routing import ScheduledTurn
         from .turn_context import TurnContext
@@ -336,7 +335,7 @@ class DeliveredInput(QueuedInput):
         owner = snapshot.threads[canonical]
         context = QueuedInputContext.capture(owner, snapshot.admission_identity(canonical))
         document = inputs.dispositions.read()
-        reserved = []
+        prepared = []
         for source, assignment in pending:
             message = source.message
             key = InputDispositions.bus_key(message, owner)
@@ -351,22 +350,8 @@ class DeliveredInput(QueuedInput):
                 ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                 origin=WireInputOrigin(root_id, message.reference),
             )
-            with ExitStack() as custody:
-                inputs.dispositions.reserve_originals(row, custody=custody)
-                paused = store.assignments.transition_preengagement(
-                    assignment.assignment_id, DeferredAssignment,
-                    expected_revision=assignment.revision,
-                ).value
-                custody.pop_all()
-            reserved.append((
-                cls(
-                    text=row.source_text, echo=False, context=context,
-                    input_id=ACPInputIdText.new(), prompt=rendered.text,
-                    bus_key=key, message=message, assignment=paused,
-                ),
-                InputContent(text=rendered.text, contributions=rendered.contributions),
-            ))
-        return tuple(reserved)
+            prepared.append((key, row, rendered, message, assignment))
+        return owner, context, snapshot, tuple(prepared)
 
     @classmethod
     async def deliver_pending(
@@ -400,17 +385,50 @@ class DeliveredInput(QueuedInput):
         pending = pending[:max(await cls.capacity(inputs, session_id), 0)]
         if not pending:
             return
-        unplaced: tuple[Self, ...] = ()
-        async with _async_store_lock(inputs.comms._wire_lock_path):
-            reserved = await Coordination.run_async(store_path, partial(
-                cls.reserve_pending, inputs, owner.name, root_id, pending,
+        from .agent_backend import InputContent
+        # Preparation reads registry/dispositions without wire custody and never
+        # holds a lock across an await. Reservation takes the wire lock only
+        # for synchronous file work; coordination transitions run outside it.
+        delivery_owner, context, snapshot, prepared = await Coordination.run_worker(
+            partial(cls._prepared_pending, inputs, owner.name, root_id, pending)
+        )
+        reserved: list[tuple[Self, Any]] = []
+        for key, row, rendered, message, assignment in prepared:
+            custody = ExitStack()
+            try:
+                async with _async_store_lock(inputs.comms._wire_lock_path):
+                    inputs.dispositions.reserve_originals(row, custody=custody)
+            except RelationViolationError:
+                await Coordination.run_worker(custody.close)
+                continue
+            try:
+                paused = await Coordination.run_async(
+                    store_path,
+                    lambda store, assignment=assignment: store.assignments.transition_preengagement(
+                        assignment.assignment_id, DeferredAssignment,
+                        expected_revision=assignment.revision,
+                    ).value,
+                )
+            except Exception:
+                await Coordination.run_worker(custody.close)
+                continue
+            custody.pop_all()
+            custody.close()
+            reserved.append((
+                cls(
+                    text=row.source_text, echo=False, context=context,
+                    input_id=ACPInputIdText.new(), prompt=rendered.text,
+                    bus_key=key, message=message, assignment=paused,
+                ),
+                InputContent(text=rendered.text, contributions=rendered.contributions),
             ))
-            for index, (item, content) in enumerate(reserved):
-                try:
-                    item.place(inputs, session_id, inbox, content)
-                except InputHandoffRefused:
-                    unplaced = tuple(item for item, _ in reserved[index:])
-                    break
+        unplaced: tuple[Self, ...] = ()
+        for index, (item, content) in enumerate(reserved):
+            try:
+                item.place(inputs, session_id, inbox, content)
+            except InputHandoffRefused:
+                unplaced = tuple(item for item, _ in reserved[index:])
+                break
         for item in unplaced:
             await item.not_started(inputs)
 
