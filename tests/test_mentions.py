@@ -1,7 +1,7 @@
 import pytest
 
 from agent_comms import MentionQuery
-from agent_comms.comms import Comms
+from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind

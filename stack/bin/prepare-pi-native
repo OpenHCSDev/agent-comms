@@ -74,7 +74,7 @@ cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
 python3 "$stack_root/patch-native-compaction-brief.py" "$native_package/$session"
 python3 "$stack_root/patch-native-compaction-wip.py" "$native_package/$session"
-python3 "$stack_root/patch-native-compaction-cap.py" "$native_package/$compaction"
+python3 "$stack_root/patch-native-compaction-cap.py" "$native_package"
 python3 "$stack_root/patch-native-turn-context.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 python3 "$stack_root/patch-native-file-artifact.py" \
@@ -95,6 +95,7 @@ if [[ "$update_pins" == true ]]; then
 fi
 verify "$stage"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
+node --check "$stage/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$compaction"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$session"
