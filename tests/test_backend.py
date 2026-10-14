@@ -81,6 +81,14 @@ emit({{"type": "message_start", "message": {{"role": "user",
 async def _rpc_events(
     tmp_path: Path, records: list[dict], *, current_input: bool = True
 ) -> list[ae.AgentEvent]:
+    # Pi's assistant wire type always carries its content array. Parser cases
+    # specify only the fields they vary; the fake child supplies the owned base.
+    records = [
+        record | {"message": {"content": [], **record["message"]}}
+        if record.get("message", {}).get("role") == "assistant"
+        else record
+        for record in records
+    ]
     if current_input:
         # Most parser fixtures model an ordinary accepted prompt. They need a
         # matching user start, not a fabricated assistant final. Tests of the

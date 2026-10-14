@@ -77,7 +77,8 @@ def native_rpc_fixture(monkeypatch):
         args = NativeArguments.parse(arguments).rpc()
         if session_file:
             args += ("--session", session_file)
-        env = dict(os.environ)
+        inherited = RestartEnvironment.inherit(os.environ)
+        env = inherited.encode()
         env.update(environment or {})
         return NativePiRpcLaunch(
             (command, *args),
