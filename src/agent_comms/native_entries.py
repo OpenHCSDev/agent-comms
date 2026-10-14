@@ -51,13 +51,6 @@ class NativeEntryHeader:
     input_boundary: bool = False
 
 
-@dataclass(frozen=True)
-class NativeMessageEnvelope:
-    """The message member selected by an entry, without decoding its payload."""
-
-    message: dict[str, Any]
-
-
 @dataclass(frozen=True, kw_only=True)
 class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
@@ -457,8 +450,9 @@ class SessionEntry(NativeEntry):
 class MessageEntry(NativeEntry):
     @classmethod
     def ancestry_header(cls, value, coordinates) -> NativeEntryHeader:
-        envelope = FieldCodec.decode_projection(NativeMessageEnvelope, value)
-        message = PiMessage.wire_member(envelope.message)
+        message_field = next(field for field in FieldCodec._record_plan(cls).fields
+                             if field.name == "message")
+        message = PiMessage.wire_member(value.get(message_field.key))
         return NativeEntryHeader(coordinates.id, coordinates.parent_id, message.user)
 
     @classmethod

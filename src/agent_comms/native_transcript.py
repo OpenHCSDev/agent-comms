@@ -57,6 +57,16 @@ class NativeRecord:
         """A decoded record owns whether it can produce presentation events."""
         return projection(self) if self.entry is not None else ()
 
+    def extend_input_ancestry(self, inputs_by_entry):
+        """Add this record's bounded parent answer to one fragment walk."""
+        entry = self.entry
+        if entry is None:
+            return None
+        user = entry if entry.input_boundary else inputs_by_entry.get(entry.parent_id)
+        if entry.id is not None:
+            inputs_by_entry[entry.id] = user
+        return user
+
     def incomplete_tail(self, through: int) -> bool:
         return self.end == through and not self.complete and self.entry is None
 
@@ -169,13 +179,7 @@ class NativeTranscript:
         records = tuple(records)
         inputs_by_entry, resolved = {}, [None] * len(records)
         for index, record in sorted(enumerate(records), key=lambda item: item[1].start):
-            entry = record.entry
-            if entry is None:
-                continue
-            user = entry if entry.input_boundary else inputs_by_entry.get(entry.parent_id)
-            resolved[index] = user
-            if entry.id is not None:
-                inputs_by_entry[entry.id] = user
+            resolved[index] = record.extend_input_ancestry(inputs_by_entry)
         return tuple(resolved)
 
     def input_ancestor(self, record: NativeRecord):
