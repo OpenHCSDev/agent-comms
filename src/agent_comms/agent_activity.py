@@ -52,10 +52,9 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
         notification: MessageNotification,
         updated_at_ms: int,
         progress: AssignmentProgress,
-        read_at_ms: int | None,
     ) -> MessageNotification:
         return progress.selected_notification(
-            notification, read_at_ms, busy=self.turn_started_by(updated_at_ms)
+            notification, busy=self.turn_started_by(updated_at_ms)
         )
 
 

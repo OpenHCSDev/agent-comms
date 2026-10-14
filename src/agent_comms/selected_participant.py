@@ -117,14 +117,18 @@ class SelectedParticipant(MroDispatch):
             return
         identity = ParticipantOwner(owner.thread, participant.participant_generation)
         provider, model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
+        # Authored outcomes are optional prompt context, not a started turn.
+        # Capture their bounded source cut before acquiring the live turn lease:
+        # projection failure is then the drain's named unavailable state instead
+        # of a succession of Preparing turns which never reach native Pi.
+        sent_outcomes = await Coordination.run_worker(
+            lambda: cls.capture_sent_outcomes(comms, name)
+        )
         lease = cls.lease(comms, owner)
         try:
             leased = await Coordination.run_worker(lambda: next(lease))
             sources = await cls.sources(bus, store, root_id, pending, identity)
             batch = SelectedSourceBatch.first_route(sources)
-            sent_outcomes = await Coordination.run_worker(
-                lambda: cls.capture_sent_outcomes(comms, name)
-            )
             selected = cls(
                 comms,
                 bus,
@@ -153,14 +157,14 @@ class SelectedParticipant(MroDispatch):
     def capture_sent_outcomes(
         comms: Comms, name: str
     ) -> tuple[MessageNotification, ...]:
-        presentation = comms.views.thread_presentation(
-            name, sent_source_limit=MessageNotification.window_limit
+        outcomes = MessageNotification.recent_sent(
+            comms.root,
+            comms.registry,
+            comms.bus.log,
+            name,
+            limit=MessageNotification.window_limit,
         )
-        if presentation is None:
-            return ()
-        return tuple(
-            outcome for outcome in presentation.sent_notifications if outcome.changed
-        )
+        return tuple(outcome for outcome in outcomes if outcome.changed)
 
     @staticmethod
     def prepare(

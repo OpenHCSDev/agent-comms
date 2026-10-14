@@ -257,6 +257,21 @@ class MessageNotification:
         return cls.for_sources(root, registry, owner, sources)
 
     @classmethod
+    def recent_sent(
+        cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
+    ) -> tuple[MessageNotification, ...]:
+        """Project one sender's bounded outcome cut without preparing its transcript."""
+        if not 1 <= limit <= cls.window_limit:
+            raise ValueError("Sent notification limit must fit one bounded window")
+        owner = registry.require(name)
+        from .transcript_receipts import AssignedTranscriptSource
+
+        captured = AssignedTranscriptSource.for_thread(root, owner, log).window(
+            limit=0, sent_limit=limit
+        )
+        return cls.for_sources(root, registry, owner, captured.sent_sources)
+
+    @classmethod
     def for_sources(
         cls, root: Path, registry: Registration, owner: Thread, sources: Sequence[CommittedDelivery]
     ) -> tuple[MessageNotification, ...]:
