@@ -1,6 +1,7 @@
 """Original private prefix verification permits append, not changed evidence."""
 
 import asyncio
+import hashlib
 import io
 import json
 import os
@@ -8,7 +9,11 @@ import threading
 
 import pytest
 
-from agent_comms.native_pi import NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.native_pi import (
+    NativePiUnavailable,
+    PrivateEvidenceRead,
+    VerifiedNativeEvidencePrefix,
+)
 from test_native_pi import _evidence
 from test_backend_native_lifecycle import native_backend
 
@@ -120,7 +125,7 @@ def test_next_decode_cannot_reuse_prefetched_bytes(tmp_path):
         assert tuple(source._decode_captured(len(first)))[0]["id"] == "first"
         with session.open("r+b", buffering=0) as writer:
             os.pwrite(writer.fileno(), new, len(first))
-        source.size = len(first)
+        source.prefix = VerifiedNativeEvidencePrefix(len(first), hashlib.sha256(first))
         assert tuple(source._decode_captured(len(first + new)))[0]["id"] == "new"
 
 

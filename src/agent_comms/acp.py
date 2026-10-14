@@ -462,6 +462,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
         async with AsyncExitStack() as retirement:
+            # CursorPublication owns the cross-observation evidence lifetime;
+            # close it after its session/input producers have drained.
+            retirement.callback(self.cursors.close)
             retirement.push_async_callback(self.sessions.release_owned)
             retirement.push_async_callback(self.turns.close)
             retirement.push_async_callback(self.sessions.close_proxies)
