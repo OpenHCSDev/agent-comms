@@ -211,8 +211,9 @@ def _response_boundary(bus: MessageBus, *, blocking: bool = True,
                        contention: StoreLockContention | None = None,
                        measurements: PublicationMeasurements | None = None,
                        session=None) -> Iterator[RegistrySnapshot]:
-    """Total lock order: shared wire -> bus -> registry -> SQLite.
+    """Total lock order: shared wire -> bus -> registry -> sidecar -> SQLite.
 
+    Boundaries without a private sidecar skip that position in the same order.
     Raw keyed appends acquire bus then registry; Comms register takes shared
     wire then registry. No registry API that reacquires its lock may be used in
     this boundary: the bus append receives this immutable loaded revision.
