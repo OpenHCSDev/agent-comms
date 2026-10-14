@@ -7,7 +7,7 @@ import sqlite3
 import pytest
 
 from agent_comms.agent_activity import RecordedRecipientActivity, UnavailableRecipientActivity
-from agent_comms.assignment_states import EngagedAssignment
+from agent_comms.assignment_states import CompletedAssignment, EngagedAssignment
 from agent_comms.comms import Comms
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 from agent_comms.historical_views import HistoricalDisplay
@@ -106,6 +106,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
 
     activity = AssignmentActivity(
         triage_inflight=False,
+        current_execution_id=None,
         model_context=True,
         read_at_ms=1,
         response_seq=None,
@@ -132,6 +133,57 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     )
     assert live.state.startswith("Read ") and not live.busy
     assert live.detail == ""
+
+
+def test_sent_recipient_progresses_through_durable_read_and_answer(archived_notification):
+    old, _live, _source, messages, root_id = archived_notification
+    recipient, = old.bus.log.read_delivery_cohort(
+        root_id, messages[0].seq
+    ).audience.recipients
+    from agent_comms.notification_assignment import AssignmentActivity
+
+    sent_activity = AssignmentActivity(
+        triage_inflight=False,
+        current_execution_id=None,
+        model_context=False,
+        read_at_ms=None,
+        response_seq=None,
+        response_message_id=None,
+        response_received_at_ms=None,
+    )
+    engagement = EngagedAssignment.build(FullWake(), "durable-execution", "sender")
+    sent = engagement.notification(
+        recipient,
+        observation=RecordedRecipientActivity(),
+        activity=sent_activity,
+        updated_at_ms=1_000,
+    )
+    read_activity = replace(sent_activity, model_context=True, read_at_ms=2_000)
+    read = engagement.notification(
+        recipient,
+        observation=RecordedRecipientActivity(),
+        activity=read_activity,
+        updated_at_ms=1_000,
+    )
+    answered_activity = replace(
+        read_activity,
+        response_seq=99,
+        response_message_id="durable-reply",
+        response_received_at_ms=3_000,
+    )
+    answered = CompletedAssignment.build(
+        FullWake(), "durable-execution", "sender"
+    ).notification(
+        recipient,
+        observation=RecordedRecipientActivity(),
+        activity=answered_activity,
+        updated_at_ms=3_000,
+    )
+
+    assert sent.state == "Sent" and sent.read_at_ms is None
+    assert read.state.startswith("Read ") and read.read_at_ms == 2_000
+    assert answered.state.startswith("Answered ") and answered.answered_at_ms == 3_000
+    assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
 
 
 def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
