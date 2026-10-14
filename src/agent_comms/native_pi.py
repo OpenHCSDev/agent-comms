@@ -660,12 +660,15 @@ class UnverifiedNativeEvidencePrefix:
         return hashlib.sha256()
 
 
+_HashState = type(hashlib.sha256())
+
+
 @dataclass(frozen=True, slots=True)
 class VerifiedNativeEvidencePrefix:
     """The sole retained position and hash state for one opened native source."""
 
     size: int
-    digest: Any
+    digest: _HashState
 
     def copy_digest(self):
         return self.digest.copy()
