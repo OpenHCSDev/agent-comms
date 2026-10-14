@@ -12,6 +12,7 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
 from agent_comms.config_options import (
     CatalogConfigOption,
     ConfigOption,
@@ -109,6 +110,8 @@ def test_thread_service_tier_round_trips_legacy_rows():
     assert restored.service_tier is ServiceTier.PRIORITY
     standard = Thread("standard", frozenset(), ".", service_tier=ServiceTier.STANDARD)
     assert FieldCodec.decode(Thread, FieldCodec.encode(standard)).service_tier is ServiceTier.STANDARD
+    with pytest.raises(RelationViolationError, match="configuration changed"):
+        standard.require_original_model_configuration(restored)
 
 
 async def test_native_observation_only_initializes_unset_configuration(owner, tmp_path):
