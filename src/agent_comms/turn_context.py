@@ -346,12 +346,11 @@ class ContextEntryReference:
 class ContextEntryManifest:
     """The one recorded manifest for a native transcript entry."""
 
-    reference: ContextEntryReference
     manifest: SegmentManifest
 
-    def __post_init__(self) -> None:
-        if self.reference != ContextEntryReference.from_manifest(self.manifest):
-            raise ValueError("Context entry reference differs from its manifest")
+    @property
+    def reference(self) -> ContextEntryReference:
+        return ContextEntryReference.from_manifest(self.manifest)
 
 
 @dataclass(frozen=True)
