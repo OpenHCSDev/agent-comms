@@ -28,7 +28,7 @@ from typing import (
 )
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, ValueDecoder, compile_decoder
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -285,17 +285,17 @@ class _Field:
     nullable: bool
     storage: type[SqlStorage]
     column: Column
+    # The annotation's compiled decoder, resolved with the column.
+    value: ValueDecoder
 
     def encode(self, value: object) -> object:
         # Validate before SQLite can coerce a wrong Python value into its affinity.
         encoded = FieldCodec.encode(value, self.annotation)
-        FieldCodec.decode(self.annotation, encoded)
+        self.value.decode(encoded)
         return None if encoded is None else self.storage.to_sql(encoded)
 
     def decode(self, value: object) -> object:
-        return FieldCodec.decode(
-            self.annotation, None if value is None else self.storage.from_sql(value)
-        )
+        return self.value.decode(None if value is None else self.storage.from_sql(value))
 
 
 def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
@@ -321,6 +321,7 @@ class TypedRow:
                 _base_type(hints[item.name])[1] or item.metadata.get("sql", Column()).nullable,
                 item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
                 item.metadata.get("sql", Column()),
+                compile_decoder(hints[item.name]),
             )
             for item in fields(cls)
         )
