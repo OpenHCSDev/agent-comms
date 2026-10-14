@@ -41,11 +41,6 @@ class AgentRuntimeInfo:
             return None
         return self.context_used / self.context_size * 100
 
-    @property
-    def context_label(self) -> str:
-        if self.context_percent is None:
-            return ""
-        return f"{self.context_used:,}/{self.context_size:,} tokens ({self.context_percent:.1f}%)"
 
 
 @dataclass(frozen=True, slots=True)
