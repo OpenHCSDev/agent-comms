@@ -33,7 +33,6 @@ from agent_comms.obligation_states import (
 )
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.recovery_reader import RecoveryReader
-from agent_comms.wake import derive_exact_reply_target
 
 if TYPE_CHECKING:
     from agent_comms.selected_source_batch import SelectedSource
@@ -112,7 +111,7 @@ class ExecutionStore:
                 owner_lookup,
                 owner_thread,
                 max_attempts,
-                tuple(sorted({derive_exact_reply_target(source.delivery.message) for source in sources})),
+                tuple(sorted({source.delivery.message.reply_target for source in sources})),
                 assignment_ids,
             ):
                 raise IdentityConflict("execution identity conflicts")
@@ -140,7 +139,7 @@ class ExecutionStore:
         routes = {}
         for ordinal, (source, assignment) in enumerate(zip(sources, assignments, strict=True)):
             assignment_id = source.assignment_id
-            exact_target = derive_exact_reply_target(source.delivery.message)
+            exact_target = source.delivery.message.reply_target
             routes.setdefault(exact_target, None)
             if (
                 assignment.recipient_lookup != owner_lookup

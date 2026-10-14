@@ -1679,7 +1679,7 @@ class TestFailureFeedback:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(
-            "proj", "proj", "answer", reply_targets=(reply_target,), origins=(origin,)
+            "proj", "proj", "answer", origins=(origin,)
         )
         history = (
             wired.views.channel_history(reply_target)
@@ -1715,7 +1715,7 @@ class TestFailureFeedback:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(
-            "proj", "proj", "answer", reply_targets=(human.name,), origins=(origin,)
+            "proj", "proj", "answer", origins=(origin,)
         )
         history = wired.views.dm_history("proj", human.name)
         assert len(history) == 1
@@ -1752,7 +1752,7 @@ class TestFailureFeedback:
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await asyncio.wait_for(
             agent.turns.run_agent_turn(
-                "proj", "proj", "answer", reply_targets=("#team",), origins=(origin,)
+                "proj", "proj", "answer", origins=(origin,)
             ),
             timeout=9,
         )
@@ -1781,7 +1781,7 @@ class TestFailureFeedback:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn(
-            "proj", "proj", "answer", reply_targets=(human.name, "#team"), origins=(origin,)
+            "proj", "proj", "answer", origins=(origin,)
         )
         history = wired.views.full_history()
         assert len(history) == 2

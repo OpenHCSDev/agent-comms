@@ -21,7 +21,6 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.threads import Thread
 from agent_comms.turn_phase import CancellingPhase
 from agent_comms.schedule_rules import ProjectResumeCheck, WakeScheduleCheck
-from agent_comms.wake import derive_exact_reply_target
 from native_backend_fixture import native_backend_fixture
 
 
@@ -152,7 +151,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
 
             def reply(message):
                 return json.dumps(FieldCodec.encode((Message(
-                    session, derive_exact_reply_target(message), f"Reply {len(sent)}",
+                    session, message.reply_target, f"Reply {len(sent)}",
                     InfoKind, timestamp=0,
                 ),)))
 

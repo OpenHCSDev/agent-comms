@@ -26,7 +26,6 @@ from agent_comms.native_input_record import TriageNativeExecution, FullNativeExe
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
-from agent_comms.wake import derive_exact_reply_target
 from agent_comms.native_startup import NativeStartupAdmission
 from agent_comms.native_custody import PiSessionChild
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -105,7 +104,7 @@ class Provider(LoopbackProvider):
             assert original.stage is FullNativeExecution
             message=Comms(self.root).bus.log.message_by_id(assignment.message_id)
             assert message.reference==assignment.source
-            response=Message(original.owner_thread,derive_exact_reply_target(message),
+            response=Message(original.owner_thread, message.reply_target,
                              self.text,InfoKind,timestamp=0)
             yield {'content':json.dumps(FieldCodec.encode((response,)))},None
             yield {},'stop'

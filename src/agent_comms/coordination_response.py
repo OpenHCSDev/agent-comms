@@ -60,7 +60,7 @@ from agent_comms.typed_table import (
     TypedTable,
     ForeignKey,
 )
-from agent_comms.wake import WakeDecision, derive_exact_reply_target
+from agent_comms.wake import WakeDecision
 
 
 class ResponseTable:
@@ -431,7 +431,7 @@ def _require_cohort_assignments(
             if terminal
             else assignment.lifecycle.require_engagement()
         )
-        if engagement.exact_target != derive_exact_reply_target(initial.message):
+        if engagement.exact_target != initial.message.reply_target:
             raise IdentityConflict("response claim conflicts with original selected bus route")
 
 

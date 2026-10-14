@@ -339,7 +339,6 @@ class Message:
         return name in self.response_eligibility((name,), aliases=aliases).recipients
 
     @property
-    def reply_target(self) -> str | None:
-        if self.sender_role.executable:
-            return None
+    def reply_target(self) -> str:
+        """The exact response destination owned by this opening message."""
         return self.target if is_channel_target(self.target) else self.sender

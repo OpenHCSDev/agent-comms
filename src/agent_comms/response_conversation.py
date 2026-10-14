@@ -9,7 +9,6 @@ from .channel_targets import is_channel_target
 from .coordination_errors import IdentityConflict
 from .messages import Message
 from .coordination_tables.responses import ResponseObligation
-from .wake import derive_exact_reply_target
 
 
 @dataclass(frozen=True)
@@ -35,8 +34,7 @@ class ResponseConversation:
         originals = {assignment.source for assignment in assignments}
         if {source.message.reference for source in sources} != originals:
             raise IdentityConflict("Response conversation lost an original source")
-        if any(derive_exact_reply_target(source.message) != obligation.exact_target
-               for source in sources):
+        if any(source.message.reply_target != obligation.exact_target for source in sources):
             raise IdentityConflict("Response obligation differs from its original routes")
         return cls(
             FrozenRecipient(snapshot.execution.owner_lookup, snapshot.execution.owner_thread),
@@ -51,7 +49,7 @@ class ResponseConversation:
             raise IdentityConflict("Response conversation route changed")
         members = {}
         for source in self.sources:
-            if derive_exact_reply_target(source.message) != self.obligation.exact_target:
+            if source.message.reply_target != self.obligation.exact_target:
                 raise IdentityConflict("Response conversation differs from original route")
             audience = source.audience
             participants = list(audience.recipients)

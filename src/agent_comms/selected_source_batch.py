@@ -10,7 +10,6 @@ from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
 from .messages import InfoKind, Message
 from .native_pi import NativePiUnavailable
-from .wake import derive_exact_reply_target
 from .turn_context import InstructionFile, ReplyRouteSegment, WireProvenance
 
 if TYPE_CHECKING:
@@ -56,8 +55,6 @@ class SelectedSourceBatch:
             raise IdentityConflict("Selected batch changed original source order")
         if len({row.recipient_lookup for row in assignments}) != 1:
             raise IdentityConflict("Selected batch crosses recipient ownership")
-        if any(derive_exact_reply_target(source.delivery.message) is None for source in self.sources):
-            raise IdentityConflict("Selected source lacks an original reply route")
 
     @classmethod
     def first_route(cls, sources: tuple[SelectedSource, ...]) -> "SelectedSourceBatch":
@@ -70,7 +67,7 @@ class SelectedSourceBatch:
         """
         routes: dict[str | None, list[SelectedSource]] = {}
         for source in sources:
-            routes.setdefault(derive_exact_reply_target(source.delivery.message), []).append(source)
+            routes.setdefault(source.delivery.message.reply_target, []).append(source)
         if None in routes:
             # The original refusal covers the whole wave; no source is answered.
             return cls(sources)
@@ -100,7 +97,7 @@ class SelectedSourceBatch:
     @property
     def target(self) -> str:
         """The batch's one original reply route, never a second route store."""
-        return derive_exact_reply_target(self.sources[0].delivery.message)
+        return self.sources[0].delivery.message.reply_target
 
     def response_segment(self):
         """The reply route belongs to the original owners; no answer format is
