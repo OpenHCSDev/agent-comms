@@ -35,10 +35,23 @@ class CarryRefused(RuntimeError):  # noqa: N818 - names a refused one-shot opera
     pass
 
 
-def _revision(path: Path, size: int, mtime_ns: int, ctime_ns: int) -> FileRevision:
+def _revision(
+    path: Path,
+    inode: int,
+    size: int,
+    mtime_ns: int,
+    ctime_ns: int,
+    *,
+    device: int | None = None,
+) -> FileRevision:
     observed = path.stat()
-    if not stat.S_ISREG(observed.st_mode) or observed.st_size < size:
-        raise CarryRefused(f"{path}: source no longer contains the recorded revision")
+    if (
+        not stat.S_ISREG(observed.st_mode)
+        or observed.st_ino != inode
+        or (device is not None and observed.st_dev != device)
+        or observed.st_size < size
+    ):
+        raise CarryRefused(f"{path}: recorded revision belongs to another file")
     return FileRevision(
         FileIdentity(observed.st_dev, observed.st_ino), size, mtime_ns, ctime_ns
     )
@@ -120,14 +133,13 @@ def _stage_bytes(path: Path, payload: bytes) -> StagedFile:
     descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.carry-858-", dir=path.parent)
     staged = Path(temporary)
     try:
-        os.fchmod(descriptor, stat.S_IMODE(info.st_mode))
-        os.fchown(descriptor, info.st_uid, info.st_gid)
         with os.fdopen(descriptor, "wb") as output:
+            os.fchmod(output.fileno(), stat.S_IMODE(info.st_mode))
+            os.fchown(output.fileno(), info.st_uid, info.st_gid)
             output.write(payload)
             output.flush()
             os.fsync(output.fileno())
     except BaseException:
-        os.close(descriptor)
         staged.unlink(missing_ok=True)
         raise
     return StagedFile(path, staged)
@@ -146,11 +158,15 @@ def _stage_database(path: Path) -> Path:
     os.close(descriptor)
     staged = Path(temporary)
     staged.unlink()
-    shutil.copy2(path, staged)
-    source = path.stat()
-    os.chmod(staged, stat.S_IMODE(source.st_mode))
-    os.chown(staged, source.st_uid, source.st_gid)
-    return staged
+    try:
+        shutil.copy2(path, staged)
+        source = path.stat()
+        os.chmod(staged, stat.S_IMODE(source.st_mode))
+        os.chown(staged, source.st_uid, source.st_gid)
+        return staged
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
 
 
 def _sync_database(path: Path) -> None:
@@ -161,7 +177,7 @@ def _sync_database(path: Path) -> None:
         os.close(descriptor)
 
 
-def _stage_prefix_and_marker(bus_root: Path) -> tuple[StagedFile, StagedFile]:
+def _stage_marker(bus_root: Path) -> StagedFile:
     marker_path = bus_root / "bus_meta.json"
     checkpoint_path = bus_root / "private_bus_checkpoint.sqlite3"
     bus_path = bus_root / "bus.jsonl"
@@ -169,44 +185,35 @@ def _stage_prefix_and_marker(bus_root: Path) -> tuple[StagedFile, StagedFile]:
     seal = marker.get("checkpoint_seal")
     if not isinstance(seal, dict) or seal.get("state") != "final":
         raise CarryRefused(f"{marker_path}: final checkpoint seal required")
-    _old_five(seal.get("db_revision"), f"{marker_path}:db_revision")
+    old_db = _old_five(seal.get("db_revision"), f"{marker_path}:db_revision")
     witness = seal.get("witness")
     if not isinstance(witness, dict):
         raise CarryRefused(f"{marker_path}: final witness is absent")
     old_bus = _old_five(witness.get("revision"), f"{marker_path}:witness.revision")
-    if _tail(bus_path, old_bus[2]) != witness.get("tail"):
-        raise CarryRefused(f"{marker_path}: recorded bus tail differs from source")
-
-    staged_db = _stage_database(checkpoint_path)
-    connection = sqlite3.connect(staged_db)
+    db_revision = _revision(
+        checkpoint_path, old_db[1], old_db[2], old_db[3], old_db[4], device=old_db[0]
+    )
+    bus_revision = _revision(
+        bus_path, old_bus[1], old_bus[2], old_bus[3], old_bus[4], device=old_bus[0]
+    )
+    if (
+        bus_revision.size != bus_path.stat().st_size
+        or _tail(bus_path, old_bus[2]) != witness.get("tail")
+    ):
+        raise CarryRefused(f"{marker_path}: recorded bus revision differs from source")
+    connection = sqlite3.connect(f"file:{checkpoint_path}?mode=ro", uri=True)
     try:
         row = connection.execute(
             "SELECT device,inode,offset,mtime_ns,ctime_ns FROM prefix_certificate "
             "WHERE singleton=1"
         ).fetchone()
-        if row != (old_bus[0], old_bus[1], old_bus[2], old_bus[3], old_bus[4]):
-            raise CarryRefused(f"{checkpoint_path}: certificate differs from marker witness")
-        bus_info = bus_path.stat()
-        with connection:
-            connection.execute(
-                "UPDATE prefix_certificate SET device=?,inode=? WHERE singleton=1",
-                (bus_info.st_dev, bus_info.st_ino),
-            )
     finally:
         connection.close()
-    _sync_database(staged_db)
-    staged_db_info = staged_db.stat()
-    seal["db_revision"] = _encoded(FileRevision.from_stat(staged_db_info))
-    seal["witness"]["revision"] = _encoded(
-        _revision(bus_path, old_bus[2], old_bus[3], old_bus[4])
-    )
-    db_file = StagedFile(checkpoint_path, staged_db)
-    try:
-        marker_file = _stage_json(marker_path, marker)
-    except BaseException:
-        staged_db.unlink(missing_ok=True)
-        raise
-    return db_file, marker_file
+    if row != old_bus:
+        raise CarryRefused(f"{checkpoint_path}: certificate differs from marker witness")
+    seal["db_revision"] = _encoded(db_revision)
+    seal["witness"]["revision"] = _encoded(bus_revision)
+    return _stage_json(marker_path, marker)
 
 
 def _stage_activity(root: Path) -> StagedFile | None:
@@ -214,17 +221,16 @@ def _stage_activity(root: Path) -> StagedFile | None:
     if not path.exists():
         return None
     value = json.loads(path.read_text())
-    inode, size, mtime_ns, ctime_ns = _old_four(value.get("source"), f"{path}:source")
-    del inode
-    value["source"] = _encoded(_revision(root / "activity.jsonl", size, mtime_ns, ctime_ns))
+    revision = _old_four(value.get("source"), f"{path}:source")
+    value["source"] = _encoded(_revision(root / "activity.jsonl", *revision))
     FieldCodec.decode(ActivityCheckpoint, value)
     return _stage_json(path, value)
 
 
 def _stage_append_checkpoint(path: Path, bus_path: Path) -> StagedFile:
     value = json.loads(path.read_text())
-    _inode, size, mtime_ns, ctime_ns = _old_bus(value.get("source"), f"{path}:source")
-    value["source"] = _encoded(_revision(bus_path, size, mtime_ns, ctime_ns))
+    revision = _old_bus(value.get("source"), f"{path}:source")
+    value["source"] = _encoded(_revision(bus_path, *revision))
     value["integrity"] = AppendCheckpoint.payload_digest(value)
     return _stage_json(path, value)
 
@@ -244,10 +250,8 @@ def _stage_history_sources(root: Path) -> StagedFile | None:
             ("snapshot_bus_revision", "bus.jsonl"),
             ("snapshot_registry_revision", "registry.json"),
         ):
-            _inode, size, mtime_ns, ctime_ns = _old_four(
-                value.get(field), f"{path}:{index}:{field}"
-            )
-            value[field] = _encoded(_revision(source_root / name, size, mtime_ns, ctime_ns))
+            revision = _old_four(value.get(field), f"{path}:{index}:{field}")
+            value[field] = _encoded(_revision(source_root / name, *revision))
     return _stage_json(path, values)
 
 
@@ -264,10 +268,12 @@ def _stage_bus_page(bus_root: Path) -> StagedFile | None:
         identity, offset, tail, singleton = connection.execute(
             "SELECT identity,offset,tail,singleton FROM bus_page_source"
         ).fetchone()
-        _device, _inode, mtime_ns, ctime_ns = _old_four(
+        device, inode, mtime_ns, ctime_ns = _old_four(
             json.loads(identity), f"{path}:identity"
         )
-        revision = _revision(bus_root / "bus.jsonl", offset, mtime_ns, ctime_ns)
+        revision = _revision(
+            bus_root / "bus.jsonl", inode, offset, mtime_ns, ctime_ns, device=device
+        )
         with connection:
             connection.execute("ALTER TABLE bus_page_source RENAME TO old_bus_page_source")
             BusPageSource.create(connection)
@@ -295,10 +301,12 @@ def _stage_route_counts(root: Path) -> StagedFile | None:
         if identity is None:
             revision = None
         else:
-            _device, _inode, mtime_ns, ctime_ns = _old_four(
+            device, inode, mtime_ns, ctime_ns = _old_four(
                 json.loads(identity), f"{path}:identity"
             )
-            revision = _revision(root / "bus.jsonl", offset, mtime_ns, ctime_ns)
+            revision = _revision(
+                root / "bus.jsonl", inode, offset, mtime_ns, ctime_ns, device=device
+            )
         with connection:
             connection.execute("ALTER TABLE route_source RENAME TO old_route_source")
             RouteSourceRow.create(connection)
@@ -333,10 +341,8 @@ def _stage_transcript_index(root: Path) -> StagedFile | None:
             if raw is None:
                 revision = None
             else:
-                _inode, size, mtime_ns, ctime_ns = _old_four(
-                    json.loads(raw), f"{old_path}:{source}"
-                )
-                revision = _revision(Path(source), size, mtime_ns, ctime_ns)
+                old_revision = _old_four(json.loads(raw), f"{old_path}:{source}")
+                revision = _revision(Path(source), *old_revision)
             converted.append(ReplyIndex(revision, through, total, source, bool(complete)))
         with connection:
             connection.execute("ALTER TABLE reply_index RENAME TO old_reply_index")
@@ -364,8 +370,7 @@ def stage(root: Path) -> list[StagedFile]:
     staged: list[StagedFile] = []
     try:
         for bus_root in _bus_roots(root):
-            checkpoint, marker = _stage_prefix_and_marker(bus_root)
-            staged.extend((checkpoint, marker))
+            staged.append(_stage_marker(bus_root))
             page = _stage_bus_page(bus_root)
             if page is not None:
                 staged.append(page)
@@ -386,6 +391,8 @@ def stage(root: Path) -> list[StagedFile]:
     except BaseException:
         for item in staged:
             item.staged.unlink(missing_ok=True)
+        for temporary in root.rglob(".*.carry-858-*"):
+            temporary.unlink(missing_ok=True)
         raise
 
 
