@@ -12,7 +12,7 @@ from agent_comms.backend import TurnSession
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.pi_events import MessageUpdate, ToolExecutionEnd, ToolExecutionStart, UnknownPiEvent
 from agent_comms.pi_payloads import TextDelta
-from agent_comms.turn_phase import ModelWaitPhase, ResponseOutputPhase, ToolRunningPhase
+from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.pi_native_backend import PersistentPiSession
 
@@ -33,8 +33,13 @@ async def test_native_tool_lifecycle_publishes_actual_phase_after_effects():
         assert phases[0] is session.watchdog.phase
         return phases[0]
 
-    phase = await consume(MessageUpdate(assistant_message_event=TextDelta("Starting work")))
-    assert isinstance(phase, ResponseOutputPhase)
+    updates = [
+        update async for update in MessageUpdate(
+            assistant_message_event=TextDelta("Starting work")
+        ).consume(session)
+    ]
+    assert not any(isinstance(update, NativePhaseChanged) for update in updates)
+    assert isinstance(session.watchdog.phase, ModelWaitPhase)
     phase = await consume(ToolExecutionStart(tool_call_id="one", tool_name="read"))
     assert isinstance(phase, ToolRunningPhase)
     assert phase.tools == (("one", "read"),)
@@ -43,6 +48,6 @@ async def test_native_tool_lifecycle_publishes_actual_phase_after_effects():
     phase = await consume(ToolExecutionEnd(tool_call_id="one", tool_name="read"))
     assert phase.tools == (("two", "bash"),)
     phase = await consume(ToolExecutionEnd(tool_call_id="two", tool_name="bash"))
-    assert isinstance(phase, ResponseOutputPhase)
+    assert isinstance(phase, ModelWaitPhase)
     updates = [update async for update in UnknownPiEvent(payload={}).consume(session)]
     assert not any(isinstance(update, NativePhaseChanged) for update in updates)

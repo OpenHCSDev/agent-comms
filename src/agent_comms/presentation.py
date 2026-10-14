@@ -20,6 +20,7 @@ from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .message_page import MessagePage, MessagePageRequest
+from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
@@ -37,7 +38,6 @@ if TYPE_CHECKING:
     from .catalog_store import ChannelCatalog
     from .goal_waits import GoalWait
     from .message_bus import MessageBus
-    from .message_reference import MessageReference
     from .messages import Message
     from .read_ledger import ReadLedger
     from .read_ledger import ReadDocument
@@ -60,6 +60,7 @@ class MessageNotification:
     busy: bool = False
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
+    reply_reference: MessageReference | None = None
 
     @property
     def recipient(self) -> str:

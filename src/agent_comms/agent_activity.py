@@ -14,6 +14,7 @@ from .registration import Registration
 from .native_input_owner import RegistryOwner
 
 if TYPE_CHECKING:
+    from .notification_assignment import AssignmentProgress
     from .presentation import MessageNotification
 from .activity import (
     Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity,
@@ -50,12 +51,24 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
             source.message, notification.recipient_identity, snapshot, document=document
         )
 
-    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
-        if not self.turn_started_by(updated_at_ms):
-            return replace(notification, state="Paused", busy=False, priority=3,
-                detail="A response was selected, but no matching active turn is running. "
-                       "Outcome is unconfirmed; do not automatically retry.")
-        return notification
+    def selected_response(
+        self,
+        notification: MessageNotification,
+        updated_at_ms: int,
+        progress: AssignmentProgress,
+    ) -> MessageNotification:
+        return progress.notification(
+            notification, running=self.turn_started_by(updated_at_ms)
+        )
+
+    def delivered_response(
+        self, notification: MessageNotification, updated_at_ms: int
+    ) -> MessageNotification:
+        return replace(
+            notification,
+            state="Read — no reply",
+            detail="The message entered a turn that has ended without a linked reply.",
+        )
 
 
 @dataclass(frozen=True)
@@ -65,7 +78,12 @@ class RecordedRecipientActivity(RecipientActivity):
     def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
         return notification
 
-    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
+    def selected_response(
+        self,
+        notification: MessageNotification,
+        updated_at_ms: int,
+        progress: AssignmentProgress,
+    ) -> MessageNotification:
         return replace(notification, state="Response selected", busy=False, priority=3,
             detail="The recorded assignment selected a response; completion is not recorded.")
 
@@ -113,18 +131,18 @@ class LiveRecipientActivity(RecipientActivity):
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return self.thread.turn_started_by(updated_at_ms)
 
-    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
-        notification = super().selected_response(notification, updated_at_ms)
-        if (
-            self.turn_started_by(updated_at_ms)
-            and self.thread.turn_state.phase.has_response_output
-        ):
+    def delivered_response(
+        self, notification: MessageNotification, updated_at_ms: int
+    ) -> MessageNotification:
+        if self.turn_started_by(updated_at_ms):
             return replace(
                 notification,
-                state="Read - working",
-                detail="The agent read this message and has started its response.",
+                state="Read — current turn",
+                detail="The message entered the agent's current turn; no linked reply exists yet.",
+                busy=True,
+                priority=1,
             )
-        return notification
+        return super().delivered_response(notification, updated_at_ms)
 
     def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
         from .presentation import MessageNotification
