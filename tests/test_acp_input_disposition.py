@@ -287,15 +287,23 @@ async def test_waiting_message_is_drained_when_following_input_opens(
     native.provider.tool_call = (
         "bash", {"command": "sleep 2; printf slow-tool-done"},
     )
-    opened, release = asyncio.Event(), asyncio.Event()
+    opened, open_release = asyncio.Event(), asyncio.Event()
+    started, started_release = asyncio.Event(), asyncio.Event()
     original_open = OwnerFollowingInputs.open
+    original_started = OwnerFollowingInputs.started
 
     async def delayed_open(following, tracked):
         opened.set()
-        await release.wait()
+        await open_release.wait()
         await original_open(following, tracked)
 
+    async def delayed_started(following, input_id):
+        started.set()
+        await started_release.wait()
+        await original_started(following, input_id)
+
     monkeypatch.setattr(OwnerFollowingInputs, "open", delayed_open)
+    monkeypatch.setattr(OwnerFollowingInputs, "started", delayed_started)
     async with native.open_owner(
         runtime_enabled=True, auto_wake=True, native_options=("--tools", "bash"),
     ) as (owner, session):
@@ -329,7 +337,15 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 "sender", session, "deliver as soon as following input opens",
             ))
             await wait_for(lambda: session in owner.inputs._idle_private_revisions)
-            release.set()
+            key = message.seq, message.message_id
+            pending, = comms.views.message_notifications([message])[key]
+            assert pending.state == "Pending" and not pending.busy
+            open_release.set()
+            await asyncio.wait_for(started.wait(), 30)
+            in_flight, = comms.views.message_notifications([message])[key]
+            assert in_flight.state == "Starting response" and in_flight.busy
+            assert in_flight.read_at_ms is None
+            started_release.set()
             # Opening is the retry trigger; no second bus append or observation
             # tick is needed to reserve the waiting input.
             await wait_for(lambda: any(
@@ -344,6 +360,9 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 initial.seq, message.seq,
             ]
             assert type(assignments[-1].lifecycle) is DeliveredAssignment
+            read, = comms.views.message_notifications([message])[key]
+            assert read.state == "Read — no reply" and not read.busy
+            assert read.read_at_ms == assignments[-1].updated_at_ms
             assert native.provider.posts == 2
             rows = [json.loads(line) for line in native.session.read_text().splitlines()]
             tool_result = next(
@@ -358,7 +377,8 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             )
             assert tool_result < following
         finally:
-            release.set()
+            open_release.set()
+            started_release.set()
 
 
 async def test_waiting_messages_and_a_model_change_reach_the_next_model_call_together(
