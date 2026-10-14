@@ -352,7 +352,12 @@ class RecoveryMonitorCapability:
             raise RecoveryBlocked("monitor cannot record a live Pi RPC subprocess as dead")
         store = self._store
         replay_facts = ReplayFact(replay_facts)
-        if not isinstance(owner_loss, VerifiedOwnerLoss):
+        if (
+            not isinstance(owner_loss, VerifiedOwnerLoss)
+            or getattr(owner_loss, "_issuer", None) is not _OWNER_LOSS_ISSUER
+            or not getattr(owner_loss, "_active", False)
+            or getattr(owner_loss, "_store", None) is not store
+        ):
             raise RecoveryBlocked("monitor requires an observed release of this exact owner")
         with store.session.settlement(owner_loss.boundary) as boundary:
             db = store.session._connection
