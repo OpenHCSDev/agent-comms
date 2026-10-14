@@ -183,7 +183,7 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     )))
     reader = NativeTranscript(path)
     records = tuple(reader.forward(0, path.stat().st_size))
-    observe, ancestor = CoordinationStore.observing, NativeTranscript.input_ancestor
+    observe, ancestry = CoordinationStore.observing, NativeTranscript.inputs_for
     session_id = NativeTranscript.session_id.fget
     active, headers, walks = [], [], []
 
@@ -196,26 +196,27 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
             finally:
                 active.pop()
 
-    def traced_ancestor(self, record):
+    def traced_ancestry(self, records):
         assert not active
         # A real zero-timeout writer commits while the native parent walk runs.
         with Coordination(str(database), lock_timeout=0) as writer:
             generation = writer.participants.get(lookup).participant_generation
             writer.participants.advance_generation(lookup, thread.name, expected_generation=generation)
-        walks.append(record.entry.id)
-        return ancestor(self, record)
+        walks.append(tuple(record.entry.id for record in records))
+        return ancestry(self, records)
 
     def traced_header(self):
         headers.append(self.path)
         return session_id(self)
 
     monkeypatch.setattr(CoordinationStore, "observing", traced_read)
-    monkeypatch.setattr(NativeTranscript, "input_ancestor", traced_ancestor)
+    monkeypatch.setattr(NativeTranscript, "inputs_for", traced_ancestry)
     monkeypatch.setattr(NativeTranscript, "session_id", property(traced_header))
     source = AssignedTranscriptSource.for_thread(root, thread, comms.bus.log)
     with comms.transcripts.routes.for_session(str(path)) as routes:
         projected = tuple(source.native_records((records,), routes, reader))
-    assert walks == ["source", "reply"] and headers == [path]
+    # One parent walk serves the whole fragment.
+    assert walks == [tuple(record.entry.id for record in records)] and headers == [path]
     assert not active
     assert tuple(event for _, events in projected for event in events) == (
         UserTranscript("request", native_id="a" * 32), AssistantTranscript("answer"),
