@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import field as dataclass_field
+from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import (
     IntegrityViolationError,
@@ -20,6 +21,9 @@ from agent_comms.coordination_tables.publications import PublicationIntents, Pub
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import projected
+
+if TYPE_CHECKING:
+    from .coordination_session import NativeBoundary
 
 
 @dataclass(frozen=True, slots=True)
@@ -211,7 +215,10 @@ class RecoverySnapshot:
             is_current=self.is_current,
         )
 
-    def settle(self, session, outcome, reason_code: str | None) -> None:
+    def settle(
+        self, session, outcome, reason_code: str | None,
+        boundary: NativeBoundary | None = None,
+    ) -> None:
         from .coordination_tables.attempts import AttemptRecord
         from .coordination_tables.assignments import WakeAssignment
         from .coordination_tables.executions import ExecutionRecord, CurrentExecutions
@@ -228,7 +235,7 @@ class RecoverySnapshot:
         ):
             raise RecoveryBlocked("settlement requires exact final done/death evidence")
         execution_state, response = outcome.disposition(self, attempt)
-        self.release_resources(session)
+        session.release_resources(self, boundary)
         now = session.now(max(execution.updated_at_ms, attempt.updated_at_ms))
         AttemptRecord.update(
             db,
@@ -280,7 +287,7 @@ class RecoverySnapshot:
             pointer_revision=self.pointer_revision + 1,
         )
 
-    def finish_publications(self, session) -> None:
+    def finish_publications(self, session, boundary: NativeBoundary) -> None:
         """Release this one native attempt only when every original route settled."""
         from .attempt_states import SucceededAttempt
         from .execution_states import CompletedExecution
@@ -289,7 +296,7 @@ class RecoverySnapshot:
         if not all(row.lifecycle.published for row in self.require_wire_responses()):
             return
         attempt = self.require_current_attempt()
-        self.release_resources(session)
+        session.release_resources(self, boundary)
         db, execution = session._connection, self.execution
         AttemptRecord.update(
             db, where="execution_id=? AND attempt_ordinal=? AND revision=?",
@@ -319,7 +326,7 @@ class RecoverySnapshot:
             execution_id=None, attempt_ordinal=None, pointer_revision=self.pointer_revision + 1,
         )
 
-    def release_resources(self, session) -> None:
+    def release_resources(self, boundary: NativeBoundary) -> None:
         """Release the durable generations acquired by this exact final attempt.
 
         No live selected turn or in-memory tool claim list is needed. A claim
@@ -328,12 +335,9 @@ class RecoverySnapshot:
         """
         from .envelope_claim_transitions import ClaimRelease, project_verified_transitions
         from .messages import InfoKind, Message
+        from itertools import groupby
 
-        if session._settlement_boundary is None:
-            if (session.path.parent / "bus.jsonl").exists():
-                raise RecoveryBlocked("terminal claims require the ordered settlement boundary")
-            return
-        bus, bus_lock, registry = session._settlement_boundary
+        bus, bus_lock, registry = boundary.bus, boundary.bus_lock, boundary.registry
         attempt = self.require_attempt()
         metadata = bus.log._private_marker_unlocked()
         transitions, _ = bus_lock.claim_transitions(bus.log, metadata)
@@ -348,19 +352,38 @@ class RecoverySnapshot:
         if not owned:
             return
         owner = registry.threads[registry.canonical_name(attempt.owner_thread)]
-        if any(claim.incarnation != str(owner.created_at) for claim in owned):
-            raise IdentityConflict("terminal claim owner incarnation changed")
+        assignment_targets = {
+            assignment.assignment_id: assignment.lifecycle.exact_target
+            for assignment in self.assignments
+        }
+        def target_of(claim) -> str:
+            admission = claim.admission
+            assert admission is not None
+            target = assignment_targets.get(admission.wake_assignment_id)
+            if not isinstance(target, str) or not target:
+                raise IntegrityViolationError(
+                    "terminal claim has no original wake assignment route"
+                )
+            return target
+
         from pathlib import Path
 
-        for offset in range(0, len(owned), 32):
-            bus.publisher.publish_claim_envelope(
-                Message(owner.name, self.require_wire_responses()[0].exact_target,
-                        "Terminal attempt file claims released", InfoKind, notice=True),
-                worktree=Path(owner.worktree), incarnation=str(owner.created_at),
-                releases=tuple(ClaimRelease(claim.resource, claim.generation)
-                               for claim in owned[offset:offset + 32]),
-                _locked_registry_snapshot=registry, _bus_lock=bus_lock,
-            )
+        ordered = sorted(
+            owned, key=lambda claim: (claim.incarnation, target_of(claim))
+        )
+        for (incarnation, target), records in groupby(
+            ordered, key=lambda claim: (claim.incarnation, target_of(claim))
+        ):
+            recorded = tuple(records)
+            for offset in range(0, len(recorded), 32):
+                bus.publisher.publish_claim_envelope(
+                    Message(owner.name, target,
+                            "Terminal attempt file claims released", InfoKind, notice=True),
+                    worktree=Path(owner.worktree), incarnation=incarnation,
+                    releases=tuple(ClaimRelease(claim.resource, claim.generation)
+                                   for claim in recorded[offset:offset + 32]),
+                    _locked_registry_snapshot=registry, _bus_lock=bus_lock,
+                )
 
     def require_nonpublication_response(self) -> None:
         for obligation in self.obligations:

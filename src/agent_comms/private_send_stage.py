@@ -348,11 +348,9 @@ class FullNativeSend(NativeSendStage):
         self.progress.fail_terminal()
 
     def fail_unknown(self, bus, owner, witness) -> None:
-        from .coordination_response import _response_boundary
-
-        with _response_boundary(bus, session=self.progress.attempts.session) as registry:
-            witness.require_live(registry, self.fence)
-            self.progress.fail_unknown()
+        with self.progress.attempts.session.boundary(bus) as boundary:
+            witness.require_live(boundary.registry, self.fence)
+            self.progress.fail_unknown(boundary)
 
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         snapshot, _ = store.attempts.require_fence(self.fence)
