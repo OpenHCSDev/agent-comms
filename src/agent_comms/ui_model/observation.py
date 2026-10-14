@@ -603,7 +603,9 @@ class ObservationService:
     def observe(self) -> None:
         views = self.comms.views
         revision = views.revision()
-        stores = self.revision is None or revision.stores_changed_since(self.revision)
+        earlier = self.revision
+        stores = earlier is None or revision.stores_changed_since(earlier)
+        sidebar_changed = earlier is None or revision.sidebar_changed_since(earlier)
         self.revision = revision
         if stores:
             self.connection.send(RevisionObserved(revision))
@@ -616,7 +618,7 @@ class ObservationService:
                 else RosterSidebarRead()
             )
             key = SidebarSent(sidebar, revision.expiry_tick // EXPIRY_PERIOD, type(stage))
-            if stores or key != self.sent_sidebar:
+            if sidebar_changed or key != self.sent_sidebar:
                 result = stage.read(sidebar, self.comms, revision)
                 if result is not None:
                     self.connection.send(result)

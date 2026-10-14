@@ -856,6 +856,26 @@ class WireRevision:
         """A thread registration or a channel declaration changed."""
         return (self.registry, self.catalog) != (earlier.registry, earlier.catalog)
 
+    def sidebar_changed_since(self, earlier: WireRevision) -> bool:
+        """Stores that determine sidebar rows changed; thread-page reads do not."""
+        return (
+            self.registry,
+            self.catalog,
+            self.bus_log,
+            self.activity,
+            self.runtime_info,
+            self.goal_waits,
+            self.relationships,
+        ) != (
+            earlier.registry,
+            earlier.catalog,
+            earlier.bus_log,
+            earlier.activity,
+            earlier.runtime_info,
+            earlier.goal_waits,
+            earlier.relationships,
+        )
+
     def stores_changed_since(self, earlier: WireRevision) -> bool:
         """Any observed store changed; the activity expiry tick is not a store."""
         return replace(self, expiry_tick=earlier.expiry_tick) != earlier

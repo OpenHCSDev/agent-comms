@@ -280,11 +280,9 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
     checkpoint.write_text("{damaged")
     assert set(wire(wired.root).views.coordination_snapshot().last_sent) == {"PR111", "fixer"}
 
-    # A valid JSON file can also lose projection values after local damage.
-    # The bus is still authoritative when the checkpoint shape survives.
+    # A valid JSON file with a damaged declared shape also rebuilds.
     cached = json.loads(checkpoint.read_text())
-    cached["payload"]["channels"]["#base"] = [0.0, 0.0]
-    cached["payload"]["sent"]["fixer"] = 0.0
+    cached.pop("sent")
     checkpoint.write_text(json.dumps(cached))
     reopened = wire(wired.root)
     assert reopened.views.coordination_snapshot().last_sent["fixer"] > 0.0

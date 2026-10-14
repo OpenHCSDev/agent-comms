@@ -137,8 +137,8 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
         projected = DisplayCheckpoint(source, source.size,
                      AppendCheckpoint.fingerprint(stream, source.size),
                      semantics, *metrics)
-        stored = opened.remember_append_checkpoint(self, projected)
+        opened.remember_append_checkpoint(self, projected)
         if checkpoint is None or checkpoint.semantics != semantics or offset != source.size:
             with suppress(OSError):
-                self.write(stored)
+                self.write(projected)
         return projected

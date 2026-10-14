@@ -3,22 +3,19 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import logging
 import os
-import re
-from dataclasses import dataclass, replace
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, Generic, Self, TypeVar
+from typing import BinaryIO, Generic, TypeVar
 
 from .field_codec import FieldCodec
 from .private_path import FileRevision
 from .store_files import _atomic_write_text, _store_lock
 
 _LOG = logging.getLogger(__name__)
-_SIGNED_PREFIX = '{"payload":'
-_SIGNED_SUFFIX = re.compile(r',"integrity":"([0-9a-f]{64})"}\Z')
 
 
 @dataclass(frozen=True)
@@ -39,15 +36,6 @@ class AppendCheckpoint:
         stream.seek(start)
         return hashlib.sha256(stream.read(offset - start)).hexdigest()
 
-    def signed_payload(self) -> StoredCheckpoint[Self]:
-        """Encode once; sign the exact payload text the reader will verify."""
-        payload = FieldCodec.encode(self)
-        text = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-        digest = hashlib.sha256(text.encode()).hexdigest()
-        return StoredCheckpoint(
-            self, f'{_SIGNED_PREFIX}{text},"integrity":"{digest}"}}'
-        )
-
     def accepts(self, revision: FileRevision, stream: BinaryIO) -> bool:
         if self.source.identity != revision.identity or self.offset > revision.size:
             return False
@@ -59,43 +47,56 @@ class AppendCheckpoint:
 Checkpoint = TypeVar("Checkpoint", bound=AppendCheckpoint)
 
 
-@dataclass(frozen=True)
-class StoredCheckpoint(Generic[Checkpoint]):
-    """A checkpoint whose exact stored payload text passed its digest."""
+class PreparedCheckpoint(ABC, Generic[Checkpoint]):
+    """One named outcome of reading a disposable append index."""
 
-    record: Checkpoint
-    text: str
-    revision: FileRevision | None = None
-
-    @classmethod
-    def decode(
-        cls, record_type: type[Checkpoint], text: str, revision: FileRevision
-    ) -> StoredCheckpoint[Checkpoint]:
-        if not text.startswith(_SIGNED_PREFIX):
-            raise ValueError("Projection index lacks its signed payload")
-        payload, end = json.JSONDecoder().raw_decode(text, len(_SIGNED_PREFIX))
-        match = _SIGNED_SUFFIX.fullmatch(text[end:])
-        if match is None:
-            raise ValueError("Projection index has an invalid integrity envelope")
-        payload_text = text[len(_SIGNED_PREFIX):end]
-        digest = hashlib.sha256(payload_text.encode()).hexdigest()
-        if not hmac.compare_digest(match.group(1), digest):
-            raise ValueError("Projection index payload digest changed")
-        return cls(FieldCodec.decode(record_type, payload), text, revision)
+    @abstractmethod
+    def capture(
+        self, owner: BusAppendIndex, stream: BinaryIO | None, revision: FileRevision | None
+    ) -> Checkpoint | None: ...
 
 
 @dataclass(frozen=True)
-class DamagedIndex:
-    """A disposable projection exists but cannot be trusted or decoded."""
+class AbsentIndex(PreparedCheckpoint[Checkpoint]):
+    """The disposable projection has not been written."""
 
-    revision: FileRevision
+    def capture(
+        self, owner: BusAppendIndex, stream: BinaryIO | None, revision: FileRevision | None
+    ) -> None:
+        return None
+
+
+@dataclass(frozen=True)
+class DamagedIndex(PreparedCheckpoint[Checkpoint]):
+    """The disposable projection exists but cannot be trusted or decoded."""
+
+    path: Path
     reason: str
 
-    def rebuild(self, owner: BusAppendIndex) -> None:
-        owner.report_damage(self)
+    @classmethod
+    def report(cls, path: Path, error: Exception) -> DamagedIndex:
+        damaged = cls(path, str(error))
+        _LOG.warning("Rebuilding damaged disposable bus index %s: %s", path, damaged.reason)
+        return damaged
+
+    def capture(
+        self, owner: BusAppendIndex, stream: BinaryIO | None, revision: FileRevision | None
+    ) -> None:
+        return None
 
 
-PreparedCheckpoint = StoredCheckpoint[Checkpoint] | DamagedIndex | None
+@dataclass(frozen=True)
+class LoadedIndex(PreparedCheckpoint[Checkpoint]):
+    """A decoded projection candidate; the opened bus cut still validates it."""
+
+    record: Checkpoint
+
+    def capture(
+        self, owner: BusAppendIndex, stream: BinaryIO | None, revision: FileRevision | None
+    ) -> Checkpoint | None:
+        if stream is not None and revision is not None and self.record.accepts(revision, stream):
+            return self.record
+        return None
 
 
 class BusAppendIndex(Generic[Checkpoint]):
@@ -105,86 +106,47 @@ class BusAppendIndex(Generic[Checkpoint]):
 
     def __init__(self, bus_path: Path, path: Path):
         self.bus_path, self.path = bus_path, path
-        self._prepared_revision: FileRevision | None = None
-        self._prepared: PreparedCheckpoint = None
-        self._prepared_known = False
-        self._reported_damage: FileRevision | None = None
 
-    def _read(self) -> PreparedCheckpoint:
+    def _read(self) -> PreparedCheckpoint[Checkpoint]:
         try:
-            with self.path.open() as stream:
-                text = stream.read()
-                revision = FileRevision.from_stat(os.fstat(stream.fileno()))
+            payload = json.loads(self.path.read_text())
         except FileNotFoundError:
-            return None
-        try:
-            return StoredCheckpoint.decode(self.record_type, text, revision)
+            return AbsentIndex()
         except (ValueError, TypeError, KeyError, json.JSONDecodeError) as error:
-            return DamagedIndex(revision, str(error))
+            return DamagedIndex.report(self.path, error)
+        try:
+            return LoadedIndex(FieldCodec.decode(self.record_type, payload))
+        except (ValueError, TypeError, KeyError) as error:
+            return DamagedIndex.report(self.path, error)
 
-    def report_damage(self, damaged: DamagedIndex) -> None:
-        """Name one damaged revision once; its caller rebuilds from the bus."""
-        if self._reported_damage != damaged.revision:
-            _LOG.warning("Rebuilding damaged disposable bus index %s: %s", self.path, damaged.reason)
-            self._reported_damage = damaged.revision
-
-    def prepare(self) -> PreparedCheckpoint:
-        """Read a candidate before the bus cut; retain its decoded current revision."""
-        revision = FileRevision.capture(self.path)
-        if self._prepared_known and revision == self._prepared_revision:
-            return self._prepared
-        prepared = self._read()
-        self._prepared_revision = None if prepared is None else prepared.revision
-        self._prepared = prepared
-        self._prepared_known = True
-        return prepared
+    def prepare(self) -> PreparedCheckpoint[Checkpoint]:
+        """Read a candidate before the bus cut is captured and its lock is taken."""
+        return self._read()
 
     def capture(
-        self, prepared: PreparedCheckpoint, stream: BinaryIO | None,
+        self, prepared: PreparedCheckpoint[Checkpoint], stream: BinaryIO | None,
         revision: FileRevision | None,
     ) -> Checkpoint | None:
-        if isinstance(prepared, DamagedIndex):
-            prepared.rebuild(self)
-            return None
-        if prepared is None or stream is None or revision is None:
-            return None
-        if prepared.record.accepts(revision, stream):
-            return prepared.record
-        return None
+        return prepared.capture(self, stream, revision)
 
-    def remember(self, record: Checkpoint) -> StoredCheckpoint[Checkpoint]:
-        return record.signed_payload()
+    def remember(self, record: Checkpoint) -> PreparedCheckpoint[Checkpoint]:
+        return LoadedIndex(record)
 
-    def write(
-        self, value: Checkpoint | StoredCheckpoint[Checkpoint], *, fsync_parent: bool = False
-    ) -> StoredCheckpoint[Checkpoint]:
-        retained = value if isinstance(value, StoredCheckpoint) else self.remember(value)
-        record = retained.record
+    def write(self, record: Checkpoint, *, fsync_parent: bool = False) -> None:
         # A completed historical prefix remains useful after later appends. It
         # may advance the disk index, but never replace a farther valid prefix.
         with _store_lock(self.path):
             try:
                 stream = self.bus_path.open("rb")
             except FileNotFoundError:
-                return retained
+                return
             with stream:
                 current = FileRevision.from_stat(os.fstat(stream.fileno()))
                 if not record.accepts(current, stream):
-                    return retained
-                saved = self._read()
-                if isinstance(saved, DamagedIndex):
-                    saved.rebuild(self)
-                    saved = None
-                if (
-                    saved is not None
-                    and saved.record.accepts(current, stream)
-                    and saved.record.offset > record.offset
-                ):
-                    return retained
-            _atomic_write_text(self.path, retained.text, fsync_parent=fsync_parent)
-        retained = replace(retained, revision=FileRevision.capture(self.path))
-        self._prepared_revision = retained.revision
-        self._prepared = retained
-        self._prepared_known = True
-        self._reported_damage = None
-        return retained
+                    return
+                if record.offset < current.size:
+                    saved = self._read().capture(self, stream, current)
+                    if saved is not None and saved.offset > record.offset:
+                        return
+            payload = json.dumps(FieldCodec.encode(record))
+            _atomic_write_text(self.path, payload, fsync_parent=fsync_parent)

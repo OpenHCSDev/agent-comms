@@ -12,7 +12,12 @@ from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
-from agent_comms.ui_model.observation import ObservationService, ObserveSidebar, SidebarObserved
+from agent_comms.ui_model.observation import (
+    ObservationService,
+    ObserveSidebar,
+    ObserveThreads,
+    SidebarObserved,
+)
 from agent_comms.ui_model.unread import IndexingUnread
 
 
@@ -101,6 +106,36 @@ def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path):
     assert second.snapshot.unread_pending == frozenset()
 
 
+def test_thread_interest_does_not_recompute_complete_sidebar(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path))
+    comms.registry.register(viewer)
+    comms.registry.declare(Thread("bob", frozenset(), str(tmp_path / "bob")))
+
+    class Results:
+        def __init__(self):
+            self.values = []
+
+        def send(self, value):
+            self.values.append(value)
+
+    results = Results()
+    service = ObservationService(comms, results)
+    ObserveSidebar(str(tmp_path), True, False).receive(service)
+    service.observe()
+    service.observe()
+    sidebar_count = sum(isinstance(result, SidebarObserved) for result in results.values)
+
+    monkeypatch.setattr(
+        comms.views.presentation,
+        "display_view_metrics",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("thread open rescanned bus")),
+    )
+    ObserveThreads(frozenset({"bob"})).receive(service)
+    service.observe()
+    assert sum(isinstance(result, SidebarObserved) for result in results.values) == sidebar_count
+
+
 def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
@@ -150,7 +185,7 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     assert fresh.views.viewer_snapshot(str(tmp_path)) == wire(tmp_path).views.viewer_snapshot(str(tmp_path))
 
 
-def test_display_checkpoint_reads_raw_signed_payload_without_encoding(tmp_path):
+def test_display_checkpoint_reads_disposable_payload_without_encoding(tmp_path):
     from agent_comms.field_codec import FieldCodec
 
     comms = wire(tmp_path)
@@ -175,7 +210,7 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path, ca
 
     checkpoint = BusDisplayIndex(comms.bus.log.path, comms.messaging.user_identity(str(tmp_path)).name).path
     cached = json.loads(checkpoint.read_text())
-    cached["payload"]["counts"]["#team"] = 0
+    cached["counts"]["#team"] = -1
     checkpoint.write_text(json.dumps(cached))
     fresh = wire(tmp_path)
     with caplog.at_level("WARNING", logger="agent_comms.bus_projection"):
@@ -353,7 +388,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     checkpoint = BusDisplayIndex(comms.bus.log.path, viewer).path
     current = json.loads(checkpoint.read_text())
-    assert next(scope for scope in current['payload']['semantics']['scopes']
+    assert next(scope for scope in current['semantics']['scopes']
                 if scope['channel'] == '#team')['any_mode'] is True
 
 

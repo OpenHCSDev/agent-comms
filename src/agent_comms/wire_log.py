@@ -25,13 +25,7 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
-from .bus_projection import (
-    AppendCheckpoint,
-    BusAppendIndex,
-    Checkpoint,
-    PreparedCheckpoint,
-    StoredCheckpoint,
-)
+from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint, PreparedCheckpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
     project_verified_transitions,
@@ -88,13 +82,11 @@ class OpenedWireSnapshot:
 
     def remember_append_checkpoint(
         self, index: BusAppendIndex[Checkpoint], record: Checkpoint,
-    ) -> StoredCheckpoint[Checkpoint]:
+    ) -> None:
         """Keep a computed exact-cut value with this existing source resource."""
         if record.source != self.revision:
             raise ValueError("Computed append checkpoint belongs to another source cut")
-        stored = index.remember(record)
-        self._append_checkpoints[index] = stored
-        return stored
+        self._append_checkpoints[index] = index.remember(record)
 
     @property
     def boundary(self) -> int:
