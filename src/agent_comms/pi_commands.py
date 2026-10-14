@@ -233,6 +233,7 @@ class GetState(SessionSnapshot, NativeQuery):
                 session_file=session.active_session_file,
                 context_used=session.usage.used,
                 context_size=session.usage.size,
+                max_output_tokens=state.model.max_tokens,
             )
 
 

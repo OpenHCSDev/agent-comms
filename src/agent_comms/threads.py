@@ -13,7 +13,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .thread_provenance import ThreadProvenance
 from .thread_execution import ThreadExecution, NativeThreadExecution
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
 from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
@@ -50,6 +50,13 @@ class Thread(ThreadProvenance):
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     thinking_level: type[ThinkingLevel] | None = field(
         default=None, metadata={"registration_inheritance": InheritMissing}
+    )
+    service_tier: ServiceTier = field(
+        default=ServiceTier.PRIORITY, kw_only=True,
+        metadata={"registration_inheritance": InheritPrevious},
+    )
+    max_output_tokens: int | None = field(
+        default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
     )
     goal: Goal | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
@@ -120,13 +127,19 @@ class Thread(ThreadProvenance):
         from .runtime_requests import ProjectRuntimeRequest
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
+        model_request = (
+            {"AGENT_COMMS_MAX_OUTPUT_TOKENS": str(self.max_output_tokens)}
+            if self.max_output_tokens is not None else {}
+        )
         return {
             "AGENT_COMMS_THREAD": self.name,
             "PI_AGENT_ID": self.name,
             "AGENT_COMMS_ROOT": str(root),
             "PI_PARENT_ID": self.parent or "",
             "AGENT_COMMS_MANAGED": "1",
+            SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
             "PI_WORKTREE": worktree,
+            **model_request,
             **project.environment(root),
         }
 
@@ -165,10 +178,44 @@ class Thread(ThreadProvenance):
             raise ValueError("Thread model cannot be empty.")
         if self.thinking_level is not None:
             object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
+        object.__setattr__(self, "service_tier", FieldCodec.decode(ServiceTier, self.service_tier))
+        if self.max_output_tokens is not None:
+            maximum = FieldCodec.decode(int, self.max_output_tokens)
+            if maximum <= 0:
+                raise ValueError("Thread maximum output tokens must be a positive integer.")
+            object.__setattr__(self, "max_output_tokens", maximum)
 
+
+    @property
+    def model_configuration(self) -> tuple[
+        str | None, type[ThinkingLevel] | None, ServiceTier, int | None
+    ]:
+        return self.model, self.thinking_level, self.service_tier, self.max_output_tokens
+
+    def require_original_model_configuration(self, original: Thread) -> None:
+        if self.incarnation != original.incarnation or self.worktree != original.worktree or (
+            self.model_configuration != original.model_configuration
+        ):
+            raise RelationViolationError("Thread configuration changed before publication")
+
+    def with_model_configuration(
+        self, *, model: str | None = None, thinking_level: str | None = None,
+        service_tier: str | ServiceTier | None = None,
+        max_output_tokens: int | None = None,
+    ) -> Thread:
+        return replace(
+            self,
+            model=self.model if model is None else model.strip(),
+            thinking_level=self.thinking_level if thinking_level is None else thinking_level,
+            service_tier=self.service_tier if service_tier is None else service_tier,
+            max_output_tokens=(
+                self.max_output_tokens if max_output_tokens is None else max_output_tokens
+            ),
+        )
 
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: str | None
+        self, *, model: str | None, thinking_level: str | None,
+        max_output_tokens: int | None = None,
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
@@ -176,6 +223,9 @@ class Thread(ThreadProvenance):
             model=self.model if self.model is not None else model,
             thinking_level=(
                 self.thinking_level if self.thinking_level is not None else thinking_level
+            ),
+            max_output_tokens=(
+                self.max_output_tokens if self.max_output_tokens is not None else max_output_tokens
             ),
         )
 
