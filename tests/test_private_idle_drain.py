@@ -16,6 +16,7 @@ from agent_comms.coordination_cohort import next_sealed_assignment
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.owned_turn import OwnedTurn
+from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
 from agent_comms.store_files import file_revision
 from agent_comms.store_files import _store_lock
@@ -117,7 +118,10 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, 
 @pytest.mark.asyncio
 async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path, monkeypatch):
     comms, agent, _root_id = _session(tmp_path)
-    execution = OwnedTurn(agent.turns, "beta", "beta", "publication custody", reply_targets=("#team",))
+    origin = Message("user", "#team", "publication custody", InfoKind)
+    execution = OwnedTurn(
+        agent.turns, "beta", "beta", "publication custody", origins=(origin,)
+    )
     async with AsyncExitStack() as resources:
         async with AsyncExitStack() as permits:
             assert await execution.acquire(resources, permits)

@@ -371,14 +371,12 @@ class EngagedAssignment(BoundAssignment):
         )
 
     def wake_frame(self, source, obligation) -> tuple[str, str]:
-        from .wake import derive_exact_reply_target
-
         if obligation is None:
             raise IdentityConflict("full wake frame requires the current response obligation")
         obligation.lifecycle.require_preparation()
         if (obligation.execution_id, obligation.exact_target) != (
             self.decision.execution_id,
-            derive_exact_reply_target(source),
+            source.exact_reply_target,
         ):
             raise IdentityConflict("full wake frame requires the current response obligation")
         return self.mode.full_expectation(), "you owe a response: " + json.dumps(

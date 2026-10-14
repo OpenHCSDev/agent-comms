@@ -11,7 +11,6 @@ from .messages import Message
 from .message_reference import MessageReference
 from .field_codec import FieldCodec
 from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
-from .wake import derive_exact_reply_target
 
 if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
@@ -139,8 +138,8 @@ class ScheduledTurn:
             (
                 index
                 for index, turn in enumerate(pending)
-                if derive_exact_reply_target(turn.origin)
-                != derive_exact_reply_target(pending[0].origin)
+                if (turn.origin.exact_reply_target if turn.origin else None)
+                != (pending[0].origin.exact_reply_target if pending[0].origin else None)
                 or (turn.origin and turn.origin.response_policy.separate_turn)
             ),
             len(pending),

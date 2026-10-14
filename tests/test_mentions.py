@@ -9,7 +9,6 @@ from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, M
 from agent_comms.routing import ScheduledTurn
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
-from agent_comms.wake import derive_exact_reply_target
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
@@ -27,7 +26,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert Comms(tmp_path).views.channel_history("#team")[0].mentions == message.mentions
     assert Message.from_wire(message.to_wire()) == message
     scheduled = ScheduledTurn.incoming(message)
-    assert derive_exact_reply_target(scheduled.origin) == "#team"
+    assert scheduled.origin.exact_reply_target == "#team"
     assert "Response policy: mentioned_only" in scheduled.prompt
     assert "only resolved mentioned identities may respond: @alpha, @beta" in scheduled.prompt
     assert "unmentioned observers dismiss quietly" in scheduled.prompt
