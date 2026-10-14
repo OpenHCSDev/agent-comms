@@ -80,7 +80,7 @@ def _drain_candidate(root: Path) -> None:
                     source.revision,
                     lambda record: DeliveryMessage.from_wire(record, root_id=source.metadata.root_id),
                 )
-            if result.caught_up and route_result.caught_up:
+            if result.caught_up and route_result.complete():
                 with _guard:
                     if _pending[root][1] <= result.checkpoint_bytes:
                         # Retire this worker once, atomically with its final

@@ -6,7 +6,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from agent_comms.bus_route_counts import BusRouteCounts, RouteIndexReady, RouteIndexRebuilding
+from agent_comms.bus_route_counts import BusRouteCounts, RouteIndexRebuilding
 from agent_comms.comms import wire
 from agent_comms.routing import DeliveryMessage
 from agent_comms.threads import Thread
@@ -35,7 +35,7 @@ def _case(tmp_path, monkeypatch):
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path)))
     comms.messaging.send_message("sender", "recipient", "first")
-    assert isinstance(_sync(comms), RouteIndexReady)
+    assert _sync(comms).complete()
     return comms
 
 
@@ -45,10 +45,9 @@ def test_revision_timestamp_change_does_not_redecode_unchanged_bus(tmp_path, mon
     before = path.stat()
     os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns + 1_000_000_000))
 
-    assert isinstance(
-        _sync(comms, lambda _row: pytest.fail("unchanged bytes were decoded")),
-        RouteIndexReady,
-    )
+    assert _sync(
+        comms, lambda _row: pytest.fail("unchanged bytes were decoded")
+    ).complete()
 
 
 def test_reader_returns_rebuilding_while_writer_decodes_without_index_lock(
@@ -74,6 +73,6 @@ def test_reader_returns_rebuilding_while_writer_decodes_without_index_lock(
             comms.bus.pending_counts("recipient")
         elapsed = time.perf_counter() - started
         release.set()
-        assert isinstance(writer.result(5), RouteIndexReady)
+        assert writer.result(5).complete()
     assert elapsed < 0.2
     assert comms.bus.pending_counts("recipient") == {"sender": 2}

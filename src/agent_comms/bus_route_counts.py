@@ -86,17 +86,20 @@ class UnseenDelivery(TypedRow):
 
 
 class RouteIndexState:
-    caught_up: ClassVar[bool]
+    def complete(self) -> bool:
+        raise NotImplementedError
 
 
 class RouteIndexReady(RouteIndexState):
-    caught_up = True
+    def complete(self) -> bool:
+        return True
 
 
 class RouteIndexRebuilding(CoordinationReadUnavailable, RouteIndexState):
     """The writer has not committed route counts through the requested cut."""
 
-    caught_up = False
+    def complete(self) -> bool:
+        return False
 
     def __init__(self, through: int, size: int) -> None:
         self.through = through
