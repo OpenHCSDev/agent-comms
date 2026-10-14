@@ -487,23 +487,6 @@ CodexItem = Annotated[
 ]
 
 
-class ItemUpdate(WireModel):
-    threadId: str
-    turnId: str
-    item: CodexItem
-
-
-class TextDelta(WireModel):
-    threadId: str
-    turnId: str
-    itemId: str
-    delta: str
-
-
-class SummaryDelta(TextDelta):
-    summaryIndex: int
-
-
 class ItemsList(RequestParams):
     method = 'thread/items/list'
     threadId: str
