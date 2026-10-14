@@ -12,6 +12,8 @@ import pytest
 from agent_comms import cohort_foreground
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
+from agent_comms.selected_triage import FullSelectedTriage, IgnoreSelectedTriage
 from agent_comms.coordinator import Coordination
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.historical_native_inputs import read_historical_native_inputs
@@ -53,7 +55,44 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
             rows = NativeRuntimeInput.select(store.session._connection)
             assert len(rows) == 4
             assert len({row.input_id for row in rows}) == 4
-            assert all(row.session_id is not None for row in rows)
+            assert all(row.reference.recorded for row in rows)
+
+            def source_sequences(row):
+                return tuple(
+                    store.assignments.get(assignment_id).wire_seq
+                    for assignment_id in row.execution.source_assignment_ids(
+                        store.session._connection, row.input_id
+                    )
+                )
+
+            alpha_lookup = stable_thread_lookup(comms.registry.require("alpha").created_at)
+            beta_lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+            by_source = {}
+            for row in rows:
+                by_source.setdefault((row.owner_lookup, source_sequences(row)), []).append(row)
+            alpha_first = by_source[(alpha_lookup, (first.seq,))]
+            beta_first = sorted(
+                by_source[(beta_lookup, (first.seq,))],
+                key=lambda row: row.execution.proof_order,
+            )
+            later_groups = [
+                grouped
+                for (owner_lookup, source_seqs), grouped in by_source.items()
+                if owner_lookup == alpha_lookup and second.seq in source_seqs
+            ]
+            assert len(later_groups) == 1
+            alpha_later = later_groups[0]
+            assert [type(row.execution) for row in alpha_first] == [TriageNativeExecution]
+            assert [type(row.execution) for row in beta_first] == [
+                TriageNativeExecution,
+                FullNativeExecution,
+            ]
+            assert [type(row.execution) for row in alpha_later] == [TriageNativeExecution]
+            assert alpha_first[0].verdict is alpha_later[0].verdict is IgnoreSelectedTriage
+            assert beta_first[0].verdict is FullSelectedTriage
+            assert beta_first[1].execution.published_replies(
+                store.session._connection, beta_lookup
+            )
         assert owner.inputs.dispositions.read().rows == {}
         assert owner.inputs.pending_turns == {}
         before = len(alpha_calls), len(beta_calls)
