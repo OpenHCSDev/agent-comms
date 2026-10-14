@@ -18,7 +18,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
-from agent_comms.store_files import file_revision
+from agent_comms.private_path import FileRevision
 from agent_comms.store_files import _store_lock
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
@@ -433,10 +433,10 @@ def test_coordination_read_preserves_revision_and_repairs_exposed_mode(tmp_path)
     path = tmp_path / "coordination.sqlite3"
     with Coordination(path):
         pass
-    revision = file_revision(path)
+    revision = FileRevision.capture(path)
     with Coordination(path):
         pass
-    assert file_revision(path) == revision
+    assert FileRevision.capture(path) == revision
     path.chmod(0o644)
     with Coordination(path):
         assert path.stat().st_mode & 0o777 == 0o600

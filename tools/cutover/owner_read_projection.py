@@ -10,7 +10,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.owner_lifecycle import OwnerReleaseStore, OwnerRestartSelection
-from agent_comms.store_files import file_revision
+from agent_comms.private_path import FileRevision
 from agent_comms.wire_log import WireLog
 from thread_format_retirement import GoalReportMemberRetirement
 
@@ -85,13 +85,15 @@ class RecordedRegistryProjection(OwnerReadProjection):
         """Project while the original read/writer owns the decoded document."""
         root = root.resolve()
         log = WireLog(root / 'bus.jsonl')
-        bus_revision = file_revision(log.path)
-        registry_revision = file_revision(registry_path)
+        bus_revision = FileRevision.capture(log.path)
+        registry_revision = FileRevision.capture(registry_path)
         marker = log.read_metadata_unlocked(required=True)
         provenance = cls.project(document, declaration)
         info = log.path.stat()
-        if (bus_revision != file_revision(log.path)
-                or registry_revision != file_revision(registry_path)):
+        if (
+            bus_revision != FileRevision.capture(log.path)
+            or registry_revision != FileRevision.capture(registry_path)
+        ):
             raise ValueError('Original recorded source changed during acquisition')
         return {'root': str(root), 'original_root': str(root),
                 'wire_root_id': marker.root_id, 'bus_identity': [info.st_dev, info.st_ino],

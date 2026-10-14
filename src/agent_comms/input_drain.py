@@ -28,7 +28,6 @@ from .coordination_errors import CoordinationError, IdentityConflict
 from .drain_failures import drain_failures
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
-from .bus_projection import BusFileRevision
 from .bus_publication import stable_thread_lookup
 from .cursor_owner import CursorOwner
 from .child_process import join_retirement
@@ -38,13 +37,14 @@ from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .errors import RelationViolationError
+from .private_path import FileRevision
 from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import ProjectResumeCheck, WakeScheduleCheck
 from .session_lifecycle import SessionLifecycle
-from .store_files import _async_store_lock, _store_lock, file_revision
+from .store_files import _async_store_lock, _store_lock
 from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
@@ -69,13 +69,13 @@ class TickRevision:
     coordination store say whether its own part did.
     """
 
-    registry: tuple
-    coordination: tuple
+    registry: tuple[FileRevision | None, ...]
+    coordination: tuple[FileRevision | None, ...]
     # The shared stores every publisher's appends change: the bus log and its
     # marker, and the sealed checkpoint that records which rows address which
     # recipient. They are compared apart from this owner's own stores.
-    bus: tuple
-    checkpoint: tuple
+    bus: tuple[FileRevision | None, ...]
+    checkpoint: FileRevision | None
     other: tuple
 
     @classmethod
@@ -92,12 +92,12 @@ class TickRevision:
             ),
             bus=(bus, bus_marker),
             checkpoint=root / "private_bus_checkpoint.sqlite3",
-            other=(
-                root / GoalWaits.filename,
+            goal_waits=root / GoalWaits.filename,
+            goal_attempts=(
                 root / "goal-private" / "goal_attempts.sqlite3",
                 root / "goal-private" / "goal_attempts.sqlite3-wal",
-                auth,
             ),
+            auth=auth,
         )
 
 
@@ -109,26 +109,33 @@ class TickRevisionPaths:
     coordination: tuple[Path, ...]
     bus: tuple[Path, ...]
     checkpoint: Path
-    other: tuple[Path, ...]
+    goal_waits: Path
+    goal_attempts: tuple[Path, ...]
+    auth: Path
+
+    @property
+    def other(self) -> tuple[Path, ...]:
+        return self.goal_waits, *self.goal_attempts, self.auth
 
     @property
     def watch_sources(self) -> tuple[WatchSource, ...]:
         # The marker is the final durable publication for bus bytes and their
         # checkpoint. Watching the intermediate files wakes readers before the
         # append is complete and repeats the same observation several times.
-        paths = (*self.registry, *self.coordination, *self.bus[1:], *self.other)
-        return tuple(
-            WatchSource.file(path, modified=path.name.endswith((".sqlite3", ".sqlite3-wal")))
-            for path in paths
+        replaced = (*self.registry, *self.bus[1:], self.goal_waits, self.auth)
+        modified = (*self.coordination, *self.goal_attempts)
+        return (
+            *(WatchSource.file(path) for path in replaced),
+            *(WatchSource.modified_file(path) for path in modified),
         )
 
     def capture(self, local: tuple) -> TickRevision:
-        revisions = lambda paths: tuple(file_revision(path) for path in paths)
+        revisions = lambda paths: tuple(FileRevision.capture(path) for path in paths)
         return TickRevision(
             registry=revisions(self.registry),
             coordination=revisions(self.coordination),
             bus=revisions(self.bus),
-            checkpoint=file_revision(self.checkpoint),
+            checkpoint=FileRevision.capture(self.checkpoint),
             other=(revisions(self.other), *local),
         )
 
@@ -216,16 +223,16 @@ class InputObservation:
             raise RelationViolationError("Wire tail has no stable file revision")
         log = self.comms.bus.log
         metadata = log._private_marker_unlocked()
-        if file_revision(log.metadata_path) != revision.bus[1]:
+        if FileRevision.capture(log.metadata_path) != revision.bus[1]:
             raise RelationViolationError("Wire marker changed after tick capture")
         with log.path.open("rb") as stream:
-            current = BusFileRevision.capture(stream)
-            if current != BusFileRevision(*current_info):
+            current = FileRevision.from_stat(os.fstat(stream.fileno()))
+            if current != current_info:
                 raise RelationViolationError("Wire changed after tick capture")
+            if previous_info.identity != current_info.identity:
+                raise RelationViolationError("Wire tail does not extend the settled source")
             opened = OpenedWireSnapshot(metadata, metadata.last_seq, stream, current)
-            records = opened.appended_records(
-                BusFileRevision(*previous_info), settled.through_seq,
-            )
+            records = opened.appended_records(previous_info, settled.through_seq)
         addressed = any(
             recipient.recipient_lookup == lookup
             for record in records

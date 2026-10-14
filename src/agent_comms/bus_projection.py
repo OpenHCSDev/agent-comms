@@ -10,38 +10,15 @@ from pathlib import Path
 from typing import BinaryIO, Generic, TypeVar
 
 from .field_codec import FieldCodec
+from .private_path import FileRevision
 from .store_files import _atomic_write_text, _store_lock
-
-
-@dataclass(frozen=True)
-class BusFileRevision:
-    """The existing file_revision observation, with its fields declared once."""
-
-    inode: int
-    size: int
-    modified: int
-    changed: int
-
-    @classmethod
-    def capture(cls, stream: BinaryIO) -> BusFileRevision:
-        opened = os.fstat(stream.fileno())
-        return cls(opened.st_ino, opened.st_size, opened.st_mtime_ns, opened.st_ctime_ns)
-
-    def opened_by(self, stream: BinaryIO) -> bool:
-        opened = os.fstat(stream.fileno())
-        if opened.st_ino != self.inode or opened.st_size < self.size:
-            return False
-        if opened.st_size == self.size:
-            return self == type(self)(opened.st_ino, opened.st_size,
-                                      opened.st_mtime_ns, opened.st_ctime_ns)
-        return True
 
 
 @dataclass(frozen=True)
 class AppendCheckpoint:
     """One decoded record's prefix validity and integrity policy."""
 
-    source: BusFileRevision
+    source: FileRevision
     offset: int
     tail: str
     integrity: str = field(default="", kw_only=True)
@@ -71,10 +48,10 @@ class AppendCheckpoint:
         payload["integrity"] = self.payload_digest(payload)
         return payload
 
-    def accepts(self, revision: BusFileRevision, stream: BinaryIO) -> bool:
+    def accepts(self, revision: FileRevision, stream: BinaryIO) -> bool:
         if self.integrity != self.digest():
             return False
-        if self.source.inode != revision.inode or self.offset > revision.size:
+        if self.source.identity != revision.identity or self.offset > revision.size:
             return False
         if self.offset == revision.size and self.source != revision:
             return False
@@ -106,7 +83,7 @@ class BusAppendIndex(Generic[Checkpoint]):
 
     def capture(
         self, prepared: Checkpoint | None, stream: BinaryIO | None,
-        revision: BusFileRevision | None,
+        revision: FileRevision | None,
     ) -> Checkpoint | None:
         if prepared is None or stream is None or revision is None:
             return None
@@ -129,7 +106,7 @@ class BusAppendIndex(Generic[Checkpoint]):
             except FileNotFoundError:
                 return
             with stream:
-                current = BusFileRevision.capture(stream)
+                current = FileRevision.from_stat(os.fstat(stream.fileno()))
                 if not retained.accepts(current, stream):
                     return
                 saved = self._read()

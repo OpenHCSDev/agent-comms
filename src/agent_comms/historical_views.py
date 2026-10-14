@@ -18,12 +18,13 @@ from .message_page import (
 )
 from .message_reference import MessageReference
 from .messages import Message
+from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import ChannelDisplayScope, DisplayBasis, DMDisplayScope, MessageDisplayScope
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy, ResponsePolicy
-from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock, file_revision
+from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
 from .thread_provenance import ThreadProvenance
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
@@ -160,8 +161,8 @@ class HistorySource:
     wire_root_id: str
     bus_identity: tuple[int, int]
     size: int
-    snapshot_bus_revision: tuple[int, int, int, int]
-    snapshot_registry_revision: tuple[int, int, int, int]
+    snapshot_bus_revision: FileRevision
+    snapshot_registry_revision: FileRevision
     provenance: RegistryProvenance
 
     @property
@@ -171,8 +172,8 @@ class HistorySource:
     def validate(self) -> None:
         root = Path(self.root)
         if (
-            file_revision(root / "bus.jsonl") != self.snapshot_bus_revision
-            or file_revision(root / "registry.json") != self.snapshot_registry_revision
+            FileRevision.capture(root / "bus.jsonl") != self.snapshot_bus_revision
+            or FileRevision.capture(root / "registry.json") != self.snapshot_registry_revision
         ):
             raise ValueError("Historical snapshot changed; restore it before browsing")
 
@@ -372,7 +373,7 @@ class HistoryArchive:
                         "bus_meta.json",
                     )
                 ]
-                revisions = tuple(file_revision(path) for path in paths)
+                revisions = tuple(FileRevision.capture(path) for path in paths)
                 if source_read is None:
                     provenance = RegistryProvenance.capture(
                         Registration(source_root / "registry.json").snapshot()
@@ -384,7 +385,7 @@ class HistoryArchive:
                     if path.exists():
                         shutil.copy2(path, stage / path.name)
                 TranscriptRoutes(source_root).snapshot(stage)
-                if revisions != tuple(file_revision(path) for path in paths):
+                if revisions != tuple(FileRevision.capture(path) for path in paths):
                     raise ValueError("Historical source changed during snapshot; retry")
                 if source_read is not None:
                     source_read.require_original(source_root)
@@ -420,8 +421,8 @@ class HistoryArchive:
                     marker.root_id,
                     (bus_info.st_dev, bus_info.st_ino) if bus_info else (0, 0),
                     bus_info.st_size if bus_info else 0,
-                    file_revision(stage / "bus.jsonl"),
-                    file_revision(stage / "registry.json"),
+                    FileRevision.capture(stage / "bus.jsonl"),
+                    FileRevision.capture(stage / "registry.json"),
                     provenance,
                 )
                 declarations = source.provenance.threads
@@ -496,7 +497,7 @@ class HistoryArchive:
             return view.live_page(
                 presentation, before=before, after=after, limit=limit, max_bytes=max_bytes
             )
-        history_revision = file_revision(self.path)
+        history_revision = FileRevision.capture(self.path)
         if before is not None and after is not None:
             raise ValueError("Choose one history paging direction")
         cursor = before if before is not None else after

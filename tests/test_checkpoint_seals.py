@@ -71,7 +71,7 @@ def test_malformed_marker_denied_by_wire_and_registry_same_boundary(tmp_path, da
     elif damage == "seal-version-bool":
         seal["version"] = True
     elif damage == "seal-revision-bool":
-        seal["db_revision"][0] = True
+        seal["db_revision"]["size"] = True
     elif damage == "seal-digest":
         seal["witness"]["digest"] = "z" * 64
     elif damage == "seal-witness-extra":

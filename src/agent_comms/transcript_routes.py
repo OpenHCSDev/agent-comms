@@ -8,8 +8,9 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .errors import RelationViolationError
+from .private_path import FileRevision
 from .routing import TurnRouting
-from .store_files import _store_lock, file_revision
+from .store_files import _store_lock
 from .typed_table import Column, SQLiteSchemaObject, TypedTable
 
 
@@ -108,8 +109,8 @@ class _SessionRoutes:
 
 @dataclass(frozen=True, slots=True)
 class TranscriptRouteRevision:
-    database: tuple[int, int, int, int] | None
-    journal: tuple[int, int, int, int] | None
+    database: FileRevision | None
+    journal: FileRevision | None
 
 
 class TranscriptRoutes:
@@ -122,8 +123,8 @@ class TranscriptRoutes:
     def revision(self) -> TranscriptRouteRevision:
         """SQLite owns its committed data in the database or its WAL file."""
         return TranscriptRouteRevision(
-            file_revision(self.database_path),
-            file_revision(self.database_path.with_name(self.database_path.name + "-wal")),
+            FileRevision.capture(self.database_path),
+            FileRevision.capture(self.database_path.with_name(self.database_path.name + "-wal")),
         )
 
     def snapshot(self, destination: Path) -> None:
@@ -213,13 +214,13 @@ class TranscriptRoutes:
         if thread.turn_lease != lease.renamed(incarnation.name):
             raise RelationViolationError("Native publication has no current original turn")
         path = Path(thread.require_saved_session())
-        revision = file_revision(path)
+        revision = FileRevision.capture(path)
         if revision is None:
             raise RelationViolationError("Native publication has no retained session")
         reader = NativeTranscript(path)
         floor = checkpoint.offset if str(path) == checkpoint.session_file else 0
         try:
-            final, user = reader.publication_input(after=floor, through=revision[1])
+            final, user = reader.publication_input(after=floor, through=revision.size)
         except (ValueError, TypeError) as error:
             raise RelationViolationError("Native publication evidence is invalid") from error
         ids = routing.annotation_ids(reader, checkpoint, str(path), final.end)
@@ -231,7 +232,7 @@ class TranscriptRoutes:
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
             if current.turn_lease != lease.renamed(incarnation.name):
                 raise RelationViolationError("Native publication turn lease changed")
-            if current.session_file != str(path) or file_revision(path) != revision:
+            if current.session_file != str(path) or FileRevision.capture(path) != revision:
                 raise RelationViolationError("Native publication session changed")
             if not attempts.started_for_native(lease, user.input_id, user.message.text, snapshot=snapshot):
                 raise RelationViolationError("Native publication has no original STARTED input")

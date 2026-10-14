@@ -35,6 +35,13 @@ def test_tick_revision_paths_watch_final_bus_publication(tmp_path, monkeypatch):
         for name in source.names
     }
     assert watched == declared
+    modified = {
+        source.directory / os.fsdecode(name)
+        for source in paths.watch_sources
+        if source.modified
+        for name in source.names
+    }
+    assert modified == {*paths.coordination, *paths.goal_attempts}
     assert paths.bus[0] not in watched and paths.checkpoint not in watched
 
 
@@ -67,6 +74,36 @@ async def test_quiet_native_watch_wakes_when_auth_file_disappears(tmp_path, acti
         if waiting is not None and not waiting.done():
             waiting.cancel()
             await asyncio.gather(waiting, return_exceptions=True)
+        watcher.close()
+
+
+@pytest.mark.asyncio
+async def test_relevant_write_burst_cannot_postpone_owner_wake(tmp_path):
+    source = tmp_path / "shared-state"
+    source.write_text("0")
+    watcher = open_wire_watcher(WatchSource.modified_file(source))
+    if not isinstance(watcher, WireChangeWatch):
+        watcher.close()
+        pytest.skip("Native file notifications are unavailable")
+
+    async def keep_writing():
+        deadline = asyncio.get_running_loop().time() + 0.25
+        revision = 0
+        while asyncio.get_running_loop().time() < deadline:
+            source.write_text(str(revision))
+            revision += 1
+            await asyncio.sleep(0.005)
+
+    writes = None
+    try:
+        await watcher.prepare()
+        writes = asyncio.create_task(keep_writing())
+        assert await asyncio.wait_for(watcher.changed.wait(), 0.15) is True
+        assert not writes.done(), "the wake waited for unrelated writes to stop"
+    finally:
+        if writes is not None:
+            writes.cancel()
+            await asyncio.gather(writes, return_exceptions=True)
         watcher.close()
 
 

@@ -15,9 +15,9 @@ from typing import ClassVar
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .locked_store import LockedStore
+from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
 from .registry_document import RegistryDocument, RegistryEntry
-from .store_files import file_revision
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,7 +27,7 @@ class RegistryRevision:
     The raw rows let the next revision decode only the threads that changed.
     """
 
-    revision: tuple[int, int, int, int]
+    revision: FileRevision
     document: RegistryDocument
     raw: dict
 
@@ -36,7 +36,7 @@ class RegistryRevision:
 class RegistryEntryRevision:
     """One thread's entry and the registry revision it was read from, under one lock."""
 
-    revision: tuple
+    revision: tuple[FileRevision | None, FileRevision | None]
     entry: RegistryEntry
 
 
@@ -94,7 +94,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
 
     def _read_unlocked(self) -> RegistryDocument:
         self.private_guard_unlocked()  # before even a cache hit
-        revision = file_revision(self.path)
+        revision = FileRevision.capture(self.path)
         if revision is None:
             return self.empty()
         entry = self.cache.entry
@@ -116,9 +116,9 @@ class RegistryStore(LockedStore[RegistryDocument]):
     def guard_path(self) -> Path:
         return self.path.parent / ".registry-owner-guard"
 
-    def revision_unlocked(self) -> tuple:
+    def revision_unlocked(self) -> tuple[FileRevision | None, FileRevision | None]:
         """The registry file and its owner guard, which every write replaces together."""
-        return file_revision(self.path), file_revision(self.guard_path)
+        return FileRevision.capture(self.path), FileRevision.capture(self.guard_path)
 
     def read_entry(self, name: str) -> RegistryEntryRevision:
         """One thread's entry from the current file, without decoding the other threads.
@@ -154,7 +154,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
         raw = self._encode(document)
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.
-        if (revision := file_revision(self.path)) is not None:
+        if (revision := FileRevision.capture(self.path)) is not None:
             self.cache.entry = RegistryRevision(revision, document.copy(), raw)
 
     def _write_unlocked(self, text: str) -> None:
@@ -183,8 +183,13 @@ class RegistryStore(LockedStore[RegistryDocument]):
 
         marker_path = self.path.parent / "bus_meta.json"
         guard_path = self.guard_path
-        key = (_link_revision(self.path.parent), _link_revision(marker_path), file_revision(marker_path),
-               _link_revision(guard_path), _link_revision(self.path))
+        key = (
+            _link_revision(self.path.parent),
+            _link_revision(marker_path),
+            FileRevision.capture(marker_path),
+            _link_revision(guard_path),
+            _link_revision(self.path),
+        )
         if (checked := self.cache.guard) is not None and checked[0] == key:
             return checked[1]
         guard = self._check_guard_unlocked(marker_path, guard_path)
@@ -211,10 +216,10 @@ class RegistryStore(LockedStore[RegistryDocument]):
         return guard
 
 
-def _link_revision(path: Path) -> tuple[int, int, int, int] | None:
+def _link_revision(path: Path) -> FileRevision | None:
     """Revision of the directory entry itself, without following a symlink."""
     try:
         info = path.lstat()
     except FileNotFoundError:
         return None
-    return info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
+    return FileRevision.from_stat(info)

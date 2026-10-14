@@ -15,6 +15,7 @@ from .historical_views import HistoryArchive
 from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
 from .messages import Message
+from .private_path import FileRevision
 from .read_basis import (
     ChannelDisplayScope,
     DMDisplayScope,
@@ -23,7 +24,6 @@ from .read_basis import (
     ViewUnread,
 )
 from .routing import DeliveryMessage, DeliveryScope, PendingCounts
-from .store_files import file_revision
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -87,7 +87,7 @@ class MessageBus:
             )
         else:
             scopes = display_scopes
-        revision = (file_revision(self.log.path), viewer_names)
+        revision = (FileRevision.capture(self.log.path), viewer_names)
         cached = self._view_unread_cache.get(viewer)
         if cached is not None and cached.revision == revision and cached.scopes == scopes:
             return dict(cached.counts)
@@ -232,7 +232,7 @@ class MessageBus:
         for actor in set(actors.values()):
             deliveries[actor] = self._delivery_scope(actor, snapshot, catalog=catalog)
         revision = tuple(
-            file_revision(path)
+            FileRevision.capture(path)
             for path in (
                 self.log.path,
                 self._registry.store.path,
