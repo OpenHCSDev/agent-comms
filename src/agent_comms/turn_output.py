@@ -58,9 +58,11 @@ class TurnOutput:
         self.error_message = None
 
     @property
-    def declared_failure(self) -> failures.TurnFailure | None:
+    def declared_failure(self) -> failures.TurnFailure:
         failure = self.failure
-        if failure is None or self.retry_result is None:
+        if failure is None:
+            raise ValueError("Failed native terminal lacks its declared failure")
+        if self.retry_result is None:
             return failure
         return self.retry_result.refine_failure(failure)
 

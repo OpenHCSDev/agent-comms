@@ -1116,6 +1116,40 @@ def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
         native_pi.main()
 
 
+@pytest.mark.parametrize(
+    ("stop_reason", "detail"),
+    [
+        ("error", "provider failed"),
+        ("length", "Model output limit reached"),
+        ("aborted", "provider failed"),
+    ],
+)
+def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
+    from types import SimpleNamespace
+
+    from agent_comms.pi_events import PiEvent
+    from agent_comms.turn_failure import ModelRequestFailed
+    from agent_comms.turn_output import TurnOutput
+
+    event = PiEvent.from_wire({
+        "type": "message_end",
+        "message": {
+            "role": "assistant",
+            "content": [],
+            "stopReason": stop_reason,
+            "errorMessage": detail if stop_reason != "length" else None,
+        },
+    })
+    terminal = []
+    output = TurnOutput()
+    event.message.tracked_end(SimpleNamespace(
+        output=output, fail_terminal=terminal.append
+    ))
+
+    assert output.declared_failure == ModelRequestFailed(detail)
+    assert terminal == [detail]
+
+
 def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_path):
     from agent_comms.native_pi import NativeContextProof
     from agent_comms.turn_failure import ModelRequestFailed

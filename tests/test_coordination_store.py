@@ -708,123 +708,66 @@ def test_final_backend_fact_blocks_later_phase_progress_and_dead_lease(
         assert type(outcome.value.execution.lifecycle) is FailedExecution
 
 
-def test_replay_safety_does_not_cross_retry_attempts(db_path: Path) -> None:
+@pytest.mark.parametrize(
+    "fact", [ReplayFact.ASSISTANT_OUTPUT, ReplayFact.TOOL_CALL_STARTED]
+)
+def test_provider_proof_carries_until_later_attempt_records_output(
+    db_path: Path, fact: ReplayFact
+) -> None:
     with ready(db_path, max_attempts=3) as db:
         _, first = started(db)
-        initial = db.attempts.observe_replay(
-            first,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.NONE,
-            replay_safe=True,
-            side_effects_possible=False,
-        )
-        assert initial.value.replay is not None
-        same = db.attempts.observe_replay(
-            first,
-            expected_pointer_revision=1,
-            expected_replay_revision=1,
-            facts=ReplayFact.NONE,
-            replay_safe=True,
-            side_effects_possible=False,
-        )
-        assert isinstance(same, AlreadyApplied)
         first = final_evidence(db, first)
         deferred = db.attempts.settle_nonpublication(
             first,
             expected_pointer_revision=1,
             outcome=AttemptFailedAttempt(),
-            reason_code="first_failed",
+            reason_code="provider_failed",
+            failure=ProviderRetryExhausted("controlled provider failure"),
         )
-        assert deferred.value.can_retry
+        proof = deferred.value.replay
+        assert deferred.value.can_retry and proof is not None and proof.allows_retry
         db.participants.advance_generation("owner", "thread", expected_generation=1)
-        second_token = prepare_fence_token()
         second = db.attempts.start(
             AttemptStart(
                 "exec",
                 2,
                 "thread",
                 2,
-                second_token,
+                prepare_fence_token(),
                 expected_execution_revision=4,
                 expected_pointer_revision=2,
             )
         )
-        assert second.value.snapshot.replay is not None
-        assert not second.value.snapshot.replay.replay_safe
-        assert second.value.snapshot.replay.revision == 2
-        replayed_start = db.attempts.start(
-            AttemptStart(
-                "exec",
-                2,
-                "thread",
-                2,
-                second_token,
-                expected_execution_revision=4,
-                expected_pointer_revision=2,
-            )
-        )
-        assert isinstance(replayed_start, AlreadyApplied)
-        assert db.snapshots.get("exec").replay == second.value.snapshot.replay
-        same_unsafe = db.attempts.observe_replay(
-            second.value.fence,
-            expected_pointer_revision=3,
-            expected_replay_revision=2,
-            facts=ReplayFact.NONE,
-            replay_safe=False,
-            side_effects_possible=False,
-        )
-        assert isinstance(same_unsafe, AlreadyApplied)
-        with pytest.raises(IdentityConflict):
-            db.attempts.observe_replay(
-                second.value.fence,
-                expected_pointer_revision=3,
-                expected_replay_revision=2,
-                facts=ReplayFact.NONE,
-                replay_safe=True,
-                side_effects_possible=False,
-            )
+        assert second.value.snapshot.replay == proof
+        with db.session.transaction() as connection:
+            ReplayAssessments.accumulate(connection, "exec", fact)
+        revoked = db.snapshots.get("exec").replay
+        assert revoked is not None
+        assert revoked.facts == fact and not revoked.allows_retry
+
         second_fence = final_evidence(db, second.value.fence, pointer_revision=3)
         outcome = db.attempts.settle_nonpublication(
             second_fence,
             expected_pointer_revision=3,
             outcome=AttemptFailedAttempt(),
-            reason_code="second_failed",
+            reason_code="provider_failed_after_output",
+            failure=ProviderRetryExhausted("controlled provider failure"),
         )
         assert type(outcome.value.execution.lifecycle) is FailedExecution
         assert not outcome.value.can_retry
-        assert outcome.value.replay is not None and not outcome.value.replay.replay_safe
-        with pytest.raises((StaleFence, IdentityConflict)):
-            db.attempts.start(
-                AttemptStart(
-                    "exec",
-                    3,
-                    "thread",
-                    3,
-                    prepare_fence_token(),
-                    expected_execution_revision=6,
-                    expected_pointer_revision=4,
-                )
-            )
+        assert outcome.value.replay == revoked
 
 
 def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path) -> None:
     with ready(db_path, max_attempts=3) as db:
         _, first = started(db)
-        db.attempts.observe_replay(
-            first,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.NONE,
-            replay_safe=True,
-            side_effects_possible=False,
-        )
         first = final_evidence(db, first)
         deferred = db.attempts.settle_nonpublication(
             first,
             expected_pointer_revision=1,
             outcome=AttemptFailedAttempt(),
-            reason_code="first_failed",
+            reason_code="provider_failed",
+            failure=ProviderRetryExhausted("controlled provider failure"),
         )
         assert deferred.value.can_retry
         db.participants.advance_generation("owner", "thread", expected_generation=1)
@@ -865,9 +808,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
             )
         )
         assert isinstance(second, Applied)
-        assert second.value.snapshot.replay is not None
-        assert not second.value.snapshot.replay.replay_safe
-        assert second.value.snapshot.replay.revision == 2
+        assert second.value.snapshot.replay == before.replay
 
 
 def test_ambiguity_forces_failed_partition(db_path: Path) -> None:

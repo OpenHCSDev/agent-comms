@@ -45,6 +45,7 @@ from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .selected_session import SelectedSession
 from .turn_context import InputContributionCoordinates
+from .turn_failure import TurnFailure
 
 
 if TYPE_CHECKING:
@@ -102,7 +103,7 @@ class TrackedTerminal(ABC):
     def later_input(self, parts: list[str]) -> TrackedTerminal:
         return PendingTrackedTerminal()
 
-    def raise_failure(self, proof, provider, model, failure) -> None:
+    def raise_if_failed(self, proof, provider, model, output) -> None:
         return None
 
     def require_failed(self) -> None:
@@ -170,9 +171,12 @@ class FailedTrackedTerminal(TrackedTerminal):
     def tool_round(self):
         return self
 
-    def raise_failure(self, proof, provider, model, failure):
-        if failure is None:
-            raise NativePiUnavailable("Native failed terminal lacks its declared failure")
+    def raise_if_failed(self, proof, provider, model, output) -> None:
+        self.raise_failure(proof, provider, model, output.declared_failure)
+
+    def raise_failure(
+        self, proof, provider, model, failure: TurnFailure
+    ) -> None:
         raise NativePiTerminalFailure(self.text, proof, provider, model, failure)
 
     def later_input(self, parts):
@@ -634,8 +638,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         with self.startup.measurements.operation("native_terminal_result"):
             with self.startup.measurements.operation("native_terminal_proof"):
                 proof = await self.context_proof()
-            self.terminal.raise_failure(
-                proof, self.provider, self.model, self.output.declared_failure
+            self.terminal.raise_if_failed(
+                proof, self.provider, self.model, self.output
             )
             if self.tool_socket is not None:
                 self.tool_socket.assert_complete()
