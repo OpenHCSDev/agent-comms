@@ -81,6 +81,9 @@ def test_reader_counts_uncommitted_append_while_writer_decodes_without_index_loc
 def test_reader_beyond_rebuild_bound_is_rebuilding(tmp_path, monkeypatch):
     comms = _case(tmp_path, monkeypatch)
     comms.messaging.send_message("sender", "recipient", "appended")
+    comms.messaging.send_message("sender", "recipient", "appended again")
+    # One reader sync commits at most one row past the bound; the second
+    # row stays beyond it.
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
     with pytest.raises(RouteIndexRebuilding):
         comms.bus.pending_counts("recipient")

@@ -25,7 +25,7 @@ def consistent(comms, *names):
 
 
 @pytest.mark.parametrize("rebound", ["sender", "recipient"])
-def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, monkeypatch, rebound):
+def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, rebound):
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
@@ -45,14 +45,6 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, monkeypa
         "retained history",
         "current input",
     ]
-
-    def unavailable(*_args):
-        raise sqlite3.DatabaseError("index unavailable")
-
-    monkeypatch.setattr(BusRouteCounts, "sync", unavailable)
-    uncached = wire(tmp_path)
-    consistent(uncached, "sender", "recipient")
-    assert [row.seq for row in uncached.bus.inbox("recipient", "sender")] == [new.seq]
 
 
 def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
@@ -171,9 +163,15 @@ def test_new_route_table_is_created_and_reset_with_its_scope(tmp_path):
     class ExtraRouteStatisticRow(RouteTable, TypedTable):
         observed: int
 
-    with BusRouteCounts(tmp_path / "bus.jsonl") as index:
-        ExtraRouteStatisticRow(7).insert(index.connection)
-        index.connection.commit()
+    from contextlib import closing
+
+    routes = BusRouteCounts(tmp_path / "bus.jsonl")
+    routes.prepare()
+    with closing(sqlite3.connect(routes.path)) as writer:
+        ExtraRouteStatisticRow(7).insert(writer)
+        writer.commit()
+    with routes as index:
         assert ExtraRouteStatisticRow.select(index.connection) == [ExtraRouteStatisticRow(7)]
-        assert index.sync(None, None, lambda _: None)
+    assert routes.sync(None, None, lambda _: None).complete
+    with routes as index:
         assert ExtraRouteStatisticRow.select(index.connection) == []

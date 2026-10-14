@@ -285,15 +285,18 @@ class MessageBus:
         """Answer ``read(index, requests)`` from the committed route index.
 
         ``requests`` are the routes currently delivered to these actors. The
-        rows this cut appended after the index's committed position come back
-        decoded beside the answer; the caller applies the same delivery rule.
+        reader first commits a bounded remainder when the projection lock is
+        free; rows still past the committed position (another writer held the
+        lock) come back decoded beside the answer under the same delivery rule.
         """
         recipients = self._route_recipients(snapshot, deliveries)
 
         def decode(record):
             return DeliveryMessage.from_wire(record, root_id=source.metadata.root_id)
 
-        with BusRouteCounts(self.log.path) as index:
+        routes = BusRouteCounts(self.log.path)
+        routes.sync(source.stream, source.revision, decode, blocking=False)
+        with routes as index:
             appended = index.appended(source.stream, source.revision, decode)
             requests = []
             for route in index.routes():

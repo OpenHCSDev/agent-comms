@@ -215,8 +215,14 @@ class BusRouteCounts:
     def sync(
         self, source: BinaryIO | None, revision: FileRevision | None,
         decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
+        *, blocking: bool = True,
     ) -> RouteIndexState:
-        """Decode a bounded source delta first, then commit under a short lock."""
+        """Decode a bounded source delta first, then commit under a short lock.
+
+        A reader passes ``blocking=False``: when another writer holds the
+        projection lock it is committing the same bytes, so this reader
+        answers from its own remainder instead of waiting.
+        """
         size = revision.size if revision is not None else 0
         if source is not None:
             opened = FileRevision.from_stat(os.fstat(source.fileno()))
@@ -259,32 +265,35 @@ class BusRouteCounts:
         tail_digest = self._tail(source, through) if source is not None else None
         checkpoint = replace(revision, size=through) if revision is not None else None
 
-        with _store_lock(self.path), closing(sqlite3.connect(self.path, timeout=30)) as connection:
-            connection.execute("PRAGMA synchronous=FULL")
-            connection.execute("BEGIN IMMEDIATE")
-            current_rows = RouteSourceRow.select(connection)
-            current = current_rows[0] if current_rows else None
-            if current != recorded:
-                connection.rollback()
-                current_through = current.revision.size if current and current.revision else 0
-                return (RouteIndexReady() if current_through >= size
-                        else RouteIndexBehind(current_through, size))
-            if rebuild:
-                for owner in TypedTable.members_with(RouteTable):
-                    connection.execute(f'DELETE FROM "{owner.declared_name}"')
-            for row in rows:
-                row.insert(connection)
-            for (target, sender, sender_lookup), (count, oldest) in totals.items():
-                connection.execute(
-                    f'INSERT INTO "{RouteTotalRow.declared_name}" '
-                    '(target,sender,sender_lookup,total,oldest) VALUES (?,?,?,?,?) '
-                    'ON CONFLICT(target,sender,sender_lookup) DO UPDATE SET '
-                    'total=total+excluded.total, oldest=min(oldest,excluded.oldest)',
-                    (target, sender, sender_lookup, count, oldest),
-                )
-            connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
-            RouteSourceRow(1, checkpoint, tail_digest).insert(connection)
-            connection.commit()
+        try:
+            with _store_lock(self.path, blocking=blocking), closing(sqlite3.connect(self.path, timeout=30)) as connection:
+                connection.execute("PRAGMA synchronous=FULL")
+                connection.execute("BEGIN IMMEDIATE")
+                current_rows = RouteSourceRow.select(connection)
+                current = current_rows[0] if current_rows else None
+                if current != recorded:
+                    connection.rollback()
+                    current_through = current.revision.size if current and current.revision else 0
+                    return (RouteIndexReady() if current_through >= size
+                            else RouteIndexBehind(current_through, size))
+                if rebuild:
+                    for owner in TypedTable.members_with(RouteTable):
+                        connection.execute(f'DELETE FROM "{owner.declared_name}"')
+                for row in rows:
+                    row.insert(connection)
+                for (target, sender, sender_lookup), (count, oldest) in totals.items():
+                    connection.execute(
+                        f'INSERT INTO "{RouteTotalRow.declared_name}" '
+                        '(target,sender,sender_lookup,total,oldest) VALUES (?,?,?,?,?) '
+                        'ON CONFLICT(target,sender,sender_lookup) DO UPDATE SET '
+                        'total=total+excluded.total, oldest=min(oldest,excluded.oldest)',
+                        (target, sender, sender_lookup, count, oldest),
+                    )
+                connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
+                RouteSourceRow(1, checkpoint, tail_digest).insert(connection)
+                connection.commit()
+        except BlockingIOError:
+            return RouteIndexBehind(offset, size)
         return RouteIndexReady() if through == size else RouteIndexBehind(through, size)
 
     _requests = """requests AS (
