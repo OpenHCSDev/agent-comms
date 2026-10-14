@@ -52,7 +52,12 @@ def _maintain_in_process(root: str, root_id: str, through_seq: int, start, resul
             bootstrap_new=True, max_rows=256, max_bytes=8 * 1024 * 1024,
         )
     except BaseException as error:
-        results.put(("error", type(error).__name__, str(error)))
+        causes = []
+        current = error
+        while current is not None:
+            causes.append(f"{type(current).__name__}: {current}")
+            current = current.__cause__
+        results.put(("error", *causes))
     else:
         results.put(("ok", outcome.caught_up))
 
@@ -102,7 +107,7 @@ def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) ->
         process.join(timeout=15)
         assert process.exitcode == 0
     outcomes = [results.get(timeout=2) for _ in processes]
-    assert all(outcome[0] == "ok" for outcome in outcomes), outcomes
+    assert outcomes.count(("ok", True)) == 2, outcomes
     with sqlite3.connect(index.path) as db:
         checkpoint = db.execute(
             "SELECT last_seq FROM candidate_checkpoint WHERE singleton=1"

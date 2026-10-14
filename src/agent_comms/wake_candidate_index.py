@@ -188,9 +188,8 @@ class WakeCandidateIndex:
                 db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
             )
             if not actual and create:
-                with db:
-                    for table in TypedTable.members_with(CandidateTable):
-                        table.create(db)
+                for table in TypedTable.members_with(CandidateTable):
+                    table.create(db)
                 return
             if SQLiteSchemaObject.differences(actual, schema):
                 raise ProjectionRebuildRequiredError(
@@ -355,11 +354,11 @@ class WakeCandidateIndex:
             with self.bus.log.path.open("rb") as stream:
                 stat = os.fstat(stream.fileno())
                 with closing(self._connect(self.path, readonly=False)) as db:
-                    # Rebuild replays current-format projections only; old schemas
-                    # require the explicit store reset outside runtime code.
-                    self._schema(db, create=True)
                     db.execute("BEGIN IMMEDIATE")
                     try:
+                        # The writer transaction owns schema creation, bootstrap
+                        # selection, bounded replay and checkpoint commit.
+                        self._schema(db, create=True)
                         checkpoint = self._checkpoint_start(
                             db, stream, stat, root_id,
                             rebuild=rebuild, bootstrap_new=bootstrap_new,
