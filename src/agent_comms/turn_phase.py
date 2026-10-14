@@ -41,6 +41,7 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     holds_refusal_reports: ClassVar[bool] = False
     activity_state: ClassVar[ActivityState] = ActivityState.THINKING
     label: ClassVar[str] = "Waiting for model"
+    has_response_output: ClassVar[bool] = False
 
     @property
     def summary(self) -> str:
@@ -95,6 +96,9 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
 
     def model_progress(self) -> TurnPhase:
         return ModelWaitPhase()
+
+    def response_output(self) -> TurnPhase:
+        return ResponseOutputPhase()
 
     def stalled(self, accepted: bool) -> TurnPhase:
         return self if accepted else PromptAcceptancePhase()
@@ -159,6 +163,12 @@ class PublishingPhase(TurnPhase):
 class ModelWaitPhase(TurnPhase):
     def model_progress(self) -> TurnPhase:
         return self
+
+
+class ResponseOutputPhase(ModelWaitPhase):
+    """The current turn has emitted assistant text or started a tool."""
+
+    has_response_output = True
 
 
 class SettlingStatsPhase(TurnPhase):
@@ -241,6 +251,7 @@ class ToolRunningPhase(Excursion):
     tools: tuple[tuple[str, str], ...] = ()
     activity_state = ActivityState.WORKING
     label = "Running tool"
+    has_response_output = True
 
     @property
     def summary(self) -> str:
@@ -252,7 +263,7 @@ class ToolRunningPhase(Excursion):
 
     def tool_ended(self, tool_id: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)
-        return replace(self, tools=retained) if retained else ModelWaitPhase()
+        return replace(self, tools=retained) if retained else ResponseOutputPhase()
     def may_finish(self, active_tools: set[str]) -> bool:
         return not active_tools
 

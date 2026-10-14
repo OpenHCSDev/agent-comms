@@ -20,6 +20,7 @@ from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.turn_phase import ResponseOutputPhase
 from delivery_owner_fixture import canonical_delivery_owner, native_model
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -179,6 +180,11 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
                 replace(notices[0], message=message),
             )
             assert calls == []  # Projection never launches or resends an input.
+
+            lease = comms.registry.require("beta").require_turn_lease()
+            comms.agents.transition_turn(lease, ResponseOutputPhase())
+            working = comms.views.message_notifications([message])[key]
+            assert working[0].state == "Read - working" and working[0].busy
 
             # Same PID, different process incarnation: even a retained active turn
             # cannot supply liveness. Persist through the real typed registry.

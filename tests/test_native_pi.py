@@ -830,11 +830,11 @@ def test_missing_native_model_fails_before_any_session_side_effect(
 @pytest.fixture
 def durable_attempt(tmp_path):
     from agent_comms.coordination_tables.executions import ExecutionOrigin
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordinator import StandaloneCoordination
     from agent_comms.durable_turn import DurableTurn
     from agent_comms.owner_fence import prepare_fence_token
 
-    with Coordination(tmp_path / "attempt.sqlite3") as store:
+    with StandaloneCoordination(tmp_path / "attempt.sqlite3") as store:
         store.participants.register("owner", "owner", "owner", committed=True)
         created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
         pending = store.executions.mark_pending(
@@ -1085,7 +1085,8 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert observed.count("input_committed") == 1
             assert observed.count("context_committed") == 1
             assert "agent_settled" not in observed
-            settled = durable_attempt.fail_unknown()
+            with durable_attempt.attempts.session.settlement() as boundary:
+                settled = durable_attempt.fail_unknown(boundary)
             assert not settled.is_current and not settled.can_retry
             return
         if outcome == "rejected":
