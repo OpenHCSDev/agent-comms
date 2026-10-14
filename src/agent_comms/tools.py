@@ -15,6 +15,7 @@ from .command import Command
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
+from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .goal_actions import (
     ActiveGoalAction,
@@ -269,10 +270,15 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
     def apply(self, comms: Comms) -> JsonObject:
         """Change this thread's model or another thread's model for future turns."""
         thread_name = self.thread or _executing_thread()
+        original = comms.registry.require(thread_name)
+        if comms.registry.status(thread_name).active and thread_name != _executing_thread():
+            raise RelationViolationError(
+                f"{thread_name} is running; change its settings through its own session"
+            )
         model = self.model.strip()
         thinking_level = (self.thinking_level or "").strip()
         thread = comms.threads.set_thread_configuration(
-            comms.registry.require(thread_name),
+            original,
             model=model or None,
             thinking_level=thinking_level or None,
             service_tier=self.service_tier,

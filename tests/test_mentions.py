@@ -2,6 +2,7 @@ import pytest
 
 from agent_comms import MentionQuery
 from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
@@ -181,16 +182,16 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
         "thinking_level": None,
         "service_tier": "priority",
     }
-    result = invoke_tool(
-        comms,
-        "comms_model",
-        {
-            "thread": "peer",
-            "model": "openai-codex/gpt-5.6-sol",
-            "thinking_level": "high",
-            "service_tier": "standard",
-        },
-    )
+    peer_configuration = {
+        "thread": "peer",
+        "model": "openai-codex/gpt-5.6-sol",
+        "thinking_level": "high",
+        "service_tier": "standard",
+    }
+    with pytest.raises(RelationViolationError, match="through its own session"):
+        invoke_tool(comms, "comms_model", peer_configuration)
+    comms.registry.unregister("peer")
+    result = invoke_tool(comms, "comms_model", peer_configuration)
     assert result["thread"] == "peer" and result["thinking_level"] == "high"
     configured = comms.registry.require("peer")
     assert configured.model == "openai-codex/gpt-5.6-sol"
