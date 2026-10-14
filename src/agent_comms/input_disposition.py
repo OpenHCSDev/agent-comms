@@ -191,7 +191,7 @@ class InputDispositions:
             row.key,
             row.owner,
             row.admission,
-            getattr(row, "turn_id", None),
+            row.bound_turn_id,
             int(row.unresolved),
             row.sequence,
             InputDispositions._payload(row),

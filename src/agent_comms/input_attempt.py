@@ -91,6 +91,10 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     def matches_native(self, *, turn_id: str, native_id: str, text: str) -> bool:
         return False
 
+    @property
+    def bound_turn_id(self) -> str | None:
+        return None
+
     def started_for_native(
         self,
         lease: TurnLeaseFence,
@@ -254,6 +258,10 @@ class SentInput(StoredInput):
 
     def matches_native(self, *, turn_id: str, native_id: str, text: str) -> bool:
         return (self.turn_id, self.native_id, self.sent_text) == (turn_id, native_id, text)
+
+    @property
+    def bound_turn_id(self) -> str:
+        return self.turn_id
 
     def bound_bus_input(self) -> SentInput | None:
         return self if self.sequence is not None else None
