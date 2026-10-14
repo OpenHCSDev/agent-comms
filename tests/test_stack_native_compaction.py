@@ -169,7 +169,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
             (agent / "models.json").write_text(json.dumps({"providers": {"openrouter": {
                 "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
                 "modelOverrides": {"z-ai/glm-5.3-flash": {
-                    "contextWindow": 1050000 if case == "cap_disabled" else 128000,
+                    "contextWindow": 272000 if case == "cap_disabled" else 128000,
                     "maxTokens": 4096,
                 }},
             }}}))
@@ -201,7 +201,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
             if case == "acp_threshold":
                 await _acp_threshold(root, project, session, native_bin, native_args, child_env,
                                      summary_entered, release_summary, monkeypatch)
-                assert len(summaries) == 1 and len(prompts) == 1
+                assert len(summaries) >= 1 and len(prompts) == 1
                 assert "TASK_BRIEF_SENTINEL" in json.dumps(summaries[0]["messages"])
                 return
             pi_session = PersistentPiSession()
@@ -242,7 +242,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
         assert done.ok is True, done
         assert len(ends) == 1 and not ends[0].aborted
         assert len(compactions) == 1 and SUMMARY in compactions[0]["summary"]
-        assert len(summaries) == 1
+        assert len(summaries) >= 1
         assert "TASK_BRIEF_SENTINEL" in json.dumps(summaries[0]["messages"])
         assert "LEGACY_DISCARDED_HISTORY" in json.dumps(summaries[0]["messages"])
         final = json.dumps(prompts[-1]["messages"])
@@ -250,7 +250,9 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
         if case in {"threshold", "cap_disabled"}:
             # Pi compacts before the prompt; the input is sent once, after the summary.
             # The Core-owned budget remains effective even when this thread persisted
-            # compaction.enabled=false and its model advertises a 1,050,000-token window.
+            # compaction.enabled=false. Even though this completed response is also
+            # above its model's 272,000-token window, retained context uses the
+            # standard threshold reason; overflow is reserved for interrupted recovery.
             assert ends[0].reason is ThresholdCompactionReason
             assert len(prompts) == 1
             kinds = [type(event) for event in events]

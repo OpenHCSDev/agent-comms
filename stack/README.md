@@ -98,12 +98,17 @@ budget owns Core's immutable 300,000-token retained-context threshold as well
 as `reserveTokens` and `keepRecentTokens`. A per-thread
 `compaction.enabled: false` cannot disable that Core threshold. Models keep
 their real advertised context windows; Pi compacts at the smaller of the
-model-safe threshold and 300,000 tokens.
+model-safe threshold and 300,000 tokens. That same threshold bounds each
+summarizer request. An oversized pre-existing span is summarized in order
+through bounded updates instead of being sent as one request that the
+summarizer cannot accept.
 
 Threshold compaction runs before a model request at a completed user/tool
 boundary or after a completed response, never while a tool is running.
-Overflow recovery compacts once, then continues the same context. Context size
-is Pi's estimate, reported through `get_session_stats`. A manual compaction is
+A completed response crossing either threshold uses Pi's standard threshold
+reason. Overflow recovery is reserved for an interrupted provider request: it
+compacts once, then continues the same context. Context size is Pi's estimate,
+reported through `get_session_stats`. A manual compaction is
 Pi's `compact` RPC. The thread's task brief (`PI_TASK`) is passed to every
 summary as custom instructions, ahead of any instructions given to `/compact`.
 Tracked inputs are never re-sent by Pi's provider retry; the only resend is
