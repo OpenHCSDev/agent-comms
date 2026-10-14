@@ -28,15 +28,10 @@ if TYPE_CHECKING:
 class AssignmentProgress(DeclaredFamily, affix="Progress"):
     """How far one assignment got, derived once from its durable evidence."""
 
-    running_state = "Starting response"
-    running_detail = (
-        "The message was selected for this turn; model-context receipt is still pending."
-    )
-    interrupted_state = "Interrupted before read — outcome unknown"
-    interrupted_detail = (
-        "The response turn ended before a model-context receipt was recorded. "
-        "Do not automatically retry."
-    )
+    running_state: str
+    running_detail: str
+    interrupted_state: str
+    interrupted_detail: str
 
     def notification(self, notification: MessageNotification, *, running: bool):
         return replace(
@@ -46,6 +41,18 @@ class AssignmentProgress(DeclaredFamily, affix="Progress"):
             busy=running,
             priority=notification.priority if running else 3,
         )
+
+
+class NotShownProgress(AssignmentProgress):
+    running_state = "Starting response"
+    running_detail = (
+        "The message was selected for this turn; model-context receipt is still pending."
+    )
+    interrupted_state = "Interrupted before read — outcome unknown"
+    interrupted_detail = (
+        "The response turn ended before a model-context receipt was recorded. "
+        "Do not automatically retry."
+    )
 
 
 class _ReadAssignmentProgress:
@@ -87,7 +94,7 @@ class AssignmentActivity(TypedRow):
             return ProducedOutputProgress()
         if self.model_context:
             return ShownToModelProgress()
-        return AssignmentProgress()
+        return NotShownProgress()
 
     @property
     def response_reference(self) -> MessageReference | None:
