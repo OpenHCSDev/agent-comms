@@ -102,17 +102,40 @@ def test_consecutive_appends_rehash_only_the_captured_prefix(tmp_path, monkeypat
             start = source.stream.tell()
             data = real_read(size)
             reads.append((start, size))
-            # Three consecutive hashing passes see growth after reading their
-            # last byte. None can certify the old digest at the new revision.
-            if 2 <= len(reads) <= 4:
+            # Two consecutive hashing passes see growth after reading their
+            # last byte. Neither can certify the old digest at the new revision.
+            if 2 <= len(reads) <= 3:
                 append_to(session)
             return data
 
         monkeypatch.setattr(source.stream, "read", reading)
         assert len(tuple(source.rows())) == 2
-        assert reads == [(0, len(original))] * 5  # capture + four hash passes
+        assert reads == [(0, len(original))] * 4  # capture + three bounded passes
         assert source.size == len(original)
-        assert len(tuple(source.rows())) == 3  # later bytes decoded only now
+        assert len(tuple(source.rows())) == 2  # later bytes decoded only now
+
+
+def test_continuous_append_exhausts_owned_prefix_verification_resource(tmp_path, monkeypatch):
+    session = _evidence(tmp_path)
+    original = session.read_bytes()
+    with PrivateEvidenceRead.open(session) as source:
+        real_read = source.stream.read
+        reads = 0
+
+        def reading(size):
+            nonlocal reads
+            reads += 1
+            data = real_read(size)
+            if reads > 1:
+                append_to(session)
+            return data
+
+        monkeypatch.setattr(source.stream, "read", reading)
+        with pytest.raises(NativePiUnavailable, match="did not become stable"):
+            tuple(source.rows())
+        assert reads == 1 + source.prefix_verification_attempts
+        assert source.stream.closed
+        assert session.read_bytes().startswith(original)
 
 
 async def test_actual_saved_native_tool_start_uses_prefix_reader(native_backend, monkeypatch):

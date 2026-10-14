@@ -654,6 +654,8 @@ class PrivateEvidenceRead:
     checks both the descriptor and named revision across the observation.
     """
 
+    prefix_verification_attempts = 3
+
     def __init__(self, path, stream):
         self.path, self.stream = path, stream
         self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
@@ -736,7 +738,7 @@ class PrivateEvidenceRead:
         revision = FileRevision.from_stat(before)
         if revision.identity != self.identity or revision.size < size:
             raise NativePiUnavailable("Native Pi evidence snapshot source changed")
-        while True:
+        for _attempt in range(self.prefix_verification_attempts):
             self.stream.seek(0)
             digest = hashlib.sha256()
             remaining = size
@@ -752,6 +754,7 @@ class PrivateEvidenceRead:
             if observed == revision:
                 return
             revision = observed
+        raise NativePiUnavailable("Native Pi evidence prefix did not become stable")
 
     def _observe_revision_after(self, revision):
         """Check original private inode and monotonic growth, not byte integrity.
