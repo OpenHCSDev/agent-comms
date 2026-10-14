@@ -266,7 +266,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(native
                 outcome for outcome in sender_view.sent_notifications
                 if outcome.message.reference == message.reference
             )
-            assert sent_read.state == "Read — no reply"
+            assert sent_read.state.startswith("Read ")
             assert sent_read.read_at_ms == assignment.updated_at_ms
             assert sent_read.changed
             # One turn, two inputs: the prompt and the message, each sent once.

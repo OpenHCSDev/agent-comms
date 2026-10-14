@@ -225,7 +225,7 @@ class ConversationSourceWindowRequest:
         requests: tuple[ConversationSourceWindowRequest, ...],
     ) -> tuple[ConversationSourceWindow, ...]:
         """Capture all requests from the same certified wire cut."""
-        if not log.path.exists():
+        if not log.path.exists() and not log.metadata_path.exists():
             return tuple(ConversationSourceWindow(request, ()) for request in requests)
         with log.certified_read() as source:
             return tuple(request.capture(source, lookup) for request in requests)

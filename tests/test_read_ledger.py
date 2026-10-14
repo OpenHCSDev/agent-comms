@@ -106,6 +106,7 @@ def test_agent_sent_dm_includes_independent_human_read(tmp_path):
     selected = SelectedPrompt(SimpleNamespace(
         comms=comms,
         owner=SimpleNamespace(thread=comms.registry.require("alice")),
+        sent_outcomes=(outcome,),
     ))
     assert [item.message.reference for item in selected.sent_outcomes()] == [message.reference]
 

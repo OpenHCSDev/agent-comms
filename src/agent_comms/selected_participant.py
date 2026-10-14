@@ -27,6 +27,7 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_attestation import ObservedAttestation
 from .private_registry_guard import _require_no_private_owner_rename
 from .participant_store import ParticipantSnapshot
+from .presentation import MessageNotification
 from .turn_phase import PreparingPhase, TurnPhase
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 
@@ -41,6 +42,7 @@ class SelectedParticipant(MroDispatch):
     identity: ParticipantOwner
     lookup: str
     batch: SelectedSourceBatch
+    sent_outcomes: tuple[MessageNotification, ...]
     provider: str
     model: str
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
@@ -120,6 +122,9 @@ class SelectedParticipant(MroDispatch):
             leased = await Coordination.run_worker(lambda: next(lease))
             sources = await cls.sources(bus, store, root_id, pending, identity)
             batch = SelectedSourceBatch.first_route(sources)
+            sent_outcomes = await Coordination.run_worker(
+                lambda: cls.capture_sent_outcomes(comms, name)
+            )
             selected = cls(
                 comms,
                 bus,
@@ -129,6 +134,7 @@ class SelectedParticipant(MroDispatch):
                 ParticipantOwner(leased.thread, identity.generation),
                 participant.lookup,
                 batch,
+                sent_outcomes,
                 provider,
                 model,
                 on_compaction=on_compaction,
@@ -142,6 +148,19 @@ class SelectedParticipant(MroDispatch):
             # Joined entry can acquire custody without delivering its result.
             # The original generator owns retirement even in that case.
             await Coordination.run_worker(lease.close)
+
+    @staticmethod
+    def capture_sent_outcomes(
+        comms: Comms, name: str
+    ) -> tuple[MessageNotification, ...]:
+        presentation = comms.views.thread_presentation(
+            name, sent_source_limit=MessageNotification.window_limit
+        )
+        if presentation is None:
+            return ()
+        return tuple(
+            outcome for outcome in presentation.sent_notifications if outcome.changed
+        )
 
     @staticmethod
     def prepare(

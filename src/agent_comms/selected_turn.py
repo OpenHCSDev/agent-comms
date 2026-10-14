@@ -45,16 +45,7 @@ class SelectedPrompt:
         )
 
     def sent_outcomes(self):
-        participant = self.participant
-        presentation = participant.comms.views.thread_presentation(
-            participant.owner.thread.name,
-            sent_source_limit=SelectedWakeSegment.sent_source_limit,
-        )
-        if presentation is None:
-            return ()
-        return tuple(
-            outcome for outcome in presentation.sent_notifications if outcome.changed
-        )[:SelectedWakeSegment.sent_limit]
+        return self.participant.sent_outcomes[:SelectedWakeSegment.sent_limit]
 
     def triage(self) -> RenderedInput:
         participant = self.participant

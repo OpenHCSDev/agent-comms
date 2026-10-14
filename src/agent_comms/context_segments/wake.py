@@ -38,7 +38,6 @@ class SelectedWakeSegment(InstructionSegment):
     sent_outcomes: tuple[MessageNotification, ...]
 
     sent_limit = 5
-    sent_source_limit = MessageNotification.window_limit
 
     @classmethod
     def capture(cls, sources, owner, *, obligations=(), sent_outcomes=()):

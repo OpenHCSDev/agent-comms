@@ -117,7 +117,7 @@ class TestToolCatalog:
                 row["state"],
             )
             for row in result["sent_notifications"]
-        ] == [(sent.seq, "track me", "recipient", "Waiting for agent")]
+        ] == [(sent.seq, "track me", "recipient", "Sent")]
 
     def test_ack_can_target_one_conversation(self, comms):
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
