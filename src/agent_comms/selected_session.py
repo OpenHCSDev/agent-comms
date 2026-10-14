@@ -51,6 +51,9 @@ class SelectedSession:
 
         return PendingAttestation()
 
+    def tracked_attestation(self, current):
+        return current
+
     def startup_admission(self, launch, root, boundary, *,
                           measurements: PublicationMeasurements | None = None):
         from .native_startup import NativeStartupAdmission
@@ -190,6 +193,11 @@ class SavedSelectedSession(SelectedSession):
 
         return PendingAttestation(self.identity)
 
+    def tracked_attestation(self, current):
+        from .native_attestation import KnownSessionAttestation
+
+        return KnownSessionAttestation(self.identity)
+
     def require_launch_header(self) -> None:
         if self.custody is not None:
             try:
@@ -215,6 +223,10 @@ class SavedSelectedSession(SelectedSession):
 @dataclass(frozen=True)
 class FirstSelectedSession(SavedSelectedSession):
     creation: FreshPrivateSession = field(kw_only=True)
+
+    def tracked_attestation(self, current):
+        # First enrollment still attests model, empty history and generated source.
+        return current
 
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()
