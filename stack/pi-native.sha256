@@ -1,10 +1,10 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
-efabbb4fc9680938d03619a09100ea96096636d5886ae966ee6615ab11796c84  dist/core/agent-session.js
+e7ea00291bd05ae00b715da7d6165f093d6016ac8afa0704ca43faf0f154cd47  dist/core/agent-session.js
 c69971d290b3b53e391eeb8aafdb2b45f6d5fd11ccf4330eb733fa2cb557ebaa  dist/core/compaction/compaction.js
 0bcfbc31fab1a6216f81a4ae2313c7e884743795600816fbc36f1da552c44f84  dist/core/compaction/compaction.d.ts
 54450bbf96d22be7af9d66fade282ee7f2095906e9d818b60182338ef88f64d1  dist/core/session-manager.js
 1ef2941db3e2fc0602c4bae08200a99b00ab447e42970a0eca085e7ea684b04e  dist/modes/rpc/rpc-mode.js
-1ab936b4f516b9584f1c931794eb58db9707655fc6fb8693f99343245f0646ab  dist/core/agent-session.d.ts
+dc4ec6653ca99d0586eb50b35a8aa63379c2c68e159f6ce694fa57f242087462  dist/core/agent-session.d.ts
 79af9473674c3206bea1b3f4d710d57de8010871a3d82462884721a17a5b24e0  dist/core/session-manager.d.ts
 4dd447d193a7104230f51a7d09031c9cba81aec19d7d20762ba6c038ec06de51  dist/modes/rpc/rpc-types.d.ts
 8e9c3338bf40a4d965456214584400ab8c41130ca55ec3d8625d676d4807cab6  node_modules/@earendil-works/pi-agent-core/dist/agent.js
@@ -24,8 +24,8 @@ fc662902a510c19c5b0af7e3cf96742f5d6071c004fe226a992a59cd0bf7522a  dist/core/sdk.
 223b4e3cc99b8f7a46c2243df77bfb02e4127d3101180fe4e2be072a28c98622  dist/core/native-proof-journal.js
 d2cee72e8e69b5dc8f8d0c84944c1a341e85ed7aa283b94463bafa5b4107ea1c  dist/core/native-proof-schema.js
 aae7f609bfa65d29ed16e311456921a88221622e08cf6a1f5c7aab8e58bd69e6  node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
-bfcdccbbceac26cd561ead2009d645bd41d2e2b6608d2506babc73c1ff689d87  agent-comms-extensions/global-agent-comms/index.mjs
-77559b1b0b2b808e2b9b01435093760eebe4d2df2bcffb180fd98dac470bb3b1  dist/agent-comms-imports.json
+2555501dfd1af61e7f7597d7d23917d9260549a43daa85bdd5433915df006e65  agent-comms-extensions/global-agent-comms/index.mjs
+5bdda4e9827e3acc70ed2c88ee372bc37b503c4aba3054b7c32cffb352fb5792  dist/agent-comms-imports.json
 376f78f7fe90e1e9810e56b528a4dde331eae03b472ead2f28f7dba55a21ec2c  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js
 92b604f8fe824fcb018d35fb9736319803a3caf0f90ef5e2fd53178857514086  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
 e87b99fc294377e78a6bc6019a6b21816d9ba27012f109fb2626105e0c3f1ceb  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js
@@ -55,4 +55,4 @@ b20faeea0427f73d756a5264c1a907631c701a1140d9d716290800ce87e46d86  dist/core/skil
 d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skills.js
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
-# agent-comms-native-tree-v1 5bfdc3662cc19ef466c346b383ac8f7885f3e8dbddaa38443b96c0655eda76c1
+# agent-comms-native-tree-v1 51c063a092e6147cc9e1f6a1939698ae1be81da5e9139763eb760713255c44ec

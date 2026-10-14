@@ -9,7 +9,7 @@ from acp import RequestError
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
-from agent_comms.acp_failure import PromptFailureReceipt
+from agent_comms.acp_failure import RequestFailure
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
@@ -118,7 +118,8 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
             active_backends -= 1
 
     if outcome == "error":
-        native.provider.status = 503
+        native.provider.status = 400
+        native.provider.error_message = "insufficient_quota"
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     await proxy.subscribe()
@@ -177,8 +178,8 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
             if outcome in {"exception", "error"}:
                 with pytest.raises(RequestError) as caught:
                     await turn
-                receipt = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
-                assert receipt.notification_published and receipt.failure.input_state.public_status == "started"
+                request_failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
+                assert request_failure.notification_published and request_failure.failure.input_state.public_status == "started"
             else:
                 assert (await turn)["stopReason"] == "end_turn"
             await asyncio.wait_for(continued.wait(), 30)

@@ -68,6 +68,7 @@ PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
     "bash_execution_update",
     "compaction_start", "compaction_end",
     "auto_retry_start", "auto_retry_end",
+    "native_retry_start", "native_retry_end",
     "summarization_retry_scheduled", "summarization_retry_attempt_start",
     "summarization_retry_finished",
     "steering_interrupt_started", "steering_interrupt_completed",

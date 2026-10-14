@@ -7,12 +7,15 @@ ACP publication constructs SDK updates directly from these declared fields.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from .activity import ActivityState
-from .acp_failure import FailureSource, UnrecordedFailureSource
+from .acp_failure import (
+    FailureSource, UnrecordedFailureSource, NativeTurnOutcome, ProviderRetryResult,
+    UnresolvedNativeTurnOutcome, SuccessfulNativeTurnOutcome, FailedNativeTurnOutcome,
+)
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
@@ -30,6 +33,8 @@ if TYPE_CHECKING:
     from .goals import Goal
     from .pi_events import RetryAttemptEvent
     from .turn_phase import TurnPhase
+    from .input_disposition import InputDocument
+    from .turn_input_source import OriginalTurnInput
 
 
 class AgentEvent(ABC):
@@ -199,6 +204,16 @@ class Done(AgentEvent):
     ok: bool
     reason_code: str | None = None
     diagnostic: dict[str, Any] | None = None
+    outcome: NativeTurnOutcome = field(default_factory=UnresolvedNativeTurnOutcome)
+    # Immutable completion snapshot of TurnOutput's already decoded result.
+    retry_result: ProviderRetryResult | None = None
+
+    def resolve(
+        self, error: Error | None, document: InputDocument, original: OriginalTurnInput,
+    ) -> Done:
+        outcome = (SuccessfulNativeTurnOutcome() if self.ok else
+                   FailedNativeTurnOutcome.resolve(self, error, document, original))
+        return replace(self, outcome=outcome)
 
 
 @dataclass(frozen=True)
@@ -228,6 +243,8 @@ class Notice(AgentEvent):
 
 @dataclass(frozen=True)
 class Error(AgentEvent):
+    # Raw native failure evidence is not a public completed outcome. Done owns
+    # its resolution; a recovered turn never publishes an interim refusal.
     text: str
     reason_code: str | None = None
     command: PiCommand | None = None

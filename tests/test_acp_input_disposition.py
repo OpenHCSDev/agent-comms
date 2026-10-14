@@ -15,7 +15,7 @@ from acp.schema import TextContentBlock
 from agent_comms import backend
 from agent_comms import pi_commands as commands
 from agent_comms import pi_events as pi
-from agent_comms.acp_failure import PromptFailureReceipt
+from agent_comms.acp_failure import RequestFailure
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, QueuePromptRequest, SteerPromptRequest, decode_updates, encode_request
 from agent_comms.child_process import BoundedRun, ExitedOutcome
 from agent_comms.assignment_states import DeliveredAssignment
@@ -70,7 +70,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
             await owner.prompt(session, [TextContentBlock(type="text", text="test")])
         assert isinstance(caught.value.__cause__, NativePiUnavailable)
         assert "preflight" in str(caught.value.__cause__)
-        failure = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
+        failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
         assert failure.notification_published and failure.failure.input_state.public_status == "not_sent"
         rows = owner.inputs.dispositions.read().unknown(frozenset({session}))
         assert len(rows) == 1 and not rows[0].has_native_binding
@@ -140,7 +140,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             else:
                 with pytest.raises(RequestError) as caught:
                     await asyncio.wait_for(turn, 30)
-                failure = PromptFailureReceipt.from_error(caught.value.code, str(caught.value), caught.value.data)
+                failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
                 assert failure.notification_published
             final = InputDispositions(owner.inputs.dispositions.path).read().rows
             assert len(final) == 2
@@ -406,3 +406,95 @@ def test_disposition_fixtures_cannot_reintroduce_retired_delivery_engine():
                     "DeliveryDocument",
                     "wire",
                 }
+
+
+async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(native_backend):
+    native = native_backend
+    await native.author_history()
+    held = asyncio.Event()
+    native.provider.response_gate = held
+    async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+        comms = owner._comms
+        receiver = await Coordination.run_worker(partial(comms.registry.require, session))
+        lookup = stable_thread_lookup(receiver.created_at)
+        comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+        try:
+            first = comms.messaging.send_message("sender", session, "which parser is slow?")
+            await owner.inputs.drain_inbox(session)
+            await wait_for(lambda: native.provider.posts == 1)
+            reply_turn = owner.inputs.wake_tasks[session]
+            known = len(owner.inputs.dispositions.read().rows)
+            second = comms.messaging.send_message("sender", session, "the yaml one, I mean")
+            native.provider.response_gate = None
+            # The owner's own observation hands the second message to the running turn.
+            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == known + 1)
+            held.set()
+            await asyncio.wait_for(reply_turn, 30)
+
+            def assignments():
+                with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                    return sealed_cohort_assignments(store, lookup)
+
+            states = {
+                assignment.wire_seq: type(assignment.lifecycle)
+                for assignment in await Coordination.run_worker(assignments)
+            }
+            assert states[second.seq] is DeliveredAssignment
+            assert states[first.seq] is not DeliveredAssignment
+            # One turn took both: the second went in at the next model call, sent once.
+            assert native.provider.posts == 2
+            assert "the yaml one, I mean" in json.dumps(native.provider.requests[1]["messages"])
+            assert "the yaml one, I mean" not in json.dumps(native.provider.requests[0]["messages"])
+            assert len({row.turn_id for row in owner.inputs.dispositions.read().rows.values()}) == 1
+            # Nothing is left to start another turn for, and the sender got one answer.
+            await wait_for(lambda: session not in owner.inputs.wake_tasks)
+            assert native.provider.posts == 2
+            assert len([m for m in comms.views.full_history() if m.sender == session]) == 1
+        finally:
+            held.set()
+
+
+async def test_model_change_stored_by_another_process_reaches_the_running_turn(native_backend):
+    native = native_backend
+    await native.author_history()
+    held = asyncio.Event()
+    native.provider.response_gate = held
+    async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+        comms = owner._comms
+        comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+        turn = asyncio.create_task(
+            owner.prompt(session, [TextContentBlock(type="text", text="first")])
+        )
+        try:
+            await wait_for(lambda: native.provider.posts == 1)
+            assert native.provider.requests[0]["model"] == "fixture"
+            # What `agent-comms invoke --tool comms_model` does from its own process.
+            elsewhere = Comms(native.root, private_initial_writes=True)
+
+            def store_change():
+                thread = elsewhere.registry.require(session)
+                elsewhere.threads.set_thread_configuration(
+                    thread, model="response-local/fixture-second",
+                    thinking_level=thread.thinking_level,
+                )
+
+            await Coordination.run_worker(store_change)
+            # The owner sees the stored change itself and hands it to the running turn.
+            await wait_for(
+                lambda: owner.sessions.config.settings_in_use[session].model
+                == "response-local/fixture-second"
+                and owner.inputs.backend_inboxes[session].empty()
+            )
+            await Coordination.run_worker(partial(
+                elsewhere.messaging.send_message, "sender", session, "still there?"
+            ))
+            native.provider.response_gate = None
+            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == 2)
+            held.set()
+            assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
+            assert native.provider.posts == 2
+            assert native.provider.requests[1]["model"] == "fixture-second"
+        finally:
+            held.set()
+            turn.cancel()
+            await asyncio.gather(turn, return_exceptions=True)

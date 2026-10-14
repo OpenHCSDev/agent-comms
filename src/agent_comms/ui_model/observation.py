@@ -25,7 +25,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import CoordinationError, CoordinationReadUnavailable, StaleRevision
 
@@ -127,8 +127,6 @@ class OwnerRead(AwaitedRead):
     """
 
     owner: ThreadIncarnation
-    # The owner answers from its own stores; a slower answer is a stalled owner.
-    TIMEOUT: ClassVar[float] = 3
 
     def receive(self, service: ObservationService) -> None:
         service.owner_reads[self.request_id] = asyncio.ensure_future(self.serve(service))
@@ -143,18 +141,17 @@ class OwnerRead(AwaitedRead):
     async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
         try:
             self.require_root(comms)
-            async with asyncio.timeout(self.TIMEOUT):
-                return ReadAnswered(self.request_id, await self.ask(comms))
+            return ReadAnswered(self.request_id, await self.ask(comms))
         except Exception as error:
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
-        from agent_comms.runtime import RuntimeConnection, socket_path
+        from agent_comms.runtime import OwnerReplyConnection, socket_path
 
         owner = comms.registry.require(self.owner.name)
         if owner.incarnation != self.owner:
             raise ValueError("The owner incarnation changed while preparing the request.")
-        return RuntimeConnection(comms, owner.name, socket_path(comms.root, owner.pid))
+        return OwnerReplyConnection(comms, owner.name, socket_path(comms.root, owner.pid))
 
     async def ask(self, comms: Comms) -> object:
         from acp.exceptions import RequestError

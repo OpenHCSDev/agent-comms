@@ -633,53 +633,8 @@ class TestAgentTurn:
                 result.progress == "Backend turn ended without a result; inspect local diagnostics."
             )
         assert secret not in result.progress
-        assert "proj" not in agent.turns.emitted_errors
         await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
-
-    async def test_error_dedup_is_scoped_to_one_turn_and_cancel_clears_it(
-        self, wired, tmp_path, monkeypatch
-    ):
-        agent = self._agent_with_events(tmp_path, wired)
-        sent: list = []
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
-                if _update_text(update) == "busy":
-                    seen_error.set()
-
-        seen_error = asyncio.Event()
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        turns = 0
-
-        async def events(*args, **kwargs):
-            nonlocal turns
-            turns += 1
-            if turns == 1:
-                yield ae.Error(text="busy")
-                yield ae.Done(ok=True, text="A succeeded")
-            elif turns == 2:
-                yield ae.Done(ok=False, text="busy")
-            else:
-                yield ae.Error(text="busy")
-                await asyncio.Event().wait()
-
-        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn("proj", "proj", "A")
-        assert "proj" not in agent.turns.emitted_errors
-        seen_error.clear()
-        await agent.turns.run_agent_turn("proj", "proj", "B")
-        assert [_update_text(item) for item in sent].count("busy") == 2
-        assert "proj" not in agent.turns.emitted_errors
-        seen_error.clear()
-        cancelled = asyncio.create_task(agent.turns.run_agent_turn("proj", "proj", "C"))
-        await asyncio.wait_for(seen_error.wait(), 2)
-        cancelled.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await cancelled
-        assert "proj" not in agent.turns.emitted_errors
 
     async def test_successful_turn_without_a_goal_report_authorizes_next_attempt(
         self, wired, tmp_path, monkeypatch

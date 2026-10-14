@@ -23,10 +23,12 @@ class MroDispatch:
 
     The method declarations are the authority. No global registry, registration
     order, or event-name roster participates in dispatch. A diamond ancestor is
-    visited once by Python's MRO. A returned replacement flows to later handlers.
+    visited once by Python's MRO. A returned replacement flows to later handlers;
+    ``DISCARD`` ends the pipeline without returning a value to its caller.
     """
 
     _handler_declarations: ClassVar[tuple[tuple[str, tuple[type, ...]], ...]] = ()
+    DISCARD: ClassVar[object] = object()
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -58,7 +60,10 @@ class MroDispatch:
     async def consume_handlers(self, value: Any, handlers: Iterable[Handler], *args, **kwargs) -> Any:
         """Consume the selected declarations inside the consumer's resource lifetime."""
         for handler in handlers:
-            value = self.replace_value(value, await handler(value, *args, **kwargs))
+            replacement = await handler(value, *args, **kwargs)
+            if replacement is self.DISCARD:
+                return None
+            value = self.replace_value(value, replacement)
         return value
 
     def dispatch_sync(self, value: Any, *args, **kwargs) -> Any:
@@ -67,7 +72,10 @@ class MroDispatch:
 
     def consume_handlers_sync(self, value: Any, handlers: Iterable[Handler], *args, **kwargs) -> Any:
         for handler in handlers:
-            value = self.replace_value(value, handler(value, *args, **kwargs))
+            replacement = handler(value, *args, **kwargs)
+            if replacement is self.DISCARD:
+                return None
+            value = self.replace_value(value, replacement)
         return value
 
     @staticmethod

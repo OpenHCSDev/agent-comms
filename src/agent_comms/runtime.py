@@ -19,7 +19,7 @@ from collections.abc import Coroutine
 from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, ClassVar, cast
 
 from acp.exceptions import RequestError
 from acp.schema import RequestPermissionResponse
@@ -354,6 +354,9 @@ class RuntimeConnection:
                 writer.close()
                 raise
 
+    async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
+        return await JsonlStreamReader(reader).readline()
+
     async def request(self, action: str, **kwargs: Any) -> dict[str, Any]:
         if self._closed:
             raise ConnectionError("Owner attachment was closed before request dispatch")
@@ -376,7 +379,7 @@ class RuntimeConnection:
                 ).encode()
             )
             await writer.drain()
-            line = await JsonlStreamReader(reader).readline()
+            line = await self._read_response(reader)
             if not line:
                 raise RuntimeError("Thread owner disconnected after request; outcome unknown.")
             data = json.loads(line)
@@ -397,6 +400,16 @@ class RuntimeConnection:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+class OwnerReplyConnection(RuntimeConnection):
+    """Bound only the live owner's response after a request has been dispatched."""
+
+    REPLY_TIMEOUT: ClassVar[float] = 3
+
+    async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
+        async with asyncio.timeout(self.REPLY_TIMEOUT):
+            return await super()._read_response(reader)
 
 
 class RuntimeProxy(RuntimeConnection):

@@ -60,6 +60,7 @@ from .field_codec import FieldCodec
 from .cursor_publication import CursorPublication
 from .input_drain import InputDrain
 from .queued_input import DeliveredInput
+from .schedule_rules import SelectedWakeCheck
 from .input_effects import InputEffects
 from .message_bus import MessageBus
 from .routing import MessageRoute
@@ -449,22 +450,14 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # or replay that turn here.
             participant.pointer.require_idle()
             return True
-        runnable = await Coordination.run_async(store_path, select)
-        result = None
-        if runnable:
-            result = await self.turns.run_selected(session_id, execution)
-        if result is None:
-            # N (or absent-audience) rows prove coverage, not an injected
-            # input. Extend only an existing current generation or an all-N prefix;
-            # old-generation Pi evidence cannot initialize this cursor on reconnect.
+        if not await Coordination.run_async(store_path, select):
             await self.cursors.publish(session_id, thread_name, advance=True)
-        else:
-            # A disconnected client must not turn a settled claim into an
-            # apparent model failure. Reconnect reads the same durable row.
-            await self.cursors.publish(
-                session_id, thread_name, selected_status=result.cursor_status
-            )
-        return int(result is not None)
+            return 0
+        SelectedWakeCheck(
+            session_id=session_id, inputs=self.inputs, execution=execution,
+            thread=thread_name, owner=snapshot.owner_identity(thread_name),
+        ).schedule()
+        return 1
 
     async def shutdown(self) -> None:
         """Stop drains and mark threads owned by this ACP connection offline."""
@@ -502,13 +495,13 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         *,
         turn_id: str | None = None,
         route: MessageRoute | None = None,
-    ) -> None:
-        """Publish typed live or saved transcript events."""
+    ) -> events.AgentEvent | TranscriptUpdate:
+        """Publish and return the observation with its actual delivery result."""
         client = client or self._runtime
         if isinstance(event, events.AgentEvent):
-            await AcpEventConsumer(self, session_id, client, turn_id, route).dispatch(event)
-            return
+            return await AcpEventConsumer(self, session_id, client, turn_id, route).dispatch(event)
         await event.publish(session_id, client)
+        return event
 
     @staticmethod
     def _prompt_text(prompt: list[Any]) -> str:

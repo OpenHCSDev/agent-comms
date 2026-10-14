@@ -13,7 +13,6 @@ from uuid import uuid4
 from acp import RequestError
 
 from . import agent_events as events
-from .acp_failure import PromptFailureReceipt
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .goal_attempts import LaunchPermit
@@ -403,7 +402,6 @@ class OwnedTurn:
         if not await Coordination.run_worker(partial(self.admit, permits)):
             return False
         self.runner.sessions.bindings[self.session_id] = self.thread_name
-        self.runner.emitted_errors.pop(self.session_id, None)
         await Coordination.run_worker(partial(self.begin, resources))
         self.open_stream(resources, permits)
         # Early failures close claims before inbox/lease retirement. Once all
@@ -429,7 +427,6 @@ class OwnedTurn:
         try:
             await self.prepare_native()
             await self.stream()
-            await self.progress.publish_result()
         except asyncio.CancelledError:
             await self.runner.transition_turn(self.session_id, self.turn_lease, CancellingPhase())
             await self.backend.abort(self.owner_task)
@@ -440,12 +437,10 @@ class OwnedTurn:
             raise
         except Exception as error:
             await Coordination.run_worker(self.settle_unbound)
-            await self.progress.report_failure(error)
-            failure = self.runner.emitted_errors.get(self.session_id)
-            if failure is not None:
-                raise PromptFailureReceipt(failure, True).request_error() from error
+            request_failure = await self.progress.report_failure(error)
+            if request_failure is not None:
+                raise request_failure.request_error() from error
             raise
-        # A published native failure is a completed observation, not a new
-        # exception to feed back through outer-fault publication.
-        if failure := self.runner.emitted_errors.get(self.session_id):
-            raise PromptFailureReceipt(failure, True).request_error()
+        # The completed outcome owns notification delivery and request failure;
+        # it is outside stream-fault reporting, so no failure is published twice.
+        await self.progress.publish_result()

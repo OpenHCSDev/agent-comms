@@ -56,7 +56,7 @@ class ThreadRowModel:
         presentation = person.presentation
         return cls(
             person.thread.incarnation, presentation.title, presentation.label, presentation.summary,
-            presentation.busy, person.runtime.model if person.runtime else person.thread.model,
+            presentation.busy, person.thread.model,
             person.thread.execution.prepare_conversation(PersonUnread(person, snapshot)),
             person.status.active, person.thread.execution,
         )

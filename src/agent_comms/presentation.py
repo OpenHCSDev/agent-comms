@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .activity import ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
-from .bus_display_index import BusDisplayIndex, DisplayCheckpoint, DisplayMetricScope
+from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import is_channel_target
 from .channels import Channel
 from .display_order import ChannelSort
@@ -24,7 +24,7 @@ from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
-from .store_files import StoreRevision, _store_lock, file_revision
+from .store_files import StoreRevision, _store_lock
 from .thread_presentation import ThreadPresentation, ThreadOwnerBinding, UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus
 from .thread_identity import ThreadIncarnation
@@ -287,7 +287,14 @@ class BusPresentation:
         self.catalog = catalog
         self._path = bus.log.path
         self._wire_lock_path = bus.log.path.parent / "wire"
-        self._display_metrics: dict[str, DisplayCheckpoint] = {}
+        self._display_indexes: dict[str, BusDisplayIndex] = {}
+
+    def display_index(self, viewer: str) -> BusDisplayIndex:
+        index = self._display_indexes.get(viewer)
+        if index is None:
+            index = self.bus.log.register_append_index(BusDisplayIndex(self._path, viewer))
+            self._display_indexes[viewer] = index
+        return index
 
     @contextmanager
     def snapshot(
@@ -301,10 +308,15 @@ class BusPresentation:
         holds none of these locks. Later appends are outside the opened cut;
         heartbeat changes cannot invalidate it.
         """
+        if viewer is not None:
+            self.display_index(viewer)
+        prepared = self.bus.log.prepare_append_indexes()
         with ExitStack() as stack:
             with _store_lock(self._wire_lock_path, shared=True):
                 source = stack.enter_context(
-                    self.bus.log._opened_wire_snapshot(need_sequence=False)
+                    self.bus.log._opened_wire_snapshot(
+                        need_sequence=False, prepared_indexes=prepared,
+                    )
                 )
                 with DisplaySelection.reading(
                     self.registry, self.catalog, self.bus.reads, viewer
@@ -404,26 +416,14 @@ class BusPresentation:
         Caches may be reused or published only for an unchanged bus revision.
         """
         semantics = DisplayMetricScope(scopes, activity_scopes, viewer_names)
-        cached = self._display_metrics.get(viewer)
-        if source.revision is not None and cached is not None:
-            if cached.current_for(source.revision, semantics):
-                return ({name: ChannelActivity(*clocks) for name, clocks in cached.activity.items()},
-                        dict(cached.counts))
         initial = semantics.empty_metrics
-        projected = BusDisplayIndex(self._path, viewer).snapshot(
-            source, semantics,
-        )
+        projected = self.display_index(viewer).snapshot(source, semantics)
         if projected is None:
             metrics = initial
             for message, _ in source.public_records():
                 semantics.observe(message, metrics)
         else:
             metrics = projected.metrics
-            if file_revision(self._path) == (
-                projected.source.inode, projected.source.size,
-                projected.source.modified, projected.source.changed,
-            ):
-                self._display_metrics[viewer] = projected
         return ({name: ChannelActivity(*clocks) for name, clocks in metrics[0].items()},
                 dict(metrics[1]))
 
@@ -609,7 +609,6 @@ class ThreadView:
             "activity": self.activity.state.value,
             "activity_detail": self.activity.detail,
             "goal_execution": asdict(self.goal_execution) if self.goal_execution else None,
-            "model": self.runtime.model if self.runtime else self.thread.model,
             "session_name": self.runtime.session_name if self.runtime else None,
             "context_used": self.runtime.context_used if self.runtime else None,
             "context_size": self.runtime.context_size if self.runtime else None,

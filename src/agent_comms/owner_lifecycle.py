@@ -17,6 +17,7 @@ from .errors import RelationViolationError
 from .locked_store import LockedStore
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
+from .native_arguments import NativeArguments
 from .owner_launch import RestartEnvironment
 from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
 from .registration import Registration
@@ -208,7 +209,8 @@ class OwnerLifecycle:
             return owned
 
     def ensure_owner(
-        self, name: str, *, agent_bin: str = "pi", agent_args: Sequence[str] | None = None
+        self, name: str, *, agent_bin: str = NativeArguments.default_binary,
+        agent_args: Sequence[str] | None = None,
     ) -> Thread:
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
@@ -237,7 +239,7 @@ class OwnerLifecycle:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.pid, False)
             owner = self._launch_owner_unlocked(
-                thread, agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", "pi"), agent_args
+                thread, NativeArguments.configured_binary(agent_bin), agent_args
             )
             return OwnerStartResult(owner.name, owner.pid, True)
 
@@ -389,7 +391,7 @@ class OwnerLifecycle:
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
-                "AGENT_COMMS_AGENT_BIN": agent_bin,
+                NativeArguments.binary_key: agent_bin,
             }
         )
         if private_launch is not None:
@@ -404,7 +406,7 @@ class OwnerLifecycle:
         if startup_input_key is not None:
             env["AGENT_COMMS_STARTUP_INPUT_KEY"] = startup_input_key
         if agent_args is not None:
-            env["AGENT_COMMS_AGENT_ARGS"] = shlex.join(agent_args)
+            env[NativeArguments.arguments_key] = shlex.join(agent_args)
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:

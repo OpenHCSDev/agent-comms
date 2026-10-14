@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import shlex
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from typing import TYPE_CHECKING, Any
@@ -17,10 +16,10 @@ from acp.schema import (
 )
 
 from .image_inputs import prompt_images
-from .queued_input import InitialInput, InputHandoffRefused
+from .following_inputs import OwnerFollowingInputs
+from .queued_input import InitialInput
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from . import agent_events as events
-from .acp_failure import ACPFailure
 from .agent_backend import AgentBackend, InputRequest, SendNow, TurnInboxItem
 from .channel_targets import BuiltinChannel
 from .comms import Comms
@@ -58,13 +57,6 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
-DEFAULT_AGENT_BIN = "pi"
-DEFAULT_AGENT_ARGS = [
-    "--provider",
-    "openrouter",
-    "--model",
-    "z-ai/glm-5.3-flash",
-]
 NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
 REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
 REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
@@ -108,18 +100,12 @@ class TurnRunner:
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        self.agent_bin = agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", DEFAULT_AGENT_BIN)
-        arg_env = os.environ.get("AGENT_COMMS_AGENT_ARGS")
-        self.agent_args = NativeArguments.parse(
-            agent_args
-            if agent_args is not None
-            else (shlex.split(arg_env) if arg_env is not None else list(DEFAULT_AGENT_ARGS))
-        )
+        self.agent_bin = NativeArguments.configured_binary(agent_bin)
+        self.agent_args = NativeArguments.configured(agent_args)
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}
         self.turn_locks: dict[str, asyncio.Lock] = {}
-        self.emitted_errors: dict[str, ACPFailure] = {}
         self.goals = GoalScheduler(comms, effects)
         self.reply_window = (
             reply_window
@@ -517,22 +503,9 @@ class TurnRunner:
                 result = await execution.run(
                     on_compaction=partial(self.effects._emit_event, session_id),
                     pi_session=self.backend_for(session_id, owner),
+                    following=(following := OwnerFollowingInputs(self.inputs, session_id, owner, inbox)),
                 )
-                while not inbox.empty():
-                    command = inbox.get_nowait()
-                    if not command.carried_inputs:
-                        continue  # A send-now control carries no input of its own.
-                    (input_id,) = (carried.value for carried in command.carried_inputs)
-                    item = self.inputs.queued_inputs.get(session_id, {}).get(input_id)
-                    if item is None:
-                        await self.inputs.input_refused(session_id, input_id)
-                        continue
-                    try:
-                        await item.dispatch(self, session_id, execution.owner_name)
-                    except InputHandoffRefused:
-                        await self.inputs.input_refused(session_id, input_id)
-                        continue
-                    break  # The existing native forwarder consumes the remaining live inbox.
+                await following.pass_on_unread(self)
                 return result
             finally:
                 await self.inputs.finish_turn_inputs(session_id, inbox)
