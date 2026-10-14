@@ -5,9 +5,15 @@ from agent_comms.activity import Activity, ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
+from agent_comms.turn_phase import (
+    CompactionPhase,
+    ModelWaitPhase,
+    ProviderRetryPhase,
+    ToolRunningPhase,
+)
 
 
-def test_silent_active_turn_does_not_age_into_ready(tmp_path):
+def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(
         Thread(
@@ -30,8 +36,25 @@ def test_silent_active_turn_does_not_age_into_ready(tmp_path):
     )
     view = comms.views.thread_views()[0]
     assert view.thread.executing and view.presentation.busy
-    assert comms.agents.activity_of("worker").state is ActivityState.WORKING
+    current = comms.agents.activity_of("worker")
+    assert current.state is ActivityState.THINKING
+    assert current.detail == "Long-running work"
+
+    comms.agents.transition_turn(first, ToolRunningPhase(tools=(("call", "bash"),)))
+    assert comms.agents.activity_of("worker").presentation("Worker").summary == "Working · bash"
+    comms.agents.observe_native_phase(first, ModelWaitPhase())
+    assert comms.agents.activity_of("worker").presentation("Worker").summary == "Thinking"
+    comms.agents.observe_native_phase(first, CompactionPhase())
+    assert comms.agents.activity_of("worker").detail == "Compacting context"
+    comms.agents.observe_native_phase(first, ModelWaitPhase())
+    assert comms.agents.activity_of("worker").presentation("Worker").summary == "Thinking"
+    comms.agents.observe_native_phase(first, ProviderRetryPhase())
+    assert comms.agents.activity_of("worker").detail == "Provider retry"
+    comms.agents.observe_native_phase(first, ModelWaitPhase())
+    assert comms.agents.activity_of("worker").presentation("Worker").summary == "Thinking"
+
     comms.agents.finish_turn(first)
+    assert comms.agents.activity_of("worker").presentation("Worker").summary == "Ready"
     assert not comms.views.thread_views()[0].presentation.busy
     comms.agents.begin_turn("worker", "second")
     comms.agents.finish_turn(first)

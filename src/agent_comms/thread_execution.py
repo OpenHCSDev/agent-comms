@@ -59,6 +59,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
         return UnavailableRecipientActivity()
 
+    @classmethod
+    def project_activity(cls, thread: Thread, activity):
+        """External participants report their own activity events."""
+        return activity
+
 
 class NativeThreadExecution(ThreadExecution):
     @classmethod
@@ -101,6 +106,11 @@ class NativeThreadExecution(ThreadExecution):
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):
         binding = cls.owner_binding(snapshot, thread)
         return binding.recipient_activity(agents, snapshot, thread)
+
+    @classmethod
+    def project_activity(cls, thread: Thread, activity):
+        """A running native owner displays its current turn phase."""
+        return thread.turn_state.phase.project_activity(activity) if thread.has_process else activity
 
 
 class ExternalThreadExecution(ThreadExecution):
