@@ -11,7 +11,7 @@ import json
 import sys
 from typing import Annotated, ClassVar, Generic, Literal, TypeVar, Union
 
-from metaclass_registry import AutoRegisterMeta, RegistryConfig
+from metaclass_registry import RegistryConfig
 from pydantic import (
     Discriminator, Field, JsonValue, Tag, TypeAdapter,
     computed_field,
@@ -23,7 +23,7 @@ from agent_comms.transcript_events import (
 )
 
 
-from cli_comms import WireModel, TranscriptUpdate
+from cli_comms import RegisteredWireMeta, WireModel, TranscriptUpdate
 
 
 class TextInput(WireModel):
@@ -126,10 +126,6 @@ class RpcNotification(WireModel):
 
 
 RPC_RESPONSE = TypeAdapter(RpcSuccess | RpcFailure | RpcNotification)
-
-
-class RegisteredWireMeta(AutoRegisterMeta, type(WireModel)):
-    """Compose the existing registration and validation implementations."""
 
 
 class Item(WireModel, ABC, metaclass=RegisteredWireMeta):

@@ -16,6 +16,7 @@ import sys
 from typing import AsyncIterator, ClassVar, Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
+from metaclass_registry import AutoRegisterMeta
 from agent_comms.messages import Message, MessageKind
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.transcript_events import TranscriptEvent
@@ -24,6 +25,9 @@ from agent_comms.transcript_events import TranscriptEvent
 class WireModel(BaseModel):
     """Strict fields at an external protocol boundary; unused metadata stays outside."""
     model_config = ConfigDict(strict=True)
+
+class RegisteredWireMeta(AutoRegisterMeta, type(WireModel)):
+    """Compose declaration registration with external-field validation."""
 
 class CoreError(WireModel):
     error: str
