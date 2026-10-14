@@ -534,10 +534,25 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             await wait_for(lambda: native.provider.posts == 1)
             reply_turn = owner.inputs.wake_tasks[session]
             known = len(owner.inputs.dispositions.read().rows)
+            assert native.provider.requests[0]["model"] == "fixture"
+            elsewhere = Comms(native.root, private_initial_writes=True)
+
+            def store_change():
+                thread = elsewhere.registry.require(session)
+                elsewhere.threads.set_thread_configuration(
+                    thread, model="response-local/fixture-second",
+                    thinking_level=thread.thinking_level,
+                )
+
+            await Coordination.run_worker(store_change)
             second = comms.messaging.send_message("sender", session, "the yaml one, I mean")
             native.provider.response_gate = None
-            # The owner's own observation hands the second message to the running turn.
-            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == known + 1)
+            # One observer feeds settings and accepted messages through the running-turn inbox.
+            await wait_for(
+                lambda: len(owner.inputs.dispositions.read().rows) == known + 1
+                and owner.sessions.config.settings_in_use[session].model
+                == "response-local/fixture-second"
+            )
             held.set()
             await asyncio.wait_for(reply_turn, 30)
 
@@ -553,6 +568,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             assert states[first.seq] is not DeliveredAssignment
             # One turn took both: the second went in at the next model call, sent once.
             assert native.provider.posts == 2
+            assert native.provider.requests[1]["model"] == "fixture-second"
             assert "the yaml one, I mean" in json.dumps(native.provider.requests[1]["messages"])
             assert "the yaml one, I mean" not in json.dumps(native.provider.requests[0]["messages"])
             assert len({row.turn_id for row in owner.inputs.dispositions.read().rows.values()}) == 1
