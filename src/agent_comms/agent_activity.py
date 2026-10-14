@@ -267,6 +267,4 @@ class AgentActivity:
             )
 
     def agent_info_of(self, thread: str) -> AgentRuntimeInfo | None:
-        configured = self.registry.require(thread)
-        info = self.runtime_info.read().get(configured.name)
-        return replace(info, model=configured.model) if info is not None else None
+        return self.runtime_info.read().get(self.registry.require(thread).name)
