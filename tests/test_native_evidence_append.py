@@ -54,21 +54,25 @@ def test_source_change_during_original_read(tmp_path, monkeypatch, phase, paddin
 
     with PrivateEvidenceRead.open(session) as source:
         real_read = source.stream.read
-        reads = 0
+        passes = 0
 
         def reading(size):
-            nonlocal reads
-            reads += 1
-            if reads == 2 and phase == "hash_before":
+            nonlocal passes
+            start = source.stream.tell()
+            # FileIO.readline() reads individual bytes while decoding rows.
+            # Count only PrivateEvidenceRead's bounded capture/hash chunks.
+            if size > 1 and start == 0:
+                passes += 1
+            if passes == 2 and start == 0 and phase == "hash_before":
                 entered.set()
                 assert finished.wait(5)
             data = real_read(size)
-            # The shepherd's case: return old bytes only AFTER the writer has
-            # rewritten the prefix and grown the file, including a multi-chunk
-            # hash whose prefix was read well before this final read.
-            if (reads == 1 and phase == "capture" or
-                    reads > 1 and phase == "hash_after" and
-                    source.stream.tell() == len(original) and not entered.is_set()):
+            # The shepherd's case: mutate after bytes from the observed
+            # revision were returned, including a multi-chunk prefix.
+            if (passes == 1 and phase == "capture" or
+                    passes > 1 and phase == "hash_after") and size > 1 and (
+                    source.stream.tell() == len(original) and not entered.is_set()
+            ):
                 entered.set()
                 assert finished.wait(5)
             return data
@@ -77,11 +81,14 @@ def test_source_change_during_original_read(tmp_path, monkeypatch, phase, paddin
         thread = threading.Thread(target=writer)
         thread.start()
         try:
-            if change == "append":
+            if change == "append" and phase != "capture":
                 assert len(tuple(source.rows())) == 2
                 assert source.size == len(original)
                 assert tuple(source.rows())[0]["id"] == "concurrent-append"
             else:
+                # Chunked capture cannot distinguish an append from a prefix
+                # rewrite before unread chunks, so revision growth there fails
+                # closed. Growth after capture is rehashed and admitted.
                 with pytest.raises(NativePiUnavailable):
                     tuple(source.rows())
                 assert source.stream.closed
@@ -97,15 +104,20 @@ def test_consecutive_appends_rehash_only_the_captured_prefix(tmp_path, monkeypat
     with PrivateEvidenceRead.open(session) as source:
         real_read = source.stream.read
         reads = []
+        passes = 0
 
         def reading(size):
+            nonlocal passes
             start = source.stream.tell()
             data = real_read(size)
-            reads.append((start, size))
-            # Two consecutive hashing passes see growth after reading their
-            # last byte. Neither can certify the old digest at the new revision.
-            if 2 <= len(reads) <= 3:
-                append_to(session)
+            if size > 1:
+                if start == 0:
+                    passes += 1
+                reads.append((start, size))
+                # Two consecutive hashing passes see growth after reading their
+                # last byte. Neither can certify the old digest at the new revision.
+                if passes in (2, 3) and source.stream.tell() == len(original):
+                    append_to(session)
             return data
 
         monkeypatch.setattr(source.stream, "read", reading)
@@ -121,13 +133,18 @@ def test_continuous_append_exhausts_owned_prefix_verification_resource(tmp_path,
     with PrivateEvidenceRead.open(session) as source:
         real_read = source.stream.read
         reads = 0
+        passes = 0
 
         def reading(size):
-            nonlocal reads
-            reads += 1
+            nonlocal reads, passes
+            start = source.stream.tell()
             data = real_read(size)
-            if reads > 1:
-                append_to(session)
+            if size > 1:
+                reads += 1
+                if start == 0:
+                    passes += 1
+                if passes > 1 and source.stream.tell() == len(original):
+                    append_to(session)
             return data
 
         monkeypatch.setattr(source.stream, "read", reading)

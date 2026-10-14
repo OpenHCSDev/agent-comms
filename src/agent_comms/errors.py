@@ -11,6 +11,10 @@ class RelationViolationError(ValueError):
     """A required relation between declarations cannot be proved."""
 
 
+class StoredHistoryUnreadable(RelationViolationError):  # noqa: N818 - nominal read failure
+    """Stored wire bytes cannot be decoded as their declared history type."""
+
+
 class ClaimEnvelopeUnknownError(RelationViolationError):
     """A claim row may be visible after failed durability; never replay automatically."""
 

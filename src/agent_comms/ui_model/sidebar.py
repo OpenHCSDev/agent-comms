@@ -56,7 +56,7 @@ class ThreadRowModel:
         presentation = person.presentation
         return cls(
             person.thread.incarnation, presentation.title, presentation.label, presentation.summary,
-            presentation.busy, person.runtime.model if person.runtime else person.thread.model,
+            presentation.busy, person.thread.model,
             person.thread.execution.prepare_conversation(PersonUnread(person, snapshot)),
             person.status.active, person.thread.execution,
         )
@@ -125,6 +125,12 @@ class SidebarModel:
         busy = frozenset(name for name, row in threads.items() if row.busy)
         channels = {view.channel.name: ChannelRowModel.of(view, snapshot, busy) for view in snapshot.channels}
         return channels, threads
+
+    def clear(self) -> None:
+        """An unreadable source supplies no current rows or snapshot."""
+        self.snapshot = None
+        self.threads.replace({})
+        self.channels.replace({})
 
     def apply(self, snapshot: CoordinationSnapshot,
               derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]) -> None:

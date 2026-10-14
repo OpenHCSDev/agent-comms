@@ -679,7 +679,7 @@ class PrivateEvidenceRead:
         self.stream.close()
 
     def _capture_append(self):
-        """Read original bytes under the file's own I/O exception boundary."""
+        """Verify and hash original bytes without retaining the complete prefix."""
         try:
             info = os.fstat(self.stream.fileno())
             PrivateFileRole.require(info)
@@ -690,14 +690,41 @@ class PrivateEvidenceRead:
                 raise NativePiUnavailable("Native Pi evidence file is empty or truncated")
             self.stream.seek(self.size)
             digest = self.digest.copy()
-            appended = self.stream.read(info.st_size - self.size)
-            if len(appended) != info.st_size - self.size or (appended and not appended.endswith(b"\n")):
+            remaining = info.st_size - self.size
+            last = b""
+            while remaining:
+                raw = self.stream.read(min(remaining, 128 * 1024))
+                if not raw:
+                    raise NativePiUnavailable("Native Pi evidence file is incomplete")
+                remaining -= len(raw)
+                digest.update(raw)
+                last = raw[-1:]
+            if info.st_size > self.size and last != b"\n":
                 raise NativePiUnavailable("Native Pi evidence file is incomplete")
-            digest.update(appended)
-            self._observe_revision_after(revision)
-            return info.st_size, digest, appended
+            if self._observe_revision_after(revision) != revision:
+                raise NativePiUnavailable("Native Pi evidence changed during observation")
+            return info.st_size, digest
         except (OSError, ValueError) as error:
             raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
+
+    def _decode_captured(self, size):
+        """Decode one verified physical row at a time up to the captured size."""
+        try:
+            self.stream.seek(self.size)
+        except (OSError, ValueError) as error:
+            raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
+        remaining = size - self.size
+        while remaining:
+            try:
+                raw = self.stream.readline(remaining)
+            except (OSError, ValueError) as error:
+                raise NativePiUnavailable(
+                    "Native Pi evidence file is unavailable or not private"
+                ) from error
+            if not raw or not raw.endswith(b"\n"):
+                raise NativePiUnavailable("Native Pi evidence file is incomplete")
+            remaining -= len(raw)
+            yield self._decode_row(raw)
 
     @staticmethod
     def _decode_row(raw):
@@ -711,11 +738,10 @@ class PrivateEvidenceRead:
 
     def rows(self):
         try:
-            size, digest, appended = self._capture_append()
-            # Byte acquisition and decoding own their errors. Yielding these
-            # original rows transfers no authority over a consumer's failures.
-            for raw in appended.splitlines(keepends=True):
-                yield self._decode_row(raw)
+            size, digest = self._capture_append()
+            # Acquisition verifies the fixed revision first. Decode then holds
+            # only one physical row; final verification rejects any later change.
+            yield from self._decode_captured(size)
             try:
                 self.verify_snapshot(size, digest.digest())
             except (OSError, ValueError) as error:

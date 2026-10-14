@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .errors import RelationViolationError
+from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec
 from .declared_family import DeclaredFamily
 
@@ -200,7 +200,7 @@ class WireScan:
         except (RelationViolationError, DuplicateWireKeyError):
             raise
         except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as error:
-            raise RelationViolationError("Malformed public bus row blocks publication.") from error
+            raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
 
 
 from .turn_context import ContextManifest
