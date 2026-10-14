@@ -465,7 +465,9 @@ class DeferredAssignment(InterruptedAssignment):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return activity.progress.notification(notification, running=False)
+        return observation.selected_response(
+            notification, updated_at_ms, activity.progress,
+        )
 
     notification_state = "Interrupted — outcome unknown"
     notification_detail = (
@@ -514,7 +516,10 @@ class DeliveredAssignment(AssignmentDecision, AssignmentState):
         notification = super().notification(
             recipient, observation=observation, activity=activity
         )
-        return observation.delivered_response(notification, updated_at_ms)
+        return replace(
+            observation.delivered_response(notification, updated_at_ms),
+            read_at_ms=updated_at_ms,
+        )
 
     notification_priority = 2
     notification_state = "Delivered"
