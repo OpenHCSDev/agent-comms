@@ -149,7 +149,59 @@ class SettledTick:
     admission_after_seq: int | None = None
 
 
-class InputDrain:
+class InputObservation:
+    """File-driven observation and process-local wake behavior."""
+
+    def _tick_paths(self) -> TickRevisionPaths:
+        configuration = self.sessions.config.configuration
+        return TickRevision.paths(
+            self.comms.root,
+            registry=self.comms.registry.store.path,
+            registry_guard=self.comms.registry.store.guard_path,
+            bus=self.comms.bus.log.path,
+            bus_marker=self.comms.bus.log.metadata_path,
+            auth=configuration.native_config / "auth.json",
+        )
+
+    def _tick_revision(
+        self, session_id: str, paths: TickRevisionPaths | None = None,
+    ) -> TickRevision:
+        """Stat every declared physical dependency plus process-local inputs."""
+        return (paths or self._tick_paths()).capture((
+            self.sessions.bindings.get(session_id),
+            self.auto_wake,
+            self.sessions.runtime_enabled,
+            self.effects._private_nk_native_package,
+        ))
+
+    def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
+        if self.drain_tasks.get(session_id) is task:
+            self._observation_watchers.pop(session_id, None)
+
+    def wake_observer(self, session_id: str) -> None:
+        watcher = self._observation_watchers.get(session_id)
+        if watcher is not None:
+            watcher.notify()
+
+    async def retry_observer(self, session_id: str) -> None:
+        await asyncio.sleep(0.05)
+        self.wake_observer(session_id)
+
+    def register_wake(self, session_id: str, task: asyncio.Task[None]) -> None:
+        self.wake_tasks[session_id] = task
+        task.add_done_callback(lambda _task: self.wake_observer(session_id))
+
+    def _repeat_observation_ready(self, session_id: str, drained: int) -> bool:
+        if drained != 0 or session_id not in self._repeat_private_observations:
+            return False
+        if self.pending_turns.get(session_id):
+            return False
+        if session_id in self.effects.turns.turn_tasks:
+            return False
+        return session_id not in self.backend_inboxes
+
+
+class InputDrain(InputObservation):
     def __init__(
         self,
         comms: Comms,
@@ -308,55 +360,6 @@ class InputDrain:
             lambda completed: self._retire_observer(session_id, completed)
         )
 
-    def _tick_paths(self) -> TickRevisionPaths:
-        configuration = self.sessions.config.configuration
-        return TickRevision.paths(
-            self.comms.root,
-            registry=self.comms.registry.store.path,
-            registry_guard=self.comms.registry.store.guard_path,
-            bus=self.comms.bus.log.path,
-            bus_marker=self.comms.bus.log.metadata_path,
-            auth=configuration.native_config / "auth.json",
-        )
-
-    def _tick_revision(
-        self, session_id: str, paths: TickRevisionPaths | None = None,
-    ) -> TickRevision:
-        """Stat every declared physical dependency plus process-local inputs.
-
-        The stores are compared by their existing file revisions only; nothing
-        is decoded. It reads no channel catalog, bus history, runtime info or
-        read markers: those serve views. Its only activity read is its own
-        drain diagnostic, which only this owner's tick writes, so no activity
-        append changes what a settled tick would do.
-        """
-        return (paths or self._tick_paths()).capture((
-            self.sessions.bindings.get(session_id),
-            self.auto_wake,
-            self.sessions.runtime_enabled,
-            self.effects._private_nk_native_package,
-        ))
-
-    def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
-        if self.drain_tasks.get(session_id) is task:
-            self._observation_watchers.pop(session_id, None)
-
-    def wake_observer(self, session_id: str) -> None:
-        """Wake this session's current file observer for process-local work."""
-        watcher = self._observation_watchers.get(session_id)
-        if watcher is not None:
-            watcher.notify()
-
-    async def retry_observer(self, session_id: str) -> None:
-        """Retry a recoverable failure without restoring an idle polling clock."""
-        await asyncio.sleep(0.05)
-        self.wake_observer(session_id)
-
-    def register_wake(self, session_id: str, task: asyncio.Task[None]) -> None:
-        """Record one wake task and one observer notification on its completion."""
-        self.wake_tasks[session_id] = task
-        task.add_done_callback(lambda _task: self.wake_observer(session_id))
-
     def _in_standby(self, session_id: str) -> bool:
         """The published goal execution waits on other threads.
 
@@ -376,9 +379,10 @@ class InputDrain:
     def _quiescent(self, session_id: str) -> bool:
         """No process-local work or retry is waiting on the next tick."""
         wake = self.wake_tasks.get(session_id)
+        if session_id in self._repeat_private_observations:
+            return False
         return (
             session_id in self._idle_private_revisions
-            and session_id not in self._repeat_private_observations
             and not self.effects.cursors.delivery(session_id).needs_refresh
             and not self.pending_turns.get(session_id)
             and session_id not in self.effects.turns.turn_tasks
@@ -476,13 +480,7 @@ class InputDrain:
                         if not current.executing and self._quiescent(session_id):
                             marker = await Coordination.run_worker(self._bus_marker)
                             settled = SettledTick(revision, entry, marker.admission_after_seq)
-                        elif (
-                            drained == 0
-                            and session_id in self._repeat_private_observations
-                            and not self.pending_turns.get(session_id)
-                            and session_id not in self.effects.turns.turn_tasks
-                            and session_id not in self.backend_inboxes
-                        ):
+                        elif self._repeat_observation_ready(session_id, drained):
                             # The first empty private observation may advance its
                             # own durable cursor. Re-read that transition now;
                             # healthy file notification remains event-driven.

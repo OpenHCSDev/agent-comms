@@ -142,7 +142,7 @@ class CertifiedSourceRead:
         """
         from .wire_log import WireLog
 
-        if type(bus) is not WireLog or bus.path.name != "bus.jsonl":
+        if not isinstance(bus, WireLog) or bus.path.name != "bus.jsonl":
             raise TypeError("Canonical private WireLog required")
         self.require_current()
         if bus.path.resolve() == self.path.resolve():
