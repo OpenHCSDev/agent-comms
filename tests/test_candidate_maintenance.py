@@ -75,6 +75,22 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
         assert page.entries[0].wake_mode == "full"
 
 
+def test_failed_drain_is_named_and_retires_pending_state(monkeypatch, tmp_path, caplog) -> None:
+    comms, _root_id = _wire(tmp_path)
+    root = comms.bus.log.path.parent
+    maintenance._pending[root] = (comms.bus, 1)
+
+    def fail(*args, **kwargs):
+        raise ValueError("synthetic index failure")
+
+    monkeypatch.setattr(WakeCandidateIndex, "catch_up_committed_append", fail)
+    with pytest.raises(maintenance.CandidateMaintenanceFailed) as failed:
+        maintenance._drain_candidate(root)
+    assert failed.value.root == root
+    assert root not in maintenance._pending
+    assert "Candidate maintenance failed for" in caplog.text
+
+
 def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send(
     monkeypatch, tmp_path
 ) -> None:
