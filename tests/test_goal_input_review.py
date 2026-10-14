@@ -104,7 +104,9 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         assert row.source_text == message.body and not hasattr(row, "sent_text")
         assert row.admission == admission and row.reviewed_for_goal(goal.id)
     assert not ledger.read().rows["acp:owner-input"].goal_reviews
-    assert not (comms.root / "goal-private").exists()
+    generation = comms.goals.open_goal_store().snapshot(goal.id)
+    assert generation is not None and generation.lifecycle.ready
+    assert generation.attempt_id is None
     reopened = wire(comms.root)
     reopened.goals.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
     reopened.goals.update_goal(

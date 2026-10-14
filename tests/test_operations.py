@@ -126,7 +126,7 @@ class TestThreadOps:
                 },
             },
         ]
-        session_file.write_text("\n".join(json.dumps(record) for record in records))
+        session_file.write_text("\n".join(json.dumps(record) for record in records) + "\n")
         wired.registry.declare(
             Thread(
                 name="transcript-thread",
@@ -188,12 +188,15 @@ class TestThreadOps:
         wired.messaging.send("PR111", "#all", "after claim")
         assert [message.body for message in wired.bus.inbox(claimed.name)] == ["after claim"]
 
-    def test_runtime_info_is_exposed_in_presence(self, wired):
+    def test_presence_uses_configured_model_with_runtime_context(self, wired):
+        wired.threads.set_thread_configuration(
+            wired.registry.require("fixer"), model="configured/model"
+        )
         wired.agents.set_agent_info(
-            "fixer", model="openrouter/model", context_used=25, context_size=100
+            "fixer", model="observed/model", context_used=25, context_size=100
         )
         row = next(row for row in wired.views.who() if row["name"] == "fixer")
-        assert row["model"] == "openrouter/model"
+        assert row["model"] == "configured/model"
         assert row["context_percent"] == 25
         assert wired.agents.agent_info_of("fixer").context_used == 25
 
@@ -249,7 +252,9 @@ class TestThreadOps:
         wired.owners.stop("fixer")
         session_file = tmp_path / "session.jsonl"
 
-        attached = wired.threads.attach_session("fixer", str(session_file), pid=123)
+        attached = wired.threads.attach_session(
+            wired.registry.require("fixer"), str(session_file), pid=123
+        )
 
         assert attached.tags == frozenset({"auth"})
         assert attached.parent == "PR111"
@@ -269,7 +274,7 @@ class TestThreadOps:
 
     def test_archive_requires_stopped_thread(self, wired):
         wired.messaging.send("PR111", "fixer", "kept after archive")
-        with pytest.raises(RelationViolationError, match="Stop"):
+        with pytest.raises(RelationViolationError, match="no longer stopped"):
             wired.threads.archive("fixer")
         wired.owners.stop("fixer")
         wired.threads.archive("fixer")
@@ -427,9 +432,9 @@ class TestThreadOps:
 
 
 class TestFork:
-    def test_spec_requires_task(self):
-        with pytest.raises(ValueError, match="task"):
-            ForkSpec(name="x", parent="p", task="")
+    def test_spec_allows_an_empty_task_and_uses_an_explicit_prompt(self):
+        assert ForkSpec(name="x", parent="p").initial_prompt == ""
+        assert ForkSpec(name="x", parent="p", prompt="first input").initial_prompt == "first input"
 
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(RelationViolationError, match="session file"):
@@ -457,7 +462,10 @@ class TestLedgerOps:
                 json.dumps(
                     {
                         "type": "message",
-                        "message": {"role": "assistant", "content": "x" * 2_000_000},
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "x" * 2_000_000}],
+                        },
                     }
                 )
                 + "\n"
@@ -465,7 +473,13 @@ class TestLedgerOps:
             for index in range(100):
                 stream.write(
                     json.dumps(
-                        {"type": "message", "message": {"role": "assistant", "content": str(index)}}
+                        {
+                            "type": "message",
+                            "message": {
+                                "role": "assistant",
+                                "content": [{"type": "text", "text": str(index)}],
+                            },
+                        }
                     )
                     + "\n"
                 )

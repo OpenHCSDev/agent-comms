@@ -80,13 +80,27 @@ class Registration:
             requested = thread.for_claim(edit.document.claim_name(thread.name))
             return self._declare_in(edit, requested, RunningThreadStatus())
 
+    @staticmethod
+    def _prepare_declaration(document, channels, thread: Thread, status: ThreadStatus):
+        """Derive one declaration after checking its complete namespace."""
+        change = document.prepare_declaration(thread, status)
+        for tag in change.thread.tags - channels.all_tags(document.threads):
+            channels.require_available_tag_name(tag, document.threads)
+        return change
+
+    def require_declaration_available(
+        self, thread: Thread, status: ThreadStatus = _RUNNING_STATUS,
+    ) -> None:
+        """Refuse a known-invalid declaration before its producer performs side effects."""
+        catalog = ChannelCatalog(self.store.path.parent / ChannelCatalog.filename)
+        with self.store.reading() as document, catalog.reading() as channels:
+            self._prepare_declaration(document, channels, thread, status)
+
     def _declare_in(self, edit: RegistryEdit, thread: Thread, status: ThreadStatus) -> Thread:
         root = self.store.path.parent
         catalog = ChannelCatalog(root / ChannelCatalog.filename)
-        change = edit.document.prepare_declaration(thread, status)
         with catalog.editing() as channels:
-            for tag in change.thread.tags - channels.all_tags(edit.document.threads):
-                channels.require_available_tag_name(tag, edit.document.threads)
+            change = self._prepare_declaration(edit.document, channels, thread, status)
             self._commit_registration(edit, change)
             channels.remember_tags(change.thread.tags, change.thread.created_at)
         return change.installed_thread

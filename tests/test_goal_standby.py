@@ -29,7 +29,11 @@ from goal_owner_fixture import canonical_goal_wire
 async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     tmp_path, monkeypatch, changed
 ):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    from agent_comms.native_arguments import NativeArguments
+
+    configured_model = NativeArguments.parse(NativeArguments.default).model
+    assert configured_model is not None
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = canonical_goal_wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
