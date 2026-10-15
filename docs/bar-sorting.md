@@ -47,7 +47,10 @@ Runtime family registration and Textual handlers require application checks.
   caller's concrete-mode decision.
 - Toad sorting uses the existing FormBridge/ObjectState form machinery and typed
   choices; visibility edits borrow the existing saved-settings state. No parallel
-  sorting implementation or settings store.
+  sorting implementation or settings store. Forms start without a copied backend
+  default and display the observed order. SelectEditor renders its existing option
+  labels (including an unset form value); the copied choice/enum text overrides
+  are deleted. This fixes the real popup crash on an empty signature default.
 - ThreadSort and ChannelSort now own channel-scoped persistence as well; the
   two UI `store_order` forwarding overrides and their abstract dispatch are deleted.
 - RelationshipGroup declarations own key/title/empty text/entry supply. The
@@ -86,13 +89,22 @@ registry/handler binding still requires the real application.
   coverage minimum, not a test failure. A later no-coverage run passed 66 and
   timed out waiting for the lock-helper process's initial ready signal (before
   reading the adopter); the bounded serial check is recorded separately.
-  No full-package coverage claim. Pinned CPUs 4-9.
+  The same lock-adopter check passed serially in 1.93 s. No full-package coverage
+  claim. Pinned CPUs 4-9. Final Core ratchet exits 0.
 - [x] Prior paired candidate in a separate runtime: real st/Xvfb saved-history
   startup; independent channel and member click/change/persist/reopen, application
   restart, mixed relationship ordering/change/reopen, live status/row updates,
   visibility editing/persistence, retained selected thread/root and unsent draft.
   Original live sort preferences restored. No input submitted or replayed.
-- [ ] Repeat affected interactions on the final relationship-family checkpoint.
+- [x] Real app on Core b52a6b21 + Toad fb9d7e63: member popup opens, changes
+  to Date created and reopens; channel popup changes to Last user input and reopens.
+  Source-root/tab and unsent draft remain. All live sort preferences are restored.
+- [ ] Check right-panel open/close and mixed-order popup in codex's combined build.
+  A real run found the last old `group.model.key` reader in
+  `session_thread_panels.py:65-66`; Toad 2c736b3e deletes that capture loop and
+  declares the tree's shared typed-state capture hook. The same owner now captures
+  state before identity changes. This final fix is pushed but not yet app-verified.
+  Codex requested no additional standalone build; integration/check is in the pair.
 - [ ] Paired global installation and acceptance through codex.
 - [ ] Review and installed delivery through integration owner.
 
