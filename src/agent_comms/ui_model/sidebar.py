@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
@@ -91,9 +91,7 @@ class ChannelRowModel:
 
 
 class SidebarObservation(ABC):
-    @property
-    def snapshot(self):
-        return None
+    snapshot: CoordinationSnapshot | None = None
 
     @abstractmethod
     def references_for(self, root): ...
@@ -117,15 +115,11 @@ class FailedSidebar(SidebarObservation):
 
 @dataclass(frozen=True)
 class ObservedSidebar(SidebarObservation):
-    value: CoordinationSnapshot
-
-    @property
-    def snapshot(self):
-        return self.value
+    snapshot: CoordinationSnapshot = field()
 
     def references_for(self, root):
         from ..display_references import ForeignReferences
-        references = self.value.references
+        references = self.snapshot.references
         return references if root == references.root else ForeignReferences(root, references.root)
 
 
