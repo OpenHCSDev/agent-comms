@@ -80,7 +80,7 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
     round_trip = pickle.loads(pickle.dumps(answer))
     assert str(round_trip.error) == str(answer.error)
     assert UnreadableHistory.capture(answer.error) is answer.error
-    observed = ThreadsObserved(None, {}, {"saved": answer.error}, frozenset())
+    observed = ThreadsObserved(None, {}, {"saved": answer.error}, frozenset(), frozenset({"saved"}))
     status = OpenThreadStatus(lambda callback: callback())
     status.observed(observed)
     assert not status.rows.rows["saved"].available
@@ -186,6 +186,9 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
             while not waiting.done():
                 await readable(process)
                 process.results()
+                # The pipe resolved the Future; let its awaiting Task resume.
+                # An unchanged error no longer emits an unrelated extra wake.
+                await asyncio.sleep(0)
         assert await waiting == {}
         assert process.process.is_alive() and process.died is None
         assert comms.bus.log.path.read_bytes() == original

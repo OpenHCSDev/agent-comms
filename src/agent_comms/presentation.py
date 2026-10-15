@@ -15,7 +15,7 @@ from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import is_channel_target
 from .channels import Channel
-from .display_order import ChannelSort
+from .display_order import ChannelSort, NameChannelSort
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
@@ -28,6 +28,7 @@ from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
+from .display_references import DisplayReferences
 from .thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
@@ -580,7 +581,7 @@ class ChannelView:
         snapshot: RegistrySnapshot,
         channels: Mapping[str, Channel],
         pins: Mapping[str, frozenset[str]],
-        order: ChannelSort,
+        order: type[ChannelSort],
         activity: Mapping[str, ObservedActivity],
         sent: Mapping[str, float],
         messages: Mapping[str, ChannelActivity],
@@ -757,8 +758,9 @@ class CoordinationSnapshot:
     channels: tuple[ChannelView, ...]
     unread: Mapping[str, int]
     last_sent: Mapping[str, float]
+    references: DisplayReferences
     channel_unread: Mapping[str, int] = field(default_factory=dict)
-    channel_order: ChannelSort = ChannelSort.NAME
+    channel_order: type[ChannelSort] = NameChannelSort
     thread_unread: Mapping[str, int] = field(default_factory=dict)
     unread_pending: frozenset[str] = frozenset()
     show_stopped: bool = True
@@ -786,6 +788,7 @@ class CoordinationSnapshot:
                 show_stopped=show_stopped, show_archived=show_archived,
             ),
             unread=unread, last_sent=sent, channel_unread=channel_unread,
+            references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, show_stopped=show_stopped,
             show_archived=show_archived, read_marker_notice=read_marker_notice,
         )

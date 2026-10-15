@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
-from .activity import ActivityState
+from .activity import Activity, ActivityState
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -61,16 +61,17 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def activity_detail(self) -> str:
         return self.detail
 
+    def activity_event(self, thread: str) -> Activity:
+        """Record this phase's declared activity, without observation-only readiness."""
+        return Activity.create(thread, self.activity_state, self.activity_detail)
+
     def project_activity(self, activity):
         """Display this phase while preserving the acquired drain readiness."""
-        return replace(activity, state=self.activity_state, detail=self.activity_detail)
+        return activity.with_status(self.activity_state, self.activity_detail)
 
     def model_wait(self, backstop: float | None) -> float | None:
         """Core's no-event backstop for this phase; None where nothing bounds it here."""
         return backstop
-
-    def described(self, detail: str) -> TurnPhase:
-        return replace(self, detail=detail[:200])
 
     def input_started(self) -> TurnPhase:
         return ModelWaitPhase()
@@ -276,7 +277,7 @@ class ToolRunningPhase(LabeledActivity, Excursion):
 
     def tool_started(self, tool_id: str, title: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)
-        return replace(self, detail="", tools=(*retained, (tool_id, title[:200])))
+        return replace(self, detail="", tools=(*retained, (tool_id, title)))
 
     def tool_ended(self, tool_id: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)

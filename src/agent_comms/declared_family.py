@@ -38,7 +38,8 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
             root is None and any(isinstance(base, _FamilyMeta) for base in bases)
         )
         if is_root:
-            namespace["_family_affix"] = affix or ""
+            # slots dataclasses recreate the root without its class-header keywords.
+            namespace["_family_affix"] = affix if affix is not None else namespace.get("_family_affix", "")
             namespace["__registry__"] = (
                 LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
             )

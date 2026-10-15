@@ -39,8 +39,16 @@ class CoordinationSession(CoordinationStore):
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
+        """Admit a rollback-journal writer only after existing readers retire.
+
+        ``BEGIN IMMEDIATE`` lets new work proceed before old readers release,
+        then makes those readers a fallible dependency of ``COMMIT``.  Every
+        coordinator write instead acquires the exclusive rollback-journal lock
+        before changing state, so contention remains an admission outcome and
+        a successfully admitted transaction owns its complete commit lifetime.
+        """
         with self._transaction_lifetime() as db:
-            db.execute("BEGIN IMMEDIATE")
+            db.execute("BEGIN EXCLUSIVE")
             yield db
 
     @contextmanager
@@ -53,18 +61,6 @@ class CoordinationSession(CoordinationStore):
 
     def release_resources(self, snapshot, boundary: NativeBoundary | None) -> None:
         """Standalone attempts cannot acquire native file claims."""
-
-    @contextmanager
-    def irreversible_admission(self) -> Iterator[sqlite3.Connection]:
-        """Exclude readers before external effects, never upgrade after sending.
-
-        In rollback-journal mode BEGIN IMMEDIATE admits readers that can block
-        COMMIT. The raw native writer must acquire the exclusive lock before any
-        prompt byte; with its zero timeout, contention remains pre-admission.
-        """
-        with self._transaction_lifetime() as db:
-            db.execute("BEGIN EXCLUSIVE")
-            yield db
 
     @contextmanager
     def _transaction_lifetime(self) -> Iterator[sqlite3.Connection]:

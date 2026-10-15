@@ -78,7 +78,7 @@ async def test_nonwaiting_reader_reports_named_store_busy(tmp_path):
 
     with (
         Coordination(str(path)) as writer,
-        writer.session.irreversible_admission(),
+        writer.session.transaction(),
         pytest.raises(CoordinationReadUnavailable),
     ):
         await Coordination.run_read_async(path, read, contention=StoreBusy())

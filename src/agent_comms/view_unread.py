@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, ClassVar
 from weakref import WeakValueDictionary
 
 from .coordination_database import CoordinationStore, StoreBusy
+from .coordination_errors import CoordinationReadUnavailable
 from .native_entries import NativeEntry
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
@@ -239,16 +240,19 @@ class NativeReplyPreparation:
         if self.future.cancelled():
             return None
         batch = self.future.result()
-        with database:
-            database.execute("BEGIN IMMEDIATE")
-            for update in batch.updates:
-                source = update.after.source
-                if source not in self.reads or source not in wanted:
-                    continue
-                revision = FileRevision.capture(Path(source))
-                expected = self.reads[source][1]
-                if revision is not None and expected.holds_cut(revision, expected.size):
-                    update.commit(database)
+        try:
+            with database:
+                database.execute("BEGIN IMMEDIATE")
+                for update in batch.updates:
+                    source = update.after.source
+                    if source not in self.reads or source not in wanted:
+                        continue
+                    revision = FileRevision.capture(Path(source))
+                    expected = self.reads[source][1]
+                    if revision is not None and expected.holds_cut(revision, expected.size):
+                        update.commit(database)
+        except sqlite3.OperationalError as error:
+            CoordinationReadUnavailable.raise_from(error)
         return batch.last_source
 
 
@@ -314,19 +318,24 @@ class TranscriptReadState(ThreadOwnedState):
             )
             try:
                 connection.execute("PRAGMA synchronous=NORMAL")
-                connection.execute("BEGIN IMMEDIATE")
                 (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
-                if version.user_version == 0:
-                    if _IndexTable.read(
-                        connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
-                    ):
+                # Opening an installed index is a read. Only initialization
+                # needs a writer; recheck after taking it because another
+                # process may have initialized the file since this read.
+                if version.user_version != _INDEX_VERSION:
+                    connection.execute("BEGIN IMMEDIATE")
+                    (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
+                    if version.user_version == 0:
+                        if _IndexTable.read(
+                            connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                        ):
+                            raise ValueError("Reply index requires the quiet runtime reset")
+                        for table in TypedTable.members_with(ReplyIndexTable):
+                            table.create(connection)
+                        connection.execute(f"PRAGMA user_version={_INDEX_VERSION}")
+                    elif version.user_version != _INDEX_VERSION:
                         raise ValueError("Reply index requires the quiet runtime reset")
-                    for table in TypedTable.members_with(ReplyIndexTable):
-                        table.create(connection)
-                    connection.execute(f"PRAGMA user_version={_INDEX_VERSION}")
-                elif version.user_version != _INDEX_VERSION:
-                    raise ValueError("Reply index requires the quiet runtime reset")
-                connection.commit()
+                    connection.commit()
             except (sqlite3.DatabaseError, ValueError):
                 connection.close()
                 raise
@@ -363,11 +372,16 @@ class TranscriptReadState(ThreadOwnedState):
         database = self._database()
         preparation = self._preparation
         if preparation is not None and preparation.future.done():
-            # No native bytes are read under wire or SQLite custody. Deletion
-            # withdraws admitted reads, and this rechecks the original file cut.
-            with _store_lock(self.path.parent / "wire", shared=True, blocking=False):
-                self._next_source = preparation.commit(database, revisions)
-            self._preparation = None
+            # Publishing prepared work is independent of reading committed counts.
+            # A busy writer retains this exact work; it does not invalidate other
+            # sources. The wire lock still orders publication against deletion.
+            try:
+                with _store_lock(self.path.parent / "wire", shared=True, blocking=False):
+                    self._next_source = preparation.commit(database, revisions)
+            except (BlockingIOError, CoordinationReadUnavailable):
+                pass
+            else:
+                self._preparation = None
         with database:
             CoordinationStore.begin_snapshot(database)
             indexes = ReplyIndex.for_sources(database, tuple(revisions))
@@ -397,20 +411,17 @@ class TranscriptReadState(ThreadOwnedState):
         self, viewer: str, sources: Mapping[str, str], *, document: ReadDocument | None = None
     ) -> TranscriptUnread:
         # Counts never wait for native decoding or another in-process reader.
-        if self._cancelled.is_set() or not self._lock.acquire(blocking=False):
-            return TranscriptUnread({}, frozenset(sources))
+        if self._cancelled.is_set():
+            raise RuntimeError("Transcript reader is closed")
+        if not self._lock.acquire(blocking=False):
+            raise CoordinationReadUnavailable("Transcript counts are being read")
         try:
             document = self.reads.read() if document is None else document
             try:
                 return self._counts_locked(viewer, sources, document)
-            except BlockingIOError:
-                return TranscriptUnread({}, frozenset(sources))
             except sqlite3.DatabaseError as error:
-                if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
-                    # Another process is indexing: the same answer as a busy lock here.
-                    return TranscriptUnread({}, frozenset(sources))
                 if error.sqlite_errorcode not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
-                    raise
+                    CoordinationReadUnavailable.raise_from(error)
                 self._discard_database()
                 return self._counts_locked(viewer, sources, document)
         finally:
