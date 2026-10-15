@@ -749,8 +749,6 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
         from .native_tools import NativeTool
         from .transcript_events import ToolEndTranscript
 
-        if not self.parts:
-            return []
         output = "\n".join(part.text for part in self.parts if isinstance(part, TextContent))
         result = ProvidedToolResult(content=self.parts, details=self.details)
         events = [

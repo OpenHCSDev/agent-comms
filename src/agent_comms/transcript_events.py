@@ -148,7 +148,9 @@ class NoticeTranscript(AgentTextTranscript):
 class SentTranscript(OutgoingRoute, WireTextTranscript):
     """One immutable original wire row, separate from native assistant output."""
 
-    scope: AssignedSourceIdentity | None = field(default=None, kw_only=True)
+    # Source coverage is qualified by this read/notification, not persisted as
+    # the message author's namespace. Native tool results are still unqualified.
+    scope: AssignedSourceIdentity | None = field(default=None, kw_only=True, metadata={"wire_omit_default": True})
 
     def in_source(self, scope):
         return replace(self, scope=scope) if self.scope is None else self
@@ -198,6 +200,8 @@ class ToolEndTranscript(ToolTranscript):
         if self.sent_message is None or not self.ok:
             return (self,)
         message = self.sent_message.in_source(scope)
+        if message.scope != scope:
+            return (self,)
         return (replace(self, sent_message=message), message)
 
     @property

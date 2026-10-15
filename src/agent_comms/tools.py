@@ -671,8 +671,6 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms) -> JsonObject:
-        from .message_reference import AssignedSourceIdentity
-        scope = AssignedSourceIdentity(str(comms.root), comms.registry.require(self.sender).incarnation)
         message = comms.messaging.send_message(
             self.sender, self.target, self.body, self.type, report=self.report
         )
@@ -680,7 +678,7 @@ class CommsSendTool(ToolRequest):
         from .transcript_events import SentTranscript
 
         return PublishedMessageToolDetails(
-            id=message.message_id, message=SentTranscript.from_message(message, scope=scope)).to_wire()
+            id=message.message_id, message=SentTranscript.from_message(message)).to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
