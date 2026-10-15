@@ -615,6 +615,9 @@ class UpdatedFile(PatchChange):
 
     def patch(self, path: str, content: str) -> ToolDiff:
         before, after = self.paths(path)
+        if self.move_path is not None:
+            # Codex appends the destination outside its unified hunk text.
+            content = content.removesuffix(f'\n\nMoved to: {self.move_path}')
         return ToolDiff(f'--- {before}\n+++ {after}\n{content}')
 
 
