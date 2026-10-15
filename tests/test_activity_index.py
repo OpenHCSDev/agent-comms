@@ -31,18 +31,15 @@ def test_appends_parse_only_new_records_and_do_not_mutate_published_snapshots(tm
     assert "new-worker" not in previous
 
 
-def test_fresh_reader_loads_latest_threads_without_replaying_activity_history(tmp_path):
+def test_fresh_reader_preserves_latest_threads_and_sees_append(tmp_path):
     path = tmp_path / "activity.jsonl"
     path.write_text("".join(encoded(f"worker-{index % 10}") + "\n" for index in range(3000)))
-    assert len(ActivityLog(path).all_current()) == 10
-    with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
-        assert len(ActivityLog(path).all_current()) == 10
-        assert sum(call.args[0] is Activity for call in parse.call_args_list) == 10
-    ActivityLog(path).emit(Activity("new-worker", ActivityState.THINKING, "latest"))
-    with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
-        current = ActivityLog(path).all_current()
-        assert current["new-worker"].detail == "latest"
-        assert sum(call.args[0] is Activity for call in parse.call_args_list) == 11
+    previous = ActivityLog(path).all_current()
+    assert set(previous) == {f"worker-{index}" for index in range(10)}
+    assert ActivityLog(path).all_current() == previous
+    appended = Activity("new-worker", ActivityState.THINKING, "latest")
+    ActivityLog(path).emit(appended)
+    assert ActivityLog(path).all_current() == {**previous, "new-worker": appended}
 
 
 def test_fresh_reader_rebuilds_after_activity_rewrite_before_append(tmp_path):

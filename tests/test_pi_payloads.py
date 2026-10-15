@@ -154,11 +154,10 @@ def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repeti
 
     event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry"})
     pending = PendingNativeCommit()
-    assert not pending.observed
     with pytest.raises(NativePiUnavailable, match="tracked model context"):
         pending.require()
     observed = pending.capture(event)
-    assert isinstance(observed, ObservedNativeCommit) and observed.observed
+    assert isinstance(observed, ObservedNativeCommit)
     assert observed.require() is event
     with pytest.raises(NativePiUnavailable, match="repeated the input commitment"):
         observed.capture(event)

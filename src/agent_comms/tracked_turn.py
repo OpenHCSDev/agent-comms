@@ -62,8 +62,6 @@ T = TypeVar("T")
 class NativeCommitObservation(ABC, Generic[T]):
     """Observed original native receipts, without granting admission or replay."""
 
-    observed = False
-
     @abstractmethod
     def require(self) -> T: ...
 
@@ -82,7 +80,6 @@ class PendingNativeCommit(NativeCommitObservation[T]):
 @dataclass(frozen=True)
 class ObservedNativeCommit(NativeCommitObservation[T]):
     event: T
-    observed = True
 
     def require(self) -> T:
         return self.event
@@ -403,10 +400,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             self.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = self.tool_socket.token
 
     @property
-    def started_input(self):
-        return self.input_commit.observed
-
-    @property
     def active_tools(self):
         return self.tool_socket.active_tools if self.tool_socket is not None else set()
 
@@ -532,6 +525,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     async def committed_input(self, event: pi.InputCommitted) -> None:
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
+            self.admission = self.admission.start(event)
             self.evidence = self.custody.enter_context(
                 NativeEntry.open_input_evidence(self.active_session_file)
             )

@@ -12,6 +12,7 @@ from pathlib import Path
 from .declared_family import DeclaredFamily
 from .native_entries import NativeEntry, SessionEntry
 from .private_path import FileRevision
+from .transcript_receipts import TranscriptSource
 
 
 def _reverse_records(
@@ -124,7 +125,7 @@ class NativeRecord:
         return None
 
 
-class NativeTranscript:
+class NativeTranscript(TranscriptSource):
     def __init__(self, path: Path):
         self.path = path
 
@@ -165,7 +166,7 @@ class NativeTranscript:
     def cut(self) -> SessionCut:
         return SessionCut(FileRevision.capture(self.path))
 
-    def reply_revision(self, root: Path, thread):
+    def publication_revision(self, root: Path, thread):
         from .bus_publication import stable_thread_lookup
         from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 

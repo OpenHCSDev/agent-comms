@@ -710,6 +710,18 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         pytest.skip("Set AC_NATIVE_COPIED_PACKAGE to the reviewed private copied fork")
     package = Path(selected)
     _trusted_package(package)
+    from agent_comms.turn_watchdog import ProgressWatchdog
+
+    waits_after_start = []
+    select_wait = ProgressWatchdog.wait_for
+
+    def observe_wait(watchdog, session):
+        wait = select_wait(watchdog, session)
+        if session.started_input:
+            waits_after_start.append(wait is watchdog.input_wait)
+        return wait
+
+    monkeypatch.setattr(ProgressWatchdog, "wait_for", observe_wait)
     provider = "configured-fixture" if outcome in {"configured", "restarted"} else "openrouter"
     model = "fixture-model" if outcome in {"configured", "restarted"} else "z-ai/glm-5.3-flash"
     calls: list[str] = []
@@ -760,6 +772,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
+    native_session = PersistentPiSession()
     try:
         worktree = tmp_path / "project"
         worktree.mkdir(mode=0o700)
@@ -890,6 +903,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
 
         request = dict(
             observe_event=observe,
+            pi_session=native_session,
             input_id=INPUT_ID,
             prompt="Respond with X, fixture only",
             worktree=worktree,
@@ -914,6 +928,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert len(children) == 1 and children[0].returncode is not None
             assert calls == ["/v1/chat/completions"]
             assert observed.count("input_committed") == 1
+            assert waits_after_start and not any(waits_after_start)
             assert observed.count("context_committed") == 1
             assert "agent_settled" not in observed
             with durable_attempt.attempts.session.settlement() as boundary:
@@ -992,6 +1007,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         assert committed_input["inputId"] == INPUT_ID
         assert committed_context["inputId"] == INPUT_ID
         assert preflight_index < prompt_index < rpc_events.index(committed_input)
+        assert waits_after_start and not any(waits_after_start)
         assert observed.count("context_committed") == 1
         assert "auto_retry_start" not in observed
         assert "compaction_start" not in observed
@@ -1039,6 +1055,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                 if entry["type"] == "message" and entry["message"]["role"] == "user"
             ] == [INPUT_ID, "b" * 32]
     finally:
+        await native_session.close()
         server.shutdown()
         server.server_close()
         worker.join(timeout=2)
