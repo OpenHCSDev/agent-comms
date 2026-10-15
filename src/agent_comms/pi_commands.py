@@ -14,7 +14,6 @@ from uuid import uuid4
 from .turn_phase import ShutdownPhase
 
 from .native_turn_context import NativeContextData
-from .pi_vocabulary import ThinkingLevel
 from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
