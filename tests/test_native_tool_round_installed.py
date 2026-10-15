@@ -8,6 +8,8 @@ import pytest
 
 from agent_comms.channel_coding_tools import CodingToolOwner, CodingToolSocket
 from agent_comms.pi_payloads import ToolCallContent
+from agent_comms.native_pi import NativePiTerminalFailure
+from agent_comms.turn_failure import ModelRequestFailed
 from agent_comms.tracked_turn import TrackedTurnSession
 from delivery_owner_fixture import reply_turn_finished
 from test_backend_native_lifecycle import native_backend
@@ -20,8 +22,9 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
     (native.project / "independent-read.txt").write_text("Fresh fixture, not a retained input\n")
     effect = native.project / "independent-effect.txt"
     release = asyncio.Event()
-    requests, admissions, sockets = [], [], []
+    requests, admissions, sockets, terminal_failures = [], [], [], []
     provider = native.provider
+    provider.error_type = "invalid_request_error"
 
     def response_chunks():
         number = provider.posts
@@ -68,6 +71,16 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         admit(owner, round_number, call)
         admissions.append((round_number, call.call_id))
 
+    result = TrackedTurnSession.result
+
+    async def observed_result(turn):
+        try:
+            return await result(turn)
+        except NativePiTerminalFailure as error:
+            terminal_failures.append(error.failure)
+            raise
+
+    monkeypatch.setattr(TrackedTurnSession, "result", observed_result)
     monkeypatch.setattr(provider, "response_chunks", response_chunks)
     monkeypatch.setattr(TrackedTurnSession, "message_end", delayed_declaration)
     monkeypatch.setattr(CodingToolSocket, "handle_request", observed_request)
@@ -75,7 +88,9 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
     async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
         comms = owner._comms
         comms.threads.claim_thread("verifier", tags=frozenset(), worktree=str(native.project))
-        comms.messaging.send_message("verifier", session, "Distinct isolated delayed-round verification.")
+        comms.messaging.send_message(
+            "verifier", session, f"Distinct isolated delayed-round verification {native.session.stem}."
+        )
         await owner.inputs.drain_inbox(session)
         await asyncio.wait_for(reply_turn_finished(owner, session), 45)
 
@@ -98,13 +113,19 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         errors = [message for message in messages if message.get("stopReason") == "error"]
         assert len(errors) == 1
         assert provider.error_message in errors[0]["errorMessage"]
-        failures = [json.loads(path.read_text()) for path in (native.root / "diagnostics").glob("*.json")]
+        assert len(terminal_failures) == 1
+        assert type(terminal_failures[0]) is ModelRequestFailed
+        assert provider.error_message in terminal_failures[0].text
+        tracked_users = [message for message in messages if message.get("inputId")]
+        assert len(tracked_users) == 1
+        reports = [json.loads(path.read_text()) for path in (native.root / "diagnostics").glob("*.json")]
+        failures = [report for report in reports if report.get("turn_id") == tracked_users[0]["inputId"]]
         assert len(failures) == 1
-        assert failures[0]["reason"] == "model_request_failed"
-        assert "NativePiUnavailable" not in failures[0].get("source_error", "")
+        assert "NativePiTerminalFailure" in failures[0]["source_error"]
+        assert "without matching durable proof" not in failures[0]["source_error"]
         print("installed_native_round_result=" + json.dumps({
             "installed_module": str(Path(__import__("agent_comms").__file__).resolve()),
             "new_inputs": 1, "tool_calls": requests, "owner_admissions": admissions,
-            "effect_lines": 1, "failure_reason": failures[0]["reason"],
+            "effect_lines": 1, "failure_reason": str(terminal_failures[0].code),
             "original_fixture_history_preserved": True,
         }))
