@@ -445,6 +445,17 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     without_rowid: ClassVar[bool] = False
 
     @classmethod
+    def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
+        """Enumerate the schema owner's already imported row declarations.
+
+        Schema owners load their row modules before querying capabilities. A
+        checkpoint read must not import unrelated application modules while
+        holding its bus lock. External table-name decoding still uses the
+        registry's complete lazy discovery through DeclaredFamily.decode.
+        """
+        return tuple(dict.values(cls.__registry__))
+
+    @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
         # A method permits mutually referring row classes without string names.
         return ()
