@@ -16,7 +16,7 @@ from agent_comms.presentation import CoordinationSnapshot, ThreadView
 from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.changes import KeyedModel
-from agent_comms.ui_model.unread import UnreadPresentation
+from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
 
 @dataclass(frozen=True)
@@ -53,12 +53,13 @@ class ThreadRowModel:
         return self.incarnation.name
 
     @classmethod
-    def of(cls, person: ThreadView, snapshot: CoordinationSnapshot) -> ThreadRowModel:
+    def of(cls, person: ThreadView, snapshot: CoordinationSnapshot | None) -> ThreadRowModel:
         presentation = person.presentation
         return cls(
             person.thread.incarnation, presentation.title, presentation.label, presentation.summary,
             presentation.busy, person.thread.model,
-            person.thread.execution.prepare_conversation(PersonUnread(person, snapshot)),
+            (UnobservedUnread() if snapshot is None else
+             person.thread.execution.prepare_conversation(PersonUnread(person, snapshot))),
             person.status.active, person.thread.execution,
         )
 

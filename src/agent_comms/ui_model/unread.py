@@ -53,6 +53,13 @@ class UnreadPresentation(ABC):
 
 
 @dataclass(frozen=True)
+class UnobservedUnread(UnreadPresentation):
+    """The view has no count observation for this source; it is not a known zero."""
+    label = ""
+    detail = "Unread counts have not been observed for this source."
+
+
+@dataclass(frozen=True)
 class ExactUnread(UnreadPresentation):
     count: int = 0
 
