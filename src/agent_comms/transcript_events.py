@@ -90,6 +90,11 @@ class SilentTranscript:
 class OutgoingRoute:
     """Route capability shared by native output and original wire projection."""
 
+    def require_reply_route(self) -> MessageRoute:
+        if not self.routed:
+            raise ValueError("Outgoing message evidence requires a reply route")
+        return self.routing.reply
+
     @property
     def routed(self) -> bool:
         return self.routing is not None and self.routing.reply is not None
@@ -163,11 +168,11 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
     def qualified_for(self, scope) -> bool:
         if self.scope is None or scope is None:
             return False
-        return scope.same_publication_source(self.scope)
+        return self.routed and scope.same_publication_source(self.scope)
 
     @property
     def outgoing_sources(self) -> tuple[OutgoingMessageReference, ...]:
-        return () if self.scope is None else (OutgoingMessageReference(self.scope, self.source),)
+        return (OutgoingMessageReference(self.scope, self.source),) if self.qualified_for(self.scope) else ()
 
     def assigned_events(self, source, through):
         # Retained tool evidence remains visible when this exact publication
