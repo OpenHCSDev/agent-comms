@@ -28,7 +28,7 @@ from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
 from .coordination_tables.publications import PublicationIntents
-from .errors import RelationViolationError
+from .errors import HumanAdmissionBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, TypedTable
@@ -231,13 +231,21 @@ class CertifiedSourceRead:
             position = offset + length
         self.require_open_prefix()
 
-    def public_message_references(self) -> Iterator[tuple[str, MessageReference]]:
-        """Original sender and identity of every message row, without its body.
+    def require_new_human_message(self, sender: str, message_id: str) -> None:
+        """Check publication against the sealed index, without reading history.
 
-        Retained public rows remain present even when they have no SQL pointer.
+        A reserved sequence without a committed row is still UNKNOWN. A later
+        sender skipping that sequence leaves a permanent indexed gap; it must
+        not make the unresolved human input disappear.
         """
-        for row in self.message_rows():
-            yield from WireRecord.certified_public_references(row)
+        self.require_open_prefix()
+        PublicMessages.require_contiguous(self.connection)
+        if self.marker.last_seq != self.witness.through_seq:
+            raise HumanAdmissionBlockedError(
+                "Private bus sequence reservation has UNKNOWN outcome; "
+                "human send blocked, do not retry."
+            )
+        PublicMessages.require_unused(self.connection, sender, message_id)
 
     def messages(self) -> Iterator[Message]:
         """Every committed message; its certified row is not checked a second time."""
@@ -572,6 +580,41 @@ class WireSourcePointer(Generic[OriginalSource], ABC):
 
 
 @dataclass(frozen=True)
+class PublicMessages(CheckpointTable, TypedTable):
+    """Every public identity and its preceding committed message sequence.
+
+    MessageWireRecord supplies this relation for retained and delivered rows.
+    Silent observations do not allocate sequences. The partial index contains
+    only gaps, so checking continuity never walks an intact message history.
+    """
+
+    seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
+    previous_seq: int = field(metadata={"sql": Column(check="previous_seq>=0 AND previous_seq<seq")})
+    sender: str
+    message_id: str
+    gap: ClassVar[str] = "seq != previous_seq + 1"
+    indexes = (Index(("sender", "message_id")), Index(("seq",), where=gap))
+
+    @classmethod
+    def require_contiguous(cls, db: sqlite3.Connection) -> None:
+        if db.execute(f'SELECT 1 FROM "{cls.declared_name}" WHERE {cls.gap} LIMIT 1').fetchone():
+            raise HumanAdmissionBlockedError(
+                "Private bus sequence gap has UNKNOWN outcome; "
+                "human send blocked, do not retry."
+            )
+
+    @classmethod
+    def require_unused(cls, db: sqlite3.Connection, sender: str, message_id: str) -> None:
+        if db.execute(
+            f'SELECT 1 FROM "{cls.declared_name}" WHERE sender=? AND message_id=? LIMIT 1',
+            (sender, message_id),
+        ).fetchone():
+            raise RelationViolationError(
+                "Human initial ID already exists; inspect its receipt, do not retry."
+            )
+
+
+@dataclass(frozen=True)
 class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, TypedTable):
     seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
     message_id: str
@@ -883,8 +926,7 @@ class PrefixCertificate(CheckpointTable, TypedTable):
                     def collect(offset, raw, record):
                         nonlocal digest, through_seq
                         digest = _chain(digest, raw)
-                        through_seq = record.sequence_after(through_seq)
-                        _index_row(db, offset, raw, record)
+                        through_seq = _index_row(db, offset, raw, record, through_seq)
 
                     with db:
                         for _ in bus.verified_records_unlocked(marker, on_row=collect):
@@ -1018,9 +1060,12 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
     return PrefixCertificate.read_witness(db)
 
 
-def _index_row(db: sqlite3.Connection, offset: int, raw: bytes, record: WireRecord) -> None:
-    for row in record.checkpoint_rows(offset, len(raw)):
+def _index_row(db: sqlite3.Connection, offset: int, raw: bytes,
+               record: WireRecord, previous_sequence: int) -> int:
+    sequence = record.sequence_after(previous_sequence)
+    for row in record.checkpoint_rows(offset, len(raw), previous_sequence):
         row.insert(db)
+    return sequence
 
 
 def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -> PrefixWitness:
@@ -1093,7 +1138,7 @@ def _recover_pending_unlocked(
             if count > 100_000 or size > 128 * 1024 * 1024:
                 raise RelationViolationError("Private bus pending recovery exceeds cold bound.")
             digest = _chain(digest, raw)
-            last_seq = record.sequence_after(last_seq)
+            last_seq = _index_row(db, offset, raw, record, last_seq)
             if offset + len(raw) == prior.revision.size:
                 prior_seen = True
                 prior_seq = last_seq
@@ -1101,7 +1146,6 @@ def _recover_pending_unlocked(
                     raise RelationViolationError(
                         "Private bus checkpoint old prefix changed during recovery."
                     )
-            _index_row(db, offset, raw, record)
 
         for _ in bus.verified_records_unlocked(marker, on_row=collect):
             pass
@@ -1244,8 +1288,9 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
     marker.seal_with(PendingSeal.capture(saved, expected, path))
     bus.write_metadata_unlocked(marker)
     with db:
+        indexed_sequence = saved.through_seq
         for offset, raw, record in additions:
-            _index_row(db, offset, raw, record)
+            indexed_sequence = _index_row(db, offset, raw, record, indexed_sequence)
         PrefixCertificate.capture(
             saved.root_id, info, last_seq, digest, expected.tail
         ).upsert(db)
@@ -1349,7 +1394,7 @@ def append_private_bus_checkpoint_unlocked(
             marker.seal_with(PendingSeal.capture(saved, expected, path))
             bus.write_metadata_unlocked(marker)
             with db:
-                _index_row(db, offset, raw, record)
+                _index_row(db, offset, raw, record, saved.through_seq)
                 PrefixCertificate.capture(
                     saved.root_id, info, sequence, digest, expected.tail
                 ).upsert(db)
