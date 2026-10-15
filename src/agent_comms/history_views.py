@@ -40,7 +40,6 @@ from .message_page import MessagePage
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
-from .notification_assignment import NotificationAssignment
 from .presentation import (
     ChannelView,
     CoordinationSnapshot,
@@ -344,18 +343,7 @@ class HistoryViews:
         owner = captured.read.identity.thread
         if not owner.incarnation.current(snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
-        assignment_read = NotificationAssignment.read(
-            self.root, (*captured.sources, *captured.sent_sources))
-        return replace(
-            view.presentation,
-            notifications=MessageNotification.for_sources(
-                self.root, self.registry, owner, captured.sources,
-                assignment_read=assignment_read),
-            sent_notifications=MessageNotification.for_sources(
-                self.root, self.registry, owner, captured.sent_sources,
-                assignment_read=assignment_read),
-            read_identity=captured.read.identity,
-        )
+        return view.presentation.with_sources(captured)
 
     def coordination_snapshot(
         self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False

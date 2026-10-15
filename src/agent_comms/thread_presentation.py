@@ -11,7 +11,7 @@ from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
     from .presentation import MessageNotification
-    from .transcripts import TranscriptReadIdentity
+    from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
 
 
 class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
@@ -76,6 +76,29 @@ class ThreadPresentation:
     attention: bool = False
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
     read_identity: TranscriptReadIdentity | None = None
+
+    def with_sources(self, window: TranscriptSourceWindow) -> ThreadPresentation:
+        """Incoming and sent outcomes are views of one captured notification window."""
+        from .bus_publication import stable_thread_lookup
+        from .notification_assignment import NotificationAssignment
+        from .presentation import MessageNotification
+
+        transcripts = window.read.owner
+        sources = tuple({source.message.reference: source
+                         for source in (*window.sources, *window.sent_sources)}.values())
+        projected = MessageNotification.delivery_window(
+            transcripts.root, transcripts.registry, sources,
+            NotificationAssignment.read(transcripts.root, sources),
+            owner_lookup=stable_thread_lookup(window.read.identity.thread.created_at),
+        )
+        incoming, sent = (
+            tuple(replace(notification, message=source.message)
+                  for source in selected
+                  for notification in projected[source.message.seq, source.message.message_id])
+            for selected in (window.sources, window.sent_sources)
+        )
+        return replace(self, notifications=incoming, sent_notifications=sent,
+                       read_identity=window.read.identity)
 
     @property
     def label(self) -> str:

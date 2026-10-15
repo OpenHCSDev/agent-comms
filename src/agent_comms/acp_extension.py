@@ -495,6 +495,14 @@ class CompactionCommittedUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
+class TranscriptDraftUpdate(AgentCommsUpdate):
+    """Current draft beside an unchanged, already published transcript page."""
+
+    identity: TranscriptReadIdentity
+    draft: ExternalDraftRow | None
+
+
+@dataclass(frozen=True)
 class TranscriptSnapshotUpdate(AgentCommsUpdate):
     page: TranscriptPage
     identity: TranscriptReadIdentity

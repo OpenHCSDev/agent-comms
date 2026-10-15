@@ -208,6 +208,10 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         """
         return self.contains_records_cut(other) and self.content_identity == other.content_identity
 
+    def same_snapshot(self, other: TranscriptReadIdentity) -> bool:
+        """Finished history and its source projection agree, including the latest record."""
+        return self.records_cut == other.records_cut and self.same_content(other)
+
 
 @dataclass(frozen=True, slots=True)
 class LiveTranscriptReadIdentity(TranscriptReadIdentity):
@@ -337,8 +341,7 @@ class TranscriptRead:
         """Read the page and external draft from one retained source lifecycle."""
         page, draft = self._read_page()
         current = self.current_identity()
-        if (self.identity.records_cut != current.records_cut
-                or not self.identity.same_content(current)):
+        if not self.identity.same_snapshot(current):
             raise StaleRevision("Transcript finished while reading its current draft")
         return page, draft
 
@@ -347,8 +350,7 @@ class TranscriptRead:
         with self.source.records.reading() as records:
             draft = records.current_draft()
         current = self.current_identity()
-        if (self.identity.records_cut != current.records_cut
-                or not self.identity.same_content(current)):
+        if not self.identity.same_snapshot(current):
             raise StaleRevision("Transcript finished while reading its current draft")
         return draft
 
@@ -398,9 +400,14 @@ class Transcripts:
         through: TranscriptCursor | None = None,
         historical_source: str | None = None,
     ) -> TranscriptRead:
-        return self.capture_page_window(
-            name, before=before, after=after, through=through, historical_source=historical_source,
-        ).read
+        from .transcript_receipts import AssignedTranscriptSource
+
+        page = self._page_source(name, through, historical_source)
+        frontier = AssignedTranscriptSource.for_thread(page.root, page.thread, page.log).frontier
+        identity = self._capture_page_identity(
+            page, name, frontier, before=before, after=after, through=through,
+        )
+        return TranscriptRead(self, identity, page)
 
     def capture_page_window(
         self,

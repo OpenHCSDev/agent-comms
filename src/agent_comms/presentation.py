@@ -834,6 +834,12 @@ class WireRevision:
     external_transcripts: tuple[FileRevision | None, ...]
     expiry_tick: int
 
+    expiry_seconds: ClassVar[int] = 30
+
+    @property
+    def expiry_period(self) -> int:
+        return self.expiry_tick // self.expiry_seconds
+
     def registrations_changed_since(self, earlier: WireRevision) -> bool:
         """A thread registration or a channel declaration changed."""
         return (self.registry, self.catalog) != (earlier.registry, earlier.catalog)
@@ -842,12 +848,30 @@ class WireRevision:
         """Any observed store changed; the activity expiry tick is not a store."""
         return replace(self, expiry_tick=earlier.expiry_tick) != earlier
 
-    def sidebar_changed_since(self, earlier: WireRevision) -> bool:
-        """CLI text changes its transcript; activity and bus reads supply sidebar state.
+    def status_changed_since(self, earlier: WireRevision) -> bool:
+        """Activity, assignments and bus reads supply thread status.
 
         Draft and finished CLI items share one store. Neither changes the
         sidebar's roster, activity or unread bus counts. Their own observer
         still receives every revision and refreshes the conversation.
         """
         return replace(self, external_transcripts=earlier.external_transcripts,
+                       native_unread=earlier.native_unread,
                        expiry_tick=earlier.expiry_tick) != earlier
+
+    def sidebar_changed_since(self, earlier: WireRevision) -> bool:
+        """Native unread progress updates counts without rebuilding thread presentations."""
+        return self.native_unread != earlier.native_unread or self.status_changed_since(earlier)
+
+    def external_transcripts_changed_since(self, earlier: WireRevision) -> bool:
+        """CLI drafts and finished items changed, independently of coordination status."""
+        return self.external_transcripts != earlier.external_transcripts
+
+    def notifications_changed_since(self, earlier: WireRevision) -> bool:
+        """Recipient state depends on assignments, presence, bus replies and read marks."""
+        return replace(
+            self, catalog=earlier.catalog, history=earlier.history,
+            native_unread=earlier.native_unread, goal_waits=earlier.goal_waits,
+            relationships=earlier.relationships, external_transcripts=earlier.external_transcripts,
+            expiry_tick=earlier.expiry_tick,
+        ) != earlier or self.expiry_period != earlier.expiry_period

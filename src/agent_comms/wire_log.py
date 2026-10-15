@@ -770,13 +770,12 @@ class WireLog:
 
     @contextmanager
     def verify_before_read_unlocked(self, *, shared: bool = False):
-        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+        """Read a durably certified source, recovering unfinished writes exclusively.
 
-        The marker is fsynced before the first claim send. A failed bus append may
-        leave a complete, visible row: another cooperating process must fsync the
-        opened inode and its directory, then reject incomplete/corrupt rows, before
-        treating either the announcement or the claim as committed. This hook is
-        entered by the shared bus lock, including ordinary inbox/history readers.
+        A final certificate proves its exact bus revision was flushed by the
+        writer. Shared readers verify that certificate without flushing again.
+        Recovery and uncertified sources still flush before accepting visible
+        bytes left by an interrupted append.
         """
         private_marker = self._claim_marker_unlocked()
         if private_marker is None:
