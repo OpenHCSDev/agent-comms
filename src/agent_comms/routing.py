@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -15,6 +15,7 @@ from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .registry_document import RegistrySnapshot
+    from .thread_provenance import ThreadProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -206,18 +207,28 @@ class DeliveryScope(MessageDisplayScope):
             target in self.channels or self.canonical(target) == self.actor
         )
 
+    @staticmethod
+    def sender_lookups(source: ThreadProvenance) -> Iterator[str]:
+        """Admitted publication formats for the original declared participant."""
+        from .bus_publication import stable_thread_lookup
+
+        yield ""
+        if source.incarnation.has_recorded_birth:
+            yield stable_thread_lookup(source.created_at)
+
     def minimum_timestamp(
         self, sender: str, target: str, sender_lookup: str, snapshot: RegistrySnapshot
     ) -> float | None:
         """Require current identities while preserving aliases of one incarnation."""
-        from .bus_publication import stable_thread_lookup
 
         if not self.delivers(sender, target):
             return None
         source = snapshot.threads.get(self.canonical(sender))
         if source is None:
             return None
-        if sender_lookup and sender_lookup != stable_thread_lookup(source.created_at):
+        if sender_lookup:
+            source.incarnation.require_recorded()
+        if sender_lookup not in self.sender_lookups(source):
             return None
         return max(source.created_at, snapshot.threads[self.actor].created_at)
 

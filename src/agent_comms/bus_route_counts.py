@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 class RouteTable:
     """Disposable tables owned and reset together by the route projection."""
 
-    schema: ClassVar[int] = 2
+    schema: ClassVar[int] = 3
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -239,7 +239,7 @@ class RouteIdentityRow(RouteTable, TypedTable):
     sender_lookup: str = field(metadata={"sql": Column(primary_key=True)})
     first_seq: int
     without_rowid: ClassVar = True
-    indexes: ClassVar = (Index(("target", "first_seq", "sender", "sender_lookup")),)
+    indexes: ClassVar = (Index(("target", "sender", "first_seq", "sender_lookup")),)
 
 
 @dataclass(frozen=True)
@@ -526,26 +526,54 @@ class OpenedRouteCounts(BusRouteCounts):
             if delivery.unread(item, self.registry, seen)
         ))
 
-    _requests = f"""candidates AS MATERIALIZED (
-                SELECT owner.key AS actor, route.target, route.sender, route.sender_lookup,
+    _requests = f"""request_targets AS MATERIALIZED (
+                SELECT DISTINCT target.value AS target
+                FROM json_each(:targets) AS owner,json_each(owner.value) AS target
+            ), unrecorded AS MATERIALIZED (
+                SELECT target.target,source.value AS sender,
+                    (SELECT sender_lookup FROM "{RouteIdentityRow.declared_name}" AS route
+                     WHERE route.target=target.target AND route.sender=source.value
+                         AND route.first_seq<=:through AND route.sender_lookup<>''
+                     ORDER BY route.first_seq LIMIT 1) AS sender_lookup
+                FROM request_targets AS target,json_each(:unrecorded) AS source
+            ), route_keys AS (
+                SELECT target.target,sender.key AS sender,lookup.value AS sender_lookup
+                FROM request_targets AS target,json_each(:senders) AS sender,
+                    json_each(sender.value) AS lookup
+                UNION ALL
+                SELECT * FROM unrecorded WHERE sender_lookup IS NOT NULL
+            ), roots AS MATERIALIZED (
+                SELECT route.*,
                     (SELECT time_root FROM "{RouteEntryRow.declared_name}" AS row
                      WHERE row.target=route.target AND row.sender=route.sender
                          AND row.sender_lookup=route.sender_lookup AND row.seq<=:through
-                     ORDER BY row.seq DESC LIMIT 1) AS root,
+                     ORDER BY row.seq DESC LIMIT 1) AS root
+                FROM route_keys AS route
+            ), candidates AS MATERIALIZED (
+                SELECT owner.key AS actor,roots.*,
                     delivery_since(
-                        owner.key, route.sender, route.target, route.sender_lookup
+                        owner.key,roots.sender,roots.target,roots.sender_lookup
                     ) AS since
-                FROM json_each(:targets) AS owner, json_each(owner.value) AS target
-                JOIN "{RouteIdentityRow.declared_name}" AS route ON route.target=target.value
-                WHERE route.first_seq<=:through
+                FROM json_each(:targets) AS owner,json_each(owner.value) AS target
+                JOIN roots ON roots.target=target.value WHERE roots.root IS NOT NULL
             ), requests AS MATERIALIZED (
                 SELECT * FROM candidates WHERE since IS NOT NULL
             )"""
 
-    def _request_targets(self, actors):
-        return json.dumps({
-            actor: sorted(self.deliveries[actor].index_targets) for actor in actors
-        })
+    def _request_bindings(self, actors):
+        senders = {}
+        unrecorded = []
+        for name, source in self.registry.named_members():
+            senders[name] = tuple(DeliveryScope.sender_lookups(source))
+            if not source.incarnation.has_recorded_birth:
+                unrecorded.append(name)
+        return {
+            "targets": json.dumps({
+                actor: sorted(self.deliveries[actor].index_targets) for actor in actors
+            }),
+            "senders": json.dumps(senders), "unrecorded": json.dumps(unrecorded),
+            "through": self.source.through,
+        }
 
     # One eligibility implementation supplies both counts and listings. The
     # accepted frontier has disjoint subtrees; count uses their stored ranks,
@@ -594,9 +622,9 @@ class OpenedRouteCounts(BusRouteCounts):
             FROM requests AS request
             LEFT JOIN totals ON totals.actor=request.actor AND totals.root=request.root
             LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
-            {"targets": self._request_targets(self.deliveries),
-             "seen": json.dumps({actor: sorted(rows) for actor, rows in seen.items()}),
-             "through": self.source.through},
+            self._request_bindings(self.deliveries) | {
+                "seen": json.dumps({actor: sorted(rows) for actor, rows in seen.items()}),
+            },
         ))
 
     def _read_deliveries(self, actor: str, seen: frozenset[int]) -> list[UnseenDelivery]:
@@ -620,6 +648,5 @@ class OpenedRouteCounts(BusRouteCounts):
             SELECT row.seq,row.target FROM sequences AS listed
             JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=listed.seq
             WHERE row.seq NOT IN (SELECT value FROM json_each(:seen)) ORDER BY row.seq''',
-            {"targets": self._request_targets((actor,)), "actor": actor,
-             "seen": json.dumps(sorted(seen)), "through": self.source.through},
+            self._request_bindings((actor,)) | {"actor": actor, "seen": json.dumps(sorted(seen))},
         ))
