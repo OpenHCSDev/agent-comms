@@ -8,6 +8,9 @@ from agent_comms.activity import Activity, ActivityState, ObservedActivity, Read
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.shared import ThreadOutput
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.display_order import LastActivityThreadSort
+from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved
+from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_events import ToolExecutionStart
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -73,6 +76,48 @@ def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
             assert phase.summary == title
     finally:
         comms.agents.finish_turn(lease)
+
+
+def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phases(comms):
+    native = comms.registry.declare(Thread("native-clock", frozenset({"clock"}), str(comms.root),
+        process_identity=ProcessIdentity.capture(os.getpid())))
+    cli = comms.registry.declare(Thread("cli-clock", frozenset({"clock"}), str(comms.root),
+        execution=ExternalThreadExecution))
+    comms.channels.set_channel_sort("#clock", LastActivityThreadSort)
+    output = ThreadOutput(ExternalTranscript(comms.root, cli.incarnation), comms.agents)
+    request = ObserveSidebar(str(comms.root), True, False)
+
+    def observed():
+        snapshot = comms.views.coordination_snapshot()
+        return SidebarObserved(comms.views.revision(), request, snapshot, SidebarModel.derive(snapshot))
+
+    def members(result):
+        return result.derived[0]["#clock"].members
+
+    output.status(ActivityState.WORKING, "unchanged")
+    lease = comms.agents.begin_turn(native.name, "clock-order").turn_lease
+    try:
+        started = observed()
+        assert members(started) == (native.name, cli.name)
+        assert comms.agents.activity_of(native.name).timestamp >= comms.registry.require(native.name).active_turn.started_at
+        output.status(ActivityState.WORKING, "unchanged")
+        external = observed()
+        assert members(external) == (cli.name, native.name)
+        assert not external.same_observation(started)
+        phase = ModelWaitPhase().tool_started("clock-tool", "Clock progress")
+        comms.agents.observe_native_phase(lease, phase)
+        progressed = observed()
+        assert members(progressed) == (native.name, cli.name)
+        assert not progressed.same_observation(external)
+        clock = comms.agents.activity_of(native.name).timestamp
+        assert comms.agents.observe_native_phase(lease, phase) == ()
+        assert comms.agents.activity_of(native.name).timestamp == clock
+        assert observed().same_observation(progressed)
+    finally:
+        comms.agents.finish_turn(lease)
+    finished = comms.agents.activity_of(native.name).timestamp
+    assert comms.agents.observe_native_phase(lease, ModelWaitPhase()) == ()
+    assert comms.agents.activity_of(native.name).timestamp == finished
 
 
 def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):

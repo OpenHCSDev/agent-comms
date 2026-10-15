@@ -57,6 +57,13 @@ class TurnState:
     def phase(self) -> TurnPhase:
         return self.active.phase if self.active is not None else IdlePhase()
 
+    def project_activity(self, activity):
+        """The turn start is activity even before its first phase observation."""
+        projected = self.phase.project_activity(activity)
+        if self.active is None:
+            return projected
+        return replace(projected, timestamp=max(activity.timestamp, self.active.started_at))
+
     def phase_effects(self, phase: TurnPhase) -> Iterator[TurnState]:
         """Emit only a changed active turn, retaining its original identity."""
         if self.active is not None and phase != self.active.phase:
