@@ -22,12 +22,13 @@ from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from collections.abc import Iterator, Mapping
-from typing import TYPE_CHECKING, BinaryIO, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
-from .errors import RelationViolationError
+from .coordination_tables.publications import PublicationIntents
+from .errors import HumanAdmissionBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, TypedTable
@@ -41,8 +42,9 @@ if TYPE_CHECKING:
     from .wire_log import WireLog
     from .messages import Message
     from .message_reference import MessageReference
-    from .coordination_tables.publications import PublicationIntents
     from .retained_task_facts import ExactTaskFact
+    from .registration import Registration
+    from .turn_context import ContextEntryReference, ContextManifest, SegmentManifest
 
 OriginalSource = TypeVar("OriginalSource")
 
@@ -229,13 +231,21 @@ class CertifiedSourceRead:
             position = offset + length
         self.require_open_prefix()
 
-    def public_message_references(self) -> Iterator[tuple[str, MessageReference]]:
-        """Original sender and identity of every message row, without its body.
+    def require_new_human_message(self, sender: str, message_id: str) -> None:
+        """Check publication against the sealed index, without reading history.
 
-        Retained public rows remain present even when they have no SQL pointer.
+        A reserved sequence without a committed row is still UNKNOWN. A later
+        sender skipping that sequence leaves a permanent indexed gap; it must
+        not make the unresolved human input disappear.
         """
-        for row in self.message_rows():
-            yield from WireRecord.certified_public_references(row)
+        self.require_open_prefix()
+        PublicMessages.require_contiguous(self.connection)
+        if self.marker.last_seq != self.witness.through_seq:
+            raise HumanAdmissionBlockedError(
+                "Private bus sequence reservation has UNKNOWN outcome; "
+                "human send blocked, do not retry."
+            )
+        PublicMessages.require_unused(self.connection, sender, message_id)
 
     def messages(self) -> Iterator[Message]:
         """Every committed message; its certified row is not checked a second time."""
@@ -383,6 +393,19 @@ class CertifiedSourceRead:
         except (sqlite3.Error, OSError, ValueError, TypeError) as error:
             raise RelationViolationError("Certified initial page is unavailable.") from error
 
+    def conversation_frontier(self, lookup: str) -> int:
+        """Latest original sender/recipient sequence without reconstructing a delivery."""
+        self.require_current()
+        row = self.connection.execute(
+            f"SELECT coalesce(max(seq), 0) FROM ("
+            f"SELECT max(seq) AS seq FROM {DeliverySources.declared_name} "
+            "WHERE sender_lookup=? UNION ALL "
+            f"SELECT max(seq) AS seq FROM {Addressed.declared_name} WHERE lookup=?"
+            ")",
+            (lookup, lookup),
+        ).fetchone()
+        return row[0]
+
     def conversation_sources(
         self,
         lookup: str,
@@ -427,9 +450,6 @@ class CertifiedSourceRead:
                 yield original
 
         return decoded()
-
-    def context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:
-        return self.marker.access.context_manifests(self, incarnation, snapshot)
 
     def retained_task_facts(self, incarnation: ThreadIncarnation) -> Iterator[ExactTaskFact]:
         """Capture this owner's originals; their declarations own applicability.
@@ -499,59 +519,10 @@ class CertifiedSourceRead:
         )
         return (*records, ObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
 
-    def indexed_context_resources(self, incarnation: ThreadIncarnation, snapshot, *, previous=()):
-        """Resolve compact turn records through entry manifests recorded once."""
-        self.require_current()
-        storage = SqlStorage.for_type(ThreadIncarnation)
-        parameters = tuple(storage.to_sql(FieldCodec.encode(recorded))
-                           for recorded in incarnation.recorded_names(snapshot))
-        rows = tuple(RecordedContextManifestSources.select(
-            self.connection, where="thread IN (" + ",".join("?" for _ in parameters) + ")",
-            parameters=parameters, order_by=("offset",),
-        ))
-        retained = {resource.pointer: resource for resource in previous}
-        recorded_previous = tuple(
-            replace(
-                resource,
-                value=RecordedContextManifest.capture(resource.value)[0],
-            )
-            for resource in previous
-        )
-        captured = tuple(self.capture_resources(rows, previous=recorded_previous))
-        references = {
-            reference
-            for resource in captured
-            for segment in resource.value.segments
-            for reference in segment.entries
-        }
-        entry_rows = self.context_entry_rows(references)
-        entries = {}
-        geometries = {(row.offset, row.length): row for row in entry_rows}
-        for row in geometries.values():
-            raw = row.read_bytes(self.stream)
-            record = WireRecord.from_wire(json.loads(raw), self.witness.root_id)
-            for entry in record.context_entries():
-                if entry.reference in references:
-                    entries[entry.reference] = entry.manifest
-        if entries.keys() != references:
-            raise RelationViolationError("Recorded context entries are incomplete")
-
-        def decoded():
-            for resource in captured:
-                prior = retained.get(resource.pointer)
-                if prior is not None and prior.raw == resource.raw:
-                    yield prior
-                    continue
-                manifest = resource.value.restore(entries)
-                if manifest.thread.resolved(snapshot) != incarnation:
-                    raise RelationViolationError("Context source differs from recorded owner.")
-                yield replace(resource, value=manifest)
-
-        return decoded()
-
-
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
+        if type(intent) is not PublicationIntents:
+            raise TypeError("Keyed response requires a validated PublicationIntents.")
         self.require_current()
         if ResponseKeys.one(self.connection, key=intent.publication_key) is None:
             return None
@@ -606,6 +577,41 @@ class WireSourcePointer(Generic[OriginalSource], ABC):
         if len(raw) != self.length or not raw.endswith(b"\n"):
             raise RelationViolationError("Certified source row changed.")
         return raw
+
+
+@dataclass(frozen=True)
+class PublicMessages(CheckpointTable, TypedTable):
+    """Every public identity and its preceding committed message sequence.
+
+    MessageWireRecord supplies this relation for retained and delivered rows.
+    Silent observations do not allocate sequences. The partial index contains
+    only gaps, so checking continuity never walks an intact message history.
+    """
+
+    seq: int = field(metadata={"sql": Column(primary_key=True, check="seq>0")})
+    previous_seq: int = field(metadata={"sql": Column(check="previous_seq>=0 AND previous_seq<seq")})
+    sender: str
+    message_id: str
+    gap: ClassVar[str] = "seq != previous_seq + 1"
+    indexes = (Index(("sender", "message_id")), Index(("seq",), where=gap))
+
+    @classmethod
+    def require_contiguous(cls, db: sqlite3.Connection) -> None:
+        if db.execute(f'SELECT 1 FROM "{cls.declared_name}" WHERE {cls.gap} LIMIT 1').fetchone():
+            raise HumanAdmissionBlockedError(
+                "Private bus sequence gap has UNKNOWN outcome; "
+                "human send blocked, do not retry."
+            )
+
+    @classmethod
+    def require_unused(cls, db: sqlite3.Connection, sender: str, message_id: str) -> None:
+        if db.execute(
+            f'SELECT 1 FROM "{cls.declared_name}" WHERE sender=? AND message_id=? LIMIT 1',
+            (sender, message_id),
+        ).fetchone():
+            raise RelationViolationError(
+                "Human initial ID already exists; inspect its receipt, do not retry."
+            )
 
 
 @dataclass(frozen=True)
@@ -684,11 +690,176 @@ class ContextEntrySources(WireSourcePointer[ContextEntryManifest], CheckpointTab
 
 
 @dataclass(frozen=True)
+class ContextManifestCursor(ABC):
+    """A cut in one certified source; direction belongs to the cut's type."""
+
+    source: PrefixSource
+    offset: int
+    @property
+    @abstractmethod
+    def comparison(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def descending(self) -> bool: ...
+
+    def available(self, connection, owners):
+        exists = connection.execute(
+            f'SELECT 1 FROM "{RecordedContextManifestSources.declared_name}" WHERE '
+            'thread IN (' + ','.join('?' for _ in owners) + ') '
+            f'AND offset {self.comparison} ? LIMIT 1', (*owners, self.offset),
+        ).fetchone()
+        return self if exists else None
+
+
+class BeforeContextManifest(ContextManifestCursor):
+    comparison = "<"
+    descending = True
+
+
+class AfterContextManifest(ContextManifestCursor):
+    comparison = ">"
+    descending = False
+
+
+@dataclass(frozen=True)
+class ContextManifestReference:
+    """An exact recorded request, not a turn-name search over all history."""
+
+    source: PrefixSource
+    offset: int
+
+    def read(self, log, name, registry):
+        page = RecordedContextManifestSources.for_owner(log, name, registry,
+            cursor=BeforeContextManifest(self.source, self.offset + 1), limit=1)
+        if len(page.resources) != 1 or page.resources[0].pointer.offset != self.offset:
+            raise ValueError("Recorded context reference is absent from this owner")
+        return page.resources[0].value
+
+
+@dataclass(frozen=True)
+class ContextManifestPage:
+    """One page of original resources and source-bound cuts in either direction."""
+
+    resources: tuple[CapturedWireSource[ContextManifest], ...]
+    older: BeforeContextManifest | None
+    newer: AfterContextManifest | None
+
+    def has_older(self) -> bool:
+        return self.older is not None
+
+    def has_newer(self) -> bool:
+        return self.newer is not None
+
+    def reference(self, manifest: ContextManifest) -> ContextManifestReference:
+        for resource in self.resources:
+            if resource.value is manifest:
+                return ContextManifestReference(resource.source, resource.pointer.offset)
+        raise ValueError("Recorded context is outside the selected page")
+
+
+@dataclass(frozen=True)
 class RecordedContextManifestSources(
     WireSourcePointer[RecordedContextManifest], CheckpointTable, TypedTable
 ):
     thread: ThreadIncarnation
     indexes = (Index(("thread", "offset")), Index(("offset",), unique=True))
+    max_page_rows: ClassVar[int] = 8
+    max_page_bytes: ClassVar[int] = 512 * 1024
+
+    @classmethod
+    def for_owner(
+        cls, log: WireLog, name: str, registry: Registration, *,
+        cursor: ContextManifestCursor | None = None,
+        previous: tuple[CapturedWireSource[ContextManifest], ...] = (),
+        limit: int | None = None,
+    ) -> ContextManifestPage:
+        """Acquire one bounded page and its entries; decode outside both locks.
+
+        The budget bounds turn rows. Referenced entry rows are indivisible
+        dependencies of those requests, never a reason to scan other turns.
+        Entry references come from the captured turn records. The second read
+        must contain that same prefix, and every entry must belong to it. Later
+        appends therefore cannot change this observation or fill a missing entry.
+        """
+        from .store_files import _store_lock
+
+        limit = cls.max_page_rows if limit is None else limit
+        if not 1 <= limit <= cls.max_page_rows:
+            raise ValueError("Context page row limit exceeds its source budget")
+        with _store_lock(log.path.parent / "wire", shared=True), log.certified_read() as source:
+            snapshot = registry.snapshot()
+            incarnation = snapshot.require(name).incarnation
+            storage = SqlStorage.for_type(ThreadIncarnation)
+            owners = tuple(storage.to_sql(FieldCodec.encode(recorded))
+                           for recorded in incarnation.recorded_names(snapshot))
+            where = "thread IN (" + ",".join("?" for _ in owners) + ")"
+            parameters = owners
+            prefix = source.witness
+            if cursor is not None:
+                if cursor.source != prefix.source_identity:
+                    raise ValueError("Recorded context page changed its source")
+                where += f" AND offset {cursor.comparison} ?"
+                parameters += (cursor.offset,)
+            descending = cursor is None or cursor.descending
+            candidates = cls.iterate(source.connection.execute(
+                f'SELECT * FROM "{cls.declared_name}" WHERE {where} '
+                f'ORDER BY offset {"DESC" if descending else "ASC"} LIMIT ?',
+                (*parameters, limit),
+            ))
+            rows, size = [], 0
+            for row in candidates:
+                # A complete first request always makes progress, even when
+                # its indivisible record exceeds the ordinary page budget.
+                if rows and size + row.length > cls.max_page_bytes:
+                    break
+                rows.append(row)
+                size += row.length
+            candidates.close()
+            rows = tuple(sorted(rows, key=lambda row: row.offset))
+            older = newer = None
+            if rows:
+                older = BeforeContextManifest(prefix.source_identity, rows[0].offset).available(
+                    source.connection, owners)
+                newer = AfterContextManifest(prefix.source_identity, rows[-1].offset).available(
+                    source.connection, owners)
+            # The certificate verifies the append-only prefix; carry installs
+            # replace the inode. A retained pointer from this same source is
+            # immutable, so a refresh reads only newly recorded turns.
+            retained = {item.pointer: item for item in previous
+                        if item.source == prefix.source_identity}
+            captured = tuple((row, row.read_bytes(source.stream)) for row in rows
+                             if row not in retained)
+
+        resources = {row: retained[row] for row in rows if row in retained}
+        changed = {row: row.decode_bytes(raw, prefix.root_id) for row, raw in captured}
+
+        references = {reference for recorded in changed.values()
+                      for segment in recorded.segments for reference in segment.entries}
+        entries: dict[ContextEntryReference, SegmentManifest] = {}
+        if references:
+            with log.certified_read() as source:
+                source.witness.require_read_window(prefix)
+                entry_rows = source.context_entry_rows(references)
+                geometries = {(row.offset, row.length): row for row in entry_rows}
+                if any(row.offset + row.length > prefix.offset for row in entry_rows):
+                    raise RelationViolationError("Context entry lies beyond its turn's source prefix")
+                entry_bytes = tuple(row.read_bytes(source.stream) for row in geometries.values())
+            for raw in entry_bytes:
+                record = WireRecord.from_wire(json.loads(raw), prefix.root_id)
+                for entry in record.context_entries():
+                    if entry.reference in references:
+                        entries[entry.reference] = entry.manifest
+            if entries.keys() != references:
+                raise RelationViolationError("Recorded context entries are incomplete")
+
+        for row, raw in captured:
+            if row in changed:
+                manifest = changed[row].restore(entries)
+                if manifest.thread.resolved(snapshot) != incarnation:
+                    raise RelationViolationError("Context source differs from recorded owner.")
+                resources[row] = CapturedWireSource(prefix.source_identity, row, raw, manifest)
+        return ContextManifestPage(tuple(resources[row] for row in rows), older, newer)
 
     def decode_bytes(self, raw: bytes, root_id: str):
         from .wire_record import WireRecord
@@ -755,8 +926,7 @@ class PrefixCertificate(CheckpointTable, TypedTable):
                     def collect(offset, raw, record):
                         nonlocal digest, through_seq
                         digest = _chain(digest, raw)
-                        through_seq = record.sequence_after(through_seq)
-                        _index_row(db, offset, raw, record)
+                        through_seq = _index_row(db, offset, raw, record, through_seq)
 
                     with db:
                         for _ in bus.verified_records_unlocked(marker, on_row=collect):
@@ -890,9 +1060,12 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
     return PrefixCertificate.read_witness(db)
 
 
-def _index_row(db: sqlite3.Connection, offset: int, raw: bytes, record: WireRecord) -> None:
-    for row in record.checkpoint_rows(offset, len(raw)):
+def _index_row(db: sqlite3.Connection, offset: int, raw: bytes,
+               record: WireRecord, previous_sequence: int) -> int:
+    sequence = record.sequence_after(previous_sequence)
+    for row in record.checkpoint_rows(offset, len(raw), previous_sequence):
         row.insert(db)
+    return sequence
 
 
 def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -> PrefixWitness:
@@ -965,7 +1138,7 @@ def _recover_pending_unlocked(
             if count > 100_000 or size > 128 * 1024 * 1024:
                 raise RelationViolationError("Private bus pending recovery exceeds cold bound.")
             digest = _chain(digest, raw)
-            last_seq = record.sequence_after(last_seq)
+            last_seq = _index_row(db, offset, raw, record, last_seq)
             if offset + len(raw) == prior.revision.size:
                 prior_seen = True
                 prior_seq = last_seq
@@ -973,7 +1146,6 @@ def _recover_pending_unlocked(
                     raise RelationViolationError(
                         "Private bus checkpoint old prefix changed during recovery."
                     )
-            _index_row(db, offset, raw, record)
 
         for _ in bus.verified_records_unlocked(marker, on_row=collect):
             pass
@@ -1035,6 +1207,10 @@ def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWi
 
 def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWitness:
     """The durability owner verifies its already opened source and certificate."""
+    # Exclusive recovery may adopt bytes left visible by an interrupted append.
+    # Make those bytes durable before publishing a repaired certificate.
+    os.fsync(stream.fileno())
+    _directory_sync(bus.path)
     saved = _saved(db)
     info = os.fstat(stream.fileno())
     if (
@@ -1112,8 +1288,9 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
     marker.seal_with(PendingSeal.capture(saved, expected, path))
     bus.write_metadata_unlocked(marker)
     with db:
+        indexed_sequence = saved.through_seq
         for offset, raw, record in additions:
-            _index_row(db, offset, raw, record)
+            indexed_sequence = _index_row(db, offset, raw, record, indexed_sequence)
         PrefixCertificate.capture(
             saved.root_id, info, last_seq, digest, expected.tail
         ).upsert(db)
@@ -1136,6 +1313,8 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *, sh
         try:
             db = resources.enter_context(closing(marker.access.open_checkpoint(path, shared=shared)))
             stream = resources.enter_context(bus.path.open("rb"))
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                raise RelationViolationError("Claim bus is not a regular file.")
             saved = marker.access.verify_checkpoint(bus, marker, db, stream, path, shared=shared)
             db.execute("PRAGMA query_only=ON")
         except (sqlite3.Error, OSError) as error:
@@ -1148,56 +1327,35 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *, sh
 @contextmanager
 def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata, *,
                                  shared: bool = False):
-    """The existing claim durability owner supplies this lock's opened source."""
+    """Use the durable certificate, or flush and scan an uncertified source."""
+    if certificate_enabled(bus.path) or private_marker.requires_checkpoint:
+        # A shared reader verifies the exact bus revision and final seal. The
+        # writer already flushed those bytes before sealing them. Unfinished
+        # writes raise CheckpointNeedsRepair; the lock owner retries exclusively.
+        with opened_private_checkpoint_unlocked(bus, private_marker, shared=shared) as source:
+            yield source
+        return
     with ExitStack() as resources:
         try:
-            # This original fsynced marker and opened source remain under the
-            # canonical flock. Its resource is never valid across releases.
             flags = os.O_RDONLY | os.O_NOFOLLOW
             try:
                 descriptor = os.open(bus.path, flags)
             except FileNotFoundError:
                 descriptor = None
-            if descriptor is None and (
-                certificate_enabled(bus.path) or private_marker.requires_checkpoint
-            ):
-                raise RelationViolationError("Private checkpoint bus inode is missing.")
-            source = None
             if descriptor is not None:
                 stream = resources.enter_context(os.fdopen(descriptor, "rb"))
                 if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                     raise RelationViolationError("Claim bus is not a regular file.")
                 os.fsync(stream.fileno())
-                if certificate_enabled(bus.path) or private_marker.requires_checkpoint:
-                    private_marker = bus._private_marker_unlocked()
-                    private_marker.seal
-                    directory_fd = os.open(
-                        bus.path.parent, os.O_RDONLY | os.O_DIRECTORY
-                    )
-                    try:
-                        os.fsync(directory_fd)
-                    finally:
-                        os.close(directory_fd)
-                    source = resources.enter_context(
-                        opened_private_checkpoint_unlocked(bus, private_marker, shared=shared)
-                    )
-                else:
-                    scan = WireScan(private_marker)
-                    while line := stream.readline(scan.max_row_bytes + 1):
-                        scan.read(line)
-            if source is None:
-                directory_fd = os.open(
-                    bus.path.parent, os.O_RDONLY | os.O_DIRECTORY
-                )
-                try:
-                    os.fsync(directory_fd)
-                finally:
-                    os.close(directory_fd)
+                scan = WireScan(private_marker)
+                while line := stream.readline(scan.max_row_bytes + 1):
+                    scan.read(line)
+            _directory_sync(bus.path)
         except OSError as error:
             raise RelationViolationError("Claim bus durability is UNKNOWN.") from error
         # Caller exceptions keep their own cause and disposition. Closing
         # borrowed resources does not run another admission or proof check.
-        yield source
+        yield None
 
 
 def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:
@@ -1236,7 +1394,7 @@ def append_private_bus_checkpoint_unlocked(
             marker.seal_with(PendingSeal.capture(saved, expected, path))
             bus.write_metadata_unlocked(marker)
             with db:
-                _index_row(db, offset, raw, record)
+                _index_row(db, offset, raw, record, saved.through_seq)
                 PrefixCertificate.capture(
                     saved.root_id, info, sequence, digest, expected.tail
                 ).upsert(db)

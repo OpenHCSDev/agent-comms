@@ -203,12 +203,12 @@ class InputDispositions(TypedStore):
     def _select(self, where: str, parameters: tuple = ()) -> InputDocument:
         if not self.path.exists():
             return InputDocument({})  # nothing was ever recorded; a read creates nothing
-        with self.transaction(write=False) as connection:
+        with self.snapshot() as connection:
             return self._document(connection, where, parameters)
 
     def _update(self, where: str, parameters: tuple, change) -> InputDocument:
         """Change only the selected rows; the callback returns the original to skip writing."""
-        with self.transaction(write=True) as connection:
+        with self.writing() as connection:
             original = self._document(connection, where, parameters)
             changed = change(original)
             for key, row in changed.rows.items():

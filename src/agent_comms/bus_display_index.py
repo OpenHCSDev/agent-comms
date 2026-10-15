@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex
+from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope
 from .read_ledger import ReadLedger
-from .messages import Message
 
 if TYPE_CHECKING:
     from .wire_log import OpenedWireSnapshot
@@ -22,17 +22,21 @@ DisplayMetrics = tuple[dict[str, tuple[float, float]], dict[str, int]]
 @dataclass(frozen=True)
 class DisplayMetricScope:
     scopes: tuple[ChannelDisplayScope, ...]
-    activity_scopes: tuple[ChannelDisplayScope, ...]
     viewer_names: frozenset[str]
+    seen_sequences: frozenset[int]
 
     @property
     def empty_metrics(self) -> DisplayMetrics:
-        return ({scope.channel: (0.0, 0.0) for scope in self.activity_scopes},
+        return ({scope.channel: (0.0, 0.0) for scope in self.scopes},
                 dict.fromkeys((scope.channel for scope in self.scopes), 0))
 
+    def unread(self, message: Message) -> bool:
+        return message.sender not in self.viewer_names and message.seq not in self.seen_sequences
+
     def observe(self, message: Message, metrics: DisplayMetrics) -> None:
-        clocks, unread = metrics
-        for scope in self.activity_scopes:
+        clocks, counts = metrics
+        unread = self.unread(message)
+        for scope in self.scopes:
             if scope.includes(message):
                 last_message, last_user = clocks[scope.channel]
                 clocks[scope.channel] = (
@@ -40,10 +44,7 @@ class DisplayMetricScope:
                     max(last_user, message.timestamp)
                     if ReadLedger.human(message.sender_role) else last_user,
                 )
-        if message.sender not in self.viewer_names:
-            for scope in self.scopes:
-                if scope.unread(message):
-                    unread[scope.channel] += 1
+                counts[scope.channel] += int(unread)
 
 
 @dataclass(frozen=True)
@@ -51,15 +52,14 @@ class DisplayCheckpoint(AppendCheckpoint):
     semantics: DisplayMetricScope
     activity: dict[str, tuple[float, float]]
     counts: dict[str, int]
-    schema: Literal[2] = field(default=2, kw_only=True)
+    schema: Literal[3] = field(default=3, kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         if any(value < 0 for value in self.counts.values()):
             raise ValueError("Unread projection count must be nonnegative")
-        expected = ({scope.channel for scope in self.semantics.activity_scopes},
-                    {scope.channel for scope in self.semantics.scopes})
-        if (self.activity.keys(), self.counts.keys()) != expected:
+        expected = {scope.channel for scope in self.semantics.scopes}
+        if self.activity.keys() != expected or self.counts.keys() != expected:
             raise ValueError("Projection metrics differ from the captured channel scope")
 
     @property
@@ -74,38 +74,33 @@ class DisplayCheckpoint(AppendCheckpoint):
         """Reuse each answer only while its own inclusion history agrees."""
         metrics = semantics.empty_metrics
         clocks, counts = metrics
-        previous_activity = {scope.channel: scope for scope in self.semantics.activity_scopes}
-        previous_unread = {scope.channel: scope for scope in self.semantics.scopes}
-        rebuild_activity, rebuild_unread, changed_reads = [], [], []
-        for scope in semantics.activity_scopes:
-            previous = previous_activity.get(scope.channel)
-            if previous is not None and scope.same_projection(previous):
-                clocks[scope.channel] = self.activity[scope.channel]
-            else:
-                rebuild_activity.append(scope)
+        previous_scopes = {scope.channel: scope for scope in self.semantics.scopes}
+        rebuild, changed_reads = [], []
+        same_reads = semantics.seen_sequences == self.semantics.seen_sequences
         for scope in semantics.scopes:
-            previous = previous_unread.get(scope.channel)
-            if (previous is not None and scope.same_projection(previous)
-                    and semantics.viewer_names == self.semantics.viewer_names):
-                counts[scope.channel] = self.counts[scope.channel]
-                if scope.seen_sequences != previous.seen_sequences:
-                    changed_reads.append((previous, scope))
-            else:
-                rebuild_unread.append(scope)
-        rebuilt = DisplayMetricScope(tuple(rebuild_unread), tuple(rebuild_activity),
-                                     semantics.viewer_names)
-        changed_sequences = frozenset(
-            seq for previous, scope in changed_reads
-            for seq in previous.seen_sequences ^ scope.seen_sequences
-        )
+            previous = previous_scopes.get(scope.channel)
+            if scope == previous:
+                clocks[scope.channel] = self.activity[scope.channel]
+                if semantics.viewer_names == self.semantics.viewer_names:
+                    counts[scope.channel] = self.counts[scope.channel]
+                    if not same_reads:
+                        changed_reads.append(scope)
+                    continue
+            rebuild.append(scope)
+        rebuilt = DisplayMetricScope(tuple(rebuild), semantics.viewer_names,
+                                     semantics.seen_sequences)
+        changed_sequences = (self.semantics.seen_sequences ^ semantics.seen_sequences
+                             if changed_reads else frozenset())
         records = (opened.public_records(before_offset=self.offset)
-                   if rebuild_activity or rebuild_unread else
+                   if rebuild else
                    opened.public_records_for(changed_sequences, before_offset=self.offset))
         for message, _ in records:
             rebuilt.observe(message, metrics)
-            if message.sender not in semantics.viewer_names:
-                for previous, scope in changed_reads:
-                    counts[scope.channel] += int(scope.unread(message)) - int(previous.unread(message))
+            delta = int(semantics.unread(message)) - int(self.semantics.unread(message))
+            if delta:
+                for scope in changed_reads:
+                    if scope.includes(message):
+                        counts[scope.channel] += delta
         return metrics
 
 
@@ -114,7 +109,8 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
 
     def __init__(self, bus_path: Path, viewer: str):
         digest = hashlib.sha256(viewer.encode()).hexdigest()
-        super().__init__(bus_path, bus_path.with_name(f"bus_display_{digest}.json"))
+        path = bus_path.with_name(f"bus_display_{self.record_type.schema}_{digest}.json")
+        super().__init__(bus_path, path)
 
     def snapshot(self, opened: OpenedWireSnapshot,
                  semantics: DisplayMetricScope) -> DisplayCheckpoint | None:

@@ -1009,25 +1009,6 @@ class ContextManifest:
             raise ValueError("Source is outside the original recorded context segment")
         return ContextSourceText(source.public_description(), source.public_text(comms))
 
-    def changed_from_history(self, history: tuple[ContextManifest, ...]) -> dict:
-        """Compare with the previous original turn at this sealed wire position.
-
-        A turn's immutable ID and allocation survive a rename; its recorded
-        spelling remains original evidence. Later observations cannot be this
-        historical manifest's predecessor.
-        """
-        earlier = reversed(history)
-        try:
-            next(manifest for manifest in earlier if manifest == self)
-        except StopIteration as error:
-            raise ValueError("Context manifest is outside the original history") from error
-        try:
-            previous = next(manifest for manifest in earlier
-                            if not self.turn.same_recording(manifest.turn))
-        except StopIteration as error:
-            raise ValueError("No preceding recorded turn exists for comparison") from error
-        return self.changed_since(previous)
-
     def changed_since(self, previous: ContextManifest) -> dict:
         """An inspection projection, never a retained input copy."""
         return {

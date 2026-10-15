@@ -95,7 +95,7 @@ def test_native_growth_during_page_preparation_keeps_the_captured_cut(tmp_path, 
     }}) + "\n")
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
     captured = comms.transcripts.capture_page_read("worker")
-    prepare = comms.transcripts.thread_transcript_page
+    prepare = comms.transcripts._thread_transcript_page
 
     def append_after_page(*args, **kwargs):
         page = prepare(*args, **kwargs)
@@ -105,7 +105,7 @@ def test_native_growth_during_page_preparation_keeps_the_captured_cut(tmp_path, 
             }}) + "\n")
         return page
 
-    monkeypatch.setattr(comms.transcripts, "thread_transcript_page", append_after_page)
+    monkeypatch.setattr(comms.transcripts, "_thread_transcript_page", append_after_page)
     assert [event.text for event in captured.read().events] == ["captured answer"]
     assert captured.content_current()
     assert [

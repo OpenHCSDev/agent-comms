@@ -441,7 +441,7 @@ async def test_taking_a_store_lock_does_not_wake_directory_watchers(tmp_path):
         pass
     # Watch the lock file itself: any close-write of it would be a wake.
     watcher = open_wire_watcher(
-        WatchSource(tmp_path, frozenset({b".registry.json.lock"}))
+        WatchSource.file(tmp_path / ".registry.json.lock")
     )
     if not isinstance(watcher, WireChangeWatch):
         pytest.skip("Native file notifications are unavailable")

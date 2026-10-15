@@ -110,6 +110,15 @@ class TranscriptRouteRevision:
     database: FileRevision | None
     journal: FileRevision | None
 
+    @classmethod
+    def capture(cls, database: Path) -> TranscriptRouteRevision:
+        """Capture committed route storage; an empty WAL carries no route change."""
+        journal = FileRevision.capture(database.with_name(database.name + "-wal"))
+        return cls(
+            FileRevision.capture(database),
+            journal if journal is not None and journal.size else None,
+        )
+
 
 class TranscriptRoutes:
     filename = "transcript_routes.sqlite3"
@@ -120,10 +129,7 @@ class TranscriptRoutes:
 
     def revision(self) -> TranscriptRouteRevision:
         """SQLite owns its committed data in the database or its WAL file."""
-        return TranscriptRouteRevision(
-            FileRevision.capture(self.database_path),
-            FileRevision.capture(self.database_path.with_name(self.database_path.name + "-wal")),
-        )
+        return TranscriptRouteRevision.capture(self.database_path)
 
     def snapshot(self, destination: Path) -> None:
         """Retain a consistent current annotation store for attached history."""

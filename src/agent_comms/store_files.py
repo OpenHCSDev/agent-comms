@@ -230,6 +230,30 @@ def _store_lock(
             yield lock
 
 
+@contextmanager
+def _store_read_lock(
+    store_path: Path,
+    *,
+    blocking: bool = True,
+    contention: StoreLockContention | None = None,
+) -> Iterator[StoreLock]:
+    """Share source custody, escalating only when its checkpoint needs repair."""
+    from .private_bus_checkpoint import CheckpointNeedsRepair
+
+    with ExitStack() as resources:
+        try:
+            lock = resources.enter_context(
+                _store_lock(
+                    store_path, blocking=blocking, shared=True, contention=contention
+                )
+            )
+        except CheckpointNeedsRepair:
+            lock = resources.enter_context(
+                _store_lock(store_path, blocking=blocking, contention=contention)
+            )
+        yield lock
+
+
 @asynccontextmanager
 async def _async_store_lock(
     store_path: Path,

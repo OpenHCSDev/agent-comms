@@ -17,6 +17,35 @@ def prepared(root):
     return comms
 
 
+def test_conversation_persisted_pairs_decode_once_without_an_encode_round_trip():
+    from unittest.mock import patch
+
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.read_basis import Conversation
+    from agent_comms.thread_identity import ThreadIncarnation
+
+    conversation = Conversation(participants=(ThreadIncarnation("alice", 1.0),))
+    encoded = conversation.to_wire()
+    assert encoded == {"target": "", "participants": [["alice", 1.0]]}
+    with patch.object(FieldCodec, "encode", side_effect=AssertionError("Already decoded")):
+        assert Conversation.from_wire(encoded) == conversation
+    assert encoded == {"target": "", "participants": [["alice", 1.0]]}
+
+
+@pytest.mark.parametrize("raw", [
+    {"target": "#team", "participants": [], "unknown": 1},
+    {"target": 2, "participants": []},
+    {"participants": [["alice", True]]},
+    {"participants": [["alice"]]},
+    {"participants": {}},
+])
+def test_conversation_pair_boundary_retains_strict_codec_validation(raw):
+    from agent_comms.read_basis import Conversation
+
+    with pytest.raises((TypeError, ValueError)):
+        Conversation.from_wire(raw)
+
+
 def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     comms = Comms(tmp_path)
     comms.messaging.initialize_private_initial_protocol()

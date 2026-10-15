@@ -8,13 +8,13 @@ from dataclasses import dataclass, field, replace
 
 from .channel_targets import BuiltinChannel, Tag
 from .channels import Channel, SavedView, ViewPredicate
-from .display_order import ChannelSort, ThreadSort
+from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
 from .thread_provenance import ThreadProvenance
 
 
 @dataclass(frozen=True, slots=True)
 class ChannelPreferences:
-    order: ThreadSort = ThreadSort.CREATED
+    order: type[ThreadSort] = CreatedThreadSort
     created_at: float = 0.0
     pinned: bool = False
     parent: str | None = None
@@ -41,7 +41,7 @@ class CatalogDocument:
     tags: frozenset[str] = frozenset()
     preferences: dict[str, ChannelPreferences] = field(default_factory=dict)
     saved_views: dict[str, SavedView] = field(default_factory=dict)
-    list_order: ChannelSort = ChannelSort.NAME
+    list_order: type[ChannelSort] = NameChannelSort
 
     def __post_init__(self) -> None:
         self.validate()

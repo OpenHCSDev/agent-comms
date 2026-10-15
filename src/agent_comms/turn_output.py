@@ -57,6 +57,10 @@ class TurnOutput:
             self.failure = None
         self.error_message = None
 
+    def raise_if_failed(self, proof, provider: str, model: str) -> None:
+        if self.failure is not None:
+            self.declared_failure.raise_native(proof, provider, model)
+
     @property
     def declared_failure(self) -> failures.TurnFailure:
         failure = self.failure

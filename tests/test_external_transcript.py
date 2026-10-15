@@ -1,6 +1,10 @@
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.external_transcript import ExternalTranscriptRead
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
@@ -40,6 +44,43 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
     assert newest.has_older and not older.has_older
     later = comms.transcripts.thread_transcript_page("codex", after=older.after)
     assert [event.text for event in later.events] == ["Hello"]
+
+
+def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch):
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(Thread("codex", frozenset(), str(tmp_path)))
+    transcript = comms.transcripts.external("codex")
+    transcript.draft(
+        turn_id="turn", item_id="reply", events=(AssistantTranscript("Writing"),)
+    )
+    read = comms.transcripts.capture_page_read("codex")
+    reading_draft = threading.Event()
+    release = threading.Event()
+    current_draft = ExternalTranscriptRead.current_draft
+
+    def pause_draft(source):
+        draft = current_draft(source)
+        reading_draft.set()
+        assert release.wait(timeout=5)
+        return draft
+
+    monkeypatch.setattr(ExternalTranscriptRead, "current_draft", pause_draft)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        page = executor.submit(read._read_page)
+        assert reading_draft.wait(timeout=5)
+        finish = executor.submit(
+            transcript.finish,
+            turn_id="turn",
+            item_id="reply",
+            events=(AssistantTranscript("Finished"),),
+        )
+        finish.result(timeout=5)
+        release.set()
+        captured_page, captured_draft = page.result(timeout=5)
+
+    assert captured_page.events == ()
+    assert captured_draft.events[0].text == "Writing"
+    assert transcript.current_draft() is None
 
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):

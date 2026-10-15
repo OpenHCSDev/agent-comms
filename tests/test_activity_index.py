@@ -1,6 +1,8 @@
 """Append-aware activity snapshots preserve the existing JSONL recovery contract."""
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import pytest
@@ -31,18 +33,56 @@ def test_appends_parse_only_new_records_and_do_not_mutate_published_snapshots(tm
     assert "new-worker" not in previous
 
 
-def test_fresh_reader_loads_latest_threads_without_replaying_activity_history(tmp_path):
+def test_fresh_reader_preserves_latest_threads_and_sees_append(tmp_path):
     path = tmp_path / "activity.jsonl"
     path.write_text("".join(encoded(f"worker-{index % 10}") + "\n" for index in range(3000)))
-    assert len(ActivityLog(path).all_current()) == 10
-    with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
-        assert len(ActivityLog(path).all_current()) == 10
-        assert sum(call.args[0] is Activity for call in parse.call_args_list) == 10
-    ActivityLog(path).emit(Activity("new-worker", ActivityState.THINKING, "latest"))
-    with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
-        current = ActivityLog(path).all_current()
-        assert current["new-worker"].detail == "latest"
-        assert sum(call.args[0] is Activity for call in parse.call_args_list) == 11
+    previous = ActivityLog(path).all_current()
+    assert set(previous) == {f"worker-{index}" for index in range(10)}
+    assert ActivityLog(path).all_current() == previous
+    appended = Activity("new-worker", ActivityState.THINKING, "latest")
+    ActivityLog(path).emit(appended)
+    assert ActivityLog(path).all_current() == {**previous, "new-worker": appended}
+
+
+def test_competing_readers_do_not_return_an_older_published_cut(tmp_path, monkeypatch):
+    from agent_comms.activity_checkpoint import ActivityCheckpoint
+
+    path = tmp_path / "activity.jsonl"
+    log = ActivityLog(path)
+    log.emit(Activity("a", ActivityState.THINKING))
+    log.all_current()
+    log.emit(Activity("b", ActivityState.THINKING))
+    earlier_size = path.stat().st_size
+    earlier_ready, later_ready = threading.Event(), threading.Event()
+    publish_earlier, publish_later = threading.Event(), threading.Event()
+    capture = ActivityCheckpoint.capture
+    later_size = None
+
+    def suspended_capture(cls, stream, revision, latest, offset):
+        if revision.size == earlier_size:
+            earlier_ready.set()
+            assert publish_earlier.wait(5)
+        elif revision.size == later_size:
+            later_ready.set()
+            assert publish_later.wait(5)
+        return capture(stream, revision, latest, offset)
+
+    monkeypatch.setattr(ActivityCheckpoint, "capture", classmethod(suspended_capture))
+    with ThreadPoolExecutor(max_workers=2) as readers:
+        earlier = readers.submit(log.all_current)
+        assert earlier_ready.wait(5)
+        log.emit(Activity("c", ActivityState.THINKING))
+        later_size = path.stat().st_size
+        later = readers.submit(log.all_current)
+        try:
+            assert later_ready.wait(5)
+            publish_earlier.set()
+            assert set(earlier.result(5)) == {"a", "b"}
+            publish_later.set()
+            assert set(later.result(5)) == {"a", "b", "c"}
+        finally:
+            publish_earlier.set()
+            publish_later.set()
 
 
 def test_fresh_reader_rebuilds_after_activity_rewrite_before_append(tmp_path):

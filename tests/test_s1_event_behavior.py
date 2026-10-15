@@ -86,6 +86,22 @@ class CompactionAbortCase(CompactionCase):
         )
 
 
+class ContextCase(EffectCase):
+    def body(self):
+        return (
+            ae.AgentInfo(model="model", session_name="saved", context_used=20, context_size=1000),
+            ae.ContextInfo(context_used=None, context_size=1000),
+            ae.ContextInfo(context_used=35, context_size=1000),
+            ae.Chunk("answer"),
+        )
+
+    async def assert_effect(self, execution, progress):
+        await super().assert_effect(execution, progress)
+        info = execution.runner.comms.agents.agent_info_of(execution.thread_name)
+        assert (info.model, info.session_name) == ("model", "saved")
+        assert (info.context_used, info.context_size) == (35, 1000)
+
+
 class SettingsCase(EffectCase):
     def body(self):
         return (
@@ -244,6 +260,35 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     assert observed.index(ae.StreamSettled) < observed.index(ae.Done)
     if issubclass(case, SettingsCase):
         assert ae.ModelChanged in observed and ae.ThinkingChanged in observed
+
+
+async def test_usage_observation_keeps_metadata_without_reattachment(owner_turn, monkeypatch):
+    execution, progress = owner_turn
+    comms, name = execution.runner.comms, execution.thread_name
+    comms.agents.observe_runtime_info(name, ae.AgentInfo(
+        model="test/model", session_name="saved", context_used=20, context_size=1000,
+    ))
+
+    async def unexpected_metadata(event):
+        pytest.fail("Usage observation invoked native identity/configuration lifecycle")
+
+    monkeypatch.setattr(progress, "before_native_metadata", unexpected_metadata)
+    monkeypatch.setattr(progress, "after_native_metadata", unexpected_metadata)
+
+    class SampledContext(ae.ContextInfo):
+        """Another producer needs no new dispatch or persistence enrollment."""
+
+    await progress.consume(SampledContext(context_used=None, context_size=1000))
+    info = comms.agents.agent_info_of(name)
+    assert (info.model, info.session_name) == ("test/model", "saved")
+    assert (info.context_used, info.context_size) == (None, 1000)
+    await progress.consume(SampledContext(context_used=35, context_size=1000))
+    comms.agents.observe_runtime_info(name, ae.NativeMetadataObservation(
+        model="test/new-model", session_name="renamed",
+    ))
+    info = comms.agents.agent_info_of(name)
+    assert (info.model, info.session_name) == ("test/new-model", "renamed")
+    assert (info.context_used, info.context_size) == (35, 1000)
 
 
 @pytest.mark.parametrize("after_stream", [False, True])

@@ -90,16 +90,10 @@ class SessionLifecycle:
             methods = [
                 TerminalAuthMethod(
                     type="terminal",
-                    id=f"pi-login-{provider or 'all'}",
-                    name=name,
-                    description="Sign in using Pi's native provider UI",
-                    args=["--login", provider] if provider else ["--login"],
-                )
-                for provider, name in (
-                    ("openai-codex", "ChatGPT subscription"),
-                    ("openrouter", "OpenRouter"),
-                    ("openai", "OpenAI API"),
-                    ("", "Other Pi provider"),
+                    id="pi-login",
+                    name="Connect a provider",
+                    description="Choose a provider and sign in using Pi's native UI",
+                    args=["--login"],
                 )
             ]
         return InitializeResponse(
@@ -310,7 +304,7 @@ class SessionLifecycle:
             return name
 
     async def observe_native_configuration(
-        self, session_id: str, thread_name: str, event: events.AgentInfo
+        self, session_id: str, thread_name: str, event: events.NativeMetadataObservation
     ) -> None:
         """Initialize only unset configuration from its actual native producer."""
         await Coordination.run_worker(partial(

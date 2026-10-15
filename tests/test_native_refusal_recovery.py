@@ -154,6 +154,8 @@ async def test_exhausted_empty_responses_become_typed_provider_failure():
     reason = "Provider returned no authoritative response"
     from agent_comms.turn_output import TurnOutput
 
+    from agent_comms.turn_failure import ModelRequestFailed
+
     turn = object.__new__(TrackedTurnSession)
     turn.output = TurnOutput()
     turn.terminal = PendingTrackedTerminal()
@@ -164,14 +166,10 @@ async def test_exhausted_empty_responses_become_typed_provider_failure():
         "finalError": reason,
     }))
 
-    from agent_comms.turn_failure import ProviderRetryExhausted
-
     with pytest.raises(native_pi.NativePiTerminalFailure) as caught:
-        turn.terminal.raise_failure(
-            None, "provider", "model", turn.output.declared_failure
-        )
+        turn.output.raise_if_failed(None, "provider", "model")
     assert reason in str(caught.value)
-    assert caught.value.failure == ProviderRetryExhausted(reason)
+    assert caught.value.failure == ModelRequestFailed(reason)
 
 
 @pytest.mark.asyncio

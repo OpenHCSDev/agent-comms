@@ -4,8 +4,12 @@ from acp.schema import SessionConfigSelectOption
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
-from agent_comms.config_options import ModelConfigOption
+from agent_comms.config_options import InvalidConfigChoice, ModelConfigOption
 from agent_comms.login import run_login
+from agent_comms.native_arguments import NativeArguments
+from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 
 
@@ -13,9 +17,36 @@ async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
     agent = CommsAgent(wire(tmp_path), agent_bin="pi")
     assert not (await agent.initialize(1, {})).auth_methods
     methods = (await agent.initialize(1, {"auth": {"terminal": True}})).auth_methods
-    codex = next(method for method in methods if method.id == "pi-login-openai-codex")
-    assert codex.model_dump(by_alias=True)["type"] == "terminal"
-    assert codex.args == ["--login", "openai-codex"]
+    method, = methods
+    assert method.id == "pi-login"
+    assert method.model_dump(by_alias=True)["type"] == "terminal"
+    assert method.args == ["--login"]
+
+
+async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_model(
+    tmp_path, monkeypatch
+):
+    async def discover(self, thread):
+        return []
+
+    monkeypatch.setattr(ModelConfigOption, "discover", discover)
+    option = ModelConfigOption(
+        "pi", NativeArguments.parse(()),
+        RestartEnvironment(native_config=tmp_path, agent_directory=tmp_path),
+    )
+    thread = Thread(name="setup", tags=frozenset(), worktree=str(tmp_path))
+    advertised = await option.describe(thread)
+    assert advertised.current_value == ""
+    assert [choice.value for choice in advertised.options] == [""]
+    with pytest.raises(InvalidConfigChoice):
+        await option.validate(thread, "")
+
+    from dataclasses import replace
+
+    selected = replace(thread, model="saved/model")
+    with pytest.raises(NativePiUnavailable, match="saved/model"):
+        await option.describe(selected)
+    assert selected.model == "saved/model"
 
 
 def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
@@ -41,7 +72,7 @@ def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
 
 
 async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, fake_native_catalog
 ):
     revision = [0]
     monkeypatch.setattr("agent_comms.owner_launch.RestartEnvironment.auth_revision", lambda self: (revision[0], 0))
@@ -53,7 +84,10 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
         return models
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)
-    agent = canonical_agent(wire(tmp_path), agent_args=["--model", "test/base"])
+    agent = canonical_agent(
+        wire(tmp_path), agent_bin=NativeArguments.owner_launcher(),
+        agent_args=["--model", "test/base"],
+    )
     # Exercise the explicit refresh path without the background drain racing it.
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session_id: None)
     updates = []

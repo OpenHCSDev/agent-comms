@@ -162,8 +162,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
             return original(row)
 
         monkeypatch.setattr(Message, "from_wire", measured)
-        activity, unread = captured.views.presentation.display_view_metrics(
-            source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names)
+        activity, unread = captured.views.presentation.display_view_metrics(source, basis)
         clocks = captured.bus.last_sent_timestamps(source=source)
         assert clocks["PR111"] == first.timestamp
         assert clocks.get("fixer", 0) < appended.timestamp
@@ -188,13 +187,11 @@ def test_computed_checkpoint_stays_with_the_same_opened_cut(wired, monkeypatch):
             return original(row)
 
         monkeypatch.setattr(Message, "from_wire", measured)
-        first_metrics = wired.views.presentation.display_view_metrics(
-            source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names)
+        first_metrics = wired.views.presentation.display_view_metrics(source, basis)
         first_clocks = wired.bus.last_sent_timestamps(source=source)
         assert first.seq in parsed
         parsed.clear()
-        assert wired.views.presentation.display_view_metrics(
-            source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names) == first_metrics
+        assert wired.views.presentation.display_view_metrics(source, basis) == first_metrics
         assert wired.bus.last_sent_timestamps(source=source) == first_clocks
         assert parsed == []
 
