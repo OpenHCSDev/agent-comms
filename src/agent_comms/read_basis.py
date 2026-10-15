@@ -39,19 +39,19 @@ class Conversation:
 
     def to_wire(self) -> dict:
         """Encode the persisted participant pair format."""
-        data = FieldCodec.encode(self)
-        data["participants"] = [list(astuple(participant)) for participant in self.participants]
+        data = FieldCodec.encode(replace(self, participants=()))
+        data["participants"] = FieldCodec.encode(tuple(astuple(p) for p in self.participants))
         return data
 
     @classmethod
     def from_wire(cls, raw: dict) -> Conversation:
         """Decode participant pairs once at the persisted-key boundary."""
         data = dict(raw)
-        data["participants"] = [
-            FieldCodec.encode(ThreadIncarnation(*FieldCodec.decode(tuple[str, float], item)))
-            for item in data["participants"]
-        ]
-        return FieldCodec.decode(cls, data)
+        pairs = FieldCodec.decode(tuple[tuple[str, float], ...], data.pop("participants"))
+        return replace(
+            FieldCodec.decode(cls, data),
+            participants=tuple(ThreadIncarnation(*pair) for pair in pairs),
+        )
 
 
 @dataclass(frozen=True, slots=True)
