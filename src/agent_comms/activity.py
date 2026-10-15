@@ -14,7 +14,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -211,12 +211,23 @@ class UnavailableDrainReadiness(DiagnosticDrainReadiness):
 class ActivityData:
     """Shared declared activity fields; observations and events own their boundary."""
 
+    detail_limit: ClassVar[int] = 200
+
     thread: str
     state: ActivityState
     detail: str = ""
     timestamp: float = field(
         default_factory=time.time, metadata={"wire_name": "ts", "wire_required": True}
     )
+
+    @classmethod
+    def format_detail(cls, detail: str) -> str:
+        """Bound new status text; stored records still use strict construction."""
+        return detail if len(detail) <= cls.detail_limit else detail[:cls.detail_limit - 1] + "…"
+
+    def with_status(self, state: ActivityState, detail: str) -> Self:
+        """Project current status without changing this activity's provenance."""
+        return replace(self, state=state, detail=self.format_detail(detail))
 
     def presentation(self, title: str) -> ThreadPresentation:
         return self.state.presentation(title, self.detail)
@@ -226,8 +237,8 @@ class ActivityData:
             raise RelationViolationError("Activity thread cannot be empty.")
         if self.detail and not self.state.busy:
             raise RelationViolationError("Idle activity cannot carry a detail.")
-        if len(self.detail) > 200:
-            raise ValueError("Activity detail cannot exceed 200 characters.")
+        if len(self.detail) > self.detail_limit:
+            raise ValueError(f"Activity detail cannot exceed {self.detail_limit} characters.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -235,6 +246,11 @@ class Activity(ActivityData):
     """Original persisted event; its nullable diagnostic is external metadata."""
 
     diagnostic: DrainDiagnostic | None = field(default=None, metadata={"wire_omit_default": True})
+
+    @classmethod
+    def create(cls, thread: str, state: ActivityState, detail: str = "") -> Self:
+        """Create a new bounded status, rather than decoding an existing event."""
+        return cls(thread, state, cls.format_detail(detail))
 
     def fold_into(self, latest: dict[str, Activity]) -> None:
         """Apply this event to the latest-per-thread map; a deletion leaves no entry."""

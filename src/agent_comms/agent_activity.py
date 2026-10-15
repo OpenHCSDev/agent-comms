@@ -114,7 +114,7 @@ class AgentActivity:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
         with _store_lock(self._wire_lock_path, shared=True):
             canonical = self.registry.require(thread).name
-            self._emit_activity(Activity(thread=canonical, state=state, detail=detail))
+            self._emit_activity(Activity.create(canonical, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot | None = None) -> ObservedActivity:
         snapshot = snapshot or self.registry.snapshot()
@@ -192,7 +192,7 @@ class AgentActivity:
             lease = leased.turn_lease
             assert lease is not None
             try:
-                self.registry.transition_turn(lease, PreparingPhase(detail[:200]))
+                self.registry.transition_turn(lease, PreparingPhase(detail))
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
