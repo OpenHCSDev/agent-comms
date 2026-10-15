@@ -28,6 +28,7 @@ from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
+from .display_references import DisplayReferences
 from .thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
@@ -764,6 +765,7 @@ class CoordinationSnapshot:
     show_stopped: bool = True
     show_archived: bool = False
     read_marker_notice: str | None = None
+    references: DisplayReferences = field(default_factory=DisplayReferences)
 
     @classmethod
     def capture(
@@ -786,6 +788,7 @@ class CoordinationSnapshot:
                 show_stopped=show_stopped, show_archived=show_archived,
             ),
             unread=unread, last_sent=sent, channel_unread=channel_unread,
+            references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, show_stopped=show_stopped,
             show_archived=show_archived, read_marker_notice=read_marker_notice,
         )
