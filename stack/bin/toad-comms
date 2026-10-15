@@ -35,8 +35,7 @@ if [[ -z "$runtime" ]]; then
         exit 1
     fi
     runtime="$(dirname "$(readlink -f "$acp_launcher")")"
-    # The published frontend can advance without replacing backend owners.
-    toad="$(command -v toad || true)"
+    toad="$runtime/toad"
 else
     toad="$runtime/toad"
 fi
@@ -50,7 +49,7 @@ fi
 # Inherited roots from the old stack must not send Toad to a stale bus.
 unset AGENT_COMMS_ROOT AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE
 unset PYTHONPATH
-unset AGENT_COMMS_THREAD AGENT_COMMS_MANAGED PI_PARENT_ID PI_TASK PI_WORKTREE PI_PROMPT
+unset AGENT_COMMS_THREAD AGENT_COMMS_MANAGED PI_AGENT_ID PI_PARENT_ID PI_TASK PI_WORKTREE PI_PROMPT
 
 project="$PWD"
 session=()
