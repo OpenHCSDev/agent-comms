@@ -849,6 +849,7 @@ class WireRevision:
     activity: FileRevision | None
     runtime_info: FileRevision | None
     reads: FileRevision | None
+    native_unread: FileRevision | None
     goal_waits: FileRevision | None
     relationships: FileRevision | None
     notifications: tuple[FileRevision | None, ...]
