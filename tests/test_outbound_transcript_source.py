@@ -237,7 +237,7 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
     source = AssignedTranscriptSource.for_thread(
         comms.root, comms.registry.require("beta"), comms.bus.log
     )
-    original = source.rows("w.seq=?", (reply.seq,))
+    original = tuple(source.rows("w.seq=?", (reply.seq,)))
     lookup = stable_thread_lookup(source.recipient.created_at)
     intent = TurnRouting((initial.message.reference,), MessageRoute("beta", ("sender", "alpha")))
     # A later send can fail; this first committed subset stays a valid relation.

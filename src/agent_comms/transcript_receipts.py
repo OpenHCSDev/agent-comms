@@ -7,6 +7,7 @@ A display cursor advances each only when that source's record is consumed.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
@@ -225,7 +226,9 @@ class AssignedTranscriptSource:
     def for_thread(cls, root, thread, log):
         return cls(root, thread.incarnation, log)
 
-    def rows(self, predicate="1", parameters=(), *, limit=1, ascending=False):
+    def rows(
+        self, predicate="1", parameters=(), *, limit=1, ascending=False,
+    ) -> Iterator[CommittedDelivery]:
         return self.log.conversation_sources(
             stable_thread_lookup(self.recipient.created_at),
             predicate,
@@ -300,10 +303,10 @@ class AssignedTranscriptSource:
         if entry.final_reply:
             if routing is not None and routing.publications:
                 marks = ",".join("?" for _ in routing.publications)
-                originals = self.rows(
+                originals = tuple(self.rows(
                     f"w.seq IN ({marks})", tuple(ref.seq for ref in routing.publications),
                     limit=len(routing.publications),
-                )
+                ))
                 published = all(
                     any(original.message.reference == ref
                         and original.audience.sender_lookup == lookup for original in originals)
@@ -311,9 +314,9 @@ class AssignedTranscriptSource:
                 )
             if not published and references:
                 marks = ",".join("?" for _ in references)
-                originals = self.rows(
+                originals = tuple(self.rows(
                     f"w.seq IN ({marks})", tuple(ref.seq for ref in references), limit=len(references),
-                )
+                ))
                 published = all(
                     any(original.message.reference == ref
                         and original.audience.sender_lookup == lookup for original in originals)
@@ -329,11 +332,11 @@ class AssignedTranscriptSource:
             if isinstance(event, UserTranscript) and event.routed:
                 requests = event.routing.requests
                 marks = ",".join("?" for _ in requests)
-                originals = self.rows(
+                originals = tuple(self.rows(
                     f"w.seq IN ({marks})",
                     tuple(reference.seq for reference in requests),
                     limit=len(requests),
-                )
+                ))
                 remaining = tuple(
                     reference
                     for reference in requests

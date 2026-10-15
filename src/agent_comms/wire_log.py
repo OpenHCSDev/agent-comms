@@ -240,8 +240,9 @@ class ConversationSourceWindowRequest:
     limit: int
     ascending: bool
 
-    def capture(self, source, lookup: str) -> ConversationSourceWindow:
-        rows = (
+    def capture(self, source, lookup: str) -> Iterator[CommittedDelivery]:
+        """Copy selected bytes now; decode them only as the consumer advances."""
+        return (
             source.conversation_sources(
                 lookup,
                 self.predicate,
@@ -250,9 +251,8 @@ class ConversationSourceWindowRequest:
                 ascending=self.ascending,
             )
             if self.limit
-            else ()
+            else iter(())
         )
-        return ConversationSourceWindow(self, tuple(rows))
 
     @classmethod
     def frontier(cls, log: WireLog, lookup: str) -> int:
@@ -273,7 +273,11 @@ class ConversationSourceWindowRequest:
         if not log.path.exists() and not log.metadata_path.exists():
             return tuple(ConversationSourceWindow(request, ()) for request in requests)
         with log.certified_read() as source:
-            return tuple(request.capture(source, lookup) for request in requests)
+            captured = tuple(request.capture(source, lookup) for request in requests)
+        return tuple(
+            ConversationSourceWindow(request, tuple(rows))
+            for request, rows in zip(requests, captured)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,10 +363,15 @@ class WireLog:
         yield source
         source.require_current()
 
-    def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
-        """Read an original window through its existing canonical barrier."""
+    def conversation_sources(
+        self, lookup, predicate, parameters, *, limit, ascending,
+    ) -> Iterator[CommittedDelivery]:
+        """Copy a bounded window under the lock; decode after releasing it."""
         request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending)
-        return request.capture_many(self, lookup, (request,))[0].sources
+        if not self.path.exists() and not self.metadata_path.exists():
+            return iter(())
+        with self.certified_read() as source:
+            return request.capture(source, lookup)
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.

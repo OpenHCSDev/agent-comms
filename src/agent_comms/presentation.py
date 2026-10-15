@@ -300,7 +300,7 @@ class MessageNotification:
         owner = registry.require(name)
         from .transcript_receipts import AssignedTranscriptSource
 
-        sources = AssignedTranscriptSource.for_thread(root, owner, log).rows(limit=limit)
+        sources = tuple(AssignedTranscriptSource.for_thread(root, owner, log).rows(limit=limit))
         from .notification_assignment import NotificationAssignment
 
         return cls.for_sources(
