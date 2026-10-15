@@ -404,7 +404,8 @@ class SQLiteSchemaDifference:
     def replace_trigger(self, db: sqlite3.Connection) -> None:
         """Apply this declaration difference without altering retained rows."""
         if self.stored is not None:
-            db.execute(f"DROP TRIGGER {_identifier(self.name)}")
+            name = self.name.replace('"', '""')
+            db.execute(f'DROP TRIGGER "{name}"')
         if self.declared is not None:
             db.execute(self.declared)
 

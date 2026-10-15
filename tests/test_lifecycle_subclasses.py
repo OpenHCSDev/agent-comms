@@ -126,7 +126,7 @@ def test_open_replaces_stale_trigger_and_removes_retired_trigger(tmp_path):
         db.execute("DROP TRIGGER attempt_insert_authorized")
         db.execute("CREATE TRIGGER attempt_insert_authorized BEFORE INSERT ON attempts "
                    "BEGIN SELECT RAISE(ABORT, 'obsolete authority'); END")
-        db.execute("CREATE TRIGGER retired_attempt_trigger BEFORE INSERT ON attempts "
+        db.execute('CREATE TRIGGER "retired attempt trigger" BEFORE INSERT ON attempts '
                    "BEGIN SELECT 1; END")
 
     with StandaloneCoordination(path) as store:
@@ -136,7 +136,7 @@ def test_open_replaces_stale_trigger_and_removes_retired_trigger(tmp_path):
         ).fetchone()[0]
         assert actual == AttemptRecord.schema_objects()["attempt_insert_authorized"]
         assert db.execute(
-            "SELECT name FROM sqlite_master WHERE name = 'retired_attempt_trigger'"
+            "SELECT name FROM sqlite_master WHERE name = 'retired attempt trigger'"
         ).fetchone() is None
         assert db.execute(
             "SELECT name, sql FROM sqlite_master WHERE type = 'table' ORDER BY name"
