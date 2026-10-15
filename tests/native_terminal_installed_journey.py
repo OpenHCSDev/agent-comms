@@ -2,7 +2,8 @@
 
 Run against an isolated installed wheel with an explicit private root/package.
 Never imports or replays a prior saved input. The caller supplies an isolated
-copy of provider configuration; the original configuration is never written.
+copy of provider configuration, including the native models-store.json;
+the original configuration is never written.
 """
 import argparse
 import asyncio
@@ -10,10 +11,11 @@ import json
 import os
 from pathlib import Path
 
-from acp.schema import TextContentBlock
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
+from agent_comms.threads import Thread
+from agent_comms.wire_record import WireRecord
 
 
 class Client:
@@ -48,13 +50,17 @@ async def main(output, package, launcher, provider, model, thinking):
     try:
         await agent._runtime.start()
         opened = await agent.new_session(cwd=str(project), mcp_servers=[])
-        response = await agent.prompt(opened.session_id, [TextContentBlock(type='text', text=(
+        comms.registry.declare(Thread('verifier', frozenset(), str(project)))
+        instruction = (
             "Isolated native terminal verification. Use bash exactly once to run this "
             "command in the current directory: printf 'effect\\n' >> one-effect.txt . "
             "Do not read or modify any other file and do not retry the command. "
             "After it succeeds, reply with exactly NATIVE_TERMINAL_OK."
-        ))])
-        assert response.stop_reason == 'end_turn', response
+        )
+        original = comms.messaging.send_message('verifier', opened.session_id, instruction)
+        await agent.turns.run_agent_turn(
+            opened.session_id, opened.session_id, instruction, origins=(original,),
+        )
         assert effect.read_text() == 'effect\n'
         thread = comms.registry.require(opened.session_id)
         saved = Path(thread.session_file)
@@ -65,12 +71,20 @@ async def main(output, package, launcher, provider, model, thinking):
         finals = [message for message in messages if message.get('stopReason') == 'stop']
         assert len(users) == len(tools) == len(finals) == 1
         assert ''.join(item.get('text', '') for item in finals[0]['content']).strip() == 'NATIVE_TERMINAL_OK'
+        published = [json.loads(line) for line in comms.bus.log.path.read_text().splitlines()]
+        # Only this small, newly created private bus is inspected.
+        replies = [message for row in published
+                   for message in WireRecord.public_from_wire(row).messages()
+                   if message.sender == opened.session_id]
+        assert len(replies) == 1, replies
+        assert replies[0].target == 'verifier'
+        assert replies[0].body.strip() == 'NATIVE_TERMINAL_OK'
         (output / 'updates.json').write_text(json.dumps(client.updates, indent=2))
         (output / 'result.json').write_text(json.dumps({
             'provider': provider, 'model': model, 'thinking': thinking,
             'user_inputs': len(users), 'tool_results': len(tools),
             'successful_native_finals': len(finals), 'effect_lines': 1,
-            'acp_stop_reason': response.stop_reason, 'saved_session': str(saved),
+            'published_replies': len(replies), 'saved_session': str(saved),
         }, indent=2))
         print((output / 'result.json').read_text())
     finally:
