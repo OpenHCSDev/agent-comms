@@ -391,7 +391,7 @@ class DisplaySelection:
     @property
     def scopes(self) -> tuple[ChannelDisplayScope, ...]:
         return tuple(
-            ChannelDisplayScope.capture(channel, self.registry, seen=self.seen)
+            ChannelDisplayScope.capture(channel, self.registry)
             for channel in self.channels.values()
         )
 
@@ -403,11 +403,16 @@ class DisplaySelection:
             else frozenset()
         )
 
+    def require_viewer(self) -> str:
+        if self.viewer is None:
+            raise ValueError("Viewer metrics require a named viewer")
+        return self.viewer
+
     def scope(self, target: str) -> ChannelDisplayScope:
         channel = self.channels.get(target)
         if channel is None:
             raise ValueError(f"Unknown channel: {target!r}")
-        return ChannelDisplayScope.capture(channel, self.registry, seen=self.seen)
+        return ChannelDisplayScope.capture(channel, self.registry)
 
 
 class BusPresentation:
@@ -538,7 +543,7 @@ class BusPresentation:
                     if expected_scope is None:
                         raise ValueError("Channel display scope missing; refresh the displayed page.")
                     displayed = expected_scope.require_displayed()
-                    if not current.same_projection(expected_scope):
+                    if current != expected_scope:
                         raise ValueError("Channel display changed; refresh the displayed page.")
                     displayed.validate(
                         viewer, basis.registry, self.bus.reads.bus_identity(self.bus.log.path)
@@ -559,20 +564,17 @@ class BusPresentation:
     def display_view_metrics(
         self,
         source: OpenedWireSnapshot,
-        scopes: tuple[ChannelDisplayScope, ...],
-        activity_scopes: tuple[ChannelDisplayScope, ...],
-        viewer: str,
-        viewer_names: frozenset[str],
+        selection: DisplaySelection,
     ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
 
-        The caller supplies a canonical viewer and alias closure from the same
-        captured registry as the scopes. Never recanonicalize during this scan.
+        The captured selection owns channel inclusion, viewer aliases and read
+        membership. None is supplied independently by the metrics caller.
         Caches may be reused or published only for an unchanged bus revision.
         """
-        semantics = DisplayMetricScope(scopes, activity_scopes, viewer_names)
+        semantics = DisplayMetricScope(selection.scopes, selection.viewer_names, selection.seen)
         initial = semantics.empty_metrics
-        projected = self.display_index(viewer).snapshot(source, semantics)
+        projected = self.display_index(selection.require_viewer()).snapshot(source, semantics)
         if projected is None:
             metrics = initial
             for message, _ in source.public_records():

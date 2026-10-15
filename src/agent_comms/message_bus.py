@@ -20,7 +20,6 @@ from .read_basis import (
     DMDisplayScope,
     ListedDeliveries,
     MessageDisplayScope,
-    ViewUnread,
 )
 from .routing import DeliveryMessage, DeliveryScope, PendingCounts
 
@@ -55,7 +54,6 @@ class MessageBus:
         self._registry = registry
         self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
         self._pending_cache: dict[str, PendingCounts] = {}
-        self._view_unread_cache: dict[str, ViewUnread] = {}
         self._activity = self.log.register_append_index(BusActivityIndex(bus_path))
         self.publisher = Publisher(
             self.log,
@@ -65,41 +63,6 @@ class MessageBus:
             private_initial_writes=private_initial_writes,
             private_claim_writes=private_claim_writes,
         )
-
-    def view_unread_counts(
-        self,
-        viewer: str,
-        *,
-        display_scopes: tuple[ChannelDisplayScope, ...] | None = None,
-        viewer_names: frozenset[str] | None = None,
-    ) -> Mapping[str, int]:
-        """Human view cursors are independent of executors consuming their inboxes."""
-        viewer = self._registry.require(viewer).name
-        if display_scopes is None:
-            seen = self.reads.seen_sequences(viewer, self._registry.snapshot())
-            catalog = self._channels.read()
-            scopes = tuple(
-                ChannelDisplayScope(
-                    channel.name, catalog.history_targets(channel.name), seen_sequences=seen
-                )
-                for channel in catalog.views(self._registry.all_threads()).values()
-            )
-        else:
-            scopes = display_scopes
-        revision = (FileRevision.capture(self.log.path), viewer_names)
-        cached = self._view_unread_cache.get(viewer)
-        if cached is not None and cached.revision == revision and cached.scopes == scopes:
-            return dict(cached.counts)
-        counts = dict.fromkeys((scope.channel for scope in scopes), 0)
-        with self.log._record_snapshot() as (_, records):
-            for message, _ in records:
-                if message.sender in (viewer_names if viewer_names is not None else {viewer}):
-                    continue
-                for scope in scopes:
-                    if scope.unread(message):
-                        counts[scope.channel] += 1
-        self._view_unread_cache[viewer] = ViewUnread(revision, scopes, counts)
-        return dict(counts)
 
     def _activity_clocks(self, source: OpenedWireSnapshot | None = None):
         """The existing index borrows the same opened source after release."""
