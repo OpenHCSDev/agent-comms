@@ -186,6 +186,9 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
             while not waiting.done():
                 await readable(process)
                 process.results()
+                # The pipe resolved the Future; let its awaiting Task resume.
+                # An unchanged error no longer emits an unrelated extra wake.
+                await asyncio.sleep(0)
         assert await waiting == {}
         assert process.process.is_alive() and process.died is None
         assert comms.bus.log.path.read_bytes() == original

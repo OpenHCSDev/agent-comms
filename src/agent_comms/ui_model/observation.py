@@ -28,7 +28,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, Generic, Self, TypeVar, final
 
 from agent_comms.coordination_errors import (
     CoordinationError,
@@ -99,6 +99,7 @@ class Observation(ABC, Generic[InterestT]):
         """Subscribe to completion when this observation has unfinished preparation."""
 
 
+@final
 class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     """A strict stored-data read failed, not the observer or the whole UI.
 
@@ -112,12 +113,10 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     DEFERRED_READS = (CoordinationReadUnavailable, StaleRevision)
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, UnreadableHistory):
-            return NotImplemented
-        return type(self) is type(other) and self.args == other.args
+        return isinstance(other, UnreadableHistory) and self.args == other.args
 
     def __hash__(self) -> int:
-        return hash((type(self), self.args))
+        return hash(self.args)
 
     @classmethod
     def capture(cls, error: Exception) -> UnreadableHistory:
@@ -562,8 +561,7 @@ class ThreadReading(Observation[ObserveThreads]):
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         previous = self.observed
-        if (previous is not None and not previous.busy
-                and not revision.status_changed_since(previous.revision)):
+        if previous is not None and previous.current_at(revision):
             return
         presentations, unavailable, busy = {}, {}, set()
         for name in self.request.names:
@@ -697,6 +695,10 @@ class ThreadsObserved(Observed):
     unavailable: Mapping[str, UnreadableHistory]
     busy: frozenset[str]
     changed: frozenset[str]
+
+    def current_at(self, revision: WireRevision) -> bool:
+        """A busy result stays pending; a successful cut owns its read frontier."""
+        return not self.busy and not revision.status_changed_since(self.revision)
 
     def changed_since(self, previous: ThreadsObserved | None) -> frozenset[str]:
         """Read-state transitions and source-owned changes, independent of store churn."""
