@@ -220,7 +220,7 @@ class RecoverySnapshot:
         self, session, outcome, reason_code: str | None,
         boundary: NativeBoundary | None = None,
     ) -> None:
-        from .coordination_tables.attempts import AttemptRecord
+        from .coordination_tables.attempts import AttemptRecord, ReplayAssessments
         from .coordination_tables.assignments import WakeAssignment
         from .coordination_tables.executions import ExecutionRecord, CurrentExecutions
         from .coordination_tables.responses import ResponseObligation
@@ -235,6 +235,7 @@ class RecoverySnapshot:
             or not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead)
         ):
             raise RecoveryBlocked("settlement requires exact final done/death evidence")
+        ReplayAssessments.accumulate(db, execution.execution_id, outcome.replay_contribution)
         execution_state, response = outcome.disposition(self, attempt)
         session.release_resources(self, outcome, boundary)
         now = session.now(max(execution.updated_at_ms, attempt.updated_at_ms))

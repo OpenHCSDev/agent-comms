@@ -23,6 +23,7 @@ from agent_comms.attempt_states import (
     UnknownOutcomeAttempt,
     UnsuccessfulTerminal,
 )
+from agent_comms.attempt_recovery import MonitorEvidence
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
 from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionOrigin, ExecutionRecord
 from agent_comms.execution_states import DeferredExecution, FailedExecution
@@ -59,13 +60,41 @@ def test_attempt_transition_table_expands_declared_failure_subclasses():
         ]
 
 
-def test_unknown_settles_failed_in_current_store(tmp_path):
+@pytest.mark.parametrize("authorized", [False, True])
+def test_unknown_settles_failed_in_current_store(tmp_path, authorized):
     with ready(tmp_path / "coordination.sqlite3", origin=ExecutionOrigin.ACP) as store:
         _, fence = started(store)
-        outcome = store.attempts.fail_unknown(fence, expected_pointer_revision=1).value
+        if authorized:
+            store.attempts.observe_replay(
+                fence, expected_pointer_revision=1, expected_replay_revision=None,
+                facts=ReplayFact.NONE, replay_safe=True, side_effects_possible=False,
+            )
+            final = store.attempts.advance(
+                fence, PromptStartingAttempt, expected_pointer_revision=1,
+                backend_done=True, process_dead=True,
+            ).value
+            outcome = store.attempts.settle_nonpublication(
+                final.fence, expected_pointer_revision=1, outcome=UnknownOutcomeAttempt(),
+            ).value
+        else:
+            outcome = store.attempts.fail_unknown(fence, expected_pointer_revision=1).value
         assert type(outcome.attempt.lifecycle) is UnknownOutcomeAttempt
         assert type(outcome.execution.lifecycle) is FailedExecution
+        assert outcome.replay.facts & ReplayFact.UNKNOWN_EFFECTS
         assert not outcome.can_retry
+
+
+@pytest.mark.parametrize("outcome, contribution", [
+    (AttemptFailedAttempt(), ReplayFact.NONE),
+    (UnknownOutcomeAttempt(), ReplayFact.UNKNOWN_EFFECTS),
+])
+def test_monitor_evidence_preserves_its_outcome_and_owned_replay_contribution(outcome, contribution):
+    evidence = MonitorEvidence(
+        subprocess_dead=True, backend_done=True, reason_code="observed_exit",
+        observed_at_ms=1000, outcome=outcome,
+    )
+    assert evidence.outcome is outcome
+    assert evidence.outcome.replay_contribution == contribution
 
 
 @pytest.mark.parametrize("predecessor", [AttemptFailedAttempt, UnknownOutcomeAttempt])

@@ -8,12 +8,15 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError, RecoveryBlocked
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .coordination_errors import ResponseAdmissionBlocked
+
+if TYPE_CHECKING:
+    from .coordination_tables.attempts import ReplayFact
 
 
 @dataclass(frozen=True)
@@ -93,6 +96,12 @@ class LiveAttempt(AttemptState):
 
 
 class TerminalAttempt(AttemptState):
+    @property
+    def replay_contribution(self) -> ReplayFact:
+        from .coordination_tables.attempts import ReplayFact
+
+        return ReplayFact.NONE
+
     @property
     @abstractmethod
     def release_wording(self) -> str: ...
@@ -282,6 +291,12 @@ class UnsuccessfulTerminal(TerminalAttempt):
 
     failed = True
 
+    def disposition(self, snapshot, attempt):
+        from .execution_states import FailedExecution
+        from .obligation_states import FailedResponse
+
+        return FailedExecution(attempt.attempt_ordinal), FailedResponse()
+
     @classmethod
     def successors(cls):
         return ()
@@ -293,19 +308,19 @@ class RetryPredecessor:
     def permits_retry(self) -> bool:
         return True
 
+    def disposition(self, snapshot, attempt):
+        from .execution_states import DeferredExecution
+        from .obligation_states import DeferredResponse
+
+        if snapshot.retry_authorized:
+            return DeferredExecution(attempt.attempt_ordinal), DeferredResponse()
+        return super().disposition(snapshot, attempt)
+
 
 class AttemptFailedAttempt(RetryPredecessor, UnsuccessfulTerminal):
     @property
     def release_wording(self) -> str:
         return "Released files after a failed turn"
-
-    def disposition(self, snapshot, attempt):
-        from .execution_states import DeferredExecution, FailedExecution
-        from .obligation_states import DeferredResponse, FailedResponse
-
-        if snapshot.retry_authorized:
-            return DeferredExecution(attempt.attempt_ordinal), DeferredResponse()
-        return FailedExecution(attempt.attempt_ordinal), FailedResponse()
 
 
 class UnknownOutcomeAttempt(UnsuccessfulTerminal):
@@ -313,8 +328,8 @@ class UnknownOutcomeAttempt(UnsuccessfulTerminal):
     def release_wording(self) -> str:
         return "Released files after a turn with unknown outcome; read them before editing"
 
-    def disposition(self, snapshot, attempt):
-        from .execution_states import FailedExecution
-        from .obligation_states import FailedResponse
+    @property
+    def replay_contribution(self) -> ReplayFact:
+        from .coordination_tables.attempts import ReplayFact
 
-        return FailedExecution(attempt.attempt_ordinal), FailedResponse()
+        return ReplayFact.UNKNOWN_EFFECTS

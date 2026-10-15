@@ -221,9 +221,6 @@ class AttemptStore:
                 raise StaleRevision("pointer revision changed")
             if bool(snapshot.publication_intents):
                 raise PublicationUncertain("UNKNOWN failure cannot resolve frozen publication")
-            ReplayAssessments.accumulate(
-                self.session._connection, fence.execution_id, ReplayFact.UNKNOWN_EFFECTS
-            )
             if not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead):
                 attempt.advance(
                     self.session,
