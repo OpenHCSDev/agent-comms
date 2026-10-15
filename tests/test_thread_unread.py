@@ -1,11 +1,15 @@
 import json
 import sqlite3
+from contextlib import ExitStack
 from dataclasses import replace
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor
 from agent_comms.view_unread import ReplyIndex, TranscriptReadState, TranscriptReply
@@ -354,7 +358,8 @@ def test_close_cancels_executor_without_scanning_rest_of_native_file(tmp_path):
     assert monotonic() - started < 2
     assert state.preparation is None
     assert not any(process.is_alive() for process in processes)
-    assert state.counts("viewer", {"worker": str(source)}).pending == {"worker"}
+    with pytest.raises(RuntimeError, match="Transcript reader is closed"):
+        state.counts("viewer", {"worker": str(source)})
 
 
 def test_busy_index_is_not_discarded(tmp_path):
@@ -375,6 +380,35 @@ def test_busy_index_is_not_discarded(tmp_path):
         blocker.close()
     try:
         assert completed_counts(state, "viewer", {"worker": str(source)}).counts == {"worker": 2}
+    finally:
+        state.close()
+
+
+@pytest.mark.parametrize("busy_writer", ["wire", "sqlite"])
+def test_pending_publication_does_not_erase_other_committed_counts(tmp_path, busy_writer):
+    sources = {name: str(tmp_path / f"{name}.jsonl") for name in ("ready", "growing")}
+    for source in sources.values():
+        append(Path(source))
+    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    try:
+        assert completed_counts(state, "viewer", sources).counts == {"ready": 1, "growing": 1}
+        append(Path(sources["growing"]))
+        assert state.counts("viewer", sources).pending == {"growing"}
+        preparation = state.preparation
+        preparation.result(timeout=10)
+        with ExitStack() as blocked:
+            if busy_writer == "wire":
+                blocked.enter_context(_store_lock(tmp_path / "wire"))
+            else:
+                database = sqlite3.connect(state.index_path)
+                blocked.callback(database.close)
+                blocked.callback(database.rollback)
+                database.execute("BEGIN IMMEDIATE")
+            result = state.counts("viewer", sources)
+            assert result.counts == {"ready": 1}
+            assert result.pending == {"growing"}
+            assert state.preparation is preparation
+        assert state.counts("viewer", sources).counts == {"ready": 1, "growing": 2}
     finally:
         state.close()
 
@@ -416,6 +450,8 @@ def test_two_processes_indexing_one_growing_transcript_count_each_reply_once(tmp
         while not done and not failures:
             try:
                 state.counts("viewer", {"worker": str(source)})
+            except CoordinationReadUnavailable:
+                continue  # The observation owner retries unavailable reads, not fake counts.
             except BaseException as error:
                 failures.append(error)
 
