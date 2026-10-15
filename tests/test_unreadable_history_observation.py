@@ -151,7 +151,7 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
     row["observation"]["manifest"]["segments"][0]["manifest"]["kind"] = "unavailable_future_segment"
     comms.bus.log.path.write_text(json.dumps(row) + "\n")
     original = comms.bus.log.path.read_bytes()
-    process = ObservationProcess(comms.root)
+    process = ObservationProcess(comms.route)
     try:
         await readable(process)
         process.results()

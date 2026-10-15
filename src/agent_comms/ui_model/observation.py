@@ -37,6 +37,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
+from agent_comms.active_route import CommsRoute
 from agent_comms.presentation import WireRevision
 
 if TYPE_CHECKING:
@@ -834,13 +835,11 @@ class ObservationService:
             self.comms.views.transcript_reads.close()
 
 
-def serve(root: str, connection: Connection) -> None:
-    """Child process entry: observe ``root`` for the UI on the other end of ``connection``."""
-    from agent_comms.active_route import resolve_comms_route
+def serve(route: CommsRoute, connection: Connection) -> None:
+    """Observe the caller's selected route, including its reviewed native package."""
     from agent_comms.comms import wire
 
     try:
-        route = resolve_comms_route(Path(root))
         with route.admit_client():
             asyncio.run(ObservationService(wire(route), connection).run())
     except BaseException:
@@ -858,9 +857,9 @@ class ObservationProcess:
 
     @classmethod
     @contextmanager
-    def awaited(cls, root: Path):
+    def awaited(cls, route: CommsRoute):
         """Own pipe readiness and retirement for an attached asynchronous reader."""
-        process = cls(root)
+        process = cls(route)
         loop = asyncio.get_running_loop()
         descriptor = process.fileno()
         loop.add_reader(descriptor, process.results)
@@ -870,10 +869,10 @@ class ObservationProcess:
             loop.remove_reader(descriptor)
             process.close()
 
-    def __init__(self, root: Path):
+    def __init__(self, route: CommsRoute):
         context = multiprocessing.get_context("spawn")
         self.connection, child = context.Pipe()
-        self.process = context.Process(target=serve, args=(str(root), child), daemon=False,
+        self.process = context.Process(target=serve, args=(route, child), daemon=False,
                                        name="agent-comms-observation")
         self.process.start()
         child.close()
