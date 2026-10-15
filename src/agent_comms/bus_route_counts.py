@@ -564,9 +564,9 @@ class OpenedRouteCounts(BusRouteCounts):
         senders = {}
         unrecorded = []
         for name, source in self.registry.named_members():
-            senders[name] = tuple(DeliveryScope.sender_lookups(source))
-            if not source.incarnation.has_recorded_birth:
-                unrecorded.append(name)
+            senders[name] = tuple(DeliveryScope.sender_lookups(
+                source.incarnation, lambda: unrecorded.append(name)
+            ))
         return {
             "targets": json.dumps({
                 actor: sorted(self.deliveries[actor].index_targets) for actor in actors
