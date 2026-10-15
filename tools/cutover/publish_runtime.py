@@ -36,7 +36,7 @@ class RuntimePublication:
 
     @classmethod
     def installed(cls) -> RuntimePublication:
-        binary = Path(sys.executable).parent
+        binary = Path(sys.executable).parent.resolve(strict=True)
         links = {
             Path.home() / '.local/bin' / entry.name: binary / entry.name
             for package in ('agent-comms', 'batrachian-toad')
