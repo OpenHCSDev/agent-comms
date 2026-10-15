@@ -6,7 +6,7 @@ import hashlib
 import multiprocessing
 import sqlite3
 import threading
-from agent_comms.attempt_states import AttemptFailedAttempt, SucceededAttempt
+from agent_comms.attempt_states import AttemptFailedAttempt, SucceededAttempt, UnknownOutcomeAttempt
 from collections.abc import Callable
 from pathlib import Path
 
@@ -188,14 +188,13 @@ def monitor_evidence(
     backend_done: bool,
     *,
     subprocess_dead: bool = True,
-    unknown_effects: bool = True,
 ) -> MonitorEvidence:
     return MonitorEvidence(
         subprocess_dead=subprocess_dead,
         backend_done=backend_done,
         reason_code="process_died",
         observed_at_ms=1_000,
-        unknown_effects=unknown_effects,
+        outcome=UnknownOutcomeAttempt(),
     )
 
 

@@ -5,13 +5,16 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from agent_comms.attempt_states import AttemptFailedAttempt
+from agent_comms.attempt_states import AttemptFailedAttempt, UnknownOutcomeAttempt
 from agent_comms.claim_admission import publish_selected_resource_claim
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
+from agent_comms.execution_states import FailedExecution
+from agent_comms.obligation_states import FailedResponse
 from agent_comms.owner_fence import OwnerFence
 from test_claim_bus_read import selected_turn
 
@@ -39,8 +42,22 @@ def test_terminal_outcomes_release_exact_claims(monkeypatch, outcome):
                 outcome=AttemptFailedAttempt(),
             ).value
         assert terminal.attempt.lifecycle.failed and not terminal.is_current
+        expected_outcome = UnknownOutcomeAttempt if outcome == "unknown" else AttemptFailedAttempt
+        assert type(terminal.attempt.lifecycle) is expected_outcome
+        phase = store.session._connection.execute(
+            "SELECT phase, phase_kind FROM attempts WHERE execution_id = ? AND attempt_ordinal = ?",
+            (attempt.execution_id, attempt.attempt_ordinal),
+        ).fetchone()
+        assert tuple(phase) == (expected_outcome.declared_name, expected_outcome.declared_name)
         assert dict(comms.bus.log.claim_projection()) == {}
-        release = comms.views.full_history()[-1].claim_transition.releases[0]
+        notice = comms.views.full_history()[-1]
+        release = notice.claim_transition.releases[0]
+        expected = (
+            f"Released files after a turn with unknown outcome; read them before editing: {resource.name}"
+            if outcome == "unknown"
+            else f"Released files after a failed turn: {resource.name}"
+        )
+        assert notice.body == expected
         assert (release.resource, release.generation) == (claim.resource, claim.generation)
 
         # A delayed old settlement must leave a later acquired generation intact.
@@ -50,10 +67,19 @@ def test_terminal_outcomes_release_exact_claims(monkeypatch, outcome):
         assert current.generation != claim.generation
         before = (comms.root / "bus.jsonl").read_bytes()
         with store.session.settlement() as boundary:
-            terminal.release_resources(boundary)
+            terminal.release_resources(boundary, terminal.attempt.lifecycle)
         assert (comms.root / "bus.jsonl").read_bytes() == before
         assert comms.bus.log.claim_projection()[str(resource)] == current
         assert later.claim_transition.generation == current.generation
+
+
+def test_unknown_outcome_never_defers_when_retry_is_otherwise_authorized():
+    execution, response = UnknownOutcomeAttempt().disposition(
+        SimpleNamespace(retry_authorized=True), SimpleNamespace(attempt_ordinal=1)
+    )
+
+    assert type(execution) is FailedExecution
+    assert type(response) is FailedResponse
 
 
 def test_terminal_release_spans_the_existing_envelope_bound():
@@ -70,6 +96,10 @@ def test_terminal_release_spans_the_existing_envelope_bound():
         releases = [m.claim_transition for m in comms.views.full_history()
                     if m.claim_transition and m.claim_transition.releases]
         assert [len(row.releases) for row in releases] == [32, 3]
+        notices = [m for m in comms.views.full_history()
+                   if m.claim_transition and m.claim_transition.releases]
+        assert all(m.body.startswith("Released files after a failed turn: ") for m in notices)
+        assert sum(m.body.count("file-") for m in notices) == 35
 
 
 @pytest.mark.skipif(not os.environ.get("PI_COMPACTION_TEST_PACKAGE"), reason="requires native bundle")
