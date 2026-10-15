@@ -261,10 +261,6 @@ class RelationshipGroup(DeclaredFamily, affix="RelationshipGroup"):
     empty_text: ClassVar[str]
     order: ClassVar[type[ThreadSort] | None] = None
 
-    @property
-    def key(self) -> str:
-        return self.declared_name
-
     @classmethod
     @abstractmethod
     def supply(cls, context: RelationshipContext) -> tuple[RelationshipEntry, ...]: ...

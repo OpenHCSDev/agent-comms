@@ -3,7 +3,10 @@ from concurrent.futures import ProcessPoolExecutor
 
 import pytest
 
-from agent_comms.relationships import ChildrenRelationshipGroup, RelationshipEdit
+from agent_comms.relationships import (
+    ChildrenRelationshipGroup, CollaboratingRelationshipGroup, InboundRelationshipGroup,
+    OutboundRelationshipGroup, ParentRelationshipGroup, RelationshipEdit,
+)
 from agent_comms.comms import Comms
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.threads import Thread
@@ -79,12 +82,12 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
     pending = comms.bus.pending_count("owner")
     snapshot = comms.relationships.snapshot("owner")
-    groups = {group.key: group for group in snapshot.groups}
-    assert [row.target for row in groups["inbound"].entries] == ["peer", "#team"]
-    assert [row.target for row in groups["outbound"].entries] == ["peer"]
-    assert groups["parent"].entries[0].target == "origin"
-    assert groups["children"].entries[0].target == "child"
-    assert groups["collaborating"].entries == ()
+    groups = {type(group): group for group in snapshot.groups}
+    assert [row.target for row in groups[InboundRelationshipGroup].entries] == ["peer", "#team"]
+    assert [row.target for row in groups[OutboundRelationshipGroup].entries] == ["peer"]
+    assert groups[ParentRelationshipGroup].entries[0].target == "origin"
+    assert groups[ChildrenRelationshipGroup].entries[0].target == "child"
+    assert groups[CollaboratingRelationshipGroup].entries == ()
     assert comms.bus.pending_count("owner") == pending
     assert not snapshot.history_limited
     assert "Current delivery scope" in snapshot.incoming_basis
@@ -103,7 +106,7 @@ def test_alias_and_persisted_thread_sort(tmp_path):
         comms.relationships.collaborations("reviewer")[0].peer,
     ) == ("reviewer", "renamed")
     snapshot = Comms(comms.root).relationships.snapshot("renamed")
-    children = next(group for group in snapshot.groups if group.key == "children")
+    children = next(group for group in snapshot.groups if type(group) is ChildrenRelationshipGroup)
     assert children.order is LastActivityThreadSort
     assert collaboration_rows(comms, "reviewer")[0].target == "renamed"
 
@@ -174,7 +177,7 @@ def collaboration_rows(comms, owner="owner"):
     return next(
         group.entries
         for group in comms.relationships.snapshot(owner).groups
-        if group.key == "collaborating"
+        if type(group) is CollaboratingRelationshipGroup
     )
 
 
@@ -353,7 +356,7 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
         comms.messaging.send("peer", "owner", "Review")
         snapshot = comms.relationships.snapshot("owner")
         group = next(group for group in snapshot.sortable_groups if type(group) is SortedInboundRelationshipGroup)
-        assert group.key == "sorted_inbound"
+        assert FieldCodec.encode(group)["key"] == "sorted_inbound"
         assert group.order is LastActivityThreadSort
         assert group.entries[0].target == "peer"
         assert all(group.order is None for group in snapshot.groups if not group.selectable())
