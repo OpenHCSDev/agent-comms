@@ -1422,7 +1422,7 @@ class ContextCliCommand(CliCommand):
                             return selected[0].changed_since(manifest)
                     elif self.turn is None or manifest.turn.matches_generation(self.turn):
                         selected.append(manifest)
-                if page.older is None:
+                if not page.has_older:
                     break
                 cursor = page.older
             if not selected:

@@ -702,6 +702,14 @@ class ContextManifestPage:
     older: BeforeContextManifest | None
     newer: AfterContextManifest | None
 
+    @property
+    def has_older(self) -> bool:
+        return self.older is not None
+
+    @property
+    def has_newer(self) -> bool:
+        return self.newer is not None
+
     def reference(self, manifest: ContextManifest) -> ContextManifestReference:
         for resource in self.resources:
             if resource.value is manifest:
