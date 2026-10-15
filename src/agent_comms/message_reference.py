@@ -22,7 +22,7 @@ class AssignedSourceIdentity:
         return self.root, self.recipient.created_at
 
     def same_publication_source(self, other: AssignedSourceIdentity) -> bool:
-        return self.recipient.created_at > 0 and self.publication_key == other.publication_key
+        return self.recipient.has_recorded_birth and self.publication_key == other.publication_key
 
 
 @dataclass(frozen=True, slots=True)

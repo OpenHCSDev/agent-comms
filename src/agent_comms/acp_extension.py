@@ -190,11 +190,11 @@ class CursorScope(AttachmentScope):
 
     def __post_init__(self):
         WireRootIdText.decode(self.wire_root_id)
+        self.admission.incarnation.require_recorded()
         if (
             not self.session_id
             or self.owner_pid <= 0
             or self.admission.admission_generation <= 0
-            or self.admission.incarnation.created_at <= 0
         ):
             raise ValueError("Invalid native cursor scope")
 
