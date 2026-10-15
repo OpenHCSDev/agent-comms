@@ -16,7 +16,7 @@ from .store_files import _atomic_write_text, _store_lock
 
 @dataclass(frozen=True)
 class AppendCheckpoint:
-    """One decoded record's prefix validity against its bus revision.
+    """One decoded record's prefix validity against its append-log revision.
 
     The saved file carries an integrity digest; _read checks it once when the
     bytes are decoded, so an in-memory checkpoint is never re-encoded to check it.

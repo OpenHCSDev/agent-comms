@@ -31,6 +31,7 @@ from .thread_owned_state import ThreadOwnedState
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
+    from .activity_checkpoint import ActivityCheckpoint
     from .agent_activity import AgentActivity
     from .threads import Thread
 
@@ -294,10 +295,8 @@ class ActivityReadState:
     cuts; concurrent readers decode without holding it.
     """
 
-    revision: FileRevision | None = None
+    checkpoint: ActivityCheckpoint | None = None
     latest: dict[str, Activity] = field(default_factory=dict)
-    complete_latest: dict[str, Activity] = field(default_factory=dict)
-    offset: int = 0
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     _by_path: ClassVar[dict[str, ActivityReadState]] = {}
@@ -359,34 +358,31 @@ class ActivityLog(ThreadOwnedState):
         }
 
     def _latest_events(self) -> Mapping[str, Activity]:
+        from .activity_checkpoint import ActivityCheckpoint
+
         read = self._read
         while True:
             with read.lock:
                 revision = FileRevision.capture(self._path)
-                if revision == read.revision:
+                started_from = read.checkpoint
+                if revision == (started_from.source if started_from is not None else None):
                     return read.latest
-                started_from = read.revision
-                append = (
-                    revision is not None
-                    and started_from is not None
-                    and revision.identity == started_from.identity
-                    and revision.size > started_from.size
-                )
-                checkpoint = self.checkpoint.read() if started_from is None and revision else None
-                if checkpoint is not None and not checkpoint.matches(self._path, revision):
-                    checkpoint = None
-                if checkpoint is not None:
-                    complete, offset = dict(checkpoint.latest), checkpoint.offset
-                else:
-                    complete = read.complete_latest.copy() if append else {}
-                    offset = read.offset if append else 0
-            original_offset = offset
-            latest = complete
+                checkpoint = None
+                if revision is not None:
+                    checkpoint = started_from if started_from is not None else self.checkpoint.read()
+            latest = {}
+            captured = None
             if revision is not None:
                 try:
                     with self._path.open("rb") as stream:
                         if not revision.opened_by(stream):
                             continue
+                        if checkpoint is not None and not checkpoint.accepts(revision, stream):
+                            checkpoint = None
+                        complete = dict(checkpoint.latest) if checkpoint is not None else {}
+                        offset = checkpoint.offset if checkpoint is not None else 0
+                        original_offset = offset
+                        latest = complete
                         stream.seek(offset)
                         while stream.tell() < revision.size:
                             raw = stream.readline(revision.size - stream.tell())
@@ -414,20 +410,17 @@ class ActivityLog(ThreadOwnedState):
                                     event.fold_into(latest)
                             if terminated:
                                 offset = stream.tell()
+                        captured = ActivityCheckpoint.capture(stream, revision, complete, offset)
                 except FileNotFoundError:
                     continue
             with read.lock:
-                if read.revision != started_from:
+                if read.checkpoint is not started_from:
                     return read.latest
-                read.complete_latest, read.offset = complete, offset
-                read.latest, read.revision = latest, revision
-            if revision is not None and (checkpoint is None or offset != original_offset):
+                read.checkpoint, read.latest = captured, latest
+            if captured is not None and (checkpoint is None or offset != original_offset):
                 # The log remains authoritative if its disposable read
                 # projection cannot be persisted.
                 with suppress(OSError):
-                    from .activity_checkpoint import ActivityCheckpoint
-
-                    captured = ActivityCheckpoint.capture(self._path, revision, complete, offset)
                     self.checkpoint.replace(captured)
             return latest
 
