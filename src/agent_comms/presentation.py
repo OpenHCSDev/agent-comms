@@ -856,6 +856,12 @@ class WireRevision:
     external_transcripts: tuple[FileRevision | None, ...]
     expiry_tick: int
 
+    expiry_seconds: ClassVar[int] = 30
+
+    @property
+    def expiry_period(self) -> int:
+        return self.expiry_tick // self.expiry_seconds
+
     def registrations_changed_since(self, earlier: WireRevision) -> bool:
         """A thread registration or a channel declaration changed."""
         return (self.registry, self.catalog) != (earlier.registry, earlier.catalog)
@@ -882,3 +888,12 @@ class WireRevision:
     def external_transcripts_changed_since(self, earlier: WireRevision) -> bool:
         """CLI drafts and finished items changed, independently of coordination status."""
         return self.external_transcripts != earlier.external_transcripts
+
+    def notifications_changed_since(self, earlier: WireRevision) -> bool:
+        """Recipient state depends on assignments, presence, bus replies and read marks."""
+        return replace(
+            self, catalog=earlier.catalog, history=earlier.history,
+            native_unread=earlier.native_unread, goal_waits=earlier.goal_waits,
+            relationships=earlier.relationships, external_transcripts=earlier.external_transcripts,
+            expiry_tick=earlier.expiry_tick,
+        ) != earlier or self.expiry_period != earlier.expiry_period

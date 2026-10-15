@@ -37,6 +37,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
+from agent_comms.presentation import WireRevision
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -45,7 +46,7 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.history_views import RetiredViews
     from agent_comms.message_reference import MessageReference
-    from agent_comms.presentation import CoordinationSnapshot, WireRevision
+    from agent_comms.presentation import CoordinationSnapshot, MessageNotification
     from agent_comms.runtime import RuntimeConnection
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
@@ -55,9 +56,6 @@ if TYPE_CHECKING:
     from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel
     from agent_comms.view_unread import ReplyIndexBatch
 
-# Activity older than this reads as idle; re-derive rows at least this often
-# so staleness shows without a store change.
-EXPIRY_PERIOD = 30
 
 
 class ObservationRequest(ABC):
@@ -324,6 +322,25 @@ class ReadNotifications(ReadRequest):
     def read(self, comms: Comms):
         return comms.views.message_notifications_for_references(self.references)
 
+    def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
+        return revision.notifications_changed_since(previous)
+
+
+@dataclass(frozen=True)
+class ReadRecordedNotifications(ReadNotifications):
+    """The selected archive's recorded handling, independent of today's recipients."""
+
+    source: str
+
+    def read(self, comms: Comms):
+        from agent_comms.historical_views import HistorySource
+
+        source = HistorySource.require(comms.bus.history, self.source)
+        return source.notification_references(comms.bus.history, self.references)
+
+    def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
+        return revision.history != previous.history
+
 
 @dataclass(frozen=True)
 class ReadOwnerGoal(OwnerRead):
@@ -434,7 +451,7 @@ class SidebarReading(Observation[ObserveSidebar]):
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         while True:
-            key = SidebarSent(revision.expiry_tick // EXPIRY_PERIOD, type(self.stage), revision)
+            key = SidebarSent(revision.expiry_period, type(self.stage), revision)
             changed = self.sent is None or revision.sidebar_changed_since(self.sent.revision)
             if not changed and key == self.sent:
                 return
@@ -487,6 +504,40 @@ class ObserveViews(InterestRequest):
 
     def observation(self) -> ViewReading:
         return ViewReading(self)
+
+
+@dataclass(frozen=True)
+class ObserveNotifications(InterestRequest):
+    """Original message references currently visible in the open views."""
+
+    reads: frozenset[ReadNotifications]
+
+    def observation(self) -> NotificationReading:
+        return NotificationReading(self)
+
+
+class NotificationReading(Observation[ObserveNotifications]):
+    def __init__(self, request: ObserveNotifications):
+        super().__init__(request)
+        self.revisions: dict[ReadNotifications, WireRevision] = {}
+
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
+        for request in self.request.reads:
+            previous = self.revisions.get(request)
+            if previous is not None and not request.changed_since(revision, previous):
+                continue
+            try:
+                request.require_root(comms)
+                outcomes = request.read(comms)
+            except UnreadableHistory.DEFERRED_READS:
+                yield None  # Keep the interest pending until its source can be read.
+                continue
+            except (StoredHistoryUnreadable, RelationViolationError, ValueError) as error:
+                result = NotificationsUnreadable(revision, request, UnreadableHistory.capture(error))
+            else:
+                result = NotificationsObserved(revision, request, outcomes)
+            self.revisions[request] = revision
+            yield result
 
 
 class ThreadReading(Observation[ObserveThreads]):
@@ -626,6 +677,18 @@ class ThreadsObserved(Observed):
 
 
 @dataclass(frozen=True)
+class NotificationsObserved(Observed):
+    request: ReadNotifications
+    outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]]
+
+
+@dataclass(frozen=True)
+class NotificationsUnreadable(Observed):
+    request: ReadNotifications
+    error: UnreadableHistory
+
+
+@dataclass(frozen=True)
 class ViewsRetired(Observed):
     """Open views whose thread was deleted or replaced, or whose channel is gone or archived."""
 
@@ -744,7 +807,7 @@ class ObservationService:
         """Time-based sidebar state belongs to the sidebar observer, not file watching."""
         while not self.closed:
             now = time.time()
-            await asyncio.sleep(EXPIRY_PERIOD - now % EXPIRY_PERIOD)
+            await asyncio.sleep(WireRevision.expiry_seconds - now % WireRevision.expiry_seconds)
             self.observe_again()
 
     async def run(self) -> None:
