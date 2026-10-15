@@ -1,8 +1,8 @@
-from abc import abstractmethod
-from dataclasses import dataclass
 import subprocess
 import sys
 import textwrap
+from abc import abstractmethod
+from dataclasses import dataclass
 
 import pytest
 from metaclass_registry import DuplicateRegistryKeyError

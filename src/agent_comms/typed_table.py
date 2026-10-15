@@ -352,7 +352,9 @@ class TypedRow:
         return {name: index for index, name in enumerate(names)}
 
     @classmethod
-    def _decode_row(cls, row: sqlite3.Row | tuple[object, ...], positions: Mapping[str, int]) -> Self:
+    def _decode_row(
+        cls, row: sqlite3.Row | tuple[object, ...], positions: Mapping[str, int]
+    ) -> Self:
         values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
         instance = cls(**{item.name: values[item.name] for item in cls._fields() if item.init})
         for item in cls._fields():
@@ -371,7 +373,9 @@ class TypedRow:
             cursor.close()
 
     @classmethod
-    def joined(cls, cursor: sqlite3.Cursor, related: type[RelatedRow]) -> list[tuple[Self, RelatedRow]]:
+    def joined(
+        cls, cursor: sqlite3.Cursor, related: type[RelatedRow]
+    ) -> list[tuple[Self, RelatedRow]]:
         """Decode disjoint joined declarations once without another partial row schema.
 
         All actual columns must belong to exactly these declarations; duplicate,
@@ -534,8 +538,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             db.execute(statement)
 
     @classmethod
-    def _query(cls, db: sqlite3.Connection, where: str, parameters: tuple,
-               order_by: tuple[str, ...], descending: bool, key: dict[str, object]) -> sqlite3.Cursor:
+    def _query(
+        cls, db: sqlite3.Connection, where: str, parameters: tuple,
+        order_by: tuple[str, ...], descending: bool, key: dict[str, object]
+    ) -> sqlite3.Cursor:
         selected = cls._fields_named(tuple(key))
         if selected:
             where = "(" + where + ") AND " + " AND ".join(
@@ -661,7 +667,8 @@ class TypedStore:
     @staticmethod
     def _schema(connection: sqlite3.Connection) -> list[SQLiteSchemaObject]:
         return SQLiteSchemaObject.read(connection.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
+            "SELECT name,sql FROM sqlite_master "
+            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
 
     def _install(self) -> None:
         os.close(os.open(self.path, os.O_CREAT | os.O_RDWR, 0o600))

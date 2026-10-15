@@ -6,7 +6,11 @@ import re
 from abc import ABC, ABCMeta
 from typing import Any, ClassVar, Self, cast
 
-from metaclass_registry import AutoRegisterMeta, LazyDiscoveryDict, RegistryConfig  # type: ignore[import-untyped]
+from metaclass_registry import (  # type: ignore[import-untyped]
+    AutoRegisterMeta,
+    LazyDiscoveryDict,
+    RegistryConfig,
+)
 
 
 class _FamilyMeta(AutoRegisterMeta, ABCMeta):
