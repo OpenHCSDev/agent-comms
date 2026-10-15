@@ -220,12 +220,12 @@ class TurnProgress(events.AgentEventConsumer):
             ), self.thread.pid),
         )
 
-    async def before_agent_info(self, event: events.AgentInfo) -> None:
+    async def before_native_metadata(self, event: events.NativeMetadataObservation) -> None:
         session_file = event.session_file
         if session_file:
             await self.turn.attach_native_session(session_file)
 
-    async def after_agent_info(self, event: events.AgentInfo) -> None:
+    async def after_native_metadata(self, event: events.NativeMetadataObservation) -> None:
         await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)
 
     @handles(events.ToolEnd)

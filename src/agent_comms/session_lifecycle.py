@@ -304,7 +304,7 @@ class SessionLifecycle:
             return name
 
     async def observe_native_configuration(
-        self, session_id: str, thread_name: str, event: events.AgentInfo
+        self, session_id: str, thread_name: str, event: events.NativeMetadataObservation
     ) -> None:
         """Initialize only unset configuration from its actual native producer."""
         await Coordination.run_worker(partial(

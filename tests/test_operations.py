@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from agent_comms.activity import ActivityState
+from agent_comms.agent_events import AgentInfo
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
@@ -203,8 +204,8 @@ class TestThreadOps:
         wired.threads.set_thread_configuration(
             wired.registry.require("fixer"), model="configured/model"
         )
-        wired.agents.set_agent_info(
-            "fixer", model="observed/model", context_used=25, context_size=100
+        wired.agents.observe_runtime_info(
+            "fixer", AgentInfo(model="observed/model", context_used=25, context_size=100)
         )
         row = next(row for row in wired.views.who() if row["name"] == "fixer")
         assert row["model"] == "configured/model"
@@ -212,7 +213,7 @@ class TestThreadOps:
         assert wired.agents.agent_info_of("fixer").context_used == 25
 
     def test_configuration_names_the_resolved_model(self, wired):
-        wired.agents.set_agent_info("fixer", model="observed/model", context_used=25, context_size=100)
+        wired.agents.observe_runtime_info("fixer", AgentInfo(model="observed/model", context_used=25, context_size=100))
         answer = wired.configuration.answer("fixer")
         assert answer.model == "observed/model"
         assert answer.context_usage.label == "25/100 tokens (25.0%)"
@@ -230,7 +231,7 @@ class TestThreadOps:
 
     def test_runtime_info_rejects_unknown_thread(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.agents.set_agent_info("ghost", model="model")
+            wired.agents.observe_runtime_info("ghost", AgentInfo(model="model"))
 
     def test_list_threads_shape(self, wired):
         rows = {row["name"]: row for row in wired.views.list_threads()}
@@ -315,7 +316,7 @@ class TestThreadOps:
         references = tuple(message.reference for message in wired.bus.inbox("PR111", "fixer"))
         assert wired.messaging.acknowledge("PR111", references) == 1
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
-        wired.agents.set_agent_info("PR111", model="test/model")
+        wired.agents.observe_runtime_info("PR111", AgentInfo(model="test/model"))
         wired.ledger.merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
 
