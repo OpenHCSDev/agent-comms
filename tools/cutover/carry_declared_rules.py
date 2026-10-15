@@ -26,9 +26,20 @@ from agent_comms.typed_table import SQLiteSchemaObject, TypedTable
 _STRUCTURE = ("table_xinfo", "foreign_key_list", "index_list")
 
 
+def stored_columns(db: sqlite3.Connection, table: str) -> tuple[str, ...]:
+    """SQLite owns physical row identity as well as declared stored fields."""
+    columns = [row[1] for row in db.execute(f'PRAGMA table_xinfo("{table}")') if row[6] == 0]
+    without_rowid, = db.execute(
+        "SELECT wr FROM pragma_table_list WHERE schema='main' AND name=?", (table,)).fetchone()
+    if not without_rowid:
+        # An explicit INTEGER PRIMARY KEY aliases rowid; retaining both is valid.
+        columns.insert(0, "_rowid_")
+    return tuple(columns)
+
+
 def rows_digest(db: sqlite3.Connection, table: str) -> str:
     """Hash stored inputs; generated values belong to their SQL declarations."""
-    columns = [row[1] for row in db.execute(f'PRAGMA table_xinfo("{table}")') if row[6] == 0]
+    columns = stored_columns(db, table)
     order = ",".join('"' + name.replace('"', '""') + '"' for name in columns)
     digest = hashlib.sha256()
     for row in db.execute(f'SELECT {order} FROM "{table}" ORDER BY {order}'):
@@ -96,7 +107,7 @@ def carry(source: Path, destination: Path) -> dict:
                     # Creating AUTOINCREMENT tables creates this table already.
                     if name == "sqlite_sequence":
                         copy.execute("DELETE FROM sqlite_sequence")
-                    columns = [row[1] for row in before.execute(f'PRAGMA table_xinfo("{name}")') if row[6] == 0]
+                    columns = stored_columns(before, name)
                     selected = ",".join('"' + column.replace('"', '""') + '"' for column in columns)
                     copy.executemany(
                         f'INSERT INTO "{name}" ({selected}) VALUES ({",".join("?" for _ in columns)})',
