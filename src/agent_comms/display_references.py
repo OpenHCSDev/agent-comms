@@ -67,6 +67,11 @@ class DisplayReferenceMatch:
 
 class ReferenceContext(ABC):
     """Availability is not an empty successful catalog."""
+    requires_observation = False
+
+    async def acquire_from(self, read):
+        return self
+
     @property
     @abstractmethod
     def description(self): ...
@@ -87,6 +92,10 @@ class ReferenceContext(ABC):
 @dataclass(frozen=True)
 class RootedReferences(ReferenceContext):
     root: str
+    requires_observation = True
+
+    async def acquire_from(self, read):
+        return await read(self.root)
 
     def for_source(self, source):
         return self if source is None else DisplayReferences.recorded(self.root, source)

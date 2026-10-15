@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
@@ -94,6 +95,15 @@ class ChannelRowModel:
 class SidebarObservation(ABC):
     snapshot: CoordinationSnapshot | None = None
 
+    def require_snapshot(self) -> CoordinationSnapshot:
+        snapshot = self.snapshot
+        if snapshot is None:
+            self.unavailable()
+        return snapshot
+
+    def unavailable(self) -> NoReturn:
+        raise RuntimeError("Sidebar source has not been observed")
+
     @abstractmethod
     def references_for(self, root): ...
 
@@ -108,6 +118,9 @@ class WaitingSidebar(SidebarObservation):
 @dataclass(frozen=True)
 class FailedSidebar(SidebarObservation):
     error: Exception
+
+    def unavailable(self) -> NoReturn:
+        raise self.error
 
     def references_for(self, root):
         from ..display_references import UnavailableReferences
