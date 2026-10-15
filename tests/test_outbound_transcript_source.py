@@ -33,7 +33,7 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
     wire_before = comms.bus.log.path.read_bytes()
     assert original
     with Coordination(str(database)) as writer:
-        with writer.session.irreversible_admission():
+        with writer.session.transaction():
             for read in (
                 lambda: NotificationAssignment.read(root, (initial,)),
                 lambda: _snapshot(root, database, "beta"),

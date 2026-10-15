@@ -476,10 +476,9 @@ def test_admitted_write_never_reenters_after_busy_post_write_failure():
         os.close(write_fd)
 
 
-def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path):
-    """The historical mechanism is reproducible, not proof of live81's cause."""
+def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):
+    """A transaction which admits the pipe write owns its complete commit lifetime."""
     import threading
-    import time
 
     path = tmp_path / "coordinator.sqlite3"
     with Coordination(path, contention=StoreBusy()) as store:
@@ -489,29 +488,28 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
         entered = []
 
         @contextmanager
-        def historical_admission():
+        def admission():
             with store.session.transaction() as db:
                 db.execute("UPDATE owner_generations SET generation=2")
-                # A reader enters after BEGIN IMMEDIATE and blocks its COMMIT.
                 reader.execute("BEGIN")
-                reader.execute("SELECT * FROM owner_generations").fetchall()
+                try:
+                    with pytest.raises(sqlite3.OperationalError) as unavailable:
+                        reader.execute("SELECT * FROM owner_generations").fetchall()
+                    assert unavailable.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                finally:
+                    reader.execute("ROLLBACK")
                 entered.append(1)
                 yield
 
         try:
-            with pytest.raises(
-                native_prompt_send.PromptSendUnknown,
-                match="OperationalError: database is locked",
-            ) as caught:
-                native_prompt_send._write_fenced(
-                    write_fd,
-                    b"one prompt\n",
-                    historical_admission,
-                    threading.Event(),
-                    1,
-                    PublicationMeasurements(),
-                )
-            assert caught.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
+            native_prompt_send._write_fenced(
+                write_fd,
+                b"one prompt\n",
+                admission,
+                threading.Event(),
+                1,
+                PublicationMeasurements(),
+            )
             assert entered == [1]
             assert os.read(read_fd, 100) == b"one prompt\n"
             assert not store.session._connection.in_transaction
@@ -519,7 +517,7 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
                 store.session._connection.execute(
                     "SELECT generation FROM owner_generations"
                 ).fetchone()[0]
-                == 1
+                == 2
             )
         finally:
             reader.close()

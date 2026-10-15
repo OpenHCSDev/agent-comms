@@ -229,7 +229,7 @@ class PrivateSendAdmission:
                         self.prompt.text, blocking=False,
                     ))
                 with self._measurements.operation("coordinator_exclusive"):
-                    db = authority.enter_context(store.session.irreversible_admission())
+                    db = authority.enter_context(store.session.transaction())
                 with self._measurements.operation("selected_source_admission"):
                     self.session.admit(identity, selected_runtime_revision)
             except BlockingIOError as error:

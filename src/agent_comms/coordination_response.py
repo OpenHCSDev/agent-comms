@@ -1,8 +1,8 @@
 """Owner-fenced response publication across the coordinator and bus.
 
 Tx1 freezes an intent without a bus append. For the bounded append/Tx2, acquire
-the shared wire lock, bus lock, registry lock, then SQLite BEGIN IMMEDIATE.
-The registry lock is retained through the fsynced append and SQL terminal
+the shared wire lock, bus lock, registry lock, then the coordinator's exclusive
+write admission. The registry lock is retained through the fsynced append and SQL terminal
 commit; an explicitly witnessed live owner can be checked on that revision.
 A stop before the boundary refuses publication, whereas a concurrent stop
 linearizes after commit. The
