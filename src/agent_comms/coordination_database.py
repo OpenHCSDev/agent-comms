@@ -176,28 +176,34 @@ class CoordinationStore:
     ) -> None:
         self.path = Path(path)
         self._prepare_private_file()
-        self._connection = self.writer(self.path, contention, isolation_level=None)
+        self._connection = self._open_connection(contention)
         try:
-            self._connection.create_function(
-                "coordination_validate_publication_intent",
-                sum(field.init for field in fields(PublicationIntents)),
-                PublicationIntents.validate_sql,
-                deterministic=True,
-            )
-            self._connection.row_factory = sqlite3.Row
-            self._connection.execute("PRAGMA foreign_keys = ON")
-            # Rollback journal avoids a post-schema WAL-mode race among fresh openers.
-            self._connection.execute("PRAGMA synchronous = FULL")
+            self._configure_connection()
             self._initialize_schema()
             self._enforce_private_modes()
         except BaseException:
             self._connection.close()
             raise
 
+    def _open_connection(self, contention: StoreContention) -> sqlite3.Connection:
+        return self.writer(self.path, contention, isolation_level=None)
+
+    def _configure_connection(self) -> None:
+        self._connection.create_function(
+            "coordination_validate_publication_intent",
+            sum(field.init for field in fields(PublicationIntents)),
+            PublicationIntents.validate_sql,
+            deterministic=True,
+        )
+        self._connection.row_factory = sqlite3.Row
+        self._connection.execute("PRAGMA foreign_keys = ON")
+        # Rollback journal avoids a post-schema WAL-mode race among fresh openers.
+        self._connection.execute("PRAGMA synchronous = FULL")
+
     def _prepare_private_file(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         try:
-            info = self.path.lstat()
+            self.path.lstat()
         except FileNotFoundError:
             # Closing *any* fd for an already-published SQLite inode can release
             # this process's classic fcntl locks, even those held by another
@@ -210,14 +216,21 @@ class CoordinationStore:
                     os.link(staging, self.path, follow_symlinks=False)
             finally:
                 os.unlink(staging)
-            info = self.path.lstat()
-        if not stat.S_ISREG(info.st_mode):
-            raise IntegrityViolationError("coordination database must be a regular file")
+        info = self._private_file()
         # NTFS ACLs, not POSIX mode bits, define privacy on Windows. The
         # disposable private execution path is Linux-only; keep the schema
         # usable here without pretending chmod supplies a Windows ACL.
         if os.name != "nt" and stat.S_IMODE(info.st_mode) != 0o600:
             os.chmod(self.path, 0o600, follow_symlinks=False)
+
+    def _private_file(self) -> os.stat_result:
+        try:
+            info = self.path.lstat()
+        except FileNotFoundError as error:
+            raise IntegrityViolationError("coordination database is missing") from error
+        if not stat.S_ISREG(info.st_mode):
+            raise IntegrityViolationError("coordination database must be a regular file")
+        return info
 
     def _initialize_schema(self) -> None:
         # Existing immutable metadata needs only a consistent read. Opening an

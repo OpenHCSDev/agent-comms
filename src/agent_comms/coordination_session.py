@@ -7,7 +7,6 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import cached_property
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.coordination_database import (
@@ -16,6 +15,7 @@ from agent_comms.coordination_database import (
     StoreContention,
 )
 from agent_comms.coordination_errors import (
+    CoordinationReadUnavailable,
     IntegrityViolationError,
 )
 
@@ -30,21 +30,6 @@ class CoordinationSession(CoordinationStore):
     ) -> None:
         super().__init__(path, contention)
         self._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
-
-    @classmethod
-    @contextmanager
-    def borrowed_reader(
-        cls, path: str | Path, *, clock_ms: Callable[[], int] | None = None,
-        contention: StoreContention = DEFAULT_STORE_CONTENTION,
-    ) -> Iterator[CoordinationSession]:
-        """Adapt one owner-configured reader to the existing typed tables."""
-        resolved = Path(path)
-        with CoordinationStore.reading(resolved, contention) as connection:
-            session = cls.__new__(cls)
-            session.path = resolved
-            session._connection = connection
-            session._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
-            yield session
 
     def now(self, floor: int = 0) -> int:
         now = self._clock_ms()
@@ -102,12 +87,15 @@ class CoordinationSession(CoordinationStore):
         if db.in_transaction:
             yield
             return
-        self.begin_snapshot(db)
         try:
-            yield
-        finally:
-            if db.in_transaction:
-                db.execute("ROLLBACK")
+            try:
+                self.begin_snapshot(db)
+                yield
+            finally:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+        except sqlite3.OperationalError as error:
+            CoordinationReadUnavailable.raise_from(error)
 
 
 class NativeBoundary(ExitStack):
@@ -181,3 +169,22 @@ class NativeCoordinationSession(CoordinationSession):
         if not isinstance(boundary, NativeBoundary):
             raise IntegrityViolationError("native release requires an acquired boundary")
         snapshot.release_resources(boundary)
+
+
+class ReadNativeCoordinationSession(NativeCoordinationSession):
+    """Read-only native coordination through the complete session constructor."""
+
+    def _prepare_private_file(self) -> None:
+        self._private_file()
+
+    def _open_connection(self, contention: StoreContention) -> sqlite3.Connection:
+        return self._open_reader(self.path, contention)
+
+    def _configure_connection(self) -> None:
+        pass  # _open_reader configured query-only behavior before publication.
+
+    def _initialize_schema(self) -> None:
+        pass  # Consumers validate exactly the typed tables they read.
+
+    def _enforce_private_modes(self) -> None:
+        pass  # A reader observes private storage and never repairs it.

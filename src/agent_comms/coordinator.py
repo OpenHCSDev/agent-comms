@@ -12,7 +12,11 @@ from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
 from .child_process import join_retirement
 from .coordination_database import DEFAULT_STORE_CONTENTION, StoreContention
-from .coordination_session import CoordinationSession, NativeCoordinationSession
+from .coordination_session import (
+    CoordinationSession,
+    NativeCoordinationSession,
+    ReadNativeCoordinationSession,
+)
 from .execution_store import ExecutionStore
 from .participant_store import ParticipantStore
 from .private_runtime_schema import PrivateRuntimeSchema
@@ -80,23 +84,19 @@ class Coordination:
         cls, path: str | Path, operation: Callable[[Self], Result],
         clock_ms: Callable[[], int] | None, contention: StoreContention,
     ) -> Result:
-        with cls.session_type.borrowed_reader(
-            path, clock_ms=clock_ms, contention=contention
-        ) as session:
-            return operation(cls._from_session(session))
-
-    @classmethod
-    def _from_session(cls, session: CoordinationSession) -> Self:
-        store = cls.__new__(cls)
-        store.session = session
-        store._bind_tables()
-        return store
+        with cls(
+            str(path), clock_ms=clock_ms, contention=contention,
+            session_type=ReadNativeCoordinationSession,
+        ) as store:
+            return operation(store)
 
     def __init__(
         self, path: str, *, clock_ms: Callable[[], int] | None = None,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
+        session_type: type[CoordinationSession] | None = None,
     ):
-        self.session = self.session_type(path, clock_ms=clock_ms, contention=contention)
+        owner = self.session_type if session_type is None else session_type
+        self.session = owner(path, clock_ms=clock_ms, contention=contention)
         self._bind_tables()
 
     def _bind_tables(self) -> None:
