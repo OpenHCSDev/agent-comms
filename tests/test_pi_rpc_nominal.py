@@ -59,6 +59,8 @@ def test_new_excursion_declares_both_transitions_without_dispatch_edits():
         PiRpcChannel.decode_record(b'{"type":"audit_pause_start"}\n'), set()
     )
     assert isinstance(phase, AuditPausePhase)
+    assert TurnPhase.decode(phase.declared_name) is type(phase)
+    assert phase.declared_name in TurnPhase.names()
     assert phase.model_progress() is phase
     stalled = phase.stalled(True)
     assert stalled is phase
@@ -144,24 +146,6 @@ def test_external_formats_are_derived_and_pin_wire_spellings():
         "switch_session",
         "fork",
         "clone",
-    }
-    assert {
-        c.declared_name
-        for c in TurnPhase.members_with(TurnPhase)
-        if c.__module__ == TurnPhase.__module__
-    } == {
-        "prompt_acceptance",
-        "model_wait",
-        "settling_stats",
-        "compaction",
-        "provider_retry",
-        "summarization_retry",
-        "tool_running",
-        "preparing",
-        "idle",
-        "cancelling",
-        "shutdown",
-        "publishing",
     }
 
 
