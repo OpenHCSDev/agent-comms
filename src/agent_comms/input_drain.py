@@ -25,7 +25,7 @@ from .acp_extension import (
 from .agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
-from .drain_failures import DrainFailureState, drain_failures
+from .drain_failures import drain_failures
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
 from .bus_publication import stable_thread_lookup
@@ -433,7 +433,6 @@ class InputDrain(InputObservation):
 
     async def observe(self, session_id: str) -> None:
         settled: SettledTick | None = None
-        failure_state = DrainFailureState()
         paths = self._tick_paths()
         async with aclosing(WireWatch.observations(*paths.watch_sources)) as observations:
             async for watcher in observations:
@@ -451,6 +450,14 @@ class InputDrain(InputObservation):
                     and revision.other == settled.revision.other
                     and self._quiescent(session_id)
                 )
+                if idle:
+                    # A selected wake or an earlier observer can have recorded
+                    # a failure without changing this tick's input stores. Only
+                    # a full successful drain can recover that original fact.
+                    activity = await Coordination.run_worker(partial(
+                        self.comms.agents.activity_of, self.sessions.require(session_id),
+                    ))
+                    idle = activity.readiness.source_diagnostic() is None
                 # The settled entry is still current only while the registry is unchanged.
                 entry = settled.entry if idle else None
                 entry_current = idle and revision.registry == settled.revision.registry
@@ -498,7 +505,6 @@ class InputDrain(InputObservation):
                 owner = entry.owner_identity
                 async with drain_failures(
                     self.comms, thread, owner, partial(self.retry_observer, session_id),
-                    failure_state,
                 ):
                     # A stored model change precedes the messages the same tick hands over.
                     await self.sessions.config.sync_thread(session_id)
