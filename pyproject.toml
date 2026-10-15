@@ -40,7 +40,7 @@ all = [
     "agent-client-protocol>=0.8",
 ]
 dev = [
-    "nominal-refactor-advisor @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@96b863fe6bd7209708a75cf81fe3170ec41b3bbd",
+    "nominal-refactor-advisor @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@557b93ca06cf470895083e5ab137b61155abb46b",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23",

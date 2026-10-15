@@ -410,7 +410,18 @@ def test_declared_boolean_class_parameter_uses_immutable_external_declarations(r
     })
     dependency.commit({"scheme.py": "class ThemeColour:\n    background = None\n"})
     base = repo.commit({"__init__.py": ""})
-    head = repo.commit({"colours.py": "from ui_theme.scheme import ThemeColour\nclass Colours:\n    def changed(self):\n        def read(member: type[ThemeColour]):\n            return not member.background\n        return read\n"})
+    head = repo.commit({"colours.py": """
+from ui_theme.scheme import ThemeColour
+class Frame:
+    stops: tuple[type[ThemeColour], ...]
+class Colours:
+    def changed(self):
+        def read(member: type[ThemeColour]):
+            return not member.background
+        return read
+    def paint(self, frame: Frame):
+        return {role: not role.background for role in dict.fromkeys(frame.stops)}
+"""})
     result = subprocess.run(
         [sys.executable, "-m", "agent_comms.debt_ratchet", "--root", repo.root,
          "--base", base, "--head", head, "--declarations", str(dependency.path),
