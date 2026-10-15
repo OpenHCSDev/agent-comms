@@ -28,7 +28,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, Self, TypeVar, final
 
 from agent_comms.coordination_errors import (
     CoordinationError,
@@ -74,9 +74,8 @@ class InterestRequest(ObservationRequest):
 
     def receive(self, service: ObservationService) -> None:
         observation = self.observation()
-        previous = service.observations.get(type(observation))
-        if previous is None or previous.request != self:
-            service.observations[type(observation)] = observation
+        kind = type(observation)
+        service.observations[kind] = observation.for_interest(service.observations.get(kind))
         service.observe_again()
 
 
@@ -89,6 +88,10 @@ class Observation(ABC, Generic[InterestT]):
     def __init__(self, request: InterestT):
         self.request = request
 
+    def for_interest(self, previous: Self | None) -> Self:
+        """The requested view owns whether its read lifetime can be retained."""
+        return previous if previous is not None and previous.request == self.request else self
+
     @abstractmethod
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]: ...
 
@@ -96,6 +99,7 @@ class Observation(ABC, Generic[InterestT]):
         """Subscribe to completion when this observation has unfinished preparation."""
 
 
+@final
 class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     """A strict stored-data read failed, not the observer or the whole UI.
 
@@ -108,11 +112,11 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     # broken saved data.
     DEFERRED_READS = (CoordinationReadUnavailable, StaleRevision)
 
-    def __init__(self, reader_runtime: str, reason: str):
-        self.reader_runtime = reader_runtime
-        self.reason = reason
-        # Keep constructor arguments intact for the process pipe's pickle.
-        super().__init__(reader_runtime, reason)
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, UnreadableHistory) and self.args == other.args
+
+    def __hash__(self) -> int:
+        return hash(self.args)
 
     @classmethod
     def capture(cls, error: Exception) -> UnreadableHistory:
@@ -126,8 +130,9 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
         return cls(sys.prefix, "\nCaused by: ".join(reasons))
 
     def __str__(self) -> str:
-        return (f"Saved history unreadable: {self.reason}\n"
-                f"Reader runtime: {self.reader_runtime}. Restart this process on "
+        reader_runtime, reason = self.args
+        return (f"Saved history unreadable: {reason}\n"
+                f"Reader runtime: {reader_runtime}. Restart this process on "
                 "the reviewed runtime; if it still fails, the saved records need repair.")
 
 
@@ -433,6 +438,7 @@ class SidebarReading(Observation[ObserveSidebar]):
         super().__init__(request)
         self.stage: SidebarReadStage = RosterSidebarRead()
         self.sent: SidebarSent | None = None
+        self.published: SidebarResult | None = None
         self.preparation: Future[ReplyIndexBatch] | None = None
 
     def after_read(self, service: ObservationService) -> None:
@@ -462,7 +468,9 @@ class SidebarReading(Observation[ObserveSidebar]):
                 return
             self.sent = key
             result.finish_read(self)
-            yield result
+            if self.published is None or not result.same_observation(self.published):
+                self.published = result
+                yield result
             if self.stage is stage:
                 return
 
@@ -544,11 +552,16 @@ class NotificationReading(Observation[ObserveNotifications]):
 class ThreadReading(Observation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
-        self.revision: WireRevision | None = None
-        self.retry = False
+        self.observed: ThreadsObserved | None = None
+
+    def for_interest(self, previous: Self | None) -> Self:
+        # A new view may join unchanged names. Its turn/read fence needs an
+        # initial presentation, not the previous readers' delta.
+        return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
-        if self.revision is not None and not revision.status_changed_since(self.revision) and not self.retry:
+        previous = self.observed
+        if previous is not None and previous.current_at(revision):
             return
         presentations, unavailable, busy = {}, {}, set()
         for name in self.request.names:
@@ -559,8 +572,10 @@ class ThreadReading(Observation[ObserveThreads]):
             except StoredHistoryUnreadable as error:
                 unavailable[name] = UnreadableHistory.capture(error)
             yield None
-        self.revision, self.retry = revision, bool(busy)
-        yield ThreadsObserved(revision, presentations, unavailable, frozenset(busy))
+        observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset())
+        self.observed = replace(observed, changed=observed.changed_since(previous))
+        if previous is None or self.observed.changed:
+            yield self.observed
 
 
 class ViewReading(Observation[ObserveViews]):
@@ -643,6 +658,10 @@ class RevisionObserved(Observed):
 class SidebarResult(Observed):
     request: ObserveSidebar
 
+    def same_observation(self, previous: SidebarResult) -> bool:
+        """Every declared answer participates; a store stat is not another answer."""
+        return replace(self, revision=previous.revision) == previous
+
     @abstractmethod
     def finish_read(self, reading: SidebarReading) -> None: ...
 
@@ -675,6 +694,27 @@ class ThreadsObserved(Observed):
     presentations: Mapping[str, ThreadPresentation | None]
     unavailable: Mapping[str, UnreadableHistory]
     busy: frozenset[str]
+    changed: frozenset[str]
+
+    def current_at(self, revision: WireRevision) -> bool:
+        """A busy result stays pending; a successful cut owns its read frontier."""
+        return not self.busy and not revision.status_changed_since(self.revision)
+
+    def changed_since(self, previous: ThreadsObserved | None) -> frozenset[str]:
+        """Read-state transitions and source-owned changes, independent of store churn."""
+        if previous is None:
+            return frozenset((*self.presentations, *self.unavailable, *self.busy))
+        changed = set(self.busy ^ previous.busy)
+        changed.update(self.presentations.keys() ^ previous.presentations.keys())
+        changed.update(self.unavailable.keys() ^ previous.unavailable.keys())
+        for name in self.presentations.keys() & previous.presentations.keys():
+            current, before = self.presentations[name], previous.presentations[name]
+            if current is not before and (current is None or not current.same_observation(before)):
+                changed.add(name)
+        for name in self.unavailable.keys() & previous.unavailable.keys():
+            if self.unavailable[name] != previous.unavailable[name]:
+                changed.add(name)
+        return frozenset(changed)
 
 
 @dataclass(frozen=True)

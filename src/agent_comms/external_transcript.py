@@ -80,6 +80,11 @@ class ExternalCut(RecordsCut):
         # Finished items are append-only: later items belong to the next update.
         return current.offset >= self.offset
 
+    def draft_current(self, current: RecordsCut) -> bool:
+        # Finishing a CLI item retires its draft atomically. Its current draft
+        # must not be paired with a page captured before that completion.
+        return self == current
+
 
 @dataclass(frozen=True, slots=True)
 class ExternalTranscriptRead:
