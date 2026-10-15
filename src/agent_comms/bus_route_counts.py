@@ -84,7 +84,15 @@ class UnseenDelivery(TypedRow):
     target: str
 
 
+@dataclass(frozen=True)
+class RouteIndexRebuilding(Exception):
+    through: int
+    size: int
+
+
 class BusRouteCounts:
+    rebuild_bytes = 4 * 1024 * 1024
+
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
         self.path = bus_path.with_name("bus_route_counts.sqlite3")
@@ -140,15 +148,7 @@ class BusRouteCounts:
             tail_digest = sha256(source.read(size - source.tell())).hexdigest()
         records = RouteSourceRow.select(self.connection)
         recorded = records[0] if records else None
-        rebuild = recorded is None
-        if recorded is not None:
-            rebuild = (
-                (recorded.revision.identity if recorded.revision else None)
-                != (revision.identity if revision else None)
-                or source is None
-                or size == recorded.revision.size
-                and recorded.revision != revision
-            )
+        rebuild = recorded is None or source is None
         offset = 0 if rebuild else recorded.revision.size
         if not rebuild and offset:
             source.seek(max(0, offset - 4096))
@@ -170,9 +170,11 @@ class BusRouteCounts:
         if rebuild:
             for owner in TypedTable.members_with(RouteTable):
                 self.connection.execute(f'DELETE FROM "{owner.declared_name}"')
+        through = size
         if source is not None:
             source.seek(offset)
-            while source.tell() < size:
+            limit = min(size, offset + self.rebuild_bytes)
+            while source.tell() < size and source.tell() < limit:
                 raw = source.readline(size - source.tell())
                 if not raw.endswith(b"\n"):
                     raise RelationViolationError("Route projection source has an incomplete original row")
@@ -204,6 +206,9 @@ class BusRouteCounts:
                         total=current.total + 1,
                         oldest=min(current.oldest, row.timestamp),
                     )
+            through = source.tell()
+            source.seek(max(0, through - 4096))
+            tail_digest = sha256(source.read(through - source.tell())).hexdigest()
         for key, total in totals.items():
             self.connection.execute(
                 f'DELETE FROM "{RouteTotalRow.declared_name}" '
@@ -212,8 +217,9 @@ class BusRouteCounts:
             )
             total.insert(self.connection)
         self.connection.execute(f'DELETE FROM "{RouteSourceRow.declared_name}"')
-        RouteSourceRow(1, revision, tail_digest).insert(self.connection)
-        return True
+        checkpoint = replace(revision, size=through) if revision is not None else None
+        RouteSourceRow(1, checkpoint, tail_digest).insert(self.connection)
+        return True if through == size else RouteIndexRebuilding(through, size)
 
     _requests = """requests AS (
                 SELECT json_extract(value, '$.actor') AS actor,
