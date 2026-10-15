@@ -7,12 +7,11 @@ import os
 import threading
 import time
 from abc import abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
-from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
@@ -32,7 +31,6 @@ from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .activity_checkpoint import ActivityCheckpoint
-    from .agent_activity import AgentActivity
     from .threads import Thread
 
 
@@ -138,10 +136,6 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def require_available(self) -> None:
         pass
 
-    async def retire(self, agents: AgentActivity, thread: str) -> DrainReadiness:
-        """A healthy readiness has no retained failure to retire."""
-        return self
-
     def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
         """An ordinary preparation has no earlier request failure to display."""
         return activity
@@ -168,14 +162,6 @@ class DiagnosticDrainReadiness(DrainReadiness):
     def presentation(self, ordinary, *, busy):
         return ThreadPresentation(ordinary.title, "!", self.diagnostic.summary,
                                   busy=busy, attention=True)
-
-    async def retire(self, agents, thread):
-        from .coordinator import Coordination
-
-        await Coordination.run_worker(
-            partial(agents.set_drain_diagnostic, thread, self.diagnostic.owner, None)
-        )
-        return ReadyDrainReadiness()
 
 
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
@@ -328,6 +314,19 @@ class ActivityLog(ThreadOwnedState):
         with _store_lock(self._path):
             _append_jsonl(self._path, FieldCodec.encode(activity))
 
+    def update(self, thread: str, transition: Callable[[Activity], Activity | None]) -> bool:
+        """Read and change one thread under the existing activity writer lock.
+
+        The activity owner supplies the transition. Returning no event leaves
+        the log unchanged; an append cannot overtake its own comparison.
+        """
+        with _store_lock(self._path):
+            event = transition(self.current(thread, active=True))
+            if event is None:
+                return False
+            _append_jsonl(self._path, FieldCodec.encode(event))
+            return True
+
     def current(self, thread: str, *, active: bool = False) -> Activity:
         """Latest activity for one thread; idle when stale or unknown."""
         return self._observed(thread, self._latest_events(), active=active, now=time.time())
@@ -415,7 +414,9 @@ class ActivityLog(ThreadOwnedState):
                     continue
             with read.lock:
                 if read.checkpoint is not started_from:
-                    return read.latest
+                    # Another reader may have published a cut taken before this
+                    # one. Reacquire the actual current file, not that older cut.
+                    continue
                 read.checkpoint, read.latest = captured, latest
             if captured is not None and (checkpoint is None or offset != original_offset):
                 # The log remains authoritative if its disposable read

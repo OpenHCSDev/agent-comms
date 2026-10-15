@@ -1,6 +1,8 @@
 """Append-aware activity snapshots preserve the existing JSONL recovery contract."""
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import pytest
@@ -40,6 +42,47 @@ def test_fresh_reader_preserves_latest_threads_and_sees_append(tmp_path):
     appended = Activity("new-worker", ActivityState.THINKING, "latest")
     ActivityLog(path).emit(appended)
     assert ActivityLog(path).all_current() == {**previous, "new-worker": appended}
+
+
+def test_competing_readers_do_not_return_an_older_published_cut(tmp_path, monkeypatch):
+    from agent_comms.activity_checkpoint import ActivityCheckpoint
+
+    path = tmp_path / "activity.jsonl"
+    log = ActivityLog(path)
+    log.emit(Activity("a", ActivityState.THINKING))
+    log.all_current()
+    log.emit(Activity("b", ActivityState.THINKING))
+    earlier_size = path.stat().st_size
+    earlier_ready, later_ready = threading.Event(), threading.Event()
+    publish_earlier, publish_later = threading.Event(), threading.Event()
+    capture = ActivityCheckpoint.capture
+    later_size = None
+
+    def suspended_capture(cls, stream, revision, latest, offset):
+        if revision.size == earlier_size:
+            earlier_ready.set()
+            assert publish_earlier.wait(5)
+        elif revision.size == later_size:
+            later_ready.set()
+            assert publish_later.wait(5)
+        return capture(stream, revision, latest, offset)
+
+    monkeypatch.setattr(ActivityCheckpoint, "capture", classmethod(suspended_capture))
+    with ThreadPoolExecutor(max_workers=2) as readers:
+        earlier = readers.submit(log.all_current)
+        assert earlier_ready.wait(5)
+        log.emit(Activity("c", ActivityState.THINKING))
+        later_size = path.stat().st_size
+        later = readers.submit(log.all_current)
+        try:
+            assert later_ready.wait(5)
+            publish_earlier.set()
+            assert set(earlier.result(5)) == {"a", "b"}
+            publish_later.set()
+            assert set(later.result(5)) == {"a", "b", "c"}
+        finally:
+            publish_earlier.set()
+            publish_later.set()
 
 
 def test_fresh_reader_rebuilds_after_activity_rewrite_before_append(tmp_path):

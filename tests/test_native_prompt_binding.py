@@ -10,7 +10,6 @@ import hashlib
 import json
 import os
 import sqlite3
-import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -62,11 +61,10 @@ def fake_native_package_acquisition(monkeypatch):
 
 
 @pytest.fixture
-def tmp_path():
-    if os.name != "posix" or not Path("/var/tmp").is_dir() or Path("/var").is_symlink():
-        pytest.skip("sealed runtime requires a real, disposable /var/tmp root")
-    with tempfile.TemporaryDirectory(prefix="ac-binding-test-", dir="/var/tmp") as root:
-        yield Path(root)
+def tmp_path(tmp_path_factory):
+    if os.name != "posix":
+        pytest.skip("sealed runtime requires POSIX private directories")
+    return tmp_path_factory.mktemp("native-binding")
 
 
 def _root(tmp_path: Path):
@@ -261,13 +259,45 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
     return fake, calls
 
 
-async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monkeypatch):
+@pytest.fixture
+def journal_without_sql(monkeypatch):
+    from agent_comms import private_send_stage
+    from agent_comms.coordination_database import StoreBusy
+
+    journal_checks = []
+    stores = []
+    bound_prompt = private_send_stage.NativeSendStage.bound_prompt
+    matches = private_send_stage.expected_prompt_matches_journal
+
+    @contextmanager
+    def ordered_binding(stage, store, *args, **kwargs):
+        assert not store.session._connection.in_transaction
+        stores.append(store.session.path)
+        with bound_prompt(stage, store, *args, **kwargs) as binding:
+            yield binding
+
+    def check_journal(*args, **kwargs):
+        # Another real coordinator must admit a writer while the journal is read.
+        # A borrowed SQL reader here used to block that writer, while the inverse
+        # sidecar/SQL order could keep the reader waiting on the writer's sidecar.
+        with Coordination(str(stores[-1]), contention=StoreBusy()) as other:
+            with other.session.transaction():
+                journal_checks.append(True)
+        return matches(*args, **kwargs)
+
+    monkeypatch.setattr(private_send_stage.NativeSendStage, "bound_prompt", ordered_binding)
+    monkeypatch.setattr(private_send_stage, "expected_prompt_matches_journal", check_journal)
+    return journal_checks
+
+
+async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monkeypatch, journal_without_sql):
     root, root_id, comms, initial, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     turn = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
+    assert journal_without_sql == [True]
     assert turn is not None
     assert turn.cursor_status == "proven"
     assert len(calls) == 1
@@ -588,13 +618,14 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
     assert len(calls) == 2 and first.message.seq < second.seq
 
 
-async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, monkeypatch):
+async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, monkeypatch, journal_without_sql):
     root, root_id, comms, initial, people = _root(tmp_path)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     turn = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
+    assert journal_without_sql == [True, True]
     assert turn is not None
     assert turn.cursor_status == "proven"
     assert len(calls) == 2  # triage probe, then the FULL answer turn
