@@ -22,6 +22,7 @@ from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent
+from .transcript_receipts import TranscriptSource
 from .typed_table import Column, TypedStore, TypedTable
 
 
@@ -135,7 +136,7 @@ class ExternalTranscriptRead:
 
 
 @dataclass(frozen=True, slots=True)
-class ExternalTranscript(TypedStore):
+class ExternalTranscript(TranscriptSource, TypedStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path
@@ -201,6 +202,6 @@ class ExternalTranscript(TypedStore):
         with self.reading() as records:
             return records.cut()
 
-    def reply_revision(self, root: Path, thread) -> PublishedReplyRevision:
+    def publication_revision(self, root: Path, thread) -> PublishedReplyRevision:
         return PublishedReplyRevision(0, 0)  # Core publishes no native replies here.
 
