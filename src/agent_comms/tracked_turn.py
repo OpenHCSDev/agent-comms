@@ -198,6 +198,9 @@ class SavedTurnEnd:
     """
 
     def __init__(self) -> None:
+        from .turn_output import TurnOutput
+
+        self.output = TurnOutput()
         self.terminal: TrackedTerminal = PendingTrackedTerminal()
 
     def fail_terminal(self, text: str) -> None:
