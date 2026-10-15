@@ -24,6 +24,15 @@ class ToolDiff:
         """Keep the producer's declared grammar across the ACP boundary."""
         return "text/x-diff" if self.format == "unified" else "application/vnd.agent-comms.numbered-diff"
 
+    def tool_content(self, tool_call_id):
+        return {"type": "content", "content": {
+            "type": "resource", "resource": {
+                "uri": f"agent-comms:///tool-diffs/{quote(tool_call_id, safe='')}",
+                "mimeType": self.mime_type,
+                "text": self.text,
+            },
+        }}
+
 def tool_result_content(
     tool_call_id: str, output: str, diff: ToolDiff | None = None,
     sent_message: SentTranscript | None = None,
@@ -34,32 +43,10 @@ def tool_result_content(
     reports a patch instead, so inventing those versions would misrepresent
     omitted context. text/x-diff preserves the actual tool result for any client.
     """
-    content: list[dict[str, Any]] = []
-    if sent_message is not None:
-        import json
-        from .field_codec import FieldCodec
+    from .transcript_events import ToolEndTranscript
 
-        return [{"type": "content", "content": {
-            "type": "resource", "resource": {
-                "uri": f"agent-comms:///messages/{sent_message.source.seq}/{quote(sent_message.source.message_id, safe='')}",
-                "mimeType": SENT_MESSAGE_MIME,
-                "text": json.dumps(FieldCodec.encode(sent_message)),
-            },
-        }}]
-    if diff is not None:
-        content.append(
-            {
-                "type": "content",
-                "content": {
-                    "type": "resource",
-                    "resource": {
-                        "uri": f"agent-comms:///tool-diffs/{quote(tool_call_id, safe='')}",
-                        "mimeType": diff.mime_type,
-                        "text": diff.text,
-                    },
-                },
-            }
-        )
-    if output:
-        content.append({"type": "content", "content": {"type": "text", "text": output}})
-    return content
+    return [
+        {"type": "content", "content": {"type": "text", "text": part}}
+        if isinstance(part, str) else part.tool_content(tool_call_id)
+        for part in ToolEndTranscript.parts_for(output, diff, sent_message)
+    ]

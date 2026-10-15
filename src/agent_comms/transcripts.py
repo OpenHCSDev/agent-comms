@@ -52,6 +52,10 @@ class TranscriptCursor:
     receipts: AssignedSourceCursor | None = None
 
     @property
+    def source_identity(self) -> AssignedSourceIdentity | None:
+        return self.receipts.identity if self.receipts is not None else None
+
+    @property
     def wire_seq(self) -> int:
         return self.receipts.sequence if self.receipts is not None else 0
 
@@ -101,6 +105,14 @@ class TranscriptPage:
     after: TranscriptCursor
     has_older: bool
     has_newer: bool
+
+    def resolve_sent_messages(self, reports):
+        """Prove bounded full reports without replacing their input objects."""
+        reports = tuple(reports)
+        scope = self.after.source_identity
+        resolved = (AssignedTranscriptSource.open(scope).resolve_sent(reports)
+                    if scope is not None else reports)
+        return dict(zip(map(id, reports), resolved))
 
     def metadata(self) -> dict[str, object]:
         return {
