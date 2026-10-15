@@ -279,9 +279,12 @@ class AssignedTranscriptSource:
         return frozenset(original.message.reference for original in self._matching_sources(references, through)
                          if original.audience.sender_lookup == lookup)
 
+    def supplies_sent(self, message, *, through):
+        return message.source in self.sent_sources((message.source,), through)
+
     def display_events(self, events, through):
         through.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
-        return tuple(projected for event in events for part in event.display_events(through.identity)
+        return tuple(projected for event in events for part in event.display_events(self, through)
                      for projected in part.assigned_events(self, through))
 
     def native_records(self, fragments, routes, reader, through):
