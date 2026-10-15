@@ -38,13 +38,11 @@ class UnreadPresentation(ABC):
         """The badge rows and tabs show."""
 
     @property
-    @abstractmethod
     def highlighted(self) -> bool:
         """Whether a known unread count requires emphasis, independent of the badge."""
+        return False
 
-    @property
-    def detail(self) -> str:
-        return ""
+    detail = ""
 
 
 @dataclass(frozen=True)
@@ -62,31 +60,13 @@ class ExactUnread(UnreadPresentation):
 
 @dataclass(frozen=True)
 class IndexingUnread(UnreadPresentation):
-    @property
-    def highlighted(self) -> bool:
-        return False
-
-    @property
-    def label(self) -> str:
-        return "Indexing…"
-
-    @property
-    def detail(self) -> str:
-        return "Unread replies are still being indexed; the exact count is not yet known."
+    label = "Indexing…"
+    detail = "Unread replies are still being indexed; the exact count is not yet known."
 
 
 @dataclass(frozen=True)
 class UnobservedUnread(UnreadPresentation):
     """No observation for this view's source has arrived yet."""
 
-    @property
-    def highlighted(self) -> bool:
-        return False
-
-    @property
-    def label(self) -> str:
-        return ""
-
-    @property
-    def detail(self) -> str:
-        return "Waiting for this source's unread state."
+    label = ""
+    detail = "Waiting for this source's unread state."
