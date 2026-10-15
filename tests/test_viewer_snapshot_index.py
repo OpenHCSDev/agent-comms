@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.bus_display_index import BusDisplayIndex
+from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
@@ -69,7 +70,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     comms.bus.reads.mark_displayed(viewer.name, seen)
     if not indexed:
         # Genuine disposable-store refusal; canonical source remains readable.
-        comms.bus.log.path.with_name("bus_route_counts.sqlite3").mkdir()
+        BusRouteCounts(comms.bus.log.path).path.mkdir()
     with comms.views.presentation.snapshot(viewer=viewer.name) as (basis, source):
         before = comms.bus.pending_counts_opened(source, basis)
         sent = comms.views.last_sent_timestamps(source=source, registry=basis.registry)
@@ -100,12 +101,12 @@ def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path):
     modified = bus_path.stat().st_mtime_ns
     bus_path.write_bytes(original)
     os.utime(bus_path, ns=(modified + 1_000_000_000, modified + 1_000_000_000))
-    bus_path.with_name("bus_route_counts.sqlite3").unlink()
+    BusRouteCounts(bus_path).path.unlink()
 
     def projection_bytes():
         paths = [
             comms.bus.log.path.with_name("bus_activity_latest.json"),
-            comms.bus.log.path.with_name("bus_route_counts.sqlite3"),
+            BusRouteCounts(comms.bus.log.path).path,
             *comms.bus.log.path.parent.glob("bus_display_*.json"),
         ]
         return {path.name: path.read_bytes() for path in paths if path.exists()}
