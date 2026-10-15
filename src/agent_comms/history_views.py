@@ -462,6 +462,7 @@ class HistoryViews:
             "activity": self.agents.activity._path,
             "runtime_info": self.agents.runtime_info.path,
             "reads": self.bus.reads.path,
+            "native_unread": self.transcript_reads.index_path,
             "goal_waits": self.root / GoalWaits.filename,
             "relationships": self.root / RelationshipStore.filename,
             "notifications": tuple(NotificationAssignment.source_paths(self.root)),

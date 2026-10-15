@@ -849,6 +849,7 @@ class WireRevision:
     activity: FileRevision | None
     runtime_info: FileRevision | None
     reads: FileRevision | None
+    native_unread: FileRevision | None
     goal_waits: FileRevision | None
     relationships: FileRevision | None
     notifications: tuple[FileRevision | None, ...]
@@ -864,14 +865,19 @@ class WireRevision:
         return replace(self, expiry_tick=earlier.expiry_tick) != earlier
 
     def status_changed_since(self, earlier: WireRevision) -> bool:
-        """Activity, assignments and bus reads supply thread and sidebar status.
+        """Activity, assignments and bus reads supply thread status.
 
         Draft and finished CLI items share one store. Neither changes the
         sidebar's roster, activity or unread bus counts. Their own observer
         still receives every revision and refreshes the conversation.
         """
         return replace(self, external_transcripts=earlier.external_transcripts,
+                       native_unread=earlier.native_unread,
                        expiry_tick=earlier.expiry_tick) != earlier
+
+    def sidebar_changed_since(self, earlier: WireRevision) -> bool:
+        """Native unread progress updates counts without rebuilding thread presentations."""
+        return self.native_unread != earlier.native_unread or self.status_changed_since(earlier)
 
     def external_transcripts_changed_since(self, earlier: WireRevision) -> bool:
         """CLI drafts and finished items changed, independently of coordination status."""

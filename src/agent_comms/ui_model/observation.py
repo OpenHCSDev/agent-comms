@@ -39,6 +39,7 @@ from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 
 if TYPE_CHECKING:
+    from concurrent.futures import Future
     from multiprocessing.connection import Connection
 
     from agent_comms.comms import Comms
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
     from agent_comms.ui_model.delivery import InputDelivery
     from agent_comms.ui_model.goal import OwnerGoalSnapshot
     from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel
+    from agent_comms.view_unread import ReplyIndexBatch
 
 # Activity older than this reads as idle; re-derive rows at least this often
 # so staleness shows without a store change.
@@ -76,8 +78,7 @@ class InterestRequest(ObservationRequest):
         previous = service.observations.get(type(observation))
         if previous is None or previous.request != self:
             service.observations[type(observation)] = observation
-        service.observe_due = True
-        service.changed.set()
+        service.observe_again()
 
 
 InterestT = TypeVar("InterestT", bound=InterestRequest)
@@ -91,6 +92,9 @@ class Observation(ABC, Generic[InterestT]):
 
     @abstractmethod
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]: ...
+
+    def after_read(self, service: ObservationService) -> None:
+        """Subscribe to completion when this observation has unfinished preparation."""
 
 
 class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
@@ -283,8 +287,7 @@ class ReadTranscriptUpdate(TranscriptRequest[TranscriptSnapshotUpdate | Transcri
 
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
         previous = self.previous
-        if (previous is not None and previous.records_cut == read.identity.records_cut
-                and previous.same_content(read.identity)):
+        if previous is not None and previous.same_snapshot(read.identity):
             return TranscriptDraftUpdate(read.identity, read.current_draft())
         return TranscriptSnapshotUpdate.from_read(read)
 
@@ -412,19 +415,38 @@ class SidebarReading(Observation[ObserveSidebar]):
         super().__init__(request)
         self.stage: SidebarReadStage = RosterSidebarRead()
         self.sent: SidebarSent | None = None
+        self.preparation: Future[ReplyIndexBatch] | None = None
+
+    def after_read(self, service: ObservationService) -> None:
+        preparation = service.comms.views.transcript_reads.preparation
+        if preparation is None or preparation is self.preparation:
+            return
+        self.preparation = preparation
+        loop = asyncio.get_running_loop()
+        preparation.add_done_callback(
+            lambda _: loop.call_soon_threadsafe(self.prepared, service)
+        )
+
+    def prepared(self, service: ObservationService) -> None:
+        if service.observations.get(type(self)) is self:
+            self.sent = None
+            service.observe_again()
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         while True:
             key = SidebarSent(revision.expiry_tick // EXPIRY_PERIOD, type(self.stage), revision)
-            changed = self.sent is None or revision.status_changed_since(self.sent.revision)
+            changed = self.sent is None or revision.sidebar_changed_since(self.sent.revision)
             if not changed and key == self.sent:
                 return
-            result = self.stage.read(self.request, comms, revision)
+            stage = self.stage
+            result = stage.read(self.request, comms, revision)
             if result is None:
                 return
             self.sent = key
             result.finish_read(self)
             yield result
+            if self.stage is stage:
+                return
 
 
 @dataclass(frozen=True)
@@ -580,6 +602,8 @@ class SidebarObserved(SidebarResult):
 
     def finish_read(self, reading: SidebarReading) -> None:
         reading.stage = reading.stage.next()
+        if self.snapshot.unread_pending:
+            reading.sent = None
 
 
 @dataclass(frozen=True)
@@ -673,6 +697,10 @@ class ObservationService:
 
         source = ModifiedWatchSource(self.comms.root, self.store_names())
         async for _ in WireWatch.observations(source):
+            self.observe_again()
+
+    def observe_again(self) -> None:
+        if not self.closed:
             self.observe_due = True
             self.changed.set()
 
@@ -710,14 +738,14 @@ class ObservationService:
                 await self.answer_pending(attempted)
                 if self.closed or self.observations.get(kind) is not observation:
                     break
+            observation.after_read(self)
 
     async def expire(self) -> None:
         """Time-based sidebar state belongs to the sidebar observer, not file watching."""
         while not self.closed:
             now = time.time()
             await asyncio.sleep(EXPIRY_PERIOD - now % EXPIRY_PERIOD)
-            self.observe_due = True
-            self.changed.set()
+            self.observe_again()
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
@@ -734,11 +762,13 @@ class ObservationService:
                     self.observe_due = False
                     await self.observe(attempted)
         finally:
+            self.closed = True
             watching.cancel()
             expiring.cancel()
             for asking in self.owner_reads.values():
                 asking.cancel()
             loop.remove_reader(self.connection.fileno())
+            self.comms.views.transcript_reads.close()
 
 
 def serve(root: str, connection: Connection) -> None:
@@ -780,7 +810,7 @@ class ObservationProcess:
     def __init__(self, root: Path):
         context = multiprocessing.get_context("spawn")
         self.connection, child = context.Pipe()
-        self.process = context.Process(target=serve, args=(str(root), child), daemon=True,
+        self.process = context.Process(target=serve, args=(str(root), child), daemon=False,
                                        name="agent-comms-observation")
         self.process.start()
         child.close()
@@ -856,7 +886,4 @@ class ObservationProcess:
 
     def close(self) -> None:
         self.connection.close()
-        self.process.join(timeout=2)
-        if self.process.is_alive():
-            self.process.terminate()
-            self.process.join(timeout=2)
+        self.process.join()

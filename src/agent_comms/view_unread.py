@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
+import os
 import sqlite3
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
+from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
+from multiprocessing.synchronize import Event
 from pathlib import Path
-from threading import Event, RLock
+from threading import RLock
 from time import monotonic
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 from weakref import WeakValueDictionary
 
 from .coordination_database import CoordinationStore, StoreBusy
 from .native_entries import NativeEntry
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
+from .store_files import _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
 
@@ -46,10 +51,50 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
             f"SELECT * FROM {cls.declared_name} WHERE source IN (SELECT value FROM json_each(?))",
             (json.dumps(tuple(sources)),),
         ))
-        return {row.source: row for row in rows}
+        indexes = {source: cls(source=source) for source in sources}
+        indexes.update((row.source, row) for row in rows)
+        return indexes
 
     def covers(self, revision: FileRevision) -> bool:
         return self.complete and self.revision == revision
+
+    def continues(self, revision: FileRevision) -> bool:
+        return (
+            self.revision is not None and self.through <= self.revision.size
+            and self.revision.holds_cut(revision, self.revision.size)
+        )
+
+    def prepare(self, revision: FileRevision, budget: IndexSlice) -> ReplyIndexUpdate | None:
+        """Decode a captured native cut only; this worker never opens SQLite."""
+        if not budget.available:
+            return None
+        resume = self.continues(revision)
+        through, total = (self.through, self.total) if resume else (0, 0)
+        complete = False
+        replies: list[TranscriptReply] = []
+        with Path(self.source).open("rb") as stream:
+            if not revision.opened_by(stream):
+                return None
+            stream.seek(through)
+            for _ in range(budget.source_records):
+                if through == revision.size:
+                    complete = True
+                    break
+                if not budget.available:
+                    break
+                raw = stream.readline(revision.size - through)
+                budget.consumed(len(raw))
+                if not raw.endswith(b"\n"):
+                    complete = True  # Retry the writer's tail only after a revision change.
+                    break
+                through = stream.tell()
+                if NativeEntry.read(raw).unread_reply:
+                    total += 1
+                    replies.append(TranscriptReply(self.source, through, total))
+        index = ReplyIndex(
+            revision, through, total, self.source, complete or through == revision.size
+        )
+        return ReplyIndexUpdate(self, index, tuple(replies))
 
 
 @dataclass(frozen=True)
@@ -97,10 +142,24 @@ class IndexSlice:
     skipped or truncated. The next refresh resumes after that record.
     """
 
+    seconds: ClassVar[float] = 0.15
+    source_records: ClassVar[int] = 256
+    _worker_cancellation: ClassVar[Event]
+
     deadline: float
     cancelled: Event
     bytes_left: int = 1024 * 1024
     records_left: int = 512
+
+    @classmethod
+    def initialize_worker(cls, cancelled: Event) -> None:
+        """Bind the parent's cancellation signal, never its agent identity or stores."""
+        os.environ.pop("AGENT_COMMS_THREAD", None)
+        cls._worker_cancellation = cancelled
+
+    @classmethod
+    def worker_slice(cls) -> IndexSlice:
+        return cls(monotonic() + cls.seconds, cls._worker_cancellation)
 
     @property
     def available(self) -> bool:
@@ -115,6 +174,84 @@ class IndexSlice:
         self.records_left -= 1
 
 
+@dataclass(frozen=True)
+class ReplyIndexUpdate:
+    """A native-only prepared delta, admitted against one stored prefix."""
+
+    before: ReplyIndex
+    after: ReplyIndex
+    replies: tuple[TranscriptReply, ...]
+
+    def commit(self, database: sqlite3.Connection) -> None:
+        current = ReplyIndex.one(database, source=self.after.source) or ReplyIndex(
+            source=self.after.source
+        )
+        if current != self.before:
+            return  # Another observer's prefix won; never apply these ordinals to it.
+        if not self.before.continues(self.after.revision):
+            database.execute(
+                f"DELETE FROM {TranscriptReply.declared_name} WHERE source=?", (self.after.source,)
+            )
+        for reply in self.replies:
+            reply.insert(database)
+        self.after.upsert(database)
+
+
+@dataclass(frozen=True)
+class ReplyIndexBatch:
+    """The compact result of one bounded, fair native-file preparation unit."""
+
+    updates: tuple[ReplyIndexUpdate, ...]
+    last_source: str | None
+
+    @classmethod
+    def prepare(cls, reads: tuple[tuple[ReplyIndex, FileRevision], ...]) -> ReplyIndexBatch:
+        budget = IndexSlice.worker_slice()
+        updates = []
+        last_source = None
+        for index, revision in reads:
+            if not budget.available:
+                break
+            last_source = index.source
+            try:
+                update = index.prepare(revision, budget)
+            except FileNotFoundError:
+                continue  # A later source observation sees the missing file.
+            if update is not None:
+                updates.append(update)
+        return cls(tuple(updates), last_source)
+
+
+@dataclass
+class NativeReplyPreparation:
+    """The actual admitted work and future; deletion withdraws its original reads."""
+
+    reads: dict[str, tuple[ReplyIndex, FileRevision]]
+    future: Future[ReplyIndexBatch]
+
+    def retire(self, sources: Collection[str]) -> None:
+        for source in sources:
+            self.reads.pop(source, None)
+        if not self.reads:
+            self.future.cancel()
+
+    def commit(self, database: sqlite3.Connection, wanted: Collection[str]) -> str | None:
+        if self.future.cancelled():
+            return None
+        batch = self.future.result()
+        with database:
+            database.execute("BEGIN IMMEDIATE")
+            for update in batch.updates:
+                source = update.after.source
+                if source not in self.reads or source not in wanted:
+                    continue
+                revision = FileRevision.capture(Path(source))
+                expected = self.reads[source][1]
+                if revision is not None and expected.holds_cut(revision, expected.size):
+                    update.commit(database)
+        return batch.last_source
+
+
 class TranscriptReadState(ThreadOwnedState):
     """Index completed replies incrementally; keep the human cursor separate.
 
@@ -127,18 +264,32 @@ class TranscriptReadState(ThreadOwnedState):
     def __init__(self, path: Path):
         self.path = path.with_name(ReadLedger.filename)
         self.reads = ReadLedger(self.path)
-        self._index_path = path.with_name(f"transcript_reply_index.v{_INDEX_VERSION}.sqlite3")
+        self.index_path = path.with_name(f"transcript_reply_index.v{_INDEX_VERSION}.sqlite3")
         self._connection: sqlite3.Connection | None = None
         self._database_inode: int | None = None
         self._lock = RLock()
-        self._cancelled = Event()
-        self._next_source = 0
+        self._context = multiprocessing.get_context("spawn")
+        self._cancelled = self._context.Event()
+        self._next_source: str | None = None
+        self._pool: ProcessPoolExecutor | None = None
+        self._preparation: NativeReplyPreparation | None = None
 
     def close(self) -> None:
-        """Cancel indexing before waiting for its transaction and closing SQLite."""
+        """Cancel and join the actual native preparation before closing SQLite."""
         self._cancelled.set()
         with self._lock:
+            if self._preparation is not None:
+                self._preparation.future.cancel()
+            if self._pool is not None:
+                self._pool.shutdown(wait=True, cancel_futures=True)
+                self._pool = None
+            self._preparation = None
             self._close_database()
+
+    @property
+    def preparation(self) -> Future[ReplyIndexBatch] | None:
+        """The admitted completion itself, for the observer's existing wakeup."""
+        return self._preparation.future if self._preparation is not None else None
 
     def _close_database(self) -> None:
         if self._connection is not None:
@@ -147,21 +298,19 @@ class TranscriptReadState(ThreadOwnedState):
             self._database_inode = None
 
     def __del__(self) -> None:
-        connection = getattr(self, "_connection", None)
-        if connection is not None:
-            connection.close()
+        self.close()
 
     def _database(self) -> sqlite3.Connection:
-        revision = FileRevision.capture(self._index_path)
+        revision = FileRevision.capture(self.index_path)
         if self._connection is not None and (
             revision is None or revision.identity.inode != self._database_inode
         ):
             self._connection.close()
             self._connection = None
         if self._connection is None:
-            self._index_path.parent.mkdir(parents=True, exist_ok=True)
+            self.index_path.parent.mkdir(parents=True, exist_ok=True)
             connection = CoordinationStore.writer(
-                self._index_path, StoreBusy(), check_same_thread=False
+                self.index_path, StoreBusy(), check_same_thread=False
             )
             try:
                 connection.execute("PRAGMA synchronous=NORMAL")
@@ -182,130 +331,80 @@ class TranscriptReadState(ThreadOwnedState):
                 connection.close()
                 raise
             self._connection = connection
-            self._database_inode = self._index_path.stat().st_ino
+            self._database_inode = self.index_path.stat().st_ino
         return self._connection
 
     def _discard_database(self) -> None:
         self._close_database()
         for suffix in ("", "-journal", "-wal", "-shm"):
-            self._index_path.with_name(self._index_path.name + suffix).unlink(missing_ok=True)
+            self.index_path.with_name(self.index_path.name + suffix).unlink(missing_ok=True)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """Drop the reply projection of each deleted thread's transcript."""
         sources = tuple(thread.session_file for thread in threads if thread.session_file)
-        if not sources or not self._index_path.exists():
+        if not sources:
             return
-        # Deletion waits for the indexer instead of sharing its UI budget.
-        with self._lock, closing(CoordinationStore.writer(self._index_path)) as database:
-            with database:
-                for table in (ReplyIndex, TranscriptReply):
+        with self._lock:
+            if self._preparation is not None:
+                self._preparation.retire(sources)
+            if not self.index_path.exists():
+                return
+            with closing(CoordinationStore.writer(self.index_path)) as database, database:
+                for table in TypedTable.members_with(ReplyIndexTable):
                     database.executemany(
                         f"DELETE FROM {table.declared_name} WHERE source = ?",
                         ((source,) for source in sources),
                     )
 
-    def _index(
-        self, source: str, revision: FileRevision, budget: IndexSlice,
-        database: sqlite3.Connection, cached: ReplyIndex | None,
-    ) -> None:
-        if not budget.available:
-            return
-        resume = (
-            cached is not None and cached.revision is not None
-            and cached.through <= cached.revision.size
-            and cached.revision.holds_cut(revision, cached.revision.size)
-        )
-        through, total = (cached.through, cached.total) if resume else (0, 0)
-        complete = False
-        replies: list[TranscriptReply] = []
-        # Native decoding has no SQLite transaction or cross-process writer lock.
-        with Path(source).open("rb") as stream:
-            if not revision.opened_by(stream):
-                return
-            stream.seek(through)
-            for _ in range(256):
-                if through == revision.size:
-                    complete = True
-                    break
-                if not budget.available:
-                    break
-                raw = stream.readline(revision.size - through)
-                budget.consumed(len(raw))
-                if not raw.endswith(b"\n"):
-                    complete = True  # Retry the writer's tail only after a revision change.
-                    break
-                through = stream.tell()
-                record = NativeEntry.read(raw)
-                if record.unread_reply:
-                    total += 1
-                    replies.append(TranscriptReply(source, through, total))
-        index = ReplyIndex(revision, through, total, source, complete or through == revision.size)
-        with database:
-            database.execute("BEGIN IMMEDIATE")
-            if ReplyIndex.one(database, source=source) != cached:
-                # Another observer's commit wins. The caller rereads one snapshot;
-                # never apply these ordinals to a different committed prefix.
-                return
-            if not resume:
-                database.execute(
-                    f"DELETE FROM {TranscriptReply.declared_name} WHERE source = ?", (source,)
-                )
-            for reply in replies:
-                reply.insert(database)
-            index.upsert(database)
-
     @contextmanager
     def _indexed_sources(
-        self, revisions: dict[str, FileRevision | None], budget: IndexSlice
+        self, revisions: dict[str, FileRevision | None]
     ) -> Iterator[tuple[sqlite3.Connection, dict[str, ReplyIndex]]]:
-        """Advance missing projections lock-free, then borrow one committed read.
-
-        Ready sources keep their original snapshot: no second row decode. An
-        unfinished source releases that read before native IO and reopens it
-        after the short compare-and-commit, so totals and predecessors agree.
-        """
         database = self._database()
+        preparation = self._preparation
+        if preparation is not None and preparation.future.done():
+            # No native bytes are read under wire or SQLite custody. Deletion
+            # withdraws admitted reads, and this rechecks the original file cut.
+            with _store_lock(self.path.parent / "wire", shared=True, blocking=False):
+                self._next_source = preparation.commit(database, revisions)
+            self._preparation = None
         with database:
             CoordinationStore.begin_snapshot(database)
             indexes = ReplyIndex.for_sources(database, tuple(revisions))
-            needed = [
-                (source, revision) for source, revision in revisions.items()
-                if revision is not None
-                and (source not in indexes or not indexes[source].covers(revision))
-            ]
-            if needed:
-                database.rollback()
-                start = self._next_source % len(needed)
-                scanned = 0
-                for offset in range(len(needed)):
-                    source, revision = needed[(start + offset) % len(needed)]
-                    available = budget.available
-                    try:
-                        self._index(source, revision, budget, database, indexes.get(source))
-                    except FileNotFoundError:
-                        revisions[source] = None
-                    if available:
-                        scanned = offset + 1
-                self._next_source = start + max(scanned, 1)
-                CoordinationStore.begin_snapshot(database)
-                indexes = ReplyIndex.for_sources(database, tuple(revisions))
+            needed = {
+                source: (indexes[source], revision)
+                for source, revision in revisions.items()
+                if revision is not None and not indexes[source].covers(revision)
+            }
             yield database, indexes
+        # Admit only after releasing the read snapshot. Spawn receives data and
+        # cancellation, never this connection, the observer pipe or owner custody.
+        if needed and self._preparation is None and not self._cancelled.is_set():
+            names = tuple(needed)
+            start = names.index(self._next_source) + 1 if self._next_source in names else 0
+            reads = tuple(needed.values())
+            ordered = (*reads[start:], *reads[:start])
+            if self._pool is None:
+                self._pool = ProcessPoolExecutor(
+                    max_workers=1, mp_context=self._context,
+                    initializer=IndexSlice.initialize_worker, initargs=(self._cancelled,),
+                )
+            self._preparation = NativeReplyPreparation(
+                needed, self._pool.submit(ReplyIndexBatch.prepare, ordered)
+            )
 
     def counts(
         self, viewer: str, sources: Mapping[str, str], *, document: ReadDocument | None = None
     ) -> TranscriptUnread:
-        # A cancelled UI waiter leaves at most one bounded batch in its executor.
-        # Include lock contention in the same budget rather than queueing scans.
-        deadline = monotonic() + 0.15
-        if self._cancelled.is_set() or not self._lock.acquire(
-            timeout=max(0, deadline - monotonic())
-        ):
+        # Counts never wait for native decoding or another in-process reader.
+        if self._cancelled.is_set() or not self._lock.acquire(blocking=False):
             return TranscriptUnread({}, frozenset(sources))
         try:
-            budget = IndexSlice(deadline, self._cancelled)
             document = self.reads.read() if document is None else document
             try:
-                return self._counts_locked(viewer, sources, budget, document)
+                return self._counts_locked(viewer, sources, document)
+            except BlockingIOError:
+                return TranscriptUnread({}, frozenset(sources))
             except sqlite3.DatabaseError as error:
                 if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
                     # Another process is indexing: the same answer as a busy lock here.
@@ -313,14 +412,14 @@ class TranscriptReadState(ThreadOwnedState):
                 if error.sqlite_errorcode not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
                     raise
                 self._discard_database()
-                return self._counts_locked(viewer, sources, budget, document)
+                return self._counts_locked(viewer, sources, document)
         finally:
             self._lock.release()
 
     def _counts_locked(
-        self, viewer: str, sources: Mapping[str, str], budget: IndexSlice, document: ReadDocument
+        self, viewer: str, sources: Mapping[str, str], document: ReadDocument
     ) -> TranscriptUnread:
-        if not any(sources.values()):
+        if not any(sources.values()) and self._preparation is None:
             return TranscriptUnread(dict.fromkeys(sources, 0), frozenset())
         revisions = {
             source: FileRevision.capture(Path(source)) if source else None
@@ -328,15 +427,15 @@ class TranscriptReadState(ThreadOwnedState):
         }
         result: dict[str, int] = {}
         pending: set[str] = set()
-        with self._indexed_sources(revisions, budget) as (database, indexes):
+        with self._indexed_sources(revisions) as (database, indexes):
             ends: dict[str, int] = {}
             completed: dict[str, ReplyIndex] = {}
             for name, source in sources.items():
                 revision = revisions[source]
-                index = indexes.get(source)
+                index = indexes[source]
                 if revision is None:
                     result[name] = 0
-                elif index is None or not index.covers(revision):
+                elif not index.covers(revision):
                     pending.add(name)
                 else:
                     completed[name] = index
