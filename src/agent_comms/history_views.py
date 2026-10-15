@@ -264,7 +264,7 @@ class HistoryViews:
         """Export one fixed, non-mutating snapshot of authoritative wire rows."""
         started_at = time.time() if export_started_at is None else export_started_at
         with ExitStack() as stack:
-            with _store_lock(self._wire_lock_path):
+            with _store_lock(self._wire_lock_path, shared=True):
                 resolved = scope.resolve(self.channels.catalog, self.registry)
                 through, messages = stack.enter_context(self.bus.log.full_history_snapshot())
 

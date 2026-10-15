@@ -240,8 +240,8 @@ def accept_delivery_cohort(
     """
     if type(bus) is not MessageBus or type(store) is not Coordination:
         raise TypeError("cohort acceptance requires the actual bus and coordinator stores")
-    with bus.log.locked():
-        marker = bus.log._private_marker_unlocked()
+    with bus.log.certified_read() as source:
+        marker = source.marker
         if marker.root_id != wire_root_id:
             raise IdentityConflict("cohort admission wire root changed")
         if wire_seq <= marker.admission_after_seq:

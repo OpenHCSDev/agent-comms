@@ -186,9 +186,9 @@ class SelectedParticipant(MroDispatch):
         tuple[MessageNotification, ...],
     ]:
         """Capture detached registry, participant and optional context in one worker."""
-        with bus.log.locked():
+        with bus.log.certified_read() as source:
             _require_no_private_owner_rename(comms.root)
-            marker = bus.log._private_marker_unlocked()
+            marker = source.marker
             if marker.root_id != root_id:
                 raise IdentityConflict("selected admission wire root changed")
             after_seq = max(after_seq, marker.admission_after_seq)

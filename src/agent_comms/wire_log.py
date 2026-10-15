@@ -43,6 +43,7 @@ from .store_files import (
     _iter_jsonl_stream,
     _store_lock,
     _store_lock_file,
+    _store_read_lock,
     _held_store_source,
 )
 from .wire_metadata import WireMetadata
@@ -94,6 +95,16 @@ class OpenedWireSnapshot:
     @property
     def boundary(self) -> int:
         return self.revision.size if self.revision is not None else 0
+
+    def tail_bytes(self, max_bytes: int) -> tuple[bytes, int]:
+        """Read trailing bytes from this fixed cut's retained descriptor."""
+        if max_bytes < 0:
+            raise ValueError("tail byte limit must be nonnegative")
+        if self.stream is None:
+            return b"", 0
+        start = max(0, self.boundary - max_bytes)
+        self.stream.seek(start)
+        return self.stream.read(self.boundary - start), start
 
     @staticmethod
     def messages(record: Mapping) -> tuple[Message, ...]:
@@ -289,8 +300,8 @@ class WireLog:
 
     @contextmanager
     def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
-        """Borrow the original source verified by this canonical lock barrier."""
-        with _store_lock(self.path, blocking=blocking, contention=contention) as lock:
+        """Borrow the original source verified by the canonical reader barrier."""
+        with _store_read_lock(self.path, blocking=blocking, contention=contention) as lock:
             with self._certified_source(lock) as source:
                 yield source
 
@@ -384,12 +395,11 @@ class WireLog:
         The original wire -> bus -> registry order selects the read snapshot;
         neither physical publication lock survives into its decoder.
         """
-        with _store_lock(self.path.parent / "wire"):
-            with self.certified_read() as source:
-                snapshot = registry.snapshot()
-                incarnation = snapshot.require(name).incarnation
-                captured = source.marker.access.context_resources(
-                    source, incarnation, snapshot, previous=previous)
+        with _store_lock(self.path.parent / "wire", shared=True), self.certified_read() as source:
+            snapshot = registry.snapshot()
+            incarnation = snapshot.require(name).incarnation
+            captured = source.marker.access.context_resources(
+                source, incarnation, snapshot, previous=previous)
         return tuple(captured)
 
     @contextmanager
@@ -404,13 +414,12 @@ class WireLog:
         from .input_disposition import InputDispositions
         from .retained_task_facts import RetainedTaskFacts
 
-        with _store_lock(self.path.parent / "wire"):
-            with self.certified_read() as source:
-                snapshot = registry.snapshot()
-                owner = snapshot.require(name)
-                inputs = InputDispositions(self.path.parent)
-                captured = source.retained_task_facts(owner.incarnation)
-                export = WireExportBoundary(source.marker.last_seq, time.time())
+        with _store_lock(self.path.parent / "wire", shared=True), self.certified_read() as source:
+            snapshot = registry.snapshot()
+            owner = snapshot.require(name)
+            inputs = InputDispositions(self.path.parent)
+            captured = source.retained_task_facts(owner.incarnation)
+            export = WireExportBoundary(source.marker.last_seq, time.time())
         yield owner, snapshot, RetainedTaskFacts(tuple(captured)), inputs, export
 
     def retained_context(self, name: str, registry):
@@ -587,8 +596,6 @@ class WireLog:
         Caller holds the bus file lock. Absence is NOT authorization to append.
         """
 
-        if type(intent) is not PublicationIntents:
-            raise TypeError("Keyed response requires a validated PublicationIntents.")
         metadata = self._private_marker_unlocked()
         from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
@@ -599,9 +606,8 @@ class WireLog:
 
     def read_keyed_response(self, intent: PublicationIntents) -> Message | None:
         """Read-only exact receipt resolution; never append or repair an absent row."""
-        with _store_lock(self.path):
-            matched, _, _ = self._keyed_receipt_unlocked(intent)
-            return matched
+        with self.certified_read() as source:
+            return source.keyed_receipt(intent)
 
     def prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...]:
         """Read registered index candidates before taking any source locks."""
@@ -614,7 +620,7 @@ class WireLog:
     ):
         """Own one fixed opened inode/byte boundary beyond physical custody."""
         with ExitStack() as resources:
-            with _store_lock(self.path) as lock:
+            with _store_read_lock(self.path) as lock:
                 metadata = (
                     self._private_marker_unlocked()
                     if self.path.exists() or self.metadata_path.exists()
@@ -717,7 +723,7 @@ class WireLog:
 
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""
-        with _store_lock(self.path) as lock:
+        with _store_read_lock(self.path) as lock:
             return self._committed_sequence_unlocked(lock)
 
     def _iter_log_unlocked(self) -> Iterator[Message]:

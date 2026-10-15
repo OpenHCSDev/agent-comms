@@ -1,0 +1,132 @@
+"""Bus snapshots share read custody while publication remains exclusive."""
+
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
+from agent_comms.bus_page_index import BusPageIndex, BusPageSource
+from agent_comms.comms import wire
+from agent_comms.threads import Thread
+from agent_comms.wire_record import WireRecord
+
+
+def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture(
+    tmp_path, monkeypatch
+):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
+    comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path)))
+    first = comms.messaging.send_message("sender", "recipient", "first")
+    log = comms.bus.log
+
+    original_marker = log._private_marker_unlocked
+    readers_entered = threading.Event()
+    release_readers = threading.Event()
+    calls_lock = threading.Lock()
+    calls = 0
+
+    def pause_source_capture():
+        nonlocal calls
+        marker = original_marker()
+        with calls_lock:
+            calls += 1
+            pause = calls <= 2
+            if calls == 2:
+                readers_entered.set()
+        if pause:
+            assert release_readers.wait(timeout=5)
+        return marker
+
+    monkeypatch.setattr(log, "_private_marker_unlocked", pause_source_capture)
+
+    def capture():
+        with log._opened_wire_snapshot() as opened:
+            return opened.through, opened.boundary
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        readers = (executor.submit(capture), executor.submit(capture))
+        assert readers_entered.wait(timeout=5), "bus readers serialized behind each other"
+        delivery = executor.submit(
+            comms.messaging.send_message, "sender", "recipient", "after snapshots"
+        )
+        time.sleep(0.05)
+        assert not delivery.done(), "publication entered while shared source capture was active"
+        release_readers.set()
+        cuts = tuple(reader.result(timeout=5) for reader in readers)
+        second = delivery.result(timeout=5)
+
+    assert cuts[0] == cuts[1]
+    assert cuts[0][0] == first.seq
+    assert second.seq == first.seq + 1
+    assert [message.body for message in comms.bus.inbox("recipient")] == [
+        "first",
+        "after snapshots",
+    ]
+
+
+def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path):
+    comms = wire(tmp_path)
+    for name in ("sender", "recipient"):
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+    first = comms.messaging.send_message("sender", "recipient", "first")
+    with BusPageIndex(comms.bus.log.path) as prepared:
+        assert prepared.sync()
+
+    update_started = threading.Event()
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        with BusPageIndex(comms.bus.log.path) as reader, reader.snapshot():
+            saved = BusPageSource.one(reader.connection, singleton=1)
+            assert saved is not None
+            second = comms.messaging.send_message("sender", "recipient", "second")
+
+            def sync():
+                update_started.set()
+                with BusPageIndex(comms.bus.log.path) as writer:
+                    return writer.sync()
+
+            update = executor.submit(sync)
+            assert update_started.wait(timeout=5)
+            assert not update.done(), "page-index writer committed through a pinned reader"
+            rows = tuple(
+                reader.offsets(
+                    lower=None, upper=None, descending=False,
+                    targets=None, before_offset=saved.revision.size,
+                )
+            )
+        assert update.result(timeout=5)
+    finally:
+        executor.shutdown(wait=True)
+    assert [row.seq for row in rows] == [first.seq]
+    with BusPageIndex(comms.bus.log.path, readonly=True) as current:
+        assert [row.seq for row in current.offsets(
+            lower=None, upper=None, descending=False, targets=None
+        )] == [first.seq, second.seq]
+
+
+def test_relationship_tail_decode_does_not_retain_publication_custody(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    for name in ("sender", "recipient"):
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+    comms.messaging.send_message("sender", "recipient", "first")
+    decoding = threading.Event()
+    release = threading.Event()
+    original = WireRecord.public_from_wire
+
+    def pause_decode(record):
+        decoding.set()
+        assert release.wait(timeout=5)
+        return original(record)
+
+    monkeypatch.setattr(WireRecord, "public_from_wire", pause_decode)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        reader = executor.submit(comms.relationships.snapshot, "recipient")
+        assert decoding.wait(timeout=5)
+        publication = executor.submit(
+            comms.messaging.send_message, "sender", "recipient", "during decode"
+        )
+        second = publication.result(timeout=5)
+        release.set()
+        reader.result(timeout=5)
+
+    assert second.seq == 2

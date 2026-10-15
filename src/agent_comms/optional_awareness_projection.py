@@ -111,8 +111,8 @@ class OptionalAwarenessProjection:
         generation: int,
         admission_generation: int,
     ) -> OptionalAwarenessProjection:
-        with index.log.locked():
-            after_seq = index.log._private_marker_unlocked().admission_after_seq
+        with index.log.certified_read() as source:
+            after_seq = source.marker.admission_after_seq
         return cls(index, after_seq, through_seq, generation, admission_generation,
                    registry=registry)
 
