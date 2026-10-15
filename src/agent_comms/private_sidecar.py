@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import IdentityConflict
 
 from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable
@@ -173,7 +174,7 @@ def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.st
 
 
 def _connect(raw: bytes | None) -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:", isolation_level=None)
+    connection = CoordinationStore.writer(":memory:", isolation_level=None)
     try:
         if raw is not None:
             connection.deserialize(raw)

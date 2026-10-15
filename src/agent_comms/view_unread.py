@@ -12,6 +12,7 @@ from time import monotonic
 from typing import TYPE_CHECKING
 from weakref import WeakValueDictionary
 
+from .coordination_database import CoordinationStore
 from .native_entries import NativeEntry
 from .private_path import FileRevision
 from .read_ledger import ReadLedger
@@ -129,7 +130,7 @@ class TranscriptReadState(ThreadOwnedState):
             self._connection = None
         if self._connection is None:
             self._index_path.parent.mkdir(parents=True, exist_ok=True)
-            connection = sqlite3.connect(self._index_path, check_same_thread=False, timeout=0.05)
+            connection = CoordinationStore.writer(self._index_path, check_same_thread=False)
             try:
                 connection.execute("PRAGMA synchronous=NORMAL")
                 connection.execute("BEGIN IMMEDIATE")
@@ -163,7 +164,7 @@ class TranscriptReadState(ThreadOwnedState):
         if not sources or not self._index_path.exists():
             return
         # Deletion waits for the indexer instead of sharing its UI budget.
-        with self._lock, closing(sqlite3.connect(self._index_path, timeout=5.0)) as database:
+        with self._lock, closing(CoordinationStore.writer(self._index_path)) as database:
             with database:
                 for table in (ReplyIndex, TranscriptReply):
                     database.executemany(

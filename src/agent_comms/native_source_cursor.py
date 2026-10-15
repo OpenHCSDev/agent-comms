@@ -42,7 +42,7 @@ class NativeSourceCursor:
         cls, bus: MessageBus, *, wire_root_id: str, owner_name: str,
         source_reads: NativeEvidenceScope | None = None,
     ):
-        return await Coordination.run_async(
+        return await Coordination.run_read_async(
             bus.log.path.parent / "coordination.sqlite3",
             partial(cls._read_owned, bus, wire_root_id, owner_name, source_reads),
         )

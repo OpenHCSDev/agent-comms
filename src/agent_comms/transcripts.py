@@ -306,7 +306,7 @@ class TranscriptRead:
             return
         if failure:
             raise RelationViolationError("Native reply source has an invalid coordinator")
-        with CoordinationStore.observing(database, lock_timeout=cls.source_wait) as db:
+        with CoordinationStore.observing(database) as db:
             assert_native_runtime_schema(db)
             _assert_response_schema(db)
             yield db

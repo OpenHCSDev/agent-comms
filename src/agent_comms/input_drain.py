@@ -641,7 +641,7 @@ class InputDrain(InputObservation):
         # No physical bus custody survives into registry/SQL consumer work.
         # The original coordinator owns its bounded read acquisition policy;
         # the observation must not replace it with a zero-wait failure.
-        return await Coordination.run_async(
+        return await Coordination.run_read_async(
             self.comms.root / "coordination.sqlite3",
             partial(self._private_observation_revision, session_id, root_id, wire, entry),
         )

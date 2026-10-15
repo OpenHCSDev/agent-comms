@@ -817,7 +817,7 @@ class CoordinationSnapshot:
         people = {
             person.thread.name: person
             for person in self.threads
-            if person.status.active and person.thread.executing
+            if person.status.active and person.presentation.busy
         }
         return tuple(people[name] for name in view.members if name in people)
 

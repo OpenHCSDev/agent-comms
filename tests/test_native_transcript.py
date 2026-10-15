@@ -156,7 +156,7 @@ def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):
 def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypatch):
     from contextlib import contextmanager
     from agent_comms.bus_publication import stable_thread_lookup
-    from agent_comms.coordination_database import CoordinationStore
+    from agent_comms.coordination_database import CoordinationStore, StoreBusy
     from agent_comms.coordination_response import install_private_response_schema
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
     from agent_comms.coordinator import Coordination
@@ -198,8 +198,8 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
 
     def traced_ancestry(self, records):
         assert not active
-        # A real zero-timeout writer commits while the native parent walk runs.
-        with Coordination(str(database), lock_timeout=0) as writer:
+        # A fail-fast writer commits while the native parent walk runs.
+        with Coordination(str(database), contention=StoreBusy()) as writer:
             generation = writer.participants.get(lookup).participant_generation
             writer.participants.advance_generation(lookup, thread.name, expected_generation=generation)
         walks.append(tuple(record.entry.id for record in records))

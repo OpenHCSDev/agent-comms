@@ -245,8 +245,7 @@ class Activity(ActivityData):
 
     @classmethod
     def from_wire(cls, data: Mapping) -> Activity:
-        # Historical event timestamps may be absent; they remain unknown.
-        return FieldCodec.decode(cls, {"ts": 0.0, **data})
+        return FieldCodec.decode(cls, data)
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,8 +274,8 @@ class ActivityReadState:
 
     Each Comms builds its own ActivityLog; the decoded latest events belong
     to the file, so a new reader continues from what this process already
-    read instead of decoding the log again. The lock makes one thread catch
-    up while concurrent readers wait for its result.
+    read instead of decoding the log again. The lock captures and publishes
+    cuts; concurrent readers decode without holding it.
     """
 
     revision: FileRevision | None = None
@@ -321,9 +320,9 @@ class ActivityLog(ThreadOwnedState):
     def _observed(self, thread: str, events: Mapping[str, Activity], *,
                   active: bool, now: float) -> Activity:
         if thread not in events:
-            # The existing decoder owns an unknown historical clock. Reading
-            # an absent event must never mint an actual-event timestamp.
-            return Activity.from_wire({"thread": thread, "state": ActivityState.IDLE.value})
+            # An absent event has no historical clock. Reading it must never
+            # mint an actual-event timestamp.
+            return Activity(thread, ActivityState.IDLE, timestamp=0.0)
         latest = events[thread]
         if (
             latest.diagnostic is None
@@ -345,56 +344,67 @@ class ActivityLog(ThreadOwnedState):
 
     def _latest_events(self) -> Mapping[str, Activity]:
         read = self._read
-        with read.lock, _store_lock(self._path):
-            revision = FileRevision.capture(self._path)
-            if revision == read.revision:
-                return read.latest
-            append = (
-                revision is not None
-                and read.revision is not None
-                and revision.identity == read.revision.identity
-                and revision.size > read.revision.size
-            )
-            # Publish a new map: other threads may still be iterating the old
-            # snapshot after the store lock has been released.
-            checkpoint = (
-                self.checkpoint.read() if read.revision is None and revision is not None else None
-            )
-            if checkpoint is not None and not checkpoint.matches(self._path, revision):
-                checkpoint = None
-            if checkpoint is not None:
-                complete, offset = checkpoint.latest, checkpoint.offset
-            else:
-                complete = read.complete_latest.copy() if append else {}
-                offset = read.offset if append else 0
+        while True:
+            with read.lock:
+                revision = FileRevision.capture(self._path)
+                if revision == read.revision:
+                    return read.latest
+                started_from = read.revision
+                append = (
+                    revision is not None
+                    and started_from is not None
+                    and revision.identity == started_from.identity
+                    and revision.size > started_from.size
+                )
+                checkpoint = self.checkpoint.read() if started_from is None and revision else None
+                if checkpoint is not None and not checkpoint.matches(self._path, revision):
+                    checkpoint = None
+                if checkpoint is not None:
+                    complete, offset = dict(checkpoint.latest), checkpoint.offset
+                else:
+                    complete = read.complete_latest.copy() if append else {}
+                    offset = read.offset if append else 0
             original_offset = offset
             latest = complete
             if revision is not None:
-                with self._path.open("rb") as stream:
-                    stream.seek(offset)
-                    while raw := stream.readline():
-                        terminated = raw.endswith((b"\n", b"\r"))
-                        if line := raw.strip():
-                            try:
-                                record = json.loads(line)
-                            except (json.JSONDecodeError, UnicodeDecodeError):
-                                if not terminated:
-                                    break
-                                raise
-                            if not isinstance(record, Mapping):
-                                raise ValueError(f"JSONL record in {self._path} must be an object.")
-                            event = Activity.from_wire(record)
+                try:
+                    with self._path.open("rb") as stream:
+                        if not revision.opened_by(stream):
+                            continue
+                        stream.seek(offset)
+                        while stream.tell() < revision.size:
+                            raw = stream.readline(revision.size - stream.tell())
+                            if not raw:
+                                break
+                            terminated = raw.endswith((b"\n", b"\r"))
+                            if line := raw.strip():
+                                try:
+                                    record = json.loads(line)
+                                except (json.JSONDecodeError, UnicodeDecodeError):
+                                    if not terminated:
+                                        break
+                                    raise
+                                if not isinstance(record, Mapping):
+                                    raise ValueError(
+                                        f"JSONL record in {self._path} must be an object."
+                                    )
+                                event = Activity.from_wire(record)
+                                if terminated:
+                                    event.fold_into(complete)
+                                else:
+                                    # The writer repairs an interrupted final row before its
+                                    # next append (store_files.py:_append_jsonl).
+                                    latest = dict(complete)
+                                    event.fold_into(latest)
                             if terminated:
-                                event.fold_into(complete)
-                            else:
-                                # Preserve the existing reader's valid-EOF
-                                # behavior, but retry this tail on the next append.
-                                latest = dict(complete)
-                                event.fold_into(latest)
-                        if terminated:
-                            offset = stream.tell()
-            read.complete_latest, read.offset = complete, offset
-            read.latest, read.revision = latest, revision
+                                offset = stream.tell()
+                except FileNotFoundError:
+                    continue
+            with read.lock:
+                if read.revision != started_from:
+                    return read.latest
+                read.complete_latest, read.offset = complete, offset
+                read.latest, read.revision = latest, revision
             if revision is not None and (checkpoint is None or offset != original_offset):
                 # The log remains authoritative if its disposable read
                 # projection cannot be persisted.
@@ -403,7 +413,7 @@ class ActivityLog(ThreadOwnedState):
 
                     captured = ActivityCheckpoint.capture(self._path, revision, complete, offset)
                     self.checkpoint.replace(captured)
-            return read.latest
+            return latest
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """Append one deletion record per thread with current activity.

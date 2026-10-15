@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, BinaryIO, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
+from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
@@ -865,12 +866,12 @@ def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
         or stat.S_IMODE(info.st_mode) != 0o600
     ):
         raise RelationViolationError("Private bus checkpoint is not owner-only.")
-    uri = f"{path.absolute().as_uri()}?mode={'ro' if readonly else 'rw'}"
-    db = sqlite3.connect(uri, uri=True, timeout=0.05)
-    db.row_factory = sqlite3.Row
     if readonly:
-        db.execute("PRAGMA query_only=ON")
+        db = CoordinationStore.read_snapshot(path)
     else:
+        uri = f"{path.absolute().as_uri()}?mode=rw"
+        db = CoordinationStore.writer(uri, uri=True)
+        db.row_factory = sqlite3.Row
         db.execute("PRAGMA synchronous=FULL")
     return db
 

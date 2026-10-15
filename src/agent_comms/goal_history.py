@@ -18,6 +18,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Literal
 
+from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
 from .goals import Goal
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
@@ -78,10 +79,7 @@ class GoalHistoryStore:
             if (not stat.S_ISREG(before.st_mode) or before.st_uid != os.geteuid()
                     or stat.S_IMODE(before.st_mode) != 0o600):
                 raise GoalHistoryError("Original goal history must be a private regular file.")
-            with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True,
-                                         timeout=5, isolation_level=None)) as connection:
-                connection.execute("PRAGMA query_only=ON")
-                connection.execute("BEGIN")
+            with closing(CoordinationStore.read_snapshot(path)) as connection:
                 actual = SQLiteSchemaObject.read(connection.execute(
                     "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
                     "AND name NOT LIKE 'sqlite_%'"
@@ -99,7 +97,7 @@ class GoalHistoryStore:
 
     def _connect(self) -> sqlite3.Connection:
         try:
-            connection = sqlite3.connect(self.path, timeout=5, isolation_level=None)
+            connection = CoordinationStore.writer(self.path, isolation_level=None)
             connection.execute("PRAGMA journal_mode=DELETE")
             connection.execute("PRAGMA synchronous=EXTRA")
             return connection

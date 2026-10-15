@@ -9,8 +9,13 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_database import (
+    DEFAULT_STORE_CONTENTION,
+    CoordinationStore,
+    StoreContention,
+)
 from agent_comms.coordination_errors import (
+    CoordinationReadUnavailable,
     IntegrityViolationError,
 )
 
@@ -20,9 +25,10 @@ if TYPE_CHECKING:
 
 class CoordinationSession(CoordinationStore):
     def __init__(
-        self, path: str, *, clock_ms: Callable[[], int] | None = None, lock_timeout: float = 5.0
+        self, path: str, *, clock_ms: Callable[[], int] | None = None,
+        contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
-        super().__init__(path, lock_timeout=lock_timeout)
+        super().__init__(path, contention)
         self._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
 
     def now(self, floor: int = 0) -> int:
@@ -81,12 +87,15 @@ class CoordinationSession(CoordinationStore):
         if db.in_transaction:
             yield
             return
-        db.execute("BEGIN")
         try:
-            yield
-        finally:
-            if db.in_transaction:
-                db.execute("ROLLBACK")
+            try:
+                self.begin_snapshot(db)
+                yield
+            finally:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+        except sqlite3.OperationalError as error:
+            CoordinationReadUnavailable.raise_from(error)
 
 
 class NativeBoundary(ExitStack):
@@ -160,3 +169,22 @@ class NativeCoordinationSession(CoordinationSession):
         if not isinstance(boundary, NativeBoundary):
             raise IntegrityViolationError("native release requires an acquired boundary")
         snapshot.release_resources(boundary)
+
+
+class ReadNativeCoordinationSession(NativeCoordinationSession):
+    """Read-only native coordination through the complete session constructor."""
+
+    def _prepare_private_file(self) -> None:
+        self._private_file()
+
+    def _open_connection(self, contention: StoreContention) -> sqlite3.Connection:
+        return self._open_reader(self.path, contention)
+
+    def _configure_connection(self) -> None:
+        pass  # _open_reader configured query-only behavior before publication.
+
+    def _initialize_schema(self) -> None:
+        pass  # Consumers validate exactly the typed tables they read.
+
+    def _enforce_private_modes(self) -> None:
+        pass  # A reader observes private storage and never repairs it.
