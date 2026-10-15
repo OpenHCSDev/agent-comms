@@ -25,6 +25,10 @@ Do not replace all physical bus changes with conversation visibility. `Notificat
 
 The separate native attach defect was observed by core-route-counts without submitting input: “Transcript finished while reading its current draft”, while saved history rendered. `RecordsCut` now owns draft compatibility: `SessionCut` accepts valid append containment because native drafts belong to ACP; `ExternalCut` requires the same finished-item cut because completion retires its draft. `TranscriptReadIdentity` retains content/provenance checks and supplies the common validation to both draft read paths. Exact `same_snapshot` behavior is unchanged.
 
+`SidebarResult`, the existing result ABC, owns the same revision-normalized comparison for every declared result. `SidebarReading` retains its last publication separately from read admission: roster/complete reads, expiry, unread-pending retries, and preparation completion all still execute before suppression. The entire snapshot, derived rows, request filters and read-marker notice participate. `UnreadableHistory` owns error equality through its original exception type/arguments; its duplicate runtime/reason attributes and duplicated argument comparisons are deleted. Failure, recovery and changed failures stay distinct. The measured `BusyRows` animation is independent and is not removed or attributed to claim appends.
+
+Observation reuse belongs to `Observation.for_interest`; `ThreadReading` owns its irreducible fresh-reader lifetime. The intermediate `reuses_observation` behavioral flag and external request branch are deleted. An initial empty membership still publishes so the UI can clear old rows.
+
 ## Source census and new cases
 
 Canonical refactor-audit `Package` parsing covered 320 Core and 281 Toad production modules, with zero parse omissions. The conservative AST query retained declarations, imports, bases through class sites, writes, reads and checks for the presentation/observation/cut family. Dynamic dispatch is not resolved by this query; the declared `RecordsCut` members and all production `ThreadsObserved` consumers were read directly.
@@ -33,7 +37,7 @@ Reproduce the decisive ownership searches:
 
 ```
 rg -n 'class .*Cut|def draft_current|require_draft_snapshot|same_snapshot' src/agent_comms/{native_transcript,external_transcript,transcripts}.py
-rg -n 'same_observation|changed_since|ThreadsObserved|reuses_observation' src/agent_comms/{thread_presentation,ui_model/observation,ui_model/status}.py
+rg -n 'same_observation|changed_since|ThreadsObserved|for_interest' src/agent_comms/{thread_presentation,ui_model/observation,ui_model/status}.py
 rg -n 'ThreadsObserved|result.changed|def show_thread' ../toad-first-run/src/toad/comms_root.py
 ```
 

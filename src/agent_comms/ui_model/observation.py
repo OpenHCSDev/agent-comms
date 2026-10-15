@@ -28,7 +28,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, Self, TypeVar
 
 from agent_comms.coordination_errors import (
     CoordinationError,
@@ -69,16 +69,13 @@ class ObservationRequest(ABC):
 class InterestRequest(ObservationRequest):
     """Changes what is observed; the service observes again."""
 
-    reuses_observation = True
-
     @abstractmethod
     def observation(self) -> Observation: ...
 
     def receive(self, service: ObservationService) -> None:
         observation = self.observation()
-        previous = service.observations.get(type(observation))
-        if not self.reuses_observation or previous is None or previous.request != self:
-            service.observations[type(observation)] = observation
+        kind = type(observation)
+        service.observations[kind] = observation.for_interest(service.observations.get(kind))
         service.observe_again()
 
 
@@ -90,6 +87,10 @@ class Observation(ABC, Generic[InterestT]):
 
     def __init__(self, request: InterestT):
         self.request = request
+
+    def for_interest(self, previous: Self | None) -> Self:
+        """The requested view owns whether its read lifetime can be retained."""
+        return previous if previous is not None and previous.request == self.request else self
 
     @abstractmethod
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]: ...
@@ -110,11 +111,13 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     # broken saved data.
     DEFERRED_READS = (CoordinationReadUnavailable, StaleRevision)
 
-    def __init__(self, reader_runtime: str, reason: str):
-        self.reader_runtime = reader_runtime
-        self.reason = reason
-        # Keep constructor arguments intact for the process pipe's pickle.
-        super().__init__(reader_runtime, reason)
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, UnreadableHistory):
+            return NotImplemented
+        return type(self) is type(other) and self.args == other.args
+
+    def __hash__(self) -> int:
+        return hash((type(self), self.args))
 
     @classmethod
     def capture(cls, error: Exception) -> UnreadableHistory:
@@ -128,8 +131,9 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
         return cls(sys.prefix, "\nCaused by: ".join(reasons))
 
     def __str__(self) -> str:
-        return (f"Saved history unreadable: {self.reason}\n"
-                f"Reader runtime: {self.reader_runtime}. Restart this process on "
+        reader_runtime, reason = self.args
+        return (f"Saved history unreadable: {reason}\n"
+                f"Reader runtime: {reader_runtime}. Restart this process on "
                 "the reviewed runtime; if it still fails, the saved records need repair.")
 
 
@@ -495,9 +499,6 @@ class StopObserving(ObservationRequest):
 
 @dataclass(frozen=True)
 class ObserveThreads(InterestRequest):
-    # A new view may join an unchanged set of thread names. Its turn/read
-    # fence needs an initial presentation, not the previous views' delta.
-    reuses_observation = False
     names: frozenset[str]
 
     def observation(self) -> ThreadReading:
@@ -553,6 +554,11 @@ class ThreadReading(Observation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
         self.observed: ThreadsObserved | None = None
+
+    def for_interest(self, previous: Self | None) -> Self:
+        # A new view may join unchanged names. Its turn/read fence needs an
+        # initial presentation, not the previous readers' delta.
+        return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         previous = self.observed
@@ -704,7 +710,7 @@ class ThreadsObserved(Observed):
             if current is not before and (current is None or not current.same_observation(before)):
                 changed.add(name)
         for name in self.unavailable.keys() & previous.unavailable.keys():
-            if self.unavailable[name].args != previous.unavailable[name].args:
+            if self.unavailable[name] != previous.unavailable[name]:
                 changed.add(name)
         return frozenset(changed)
 
