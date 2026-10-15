@@ -100,8 +100,8 @@ def test_checkpoint_schema_query_stays_local_but_external_names_still_discover()
 
             # Schema-report's external-name boundary still acquires the full
             # distributed family; this change must not hide unloaded tables.
-            row = TypedTable.decode('native_runtime_inputs')
-            assert row.declared_name == 'native_runtime_inputs'
+            row = TypedTable.decode('native_runtime_input')
+            assert row.declared_name == 'native_runtime_input'
         """)],
         capture_output=True, text=True, timeout=30,
     )
