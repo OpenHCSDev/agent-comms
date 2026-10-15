@@ -109,8 +109,7 @@ class ThreadOutput:
 
     def status(self, state: ActivityState, detail: str = '') -> None:
         detail = ' '.join(detail.split())
-        self.agents.set_activity(self.transcript.incarnation.name, state,
-                                 detail if len(detail) <= 200 else detail[:199] + '…')
+        self.agents.set_activity(self.transcript.incarnation.name, state, detail)
 
 
 @dataclass(frozen=True)
