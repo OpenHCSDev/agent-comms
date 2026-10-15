@@ -80,6 +80,18 @@ three ancestry walks remain. This does not meet lifetime independence or50ms;
 it is not installed/physical acceptance and does not attribute the5.623s gap.
 Exact bound/identities/results: core-native-ancestry-8302/{request,before,after}.json.
 
+Python family census:607 modules, zero parse omissions,895→915 syntax/name
+sites, with the same pinned Toad3ad856b71 and metaclass-registry roots. Dynamic
+factory/alias resolution remains manual; these are not binding or timing proofs.
+Native JavaScript/index lifecycle is a separate required source pass before its
+implementation. The intermediate Python debt ratchet reports two additional
+foreign-absence syntax probes in native_transcript.py, not zero; no GodClass or
+boolean-chain increase. The probes include typed presence and nullable parent
+consumption in the still-to-be-deleted traversal. Ruff E/F/I and diff checks pass.
+A new opaque native entry needs no ancestry roster edit: its declared original
+coordinates suffice. A new declared Pi input-message role supplies its own user
+capability; MessageEntry consumes that declaration, not another role-name list.
+
 60 focused checks passed across the native boundary/context batch. Six stale
 terminal fixtures use removed output/failure APIs; three stale cursor/proof
 fixtures use removed assignment fields/old error wording. The isolated native
