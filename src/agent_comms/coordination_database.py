@@ -24,11 +24,8 @@ from agent_comms.coordination_schema import (
 from agent_comms.coordination_tables.metadata import SchemaMeta
 from agent_comms.coordination_tables.publications import PublicationIntents
 from agent_comms.typed_table import (
-    SQLiteSchemaDifference,
-    SQLiteSchemaObject,
     SQLiteUserVersion,
     TypedRow,
-    TypedTable,
 )
 
 
@@ -236,16 +233,15 @@ class CoordinationStore:
         return info
 
     def _initialize_schema(self) -> None:
-        # Current metadata and triggers need only a consistent read. A stale
-        # trigger is derived schema, not retained authority: refresh it under
-        # the existing installation transaction, without touching stored rows.
+        # Existing immutable metadata needs only a consistent read. Opening an
+        # ordinary reader must never become a writer awaiting other readers'
+        # release, especially before the wire -> registry -> SQLite lock order.
         self._connection.execute("BEGIN")
         try:
             version = self.schema_version
             if not self._empty_schema(version):
                 SchemaMeta.require_current(self._connection, version)
-                if not self._trigger_differences():
-                    return
+                return
         finally:
             self._connection.execute("ROLLBACK")
 
@@ -269,28 +265,11 @@ class CoordinationStore:
                 self._connection.execute(f"PRAGMA user_version = {COORDINATION_SCHEMA_VERSION}")
             else:
                 SchemaMeta.require_current(self._connection, version)
-                for difference in self._trigger_differences():
-                    difference.replace_trigger(self._connection)
             self._connection.execute("COMMIT")
         except BaseException:
             if self._connection.in_transaction:
                 self._connection.execute("ROLLBACK")
             raise
-
-    def _trigger_differences(self) -> tuple[SQLiteSchemaDifference, ...]:
-        """Compare triggers from installed table owners, including optional families."""
-        installed = {row.name for row in _TableName.read(self._connection.execute(
-            "SELECT name FROM sqlite_master WHERE type = 'table'"
-        ))}
-        expected = {}
-        for table in TypedTable.members_with(TypedTable):
-            if table.declared_name in installed:
-                declarations = table.schema_objects()
-                expected.update((name, declarations[name]) for name in table.triggers())
-        actual = SQLiteSchemaObject.read(self._connection.execute(
-            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger'"
-        ))
-        return SQLiteSchemaObject.differences(actual, expected)
 
     def _empty_schema(self, version: int) -> bool:
         return version == 0 and not _TableName.read(

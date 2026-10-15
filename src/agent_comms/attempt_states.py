@@ -18,14 +18,13 @@ from .coordination_errors import ResponseAdmissionBlocked
 
 @dataclass(frozen=True)
 class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
-    def retry_finality(self) -> bool:
+    def permits_retry(self) -> bool:
         return False
 
     terminal: ClassVar[bool] = False
     allows_tool_admission: ClassVar[bool] = False
     succeeded: ClassVar[bool] = False
     failed: ClassVar[bool] = False
-    retry_predecessor: ClassVar[bool] = False
     starting: ClassVar[bool] = False
     running: ClassVar[bool] = False
     settling: ClassVar[bool] = False
@@ -283,17 +282,19 @@ class UnsuccessfulTerminal(TerminalAttempt):
 
     failed = True
 
-    def retry_finality(self) -> bool:
-        return True
-
     @classmethod
     def successors(cls):
         return ()
 
 
-class AttemptFailedAttempt(UnsuccessfulTerminal):
-    retry_predecessor = True
+class RetryPredecessor:
+    """A known terminal outcome may precede an independently authorized retry."""
 
+    def permits_retry(self) -> bool:
+        return True
+
+
+class AttemptFailedAttempt(RetryPredecessor, UnsuccessfulTerminal):
     @property
     def release_wording(self) -> str:
         return "Released files after a failed turn"

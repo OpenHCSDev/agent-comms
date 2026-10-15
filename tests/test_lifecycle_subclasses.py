@@ -25,7 +25,6 @@ from agent_comms.attempt_states import (
 )
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayFact
 from agent_comms.coordination_tables.executions import CurrentExecutions, ExecutionOrigin, ExecutionRecord
-from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.execution_states import DeferredExecution, FailedExecution
 from agent_comms.owner_fence import prepare_fence_token
 from test_coordination_store import final_evidence, ready, started
@@ -116,29 +115,12 @@ def test_sql_retry_predecessor_is_not_every_unsuccessful_outcome(tmp_path, prede
                 db.execute("ROLLBACK")
 
 
-def test_open_replaces_stale_trigger_and_removes_retired_trigger(tmp_path):
-    path = tmp_path / "coordination.sqlite3"
-    with StandaloneCoordination(path) as store:
-        db = store.session._connection
-        tables_before = db.execute(
-            "SELECT name, sql FROM sqlite_master WHERE type = 'table' ORDER BY name"
-        ).fetchall()
-        db.execute("DROP TRIGGER attempt_insert_authorized")
-        db.execute("CREATE TRIGGER attempt_insert_authorized BEFORE INSERT ON attempts "
-                   "BEGIN SELECT RAISE(ABORT, 'obsolete authority'); END")
-        db.execute('CREATE TRIGGER "retired attempt trigger" BEFORE INSERT ON attempts '
-                   "BEGIN SELECT 1; END")
-
-    with StandaloneCoordination(path) as store:
-        db = store.session._connection
-        actual = db.execute(
-            "SELECT sql FROM sqlite_master WHERE name = 'attempt_insert_authorized'"
-        ).fetchone()[0]
-        assert actual == AttemptRecord.schema_objects()["attempt_insert_authorized"]
-        assert db.execute(
-            "SELECT name FROM sqlite_master WHERE name = 'retired attempt trigger'"
-        ).fetchone() is None
-        assert db.execute(
-            "SELECT name, sql FROM sqlite_master WHERE type = 'table' ORDER BY name"
-        ).fetchall() == tables_before
-        assert store.session._trigger_differences() == ()
+@pytest.mark.parametrize("outcome, allowed", [
+    (AttemptFailedAttempt(), True),
+    (UnknownOutcomeAttempt(), False),
+])
+def test_python_retry_permission_matches_the_outcome(outcome, allowed):
+    assert outcome.permits_retry() is allowed
+    assert DeferredExecution(1).can_retry(
+        authorized=True, attempt=outcome, is_current=False,
+    ) is allowed

@@ -203,8 +203,8 @@ class DeferredExecution(InterruptedExecution):
     def can_retry(self, *, authorized: bool, attempt, is_current: bool) -> bool:
         if self.ordinal is None or attempt is None:
             return False
-        # Failed terminal attempts own done/death/no-lease proof in their shape.
-        return authorized and attempt.retry_finality() and not is_current
+        # Outcome-owned permission is separate from final done/death evidence.
+        return authorized and attempt.permits_retry() and not is_current
 
 
 class FailedExecution(InterruptedExecution):
