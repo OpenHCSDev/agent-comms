@@ -1411,16 +1411,25 @@ class ContextCliCommand(CliCommand):
             return {"scope": "historical-imported-instructions; not current or recorded native context",
                     "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)}
         if self.turn is not None or self.diff:
-            manifests = ctx.bus.log.context_manifests(self.thread, ctx.registry)
-            selected = tuple(
-                manifest for manifest in manifests
-                if self.turn is None or manifest.turn.matches_generation(self.turn)
-            )
+            selected = []
+            cursor = None
+            while True:
+                page = ctx.bus.log.context_manifest_page(self.thread, ctx.registry, cursor=cursor)
+                for resource in reversed(page.resources):
+                    manifest = resource.value
+                    if self.diff and selected:
+                        if not selected[0].turn.same_recording(manifest.turn):
+                            return selected[0].changed_since(manifest)
+                    elif self.turn is None or manifest.turn.matches_generation(self.turn):
+                        selected.append(manifest)
+                if not page.has_older():
+                    break
+                cursor = page.older
             if not selected:
                 raise ValueError("No original context manifest exists for the requested turn")
             if self.diff:
-                return selected[-1].changed_from_history(manifests)
-            return {"manifests": selected,
+                raise ValueError("No preceding recorded turn exists for comparison")
+            return {"manifests": tuple(reversed(selected)),
                     "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
         import asyncio
         from .field_codec import FieldCodec

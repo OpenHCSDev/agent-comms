@@ -22,7 +22,7 @@ from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from collections.abc import Iterator, Mapping
-from typing import TYPE_CHECKING, BinaryIO, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
@@ -647,36 +647,139 @@ class ContextEntrySources(WireSourcePointer[ContextEntryManifest], CheckpointTab
 
 
 @dataclass(frozen=True)
+class ContextManifestCursor(ABC):
+    """A cut in one certified source; direction belongs to the cut's type."""
+
+    source: PrefixSource
+    offset: int
+    @property
+    @abstractmethod
+    def comparison(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def descending(self) -> bool: ...
+
+    def available(self, connection, owners):
+        exists = connection.execute(
+            f'SELECT 1 FROM "{RecordedContextManifestSources.declared_name}" WHERE '
+            'thread IN (' + ','.join('?' for _ in owners) + ') '
+            f'AND offset {self.comparison} ? LIMIT 1', (*owners, self.offset),
+        ).fetchone()
+        return self if exists else None
+
+
+class BeforeContextManifest(ContextManifestCursor):
+    comparison = "<"
+    descending = True
+
+
+class AfterContextManifest(ContextManifestCursor):
+    comparison = ">"
+    descending = False
+
+
+@dataclass(frozen=True)
+class ContextManifestReference:
+    """An exact recorded request, not a turn-name search over all history."""
+
+    source: PrefixSource
+    offset: int
+
+    def read(self, log, name, registry):
+        page = RecordedContextManifestSources.for_owner(log, name, registry,
+            cursor=BeforeContextManifest(self.source, self.offset + 1), limit=1)
+        if len(page.resources) != 1 or page.resources[0].pointer.offset != self.offset:
+            raise ValueError("Recorded context reference is absent from this owner")
+        return page.resources[0].value
+
+
+@dataclass(frozen=True)
+class ContextManifestPage:
+    """One page of original resources and source-bound cuts in either direction."""
+
+    resources: tuple[CapturedWireSource[ContextManifest], ...]
+    older: BeforeContextManifest | None
+    newer: AfterContextManifest | None
+
+    def has_older(self) -> bool:
+        return self.older is not None
+
+    def has_newer(self) -> bool:
+        return self.newer is not None
+
+    def reference(self, manifest: ContextManifest) -> ContextManifestReference:
+        for resource in self.resources:
+            if resource.value is manifest:
+                return ContextManifestReference(resource.source, resource.pointer.offset)
+        raise ValueError("Recorded context is outside the selected page")
+
+
+@dataclass(frozen=True)
 class RecordedContextManifestSources(
     WireSourcePointer[RecordedContextManifest], CheckpointTable, TypedTable
 ):
     thread: ThreadIncarnation
     indexes = (Index(("thread", "offset")), Index(("offset",), unique=True))
+    max_page_rows: ClassVar[int] = 8
+    max_page_bytes: ClassVar[int] = 512 * 1024
 
     @classmethod
     def for_owner(
         cls, log: WireLog, name: str, registry: Registration, *,
+        cursor: ContextManifestCursor | None = None,
         previous: tuple[CapturedWireSource[ContextManifest], ...] = (),
-    ) -> tuple[CapturedWireSource[ContextManifest], ...]:
-        """Acquire turn bytes and their entry bytes; decode outside both locks.
+        limit: int | None = None,
+    ) -> ContextManifestPage:
+        """Acquire one bounded page and its entries; decode outside both locks.
 
+        The budget bounds turn rows. Referenced entry rows are indivisible
+        dependencies of those requests, never a reason to scan other turns.
         Entry references come from the captured turn records. The second read
         must contain that same prefix, and every entry must belong to it. Later
         appends therefore cannot change this observation or fill a missing entry.
         """
         from .store_files import _store_lock
 
+        limit = cls.max_page_rows if limit is None else limit
+        if not 1 <= limit <= cls.max_page_rows:
+            raise ValueError("Context page row limit exceeds its source budget")
         with _store_lock(log.path.parent / "wire", shared=True), log.certified_read() as source:
             snapshot = registry.snapshot()
             incarnation = snapshot.require(name).incarnation
             storage = SqlStorage.for_type(ThreadIncarnation)
-            parameters = tuple(storage.to_sql(FieldCodec.encode(recorded))
-                               for recorded in incarnation.recorded_names(snapshot))
-            rows = tuple(cls.select(
-                source.connection, where="thread IN (" + ",".join("?" for _ in parameters) + ")",
-                parameters=parameters, order_by=("offset",),
-            ))
+            owners = tuple(storage.to_sql(FieldCodec.encode(recorded))
+                           for recorded in incarnation.recorded_names(snapshot))
+            where = "thread IN (" + ",".join("?" for _ in owners) + ")"
+            parameters = owners
             prefix = source.witness
+            if cursor is not None:
+                if cursor.source != prefix.source_identity:
+                    raise ValueError("Recorded context page changed its source")
+                where += f" AND offset {cursor.comparison} ?"
+                parameters += (cursor.offset,)
+            descending = cursor is None or cursor.descending
+            candidates = cls.iterate(source.connection.execute(
+                f'SELECT * FROM "{cls.declared_name}" WHERE {where} '
+                f'ORDER BY offset {"DESC" if descending else "ASC"} LIMIT ?',
+                (*parameters, limit),
+            ))
+            rows, size = [], 0
+            for row in candidates:
+                # A complete first request always makes progress, even when
+                # its indivisible record exceeds the ordinary page budget.
+                if rows and size + row.length > cls.max_page_bytes:
+                    break
+                rows.append(row)
+                size += row.length
+            candidates.close()
+            rows = tuple(sorted(rows, key=lambda row: row.offset))
+            older = newer = None
+            if rows:
+                older = BeforeContextManifest(prefix.source_identity, rows[0].offset).available(
+                    source.connection, owners)
+                newer = AfterContextManifest(prefix.source_identity, rows[-1].offset).available(
+                    source.connection, owners)
             # The certificate verifies the append-only prefix; carry installs
             # replace the inode. A retained pointer from this same source is
             # immutable, so a refresh reads only newly recorded turns.
@@ -713,7 +816,7 @@ class RecordedContextManifestSources(
                 if manifest.thread.resolved(snapshot) != incarnation:
                     raise RelationViolationError("Context source differs from recorded owner.")
                 resources[row] = CapturedWireSource(prefix.source_identity, row, raw, manifest)
-        return tuple(resources[row] for row in rows)
+        return ContextManifestPage(tuple(resources[row] for row in rows), older, newer)
 
     def decode_bytes(self, raw: bytes, root_id: str):
         from .wire_record import WireRecord

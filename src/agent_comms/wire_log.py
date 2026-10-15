@@ -386,13 +386,11 @@ class WireLog:
             for record in lock.certified_read().context_records(manifest):
                 self._append_private_unlocked(marker, record.to_wire())
 
-    def context_manifests(self, name: str, registry):
-        return tuple(resource.value for resource in self.context_manifest_resources(name, registry))
-
-    def context_manifest_resources(self, name: str, registry, *, previous=()):
+    def context_manifest_page(self, name: str, registry, *, cursor=None, previous=()):
         from .private_bus_checkpoint import RecordedContextManifestSources
 
-        return RecordedContextManifestSources.for_owner(self, name, registry, previous=previous)
+        return RecordedContextManifestSources.for_owner(
+            self, name, registry, cursor=cursor, previous=previous)
 
     @contextmanager
     def retained_sources(self, name: str, registry):
