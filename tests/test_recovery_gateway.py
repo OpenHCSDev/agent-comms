@@ -180,6 +180,74 @@ async def test_unknown_alias_and_ambiguous_owner_are_generic(private_root: Path)
         await gateway.close()
 
 
+async def test_clean_launch_expiry_keeps_same_gateway_available(private_root: Path, delayed_launch):
+    from agent_comms.recovery_gateway_client import read_gateway_projection
+
+    captured, verified = delayed_launch
+    gateway = RecoveryGateway(private_root)
+    await gateway.start()
+    try:
+        assert json.loads(await request(gateway.path))["availability"] == "unavailable"
+        assert verified == [True]
+        assert len(captured) == 1
+        assert not captured[0].alive()
+        assert not gateway._orphaned
+        assert not gateway._closing
+        view = await read_gateway_projection(gateway.path, "Alice")
+        assert view["availability"] == "available"
+        assert view["owner"] == "Alice"
+        assert view["current"]["status"] == "pending"
+    finally:
+        await gateway.close()
+    assert verified == [True, True]
+    assert not gateway.path.exists()
+    assert gateway._lock_fd is None
+    assert all(not identity.alive() for identity in captured)
+
+
+async def test_failed_retirement_retains_instance_lock(private_root: Path):
+    from agent_comms.child_process import BoundedRun
+
+    # The dedicated gateway process exits after proving retained custody. Do not
+    # clear its poisoned state or leak a lock FD into this pytest process.
+    driver = '''import asyncio,json,sys
+from pathlib import Path
+from unittest.mock import patch
+from agent_comms.child_process import AttachedChild
+from agent_comms.recovery_gateway import RecoveryGateway,GatewayUnavailableError
+from agent_comms.recovery_gateway_client import read_gateway_projection
+async def main():
+    gateway=RecoveryGateway(Path(sys.argv[1]))
+    original=AttachedChild._stop
+    async def failed_receipt(child):
+        await original(child)
+        raise RuntimeError("retirement receipt failed")
+    with patch.object(AttachedChild,"_stop",failed_receipt):
+        await gateway.start()
+        view=await read_gateway_projection(gateway.path,"Alice")
+        assert view["availability"]=="available"
+        try:
+            await gateway.close()
+        except GatewayUnavailableError:
+            pass
+        else:
+            raise AssertionError("uncertain retirement released custody")
+    assert gateway._orphaned and gateway._closing
+    assert gateway._lock_fd is not None and gateway.path.exists()
+    try:
+        await RecoveryGateway(gateway.root).start()
+    except BlockingIOError:
+        pass
+    else:
+        raise AssertionError("second gateway acquired retained lock")
+    print(json.dumps({"retained_lock":True}),flush=True)
+asyncio.run(main())
+'''
+    result = await BoundedRun.run((sys.executable, "-c", driver, str(private_root)), timeout=5)
+    assert result.outcome.successful, result.stderr.decode(errors="replace")
+    assert json.loads(result.stdout) == {"retained_lock": True}
+
+
 async def test_over_budget_is_bounded_before_reader_sort(private_root: Path):
     gateway = RecoveryGateway(private_root)
     await gateway.start()

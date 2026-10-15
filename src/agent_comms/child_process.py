@@ -38,6 +38,14 @@ class IdentityMismatchError(ProcessLookupError):
     """A recorded process incarnation is absent or has been replaced."""
 
 
+class ChildRetirementError(RuntimeError):
+    """The child owner's retirement operation failed to attest completed cleanup."""
+
+
+class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
+    """Preserve cancellation and an independently failed retirement receipt."""
+
+
 @dataclass(frozen=True)
 class ProcessIdentity:
     pid: int
@@ -907,7 +915,18 @@ class ChildProcess(Sealed, ABC):
     async def stop(self) -> ChildOutcome:
         if self._stop_task is None:
             self._stop_task = asyncio.create_task(self._stop())
-        return await join_retirement(self._stop_task)
+        try:
+            return await join_retirement(self._stop_task)
+        except asyncio.CancelledError:
+            # join_retirement completed the owned task before propagating cancellation.
+            # Its original result, not the caller's exception, owns cleanup certainty.
+            try:
+                self._stop_task.result()
+            except BaseException as error:
+                raise ChildRetirementCancelled("Child retirement was not attested") from error
+            raise
+        except Exception as error:
+            raise ChildRetirementError("Child retirement was not attested") from error
 
 
 class ChildStdio(DeclaredFamily, affix="ChildStdio"):

@@ -18,6 +18,8 @@ from agent_comms.child_process import (
     AttachedChild,
     BoundedRun,
     ChildOutcome,
+    ChildRetirementCancelled,
+    ChildRetirementError,
     ExitedOutcome,
     IdentityMismatchError,
     ObservedProcess,
@@ -141,27 +143,10 @@ async def test_exchange_borrows_result_but_retains_cleanup_on_body_error(monkeyp
 
 
 @pytest.mark.asyncio
-async def test_exchange_deadline_cancels_launch_verification_and_retires_child(monkeypatch) -> None:
+async def test_exchange_deadline_cancels_launch_verification_and_retires_child(delayed_launch) -> None:
     command = (sys.executable, "-c", "import time; time.sleep(60)")
     platform = Platform.current()
-    with platform.launch(command, ()) as launch:
-        launch_type = type(launch)
-    original_verify = launch_type.verify_async
-    original_release = launch_type.release
-    captured = []
-    verified = []
-
-    def release(launch, identity):
-        captured.append(identity)
-        original_release(launch, identity)
-
-    async def delayed_verify(launch):
-        await original_verify(launch)
-        verified.append(True)
-        await asyncio.Event().wait()
-
-    monkeypatch.setattr(launch_type, "release", release)
-    monkeypatch.setattr(launch_type, "verify_async", delayed_verify)
+    captured, verified = delayed_launch
     # This outer bound must fail the test, not masquerade as the operation's expiry.
     async with asyncio.timeout(5):
         with pytest.raises(TimeoutError):
@@ -171,6 +156,30 @@ async def test_exchange_deadline_cancels_launch_verification_and_retires_child(m
     assert len(captured) == 1
     assert not platform.matches(captured[0])
     assert not platform.group_members(captured[0])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fault", [RuntimeError, TimeoutError])
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_retirement_owner_preserves_failure_and_cancellation(monkeypatch, fault, cancel):
+    child = await AttachedChild.start((sys.executable, "-c", "pass"))
+    original_stop = child._stop
+
+    async def failing_receipt():
+        await original_stop()  # Retire the real child; inject a lost attestation safely.
+        if cancel:
+            operation.cancel()
+        raise fault("retirement receipt failed")
+
+    monkeypatch.setattr(child, "_stop", failing_receipt)
+    operation = asyncio.create_task(child.stop())
+    with pytest.raises(ChildRetirementError) as caught:
+        await operation
+    assert isinstance(caught.value, ChildRetirementCancelled) == cancel
+    assert isinstance(caught.value, asyncio.CancelledError) == cancel
+    assert operation.cancelled() == cancel
+    assert isinstance(caught.value.__cause__, fault)
+    assert child.retired
 
 
 @pytest.mark.asyncio

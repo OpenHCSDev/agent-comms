@@ -27,7 +27,7 @@ from typing import Any
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations
 
-from .child_process import BoundedRun, ParentLifeline
+from .child_process import BoundedRun, ChildRetirementError, ParentLifeline
 from .field_codec import FieldCodec
 from .pi_rpc import unique_fields
 from .coordination_database import CoordinationStore
@@ -307,11 +307,9 @@ class RecoveryGateway:
                     ):
                         raise GatewayUnavailableError("snapshot child failed or exceeded reply bound")
                     yield response
-            except GatewayUnavailableError:
-                raise
-            except (RuntimeError, TimeoutError):
-                # A12 could not attest retirement. Keep the reader admission
-                # and single-instance lock until this gateway process exits.
+            except ChildRetirementError:
+                # Only the child owner's failed retirement receipt poisons custody.
+                # A clean launch expiry leaves this gateway available for later work.
                 self._orphaned = self._closing = True
                 raise
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -349,7 +347,10 @@ class RecoveryGateway:
                     # Response and EOF do not depend on process-group retirement.
                     # This admitted handler still owns cleanup and the instance lock.
                     writer.close()
+        except asyncio.CancelledError:
+            raise
         except (
+            ChildRetirementError,
             OSError,
             sqlite3.Error,
             struct.error,
