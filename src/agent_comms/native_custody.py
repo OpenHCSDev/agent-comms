@@ -106,8 +106,12 @@ class NativeCustody(ABC):
     def retire(self, successor: NativeCustody | None = None) -> NativeCustody:
         return successor if successor is not None else self
 
-    async def closed(self) -> NativeCustody:
+    @property
+    def settled(self) -> NativeCustody:
         return self
+
+    async def closed(self) -> None:
+        """Complete this custody's retirement, if any."""
 
 class EmptyNative(NativeCustody):
     available = False
@@ -118,16 +122,6 @@ class EmptyNative(NativeCustody):
         await prepare()
         acquired = persistent.custody.idle()
         return await acquired.inspect_acquired(persistent, request)
-
-
-class NativeCleanupFailed(RuntimeError):
-    """The exact child is gone; its failed cleanup cannot own future inputs."""
-
-    def __init__(self, successor, error):
-        self.successor = successor
-        super().__init__(
-            f"Native process retired, but cleanup failed: {type(error).__name__}: {error}"
-        )
 
 
 @dataclass
@@ -142,14 +136,15 @@ class RetiringNative(NativeCustody):
             self.successor = successor
         return self
 
-    async def closed(self):
-        try:
-            await asyncio.shield(self.task)
-        except Exception as error:
-            if self.child.proc.retired:
-                raise NativeCleanupFailed(self.successor, error) from error
-            raise
-        return self.successor
+    @property
+    def settled(self) -> NativeCustody:
+        return self.successor if self.task.done() and self.child.proc.retired else self
+
+    async def closed(self) -> None:
+        # Waiting does not cancel the retained task or replace its cancellation
+        # with shield's synthetic CancelledError. The original task owns the result.
+        await asyncio.wait((self.task,))
+        self.task.result()
 
 @dataclass
 class BorrowedNative(NativeCustody):

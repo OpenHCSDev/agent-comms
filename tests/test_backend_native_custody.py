@@ -1,10 +1,12 @@
 """Saved-session launch fences exercised with the actual pinned Pi child."""
 
+import asyncio
 import os
 from uuid import uuid4
 
 import pytest
 
+from agent_comms.child_process import ChildRetirementCancelled, ChildRetirementError
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
 pytest_plugins = ("test_backend_native_lifecycle",)
@@ -105,8 +107,10 @@ async def test_cancelled_retirement_joins_exact_child_before_new_borrow(
         await asyncio.gather(retire, return_exceptions=True)
 
 
+@pytest.mark.parametrize("failure", [TimeoutError, ChildRetirementCancelled])
+@pytest.mark.parametrize("already_done", [False, True])
 async def test_retired_native_cleanup_failure_is_reported_once_without_poisoning_new_input(
-    native_backend, monkeypatch
+    native_backend, monkeypatch, failure, already_done
 ):
     """Inject a cleanup IO fault after the real pinned child has actually exited."""
     from agent_comms.native_custody import PiSessionChild
@@ -120,11 +124,19 @@ async def test_retired_native_cleanup_failure_is_reported_once_without_poisoning
         await close(child)
         if child.proc is previous:
             assert not child.proc.alive()
-            raise TimeoutError
+            raise failure("retirement diagnostic")
 
     monkeypatch.setattr(PiSessionChild, "close", failed_pipe_join)
-    with pytest.raises(Exception):
-        await owner.persistent.close_idle()
+    with pytest.raises(failure) as caught:
+        if already_done:
+            retiring = owner.persistent.custody.retire()
+            await asyncio.wait((retiring.task,))  # Complete without consuming its original result.
+            await owner.persistent._finish_retirement(retiring)
+        else:
+            await owner.persistent.close_idle()
+    if failure is ChildRetirementCancelled:
+        assert isinstance(caught.value, ChildRetirementError)
+        assert not isinstance(caught.value, Exception)
     assert not previous.alive()
     # This is the same operation the model control performs. It must not join
     # a failed task which still claims custody over an already retired child.

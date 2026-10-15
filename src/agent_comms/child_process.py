@@ -38,8 +38,12 @@ class IdentityMismatchError(ProcessLookupError):
     """A recorded process incarnation is absent or has been replaced."""
 
 
-class ChildRetirementError(RuntimeError):
-    """The child owner's retirement operation failed to attest completed cleanup."""
+class ChildRetirementError(BaseException):
+    """Capability: the child owner's cleanup receipt failed, independently of cancellation."""
+
+
+class ChildRetirementFailed(RuntimeError, ChildRetirementError):
+    """An ordinary retirement failure; never a cancellation."""
 
 
 class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
@@ -926,7 +930,7 @@ class ChildProcess(Sealed, ABC):
                 raise ChildRetirementCancelled("Child retirement was not attested") from error
             raise
         except Exception as error:
-            raise ChildRetirementError("Child retirement was not attested") from error
+            raise ChildRetirementFailed("Child retirement was not attested") from error
 
 
 class ChildStdio(DeclaredFamily, affix="ChildStdio"):

@@ -20,6 +20,7 @@ from agent_comms.child_process import (
     ChildOutcome,
     ChildRetirementCancelled,
     ChildRetirementError,
+    ChildRetirementFailed,
     ExitedOutcome,
     IdentityMismatchError,
     ObservedProcess,
@@ -176,7 +177,9 @@ async def test_retirement_owner_preserves_failure_and_cancellation(monkeypatch, 
     with pytest.raises(ChildRetirementError) as caught:
         await operation
     assert isinstance(caught.value, ChildRetirementCancelled) == cancel
+    assert isinstance(caught.value, ChildRetirementFailed) != cancel
     assert isinstance(caught.value, asyncio.CancelledError) == cancel
+    assert isinstance(caught.value, Exception) != cancel
     assert operation.cancelled() == cancel
     assert isinstance(caught.value.__cause__, fault)
     assert child.retired
