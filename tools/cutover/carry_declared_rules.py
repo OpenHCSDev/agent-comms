@@ -164,6 +164,9 @@ class InstallDeclaredRules(StoppedOwnerInstallation):
     def failed(self, failure):
         self.leave_stopped(failure)
 
+    def require_launch(self, lifecycle) -> None:
+        lifecycle.require_launch_authority()
+
     def after_stopped(self, lifecycle) -> None:
         from publish_openhcs_recovery import ROOT, require_no_clients
         from publish_runtime import RuntimePublication
