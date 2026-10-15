@@ -61,7 +61,7 @@ class AssignedSourceCursor:
 class AssignedSourceWindow:
     """Conversation and sent sources captured with one receipt frontier."""
 
-    cursor: AssignedSourceCursor
+    cursor: AssignedSourceCursor | None
     sources: tuple[CommittedDelivery, ...]
     sent_sources: tuple[CommittedDelivery, ...]
 
@@ -216,8 +216,44 @@ class LaterTranscript(TranscriptTraversal):
         return initial, consumed
 
 
+class TranscriptSource:
+    """Recorded items alone carry no assigned-wire or publication authority.
+
+    Native and external stores supply their original records. An assigned
+    source adds the separately acquired wire/publication capability below.
+    """
+
+    @property
+    def frontier(self) -> AssignedSourceCursor | None:
+        return None
+
+    def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
+        return AssignedSourceWindow(None, (), ())
+
+    def require_cursor(self, cursor):
+        cursor.require_native()
+
+    def page_rows(self, traversal, sequence, through, *, limit):
+        return iter(())
+
+    def reply_revision(self, records):
+        from .native_runtime_input import PublishedReplyRevision
+
+        return PublishedReplyRevision(0, 0)
+
+    def native_records(self, fragments, routes, reader):
+        from .native_entries import TranscriptProjection
+
+        for fragment in fragments:
+            for record in fragment:
+                yield record, record.project(lambda original: original.entry.events(
+                    TranscriptProjection(routes.get(original.entry.id),
+                                         routes.input_display(original.entry.input_id)),
+                ))
+
+
 @dataclass(frozen=True)
-class AssignedTranscriptSource:
+class AssignedTranscriptSource(TranscriptSource):
     root: Path
     recipient: ThreadIncarnation
     log: WireLog
@@ -225,6 +261,12 @@ class AssignedTranscriptSource:
     @classmethod
     def for_thread(cls, root, thread, log):
         return cls(root, thread.incarnation, log)
+
+    def require_cursor(self, cursor):
+        cursor.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
+
+    def reply_revision(self, records):
+        return records.publication_revision(self.root, self.recipient)
 
     def rows(
         self, predicate="1", parameters=(), *, limit=1, ascending=False,
