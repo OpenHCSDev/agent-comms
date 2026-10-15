@@ -81,6 +81,93 @@ def test_new_process_uses_reply_index_without_reparsing_history(tmp_path):
         assert parse.call_count == 1
 
 
+def test_sidebar_native_counts_use_the_original_captured_read_document(tmp_path):
+    from agent_comms.presentation import CoordinationSnapshot
+    from agent_comms.read_ledger import ReadLedger
+
+    comms, source = setup_thread(tmp_path)
+    append(source)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    capture = CoordinationSnapshot.capture
+
+    def painted_after_capture(*args, **kwargs):
+        comms.views.transcript_reads.mark_read(viewer, str(source), source.stat().st_size)
+        return capture(*args, **kwargs)
+
+    with (
+        patch.object(CoordinationSnapshot, "capture", side_effect=painted_after_capture),
+        patch.object(ReadLedger, "read", side_effect=AssertionError(
+            "The native projection must not reopen the captured ledger"
+        )),
+    ):
+        assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 1}
+    assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 0}
+
+
+def test_ready_native_sources_share_bulk_rows_and_one_predecessor_snapshot(tmp_path):
+    from agent_comms.view_unread import ReplyIndex, TranscriptReply
+
+    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    sources = {}
+    for number in range(20):
+        source = tmp_path / f"session-{number}.jsonl"
+        append(source)
+        state.mark_read("viewer", str(source), source.stat().st_size)
+        append(source)
+        sources[str(number)] = str(source)
+    expected = dict.fromkeys(sources, 1)
+    assert state.counts("viewer", sources).counts == expected
+    database = state._database()
+    reads = []
+    database.set_trace_callback(reads.append)
+    preceding = TranscriptReply.preceding
+
+    def captured_predecessors(connection, ends):
+        assert connection.in_transaction
+        return preceding(connection, ends)
+
+    try:
+        with patch.object(TranscriptReply, "preceding", side_effect=captured_predecessors):
+            assert state.counts("viewer", sources).counts == expected
+        assert sum(f"SELECT * FROM {ReplyIndex.declared_name} " in sql for sql in reads) == 1
+        assert sum("SELECT reply.* FROM json_each" in sql for sql in reads) == 1
+        assert not database.in_transaction
+        assert database.execute("PRAGMA busy_timeout").fetchone() == (0,)
+    finally:
+        database.set_trace_callback(None)
+        state.close()
+
+
+def test_native_decode_releases_sqlite_and_losing_slice_keeps_original_ordinals(tmp_path):
+    source = tmp_path / "source.jsonl"
+    append(source)
+    path = tmp_path / "read_ledger.json"
+    first, other = TranscriptReadState(path), TranscriptReadState(path)
+    sources = {"worker": str(source)}
+    assert first.counts("viewer", sources).counts == {"worker": 1}
+    assert other.counts("viewer", sources).counts == {"worker": 1}
+    append(source)
+    original = NativeEntry.read
+    advanced = False
+
+    def competing_read(raw):
+        nonlocal advanced
+        assert not first._connection.in_transaction
+        if not advanced:
+            advanced = True
+            assert other.counts("viewer", sources).counts == {"worker": 2}
+        return original(raw)
+
+    try:
+        with patch.object(NativeEntry, "read", side_effect=competing_read):
+            assert first.counts("viewer", sources).counts == {"worker": 2}
+        assert advanced
+        assert other.counts("viewer", sources).counts == {"worker": 2}
+    finally:
+        first.close()
+        other.close()
+
+
 def test_current_index_does_not_contend_with_an_open_previous_ui(tmp_path):
     comms, source = setup_thread(tmp_path)
     append(source)

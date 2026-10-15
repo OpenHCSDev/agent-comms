@@ -382,12 +382,13 @@ class HistoryViews:
                 self.last_sent_timestamps(source=source, registry=basis.registry), display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
                 show_stopped=show_stopped, show_archived=show_archived,
-                read_marker_notice=basis.notice,
+                read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
         unread = self.transcript_reads.counts(
             captured_viewer,
             {view.thread.name: view.thread.session_file or "" for view in snapshot.threads},
+            document=basis.document,
         )
         return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 

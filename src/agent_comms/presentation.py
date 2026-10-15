@@ -352,7 +352,7 @@ class DisplaySelection:
     catalog: CatalogDocument
     viewer: str | None
     seen: frozenset[int]
-    notice: str | None
+    document: ReadDocument
 
     @classmethod
     def capture(
@@ -364,7 +364,7 @@ class DisplaySelection:
             reads.seen_sequences(viewer, snapshot, document=document)
             if viewer is not None else frozenset()
         )
-        return cls(snapshot, catalog, canonical, seen, document.notice)
+        return cls(snapshot, catalog, canonical, seen, document)
 
     @classmethod
     @contextmanager
@@ -445,14 +445,14 @@ class BusPresentation:
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
                 {}, {}, unread={}, channel_unread={}, show_stopped=show_stopped,
-                show_archived=show_archived, read_marker_notice=basis.notice,
+                show_archived=show_archived, read_marker_notice=basis.document.notice,
             )
         pending = {
             *(view.thread.name for view in snapshot.threads),
             *(view.channel.name for view in snapshot.channels),
         }
         snapshot = replace(
-            snapshot, read_marker_notice=self.bus.reads.take_notice(basis.notice)
+            snapshot, read_marker_notice=self.bus.reads.take_notice(basis.document.notice)
         )
         return replace(snapshot, unread_pending=frozenset(pending))
 
@@ -627,7 +627,7 @@ class ChannelView:
                                if thread.role.executable and channel.matches(thread.tags))
             members = tuple(
                 sorted(
-                    (name for name, thread in people.items() if channel.matches(thread.tags)),
+                    (name for name in registered if name in people),
                     key=lambda name: (
                         name not in pinned_members,
                         channel.order.key(

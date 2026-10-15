@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_activity_index import BusActivityIndex, ChannelActivity
-from .bus_route_counts import ActorSeen, BusRouteCounts, PendingRoute
+from .bus_route_counts import BusRouteCounts, PendingRoute
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
@@ -287,9 +287,7 @@ class MessageBus:
 
         rows, appended = self._from_route_index(
             source, snapshot, deliveries,
-            lambda index, requests: index.unseen_counts(
-                requests, [ActorSeen(actor, sequences) for actor, sequences in seen.items()]
-            ),
+            lambda index, requests: index.unseen_counts(requests, seen),
         )
         for row in rows:
             add(row.actor, row.sender, row.target, row.count)
