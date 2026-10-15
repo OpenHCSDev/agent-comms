@@ -15,6 +15,7 @@ from agent_comms.tracked_turn import TrackedTurnSession
 from test_acp_private_nk_delivery import _session
 from test_acp_private_nk_delivery import tmp_path as private_root_fixture
 from test_coordinated_runtime import _fake_model
+from stored_inputs import stored_inputs
 
 tmp_path = private_root_fixture
 
@@ -80,7 +81,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
             agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
         )
         receipt = accepted_input(response)
-        accepted = agent.inputs.dispositions.read().rows[f"acp:{receipt.input_id}"]
+        accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
         assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
         assert not starts
         release.set()
@@ -97,10 +98,10 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
             )
             assert request_failure.notification_published
             assert request_failure.failure.input_state is type(
-                agent.inputs.dispositions.read().lookup(f"acp:{receipt.input_id}")
+                stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{receipt.input_id}")
             )
         assert len(starts) == 1 and "Fresh owner input" in starts[0]
-        row = agent.inputs.dispositions.read().rows[f"acp:{receipt.input_id}"]
+        row = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
         assert not row.unresolved and row.native_id == "b" * 32
         assert not agent.inputs.queued_inputs.get("beta")
         assert "beta" not in agent.inputs.backend_inboxes
@@ -142,7 +143,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
     agent.inputs.dispositions.record(
         old_key, seq=None, owner="beta", admission=admission, target="beta", text="Do not replay"
     )
-    old_row = agent.inputs.dispositions.read().rows[old_key]
+    old_row = stored_inputs(agent.inputs.dispositions.root).rows[old_key]
     comms.messaging.send_message("sender", "beta", "Selected direct message")
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
@@ -169,7 +170,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
                 await asyncio.wait_for(wake, 8)
         else:
             await asyncio.wait_for(wake, 8)
-        rows = agent.inputs.dispositions.read().rows
+        rows = stored_inputs(agent.inputs.dispositions.root).rows
         assert rows[old_key] == old_row
         assert rows[f"acp:{input_id}"].accepts_reservation
         assert "beta" not in agent.inputs.backend_inboxes
@@ -274,7 +275,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         input_id = accepted_input(response).input_id
         release.set()
         await asyncio.wait_for(turn, 8)
-        refused = agent.inputs.dispositions.read().rows[f"acp:{input_id}"]
+        refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
         assert isinstance(refused, NotSentInput)
         assert refused.public_status == "not_sent" and refused.unresolved
         assert not refused.has_native_binding and not refused.has_started
@@ -413,12 +414,12 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
             2,
         )
         receipt = accepted_input(response)
-        accepted = agent.inputs.dispositions.read().rows[f"acp:{receipt.input_id}"]
+        accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
         assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
         assert len(requests) == 1
         release.set()
         await asyncio.wait_for(turn, 18)
-        row = agent.inputs.dispositions.read().rows[f"acp:{receipt.input_id}"]
+        row = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
         assert not row.unresolved and row.native_id
         assert len(requests) == 2
         assert "Exactly one fresh owner instruction" in json.dumps(requests[1])
@@ -511,7 +512,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
         await asyncio.wait_for(turn, 8)
         assert started == expected
         assert all(
-            not agent.inputs.dispositions.read().rows[f"acp:{key}"].unresolved for key in expected
+            not stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{key}"].unresolved for key in expected
         )
     finally:
         release.set()

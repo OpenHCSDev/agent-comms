@@ -72,12 +72,12 @@ class Goals:
         """Project durable unresolved inputs; reading never schedules another attempt."""
         from .input_disposition import InputDispositions
 
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             self.registry.require(name)
             rows = (
-                InputDispositions(self.root / InputDispositions.filename)
-                .read()
-                .unknown(self.registry.aliases_for(name))
+                InputDispositions(self.root)
+                .unresolved(aliases := self.registry.aliases_for(name))
+                .unknown(aliases)
             )
             return [row.public() for row in rows]
 
@@ -91,12 +91,12 @@ class Goals:
         """Project durable notices using current owner queue facts when available."""
         from .input_disposition import InputDispositions
 
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
             return (
-                InputDispositions(self.root / InputDispositions.filename)
-                .read()
+                InputDispositions(self.root)
+                .unresolved(aliases)
                 .delivery_overview(
                     aliases, include_history=include_history, awaiting_keys=awaiting_keys
                 )
@@ -111,13 +111,13 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
-            return InputDispositions(self.root / InputDispositions.filename).dismiss_historical(
+            return InputDispositions(self.root).dismiss_historical(
                 aliases, awaiting_keys=awaiting_keys
             )
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
         """Project exact review eligibility for one current goal and dependency set."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             return self._goal_input_review(self.registry.require(name), goal_id, wait_for).public()
 
     def _goal_input_review(
@@ -135,8 +135,8 @@ class Goals:
             dict.fromkeys(GoalWaitTarget(target.name, target.created_at) for target in resolved)
         )
         owners = self.registry.aliases_for(thread.name)
-        document = InputDispositions(self.root / InputDispositions.filename).read()
-        unknown = {row.key: row for row in document.unknown(owners)}
+        dispositions = InputDispositions(self.root)
+        unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
         eligible = set()
         snapshot = self.registry.snapshot()
         from .input_attempt import ReservedInput
@@ -144,14 +144,13 @@ class Goals:
         lookup = stable_thread_lookup(thread.created_at)
         # Original certification supplies both sides of the reply. Display ACKs
         # and today's sender aliases cannot admit a different incarnation.
-        for original in self.bus.log.addressed_sources(lookup):
-            message = original.message
-            if not (
-                original.direct_for(lookup)
-                and any(target.sent(original) for target in targets)
-            ):
-                continue
-            key = InputDispositions.bus_key(message, thread)
+        replies = {
+            InputDispositions.bus_key(original.message, thread): original.message
+            for original in self.bus.log.addressed_sources(lookup)
+            if original.direct_for(lookup) and any(target.sent(original) for target in targets)
+        }
+        document = dispositions.read(tuple(replies))
+        for key, message in replies.items():
             row = document.lookup(key)
             if not row.exists:
                 # Read-only inspection of a canonical input. Only an
@@ -179,7 +178,7 @@ class Goals:
         self, name: str, *, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read durable revisions for one thread incarnation and optional goal ID."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             return self.registry.goal_history(name, goal_id=goal_id)
 
     def goal_wait(self, name: str) -> GoalWait | None:

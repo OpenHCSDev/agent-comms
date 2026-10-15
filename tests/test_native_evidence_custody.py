@@ -150,9 +150,9 @@ def test_acquired_source_observes_new_context_generation(tmp_path):
         with session.open("a") as output:
             output.write(json.dumps({"type": "compaction", "id": "new", "summary": "observed append"}) + "\n")
         write_proof_rows(session, [{
-            "schema": 1, "type": "context_committed", "sessionId": "sid",
+            "schema": 2, "type": "context_committed", "sessionId": "sid",
             "inputId": INPUT_ID, "sessionEntryId": "entry",
-            "requestGeneration": 2, "llmContextDigest": "d" * 64,
+            "requestGeneration": 2, "llmContextDigest": "d" * 64, "committedAtMs": 1_791_964_800_002,
         }])
         current = NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
         assert current.request_generation == 2

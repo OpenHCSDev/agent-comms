@@ -158,9 +158,6 @@ class NativeArguments:
     binary_key: ClassVar[str] = "AGENT_COMMS_AGENT_BIN"
     arguments_key: ClassVar[str] = "AGENT_COMMS_AGENT_ARGS"
     default_binary: ClassVar[str] = "pi"
-    default: ClassVar[tuple[str, ...]] = (
-        "--provider", "openrouter", "--model", "z-ai/glm-5.3-flash",
-    )
 
     @classmethod
     def owner_launcher(cls) -> str:
@@ -186,7 +183,7 @@ class NativeArguments:
         if arguments is None:
             source = os.environ if environment is None else environment
             encoded = source.get(cls.arguments_key)
-            arguments = cls.default if encoded is None else shlex.split(encoded)
+            arguments = () if encoded is None else shlex.split(encoded)
         return cls.parse(arguments)
 
     @classmethod

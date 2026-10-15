@@ -18,6 +18,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import CompletedGeneration
 from agent_comms.goal_presentation import GoalExecutionState
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 @pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])
@@ -262,11 +263,11 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             else:
                 assert first_proc.returncode is not None
             assert (
-                agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name
+                stored_inputs(agent.inputs.dispositions.root).rows[f"bus:{message.seq}"].declared_name
                 == "started"
             )
             for key in pending_keys:
-                row = agent.inputs.dispositions.read().rows.get(key)
+                row = stored_inputs(agent.inputs.dispositions.root).rows.get(key)
                 assert row.declared_name == "reserved" and not hasattr(row, "native_id")
                 assert row.reviewed_for_goal(goal.id)
             assert comms.registry.require("parent").goal.state.declared_name == "completed"

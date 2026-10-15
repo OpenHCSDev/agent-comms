@@ -85,10 +85,10 @@ class CatalogConfigOption(ConfigOption):
                 self.auth = self.configuration.auth_revision()
             key = self.cache_key(thread)
             if key not in self.catalogs:
-                choices = await self.discover(thread)
-                if not choices:
-                    raise NativePiUnavailable(f"{self.title} catalog has no available choices")
-                self.catalogs[key] = choices
+                # A successful empty catalogue is setup state, not a failed
+                # native process. Keep the existing unset choice reachable so
+                # the client can connect a provider before selecting a model.
+                self.catalogs[key] = await self.discover(thread)
             return self.catalogs[key]
 
     async def describe(self, thread: Thread) -> SessionConfigOptionSelect:

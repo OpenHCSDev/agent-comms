@@ -42,8 +42,10 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
                     initial.require_snapshot(comms.registry.snapshot(), "Original input changed")
             current = comms.registry.require("owner")
             status = comms.registry.status("owner")
-            saved = str(tmp_path / "observed-native.jsonl")
-            await turn.progress.before_agent_info(AgentInfo(session_file=saved))
+            native_file = tmp_path / "observed-native.jsonl"
+            native_file.write_text('{"type":"session","version":3,"id":"observed-native"}\n')
+            saved = str(native_file)
+            await turn.progress.before_native_metadata(AgentInfo(session_file=saved))
             assert turn.registry_owner is not initial
             assert turn.thread.session_file == saved
             assert turn.progress.thread is turn.thread

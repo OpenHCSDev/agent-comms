@@ -238,3 +238,28 @@ def test_tracked_execution_uses_declared_handlers_without_procedural_entrypoints
             )
             for node in ast.walk(method)
         )
+
+
+def test_queued_input_start_budget_waits_while_the_native_run_works():
+    """A message queued mid-turn is not killed by the time the turn keeps working."""
+    from types import SimpleNamespace
+
+    from agent_comms.turn_watchdog import InputStartWait, ProgressWatchdog
+
+    watchdog = ProgressWatchdog(model_wait_timeout=60.0, input_timeout=180.0, preflight_timeout=5.0)
+    session = SimpleNamespace(
+        awaiting_native_attestation=False,
+        stats=SimpleNamespace(requested=False),
+        admission=SimpleNamespace(awaiting_start=True),
+        active_tools=set(),
+    )
+    watchdog.phase = ModelWaitPhase()
+    wait = watchdog.wait_for(session)
+    assert isinstance(wait, InputStartWait)
+    wait.elapsed = 170.0
+    watchdog.now = 0.0
+    watchdog.progress()
+    assert wait.timeout() == 180.0
+    watchdog.phase = ModelWaitPhase().on(pi.ToolExecutionStart(), {"tool"})
+    session.active_tools = {"tool"}
+    assert watchdog.wait_for(session).timeout() is None

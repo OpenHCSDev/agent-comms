@@ -124,7 +124,7 @@ def _snapshot(root: Path, database: Path, requested: str) -> bytes:
     COMMIT while this original reader still holds its snapshot.
     """
     _validate_paths(root, database)
-    with CoordinationStore.observing(database, lock_timeout=0.25) as db:
+    with CoordinationStore.observing(database) as db:
         if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
             SQLiteJournalMode("delete")
         ]:

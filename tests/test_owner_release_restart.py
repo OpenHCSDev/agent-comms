@@ -38,7 +38,7 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
     if not source_python or not retained_input:
         pytest.skip('Select the actual original runtime and retained input document')
     assert Path(sys.executable).parent != Path(source_python).parent
-    original_document = InputDispositions(Path(retained_input)).read()
+    original_document = stored_inputs(Path(retained_input))
     assert original_document.rows and all(not row.accepts_reservation
                                          for row in original_document.rows.values())
     names = {row.owner for row in original_document.rows.values()}
@@ -91,7 +91,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
 ''', name, str(native.project), str(native.session)), timeout=20,
             cwd=native.project, env=environment)
         assert setup.outcome.successful, setup.stderr.decode()
-        InputDispositions(native.root / InputDispositions.filename).replace(original_document)
+        InputDispositions(native.root).replace(original_document)
         async def attach_current():
             current = comms.registry.require(name)
             from agent_comms.runtime import socket_path
@@ -157,6 +157,7 @@ def releasing_owner(tmp_path):
 from pathlib import Path
 from agent_comms.comms import Comms
 from agent_comms.threads import current_thread
+from stored_inputs import stored_inputs
 root = Path(os.environ['AGENT_COMMS_ROOT'])
 comms = Comms(root)
 def release(signum, frame):

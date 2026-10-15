@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import agent_comms
+from stored_inputs import stored_inputs
 
 
 async def configured_terminal(owner, thread, output, receipt, marker):
@@ -249,7 +250,7 @@ async def run_configured(options):
         if options.terminal_only or options.recorded_publication:
             token, child = await configured_terminal(owner, thread, output, receipt,
                                                      options.terminal_marker)
-            stored = InputDispositions(service.root / InputDispositions.filename).read()
+            stored = stored_inputs(service.root)
             original, = stored.rows.values()
             assert original.has_started
             with NativeEntry.open_evidence(Path(identity.session_file)) as reader:
@@ -288,7 +289,7 @@ async def run_configured(options):
             assert repeated == preview
             assert persistent.custody.idle().child is child
             assert selected.read_bytes() == before
-            assert not InputDispositions(service.root / InputDispositions.filename).read().rows
+            assert not stored_inputs(service.root).rows
             assert hashlib.sha256(original_file.read_bytes()).hexdigest() == original_digest
             captured.require_current()
             receipt.update(state='SCOPED_COLD_CONFIGURED_SAVED_CONTEXT_PASS',
@@ -308,7 +309,7 @@ async def run_configured(options):
             original = await observer.submit('Bounded acceptance only. Do not resume '
                 f'inherited work, use tools or change files. Reply exactly {token}.',
                 observation_seconds=300)
-        stored = InputDispositions(service.root / InputDispositions.filename).read()
+        stored = stored_inputs(service.root)
         assert len(stored.rows) == 1
         assert stored.lookup(original.key).has_started
         with NativeEntry.open_evidence(selected) as reader:
@@ -336,7 +337,7 @@ async def run_configured(options):
     finally:
         if owner is not None:
             receipt['original_dispositions'] = FieldCodec.encode(
-                InputDispositions(owner._comms.root / InputDispositions.filename).read())
+                stored_inputs(owner._comms.root))
             await owner.shutdown()
             if (options.context_only or options.terminal_only or options.recorded_publication) and 'child' in locals():
                 receipt['native_child_retired'] = child.proc.retired
@@ -362,12 +363,12 @@ def complete_goal_controls(root):
     service = Comms(root / 'wire')
     originals = FieldCodec.decode(tuple[InputAttempt, ...], json.loads(
         (root / 'context-journey' / 'original-inputs.json').read_text()))
-    dispositions = InputDispositions(service.root / InputDispositions.filename)
-    assert all(dispositions.read().lookup(item.key) == item and item.has_started for item in originals)
+    dispositions = InputDispositions(service.root)
+    assert all(stored_inputs(dispositions.root).lookup(item.key) == item and item.has_started for item in originals)
     source = service.registry.require('context-source')
     receiver = service.registry.require('context-receiver')
     retained = [Path(source.require_saved_session()), Path(receiver.require_saved_session()),
-                root / 'original-provider-requests.json', service.root / 'input_dispositions.json']
+                root / 'original-provider-requests.json', service.root / 'input_dispositions.sqlite3']
     before = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in retained}
     original_origin = originals[-1].origin.require_human()
     if isinstance(source.goal_checkpoint, PresentGoalCheckpoint):
@@ -406,7 +407,7 @@ def complete_goal_controls(root):
             receipt['standby_refused_without_active_dependency'] = str(error)
         else:
             raise AssertionError('Standby accepted a completed, non-active dependency')
-        durable = dispositions.read()
+        durable = stored_inputs(dispositions.root)
         assert all(durable.lookup(item.key) == item for item in originals)
         compare = ContextCliCommand(thread=source.name, diff=True)
         difference = compare.encode_result(compare.apply(service))

@@ -111,7 +111,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         reference = self.reference.require_recorded()
         return NativeContextProof(
             reference.input_id, reference.session_id, self.session_entry_id,
-            reference.request_generation, self.llm_context_digest,
+            reference.request_generation, self.llm_context_digest, self.committed_at_ms,
             self.require_session_identity().path,
         )
 
@@ -224,6 +224,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     session_entry_id: str | None = field(default=None, metadata={"native_context": str})
     request_generation: int | None = field(default=None, metadata={"native_context": int})
     llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
+    committed_at_ms: int | None = field(default=None, metadata={"native_context": int})
     verdict: Annotated[type[SelectedTriage] | None, RecordedTriageText] = field(
         default=None, metadata={"sql": Column(check=RecordedTriageText.sql_constraint("verdict"))}
     )
@@ -236,9 +237,10 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         "(session_id IS NULL AND session_file IS NULL) OR "
         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
         "AND length(session_file)>0 AND sent_owner_admission_generation IS NOT NULL)",
-        "(session_entry_id IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL) OR "
+        "(session_entry_id IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL "
+        "AND committed_at_ms IS NULL) OR "
         "(session_entry_id IS NOT NULL AND length(session_entry_id)>0 AND request_generation>0 "
-        "AND length(llm_context_digest)=64 AND session_id IS NOT NULL)",
+        "AND length(llm_context_digest)=64 AND committed_at_ms>0 AND session_id IS NOT NULL)",
         "stage='triage' OR verdict IS NULL",
     )
 
@@ -265,6 +267,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             session_entry_id=context.session_entry_id,
             request_generation=context.request_generation,
             llm_context_digest=context.llm_context_digest,
+            committed_at_ms=context.committed_at_ms,
             verdict=verdict,
         )
         if updated.rowcount != 1:

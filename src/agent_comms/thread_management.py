@@ -637,7 +637,7 @@ class ThreadManagement:
                 pi_bin, startup_input_key=key,
             )
             if key is not None:
-                InputDispositions(self.root / InputDispositions.filename).record(
+                InputDispositions(self.root).record(
                     key, seq=None, owner=owned.name, target=owned.name,
                     admission=self.registry.snapshot().admission_generations[owned.name],
                     text=spec.initial_prompt,

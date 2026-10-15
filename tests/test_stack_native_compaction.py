@@ -25,6 +25,7 @@ from agent_comms.comms import wire
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
+from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
@@ -337,7 +338,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
             turn.cancel()
         await asyncio.gather(turn, return_exceptions=True)
         await owner.shutdown()
-    rows = InputDispositions(comms.root / InputDispositions.filename).read().rows
+    rows = stored_inputs(comms.root).rows
     assert len(rows) == 1 and not next(iter(rows.values())).unresolved
     compaction_events = [field.event for update in updates
                          for field in decode_updates(update.field_meta or {})

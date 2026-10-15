@@ -19,6 +19,11 @@ class ToolDiff:
     text: str
     format: Literal["unified", "numbered"] = "unified"
 
+    @property
+    def mime_type(self) -> str:
+        """Keep the producer's declared grammar across the ACP boundary."""
+        return "text/x-diff" if self.format == "unified" else "application/vnd.agent-comms.numbered-diff"
+
 def tool_result_content(
     tool_call_id: str, output: str, diff: ToolDiff | None = None,
     sent_message: SentTranscript | None = None,
@@ -49,7 +54,7 @@ def tool_result_content(
                     "type": "resource",
                     "resource": {
                         "uri": f"agent-comms:///tool-diffs/{quote(tool_call_id, safe='')}",
-                        "mimeType": "text/x-diff",
+                        "mimeType": diff.mime_type,
                         "text": diff.text,
                     },
                 },

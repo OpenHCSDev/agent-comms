@@ -17,7 +17,7 @@ from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
-from agent_comms.coordination_tables.publications import PublicationIntents, PublicationReceipt
+from agent_comms.coordination_tables.publications import PublicationIntents, PublicationReceipts
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import projected
@@ -40,7 +40,7 @@ class RecoverySnapshot:
     replay: ReplayAssessments | None
     obligations: tuple[ResponseObligation, ...]
     publication_intents: tuple[PublicationIntents, ...]
-    publication_receipts: tuple[PublicationReceipt, ...]
+    publication_receipts: tuple[PublicationReceipts, ...]
     connectivity: ConnectivityFacet | None
     last_recovery: RecoveryAudit | None
     current_execution_id: str | None
@@ -85,7 +85,7 @@ class RecoverySnapshot:
         obligation = self.require_wire_response(exact_target)
         obligation.lifecycle.require_publishing()
         intent = ResponseObligation.response_record(self.publication_intents, exact_target)
-        if intent is None or intent.sender != self.execution.owner_thread:
+        if intent is None or intent.message.sender != self.execution.owner_thread:
             raise IdentityConflict("no frozen publishing intent for current owner")
         return intent, obligation
 

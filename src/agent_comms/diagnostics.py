@@ -244,8 +244,11 @@ def record_drain_failure(
         "thread": thread,
         # The artifact owns the exception; activity reason is only presentation.
         # Derive the original outer reason from that exception, never parse a
-        # file reference out of a previously presented diagnostic.
-        "drain": FieldCodec.encode(replace(diagnostic, reason=str(source_error))),
+        # file reference out of a previously presented diagnostic. The declared
+        # artifact view excludes the activity-owned observation clock.
+        "drain": FieldCodec.project(
+            replace(diagnostic, reason=str(source_error)), "artifact"
+        ),
         "outcome": "inbox observation failed; this record grants no retry authority",
         **_source_error_evidence(source_error),
     }

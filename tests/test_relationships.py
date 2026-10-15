@@ -1,11 +1,15 @@
 import json
 from concurrent.futures import ProcessPoolExecutor
+from dataclasses import replace
 
 import pytest
 
-from agent_comms.relationships import RelationshipEdit
+from agent_comms.relationships import (
+    ChildrenRelationshipGroup, CollaboratingRelationshipGroup, InboundRelationshipGroup,
+    OutboundRelationshipGroup, ParentRelationshipGroup, RelationshipEdit,
+)
 from agent_comms.comms import Comms
-from agent_comms.display_order import ThreadSort
+from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 
@@ -79,12 +83,12 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
     pending = comms.bus.pending_count("owner")
     snapshot = comms.relationships.snapshot("owner")
-    groups = {group.key: group for group in snapshot.groups}
-    assert [row.target for row in groups["inbound"].entries] == ["peer", "#team"]
-    assert [row.target for row in groups["outbound"].entries] == ["peer"]
-    assert groups["parent"].entries[0].target == "origin"
-    assert groups["children"].entries[0].target == "child"
-    assert groups["collaborating"].entries == ()
+    groups = {type(group): group for group in snapshot.groups}
+    assert [row.target for row in groups[InboundRelationshipGroup].entries] == ["peer", "#team"]
+    assert [row.target for row in groups[OutboundRelationshipGroup].entries] == ["peer"]
+    assert groups[ParentRelationshipGroup].entries[0].target == "origin"
+    assert groups[ChildrenRelationshipGroup].entries[0].target == "child"
+    assert groups[CollaboratingRelationshipGroup].entries == ()
     assert comms.bus.pending_count("owner") == pending
     assert not snapshot.history_limited
     assert "Current delivery scope" in snapshot.incoming_basis
@@ -93,7 +97,7 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
 def test_alias_and_persisted_thread_sort(tmp_path):
     comms = setup_wire(tmp_path)
     comms.relationships.edit("owner", RelationshipEdit.decode("add"), "peer", "Review")
-    comms.relationships.set_order("owner", "children", ThreadSort.LAST_ACTIVITY)
+    comms.relationships.set_order("owner", ChildrenRelationshipGroup, LastActivityThreadSort)
     comms.registry.rename("owner", "renamed")
     comms.registry.rename("peer", "reviewer")
     edge = comms.relationships.collaborations("renamed")[0]
@@ -103,8 +107,8 @@ def test_alias_and_persisted_thread_sort(tmp_path):
         comms.relationships.collaborations("reviewer")[0].peer,
     ) == ("reviewer", "renamed")
     snapshot = Comms(comms.root).relationships.snapshot("renamed")
-    children = next(group for group in snapshot.groups if group.key == "children")
-    assert children.order is ThreadSort.LAST_ACTIVITY
+    children = next(group for group in snapshot.groups if type(group) is ChildrenRelationshipGroup)
+    assert children.order is LastActivityThreadSort
     assert collaboration_rows(comms, "reviewer")[0].target == "renamed"
 
 
@@ -174,7 +178,7 @@ def collaboration_rows(comms, owner="owner"):
     return next(
         group.entries
         for group in comms.relationships.snapshot(owner).groups
-        if group.key == "collaborating"
+        if type(group) is CollaboratingRelationshipGroup
     )
 
 
@@ -336,3 +340,50 @@ def test_revision_changes_when_a_relationship_or_a_thread_does(tmp_path, monkeyp
     assert edited != start
     comms.registry.rename("peer", "reviewer")
     assert comms.relationships.revision() != edited
+
+
+def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.relationships import (
+        InboundRelationshipGroup, RelationshipGroup, SortableRelationshipGroup,
+    )
+
+    class SortedInboundRelationshipGroup(SortableRelationshipGroup, InboundRelationshipGroup):
+        title = "Sorted inbound"
+        default_order = LastActivityThreadSort
+
+    try:
+        comms = setup_wire(tmp_path)
+        comms.messaging.send("peer", "owner", "Review")
+        snapshot = comms.relationships.snapshot("owner")
+        group = next(group for group in snapshot.sortable_groups if type(group) is SortedInboundRelationshipGroup)
+        assert FieldCodec.encode(group)["key"] == "sorted_inbound"
+        assert group.order is LastActivityThreadSort
+        assert group.entries[0].target == "peer"
+        earlier = group.entries[0]
+        assert snapshot.groups_by_type[SortedInboundRelationshipGroup] is group
+        assert snapshot.current_entry(SortedInboundRelationshipGroup, earlier) is earlier
+        # The inbound capability is not the exact sorted-inbound group identity.
+        selected = replace(snapshot, groups=(group,))
+        assert selected.current_entry(InboundRelationshipGroup, earlier) is None
+        assert selected.current_entry(
+            SortedInboundRelationshipGroup, replace(earlier, kind="channel")
+        ) is None
+        reused = replace(earlier.person, thread=replace(
+            earlier.person.thread, created_at=earlier.person.thread.created_at + 1
+        ))
+        assert selected.current_entry(
+            SortedInboundRelationshipGroup, replace(earlier, person=reused)
+        ) is None
+        unavailable = replace(selected, groups=(replace(
+            group, entries=(replace(earlier, available=False),)
+        ),))
+        assert unavailable.current_entry(SortedInboundRelationshipGroup, earlier) is None
+        assert all(group.order is None for group in snapshot.groups if not group.selectable())
+        comms.relationships.set_order("owner", SortedInboundRelationshipGroup, LastActivityThreadSort)
+        encoded = json.loads(comms.relationships.store.path.read_text())
+        assert encoded["orders"][0]["group"] == "sorted_inbound"
+        reopened = Comms(comms.root).relationships.snapshot("owner")
+        assert FieldCodec.decode(type(reopened), FieldCodec.encode(reopened)) == reopened
+    finally:
+        RelationshipGroup.__registry__.pop(SortedInboundRelationshipGroup.declared_name)

@@ -13,6 +13,7 @@ from .registration import Registration
 from .native_input_owner import RegistryOwner
 
 if TYPE_CHECKING:
+    from .agent_events import RuntimeInfoObservation
     from .notification_assignment import AssignmentProgress
     from .presentation import MessageNotification
 from .activity import (
@@ -112,8 +113,7 @@ class AgentActivity:
         if state.retires_thread:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
         with _store_lock(self._wire_lock_path, shared=True):
-            canonical = self.registry.require(thread).name
-            self._emit_activity(Activity(thread=canonical, state=state, detail=detail))
+            self._emit_activity(Activity.create(thread, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot | None = None) -> ObservedActivity:
         snapshot = snapshot or self.registry.snapshot()
@@ -154,6 +154,7 @@ class AgentActivity:
         return observations
 
     def _emit_activity(self, activity: Activity) -> None:
+        activity = replace(activity, thread=self.registry.require(activity.thread).name)
         current = self.activity_of(activity.thread)
         self.activity.emit(replace(activity, diagnostic=current.readiness.source_diagnostic()))
 
@@ -191,19 +192,30 @@ class AgentActivity:
             lease = leased.turn_lease
             assert lease is not None
             try:
-                self.registry.transition_turn(lease, PreparingPhase(detail[:200]))
+                phase = PreparingPhase(detail)
+                self.registry.transition_turn(lease, phase)
+                self._record_turn_activity(leased.name, (phase,))
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
             return RegistryOwner(thread=leased, admission_generation=lease.admission_generation)
 
+    def _record_turn_activity(self, name: str, phases: Iterable[TurnPhase]) -> None:
+        """Changed phases are real activity events, just like CLI status reports."""
+        for phase in phases:
+            self._emit_activity(phase.activity_event(name))
+
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, shared=True):
-            return self.registry.transition_turn(lease, phase)
+            effects = self.registry.transition_turn(lease, phase)
+            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
+            return effects
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, shared=True):
-            return self.registry.observe_native_phase(lease, phase)
+            effects = self.registry.observe_native_phase(lease, phase)
+            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
+            return effects
 
     def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:
         """Persist this lease's terminal identity before publishing idle activity."""
@@ -211,32 +223,14 @@ class AgentActivity:
             released, fence = self.registry.release_turn(lease)
             if not released:
                 return None
-            name = self.registry.canonical_name(lease.identity.incarnation.name)
-            self._emit_activity(Activity(name, ActivityState.IDLE))
+            self._emit_activity(Activity(lease.identity.incarnation.name, ActivityState.IDLE))
             return fence
 
-    def set_agent_info(
-        self,
-        thread: str,
-        *,
-        model: str | None = None,
-        session_name: str | None = None,
-        context_used: int | None = None,
-        context_size: int | None = None,
-    ) -> None:
-        """Record the latest model and context metadata for a thread."""
+    def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:
+        """Serialize the original observation with thread rename/retirement."""
         with _store_lock(self._wire_lock_path, shared=True):
             canonical = self.registry.require(thread).name
-            self.runtime_info.set(
-                AgentRuntimeInfo(
-                    thread=canonical,
-                    timestamp=time.time(),
-                    model=model,
-                    session_name=session_name,
-                    context_used=context_used,
-                    context_size=context_size,
-                )
-            )
+            self.runtime_info.observe(canonical, time.time(), observation)
 
     def agent_info_of(self, thread: str) -> AgentRuntimeInfo | None:
         return self.runtime_info.read().get(self.registry.require(thread).name)

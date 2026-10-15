@@ -232,13 +232,13 @@ class ChannelManagement:
             with self.catalog.editing() as document:
                 return document.set_any_mode(name, enabled, threads)
 
-    def set_channel_sort(self, name: str, order: ThreadSort) -> Channel:
+    def set_channel_sort(self, name: str, order: type[ThreadSort]) -> Channel:
         with _store_lock(self._wire_lock_path):
             threads = self.registry.all_threads()
             with self.catalog.editing() as document:
                 return document.set_preferences(name, threads, order=order)
 
-    def set_channel_order(self, order: ChannelSort) -> ChannelSort:
+    def set_channel_order(self, order: type[ChannelSort]) -> type[ChannelSort]:
         with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
             document.list_order = order
         return order

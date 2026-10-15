@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 
 from .locked_store import LockedStore
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
-from .private_path import FileRevision
+from .private_path import FileIdentity, FileRevision
 from .sealed import Sealed
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
@@ -34,6 +34,24 @@ class ReadDocument:
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[str, int] = field(default_factory=dict)
     notice: str | None = None
+
+    def seen_sequences(
+        self, viewer: str, snapshot: RegistryProvenance, source: FileIdentity | None
+    ) -> frozenset[int]:
+        """Project this document against the reader's actual source identity."""
+        viewer = snapshot.canonical_name(viewer)
+        thread = snapshot.threads[viewer]
+        recorded = FileIdentity(*self.bus_identity) if self.bus_identity is not None else None
+        if recorded != source:
+            return frozenset()
+        seen: set[int] = set()
+        for key, sequences in self.messages.items():
+            name, created, raw = json.loads(key)
+            if snapshot.canonical_name(name) == viewer and created == thread.created_at:
+                conversation = Conversation.from_wire(raw)
+                if conversation.current(snapshot):
+                    seen.update(sequences)
+        return frozenset(seen)
 
 
 class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
@@ -142,19 +160,9 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
     def seen_sequences(
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
     ) -> frozenset[int]:
-        viewer = snapshot.canonical_name(viewer)
-        thread = snapshot.threads[viewer]
-        seen: set[int] = set()
         document = self.read() if document is None else document
-        if document.bus_identity != self.bus_identity(self.path.with_name("bus.jsonl")):
-            return frozenset()
-        for key, sequences in document.messages.items():
-            name, created, raw = json.loads(key)
-            if snapshot.canonical_name(name) == viewer and created == thread.created_at:
-                conversation = Conversation.from_wire(raw)
-                if conversation.current(snapshot):
-                    seen.update(sequences)
-        return frozenset(seen)
+        revision = FileRevision.capture(self.path.with_name("bus.jsonl"))
+        return document.seen_sequences(viewer, snapshot, revision.identity if revision else None)
 
     def displayed_recipient(self, message, recipient, snapshot, *, document=None):
         """Return recorded human display evidence for this exact frozen recipient.

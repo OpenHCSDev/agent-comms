@@ -52,7 +52,7 @@ class TranscriptReplay:
         # A runtime subscription is a viewer read too. Use the same retained
         # request/wait owner, rather than another replay retry mechanism.
         return self.runtime._resources.enter_context(
-            ObservationProcess.awaited(self.comms.root)
+            ObservationProcess.awaited(self.comms.route)
         )
 
     async def replay(self, session_id: str, name: str, client: Any = None) -> None:

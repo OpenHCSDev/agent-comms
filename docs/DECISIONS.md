@@ -1,5 +1,22 @@
 # Owner decisions
 
+## 2026-10-14 — No lock held across a decode; readers never block
+
+Tristan: "why do we have so many issues wit hdecoding large fiel enirely over and over again and holding locks ofr not raso nits fuckign stupid, awwe want async not hodlign locks when it doesn' needto happen and deconding shit unecessarily"
+
+Witness: 10:52-10:57 every agent and CLI waited on
+`.bus_route_counts.sqlite3.lock` while one `watch` reader rebuilt the route
+projection from the whole 3.7 GB bus inside `BusRouteCounts.sync`.
+
+A reader never takes an exclusive lock. Readers of an append-only file read
+committed bytes up to a captured size; readers of SQLite use WAL snapshots.
+A writer holds its lock only to capture a cut or commit a bounded result,
+never across decoding, scanning or I/O proportional to file size: decode
+outside the lock, then commit with a revision check. Durable state that is
+rewritten whole on each change (a JSON file of all rows) is a defect; it is
+appended or keyed so a change costs its own size. Waiting for a lock is
+async in owners and never stalls an event loop.
+
 ## 2026-10-14 — Constant cost: nothing scales with history size or throughput
 
 Tristan: "it shuold decode from latest to oldest or jsut decode what it needs so that tis always fast and doesn't get longer with theard size"

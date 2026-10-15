@@ -30,7 +30,7 @@ class WorkingMemoryAnnotations:
     @contextmanager
     def reading(path):
         """Borrow one original committed snapshot; readers never install a store."""
-        with CoordinationStore.observing(Path(path), lock_timeout=0.05) as db:
+        with CoordinationStore.observing(Path(path)) as db:
             (version,) = SQLiteUserVersion.read(db.execute("PRAGMA user_version"))
             SchemaMeta.require_current(db, version.user_version)
             yield db

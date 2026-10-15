@@ -16,6 +16,43 @@ from agent_comms.ui_model.observation import ObservationService, ObserveSidebar,
 from agent_comms.ui_model.unread import IndexingUnread
 
 
+def test_display_metrics_encode_one_viewer_read_set_for_all_channels(tmp_path):
+    from agent_comms.bus_display_index import DisplayMetricScope
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.read_basis import ChannelDisplayScope
+
+    scopes = tuple(ChannelDisplayScope(f"#{n}", frozenset({f"#{n}"})) for n in range(48))
+    seen = frozenset(range(10_000))
+    encoded = FieldCodec.encode(DisplayMetricScope(scopes, frozenset({"viewer"}), seen))
+    assert set(encoded) == {"scopes", "viewer_names", "seen_sequences"}
+    assert frozenset(encoded["seen_sequences"]) == seen
+    assert all("seen_sequences" not in scope for scope in encoded["scopes"])
+    index = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer")
+    assert index.path.name.startswith(f"bus_display_{index.record_type.schema}_")
+
+
+def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("bob", frozenset({"team", "extra"}), str(tmp_path / "bob")))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    first = comms.messaging.send_message("bob", "#team", "first")
+    comms.messaging.send_message("bob", "#team", "second")
+    comms.messaging.send_message("bob", viewer, "direct")
+    before = comms.views.viewer_snapshot(str(tmp_path))
+    comms.bus.reads.mark_displayed(
+        viewer,
+        comms.bus.reads.capture(viewer, (first,), comms.registry.snapshot(), comms.bus.log.path),
+    )
+    comms.channels.set_channel_any_mode("#extra", True)
+    after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    assert after.channel_unread["#team"] == 1
+    assert after.channel_unread["#extra"] == 2
+    def clock(snapshot):
+        return next(v.last_activity for v in snapshot.channels if v.channel.name == "#team")
+
+    assert clock(after) == clock(before)
+
+
 @pytest.mark.parametrize("indexed", [True, False])
 def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     """Later append/ACK/rename cannot broaden an acquired viewer snapshot."""
@@ -122,6 +159,46 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
     assert snapshot.channel_unread["#team"] == 1
     assert snapshot.last_sent["bob"] > 0
     assert len(opened) == 1 and opened[0].stream.closed
+
+
+def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
+    """A changed opened cut is stale observation work, not an observer failure."""
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
+    comms.messaging.send("bob", "#team", "first")
+
+    class Results:
+        def __init__(self):
+            self.values = []
+
+        def send(self, value):
+            self.values.append(value)
+
+    results = Results()
+    service = ObservationService(comms, results)
+    request = ObserveSidebar(str(tmp_path), True, False)
+    service.interest = request.apply(service.interest)
+    service.observe()  # The cheap roster stage completes first.
+
+    original = comms.views.presentation.display_view_metrics
+
+    def change_source(*args, **kwargs):
+        metrics = original(*args, **kwargs)
+        source = comms.bus.log.path
+        observed = source.stat()
+        os.utime(source, ns=(observed.st_atime_ns, observed.st_mtime_ns + 1))
+        return metrics
+
+    monkeypatch.setattr(comms.views.presentation, "display_view_metrics", change_source)
+    service.observe()
+    assert len([value for value in results.values if isinstance(value, SidebarObserved)]) == 1
+
+    monkeypatch.setattr(comms.views.presentation, "display_view_metrics", original)
+    comms.messaging.send("bob", "#team", "second")
+    service.observe()
+    snapshots = [value.snapshot for value in results.values if isinstance(value, SidebarObserved)]
+    assert len(snapshots) == 2
+    assert snapshots[-1].channel_unread["#team"] == 2
 
 
 def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
@@ -296,7 +373,9 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
     )
     assert wire(tmp_path).bus.pending_counts(viewer) == {"bob": 2}
     comms.registry.rename("bob", "renamed-bob")
-    delivery = comms.bus._delivery_scope(viewer)
+    from agent_comms.routing import DeliveryScope
+
+    delivery = DeliveryScope.capture(viewer, comms.registry.snapshot(), comms.channels.catalog.read())
     expected = Counter(
         delivery.conversation(message.sender, message.target) for message in comms.bus.inbox(viewer)
     )
@@ -378,6 +457,9 @@ def test_reserved_sequence_preserves_committed_read_cut_without_admission(tmp_pa
     with comms.bus.log._opened_wire_snapshot(need_sequence=False) as source:
         assert isinstance(source, CertifiedOpenedWireSnapshot)
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
+    with comms.bus.snapshot(viewer='Alice') as (basis, source):
+        assert source.through == first.seq < source.metadata.last_seq
+        assert comms.bus.pending_counts_opened(source, basis) == {'#team': 1}
     with pytest.raises(RelationViolationError, match='differs from its durable marker'):
         with comms.bus.log.certified_read() as source:
             source.require_current()

@@ -210,7 +210,7 @@ class FollowingTurnInput(TurnInputSource):
     keys: tuple[str, ...]
 
     def display(self, dispositions: InputDispositions, text: str) -> str:
-        row = dispositions.read().lookup(self.keys[0]) if self.keys else None
+        row = dispositions.lookup(self.keys[0]) if self.keys else None
         return row.source_text if row is not None and row.exists else text
 
     def defers_for_goal(self, original: Goal | None, current: Goal | None) -> bool:

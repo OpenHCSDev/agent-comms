@@ -10,13 +10,15 @@ from abc import abstractmethod
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from enum import Enum
+from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, projected
 from .private_path import FileRevision
 from .store_files import (
     _append_jsonl,
@@ -29,6 +31,8 @@ from .thread_owned_state import ThreadOwnedState
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
+    from .activity_checkpoint import ActivityCheckpoint
+    from .agent_activity import AgentActivity
     from .threads import Thread
 
 
@@ -64,6 +68,9 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     owner: OwnerIdentity
     error_type: str
     reason: str
+    recorded_at: float = field(
+        compare=False, metadata={"artifact_exclude": True}
+    )
 
     @property
     @abstractmethod
@@ -76,6 +83,10 @@ class DrainDiagnostic(DeclaredFamily, affix="Diagnostic"):
     @property
     def summary(self) -> str:
         return f"{self.headline} · {self.error_type}: {self.reason} · {self.recovery}"
+
+    @projected(view="artifact", name="kind")
+    def artifact_kind(self) -> str:
+        return FieldCodec.encode(type(self))
 
     def readiness(self) -> DrainReadiness:
         return UnavailableDrainReadiness(self)
@@ -127,6 +138,14 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def require_available(self) -> None:
         pass
 
+    async def retire(self, agents: AgentActivity, thread: str) -> DrainReadiness:
+        """A healthy readiness has no retained failure to retire."""
+        return self
+
+    def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
+        """An ordinary preparation has no earlier request failure to display."""
+        return activity
+
 
 @dataclass(frozen=True)
 class ReadyDrainReadiness(DrainReadiness):
@@ -150,12 +169,38 @@ class DiagnosticDrainReadiness(DrainReadiness):
         return ThreadPresentation(ordinary.title, "!", self.diagnostic.summary,
                                   busy=busy, attention=True)
 
+    async def retire(self, agents, thread):
+        from .coordinator import Coordination
+
+        await Coordination.run_worker(
+            partial(agents.set_drain_diagnostic, thread, self.diagnostic.owner, None)
+        )
+        return ReadyDrainReadiness()
+
 
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
     """Retain the failed request warning; new messages keep ordinary availability."""
 
     def presentation(self, ordinary, *, busy):
         return ordinary if busy or ordinary.busy else super().presentation(ordinary, busy=busy)
+
+    def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
+        return replace(activity, readiness=FailedPreparingDrainReadiness(self.diagnostic))
+
+
+@dataclass(frozen=True)
+class FailedPreparingDrainReadiness(NativeInputDrainReadiness):
+    """A retained native failure while the next turn has not reached its request."""
+
+    def presentation(self, ordinary, *, busy):
+        when = datetime.fromtimestamp(self.diagnostic.recorded_at).astimezone().strftime("%H:%M")
+        return replace(
+            ordinary,
+            marker="!",
+            summary=f"Failed {when}",
+            busy=busy,
+            attention=True,
+        )
 
 
 class UnavailableDrainReadiness(DiagnosticDrainReadiness):
@@ -167,12 +212,23 @@ class UnavailableDrainReadiness(DiagnosticDrainReadiness):
 class ActivityData:
     """Shared declared activity fields; observations and events own their boundary."""
 
+    detail_limit: ClassVar[int] = 200
+
     thread: str
     state: ActivityState
     detail: str = ""
     timestamp: float = field(
         default_factory=time.time, metadata={"wire_name": "ts", "wire_required": True}
     )
+
+    @classmethod
+    def format_detail(cls, detail: str) -> str:
+        """Bound new status text; stored records still use strict construction."""
+        return detail if len(detail) <= cls.detail_limit else detail[:cls.detail_limit - 1] + "…"
+
+    def with_status(self, state: ActivityState, detail: str) -> Self:
+        """Project current status without changing this activity's provenance."""
+        return replace(self, state=state, detail=self.format_detail(detail))
 
     def presentation(self, title: str) -> ThreadPresentation:
         return self.state.presentation(title, self.detail)
@@ -182,8 +238,8 @@ class ActivityData:
             raise RelationViolationError("Activity thread cannot be empty.")
         if self.detail and not self.state.busy:
             raise RelationViolationError("Idle activity cannot carry a detail.")
-        if len(self.detail) > 200:
-            raise ValueError("Activity detail cannot exceed 200 characters.")
+        if len(self.detail) > self.detail_limit:
+            raise ValueError(f"Activity detail cannot exceed {self.detail_limit} characters.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,6 +247,11 @@ class Activity(ActivityData):
     """Original persisted event; its nullable diagnostic is external metadata."""
 
     diagnostic: DrainDiagnostic | None = field(default=None, metadata={"wire_omit_default": True})
+
+    @classmethod
+    def create(cls, thread: str, state: ActivityState, detail: str = "") -> Self:
+        """Create a new bounded status, rather than decoding an existing event."""
+        return cls(thread, state, cls.format_detail(detail))
 
     def fold_into(self, latest: dict[str, Activity]) -> None:
         """Apply this event to the latest-per-thread map; a deletion leaves no entry."""
@@ -201,8 +262,7 @@ class Activity(ActivityData):
 
     @classmethod
     def from_wire(cls, data: Mapping) -> Activity:
-        # Historical event timestamps may be absent; they remain unknown.
-        return FieldCodec.decode(cls, {"ts": 0.0, **data})
+        return FieldCodec.decode(cls, data)
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,14 +291,12 @@ class ActivityReadState:
 
     Each Comms builds its own ActivityLog; the decoded latest events belong
     to the file, so a new reader continues from what this process already
-    read instead of decoding the log again. The lock makes one thread catch
-    up while concurrent readers wait for its result.
+    read instead of decoding the log again. The lock captures and publishes
+    cuts; concurrent readers decode without holding it.
     """
 
-    revision: FileRevision | None = None
+    checkpoint: ActivityCheckpoint | None = None
     latest: dict[str, Activity] = field(default_factory=dict)
-    complete_latest: dict[str, Activity] = field(default_factory=dict)
-    offset: int = 0
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     _by_path: ClassVar[dict[str, ActivityReadState]] = {}
@@ -277,9 +335,9 @@ class ActivityLog(ThreadOwnedState):
     def _observed(self, thread: str, events: Mapping[str, Activity], *,
                   active: bool, now: float) -> Activity:
         if thread not in events:
-            # The existing decoder owns an unknown historical clock. Reading
-            # an absent event must never mint an actual-event timestamp.
-            return Activity.from_wire({"thread": thread, "state": ActivityState.IDLE.value})
+            # An absent event has no historical clock. Reading it must never
+            # mint an actual-event timestamp.
+            return Activity(thread, ActivityState.IDLE, timestamp=0.0)
         latest = events[thread]
         if (
             latest.diagnostic is None
@@ -300,66 +358,71 @@ class ActivityLog(ThreadOwnedState):
         }
 
     def _latest_events(self) -> Mapping[str, Activity]:
+        from .activity_checkpoint import ActivityCheckpoint
+
         read = self._read
-        with read.lock, _store_lock(self._path):
-            revision = FileRevision.capture(self._path)
-            if revision == read.revision:
-                return read.latest
-            append = (
-                revision is not None
-                and read.revision is not None
-                and revision.identity == read.revision.identity
-                and revision.size > read.revision.size
-            )
-            # Publish a new map: other threads may still be iterating the old
-            # snapshot after the store lock has been released.
-            checkpoint = (
-                self.checkpoint.read() if read.revision is None and revision is not None else None
-            )
-            if checkpoint is not None and not checkpoint.matches(self._path, revision):
+        while True:
+            with read.lock:
+                revision = FileRevision.capture(self._path)
+                started_from = read.checkpoint
+                if revision == (started_from.source if started_from is not None else None):
+                    return read.latest
                 checkpoint = None
-            if checkpoint is not None:
-                complete, offset = checkpoint.latest, checkpoint.offset
-            else:
-                complete = read.complete_latest.copy() if append else {}
-                offset = read.offset if append else 0
-            original_offset = offset
-            latest = complete
+                if revision is not None:
+                    checkpoint = started_from if started_from is not None else self.checkpoint.read()
+            latest = {}
+            captured = None
             if revision is not None:
-                with self._path.open("rb") as stream:
-                    stream.seek(offset)
-                    while raw := stream.readline():
-                        terminated = raw.endswith((b"\n", b"\r"))
-                        if line := raw.strip():
-                            try:
-                                record = json.loads(line)
-                            except (json.JSONDecodeError, UnicodeDecodeError):
-                                if not terminated:
-                                    break
-                                raise
-                            if not isinstance(record, Mapping):
-                                raise ValueError(f"JSONL record in {self._path} must be an object.")
-                            event = Activity.from_wire(record)
+                try:
+                    with self._path.open("rb") as stream:
+                        if not revision.opened_by(stream):
+                            continue
+                        if checkpoint is not None and not checkpoint.accepts(revision, stream):
+                            checkpoint = None
+                        complete = dict(checkpoint.latest) if checkpoint is not None else {}
+                        offset = checkpoint.offset if checkpoint is not None else 0
+                        original_offset = offset
+                        latest = complete
+                        stream.seek(offset)
+                        while stream.tell() < revision.size:
+                            raw = stream.readline(revision.size - stream.tell())
+                            if not raw:
+                                break
+                            terminated = raw.endswith((b"\n", b"\r"))
+                            if line := raw.strip():
+                                try:
+                                    record = json.loads(line)
+                                except (json.JSONDecodeError, UnicodeDecodeError):
+                                    if not terminated:
+                                        break
+                                    raise
+                                if not isinstance(record, Mapping):
+                                    raise ValueError(
+                                        f"JSONL record in {self._path} must be an object."
+                                    )
+                                event = Activity.from_wire(record)
+                                if terminated:
+                                    event.fold_into(complete)
+                                else:
+                                    # The writer repairs an interrupted final row before its
+                                    # next append (store_files.py:_append_jsonl).
+                                    latest = dict(complete)
+                                    event.fold_into(latest)
                             if terminated:
-                                event.fold_into(complete)
-                            else:
-                                # Preserve the existing reader's valid-EOF
-                                # behavior, but retry this tail on the next append.
-                                latest = dict(complete)
-                                event.fold_into(latest)
-                        if terminated:
-                            offset = stream.tell()
-            read.complete_latest, read.offset = complete, offset
-            read.latest, read.revision = latest, revision
-            if revision is not None and (checkpoint is None or offset != original_offset):
+                                offset = stream.tell()
+                        captured = ActivityCheckpoint.capture(stream, revision, complete, offset)
+                except FileNotFoundError:
+                    continue
+            with read.lock:
+                if read.checkpoint is not started_from:
+                    return read.latest
+                read.checkpoint, read.latest = captured, latest
+            if captured is not None and (checkpoint is None or offset != original_offset):
                 # The log remains authoritative if its disposable read
                 # projection cannot be persisted.
                 with suppress(OSError):
-                    from .activity_checkpoint import ActivityCheckpoint
-
-                    captured = ActivityCheckpoint.capture(self._path, revision, complete, offset)
                     self.checkpoint.replace(captured)
-            return read.latest
+            return latest
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """Append one deletion record per thread with current activity.

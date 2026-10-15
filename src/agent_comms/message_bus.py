@@ -2,36 +2,34 @@
 
 from __future__ import annotations
 
-import sqlite3
-from collections.abc import AsyncIterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_activity_index import BusActivityIndex, ChannelActivity
-from .bus_route_counts import ActorSeen, BusRouteCounts, PendingRoute
+from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
 from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
 from .messages import Message
-from .private_path import FileRevision
 from .read_basis import (
     ChannelDisplayScope,
     DMDisplayScope,
     ListedDeliveries,
     MessageDisplayScope,
-    ViewUnread,
 )
-from .routing import DeliveryMessage, DeliveryScope, PendingCounts
+from .routing import DeliveryScope
+from .store_files import _store_lock
 
 if TYPE_CHECKING:
+    from .presentation import DisplaySelection
     from .registration import Registration
     from .registry_document import RegistrySnapshot
-    from .threads import Thread
-    from .presentation import DisplaySelection
-    from .catalog_store import CatalogDocument
     from .relationships import PeerRelation
+    from .threads import Thread
 
 from .publisher import Publisher
 from .wire_log import OpenedWireSnapshot, WireLog
@@ -55,8 +53,6 @@ class MessageBus:
         self.history = HistoryArchive(bus_path)
         self._registry = registry
         self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
-        self._pending_cache: dict[str, PendingCounts] = {}
-        self._view_unread_cache: dict[str, ViewUnread] = {}
         self._activity = self.log.register_append_index(BusActivityIndex(bus_path))
         self.publisher = Publisher(
             self.log,
@@ -66,41 +62,6 @@ class MessageBus:
             private_initial_writes=private_initial_writes,
             private_claim_writes=private_claim_writes,
         )
-
-    def view_unread_counts(
-        self,
-        viewer: str,
-        *,
-        display_scopes: tuple[ChannelDisplayScope, ...] | None = None,
-        viewer_names: frozenset[str] | None = None,
-    ) -> Mapping[str, int]:
-        """Human view cursors are independent of executors consuming their inboxes."""
-        viewer = self._registry.require(viewer).name
-        if display_scopes is None:
-            seen = self.reads.seen_sequences(viewer, self._registry.snapshot())
-            catalog = self._channels.read()
-            scopes = tuple(
-                ChannelDisplayScope(
-                    channel.name, catalog.history_targets(channel.name), seen_sequences=seen
-                )
-                for channel in catalog.views(self._registry.all_threads()).values()
-            )
-        else:
-            scopes = display_scopes
-        revision = (FileRevision.capture(self.log.path), viewer_names)
-        cached = self._view_unread_cache.get(viewer)
-        if cached is not None and cached.revision == revision and cached.scopes == scopes:
-            return dict(cached.counts)
-        counts = dict.fromkeys((scope.channel for scope in scopes), 0)
-        with self.log._record_snapshot() as (_, records):
-            for message, _ in records:
-                if message.sender in (viewer_names if viewer_names is not None else {viewer}):
-                    continue
-                for scope in scopes:
-                    if scope.unread(message):
-                        counts[scope.channel] += 1
-        self._view_unread_cache[viewer] = ViewUnread(revision, scopes, counts)
-        return dict(counts)
 
     def _activity_clocks(self, source: OpenedWireSnapshot | None = None):
         """The existing index borrows the same opened source after release."""
@@ -128,18 +89,29 @@ class MessageBus:
                 message.membership is None and not message.notice,
             )
 
-    def _delivery_scope(self, name: str, snapshot: RegistrySnapshot | None = None,
-                        *, catalog: CatalogDocument | None = None) -> DeliveryScope:
-        if snapshot is None:
-            snapshot = self._registry.snapshot()
-        canonical = snapshot.canonical_name(name)
-        if canonical not in snapshot.threads:
-            raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
-        thread = snapshot.threads[canonical]
-        return DeliveryScope(
-            thread.name, snapshot.aliases,
-            (self._channels.read() if catalog is None else catalog).targets_for(thread.tags)
-        )
+    @contextmanager
+    def snapshot(
+        self, viewer: str | None = None
+    ) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
+        """Own the original bus/namespace/read cut, beyond physical custody.
+
+        The bus owns capture, including the committed sequence of this exact
+        descriptor. Presentation and delivery borrow that same source instead
+        of reconstructing it from independently sampled path revisions.
+        """
+        from .presentation import DisplaySelection
+
+        prepared = self.log.prepare_append_indexes()
+        with ExitStack() as stack:
+            with _store_lock(self.log.path.parent / "wire", shared=True):
+                source = stack.enter_context(self.log._opened_wire_snapshot(
+                    prepared_indexes=prepared,
+                ))
+                with DisplaySelection.reading(
+                    self._registry, self._channels, self.reads, viewer
+                ) as basis:
+                    pass
+            yield basis, source
 
     def inbox(
         self, name: str, target: str | None = None, *,
@@ -152,22 +124,15 @@ class MessageBus:
         """
         if snapshot is None:
             snapshot = self._registry.snapshot()
-        delivery = self._delivery_scope(name, snapshot)
-        selection = delivery.selection(target, snapshot, self._channels.read())
+        catalog = self._channels.read()
+        delivery = DeliveryScope.capture(name, snapshot, catalog)
+        selection = delivery.selection(target, snapshot, catalog)
         seen = self.reads.seen_sequences(delivery.actor, snapshot)
-        with self.log._opened_wire_snapshot(need_sequence=False) as source:
-            unread = self._from_route_index(
-                source, snapshot, {delivery.actor: delivery},
-                lambda index, requests: index.unseen_deliveries(requests, seen),
-            )
-            if unread is None:
-                return [
-                    item.message
-                    for item in self._scanned_deliveries(source)
-                    if delivery.current(item, snapshot)
-                    and selection.includes(item.message)
-                    and item.message.seq not in seen
-                ]
+        with self.log._opened_wire_snapshot() as source:
+            with OpenedRouteCounts(
+                self.log.path, source, snapshot, {delivery.actor: delivery}
+            ) as index:
+                unread = index.unseen_deliveries(delivery.actor, seen)
             if not unread:
                 return []
             listed = ListedDeliveries(
@@ -175,7 +140,7 @@ class MessageBus:
                 frozenset(row.seq for row in unread),
                 frozenset(row.target for row in unread),
             )
-            page = MessagePageRequest.every(listed, after=unread[0].seq - 1).read_opened(
+            page = MessagePageRequest.every(listed, after=min(listed.sequences) - 1).read_opened(
                 self.log, source.metadata, source.revision, source.stream,
                 source.public_records(),
             )
@@ -205,153 +170,57 @@ class MessageBus:
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
-        counts = self.pending_counts(name)
-        if target is None or BuiltinChannel.aggregate_target(target):
-            return sum(counts.values())
-        if is_channel_target(target):
-            targets = self._channels.read().history_targets(target)
-            return sum(
-                count for scope, count in counts.items() if targets is None or scope in targets
-            )
-        return counts.get(self._registry.require(target).name, 0)
+        with self.snapshot() as (basis, source):
+            counts = self._pending_projection(source, basis, [name])[name]
+            if target is None or BuiltinChannel.aggregate_target(target):
+                return sum(counts.values())
+            if is_channel_target(target):
+                targets = basis.catalog.history_targets(target)
+                return sum(
+                    count for scope, count in counts.items() if targets is None or scope in targets
+                )
+            return counts.get(basis.registry.require(target).name, 0)
 
     def pending_counts(self, name: str) -> Mapping[str, int]:
-        return self._pending_projection([name])[name]
+        with self.snapshot() as (basis, source):
+            return self._pending_projection(source, basis, [name])[name]
 
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
-        return {
-            name: sum(counts.values()) for name, counts in self._pending_projection(names).items()
-        }
+        if not names:
+            return {}
+        with self.snapshot() as (basis, source):
+            return {
+                name: sum(counts.values())
+                for name, counts in self._pending_projection(source, basis, names).items()
+            }
 
-    def _pending_projection(self, names: Sequence[str]) -> Mapping[str, Mapping[str, int]]:
-        """Capture one registry/read snapshot and sync the route index once."""
-        snapshot = self._registry.snapshot()
-        catalog = self._channels.read()
-        actors = {name: snapshot.canonical_name(name) for name in names}
-        deliveries = {}
-        for actor in set(actors.values()):
-            deliveries[actor] = self._delivery_scope(actor, snapshot, catalog=catalog)
-        revision = tuple(
-            FileRevision.capture(path)
-            for path in (
-                self.log.path,
-                self._registry.store.path,
-                self._channels.path,
-                self.reads.path,
-            )
-        )
-        if all(
-            name in self._pending_cache
-            and self._pending_cache[name].revision == revision
-            and self._pending_cache[name].delivery == deliveries[actor]
-            for name, actor in actors.items()
-        ):
-            return {name: dict(self._pending_cache[name].counts) for name in names}
-        document = self.reads.read()
-        seen = {
-            actor: self.reads.seen_sequences(actor, snapshot, document=document)
-            for actor in deliveries
+    def _pending_projection(
+        self, source: OpenedWireSnapshot, basis: DisplaySelection, names: Sequence[str],
+    ) -> Mapping[str, Mapping[str, int]]:
+        """Bulk delivery counts from one original source, namespace and ledger."""
+        actors = {name: basis.registry.canonical_name(name) for name in names}
+        deliveries = {
+            actor: DeliveryScope.capture(actor, basis.registry, basis.catalog)
+            for actor in set(actors.values())
         }
-        with self.log._opened_wire_snapshot(need_sequence=False) as source:
-            counts = self._pending_counts(source, snapshot, deliveries, seen)
-        for name, actor in actors.items():
-            self._pending_cache[name] = PendingCounts(revision, deliveries[actor], counts[actor])
-        return {name: dict(counts[actor]) for name, actor in actors.items()}
+        seen = {
+            actor: basis.document.seen_sequences(
+                actor, basis.registry, source.revision.identity if source.revision else None
+            ) for actor in deliveries
+        }
+        with OpenedRouteCounts(self.log.path, source, basis.registry, deliveries) as index:
+            counts = index.unseen_counts(seen)
+        return {name: counts[actor] for name, actor in actors.items()}
 
     def pending_counts_opened(self, source: OpenedWireSnapshot,
                               selection: DisplaySelection) -> Mapping[str, int]:
-        """Keep delivery semantics, using the caller's original bus/identity/read cut."""
-        actor = selection.viewer
-        if actor is None:
-            raise ValueError("Delivery projection requires an acquired viewer")
-        delivery = self._delivery_scope(actor, selection.registry, catalog=selection.catalog)
-        return self._pending_counts(source, selection.registry, {actor: delivery},
-                                    {actor: selection.seen})[actor]
-
-    @staticmethod
-    def _route_recipients(snapshot: RegistrySnapshot, deliveries: Mapping[str, DeliveryScope]):
-        """Which of these actors a route's target delivers to."""
-        channel_members: dict[str, set[str]] = {}
-        for actor, delivery in deliveries.items():
-            for target in delivery.channels:
-                channel_members.setdefault(target, set()).add(actor)
-
-        def recipients(target: str):
-            direct = snapshot.canonical_name(target)
-            return channel_members.get(target, {direct} if direct in deliveries else set())
-
-        return recipients
-
-    def _from_route_index(
-        self, source: OpenedWireSnapshot, snapshot: RegistrySnapshot,
-        deliveries: Mapping[str, DeliveryScope], read,
-    ):
-        """Answer ``read(index, requests)`` from the route index synced to this cut.
-
-        ``requests`` are the routes currently delivered to these actors. None
-        means the index cannot cover the cut, and the caller reads the log.
-        """
-        recipients = self._route_recipients(snapshot, deliveries)
-
-        def decode(record):
-            # The root id is the marker's: a bus never written has no marker
-            # and no records, so it is read only to decode one.
-            return DeliveryMessage.from_wire(record, root_id=source.metadata.root_id)
-
-        try:
-            with BusRouteCounts(self.log.path) as index:
-                if not index.sync(source.stream, source.revision, decode):
-                    return None
-                requests = []
-                for route in index.routes():
-                    for actor in recipients(route.target):
-                        since = deliveries[actor].minimum_timestamp(
-                            route.sender, route.target, route.sender_lookup, snapshot
-                        )
-                        if since is not None:
-                            requests.append(PendingRoute(
-                                actor, route.target, route.sender, route.sender_lookup, since,
-                            ))
-                return read(index, requests)
-        except (OSError, sqlite3.DatabaseError):
-            # A disposable index outage still uses exactly the same identity filter.
-            return None
-
-    def _scanned_deliveries(self, source: OpenedWireSnapshot):
-        """Every delivery in this cut, decoded from the log itself."""
-        if source.stream is not None:
-            source.stream.seek(0)
-        records = self.log._snapshot_records(source.metadata, source.stream, source.boundary)
-        return (item for record in records for item in record.delivery_messages())
-
-    def _pending_counts(
-        self, source: OpenedWireSnapshot, snapshot: RegistrySnapshot,
-        deliveries: Mapping[str, DeliveryScope], seen: Mapping[str, frozenset[int]],
-    ) -> dict[str, dict[str, int]]:
-        recipients = self._route_recipients(snapshot, deliveries)
-        counts: dict[str, dict[str, int]] = {actor: {} for actor in deliveries}
-
-        def add(actor: str, sender: str, target: str, count: int):
-            if count:
-                conversation = deliveries[actor].conversation(sender, target)
-                counts[actor][conversation] = counts[actor].get(conversation, 0) + count
-
-        rows = self._from_route_index(
-            source, snapshot, deliveries,
-            lambda index, requests: index.unseen_counts(
-                requests, [ActorSeen(actor, sequences) for actor, sequences in seen.items()]
-            ),
-        )
-        if rows is not None:
-            for row in rows:
-                add(row.actor, row.sender, row.target, row.count)
-        else:
-            for item in self._scanned_deliveries(source):
-                message = item.message
-                for actor in recipients(message.target):
-                    if deliveries[actor].current(item, snapshot) and message.seq not in seen[actor]:
-                        add(actor, message.sender, message.target, 1)
-        return counts
+        """Borrow the caller's original source, namespace and sparse reads."""
+        actor = selection.require_viewer()
+        delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)
+        with OpenedRouteCounts(
+            self.log.path, source, selection.registry, {actor: delivery}
+        ) as index:
+            return index.unseen_counts({actor: selection.seen})[actor]
 
     def mark_delivered(
         self, name: str, references: Sequence[MessageReference]
@@ -415,8 +284,8 @@ class MessageBus:
         from .peer_relevance import Prioritized
 
         try:
-            with self.log.locked(blocking=blocking):
-                marker = self.log._private_marker_unlocked()
+            with self.log.certified_read(blocking=blocking) as source:
+                marker = source.marker
                 rows = addressed_source_pointers_unlocked(
                     self.log, marker, stable_thread_lookup(owner.created_at)
                 )
@@ -436,8 +305,8 @@ class MessageBus:
 
     def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
         """A bounded delivery stream independent of UI read acknowledgments."""
-        thread = self._registry.require(name)
-        delivery = self._delivery_scope(thread.name)
+        snapshot = self._registry.snapshot()
+        delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
         return self.display_page(delivery, after=after, limit=limit)
 
     def dm_history_page(

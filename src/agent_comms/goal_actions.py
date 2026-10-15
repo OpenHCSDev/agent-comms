@@ -227,7 +227,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         from .input_disposition import InputDispositions
 
         aliases = review.owners
-        dispositions = InputDispositions(ctx.goals.root / InputDispositions.filename)
+        dispositions = InputDispositions(ctx.goals.root)
         unknown = {row.key: row for row in review.unknown}
         reviewed_keys = tuple(dict.fromkeys(self.reviewed_inputs))
         if any(key not in unknown or unknown[key].sequence is None for key in reviewed_keys):

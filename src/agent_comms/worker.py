@@ -60,10 +60,10 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
 
     async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
         def capture():
-            with _store_lock(agent._comms._wire_lock_path):
+            with _store_lock(agent._comms._wire_lock_path, shared=True):
                 snapshot = agent._comms.registry.snapshot()
                 owner = snapshot.threads[name]
-                row = agent.inputs.dispositions.read().rows[key]
+                row = agent.inputs.dispositions.lookup(key)
                 if not row.queued_for(
                     owner.incarnation, snapshot.admission_generations[name], row.source_text
                 ):

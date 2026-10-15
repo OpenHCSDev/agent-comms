@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from agent_comms.agent_events import AgentInfo
 from agent_comms.field_codec import FieldCodec
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.turn_context import ContextManifest, RecordedContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
@@ -140,7 +141,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
     observed_owner, observed = observations[0]
     data = NativeContextManifestData(observed.counter, observed.segments, request_id=observed.request_id)
     comms, root_id = _root(tmp_path)
-    comms.agents.set_agent_info('Bob', model=observed_owner.model)
+    comms.agents.observe_runtime_info('Bob', AgentInfo(model=observed_owner.model))
     original_message = comms.messaging.send_initial_cohort('sender', '#team', '@Bob recording fixture')
     owner = CommsAgent(comms, auto_wake=False)
     turn = OwnedTurn(owner.turns, 'Alice', 'Alice', '')

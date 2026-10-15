@@ -61,13 +61,14 @@ def _evidence(tmp_path: Path) -> Path:
     ]
     journal = [
         {
-            "schema": 1,
+            "schema": 2,
             "type": "context_committed",
             "sessionId": "sid",
             "inputId": INPUT_ID,
             "sessionEntryId": "entry",
             "requestGeneration": 1,
             "llmContextDigest": "c" * 64,
+            "committedAtMs": 1_791_964_800_001,
         }
     ]
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
@@ -146,7 +147,8 @@ def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_f
     assert decoded.at(session) == NativeContextProof.read_evidence(session, INPUT_ID)
     for changed in (
         {**row, "schema": True},
-        {**row, "schema": 2},
+        {**row, "schema": 1},
+        {**row, "committedAtMs": 0},
         {**row, "type": "input_committed"},
         {**row, "requestGeneration": True},
         {**row, "requestGeneration": 0},
@@ -457,9 +459,9 @@ input_id = command['inputId']
 entry = {'type':'message','id':'entry','message':{'role':'user',
     'inputId':input_id,'inputDigest':'b'*64}}
 file.write_text(json.dumps({'type':'session','id':'sid'})+'\\n'+json.dumps(entry)+'\\n')
-proof = {'schema':1,'type':'context_committed','sessionId':'sid',
+proof = {'schema':2,'type':'context_committed','sessionId':'sid',
     'inputId':input_id,'sessionEntryId':'entry','requestGeneration':1,
-    'llmContextDigest':'c'*64}
+    'llmContextDigest':'c'*64,'committedAtMs':1_791_964_800_001}
 write_proof_rows(file, [proof])
 os.chmod(file,0o600)
 os.chmod(str(file)+'.input-proof',0o600)
@@ -699,7 +701,7 @@ def durable_attempt(tmp_path):
         "eof-large",
     ],
 )
-async def test_copied_cli_private_policy_allows_one_local_http_attempt(
+async def test_copied_cli_private_policy_preserves_one_input_across_local_requests(
     tmp_path: Path, monkeypatch, outcome: str, durable_attempt
 ) -> None:
     """Explicit opt-in: real pinned CLI, loopback-only fake provider, no paid key."""
@@ -708,6 +710,18 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         pytest.skip("Set AC_NATIVE_COPIED_PACKAGE to the reviewed private copied fork")
     package = Path(selected)
     _trusted_package(package)
+    from agent_comms.turn_watchdog import ProgressWatchdog
+
+    waits_after_start = []
+    select_wait = ProgressWatchdog.wait_for
+
+    def observe_wait(watchdog, session):
+        wait = select_wait(watchdog, session)
+        if session.started_input:
+            waits_after_start.append(wait is watchdog.input_wait)
+        return wait
+
+    monkeypatch.setattr(ProgressWatchdog, "wait_for", observe_wait)
     provider = "configured-fixture" if outcome in {"configured", "restarted"} else "openrouter"
     model = "fixture-model" if outcome in {"configured", "restarted"} else "z-ai/glm-5.3-flash"
     calls: list[str] = []
@@ -758,6 +772,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
+    native_session = PersistentPiSession()
     try:
         worktree = tmp_path / "project"
         worktree.mkdir(mode=0o700)
@@ -888,11 +903,11 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
 
         request = dict(
             observe_event=observe,
+            pi_session=native_session,
             input_id=INPUT_ID,
             prompt="Respond with X, fixture only",
             worktree=worktree,
             session=SelectedSession(sessions),
-            model_wait_timeout=15,
             provider=provider,
             model=model,
         )
@@ -912,6 +927,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert len(children) == 1 and children[0].returncode is not None
             assert calls == ["/v1/chat/completions"]
             assert observed.count("input_committed") == 1
+            assert waits_after_start and not any(waits_after_start)
             assert observed.count("context_committed") == 1
             assert "agent_settled" not in observed
             with durable_attempt.attempts.session.settlement() as boundary:
@@ -966,7 +982,8 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                 await TrackedTurnSession.execute(package, **request)
             assert failed.value.context.input_id == INPUT_ID
             assert "agent_settled" in observed
-        assert calls == ["/v1/chat/completions"]
+        attempts = 4 if outcome == "429" else 1
+        assert calls == ["/v1/chat/completions"] * attempts
         assert not (sessions / ".native-pi-agent" / "auth.json").exists()
         assert not (sessions / ".native-pi-agent" / "models.json").exists()
         preflight_index, preflight = next(
@@ -990,14 +1007,16 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         assert committed_input["inputId"] == INPUT_ID
         assert committed_context["inputId"] == INPUT_ID
         assert preflight_index < prompt_index < rpc_events.index(committed_input)
-        assert observed.count("context_committed") == 1
+        assert waits_after_start and not any(waits_after_start)
+        assert observed.count("input_committed") == 1
+        assert observed.count("context_committed") == attempts
         assert "auto_retry_start" not in observed
         assert "compaction_start" not in observed
         proof_files = list(sessions.glob("*.jsonl.input-proof"))
         assert len(proof_files) == 1
         durable_proofs = read_proof_rows(Path(str(proof_files[0]).removesuffix(".input-proof")))
-        assert len(durable_proofs) == 1
-        assert durable_proofs[0]["requestGeneration"] == 1
+        assert len(durable_proofs) == attempts
+        assert [row["requestGeneration"] for row in durable_proofs] == list(range(1, attempts + 1))
         if outcome == "restarted":
             # A second real child reopens the first child's saved private history.
             # The outer worker still has its isolated PI_CODING_AGENT_DIR.
@@ -1037,6 +1056,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                 if entry["type"] == "message" and entry["message"]["role"] == "user"
             ] == [INPUT_ID, "b" * 32]
     finally:
+        await native_session.close()
         server.shutdown()
         server.server_close()
         worker.join(timeout=2)
@@ -1155,7 +1175,7 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
     from agent_comms.turn_failure import ModelRequestFailed
 
     context = NativeContextProof(
-        INPUT_ID, "session", "entry", 1, DIGEST, tmp_path / "session.jsonl"
+        INPUT_ID, "session", "entry", 1, DIGEST, 1_791_964_800_001, tmp_path / "session.jsonl"
     )
     failed = NativePiTerminalFailure(
         "SECRET provider response including prompt data", context, "provider", "model",

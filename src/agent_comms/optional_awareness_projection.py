@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_database import CoordinationStore, StoreBusy
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.coordination_schema import (
     COORDINATION_SCHEMA_VERSION,
@@ -111,8 +111,8 @@ class OptionalAwarenessProjection:
         generation: int,
         admission_generation: int,
     ) -> OptionalAwarenessProjection:
-        with index.log.locked():
-            after_seq = index.log._private_marker_unlocked().admission_after_seq
+        with index.log.certified_read() as source:
+            after_seq = source.marker.admission_after_seq
         return cls(index, after_seq, through_seq, generation, admission_generation,
                    registry=registry)
 
@@ -241,7 +241,7 @@ class OptionalAwarenessProjection:
             raise ProjectionUnavailableError("binding candidate decisions exceed the row budget")
 
         path = self.index.log.path.with_name("coordination.sqlite3")
-        with CoordinationStore.observing(path, lock_timeout=0.05) as db:
+        with CoordinationStore.observing(path) as db:
             self._verify_schema_and_owner(db, initial, assignment, owner)
             decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)
             candidates = tuple(
@@ -314,7 +314,7 @@ class OptionalAwarenessProjection:
             ).require_snapshot(snapshot, "current registry owner turn changed")
         # A new read transaction, not the earlier candidate/decision snapshot,
         # observes a supported SQL generation advance during the optional read.
-        with CoordinationStore.observing(Path(path), lock_timeout=0) as db:
+        with CoordinationStore.observing(Path(path), StoreBusy()) as db:
             rows = _ParticipantOwner.read(
                 db.execute(
                     "SELECT g.generation,p.committed,g.owner_thread FROM owner_generations g "

@@ -19,7 +19,9 @@ export class NativeProofJournal {
         if (!info.isFile() || info.isSymbolicLink() || info.nlink !== 1 ||
             info.uid !== process.getuid() || (info.mode & 0o077) !== 0)
             throw new Error('Native proof journal must be a private owner file');
-        const db = new DatabaseSync(this.file);
+        // Core reads this journal while turns run. A commit waits out such a
+        // read, as Core's readers wait out a commit, instead of failing the turn.
+        const db = new DatabaseSync(this.file, { timeout: 5000 });
         try {
             // DELETE has recovery work bounded by the current context transaction,
             // independent of total journal history. EXTRA syncs directory removal.
@@ -99,17 +101,19 @@ export class NativeProofJournal {
         try {
             db.exec('BEGIN IMMEDIATE');
             const generation = db.prepare(nativeProofSchema.head).get().generation + 1;
+            const committedAtMs = Date.now();
             const insert = db.prepare(nativeProofSchema.insert);
-            for (const {inputId, sessionEntryId} of tracked) {
-                const record = {schema:1, type:'context_committed', sessionId:this.sessionId,
-                    inputId, sessionEntryId, requestGeneration:generation, llmContextDigest:digest};
+            // Each journal row is also the live context_committed event, unchanged.
+            const records = tracked.map(({inputId, sessionEntryId}) => ({
+                schema:2, type:'context_committed', sessionId:this.sessionId, inputId,
+                sessionEntryId, requestGeneration:generation, llmContextDigest:digest, committedAtMs}));
+            for (const record of records)
                 insert.run(...nativeProofSchema.columns.map(column => record[column.wire]));
-            }
             db.exec('COMMIT');
             // An exception here is still UNKNOWN to the live observer. On reopen
             // the committed generation is reserved, never re-emitted as a receipt.
             this.#syncDirectory();
-            return generation;
+            return records;
         } finally {
             db.close(); // An interrupted transaction rolls back; never retry here.
         }

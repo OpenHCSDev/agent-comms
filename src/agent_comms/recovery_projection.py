@@ -340,7 +340,7 @@ def read_recovery_projection(
     try:
         # mode=ro, NOT immutable=1: SQLite must respect concurrent commits.
         # Refuse WAL before this open, so it cannot create a -shm sidecar.
-        with CoordinationStore.observing(database, lock_timeout=0.25) as connection:
+        with CoordinationStore.observing(database) as connection:
             if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode")) != [
                 SQLiteJournalMode("delete")
             ]:

@@ -188,10 +188,10 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.Done)
     async def done(self, event: events.Done) -> events.Done:
-        document = await Coordination.run_worker(self.inputs.dispositions.read)
-        unknown_attempts = not document.all_started(
-            self.inputs.input_keys(self.session_id)
-        )
+        keys = self.inputs.input_keys(self.session_id)
+        document = await Coordination.run_worker(
+            partial(self.inputs.dispositions.read, (*keys, *self.original.notice_keys)))
+        unknown_attempts = not document.all_started(keys)
         if event.ok is True and unknown_attempts:
             # A final assistant stop can prove the original turn,
             # not an ACKed follow-up lacking its own user start.
@@ -220,12 +220,12 @@ class TurnProgress(events.AgentEventConsumer):
             ), self.thread.pid),
         )
 
-    async def before_agent_info(self, event: events.AgentInfo) -> None:
+    async def before_native_metadata(self, event: events.NativeMetadataObservation) -> None:
         session_file = event.session_file
         if session_file:
             await self.turn.attach_native_session(session_file)
 
-    async def after_agent_info(self, event: events.AgentInfo) -> None:
+    async def after_native_metadata(self, event: events.NativeMetadataObservation) -> None:
         await self.sessions.observe_native_configuration(self.session_id, self.thread_name, event)
 
     @handles(events.ToolEnd)

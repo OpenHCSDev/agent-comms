@@ -152,7 +152,7 @@ class SelectedParticipant(MroDispatch):
                 model,
                 on_compaction=on_compaction,
             )
-            await Coordination.run_async(store.session.path, selected.require_current)
+            await Coordination.run_read_async(store.session.path, selected.require_current)
             await Coordination.run_worker(lambda: selected.transition(
                 PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
             ))
@@ -186,9 +186,9 @@ class SelectedParticipant(MroDispatch):
         tuple[MessageNotification, ...],
     ]:
         """Capture detached registry, participant and optional context in one worker."""
-        with bus.log.locked():
+        with bus.log.certified_read() as source:
             _require_no_private_owner_rename(comms.root)
-            marker = bus.log._private_marker_unlocked()
+            marker = source.marker
             if marker.root_id != root_id:
                 raise IdentityConflict("selected admission wire root changed")
             after_seq = max(after_seq, marker.admission_after_seq)
@@ -216,7 +216,7 @@ class SelectedParticipant(MroDispatch):
             pending = pending_sealed_assignments(
                 store, lookup, thread.name, after_seq=after_seq
             )
-            sent_read = NotificationAssignment.capture_window(
+            sent_read = NotificationAssignment.capture(
                 store.session._connection, sent_sources
             )
         if pending:
@@ -267,9 +267,9 @@ class SelectedParticipant(MroDispatch):
         receipt through that same validator, without re-entering acceptance. Both
         read resources close before any native preparation or provider request.
         """
-        def capture(resource: Coordination):
-            # The certificate lends original pointer/byte snapshots. Decode
-            # outside its custody, using only the worker's owned SQL connection.
+        def capture():
+            # The certificate lends original pointer/byte snapshots before SQL
+            # snapshot custody, so file decoding cannot retain a database reader.
             with bus.log.certified_read() as source:
                 marker = source.marker
                 if marker.root_id != root_id:
@@ -277,11 +277,14 @@ class SelectedParticipant(MroDispatch):
                 for assignment in assignments:
                     if assignment.wire_seq <= marker.admission_after_seq:
                         raise IdentityConflict("historical source precedes the current admission floor")
-                captured = source.references(tuple(
+                return tuple(source.references(tuple(
                     MessageReference(assignment.wire_seq, assignment.message_id)
                     for assignment in assignments
-                ))
-            originals = tuple(captured)
+                )))
+
+        originals = await Coordination.run_worker(capture)
+
+        def verify(resource: Coordination):
             with resource.session.read():
                 assert_cohort_schema(resource.session._connection)
                 for assignment, initial in zip(assignments, originals, strict=True):
@@ -291,9 +294,8 @@ class SelectedParticipant(MroDispatch):
                         raise IdentityConflict("selected assignment is absent from its sealed receipt")
                     assignment.require_selected_source(initial, identity.thread)
                     identity.require(resource, assignment.recipient_lookup)
-            return originals
 
-        originals = await Coordination.run_async(store.session.path, capture)
+        await Coordination.run_read_async(store.session.path, verify)
         # Mutable claims stay with the original caller's open store; the worker
         # exports no connection, lease or second source/lifecycle authority.
         return tuple(

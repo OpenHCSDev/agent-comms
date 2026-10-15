@@ -343,17 +343,13 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     def _private_nk_marker(self) -> str:
         """Require the configured, certified root before any selected request."""
-        from .private_bus_checkpoint import verify_private_bus_checkpoint_unlocked
-
         self._configured_root_id()
-        with self._comms.bus.log.locked():
-            marker = self._comms.bus.log._private_marker_unlocked()
-            if marker.root_id != self._private_nk_wire_root_id:
+        with self._comms.bus.log.certified_read() as source:
+            if source.marker.root_id != self._private_nk_wire_root_id:
                 raise PublicationActivationBlocked(
                     "private N/K ACP root does not match configuration"
                 )
-            verify_private_bus_checkpoint_unlocked(self._comms.bus.log, marker)
-            return marker.root_id
+            return source.marker.root_id
 
     def _verify_native_package_once(self):
         """Verify this worker's pinned native package once, for the worker's life.
@@ -401,8 +397,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
         )
         def read_admission():
-            with bus.log.locked():
-                return bus.log._private_marker_unlocked().admission_after_seq
+            with bus.log.certified_read() as source:
+                return source.marker.admission_after_seq
         admission_after_seq = await Coordination.run_worker(read_admission)
         store_path = self._comms.root / "coordination.sqlite3"
         # One execution owns this wake's package acquisition: acceptance of new
@@ -439,18 +435,19 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             await self.cursors.publish(session_id, thread_name)
             return 0
         def select(store):
-            participant = store.participants.get(stable_thread_lookup(owner.created_at))
-            candidate = next_sealed_assignment(
-                store, participant.lookup, owner.name, after_seq=admission_after_seq,
-            )
-            if candidate is None:
-                return False
-            # An older turn is still running: refuse idle handling and let
-            # the existing drain diagnostic explain the refusal; never retire
-            # or replay that turn here.
-            participant.pointer.require_idle()
-            return True
-        if not await Coordination.run_async(store_path, select):
+            with store.session.read():
+                participant = store.participants.get(stable_thread_lookup(owner.created_at))
+                candidate = next_sealed_assignment(
+                    store, participant.lookup, owner.name, after_seq=admission_after_seq,
+                )
+                if candidate is None:
+                    return False
+                # An older turn is still running: refuse idle handling and let
+                # the existing drain diagnostic explain the refusal; never retire
+                # or replay that turn here.
+                participant.pointer.require_idle()
+                return True
+        if not await Coordination.run_read_async(store_path, select):
             await self.cursors.publish(session_id, thread_name, advance=True)
             return 0
         SelectedWakeCheck(

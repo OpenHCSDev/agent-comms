@@ -67,11 +67,11 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
     recorded = replace(reservation(), sent_owner_admission_generation=RecordedNativeAdmission(2),
                        session_id="original-session", session_file="/original/session.jsonl",
                        session_entry_id="original-entry", request_generation=1,
-                       llm_context_digest="f" * 64)
+                       llm_context_digest="f" * 64, committed_at_ms=1_791_964_800_001)
     assert recorded.reference == NativeInputReference(
         recorded.input_id, type(recorded.execution), recorded.session_id, 1
     )
-    for name in ("session_file", "session_entry_id", "llm_context_digest"):
+    for name in ("session_file", "session_entry_id", "llm_context_digest", "committed_at_ms"):
         with pytest.raises(IdentityConflict, match="partial"):
             _ = replace(recorded, **{name: None}).reference
 
@@ -89,6 +89,7 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
         reservation(), sent_owner_admission_generation=RecordedNativeAdmission(2),
         session_id="original-session", session_file="/original/session.jsonl",
         session_entry_id="original-entry", request_generation=1, llm_context_digest="f" * 64,
+        committed_at_ms=1_791_964_800_001,
     )
     source = dict(
         wire_root_id="a" * 32, source_seq=1, source_message_id="original-message",
@@ -96,7 +97,8 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
         owner_lookup=recorded.owner_lookup, owner_thread=recorded.owner_thread,
         owner_generation=recorded.owner_generation,
         context=NativeContextProof(recorded.input_id, recorded.session_id,
-            recorded.session_entry_id, 1, "f" * 64, Path(recorded.session_file)),
+            recorded.session_entry_id, 1, "f" * 64, 1_791_964_800_001,
+            Path(recorded.session_file)),
         native_reference=recorded.reference,
         expected_prompt_equality_established=True,
     )

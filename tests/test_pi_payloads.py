@@ -142,10 +142,11 @@ def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
         "type": "message_end",
         "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
     })
-    failures = []
-    session = SimpleNamespace(fail_terminal=failures.append)
+    from agent_comms.turn_output import TurnOutput
+    from agent_comms.turn_failure import ModelRequestFailed
+    session = SimpleNamespace(output=TurnOutput())
     event.message.tracked_end(session)
-    assert failures == ["original provider rejection"]
+    assert session.output.failure == ModelRequestFailed("original provider rejection")
 
 
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
@@ -154,11 +155,10 @@ def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repeti
 
     event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry"})
     pending = PendingNativeCommit()
-    assert not pending.observed
     with pytest.raises(NativePiUnavailable, match="tracked model context"):
         pending.require()
     observed = pending.capture(event)
-    assert isinstance(observed, ObservedNativeCommit) and observed.observed
+    assert isinstance(observed, ObservedNativeCommit)
     assert observed.require() is event
     with pytest.raises(NativePiUnavailable, match="repeated the input commitment"):
         observed.capture(event)
@@ -168,6 +168,8 @@ def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
     from pathlib import Path
     from agent_comms.native_pi import NativeContextProof, NativePiTerminalFailure, NativePiUnavailable
     from agent_comms.tracked_turn import AmbiguousTrackedTerminal, PendingTrackedTerminal
+    from agent_comms.turn_output import TurnOutput
+    from agent_comms.turn_failure import ModelRequestFailed, IdentityUncertain
 
     pending = PendingTrackedTerminal()
     with pytest.raises(NativePiUnavailable, match="unique authoritative"):
@@ -181,12 +183,17 @@ def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
     with pytest.raises(NativePiUnavailable, match="unique authoritative"):
         ambiguous.require_response(["actual response"])
     assert isinstance(completed.tool_round(), PendingTrackedTerminal)
-    failed = completed.fail("original provider rejection")
-    assert failed.tool_round() is failed and failed.append("later text") is failed
-    proof = NativeContextProof("a" * 32, "session", "entry", 1, "b" * 64, Path("original-session.jsonl"))
+    output = TurnOutput(failure=ModelRequestFailed("original provider rejection"))
+    proof = NativeContextProof(
+        "a" * 32, "session", "entry", 1, "b" * 64, 1_791_964_800_001, Path("original-session.jsonl")
+    )
     with pytest.raises(NativePiTerminalFailure, match="original provider rejection") as failure:
-        failed.raise_failure(proof, "configured", "model")
+        output.raise_if_failed(proof, "configured", "model")
     assert failure.value.context is proof
+    output.record_failure(IdentityUncertain("source identity changed"))
+    with pytest.raises(NativePiUnavailable, match="source identity changed") as uncertain:
+        output.raise_if_failed(proof, "configured", "model")
+    assert not isinstance(uncertain.value, NativePiTerminalFailure)
 
 
 @pytest.mark.parametrize(

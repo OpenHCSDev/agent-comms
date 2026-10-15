@@ -20,6 +20,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
+from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
 from .native_package import OWNER_INSTRUCTIONS
@@ -138,6 +139,14 @@ class NativeContextRecord:
             ),
         }
     )
+    # The native writer stamps the moment this context was committed for a
+    # model request: the time the input was shown to the model.
+    committed_at_ms: int = field(
+        metadata={
+            "wire_name": "committedAtMs",
+            "sql": Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991"),
+        }
+    )
 
     @classmethod
     def from_events(cls, input_id, session_id, input_event, context_event):
@@ -168,6 +177,8 @@ class NativeContextRecord:
             raise ValueError("Native context lacks committed session identity")
         if not 0 < self.request_generation <= 2**53 - 1:
             raise ValueError("Native context generation is outside its native range")
+        if not 0 < self.committed_at_ms <= 2**53 - 1:
+            raise ValueError("Native context commit time is outside its native range")
 
     def at(self, session_file: Path) -> NativeContextProof:
         """Locate recorded facts; this does not grant acceptance or replay."""
@@ -177,6 +188,7 @@ class NativeContextRecord:
             self.session_entry_id,
             self.request_generation,
             self.llm_context_digest,
+            self.committed_at_ms,
             session_file,
         )
 
@@ -185,7 +197,7 @@ class NativeContextRecord:
 class NativeContextJournal(NativeContextRecord, TypedTable):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
-    schema: Literal[1]
+    schema: Literal[2]
     type: Literal["context_committed"]
 
     without_rowid = True
@@ -198,7 +210,8 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
             f"{table}_append": f"""CREATE TRIGGER {table}_append BEFORE INSERT ON {table}
             WHEN NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM {table}), 0)
               OR EXISTS(SELECT 1 FROM {table} WHERE request_generation=NEW.request_generation
-                        AND llm_context_digest != NEW.llm_context_digest)
+                        AND (llm_context_digest != NEW.llm_context_digest
+                             OR committed_at_ms != NEW.committed_at_ms))
               OR NEW.session_id != (SELECT session_id FROM {table} ORDER BY session_id LIMIT 1)
             BEGIN SELECT RAISE(ABORT,'native proof lineage differs'); END""",
             **{
@@ -246,9 +259,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 PrivateFileRole.require(before)
                 if before.st_nlink != 1:
                     raise NativePiUnavailable("Native proof must be private and unaliased")
-                db = custody.enter_context(closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)))
-                db.execute("PRAGMA query_only=ON")
-                db.execute("BEGIN")
+                db = custody.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
                 actual = SQLiteSchemaObject.read(
                     db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
                 )
@@ -354,7 +365,7 @@ class NativePiTerminalFailure(NativePiUnavailable):
             flags=re.IGNORECASE,
         )
         self.public_message = (
-            f"{provider}/{model}: {match.group(1) if match else 'provider request failed'}."
+            f"{provider}/{model}: {match.group(1) if match else 'request failed'}."
         )
 
 
@@ -571,8 +582,8 @@ class NativePiRpcLaunch:
         *,
         worktree: Path,
         session: SelectedSession,
-        provider: str = "openrouter",
-        model: str = "z-ai/glm-5.3-flash",
+        provider: str,
+        model: str,
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode | None = None,

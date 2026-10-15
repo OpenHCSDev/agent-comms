@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import sqlite3
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, Literal
+from pathlib import Path
+from typing import TYPE_CHECKING, ClassVar
 
+from .channel_targets import is_channel_target
 from .errors import RelationViolationError
 from .input_origin import InputOrigin, UnattributedInputOrigin
 from .input_attempt import (
@@ -17,10 +20,10 @@ from .input_attempt import (
     StartedInput,
     StoredInput,
 )
-from .locked_store import LockedStore
 from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
+from .typed_table import Column, Index, TypedStore, TypedTable, sql_literal
 
 if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
@@ -31,8 +34,9 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class InputDocument:
-    rows: dict[str, StoredInput] = field(default_factory=dict, metadata={"wire_required": True})
-    version: Literal[1] = field(default=1, metadata={"wire_required": True})
+    """The stored rows one query selected; never the whole store."""
+
+    rows: dict[str, StoredInput] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if any(not row.exists or key != row.key for key, row in self.rows.items()):
@@ -100,16 +104,19 @@ class InputDocument:
             )
         )
 
-    def bound_bus_inputs(self) -> tuple[SentInput, ...]:
-        return tuple(
-            bound for row in self.rows.values() if (bound := row.bound_bus_input()) is not None
-        )
 
-    def active_reply_references(self, lease, root_id, snapshot) -> tuple[MessageReference, ...]:
-        return tuple(
+    def answered_by(self, lease, source, snapshot, target: str) -> tuple[MessageReference, ...]:
+        """The bus messages the lease's turn took in that a message to target answers."""
+        delivered = tuple(
             reference
             for row in sorted(self.rows.values(), key=lambda item: item.order)
-            if (reference := row.active_reply_reference(lease, root_id, snapshot)) is not None
+            if (reference := row.delivered_in(lease, source.marker.root_id, snapshot)) is not None
+        )
+        route = target if is_channel_target(target) else snapshot.canonical_name(target)
+        return tuple(
+            original.message.reference
+            for original in source.references(delivered)
+            if original.message.exact_reply_target == route
         )
 
     def unbound_wire_inputs(self, root_id: str) -> dict[MessageReference, StoredInput]:
@@ -147,17 +154,81 @@ class InputDocument:
         }
 
 
+def _unresolved_kinds() -> str:
+    """The unresolved members' stored names, derived from their declarations."""
+    return "(" + ", ".join(
+        sql_literal(member) for member in InputAttempt.members_with(StoredInput) if member.unresolved
+    ) + ")"
+
+
+@dataclass(frozen=True)
+class InputDispositionRow(TypedTable):
+    """One stored input; its lookup columns are generated from the stored row."""
+
+    key: str = field(metadata={"sql": Column(primary_key=True)})
+    attempt: StoredInput
+    owner: str = field(init=False, default=None, compare=False, repr=False, metadata={
+        "sql": Column(generated="json_extract(attempt,'$.owner')")})
+    turn_id: str | None = field(init=False, default=None, compare=False, repr=False, metadata={
+        "sql": Column(generated="json_extract(attempt,'$.turn_id')")})
+    sequence: int | None = field(init=False, default=None, compare=False, repr=False, metadata={
+        "sql": Column(generated="json_extract(attempt,'$.sequence')")})
+    unresolved: bool = field(init=False, default=None, compare=False, repr=False, metadata={
+        "sql": Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}")})
+    checks = ("key = json_extract(attempt,'$.key')",)
+    indexes = (
+        Index(("owner", "unresolved")),
+        Index(("turn_id",), where="turn_id IS NOT NULL"),
+    )
+
+
+def _members(column: str, values) -> tuple[str, tuple]:
+    values = tuple(values)
+    return f'"{column}" IN ({", ".join("?" for _ in values)})', values
+
+
 @dataclass(frozen=True, slots=True)
-class InputDispositions(LockedStore[InputDocument]):
-    filename: ClassVar[str] = "input_dispositions.json"
-    json_sort_keys = True
+class InputDispositions(TypedStore):
+    """Indexed durable input rows; each operation reads only the rows it names."""
 
-    @property
-    def record_type(self) -> type[InputDocument]:
-        return InputDocument
+    root: Path
+    filename: ClassVar[str] = "input_dispositions.sqlite3"
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (InputDispositionRow,)
 
-    def empty(self) -> InputDocument:
-        return InputDocument()
+    @staticmethod
+    def _document(connection: sqlite3.Connection, where: str, parameters: tuple) -> InputDocument:
+        return InputDocument({row.key: row.attempt for row in InputDispositionRow.select(
+            connection, where=where, parameters=parameters)})
+
+    def _select(self, where: str, parameters: tuple = ()) -> InputDocument:
+        if not self.path.exists():
+            return InputDocument({})  # nothing was ever recorded; a read creates nothing
+        with self.snapshot() as connection:
+            return self._document(connection, where, parameters)
+
+    def _update(self, where: str, parameters: tuple, change) -> InputDocument:
+        """Change only the selected rows; the callback returns the original to skip writing."""
+        with self.writing() as connection:
+            original = self._document(connection, where, parameters)
+            changed = change(original)
+            for key, row in changed.rows.items():
+                if original.rows.get(key) is not row:
+                    InputDispositionRow(key, row).upsert(connection)
+            return changed
+
+    def read(self, keys: tuple[str, ...]) -> InputDocument:
+        return self._select(*_members("key", keys))
+
+    def lookup(self, key: str) -> InputAttempt:
+        return self.read((key,)).lookup(key)
+
+    def unresolved(self, owners: frozenset[str]) -> InputDocument:
+        where, parameters = _members("owner", sorted(owners))
+        return self._select(f"unresolved = 1 AND {where}", parameters)
+
+    def in_turn(self, turn_id: str) -> InputDocument:
+        return self._select('"turn_id" = ?', (turn_id,))
+
 
     @staticmethod
     def bus_key(message: Message, owner: Thread) -> str:
@@ -186,7 +257,7 @@ class InputDispositions(LockedStore[InputDocument]):
                 )
             return changed
 
-        return self.update(reserve)
+        return self._update(*_members("key", (row.key for row in originals)), reserve)
 
     def reserve_turn(
         self, owner: str, turn: TurnId, admission: int, text: str, *, custody: ExitStack,
@@ -219,7 +290,7 @@ class InputDispositions(LockedStore[InputDocument]):
             changed = True
             return replace(document, rows={**document.rows, key: next_row})
 
-        self.update(update)
+        self._update(*_members("key", (key,)), update)
         return changed
 
     def bind(self, key: str, *, admission: int, turn_id: str, native_id: str, text: str) -> bool:
@@ -235,7 +306,7 @@ class InputDispositions(LockedStore[InputDocument]):
 
         ``already_bound`` (a send-now re-send) requires the existing binding to match.
         """
-        document = self.read()
+        document = self.read(keys)
         if any(not document.lookup(key).unresolved
                or not document.lookup(key).matches_admission(admission) for key in keys):
             return False
@@ -265,7 +336,7 @@ class InputDispositions(LockedStore[InputDocument]):
             bound = True
             return replace(document, rows={**document.rows, **dict(zip(keys, successors, strict=True))})
 
-        self.update(change)
+        self._update(*_members("key", keys), change)
         return bound
 
     def started(self, key: str, *, turn_id: str, native_id: str, text: str) -> bool:
@@ -275,7 +346,7 @@ class InputDispositions(LockedStore[InputDocument]):
 
     def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
         """Publish one complete retirement and return that exact document cut."""
-        return self.update(lambda document: document.settle_unbound(keys))
+        return self._update(*_members("key", keys), lambda document: document.settle_unbound(keys))
 
     def review_for_goal(
         self,
@@ -307,7 +378,7 @@ class InputDispositions(LockedStore[InputDocument]):
                 rows={**rows, **{key: rows[key].review(goal_id, decision) for key in keys}},
             )
 
-        self.update(review)
+        self._update(*_members("key", keys), review)
 
     def dismiss_historical(
         self,
@@ -323,4 +394,6 @@ class InputDispositions(LockedStore[InputDocument]):
             }
             return replace(document, rows={**document.rows, **changed}) if changed else document
 
-        return self.update(dismiss).delivery_overview(owners, awaiting_keys=awaiting_keys)
+        where, parameters = _members("owner", sorted(owners))
+        return self._update(f"unresolved = 1 AND {where}", parameters, dismiss).delivery_overview(
+            owners, awaiting_keys=awaiting_keys)

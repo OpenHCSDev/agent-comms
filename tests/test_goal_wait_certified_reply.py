@@ -14,6 +14,7 @@ from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoa
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.threads import Thread
 from goal_owner_fixture import canonical_goal_wire
+from stored_inputs import stored_inputs
 
 
 def register(comms, name):
@@ -116,7 +117,7 @@ async def test_native(retained_native_acp_owner):
         old_key, seq=None, owner=sid, admission=admission, target=sid,
         text="HISTORICAL_UNKNOWN_MUST_NOT_REPLAY",
     )
-    old = agent.inputs.dispositions.read().lookup(old_key)
+    old = stored_inputs(agent.inputs.dispositions.root).lookup(old_key)
     comms.goals.update_goal(
         sid, StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
     )
@@ -151,7 +152,7 @@ async def test_native(retained_native_acp_owner):
             if isinstance(item, InputDeliveryChangedUpdate)
         )
         assert accepted.input_id in agent.inputs.queued_inputs[sid]
-        queued = agent.inputs.dispositions.read().lookup(f"acp:{accepted.input_id}")
+        queued = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
         assert queued.unresolved and not queued.has_native_binding
         gate.set()
         native.provider.response_gate = None
@@ -160,10 +161,10 @@ async def test_native(retained_native_acp_owner):
         assert comms.goals.goal_wait(sid) is None
         assert comms.registry.require(sid).goal == parked_goal
         assert comms.registry.require(sid).active_turn is None
-        handled = agent.inputs.dispositions.read().lookup(f"acp:{accepted.input_id}")
+        handled = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
         assert not handled.unresolved and handled.has_native_binding
         assert not agent.inputs.queued_inputs.get(sid)
-        assert agent.inputs.dispositions.read().lookup(old_key) == old
+        assert stored_inputs(agent.inputs.dispositions.root).lookup(old_key) == old
         assert native.provider.posts == 3
         assert not any("HISTORICAL_UNKNOWN_MUST_NOT_REPLAY" in json.dumps(r) for r in native.provider.requests)
         assert "QUEUED_OWNER_FOLLOWUP" in json.dumps(native.provider.requests[-1])
@@ -187,7 +188,7 @@ async def test_native(retained_native_acp_owner):
         assert reopened.goals.goal_wait(sid) is None
         assert reopened.registry.require(sid).goal == parked_goal
         assert reopened.bus.log.message_by_id(original.message_id).reference == original.reference
-        assert InputDispositions(comms.root / InputDispositions.filename).read().lookup(old_key) == old
+        assert stored_inputs(comms.root).lookup(old_key) == old
     finally:
         gate.set()
         native.provider.response_gate = None
