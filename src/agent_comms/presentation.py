@@ -758,6 +758,7 @@ class CoordinationSnapshot:
     channels: tuple[ChannelView, ...]
     unread: Mapping[str, int]
     last_sent: Mapping[str, float]
+    references: DisplayReferences
     channel_unread: Mapping[str, int] = field(default_factory=dict)
     channel_order: ChannelSort = ChannelSort.NAME
     thread_unread: Mapping[str, int] = field(default_factory=dict)
@@ -765,7 +766,6 @@ class CoordinationSnapshot:
     show_stopped: bool = True
     show_archived: bool = False
     read_marker_notice: str | None = None
-    references: DisplayReferences = field(default_factory=DisplayReferences)
 
     @classmethod
     def capture(

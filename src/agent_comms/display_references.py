@@ -7,6 +7,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from functools import cached_property
 import re
 
 from .declared_family import DeclaredFamily
@@ -45,7 +46,7 @@ class HistoricalDisplayReference(ThreadReferenceIdentity, DisplayReference):
 
     def current_in(self, references: DisplayReferences) -> bool:
         # Recorded identity is intentionally not current registry membership.
-        return self.root == references.root
+        return references.accepts_history(self.root)
 
 
 @dataclass(frozen=True)
@@ -64,11 +65,65 @@ class DisplayReferenceMatch:
     end: int
 
 
+class ReferenceContext:
+    """Availability is not an empty successful catalog."""
+    description = ""
+
+    def find(self, text):
+        return ()
+
+    def contains(self, reference):
+        return False
+
+    def accepts_history(self, root):
+        return False
+
+    def for_source(self, source):
+        if source is None:
+            return self
+        return DisplayReferences.recorded(self.root, source)
+
+
 @dataclass(frozen=True)
-class DisplayReferences:
+class ProjectReferences(ReferenceContext):
+    """An ordinary project view has no coordination identity to recognize."""
+    def for_source(self, source):
+        if source is not None:
+            raise ValueError("Recorded references require their original coordination root")
+        return self
+
+
+@dataclass(frozen=True)
+class PendingReferences(ReferenceContext):
+    root: str
+    description = "Waiting for the original reference catalog."
+
+
+@dataclass(frozen=True)
+class UnavailableReferences(ReferenceContext):
+    root: str
+    reason: str
+
+    @property
+    def description(self):
+        return f"Reference catalog unavailable: {self.reason}"
+
+
+@dataclass(frozen=True)
+class ForeignReferences(ReferenceContext):
+    root: str
+    observed_root: str
+
+    @property
+    def description(self):
+        return f"This view belongs to {self.root}; the observed catalog belongs to {self.observed_root}."
+
+
+@dataclass(frozen=True)
+class DisplayReferences(ReferenceContext):
     """One observation's unfiltered names; no store, widget or wake state."""
 
-    root: str = ""
+    root: str
     targets: Mapping[str, DisplayReference] = field(default_factory=dict)
 
     @classmethod
@@ -99,16 +154,21 @@ class DisplayReferences:
             **recorded.targets,
         })
 
-    def find(self, text: str) -> tuple[DisplayReferenceMatch, ...]:
+    @cached_property
+    def pattern(self):
         # Escape declared names, not a second grammar for thread/channel names.
-        # Paths, URLs, emails and longer identifiers must remain indivisible.
+        names = "|".join(re.escape(name) for name in sorted(self.targets, key=len, reverse=True))
+        return re.compile(r"(?<![\w@/\\.#:-])@?(?:" + names + r")(?![\w/\\@:-]|\.\w)")
+
+    def find(self, text: str) -> tuple[DisplayReferenceMatch, ...]:
         if not self.targets:
             return ()
-        names = "|".join(re.escape(name) for name in sorted(self.targets, key=len, reverse=True))
-        pattern = re.compile(r"(?<![\w@/\\.#:-])@?(?:" + names + r")(?![\w/\\@:-]|\.\w)")
         return tuple(DisplayReferenceMatch(self.targets[match.group().removeprefix('@')],
                                            match.start(), match.end())
-                     for match in pattern.finditer(text))
+                     for match in self.pattern.finditer(text))
+
+    def accepts_history(self, root):
+        return self.root == root
 
     def contains(self, reference: DisplayReference) -> bool:
         return self.targets.get(reference.name) == reference
