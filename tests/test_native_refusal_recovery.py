@@ -149,6 +149,23 @@ async def test_explicit_failed_terminal_is_not_a_missing_final_stop(tmp_path, re
     assert [event.text for event in observed if isinstance(event, ae.Error)] == ["terminated"]
 
 
+async def test_failed_native_retry_end_without_assistant_still_declares_failure(tmp_path):
+    stub = _stub_with(tmp_path, [
+        {"type": "native_retry_end", "success": False, "attempt": 3,
+         "finalError": "terminated before an assistant terminal"},
+        *_settled_records(),
+    ])
+    observed = [event async for event in one_turn_events(
+        stub, [], "distinct retry-end-only input", str(tmp_path), require_input_id=True,
+    )]
+    done = observed[-1]
+    assert isinstance(done, ae.Done) and not done.ok
+    assert done.reason_code == "model_request_failed"
+    assert done.text == "terminated before an assistant terminal"
+    assert [event.text for event in observed if isinstance(event, ae.Error)] == [done.text]
+    assert len([event for event in observed if isinstance(event, ae.Done)]) == 1
+
+
 @pytest.mark.asyncio
 async def test_exhausted_empty_responses_become_typed_provider_failure():
     reason = "Provider returned no authoritative response"
