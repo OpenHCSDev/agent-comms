@@ -92,10 +92,11 @@ async def test_actual_native_failure_after_tool_keeps_terminal_and_effect_once(
         assert errors and "controlled failure" in errors[-1]["errorMessage"]
         tools = [message for message in messages if message.get("role") == "toolResult"]
         assert len(tools) == 1
+        assert len([message for message in messages if message.get("role") == "user"]) == 2
         reports = list((owner.root / "diagnostics").glob("*.json"))
         failures = [json.loads(path.read_text()) for path in reports]
-        assert any("model_request_failed" in json.dumps(value) for value in failures)
-        assert not any("assistant_final_stop_missing" in json.dumps(value) for value in failures)
+        assert len(failures) == 1
+        assert failures[0]["reason"] == "model_request_failed"
 
 
 @pytest.mark.parametrize("termination", ["cancel", "eof", "owner_stop"])

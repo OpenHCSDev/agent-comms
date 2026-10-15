@@ -90,6 +90,9 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
                 observed['goal'] = wired.goals.update_goal(
                     'proj', SetGoalAction(text='Ship the release'))
                 yield ae.ToolEnd(id='set-goal', name='comms_set_goal', ok=True)
+            if isinstance(event, ae.Done):
+                assert event.ok and event.retry_result.success
+                assert event.retry_result.attempt == 3
             yield event
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
@@ -149,7 +152,10 @@ async def test_explicit_failed_terminal_is_not_a_missing_final_stop(tmp_path, re
 @pytest.mark.asyncio
 async def test_exhausted_empty_responses_become_typed_provider_failure():
     reason = "Provider returned no authoritative response"
+    from agent_comms.turn_output import TurnOutput
+
     turn = object.__new__(TrackedTurnSession)
+    turn.output = TurnOutput()
     turn.terminal = PendingTrackedTerminal()
     await turn.native_retry_finished(pi_events.NativeRetryEnd.from_wire({
         "type": "native_retry_end",
@@ -162,9 +168,10 @@ async def test_exhausted_empty_responses_become_typed_provider_failure():
 
     with pytest.raises(native_pi.NativePiTerminalFailure) as caught:
         turn.terminal.raise_failure(
-            None, "provider", "model", ProviderRetryExhausted(reason)
+            None, "provider", "model", turn.output.declared_failure
         )
     assert reason in str(caught.value)
+    assert caught.value.failure == ProviderRetryExhausted(reason)
 
 
 @pytest.mark.asyncio
