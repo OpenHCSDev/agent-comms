@@ -67,12 +67,6 @@ class PendingRoute:
 
 
 @dataclass(frozen=True)
-class ActorSeen:
-    actor: str
-    sequences: frozenset[int]
-
-
-@dataclass(frozen=True)
 class RouteUnread(TypedRow):
     actor: str
     target: str
@@ -232,7 +226,6 @@ class BusRouteCounts:
                 source.seek(size - 1)
                 if source.read(1) != b"\n":
                     raise RelationViolationError("Route projection source has an incomplete original row")
-        self._initialize()
         recorded = self._recorded()
         rebuild = recorded is None or source is None
         offset = recorded.revision.size if recorded and recorded.revision else 0
@@ -308,7 +301,7 @@ class BusRouteCounts:
         return RouteTotalRow.select(self.connection)
 
     def unseen_counts(
-        self, requests: list[PendingRoute], seen: list[ActorSeen]
+        self, requests: list[PendingRoute], seen: Mapping[str, frozenset[int]]
     ) -> list[RouteUnread]:
         """One bulk query: route totals minus exact seen membership.
 
@@ -321,8 +314,7 @@ class BusRouteCounts:
         return RouteUnread.read(
             self.connection.execute(
                 f'''WITH {self._requests}, actors AS MATERIALIZED (
-                SELECT json_extract(value, '$.actor') AS actor,
-                       json_extract(value, '$.sequences') AS sequences FROM json_each(?)
+                SELECT key AS actor, value AS sequences FROM json_each(?)
             ), painted AS (
                 SELECT request.actor, request.target, request.sender,
                        request.sender_lookup, count(*) AS count
@@ -346,7 +338,8 @@ class BusRouteCounts:
             LEFT JOIN painted ON painted.actor=request.actor
                 AND painted.target=request.target AND painted.sender=request.sender
                 AND painted.sender_lookup=request.sender_lookup''',
-                (json.dumps(FieldCodec.encode(requests)), json.dumps(FieldCodec.encode(seen))),
+                (json.dumps(FieldCodec.encode(requests)),
+                 json.dumps({actor: sorted(sequences) for actor, sequences in seen.items()})),
             )
         )
 
