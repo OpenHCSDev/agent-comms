@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
+from agent_comms import native_pi
 from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_recovery import (
     RecoveryMonitorCapability,
@@ -32,7 +33,7 @@ from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 def failed_owner(directory, output, exit_allowed):
     # Persist the historical pre-settlement failure shape for operator recovery.
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
-    runtime._trusted_package = lambda path: path
+    native_pi._trusted_package = lambda path: path
     fake, _calls = _fake_model()
 
     async def old_failure(*args, **kwargs):
