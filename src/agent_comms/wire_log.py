@@ -96,6 +96,16 @@ class OpenedWireSnapshot:
     def boundary(self) -> int:
         return self.revision.size if self.revision is not None else 0
 
+    def tail_bytes(self, max_bytes: int) -> tuple[bytes, int]:
+        """Read trailing bytes from this fixed cut's retained descriptor."""
+        if max_bytes < 0:
+            raise ValueError("tail byte limit must be nonnegative")
+        if self.stream is None:
+            return b"", 0
+        start = max(0, self.boundary - max_bytes)
+        self.stream.seek(start)
+        return self.stream.read(self.boundary - start), start
+
     @staticmethod
     def messages(record: Mapping) -> tuple[Message, ...]:
         from .errors import StoredHistoryUnreadable

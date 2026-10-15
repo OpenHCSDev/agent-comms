@@ -666,13 +666,7 @@ class ThreadRelationships:
                 return self._recent, self._limited
             with self.bus.log._opened_wire_snapshot(need_sequence=False) as source:
                 revision = source.revision
-                if source.stream is None:
-                    data, start = b"", 0
-                else:
-                    size = source.boundary
-                    start = max(0, size - self.RECENT_BYTES)
-                    source.stream.seek(start)
-                    data = source.stream.read(size - start)
+                data, start = source.tail_bytes(self.RECENT_BYTES)
             lines = data.splitlines(keepends=True)
             if start and lines:
                 lines.pop(0)  # The first record may be partial.
