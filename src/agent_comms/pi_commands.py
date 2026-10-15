@@ -226,14 +226,7 @@ class GetState(SessionSnapshot, NativeQuery):
             session.session_name = state.session_name
             session.active_session_file = state.session_file or session.active_session_file
             session.usage.size = state.model.context_window
-            yield events.AgentInfo(
-                model=state.model.display_name,
-                thinking_level=ThinkingLevel.optional_name(state.thinking_level),
-                session_name=state.session_name,
-                session_file=session.active_session_file,
-                context_used=session.usage.used,
-                context_size=session.usage.size,
-            )
+            yield state.agent_info(session)
 
 
 @dataclass(frozen=True, kw_only=True)

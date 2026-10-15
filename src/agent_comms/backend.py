@@ -404,11 +404,8 @@ class TurnSession:
         if self.native.proc.returncode is None:
             await self.native.proc.stop()
 
-    def context_info(self) -> events.AgentInfo:
-        return events.AgentInfo(
-            model=self.model_name,
-            session_name=self.session_name,
-            session_file=self.active_session_file,
+    def context_info(self) -> events.ContextInfo:
+        return events.ContextInfo(
             context_used=self.usage.used,
             context_size=self.usage.size,
         )

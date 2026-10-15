@@ -13,6 +13,7 @@ from .registration import Registration
 from .native_input_owner import RegistryOwner
 
 if TYPE_CHECKING:
+    from .agent_events import RuntimeInfoObservation
     from .notification_assignment import AssignmentProgress
     from .presentation import MessageNotification
 from .activity import (
@@ -215,28 +216,11 @@ class AgentActivity:
             self._emit_activity(Activity(name, ActivityState.IDLE))
             return fence
 
-    def set_agent_info(
-        self,
-        thread: str,
-        *,
-        model: str | None = None,
-        session_name: str | None = None,
-        context_used: int | None = None,
-        context_size: int | None = None,
-    ) -> None:
-        """Record the latest model and context metadata for a thread."""
+    def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:
+        """Serialize the original observation with thread rename/retirement."""
         with _store_lock(self._wire_lock_path, shared=True):
             canonical = self.registry.require(thread).name
-            self.runtime_info.set(
-                AgentRuntimeInfo(
-                    thread=canonical,
-                    timestamp=time.time(),
-                    model=model,
-                    session_name=session_name,
-                    context_used=context_used,
-                    context_size=context_size,
-                )
-            )
+            self.runtime_info.observe(canonical, time.time(), observation)
 
     def agent_info_of(self, thread: str) -> AgentRuntimeInfo | None:
         return self.runtime_info.read().get(self.registry.require(thread).name)

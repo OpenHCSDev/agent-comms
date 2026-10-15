@@ -1005,6 +1005,19 @@ class StateData(NativeSessionSnapshot, PiResponseData):
             return {"kind": UnreportedModel.declared_name}
         return super().normalize_field(target, key, value, record)
 
+    def agent_info(self, session):
+        """Project this actual native state, not a later usage-only observation."""
+        from .agent_events import AgentInfo
+
+        return AgentInfo(
+            model=self.model.display_name,
+            thinking_level=ThinkingLevel.optional_name(self.thinking_level),
+            session_name=self.session_name,
+            session_file=session.active_session_file,
+            context_used=session.usage.used,
+            context_size=session.usage.size,
+        )
+
     def matches_model(self, selected: tuple[str, str]) -> bool:
         return self.model.matches_identity(selected)
 
