@@ -270,11 +270,7 @@ class CoordinationStore:
             else:
                 SchemaMeta.require_current(self._connection, version)
                 for difference in self._trigger_differences():
-                    if difference.stored is not None:
-                        name = difference.name.replace('"', '""')
-                        self._connection.execute(f'DROP TRIGGER "{name}"')
-                    if difference.declared is not None:
-                        self._connection.execute(difference.declared)
+                    difference.replace_trigger(self._connection)
             self._connection.execute("COMMIT")
         except BaseException:
             if self._connection.in_transaction:

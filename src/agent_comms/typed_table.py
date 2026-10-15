@@ -401,6 +401,13 @@ class SQLiteSchemaDifference:
     stored: str | None
     declared: str | None
 
+    def replace_trigger(self, db: sqlite3.Connection) -> None:
+        """Apply this declaration difference without altering retained rows."""
+        if self.stored is not None:
+            db.execute(f"DROP TRIGGER {_identifier(self.name)}")
+        if self.declared is not None:
+            db.execute(self.declared)
+
 
 @dataclass(frozen=True)
 class SQLiteSchemaObject(TypedRow):
