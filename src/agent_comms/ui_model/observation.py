@@ -69,13 +69,15 @@ class ObservationRequest(ABC):
 class InterestRequest(ObservationRequest):
     """Changes what is observed; the service observes again."""
 
+    reuses_observation = True
+
     @abstractmethod
     def observation(self) -> Observation: ...
 
     def receive(self, service: ObservationService) -> None:
         observation = self.observation()
         previous = service.observations.get(type(observation))
-        if previous is None or previous.request != self:
+        if not self.reuses_observation or previous is None or previous.request != self:
             service.observations[type(observation)] = observation
         service.observe_again()
 
@@ -433,6 +435,7 @@ class SidebarReading(Observation[ObserveSidebar]):
         super().__init__(request)
         self.stage: SidebarReadStage = RosterSidebarRead()
         self.sent: SidebarSent | None = None
+        self.published: SidebarResult | None = None
         self.preparation: Future[ReplyIndexBatch] | None = None
 
     def after_read(self, service: ObservationService) -> None:
@@ -462,7 +465,9 @@ class SidebarReading(Observation[ObserveSidebar]):
                 return
             self.sent = key
             result.finish_read(self)
-            yield result
+            if self.published is None or not result.same_observation(self.published):
+                self.published = result
+                yield result
             if self.stage is stage:
                 return
 
@@ -490,6 +495,9 @@ class StopObserving(ObservationRequest):
 
 @dataclass(frozen=True)
 class ObserveThreads(InterestRequest):
+    # A new view may join an unchanged set of thread names. Its turn/read
+    # fence needs an initial presentation, not the previous views' delta.
+    reuses_observation = False
     names: frozenset[str]
 
     def observation(self) -> ThreadReading:
@@ -544,11 +552,12 @@ class NotificationReading(Observation[ObserveNotifications]):
 class ThreadReading(Observation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
-        self.revision: WireRevision | None = None
-        self.retry = False
+        self.observed: ThreadsObserved | None = None
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
-        if self.revision is not None and not revision.status_changed_since(self.revision) and not self.retry:
+        previous = self.observed
+        if (previous is not None and not previous.busy
+                and not revision.status_changed_since(previous.revision)):
             return
         presentations, unavailable, busy = {}, {}, set()
         for name in self.request.names:
@@ -559,8 +568,10 @@ class ThreadReading(Observation[ObserveThreads]):
             except StoredHistoryUnreadable as error:
                 unavailable[name] = UnreadableHistory.capture(error)
             yield None
-        self.revision, self.retry = revision, bool(busy)
-        yield ThreadsObserved(revision, presentations, unavailable, frozenset(busy))
+        observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset())
+        self.observed = replace(observed, changed=observed.changed_since(previous))
+        if previous is None or self.observed.changed:
+            yield self.observed
 
 
 class ViewReading(Observation[ObserveViews]):
@@ -643,6 +654,10 @@ class RevisionObserved(Observed):
 class SidebarResult(Observed):
     request: ObserveSidebar
 
+    def same_observation(self, previous: SidebarResult) -> bool:
+        """Every declared answer participates; a store stat is not another answer."""
+        return replace(self, revision=previous.revision) == previous
+
     @abstractmethod
     def finish_read(self, reading: SidebarReading) -> None: ...
 
@@ -675,6 +690,23 @@ class ThreadsObserved(Observed):
     presentations: Mapping[str, ThreadPresentation | None]
     unavailable: Mapping[str, UnreadableHistory]
     busy: frozenset[str]
+    changed: frozenset[str]
+
+    def changed_since(self, previous: ThreadsObserved | None) -> frozenset[str]:
+        """Read-state transitions and source-owned changes, independent of store churn."""
+        if previous is None:
+            return frozenset((*self.presentations, *self.unavailable, *self.busy))
+        changed = set(self.busy ^ previous.busy)
+        changed.update(self.presentations.keys() ^ previous.presentations.keys())
+        changed.update(self.unavailable.keys() ^ previous.unavailable.keys())
+        for name in self.presentations.keys() & previous.presentations.keys():
+            current, before = self.presentations[name], previous.presentations[name]
+            if current is not before and (current is None or not current.same_observation(before)):
+                changed.add(name)
+        for name in self.unavailable.keys() & previous.unavailable.keys():
+            if self.unavailable[name].args != previous.unavailable[name].args:
+                changed.add(name)
+        return frozenset(changed)
 
 
 @dataclass(frozen=True)

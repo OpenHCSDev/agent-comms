@@ -77,6 +77,20 @@ class ThreadPresentation:
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
     read_identity: TranscriptReadIdentity | None = None
 
+    def same_observation(self, other: ThreadPresentation | None) -> bool:
+        """Equal view and turn evidence, not merely equal global store revisions.
+
+        Keep the exact registered thread and binding used for turn settlement.
+        The transcript owner decides whether its page changed; unrelated bus,
+        read-mark and coordinator writes do not create another page publication.
+        """
+        if other is None or replace(self, read_identity=other.read_identity) != other:
+            return False
+        original, current = self.read_identity, other.read_identity
+        if original is None or current is None:
+            return original is current
+        return original.thread == current.thread and original.same_snapshot(current)
+
     def with_sources(self, window: TranscriptSourceWindow) -> ThreadPresentation:
         """Incoming and sent outcomes are views of one captured notification window."""
         from .bus_publication import stable_thread_lookup
