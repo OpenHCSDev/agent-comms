@@ -9,7 +9,7 @@ from acp import RequestError
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .drain_failures import DrainFailureState, drain_failures
+from .drain_failures import drain_failures
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
 from .errors import RelationViolationError
@@ -144,7 +144,7 @@ class SelectedWakeCheck(SessionScheduleCheck):
         root_id = effects._configured_root_id()
         async with drain_failures(
             inputs.comms, self.thread, self.owner,
-            partial(inputs.retry_observer, session_id), DrainFailureState(),
+            partial(inputs.retry_observer, session_id),
         ):
             try:
                 before = await inputs._observe_private_revision(session_id, root_id)
