@@ -97,8 +97,6 @@ def test_malformed_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     extension = {"type": "plugin-note", "custom": {"future": True}}
     path.write_bytes(
         encoded(extension)
-        + encoded({"type": "message", "message": {"role": "assistant", "content": 42}})
-        + b'{"type":"message"\n'
         + encoded({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "valid"}]}})
         + b'{"type":"message","message":'
     )
@@ -108,10 +106,23 @@ def test_malformed_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     assert forward == list(reversed(reverse))
     assert isinstance(forward[0].entry, UnknownEntry) and forward[0].entry.payload == extension
     assert forward[0].entry.events(TranscriptProjection()) == []
-    assert forward[1].entry is None and forward[2].entry is None
-    assert forward[3].entry.events(TranscriptProjection()) == [AssistantTranscript("valid")]
+    assert forward[1].entry.events(TranscriptProjection()) == [AssistantTranscript("valid")]
     assert forward[-1].entry is None and not forward[-1].complete
     assert forward[0].start == 0 and forward[-1].end == path.stat().st_size
+
+
+@pytest.mark.parametrize("invalid", [
+    encoded({"type": "message", "message": {"role": "assistant", "content": 42}}),
+    b'{"type":"message"\n',
+])
+def test_complete_corrupt_native_records_are_not_partial_history(tmp_path, invalid):
+    path = tmp_path / "corrupt.jsonl"
+    path.write_bytes(invalid)
+    reader = NativeTranscript(path)
+    with pytest.raises(ValueError):
+        tuple(reader.forward(0, len(invalid)))
+    with pytest.raises(ValueError):
+        tuple(reader.reverse(len(invalid)))
 
 
 @pytest.mark.parametrize(
