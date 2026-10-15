@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.attempt_start import AttemptStart
-from agent_comms.attempt_states import AttemptFailedAttempt, AttemptState, TerminalAttempt
+from agent_comms.attempt_states import AttemptState, TerminalAttempt, UnknownOutcomeAttempt
 from agent_comms.coordination_contracts import (
     MAX_SANITIZED_DETAIL_CHARS,
     _bounded_reason,
@@ -221,9 +221,6 @@ class AttemptStore:
                 raise StaleRevision("pointer revision changed")
             if bool(snapshot.publication_intents):
                 raise PublicationUncertain("UNKNOWN failure cannot resolve frozen publication")
-            ReplayAssessments.accumulate(
-                self.session._connection, fence.execution_id, ReplayFact.UNKNOWN_EFFECTS
-            )
             if not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead):
                 attempt.advance(
                     self.session,
@@ -234,7 +231,7 @@ class AttemptStore:
                     reason_code="native_unknown",
                 )
             self.snapshots.get(fence.execution_id).settle(
-                self.session, AttemptFailedAttempt(), "native_unknown", acquired
+                self.session, UnknownOutcomeAttempt(), "native_unknown", acquired
             )
             return Applied(self.snapshots.get(fence.execution_id))
 

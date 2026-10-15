@@ -110,6 +110,9 @@ class UncertainCall(CallObservation):
 
 
 class CallAdmission(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
+    def expire(self, call: NativeToolCall) -> None:
+        """An unstarted waiter cannot change an already consumed admission."""
+
     def consume(self, call: NativeToolCall, action: Callable[[], None]) -> None:
         raise SelectedToolDenied("Native tool request was already consumed; outcome may be UNKNOWN")
 
@@ -121,6 +124,9 @@ class CallAdmission(ABC):  # noqa: B024 - shared rejection; leaves override vali
 
 
 class AwaitingAdmission(CallAdmission):
+    def expire(self, call: NativeToolCall) -> None:
+        call.admission = UncertainAdmission()
+
     def consume(self, call: NativeToolCall, action: Callable[[], None]) -> None:
         # No retry even when the callback is cancelled or its durable fsync fails.
         call.admission = UncertainAdmission()
@@ -187,7 +193,14 @@ class NativeToolCall(ABC):
             await self._wait_started()
             self.observation.require_executing()
             self.admission.consume(self, action)
-        except (asyncio.CancelledError, TimeoutError, ToolStartNotSeen):
+        except ToolStartNotSeen:
+            # The callback never ran. Close admission, but retain the actual
+            # native observations: delayed announcement/start/error events
+            # must still reconcile this denied call in its declared round.
+            self.admission.expire(self)
+            self.started.set()
+            raise
+        except (asyncio.CancelledError, TimeoutError):
             self.observation = UncertainCall()
             self.admission = UncertainAdmission()
             self.started.set()  # Wake other waiters; they must fail state validation.

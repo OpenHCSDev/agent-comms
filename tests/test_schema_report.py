@@ -75,6 +75,9 @@ def test_unknown_and_unavailable_stores_do_not_look_clean(tmp_path):
 def test_carry_preserves_rows_and_source_and_refuses_overwrite(tmp_path):
     source = tmp_path / "old.sqlite3"
     _old_todo(source)
+    with closing(sqlite3.connect(source)) as db:
+        db.execute("UPDATE todo SET rowid=37")
+        db.commit()
     before = source.read_bytes()
     target = tmp_path / "carried.sqlite3"
     result = carry(source, target)
@@ -83,6 +86,7 @@ def test_carry_preserves_rows_and_source_and_refuses_overwrite(tmp_path):
     assert StoreSchemaReport.observe(target).differences == ()
     with closing(sqlite3.connect(target)) as db:
         assert db.execute("SELECT text FROM todo WHERE id='one'").fetchone() == ("unfinished",)
+        assert db.execute("SELECT rowid FROM todo WHERE id='one'").fetchone() == (37,)
         # The carried rules are enforced, not only stored.
         with pytest.raises(sqlite3.IntegrityError):
             db.execute("UPDATE todo SET state='invalid'")
