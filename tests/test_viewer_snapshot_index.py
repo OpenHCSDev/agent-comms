@@ -70,7 +70,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     if not indexed:
         # Genuine disposable-store refusal; canonical source remains readable.
         comms.bus.log.path.with_name("bus_route_counts.sqlite3").mkdir()
-    with comms.bus.snapshot(viewer=viewer.name) as (basis, source):
+    with comms.views.presentation.snapshot(viewer=viewer.name) as (basis, source):
         before = comms.bus.pending_counts_opened(source, basis)
         sent = comms.views.last_sent_timestamps(source=source, registry=basis.registry)
         assert before == {"#team": 1}
@@ -397,7 +397,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     comms, _ = _root(tmp_path)
     first = comms.messaging.send_initial_cohort('sender', '#team', '@Alice first')
     comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
-    with comms.bus.snapshot(viewer='Alice') as (_, source):
+    with comms.views.presentation.snapshot(viewer='Alice') as (_, source):
         assert isinstance(source, CertifiedOpenedWireSnapshot)
         # Original lock has ended. A genuine later publication cannot broaden
         # this descriptor's cut or make the captured observation visible.

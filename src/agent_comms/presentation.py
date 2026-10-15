@@ -435,6 +435,13 @@ class BusPresentation:
             self._display_indexes[viewer] = index
         return index
 
+    @contextmanager
+    def snapshot(self, viewer: str) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
+        """Admit the display index before borrowing the bus-owned source cut."""
+        self.display_index(viewer)
+        with self.bus.snapshot(viewer) as selected:
+            yield selected
+
     def roster(
         self, viewer: str, *, show_stopped: bool = True, show_archived: bool = False
     ) -> CoordinationSnapshot:

@@ -232,5 +232,8 @@ def test_retained_source_uses_its_ledger_identity_after_path_replacement(tmp_pat
         replacement.replace(comms.bus.log.path)
         assert comms.bus._pending_projection(source, basis, (viewer,)) == {viewer: {}}
         assert comms.bus.pending_counts_opened(source, basis) == {}
-    # The new physical bus cannot inherit the old bus's paint evidence.
-    assert comms.bus.pending_counts(viewer) == {"sender": 1}
+    # A fresh acquisition cannot borrow the retained descriptor's authority.
+    from agent_comms.errors import RelationViolationError
+
+    with pytest.raises(RelationViolationError, match="checkpoint root/inode/size changed"):
+        comms.bus.pending_counts(viewer)
