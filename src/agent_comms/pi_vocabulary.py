@@ -70,8 +70,19 @@ class StopStopReason(PiStopReason):
         session.accept_final_message(message)
 
 
-class LengthStopReason(PiStopReason):
+class FailedPiStop:
+    """An explicit failed terminal records the same failure on every live path."""
+
     failed = True
+
+    @classmethod
+    async def apply(cls, session, message):
+        session.output.record_failure(cls.declared_failure(message))
+        async for event in super().apply(session, message):
+            yield event
+
+
+class LengthStopReason(FailedPiStop, PiStopReason):
     tracked_failure = "Model output limit reached"
 
 
@@ -84,19 +95,15 @@ class ToolUseStopReason(PiStopReason, declared_name="toolUse"):
             return super().tracked(session, message)
 
 
-class ErrorStopReason(PiStopReason):
-    failed = True
-
+class ErrorStopReason(FailedPiStop, PiStopReason):
     @classmethod
     def permits_progress(cls):
         return False
 
     @classmethod
     async def apply(cls, session, message):
-        if session.usage.provisional:
-            session.usage.used = session.usage.confirmed
-            session.usage.provisional = False
-            yield session.context_info()
+        async for event in super().apply(session, message):
+            yield event
         if not (session.explicit_interrupt and cls.explicit_abort) and (
             session.watchdog.phase.holds_refusal_reports
         ):

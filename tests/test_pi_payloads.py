@@ -144,6 +144,7 @@ def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
     })
     from agent_comms.turn_output import TurnOutput
     from agent_comms.turn_failure import ModelRequestFailed
+
     session = SimpleNamespace(output=TurnOutput())
     event.message.tracked_end(session)
     assert session.output.failure == ModelRequestFailed("original provider rejection")

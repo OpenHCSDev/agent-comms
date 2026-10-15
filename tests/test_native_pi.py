@@ -1160,14 +1160,13 @@ def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detai
             "errorMessage": detail if stop_reason != "length" else None,
         },
     })
-    terminal = []
     output = TurnOutput()
-    event.message.tracked_end(SimpleNamespace(
-        output=output, fail_terminal=terminal.append
-    ))
+    event.message.tracked_end(SimpleNamespace(output=output))
 
     assert output.declared_failure == ModelRequestFailed(detail)
-    assert terminal == [detail]
+    with pytest.raises(NativePiTerminalFailure, match=detail) as caught:
+        output.raise_if_failed(None, "provider", "model")
+    assert caught.value.failure == output.declared_failure
 
 
 def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_path):

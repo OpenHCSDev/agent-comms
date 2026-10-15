@@ -233,11 +233,12 @@ class AutoRetryEnd(PiEvent):
             raise ValueError("Native retry count must be nonnegative")
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        session.watchdog.progress()
+        updates = self.outcome.apply(self, session)
         session.output.retry_result = self.outcome.result(
             self.attempt, session.output.redact
         )
-        session.watchdog.progress()
-        for event in self.outcome.apply(self, session):
+        for event in updates:
             yield event
 
     def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
