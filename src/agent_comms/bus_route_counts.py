@@ -228,13 +228,8 @@ class RouteEntryRow(RouteTable, TypedTable):
             root, previous = original.node.add(db, original, leaf)
         else:
             root, previous = RouteTimeRow.store(db, leaf), None
+            RouteIdentityRow(*route, message.seq).insert(db)
         cls(message.seq, *route, message.timestamp, root.id, previous).insert(db)
-        db.execute(
-            f'INSERT INTO "{RouteIdentityRow.declared_name}" '
-            '(target,sender,sender_lookup,first_seq) VALUES (?,?,?,?) '
-            'ON CONFLICT(target,sender,sender_lookup) DO NOTHING',
-            (*route, message.seq),
-        )
 
 
 @dataclass(frozen=True)

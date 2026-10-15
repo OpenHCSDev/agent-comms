@@ -36,14 +36,16 @@ An original empty cut also cannot clear a later committed index. SQL references
 are deferred by their ForeignKey declaration, not a hand-written deletion roster.
 Deleted the stored `_targets` restatement; each query derives its requested actors
 from the original DeliveryScopes. Test index paths derive from BusRouteCounts.
+The original-root creation branch alone records route birth through the declared
+RouteIdentityRow.insert; no separate conflict probe or handwritten column codec.
 
 The full October15 paper was read, including theorem assumptions. Provider
 reachability alone does not establish state sharing, lookup correctness or runtime
 bounds. Leaf/fork behavior stays distinct; original wire and projection lifetimes
 remain separate. No claim about arbitrary future requirements or a measured gap.
 
-Verification so far:12 focused retained-cut checks,44 supplementary routing/read
-checks. The large-advance check uses actual publication, an independent reader,
+Final batch:69 targeted checks passed;4 previously deferred/injected-store cases
+deselected. Includes12 retained-cut,44 routing/read and13 viewer checks. The large-advance check uses actual publication, an independent reader,
 512 later messages and16 later routes; counts/listings remain exact with no new
 eligibility calls and at most32 additional SQLite VM operations. Includes
 nonmonotone and duplicate timestamps, sparse seen IDs, empty cuts, replacement,
@@ -69,11 +71,33 @@ without a native/model launch, publication or read acknowledgement. The new
 projection is the only intentional application-data write; original sessions,
 authentication and uncertain inputs were not edited or replayed.
 
-The current discovery bound is routes present at the original cut, not all
-possible incarnation history already inside that cut. Core-retry owns the next
-refinement: seek through DeliveryScope's current sender identities, then remove
-the intermediate route-birth catalog. Acceptance holds the current roster fixed
-while increasing retired sender generations; no history-proportional query work.
+## Remaining bounds and source evidence
+
+The discovery bound is routes present at the original cut, not all possible
+incarnation history already inside that cut. Core-retry owns that remaining
+current-source discovery work. Acceptance holds the current roster fixed while
+increasing retired sender generations; no history-proportional query work.
+Do not simply enumerate positive current lookups: ThreadProvenance intentionally
+permits finite zero births, whereas stable_thread_lookup requires positive births.
+DeliveryScope currently reads ordinary unstamped rows without requesting a stable
+lookup. Eager lookup generation would change that behavior, including empty routes.
+The existing RegistryNames/ThreadIncarnation relationships must carry any refinement;
+no speculative helper, alternate reader or constructor-only guard was retained.
+This does not invalidate the proved independence from subsequent messages/routes.
+
+Before/after census uses existing refactor-audit Package/Repository parsing:
+607 Core/dependency/Toad modules,0 parse omissions,135→162 syntax/name sites,
+Toad pinned to3ad856b71. This is not binding resolution; SQL f-string table names,
+FieldCodec variant dispatch and delivery_since's callback were traced manually.
+Debt ratchet against6e1f6558 passes with no increases. Ruff E/F/I and diff checks pass.
+Evidence: route-cut-8373-before/after.json and core-route-cut-8373/{census-after,ratchet}.log.
+
+Exact owner search (`rg -n 'key_width:|schema:|_eligible =|class RouteTotalRow|later AS|NOT INDEXED|seq > :through' src/agent_comms/bus_route_counts.py`)
+finds one key-width declaration,one schema declaration and one shared eligibility
+frontier; none of the replaced total/suffix authorities. RouteEntryRow.time_root
+is the sole declared root per original delivery; roots are never reconstructed
+from current paint or a later timestamp listing. The persisted source still owns
+identity/tail validation, and the captured wire snapshot still owns the sequence cut.
 
 No installation or physical UI acceptance claimed. Integration owner codex must
 retain off-page preparation and the actual prepared resource at cutover. Native
