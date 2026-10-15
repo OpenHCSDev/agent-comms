@@ -16,11 +16,15 @@ import argparse
 from contextlib import closing
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
 
 from agent_comms.schema_report import StoreSchemaReport
 from agent_comms.typed_table import SQLiteSchemaObject, TypedTable
+from agent_comms.owner_cutover import StoppedOwnerInstallation
+from agent_comms.owner_restart import OwnerRestartRequest
+from agent_comms.owner_lifecycle import OwnerRestartSelection
 
 # What must be identical between the stored table and its current declaration.
 _STRUCTURE = ("table_xinfo", "foreign_key_list", "index_list")
@@ -137,6 +141,80 @@ def carry(source: Path, destination: Path) -> dict:
             raise
     return {"source": str(source), "copy": str(destination),
             "carried": [change.name for change in changes], "rows_preserved": digests}
+
+
+class InstallDeclaredRules(StoppedOwnerInstallation):
+    """One-use installation; the existing batch owns stopping and restarting."""
+
+    def __init__(self, backup: Path):
+        self.backup = backup
+
+    def require_selection(self, snapshot, owners) -> None:
+        from publish_openhcs_recovery import require_no_clients
+
+        if {owner.name for owner in owners} != {
+            owner.name for owner in OwnerRestartRequest().threads(snapshot)
+        }:
+            raise ValueError("Schema installation requires every managed native owner")
+        self.selections = tuple(OwnerRestartSelection.capture(snapshot, owner.name) for owner in owners)
+        require_no_clients(self.selections)
+        if self.backup.exists():
+            raise FileExistsError(self.backup)
+
+    def failed(self, failure):
+        self.leave_stopped(failure)
+
+    def after_stopped(self, lifecycle) -> None:
+        from publish_openhcs_recovery import ROOT, require_no_clients
+        from publish_runtime import RuntimePublication
+
+        if lifecycle.root != ROOT:
+            raise ValueError("The reviewed client exclusion names a different root")
+        require_no_clients(())
+        source = lifecycle.root / "coordination.sqlite3"
+        replacement = self.backup.with_suffix(".replacement.sqlite3")
+        # SQLite, including any committed journal pages, supplies the backup.
+        with self.backup.open("xb"):
+            pass
+        self.backup.chmod(0o600)
+        with closing(sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True)) as original:
+            with closing(sqlite3.connect(self.backup)) as saved:
+                original.backup(saved)
+        self.result = carry(self.backup, replacement)
+        require_no_clients(())
+        # No process may retain the old inode or its journal across replacement.
+        for suffix in ("-wal", "-shm", "-journal"):
+            if source.with_name(source.name + suffix).exists():
+                raise ValueError("Stopped coordinator still has a journal: " + suffix)
+        for path in (self.backup, replacement):
+            with path.open("rb") as stream:
+                os.fsync(stream.fileno())
+        os.replace(replacement, source)
+        directory = os.open(source.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        RuntimePublication.installed().publish()
+
+    def complete(self, stopped):
+        self.after_stopped(stopped.lifecycle)
+        # Recovery takes the canonical wire/bus/registry boundary itself. Finish
+        # this exclusive wire scope first; retain the original launch records in
+        # memory. The handoff revalidates every stopped owner before any launch.
+        self.stopped = stopped
+        return ()
+
+    def recover_and_launch(self):
+        from agent_comms.attempt_recovery import RecoveryMonitorCapability
+
+        stopped = self.stopped
+        snapshot = stopped.lifecycle.registry.snapshot()
+        for owner in stopped.handoff.owners:
+            thread = owner.require_current(snapshot)
+            RecoveryMonitorCapability.settle_stopped_owner(stopped.lifecycle.root, thread)
+        with stopped.lifecycle.restart_wire():
+            return stopped.handoff.launch(stopped.lifecycle)
 
 
 if __name__ == "__main__":
