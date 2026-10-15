@@ -160,6 +160,11 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
         candidate = replace(self, scope=scope)
         return candidate if supplies(candidate) else self
 
+    def qualified_for(self, scope) -> bool:
+        if self.scope is None or scope is None:
+            return False
+        return scope.same_publication_source(self.scope)
+
     @property
     def outgoing_sources(self) -> tuple[OutgoingMessageReference, ...]:
         return () if self.scope is None else (OutgoingMessageReference(self.scope, self.source),)
@@ -167,7 +172,7 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
     def assigned_events(self, source, through):
         # Retained tool evidence remains visible when this exact publication
         # is absent from the captured wire source, including detached history.
-        return (() if self.scope is not None and through.identity.same_publication_source(self.scope)
+        return (() if self.qualified_for(through.identity)
                 and self.source in source.sent_sources((self.source,), through) else (self,))
 
     @classmethod
@@ -206,7 +211,7 @@ class ToolEndTranscript(ToolTranscript):
             return (self,)
         scope = through.identity
         message = self.sent_message.in_source(scope, partial(source.supplies_sent, through=through))
-        if message.scope is None or not scope.same_publication_source(message.scope):
+        if not message.qualified_for(scope):
             return (self,)
         return (replace(self, sent_message=message), message)
 
