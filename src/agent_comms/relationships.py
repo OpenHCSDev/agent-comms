@@ -250,6 +250,19 @@ class RelationshipEntry:
     sources: tuple[str, ...] = ()
     goal_contacts: tuple[GoalDerivedContact, ...] = ()
 
+    @property
+    def identity(self) -> tuple[str, str]:
+        return self.kind, self.target
+
+    def revalidates(self, earlier: RelationshipEntry) -> bool:
+        """A fresh navigation target must retain its identity and incarnation."""
+        if not self.available or self.identity != earlier.identity:
+            return False
+        if earlier.person is None:
+            return True
+        return (self.person is not None
+                and self.person.thread.incarnation == earlier.person.thread.incarnation)
+
 
 @dataclass(frozen=True, slots=True)
 class RelationshipGroup(DeclaredFamily, affix="RelationshipGroup"):
@@ -430,6 +443,13 @@ class ThreadCommsSnapshot:
     def groups_by_type(self) -> dict[type[RelationshipGroup], RelationshipGroup]:
         """Index the actual groups by exact nominal identity, never by a base capability."""
         return {type(group): group for group in self.groups}
+
+    def current_entry(self, group: type[RelationshipGroup],
+                      earlier: RelationshipEntry) -> RelationshipEntry | None:
+        current = self.groups_by_type.get(group)
+        if current is None:
+            return None
+        return next((entry for entry in current.entries if entry.revalidates(earlier)), None)
 
     @property
     def sortable_groups(self) -> tuple[SortableRelationshipGroup, ...]:

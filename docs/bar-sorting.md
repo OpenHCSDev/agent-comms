@@ -47,7 +47,10 @@ Runtime family registration and Textual handlers require application checks.
   caller's concrete-mode decision.
 - Toad sorting uses the existing FormBridge/ObjectState form machinery and typed
   choices; visibility edits borrow the existing saved-settings state. No parallel
-  sorting implementation or settings store.
+  sorting implementation or settings store. Forms start without a copied backend
+  default and display the observed order. SelectEditor renders its existing option
+  labels (including an unset form value); the copied choice/enum text overrides
+  are deleted. This fixes the real popup crash on an empty signature default.
 - ThreadSort and ChannelSort now own channel-scoped persistence as well; the
   two UI `store_order` forwarding overrides and their abstract dispatch are deleted.
 - RelationshipGroup declarations own key/title/empty text/entry supply. The
@@ -86,13 +89,34 @@ registry/handler binding still requires the real application.
   coverage minimum, not a test failure. A later no-coverage run passed 66 and
   timed out waiting for the lock-helper process's initial ready signal (before
   reading the adopter); the bounded serial check is recorded separately.
-  No full-package coverage claim. Pinned CPUs 4-9.
+  The same lock-adopter check passed serially in 1.93 s. No full-package coverage
+  claim. Pinned CPUs 4-9. Prior Core ratchet exited 0.
 - [x] Prior paired candidate in a separate runtime: real st/Xvfb saved-history
   startup; independent channel and member click/change/persist/reopen, application
   restart, mixed relationship ordering/change/reopen, live status/row updates,
   visibility editing/persistence, retained selected thread/root and unsent draft.
   Original live sort preferences restored. No input submitted or replayed.
-- [ ] Repeat affected interactions on the final relationship-family checkpoint.
+- [x] Real app on Core b52a6b21 + Toad fb9d7e63: member popup opens, changes
+  to Date created and reopens; channel popup changes to Last user input and reopens.
+  Source-root/tab and unsent draft remain. All live sort preferences are restored.
+- [x] Codex's combined real app opens the right panel and mixed-order popup without
+  either earlier crash. Toad 2c736b3e replaced the last `group.model.key` reader
+  with the tree's shared typed-state capture hook, also used before identity changes.
+- [ ] Verify the follow-up in that same combined build: a mixed popup must say
+  `Mixed orders`, offer real orders and show no `default: None`.
+  The observed form is absent until ordering arrives; a present form with no single
+  order means mixed, without a separate flag. Required form fields have no product
+  default. Placeholder text is declared once and shared by the label and editor.
+  FormView owns focus by FieldPath; SortDialog uses DeclaredField rather than
+  reaching into its editor dictionary. Snapshot owns the derived nominal group
+  index and current-entry resolution; RelationshipEntry owns identity/incarnation
+  revalidation. The UI retains its generation/root/owner/screen fences.
+  Before-edit NRA source indexes cover 320 Core, 280 Toad and 45 ObjectState/
+  PythonIntrospect modules; no parse omissions reported. These are syntax evidence,
+  not behavior proof. After-edit indexes cover 320/280 modules, 9,201/6,814
+  targets. The Core new-group check, extended for exact-group lookup, changed kind,
+  reused incarnation and unavailable target, passes in 1.74 s. No Toad tests run.
+  Codex owns the combined build and its next actual UI check.
 - [ ] Paired global installation and acceptance through codex.
 - [ ] Review and installed delivery through integration owner.
 
