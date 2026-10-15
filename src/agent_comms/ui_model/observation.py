@@ -36,11 +36,11 @@ from agent_comms.coordination_errors import (
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
+from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 
 if TYPE_CHECKING:
     from multiprocessing.connection import Connection
 
-    from agent_comms.acp_extension import TranscriptSnapshotUpdate
     from agent_comms.comms import Comms
     from agent_comms.history_views import RetiredViews
     from agent_comms.message_reference import MessageReference
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from agent_comms.runtime import RuntimeConnection
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
-    from agent_comms.transcripts import TranscriptCursor, TranscriptReadIdentity
+    from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
     from agent_comms.ui_model.delivery import InputDelivery
     from agent_comms.ui_model.goal import OwnerGoalSnapshot
     from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel
@@ -227,8 +227,11 @@ class CancelRead(ObservationRequest):
             asking.cancel()
 
 
+TranscriptResult = TypeVar("TranscriptResult")
+
+
 @dataclass(frozen=True)
-class ReadTranscript(ReadRequest):
+class TranscriptRequest(ReadRequest, Generic[TranscriptResult]):
     """One bounded transcript page and the witness it was read under.
 
     Without ``read_identity`` the source is captured now; with it, the page is
@@ -242,9 +245,7 @@ class ReadTranscript(ReadRequest):
     read_identity: TranscriptReadIdentity | None = None
     historical_source: str | None = None
 
-    def read(self, comms: Comms) -> TranscriptSnapshotUpdate:
-        from agent_comms.acp_extension import TranscriptSnapshotUpdate
-
+    def read(self, comms: Comms) -> TranscriptResult:
         try:
             transcripts = comms.transcripts
             window = dict(before=self.before, after=self.after, through=self.through)
@@ -258,9 +259,34 @@ class ReadTranscript(ReadRequest):
                     raise StaleRevision("Published transcript belongs to another recorded source")
                 read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
             # The read checks its witness before and after preparing the page.
-            return TranscriptSnapshotUpdate.from_read(read)
+            return self.result(read)
         except StoredHistoryUnreadable as error:
             raise UnreadableHistory.capture(error) from error
+
+    @abstractmethod
+    def result(self, read: TranscriptRead) -> TranscriptResult: ...
+
+
+@dataclass(frozen=True)
+class ReadTranscript(TranscriptRequest[TranscriptSnapshotUpdate]):
+    """Read a complete page, including its current draft."""
+
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
+        return TranscriptSnapshotUpdate.from_read(read)
+
+
+@dataclass(frozen=True)
+class ReadTranscriptUpdate(TranscriptRequest[TranscriptSnapshotUpdate | TranscriptDraftUpdate]):
+    """Refresh a published page, reading only its draft while its contents agree."""
+
+    previous: TranscriptReadIdentity | None = None
+
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
+        previous = self.previous
+        if (previous is not None and previous.records_cut == read.identity.records_cut
+                and previous.same_content(read.identity)):
+            return TranscriptDraftUpdate(read.identity, read.current_draft())
+        return TranscriptSnapshotUpdate.from_read(read)
 
 
 @dataclass(frozen=True)

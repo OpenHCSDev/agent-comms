@@ -398,9 +398,14 @@ class Transcripts:
         through: TranscriptCursor | None = None,
         historical_source: str | None = None,
     ) -> TranscriptRead:
-        return self.capture_page_window(
-            name, before=before, after=after, through=through, historical_source=historical_source,
-        ).read
+        from .transcript_receipts import AssignedTranscriptSource
+
+        page = self._page_source(name, through, historical_source)
+        frontier = AssignedTranscriptSource.for_thread(page.root, page.thread, page.log).frontier
+        identity = self._capture_page_identity(
+            page, name, frontier, before=before, after=after, through=through,
+        )
+        return TranscriptRead(self, identity, page)
 
     def capture_page_window(
         self,
