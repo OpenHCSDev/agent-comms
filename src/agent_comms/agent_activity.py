@@ -113,8 +113,7 @@ class AgentActivity:
         if state.retires_thread:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
         with _store_lock(self._wire_lock_path, shared=True):
-            canonical = self.registry.require(thread).name
-            self._emit_activity(Activity.create(canonical, state, detail))
+            self._emit_activity(Activity.create(thread, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot | None = None) -> ObservedActivity:
         snapshot = snapshot or self.registry.snapshot()
@@ -155,6 +154,7 @@ class AgentActivity:
         return observations
 
     def _emit_activity(self, activity: Activity) -> None:
+        activity = replace(activity, thread=self.registry.require(activity.thread).name)
         current = self.activity_of(activity.thread)
         self.activity.emit(replace(activity, diagnostic=current.readiness.source_diagnostic()))
 
@@ -192,19 +192,30 @@ class AgentActivity:
             lease = leased.turn_lease
             assert lease is not None
             try:
-                self.registry.transition_turn(lease, PreparingPhase(detail))
+                phase = PreparingPhase(detail)
+                self.registry.transition_turn(lease, phase)
+                self._record_turn_activity(leased.name, (phase,))
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
             return RegistryOwner(thread=leased, admission_generation=lease.admission_generation)
 
+    def _record_turn_activity(self, name: str, phases: Iterable[TurnPhase]) -> None:
+        """Changed phases are real activity events, just like CLI status reports."""
+        for phase in phases:
+            self._emit_activity(phase.activity_event(name))
+
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, shared=True):
-            return self.registry.transition_turn(lease, phase)
+            effects = self.registry.transition_turn(lease, phase)
+            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
+            return effects
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, shared=True):
-            return self.registry.observe_native_phase(lease, phase)
+            effects = self.registry.observe_native_phase(lease, phase)
+            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
+            return effects
 
     def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:
         """Persist this lease's terminal identity before publishing idle activity."""
@@ -212,8 +223,7 @@ class AgentActivity:
             released, fence = self.registry.release_turn(lease)
             if not released:
                 return None
-            name = self.registry.canonical_name(lease.identity.incarnation.name)
-            self._emit_activity(Activity(name, ActivityState.IDLE))
+            self._emit_activity(Activity(lease.identity.incarnation.name, ActivityState.IDLE))
             return fence
 
     def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:
