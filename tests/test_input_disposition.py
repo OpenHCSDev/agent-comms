@@ -1,6 +1,8 @@
 """Direct input state survives a process exit without replaying an attempt."""
 
 import json
+import multiprocessing
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -82,3 +84,53 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
     assert comms.goals.unresolved_inputs("kid") == expected
     assert store.started("bus:7", turn_id="turn", native_id="a" * 32, text="private wrapper")
     assert comms.goals.unresolved_inputs("new-kid") == []
+
+
+def _cold_snapshots(root, gate, results):
+    store = InputDispositions(Path(root))
+    errors = []
+    for _ in range(16):
+        gate.wait(timeout=10)
+        try:
+            assert store.lookup("original").source_text == "original"
+        except Exception as error:
+            errors.append(f"{type(error).__name__}: {error}")
+        gate.wait(timeout=10)
+    results.put(errors)
+
+
+def test_cold_wal_snapshots_do_not_compete_for_initialization(tmp_path):
+    store = InputDispositions(tmp_path)
+    store.record("original", seq=None, owner="kid", admission=1, target="kid", text="original")
+    context = multiprocessing.get_context("spawn")
+    gate, results = context.Barrier(2), context.Queue()
+    workers = [context.Process(target=_cold_snapshots, args=(str(tmp_path), gate, results))
+               for _ in range(2)]
+    try:
+        for worker in workers:
+            worker.start()
+        assert [results.get(timeout=20) for _ in workers] == [[], []]
+        for worker in workers:
+            worker.join(timeout=5)
+            assert worker.exitcode == 0
+    finally:
+        for worker in workers:
+            if worker.is_alive():
+                worker.terminate()
+                worker.join(timeout=5)
+        results.close()
+        results.join_thread()
+
+
+def test_admitted_snapshot_retains_cut_without_blocking_writer(tmp_path):
+    store = InputDispositions(tmp_path)
+    store.record("original", seq=None, owner="kid", admission=1, target="kid", text="original")
+    with ThreadPoolExecutor(max_workers=1) as writer:
+        with store.snapshot() as connection:
+            appended = writer.submit(
+                store.record, "later", seq=None, owner="kid", admission=1,
+                target="kid", text="later",
+            )
+            assert appended.result(timeout=2)
+            assert set(store._document(connection, "1", ()).rows) == {"original"}
+    assert set(store.unresolved(frozenset({"kid"})).rows) == {"original", "later"}

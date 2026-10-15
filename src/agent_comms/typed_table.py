@@ -12,8 +12,8 @@ import os
 import sqlite3
 import types
 from abc import abstractmethod
-from collections.abc import Generator, Iterator, Mapping
-from contextlib import closing, contextmanager
+from collections.abc import Callable, Generator, Iterator, Mapping
+from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, fields
 from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
@@ -670,23 +670,68 @@ class TypedStore:
             "SELECT name,sql FROM sqlite_master "
             "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
 
-    def _install(self) -> None:
-        os.close(os.open(self.path, os.O_CREAT | os.O_RDWR, 0o600))
-        with closing(sqlite3.connect(self.path, timeout=5, isolation_level=None)) as connection:
-            connection.execute("BEGIN IMMEDIATE")
+    @contextmanager
+    def _attached(
+        self, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
+    ) -> Iterator[sqlite3.Connection]:
+        """Serialize WAL attachment and retirement, not admitted SQL work.
+
+        Even a read-only cold attachment initializes the WAL index. Another
+        attachment or last-connection cleanup can make that initialization
+        return BUSY before any query competes with a data writer. The same
+        physical owner serializes these connection boundaries; readers and
+        writers retain SQLite's parallel WAL transactions between them.
+        """
+        from .store_files import _store_lock
+
+        with ExitStack() as lifetime:
+            with _store_lock(self.path):
+                resource = opening()
+                connection = resource.__enter__()
+
+            def retire(*error):
+                with _store_lock(self.path):
+                    return resource.__exit__(*error)
+
+            lifetime.push(retire)
+            yield connection
+
+    def _open_writer(self) -> sqlite3.Connection:
+        """Attach and install an absent store under the connection boundary."""
+        from .coordination_database import CoordinationStore
+
+        # Never open/close an extra descriptor for an existing SQLite inode:
+        # doing so can release another connection's process-wide fcntl locks.
+        try:
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            os.close(descriptor)
+        connection = CoordinationStore.writer(self.path, isolation_level=None)
+        try:
+            connection.execute(f"PRAGMA synchronous={self.synchronous}")
+            # This query attaches an existing WAL before releasing the boundary.
             if not self._schema(connection):
-                for row in self.rows:
-                    row.create(connection)
-            connection.execute("COMMIT")
-            # Readers never wait out a writer, nor a writer its readers.
-            connection.execute("PRAGMA journal_mode=WAL")
+                connection.execute("BEGIN IMMEDIATE")
+                if not self._schema(connection):
+                    for row in self.rows:
+                        row.create(connection)
+                connection.execute("COMMIT")
+                connection.execute("PRAGMA journal_mode=WAL")
+            return connection
+        except BaseException:
+            connection.close()
+            raise
 
     @contextmanager
     def snapshot(self) -> Iterator[sqlite3.Connection]:
-        """Read an existing store without acquiring any writer resources."""
+        """Read an existing committed store without taking its SQL writer lock."""
         from .coordination_database import CoordinationStore, StoreBusy
 
-        with CoordinationStore.observing(self.path, StoreBusy()) as connection:
+        with self._attached(
+            lambda: CoordinationStore.observing(self.path, StoreBusy())
+        ) as connection:
             self.require_schema(self._schema(connection))
             yield connection
 
@@ -696,24 +741,13 @@ class TypedStore:
 
     @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
-        if not self.path.exists():
-            self._install()  # owner-only before SQLite could create it world-readable
-        connection = sqlite3.connect(self.path, timeout=5, isolation_level=None)
-        try:
-            connection.execute(f"PRAGMA synchronous={self.synchronous}")
-            connection.execute("BEGIN IMMEDIATE")
-            actual = self._schema(connection)
-            if not actual:
-                connection.execute("ROLLBACK")
-                self._install()
+        with self._attached(lambda: closing(self._open_writer())) as connection:
+            try:
                 connection.execute("BEGIN IMMEDIATE")
-                actual = self._schema(connection)
-            self.require_schema(actual)
-            yield connection
-            connection.execute("COMMIT")
-        except BaseException:
-            if connection.in_transaction:
-                connection.execute("ROLLBACK")
-            raise
-        finally:
-            connection.close()
+                self.require_schema(self._schema(connection))
+                yield connection
+                connection.execute("COMMIT")
+            except BaseException:
+                if connection.in_transaction:
+                    connection.execute("ROLLBACK")
+                raise
