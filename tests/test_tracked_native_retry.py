@@ -4,7 +4,7 @@ from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_failure import ModelRequestFailed, ProviderRetryExhausted
 
 from agent_comms.pi_events import NativeRetryEnd
-from agent_comms.pi_payloads import FailedProviderRetry, SucceededProviderRetry
+from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
 from agent_comms.tracked_turn import (
     FailedTrackedTerminal,
     PendingTrackedTerminal,
@@ -28,6 +28,7 @@ async def test_recovered_native_request_replaces_prior_refusal_terminal():
     await turn.native_retry_finished(event)
 
     assert turn.output.failure is None
+    assert turn.output.retry_result.success and turn.output.retry_result.attempt == 1
     assert isinstance(turn.terminal, PendingTrackedTerminal)
 
 
@@ -52,6 +53,11 @@ async def test_exhausted_native_request_records_required_final_error():
     await turn.native_retry_finished(event)
 
     assert turn.terminal == FailedTrackedTerminal("final refusal")
+    assert turn.output.declared_failure == ProviderRetryExhausted("final refusal")
+    PiMessage.from_wire({
+        "role": "assistant", "content": [], "stopReason": "error",
+        "errorMessage": "final refusal",
+    }).tracked_end(turn)
     assert turn.output.declared_failure == ProviderRetryExhausted("final refusal")
 
 

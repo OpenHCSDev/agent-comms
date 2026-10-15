@@ -24,7 +24,7 @@ class Client:
         self.updates.append(update.model_dump(by_alias=True, exclude_none=True))
 
 
-async def main(output, package, provider, model, thinking):
+async def main(output, package, launcher, provider, model, thinking):
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = output / 'project'
     project.mkdir(mode=0o700)
@@ -37,7 +37,7 @@ async def main(output, package, provider, model, thinking):
     agent = CommsAgent(
         comms, runtime_enabled=True, auto_wake=False,
         private_nk_native_package=package, private_nk_wire_root_id=root_id,
-        agent_bin='pi', agent_args=[
+        agent_bin=str(launcher), agent_args=[
             '--provider', provider, '--model', model, '--thinking', thinking,
             '--no-extensions', '--no-skills', '--no-context-files', '--tools', 'bash',
         ],
@@ -81,8 +81,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--package', type=Path, required=True)
+    parser.add_argument('--launcher', type=Path, required=True)
     parser.add_argument('--provider', required=True)
     parser.add_argument('--model', required=True)
     parser.add_argument('--thinking', required=True)
     args = parser.parse_args()
-    asyncio.run(main(args.output, args.package, args.provider, args.model, args.thinking))
+    asyncio.run(main(args.output, args.package, args.launcher, args.provider, args.model, args.thinking))
