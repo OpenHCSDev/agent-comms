@@ -49,10 +49,10 @@ def verify_selected_wake(
         raise IdentityConflict("Wake admission is not typed")
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
-    with _store_lock(comms._wire_lock_path):
+    with _store_lock(comms._wire_lock_path, shared=True):
         _require_no_private_owner_rename(comms.root)
         try:
-            with comms.bus.log.locked():
+            with comms.bus.log.reading():
                 marker = comms.bus.log._private_marker_unlocked()
                 if admission.source_seq <= marker.admission_after_seq:
                     raise IdentityConflict("Selected wake precedes the current admission floor")

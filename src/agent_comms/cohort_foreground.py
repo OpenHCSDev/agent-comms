@@ -63,7 +63,7 @@ def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool
     cli = _trusted_package(native_package)
     comms = Comms(root)
     bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
-    with bus.log.locked():
+    with bus.log.reading():
         marker = bus.log._private_marker_unlocked()
     if marker.root_id != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
@@ -182,7 +182,7 @@ async def run_foreground_once(
         if action is not None:
             # Refuse an uninitialized claim protocol or permanently invalid
             # resource before owner registration or an irreversible native send.
-            with comms.bus.log.locked():
+            with comms.bus.log.reading():
                 marker = comms.bus.log._private_marker_unlocked()
             if not marker.claims:
                 raise PublicationActivationBlocked("selected file write needs a private claim protocol")

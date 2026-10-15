@@ -249,24 +249,24 @@ class MessagePageRequest:
     def read_opened(self, log, marker, source, stream, records) -> MessagePage:
         """Both readers consume the exact cut opened before scope capture."""
         if stream is not None:
-            with log.locked():
-                access = marker.access
-                try:
-                    with access.open_page_index(log.path) as index:
-                        if access.prepare_page_index(index):
-                            # Pin original source coverage and offsets in one
-                            # SQLite read transaction; later rebuilds cannot mix.
-                            saved = BusPageSource.one(index.connection, singleton=1)
-                            if saved is not None and saved.covers(stream, source):
-                                return self.indexed(index, log, marker, source, stream)
-                except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
-                    # A disposable index cannot replace the original wire cut.
-                    pass
+            access = marker.access
+            try:
+                with access.open_page_index(log.path) as index:
+                    if access.prepare_page_index(index):
+                        # The SQLite transaction pins original source coverage
+                        # and offsets. The opened wire is already a fixed cut,
+                        # so neither resource borrows current bus custody.
+                        saved = BusPageSource.one(index.connection, singleton=1)
+                        if saved is not None and saved.covers(stream, source):
+                            return self.indexed(index, marker, source, stream)
+            except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
+                # A disposable index cannot replace the original wire cut.
+                pass
             stream.seek(0)
         # Full scans borrow that SAME cut after publication custody closes.
         return self.collect(records)
 
-    def indexed(self, index, log, marker, source, stream) -> MessagePage:
+    def indexed(self, index, marker, source, stream) -> MessagePage:
         from .wire_log import OpenedWireSnapshot
 
         window = PageWindow(self.limit, self.max_bytes)

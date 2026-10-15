@@ -399,7 +399,7 @@ class MessageBus:
         from .peer_relevance import Prioritized
 
         try:
-            with self.log.locked(blocking=blocking):
+            with self.log.reading(blocking=blocking):
                 marker = self.log._private_marker_unlocked()
                 rows = addressed_source_pointers_unlocked(
                     self.log, marker, stable_thread_lookup(owner.created_at)

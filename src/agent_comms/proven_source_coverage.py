@@ -104,8 +104,10 @@ class SourceCoverage:
         )
 
     def witness(self) -> PrefixWitness:
-        with self.bus.log.locked(blocking=False, contention=self.contention):
-            return self.witness_unlocked()
+        with self.bus.log.certified_read(
+            blocking=False, contention=self.contention
+        ) as source:
+            return source.witness
 
     def read(
         self, *, limit: int = 100, after_seq: int = 0, partial: bool = False,
@@ -230,7 +232,7 @@ class SourceCoverage:
         from .native_entries import NativeEvidenceScope
 
         with NativeEvidenceScope.borrow(source_reads) as source_reads:
-            with self.bus.log.locked(blocking=False, contention=self.contention):
+            with self.bus.log.reading(blocking=False, contention=self.contention):
                 marker = self.bus.log._private_marker_unlocked()
                 if marker.root_id != self.wire_root_id:
                     raise IdentityConflict("current source admission root changed")

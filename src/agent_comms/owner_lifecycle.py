@@ -184,7 +184,7 @@ class OwnerLifecycle:
             or not native_package.is_absolute()
         ):
             raise ValueError("private owner launch requires the validated absolute root/package")
-        with self.bus.log.locked():
+        with self.bus.log.reading():
             marker = self.bus.log._private_marker_unlocked()
             if marker.root_id != wire_root_id:
                 raise RelationViolationError("private owner launch root ID changed")
@@ -338,7 +338,7 @@ class OwnerLifecycle:
         """
         private_launch = self._private_nk_launch
         if private_launch is None:
-            with self.bus.log.locked():
+            with self.bus.log.reading():
                 if self.bus.log.read_metadata_unlocked().private:
                     raise PublicationActivationBlocked(
                         "private owner launch requires explicit matching root and package"

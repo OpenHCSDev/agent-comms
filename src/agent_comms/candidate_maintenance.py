@@ -62,7 +62,7 @@ def _drain_candidate(root: Path) -> None:
             log, _bytes = _pending[root]
         # Source ownership is checked off the producer path. Maintenance cannot
         # create the protocol marker or authorize delivery.
-        with log.locked():
+        with log.reading():
             metadata = log._private_marker_unlocked()
         root_id = metadata.root_id
         index = WakeCandidateIndex(log)
