@@ -702,11 +702,9 @@ class ContextManifestPage:
     older: BeforeContextManifest | None
     newer: AfterContextManifest | None
 
-    @property
     def has_older(self) -> bool:
         return self.older is not None
 
-    @property
     def has_newer(self) -> bool:
         return self.newer is not None
 
