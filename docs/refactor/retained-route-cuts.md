@@ -86,7 +86,7 @@ no speculative helper, alternate reader or constructor-only guard was retained.
 This does not invalidate the proved independence from subsequent messages/routes.
 
 Before/after census uses existing refactor-audit Package/Repository parsing:
-607 Core/dependency/Toad modules,0 parse omissions,135→162 syntax/name sites,
+607 Core/dependency/Toad modules,0 parse omissions,135→163 syntax/name sites,
 Toad pinned to3ad856b71. This is not binding resolution; SQL f-string table names,
 FieldCodec variant dispatch and delivery_since's callback were traced manually.
 Debt ratchet against6e1f6558 passes with no increases. Ruff E/F/I and diff checks pass.
