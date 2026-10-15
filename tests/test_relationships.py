@@ -5,7 +5,7 @@ import pytest
 
 from agent_comms.relationships import RelationshipEdit
 from agent_comms.comms import Comms
-from agent_comms.display_order import ThreadSort
+from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 
@@ -93,7 +93,7 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
 def test_alias_and_persisted_thread_sort(tmp_path):
     comms = setup_wire(tmp_path)
     comms.relationships.edit("owner", RelationshipEdit.decode("add"), "peer", "Review")
-    comms.relationships.set_order("owner", "children", ThreadSort.LAST_ACTIVITY)
+    comms.relationships.set_order("owner", "children", LastActivityThreadSort)
     comms.registry.rename("owner", "renamed")
     comms.registry.rename("peer", "reviewer")
     edge = comms.relationships.collaborations("renamed")[0]
@@ -104,7 +104,7 @@ def test_alias_and_persisted_thread_sort(tmp_path):
     ) == ("reviewer", "renamed")
     snapshot = Comms(comms.root).relationships.snapshot("renamed")
     children = next(group for group in snapshot.groups if group.key == "children")
-    assert children.order is ThreadSort.LAST_ACTIVITY
+    assert children.order is LastActivityThreadSort
     assert collaboration_rows(comms, "reviewer")[0].target == "renamed"
 
 

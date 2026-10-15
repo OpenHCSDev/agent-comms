@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from agent_comms.display_order import ChannelSort, ThreadSort
+from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
 from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
@@ -71,7 +71,7 @@ class ChannelRowModel:
     active: bool
     members: tuple[str, ...]
     pinned_members: frozenset[str]
-    order: ThreadSort
+    order: type[ThreadSort]
 
     @classmethod
     def of(cls, view, snapshot: CoordinationSnapshot, busy: frozenset[str]) -> ChannelRowModel:
@@ -151,8 +151,8 @@ class SidebarModel:
         return self.observation.references_for(root)
 
     @property
-    def channel_order(self) -> ChannelSort:
-        return self.snapshot.channel_order if self.snapshot is not None else ChannelSort.NAME
+    def channel_order(self) -> type[ChannelSort]:
+        return self.snapshot.channel_order if self.snapshot is not None else NameChannelSort
 
     @property
     def read_marker_notice(self) -> str | None:
