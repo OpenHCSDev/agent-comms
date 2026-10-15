@@ -29,6 +29,7 @@ from agent_comms.coordination_tables.participants import OwnerGenerations
 
 from .child_process import BoundedRun, ParentLifeline
 from .field_codec import FieldCodec
+from .pi_rpc import unique_fields
 from .coordination_database import CoordinationStore
 from .recovery_projection import RecoveryRequest, RecoverySelection
 from .typed_table import SQLiteJournalMode
@@ -73,20 +74,11 @@ def _peer_uid(sock: socket.socket) -> int:
     raise GatewayUnavailableError("kernel peer credentials are unavailable")
 
 
-def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("duplicate key")
-        result[key] = value
-    return result
-
-
 def _decode_request(raw: bytes) -> str:
     if len(raw) > _MAX_REQUEST or raw.count(b"\n") != 1 or not raw.endswith(b"\n"):
         raise ValueError("one bounded line is required")
     value = json.loads(
-        raw.decode("utf-8", errors="strict"), object_pairs_hook=_reject_duplicate_keys
+        raw.decode("utf-8", errors="strict"), object_pairs_hook=unique_fields
     )
     return FieldCodec.decode(RecoveryRequest, value).thread
 
