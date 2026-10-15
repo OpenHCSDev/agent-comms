@@ -255,6 +255,14 @@ class ConversationSourceWindowRequest:
         return ConversationSourceWindow(self, tuple(rows))
 
     @classmethod
+    def frontier(cls, log: WireLog, lookup: str) -> int:
+        """Read one conversation high-water without reconstructing a delivery."""
+        if not log.path.exists() and not log.metadata_path.exists():
+            return 0
+        with log.certified_read() as source:
+            return source.conversation_frontier(lookup)
+
+    @classmethod
     def capture_many(
         cls,
         log: WireLog,
@@ -350,13 +358,6 @@ class WireLog:
         source.require_marker(marker)
         yield source
         source.require_current()
-
-    def conversation_frontier(self, lookup: str) -> int:
-        """Read one conversation high-water from its certified index."""
-        if not self.path.exists() and not self.metadata_path.exists():
-            return 0
-        with self.certified_read() as source:
-            return source.conversation_frontier(lookup)
 
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Read an original window through its existing canonical barrier."""

@@ -238,7 +238,8 @@ class AssignedTranscriptSource:
     def frontier(self):
         lookup = stable_thread_lookup(self.recipient.created_at)
         return AssignedSourceCursor(
-            str(self.root), self.recipient, self.log.conversation_frontier(lookup)
+            str(self.root), self.recipient,
+            ConversationSourceWindowRequest.frontier(self.log, lookup),
         )
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
