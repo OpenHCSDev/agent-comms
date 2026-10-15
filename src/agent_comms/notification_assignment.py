@@ -613,7 +613,7 @@ class NotificationAssignment(NotificationSource):
             return NotificationAssignmentRead(())
         if failure:
             raise ValueError(f"Channel notification status unavailable: {failure}")
-        with CoordinationStore.observing(database, lock_timeout=0.05) as connection:
+        with CoordinationStore.observing(database) as connection:
             return cls.capture(
                 connection, predicate, parameters, limit=limit, ascending=ascending
             )

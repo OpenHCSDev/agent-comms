@@ -438,9 +438,10 @@ class DeliveredInput(QueuedInput):
         lookup = stable_thread_lookup(owner.created_at)
 
         def read(store: Coordination):
-            assignments = pending_sealed_assignments(
-                store, lookup, owner.name, after_seq=after_seq
-            )
+            with store.session.read():
+                assignments = pending_sealed_assignments(
+                    store, lookup, owner.name, after_seq=after_seq
+                )
             with bus.log.certified_read() as source:
                 if source.marker.root_id != root_id:
                     raise IdentityConflict("delivered source wire root changed")
@@ -449,7 +450,7 @@ class DeliveredInput(QueuedInput):
                 )))
             return tuple(zip(originals, assignments, strict=True))
 
-        pending = await Coordination.run_async(store_path, read)
+        pending = await Coordination.run_read_async(store_path, read)
         if not pending:
             return
         unplaced: tuple[Self, ...] = ()

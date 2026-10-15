@@ -19,6 +19,7 @@ from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.coordination_database import StoreBusy
 from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -481,7 +482,7 @@ def test_immediate_transaction_reproduces_postwrite_busy_without_replay(tmp_path
     import time
 
     path = tmp_path / "coordinator.sqlite3"
-    with Coordination(path, lock_timeout=0) as store:
+    with Coordination(path, contention=StoreBusy()) as store:
         store.participants.register("owner", "owner", "owner", committed=True)
         reader = sqlite3.connect(path, isolation_level=None, timeout=0)
         read_fd, write_fd = os.pipe2(os.O_NONBLOCK)

@@ -20,6 +20,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
+from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
 from .native_package import OWNER_INSTRUCTIONS
@@ -246,9 +247,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 PrivateFileRole.require(before)
                 if before.st_nlink != 1:
                     raise NativePiUnavailable("Native proof must be private and unaliased")
-                db = custody.enter_context(closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)))
-                db.execute("PRAGMA query_only=ON")
-                db.execute("BEGIN")
+                db = custody.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
                 actual = SQLiteSchemaObject.read(
                     db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
                 )

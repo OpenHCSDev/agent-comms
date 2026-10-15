@@ -11,13 +11,14 @@ from typing import Self, TypeVar
 from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
 from .child_process import join_retirement
+from .coordination_database import DEFAULT_STORE_CONTENTION, StoreContention
 from .coordination_session import CoordinationSession, NativeCoordinationSession
 from .execution_store import ExecutionStore
 from .participant_store import ParticipantStore
 from .private_runtime_schema import PrivateRuntimeSchema
 from .recovery_reader import RecoveryReader
-from .working_memory_annotations import WorkingMemoryAnnotations
 from .store_files import StoreLock
+from .working_memory_annotations import WorkingMemoryAnnotations
 
 Result = TypeVar("Result")
 
@@ -41,7 +42,8 @@ class Coordination:
     @classmethod
     async def run_async(
         cls, path: str | Path, operation: Callable[[Self], Result], *,
-        clock_ms: Callable[[], int] | None = None, lock_timeout: float = 5.0,
+        clock_ms: Callable[[], int] | None = None,
+        contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> Result:
         """Own a complete operation's connection in its resource worker.
 
@@ -51,21 +53,53 @@ class Coordination:
         a later projection write after the caller releases its custody.
         """
         return await cls.run_worker(
-            partial(cls._run_owned, path, operation, clock_ms, lock_timeout)
+            partial(cls._run_owned, path, operation, clock_ms, contention)
         )
 
     @classmethod
     def _run_owned(
         cls, path: str | Path, operation: Callable[[Self], Result],
-        clock_ms: Callable[[], int] | None, lock_timeout: float,
+        clock_ms: Callable[[], int] | None, contention: StoreContention,
     ) -> Result:
-        with cls(str(path), clock_ms=clock_ms, lock_timeout=lock_timeout) as store:
+        with cls(str(path), clock_ms=clock_ms, contention=contention) as store:
             return operation(store)
 
+    @classmethod
+    async def run_read_async(
+        cls, path: str | Path, operation: Callable[[Self], Result], *,
+        clock_ms: Callable[[], int] | None = None,
+        contention: StoreContention = DEFAULT_STORE_CONTENTION,
+    ) -> Result:
+        """Run a typed coordination read on the one committed snapshot owner."""
+        return await cls.run_worker(
+            partial(cls._run_read_owned, path, operation, clock_ms, contention)
+        )
+
+    @classmethod
+    def _run_read_owned(
+        cls, path: str | Path, operation: Callable[[Self], Result],
+        clock_ms: Callable[[], int] | None, contention: StoreContention,
+    ) -> Result:
+        with cls.session_type.borrowed_reader(
+            path, clock_ms=clock_ms, contention=contention
+        ) as session:
+            return operation(cls._from_session(session))
+
+    @classmethod
+    def _from_session(cls, session: CoordinationSession) -> Self:
+        store = cls.__new__(cls)
+        store.session = session
+        store._bind_tables()
+        return store
+
     def __init__(
-        self, path: str, *, clock_ms: Callable[[], int] | None = None, lock_timeout: float = 5.0
+        self, path: str, *, clock_ms: Callable[[], int] | None = None,
+        contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ):
-        self.session = self.session_type(path, clock_ms=clock_ms, lock_timeout=lock_timeout)
+        self.session = self.session_type(path, clock_ms=clock_ms, contention=contention)
+        self._bind_tables()
+
+    def _bind_tables(self) -> None:
         self.participants = ParticipantStore(self.session)
         self.assignments = AssignmentStore(self.session)
         self.snapshots = RecoveryReader(self.session, self.participants, self.assignments)

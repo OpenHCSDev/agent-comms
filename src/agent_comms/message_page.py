@@ -256,7 +256,6 @@ class MessagePageRequest:
                         if access.prepare_page_index(index):
                             # Pin original source coverage and offsets in one
                             # SQLite read transaction; later rebuilds cannot mix.
-                            index.connection.execute("BEGIN")
                             saved = BusPageSource.one(index.connection, singleton=1)
                             if saved is not None and saved.covers(stream, source):
                                 return self.indexed(index, log, marker, source, stream)

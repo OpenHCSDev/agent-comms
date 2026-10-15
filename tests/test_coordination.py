@@ -25,7 +25,7 @@ from agent_comms.attempt_states import (
     RetryingAttempt,
     SucceededAttempt,
 )
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_database import CoordinationStore, StoreBusy
 from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
 from agent_comms.coordination_schema import (
     COORDINATION_SCHEMA_VERSION,
@@ -508,7 +508,7 @@ def test_current_schema_open_is_read_only_while_readers_and_writer_are_live(db):
         reader.execute("SELECT * FROM schema_meta").fetchall()
         writer.execute("BEGIN IMMEDIATE")
         try:
-            with CoordinationStore(path, lock_timeout=0) as reopened:
+            with CoordinationStore(path, StoreBusy()) as reopened:
                 assert reopened.schema_version == COORDINATION_SCHEMA_VERSION
                 assert not reopened._connection.in_transaction
                 assert reopened._connection.total_changes == 0

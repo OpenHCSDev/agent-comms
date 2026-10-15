@@ -7,6 +7,7 @@ from contextlib import closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .private_path import FileRevision
 from .routing import TurnRouting
@@ -70,10 +71,7 @@ class _SessionRoutes:
     """One indexed read snapshot; decode only entries used by the page."""
 
     def __init__(self, path: Path | None, session_file: str):
-        self._connection = sqlite3.connect(path, timeout=30) if path else None
-        if self._connection is not None:
-            # Keep all annotations on one page at one committed revision.
-            self._connection.execute("BEGIN")
+        self._connection = CoordinationStore.read_snapshot(path) if path else None
         self._session_file = session_file
         self._cache: dict[str, TurnRouting | None] = {}
         self._input_cache: dict[str, InputDisplay | None] = {}
@@ -135,10 +133,8 @@ class TranscriptRoutes:
         descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
         os.close(descriptor)
         with (
-            closing(
-                sqlite3.connect(self.database_path.resolve().as_uri() + "?mode=ro", uri=True)
-            ) as source,
-            closing(sqlite3.connect(target)) as output,
+            closing(CoordinationStore.read_snapshot(self.database_path)) as source,
+            closing(CoordinationStore.writer(target)) as output,
         ):
             _assert_schema(source)
             source.backup(output)
@@ -152,7 +148,7 @@ class TranscriptRoutes:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with (
             _store_lock(self.database_path),
-            closing(sqlite3.connect(self.database_path, timeout=30)) as connection,
+            closing(CoordinationStore.writer(self.database_path)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
@@ -172,9 +168,7 @@ class TranscriptRoutes:
         """Read typed owner bindings without creating or upgrading a database."""
         if not self.database_path.exists():
             return {}
-        with closing(
-            sqlite3.connect(self.database_path.resolve().as_uri() + "?mode=ro", uri=True)
-        ) as connection:
+        with closing(CoordinationStore.read_snapshot(self.database_path)) as connection:
             _assert_schema(connection)
             return {
                 row.native_id: row
@@ -187,7 +181,7 @@ class TranscriptRoutes:
         self._ensure_database(create=True)
         with (
             _store_lock(self.database_path),
-            closing(sqlite3.connect(self.database_path, timeout=30)) as connection,
+            closing(CoordinationStore.writer(self.database_path)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
@@ -251,7 +245,9 @@ class TranscriptRoutes:
 
     def _record_publication(self, session_file, entry_ids, final_id, routing, published):
         self._ensure_database(create=True)
-        with _store_lock(self.database_path), closing(sqlite3.connect(self.database_path, timeout=30)) as connection:
+        with _store_lock(self.database_path), closing(
+            CoordinationStore.writer(self.database_path)
+        ) as connection:
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
                 final_routing = replace(routing, publications=published)
@@ -281,7 +277,7 @@ class TranscriptRoutes:
         self._ensure_database(create=True)
         with (
             _store_lock(self.database_path),
-            closing(sqlite3.connect(self.database_path, timeout=30)) as connection,
+            closing(CoordinationStore.writer(self.database_path)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with connection:

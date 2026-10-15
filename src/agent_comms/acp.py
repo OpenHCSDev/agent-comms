@@ -439,18 +439,19 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             await self.cursors.publish(session_id, thread_name)
             return 0
         def select(store):
-            participant = store.participants.get(stable_thread_lookup(owner.created_at))
-            candidate = next_sealed_assignment(
-                store, participant.lookup, owner.name, after_seq=admission_after_seq,
-            )
-            if candidate is None:
-                return False
-            # An older turn is still running: refuse idle handling and let
-            # the existing drain diagnostic explain the refusal; never retire
-            # or replay that turn here.
-            participant.pointer.require_idle()
-            return True
-        if not await Coordination.run_async(store_path, select):
+            with store.session.read():
+                participant = store.participants.get(stable_thread_lookup(owner.created_at))
+                candidate = next_sealed_assignment(
+                    store, participant.lookup, owner.name, after_seq=admission_after_seq,
+                )
+                if candidate is None:
+                    return False
+                # An older turn is still running: refuse idle handling and let
+                # the existing drain diagnostic explain the refusal; never retire
+                # or replay that turn here.
+                participant.pointer.require_idle()
+                return True
+        if not await Coordination.run_read_async(store_path, select):
             await self.cursors.publish(session_id, thread_name, advance=True)
             return 0
         SelectedWakeCheck(

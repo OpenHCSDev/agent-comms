@@ -7,9 +7,14 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import cached_property
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_database import (
+    DEFAULT_STORE_CONTENTION,
+    CoordinationStore,
+    StoreContention,
+)
 from agent_comms.coordination_errors import (
     IntegrityViolationError,
 )
@@ -20,10 +25,26 @@ if TYPE_CHECKING:
 
 class CoordinationSession(CoordinationStore):
     def __init__(
-        self, path: str, *, clock_ms: Callable[[], int] | None = None, lock_timeout: float = 5.0
+        self, path: str, *, clock_ms: Callable[[], int] | None = None,
+        contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
-        super().__init__(path, lock_timeout=lock_timeout)
+        super().__init__(path, contention)
         self._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
+
+    @classmethod
+    @contextmanager
+    def borrowed_reader(
+        cls, path: str | Path, *, clock_ms: Callable[[], int] | None = None,
+        contention: StoreContention = DEFAULT_STORE_CONTENTION,
+    ) -> Iterator[CoordinationSession]:
+        """Adapt one owner-configured reader to the existing typed tables."""
+        resolved = Path(path)
+        with CoordinationStore.reading(resolved, contention) as connection:
+            session = cls.__new__(cls)
+            session.path = resolved
+            session._connection = connection
+            session._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
+            yield session
 
     def now(self, floor: int = 0) -> int:
         now = self._clock_ms()
@@ -81,7 +102,7 @@ class CoordinationSession(CoordinationStore):
         if db.in_transaction:
             yield
             return
-        db.execute("BEGIN")
+        self.begin_snapshot(db)
         try:
             yield
         finally:
