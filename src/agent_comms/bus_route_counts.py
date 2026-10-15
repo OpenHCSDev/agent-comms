@@ -543,19 +543,20 @@ class OpenedRouteCounts(BusRouteCounts):
                 UNION ALL
                 SELECT * FROM unrecorded WHERE sender_lookup IS NOT NULL
             ), roots AS MATERIALIZED (
-                SELECT route.*,
-                    (SELECT time_root FROM "{RouteEntryRow.declared_name}" AS row
-                     WHERE row.target=route.target AND row.sender=route.sender
-                         AND row.sender_lookup=route.sender_lookup AND row.seq<=:through
-                     ORDER BY row.seq DESC LIMIT 1) AS root
+                SELECT row.target,row.sender,row.sender_lookup,row.time_root AS root
                 FROM route_keys AS route
+                JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=(
+                    SELECT latest.seq FROM "{RouteEntryRow.declared_name}" AS latest
+                    WHERE latest.target=route.target AND latest.sender=route.sender
+                        AND latest.sender_lookup=route.sender_lookup AND latest.seq<=:through
+                    ORDER BY latest.seq DESC LIMIT 1)
             ), candidates AS MATERIALIZED (
                 SELECT owner.key AS actor,roots.*,
                     delivery_since(
                         owner.key,roots.sender,roots.target,roots.sender_lookup
                     ) AS since
                 FROM json_each(:targets) AS owner,json_each(owner.value) AS target
-                JOIN roots ON roots.target=target.value WHERE roots.root IS NOT NULL
+                JOIN roots ON roots.target=target.value
             ), requests AS MATERIALIZED (
                 SELECT * FROM candidates WHERE since IS NOT NULL
             )"""
