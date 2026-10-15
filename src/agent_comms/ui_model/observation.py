@@ -415,6 +415,14 @@ class StopSidebar(ObservationRequest):
 
 
 @dataclass(frozen=True)
+class StopObserving(ObservationRequest):
+    """Views are retiring; finish their outstanding reads without observing more state."""
+
+    def receive(self, service: ObservationService) -> None:
+        service.observations.clear()
+
+
+@dataclass(frozen=True)
 class ObserveThreads(InterestRequest):
     names: frozenset[str]
 
