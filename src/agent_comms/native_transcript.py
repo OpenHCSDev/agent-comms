@@ -119,6 +119,11 @@ class NativeTranscript:
     def __init__(self, path: Path):
         self.path = path
 
+    @contextmanager
+    def reading(self):
+        """Keep the native record owner bound across one page projection."""
+        yield self
+
     def current_draft(self) -> None:
         """Native in-progress output belongs to the ACP stream."""
         return None

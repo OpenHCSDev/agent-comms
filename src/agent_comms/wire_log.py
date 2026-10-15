@@ -351,6 +351,13 @@ class WireLog:
         yield source
         source.require_current()
 
+    def conversation_frontier(self, lookup: str) -> int:
+        """Read one conversation high-water from its certified index."""
+        if not self.path.exists() and not self.metadata_path.exists():
+            return 0
+        with self.certified_read() as source:
+            return source.conversation_frontier(lookup)
+
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Read an original window through its existing canonical barrier."""
         request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending)

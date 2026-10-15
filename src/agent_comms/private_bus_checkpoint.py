@@ -383,6 +383,19 @@ class CertifiedSourceRead:
         except (sqlite3.Error, OSError, ValueError, TypeError) as error:
             raise RelationViolationError("Certified initial page is unavailable.") from error
 
+    def conversation_frontier(self, lookup: str) -> int:
+        """Latest original sender/recipient sequence without reconstructing a delivery."""
+        self.require_current()
+        row = self.connection.execute(
+            f"SELECT coalesce(max(seq), 0) FROM ("
+            f"SELECT max(seq) AS seq FROM {DeliverySources.declared_name} "
+            "WHERE sender_lookup=? UNION ALL "
+            f"SELECT max(seq) AS seq FROM {Addressed.declared_name} WHERE lookup=?"
+            ")",
+            (lookup, lookup),
+        ).fetchone()
+        return row[0]
+
     def conversation_sources(
         self,
         lookup: str,

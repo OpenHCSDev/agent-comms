@@ -263,10 +263,15 @@ class RefreshTranscript(ReadRequest):
     identity: TranscriptReadIdentity
 
     def read(self, comms: Comms) -> TranscriptSnapshotUpdate | None:
-        from agent_comms.transcripts import TranscriptRead
-
         identity = self.identity
-        if TranscriptRead(comms.transcripts, identity).content_current():
+        read = comms.transcripts.bind_page_read(
+            identity.requested_name,
+            identity,
+            before=identity.before,
+            after=identity.after,
+            through=identity.through,
+        )
+        if read.content_current():
             return None
         return ReadTranscript(
             self.root, identity.requested_name, before=identity.before, after=identity.after,
