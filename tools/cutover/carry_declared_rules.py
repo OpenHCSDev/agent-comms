@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import closing
+import fcntl
 import hashlib
 import json
 import os
@@ -149,6 +150,19 @@ class InstallDeclaredRules(StoppedOwnerInstallation):
     def __init__(self, backup: Path):
         self.backup = backup
 
+    def restart(self, lifecycle, request):
+        from agent_comms.active_route import active_route_path, read_active_route
+
+        directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        try:
+            fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if read_active_route().root != lifecycle.root:
+                raise ValueError("Published route differs from the migration root")
+            super().restart(lifecycle, request)
+            return self.recover_and_launch()
+        finally:
+            os.close(directory)
+
     def require_selection(self, snapshot, owners) -> None:
         from publish_openhcs_recovery import require_no_clients
 
@@ -175,7 +189,7 @@ class InstallDeclaredRules(StoppedOwnerInstallation):
             raise ValueError("The reviewed client exclusion names a different root")
         require_no_clients(())
         source = lifecycle.root / "coordination.sqlite3"
-        replacement = self.backup.with_suffix(".replacement.sqlite3")
+        replacement = source.with_name("coordination.rebuilt.sqlite3")
         # SQLite, including any committed journal pages, supplies the backup.
         with self.backup.open("xb"):
             pass
