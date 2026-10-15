@@ -148,8 +148,8 @@ class NoticeTranscript(AgentTextTranscript):
 class SentTranscript(OutgoingRoute, WireTextTranscript):
     """One immutable original wire row, separate from native assistant output."""
 
-    # Source coverage is qualified by this read/notification, not persisted as
-    # the message author's namespace. Native tool results are still unqualified.
+    # Preserve recorded publication provenance; a reader may qualify old
+    # unscoped evidence, but must never reinterpret a recorded source.
     scope: AssignedSourceIdentity | None = field(default=None, kw_only=True, metadata={"wire_omit_default": True})
 
     def in_source(self, scope):
