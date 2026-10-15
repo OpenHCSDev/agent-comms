@@ -212,6 +212,11 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         """Finished history and its source projection agree, including the latest record."""
         return self.records_cut == other.records_cut and self.same_content(other)
 
+    def require_draft_snapshot(self, current: TranscriptReadIdentity) -> None:
+        """The record source owns whether growth invalidates its current draft."""
+        if not self.records_cut.draft_current(current.records_cut) or not self.same_content(current):
+            raise StaleRevision("Transcript changed while reading its current draft")
+
 
 @dataclass(frozen=True, slots=True)
 class LiveTranscriptReadIdentity(TranscriptReadIdentity):
@@ -340,18 +345,14 @@ class TranscriptRead:
     def read_snapshot(self) -> tuple[TranscriptPage, ExternalDraftRow | None]:
         """Read the page and external draft from one retained source lifecycle."""
         page, draft = self._read_page()
-        current = self.current_identity()
-        if not self.identity.same_snapshot(current):
-            raise StaleRevision("Transcript finished while reading its current draft")
+        self.identity.require_draft_snapshot(self.current_identity())
         return page, draft
 
     def current_draft(self) -> ExternalDraftRow | None:
         """Read current text beside this page, before its finished cut changes."""
         with self.source.records.reading() as records:
             draft = records.current_draft()
-        current = self.current_identity()
-        if not self.identity.same_snapshot(current):
-            raise StaleRevision("Transcript finished while reading its current draft")
+        self.identity.require_draft_snapshot(self.current_identity())
         return draft
 
 

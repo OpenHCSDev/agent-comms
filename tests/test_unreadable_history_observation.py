@@ -80,7 +80,7 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
     round_trip = pickle.loads(pickle.dumps(answer))
     assert str(round_trip.error) == str(answer.error)
     assert UnreadableHistory.capture(answer.error) is answer.error
-    observed = ThreadsObserved(None, {}, {"saved": answer.error}, frozenset())
+    observed = ThreadsObserved(None, {}, {"saved": answer.error}, frozenset(), frozenset({"saved"}))
     status = OpenThreadStatus(lambda callback: callback())
     status.observed(observed)
     assert not status.rows.rows["saved"].available

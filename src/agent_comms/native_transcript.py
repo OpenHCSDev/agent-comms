@@ -58,6 +58,10 @@ class RecordsCut(DeclaredFamily, affix="Cut"):
     @abstractmethod
     def contains(self, current, through: int) -> bool: ...
 
+    @abstractmethod
+    def draft_current(self, current: RecordsCut) -> bool:
+        """Whether this cut can still accompany the source's current draft."""
+
 
 @dataclass(frozen=True)
 class SessionCut(RecordsCut):
@@ -73,6 +77,11 @@ class SessionCut(RecordsCut):
         if self.revision is None or current.revision is None:
             return self.revision == current.revision
         return self.revision.holds_cut(current.revision, through)
+
+    def draft_current(self, current: RecordsCut) -> bool:
+        # Native drafts belong to the ACP stream, not this saved-record reader.
+        # Appends do not invalidate the already captured page's absent draft.
+        return self.holds(current, self.offset)
 
 
 @dataclass(frozen=True)
