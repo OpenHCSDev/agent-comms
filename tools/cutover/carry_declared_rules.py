@@ -13,7 +13,7 @@ has since advanced must not replace it.
 from __future__ import annotations
 
 import argparse
-from contextlib import closing
+from contextlib import ExitStack, closing
 import fcntl
 import hashlib
 import json
@@ -25,7 +25,6 @@ from agent_comms.schema_report import StoreSchemaReport
 from agent_comms.typed_table import SQLiteSchemaObject, TypedTable
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.owner_restart import OwnerRestartRequest
-from agent_comms.owner_lifecycle import OwnerRestartSelection
 
 # What must be identical between the stored table and its current declaration.
 _STRUCTURE = ("table_xinfo", "foreign_key_list", "index_list")
@@ -151,27 +150,15 @@ class InstallDeclaredRules(StoppedOwnerInstallation):
         self.backup = backup
 
     def restart(self, lifecycle, request):
-        from agent_comms.active_route import active_route_path, read_active_route
-
-        directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-        try:
-            fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            if read_active_route().root != lifecycle.root:
-                raise ValueError("Published route differs from the migration root")
+        with ExitStack() as self.resources:
             super().restart(lifecycle, request)
             return self.recover_and_launch()
-        finally:
-            os.close(directory)
 
     def require_selection(self, snapshot, owners) -> None:
-        from publish_openhcs_recovery import require_no_clients
-
         if {owner.name for owner in owners} != {
             owner.name for owner in OwnerRestartRequest().threads(snapshot)
         }:
             raise ValueError("Schema installation requires every managed native owner")
-        self.selections = tuple(OwnerRestartSelection.capture(snapshot, owner.name) for owner in owners)
-        require_no_clients(self.selections)
         if self.backup.exists():
             raise FileExistsError(self.backup)
 
@@ -182,11 +169,19 @@ class InstallDeclaredRules(StoppedOwnerInstallation):
         lifecycle.require_launch_authority()
 
     def after_stopped(self, lifecycle) -> None:
+        from agent_comms.active_route import active_route_path, read_active_route
         from publish_openhcs_recovery import ROOT, require_no_clients
         from publish_runtime import RuntimePublication
 
         if lifecycle.root != ROOT:
             raise ValueError("The reviewed client exclusion names a different root")
+        # Worker observers borrow the route too. Stop them before taking the
+        # exclusive lock; retain it only for replacement and recovery.
+        directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        self.resources.callback(os.close, directory)
+        fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if read_active_route().root != lifecycle.root:
+            raise ValueError("Published route differs from the migration root")
         require_no_clients(())
         source = lifecycle.root / "coordination.sqlite3"
         replacement = source.with_name("coordination.rebuilt.sqlite3")
@@ -231,6 +226,9 @@ class InstallDeclaredRules(StoppedOwnerInstallation):
             thread = owner.require_current(snapshot)
             RecoveryMonitorCapability.settle_stopped_owner(stopped.lifecycle.root, thread)
         with stopped.lifecycle.restart_wire():
+            # The new runtime is published and recovery is complete. Its new
+            # observers must be able to borrow the route during startup.
+            self.resources.close()
             return stopped.handoff.launch(stopped.lifecycle)
 
 
