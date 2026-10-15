@@ -9,6 +9,7 @@ from .channel_targets import BuiltinChannel
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
+    from .channel_management import ChannelManagement
     from .history_views import HistoryViews
     from .presentation import ChannelView
 
@@ -19,6 +20,10 @@ class DisplayOrder(ABC):
     @classmethod
     def label(cls) -> str:
         return cls.title
+
+    @classmethod
+    @abstractmethod
+    def store_channel_order(cls, channels: ChannelManagement, channel: str | None) -> type[DisplayOrder]: ...
 
 
 class ThreadSort(DisplayOrder, DeclaredFamily, affix="ThreadSort"):
@@ -33,6 +38,12 @@ class ThreadSort(DisplayOrder, DeclaredFamily, affix="ThreadSort"):
     @staticmethod
     @abstractmethod
     def timestamp(created: float, activity: float, sent: float) -> float: ...
+
+    @classmethod
+    def store_channel_order(cls, channels: ChannelManagement, channel: str | None) -> type[ThreadSort]:
+        if channel is None:
+            raise ValueError("Member ordering requires a channel")
+        return channels.set_channel_sort(channel, cls).order
 
     @staticmethod
     def sent_timestamps(views: HistoryViews) -> dict[str, float]:
@@ -78,6 +89,10 @@ class ChannelSort(DisplayOrder, DeclaredFamily, affix="ChannelSort"):
         if builtin is not None:
             return not view.channel.pinned, builtins.index(builtin), 0, 0, view.channel.name
         return not view.channel.pinned, len(builtins), *cls.sort_fields(view)
+
+    @classmethod
+    def store_channel_order(cls, channels: ChannelManagement, channel: str | None) -> type[ChannelSort]:
+        return channels.set_channel_order(cls)
 
     @classmethod
     @abstractmethod

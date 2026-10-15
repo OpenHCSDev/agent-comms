@@ -74,6 +74,7 @@ class MutualThreadRelation(ABC):
 
     # Each relation owns the relevance its two threads have toward each other.
     relevance: ClassVar[type[PeerRelevance]]
+    source: ClassVar[str]
     # Why the two threads are related, in words an agent can read.
     note: str
 
@@ -95,6 +96,20 @@ class MutualThreadRelation(ABC):
 
     def incident(self, thread: Thread) -> bool:
         return thread.incarnation in self.pair_identity
+
+    def entry_goal_contacts(self) -> tuple[GoalDerivedContact, ...]:
+        return ()
+
+    def entry(self, identity: ThreadIncarnation, person: ThreadView | None,
+              available: bool, current: RelationshipEntry | None) -> RelationshipEntry:
+        return RelationshipEntry(
+            identity.name, "thread", person if available else None,
+            detail=f"{current.detail}\n{self.note}" if current and current.detail else self.note,
+            available=available,
+            sources=(*current.sources, self.source) if current else (self.source,),
+            goal_contacts=(*current.goal_contacts, *self.entry_goal_contacts())
+                          if current else self.entry_goal_contacts(),
+        )
 
     def counterpart(self, thread: Thread) -> ThreadIncarnation | None:
         if self.owner_incarnation == thread.incarnation:
@@ -120,6 +135,7 @@ class CollaborationRevision(MutualThreadRelation):
     created_at: float
     updated_at: float
     relevance: ClassVar[type[PeerRelevance]] = CollaboratorRelevance
+    source: ClassVar[str] = "explicit"
 
     def earlier_notes(self) -> tuple[RelationRevision, ...]:
         return ()
@@ -188,6 +204,10 @@ class GoalDerivedContact(MutualThreadRelation):
     goal_id: str
     text_revision: int
     relevance: ClassVar[type[PeerRelevance]] = GoalContactRelevance
+    source: ClassVar[str] = "goal_mention"
+
+    def entry_goal_contacts(self) -> tuple[GoalDerivedContact, ...]:
+        return (self,)
 
     @property
     def note(self) -> str:
@@ -232,11 +252,168 @@ class RelationshipEntry:
 
 
 @dataclass(frozen=True, slots=True)
-class RelationshipGroup:
-    key: str
-    title: str
+class RelationshipGroup(DeclaredFamily, affix="RelationshipGroup"):
+    """A declared group owns its identity, presentation and entry source."""
+
     entries: tuple[RelationshipEntry, ...]
-    order: type[ThreadSort] | None = None
+    family_discriminator: ClassVar[str] = "key"
+    title: ClassVar[str]
+    empty_text: ClassVar[str]
+    order: ClassVar[type[ThreadSort] | None] = None
+
+    @classmethod
+    @abstractmethod
+    def supply(cls, context: RelationshipContext) -> tuple[RelationshipEntry, ...]: ...
+
+    @classmethod
+    def build(cls, context: RelationshipContext) -> RelationshipGroup:
+        return cls(cls.supply(context))
+
+    def selectable(self) -> tuple[SortableRelationshipGroup, ...]:
+        return ()
+
+
+class RecentRelationshipGroup(RelationshipGroup):
+    @classmethod
+    def supply(cls, context: RelationshipContext) -> tuple[RelationshipEntry, ...]:
+        entries = {}
+        for message in reversed(context.messages):
+            if message.notice or message.membership is not None:
+                continue
+            for target in cls.targets(context, message):
+                entries.setdefault(target, context.entry(
+                    target, message=message,
+                    detail=f"{message.sender} → {message.target}\n{message.body[:240]}",
+                ))
+        return tuple(entries.values())
+
+    @staticmethod
+    @abstractmethod
+    def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]: ...
+
+
+class InboundRelationshipGroup(RecentRelationshipGroup):
+    title = "Last inbound"
+    empty_text = "No recent inbound"
+
+    @staticmethod
+    def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
+        sender = context.registry.canonical_name(message.sender)
+        if sender == context.thread.name or not context.delivery.delivers(message.sender, message.target):
+            return ()
+        return (sender, message.target) if is_channel_target(message.target) else (sender,)
+
+
+class OutboundRelationshipGroup(RecentRelationshipGroup):
+    title = "Last outbound"
+    empty_text = "No recent outbound"
+
+    @staticmethod
+    def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
+        if context.registry.canonical_name(message.sender) != context.thread.name:
+            return ()
+        target = message.target
+        return (target if is_channel_target(target) else context.registry.canonical_name(target),)
+
+
+class ParentRelationshipGroup(RelationshipGroup):
+    title = "Parent fork"
+    empty_text = "Not forked"
+
+    @classmethod
+    def supply(cls, context: RelationshipContext) -> tuple[RelationshipEntry, ...]:
+        return (context.entry(context.thread.parent),) if context.thread.parent else ()
+
+
+@dataclass(frozen=True, slots=True)
+class SortableRelationshipGroup(RelationshipGroup):
+    """Only this capability has saved ordering, defaults and ordered entries."""
+
+    order: type[ThreadSort] = field()
+    default_order: ClassVar[type[ThreadSort]]
+
+    @classmethod
+    def selected_order(cls, context: RelationshipContext) -> type[ThreadSort]:
+        return context.orders.get(cls, cls.default_order)
+
+    @classmethod
+    def build(cls, context: RelationshipContext) -> SortableRelationshipGroup:
+        order = cls.selected_order(context)
+
+        def key(item: RelationshipEntry) -> tuple[float, float, str]:
+            person = item.person
+            return order.key(
+                item.target,
+                person.thread.created_at if person else 0,
+                person.activity.timestamp if person else 0,
+                context.sent.get(item.target, 0) if person else 0,
+            )
+
+        return cls(tuple(sorted(cls.supply(context), key=key)), order)
+
+    def selectable(self) -> tuple[SortableRelationshipGroup, ...]:
+        return (self,)
+
+    @classmethod
+    def ordered(cls, document: RelationshipDocument, owner: Thread,
+                order: type[ThreadSort]) -> RelationshipDocument:
+        row = RelationshipOrder(owner.name, owner.created_at, cls, order)
+        return replace(document, orders=tuple(
+            saved for saved in document.orders if saved.identity != row.identity
+        ) + (row,))
+
+
+class ChildrenRelationshipGroup(SortableRelationshipGroup):
+    title = "Children"
+    empty_text = "No children"
+    default_order = CreatedThreadSort
+
+    @classmethod
+    def supply(cls, context: RelationshipContext) -> tuple[RelationshipEntry, ...]:
+        return tuple(
+            context.entry(child.name)
+            for child in context.registry.threads.values()
+            if child.parent and context.registry.canonical_name(child.parent) == context.thread.name
+        )
+
+
+class CollaboratingRelationshipGroup(SortableRelationshipGroup):
+    title = "Collaborating"
+    empty_text = "No active collaborations"
+    default_order = LastActivityThreadSort
+
+    @classmethod
+    def supply(cls, context: RelationshipContext) -> tuple[RelationshipEntry, ...]:
+        entries: dict[ThreadIncarnation, RelationshipEntry] = {}
+        for relation in (*context.edges, *context.goal_contacts):
+            identity = relation.counterpart(context.thread)
+            if identity is None:
+                continue
+            person = context.people.get(identity.name)
+            available = person is not None and person.thread.incarnation == identity
+            entries[identity] = relation.entry(identity, person, available, entries.get(identity))
+        return tuple(entries.values())
+
+
+@dataclass(frozen=True, slots=True)
+class RelationshipContext:
+    registry: RegistrySnapshot
+    thread: Thread
+    people: dict[str, ThreadView]
+    messages: tuple[Message, ...]
+    delivery: DeliveryScope
+    edges: tuple[Collaboration, ...]
+    goal_contacts: tuple[GoalDerivedContact, ...]
+    orders: dict[type[SortableRelationshipGroup], type[ThreadSort]]
+    sent: dict[str, float]
+
+    def entry(self, name: str, *, message: Message | None = None,
+              detail: str = "") -> RelationshipEntry:
+        name = name if is_channel_target(name) else self.registry.canonical_name(name)
+        return RelationshipEntry(
+            name, "channel" if is_channel_target(name) else "thread", self.people.get(name),
+            message.seq if message else 0, message.timestamp if message else 0, detail,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -248,6 +425,10 @@ class ThreadCommsSnapshot:
     history_messages: int
     incoming_basis: str = "Current delivery scope, independent of read markers"
     unresolved_goal_mentions: tuple[GoalMentionDiagnostic, ...] = ()
+
+    @property
+    def sortable_groups(self) -> tuple[SortableRelationshipGroup, ...]:
+        return tuple(selected for group in self.groups for selected in group.selectable())
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,7 +467,7 @@ class Contacts:
 class RelationshipOrder:
     owner: str
     owner_created: float
-    group: str
+    group: type[SortableRelationshipGroup]
     order: type[ThreadSort]
 
     @property
@@ -294,7 +475,7 @@ class RelationshipOrder:
         return ThreadIncarnation(self.owner, self.owner_created)
 
     @property
-    def identity(self) -> tuple[ThreadIncarnation, str]:
+    def identity(self) -> tuple[ThreadIncarnation, type[SortableRelationshipGroup]]:
         return self.incarnation, self.group
 
     def resolved(self, registry: RegistrySnapshot) -> RelationshipOrder:
@@ -323,11 +504,6 @@ class RelationshipDocument:
             collaborations=tuple(edge.resolved(registry) for edge in self.collaborations),
             orders=tuple(row.resolved(registry) for row in self.orders),
         )
-
-    def ordered(self, owner: Thread, group: str, order: type[ThreadSort]) -> RelationshipDocument:
-        row = RelationshipOrder(owner.name, owner.created_at, group, order)
-        rows = tuple(saved for saved in self.orders if saved.identity != row.identity)
-        return replace(self, orders=(*rows, row))
 
 
 @dataclass(frozen=True)
@@ -592,31 +768,12 @@ class ThreadRelationships:
             explicit = tuple(edge.oriented(thread) for edge in edges if edge.incident(thread))
             contacts, diagnostics = self._goal_contacts(registry)
             visible: dict[ThreadIncarnation, RelationshipEntry] = {}
-            for edge in explicit:
-                visible[edge.peer_incarnation] = RelationshipEntry(
-                    edge.peer,
-                    "thread",
-                    detail=edge.note,
-                    available=edge.peer_incarnation.current(registry),
-                    sources=("explicit",),
-                )
-            for contact in contacts:
-                identity = contact.counterpart(thread)
+            for relation in (*explicit, *contacts):
+                identity = relation.counterpart(thread)
                 if identity is None:
                     continue
-                peer_name = identity.name
-                current = visible.get(identity)
-                visible[identity] = RelationshipEntry(
-                    peer_name,
-                    "thread",
-                    detail=(
-                        f"{current.detail}\n{contact.note}"
-                        if current and current.detail
-                        else contact.note
-                    ),
-                    available=True,  # _goal_contacts checked this exact live incarnation.
-                    sources=(*current.sources, "goal_mention") if current else ("goal_mention",),
-                    goal_contacts=(*current.goal_contacts, contact) if current else (contact,),
+                visible[identity] = relation.entry(
+                    identity, None, identity.current(registry), visible.get(identity),
                 )
             return Contacts(
                 explicit,
@@ -647,14 +804,13 @@ class ThreadRelationships:
             self.store.update(change)
             return result
 
-    def set_order(self, owner: str, group: str, order: type[ThreadSort]) -> type[ThreadSort]:
-        if group not in {"children", "collaborating"}:
-            raise ValueError("This relationship group has no selectable sort")
+    def set_order(self, owner: str, group: type[SortableRelationshipGroup],
+                  order: type[ThreadSort]) -> type[ThreadSort]:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(owner)
             registry = self.registry.snapshot()
             self.store.update(
-                lambda document: document.resolved(registry).ordered(thread, group, order)
+                lambda document: group.ordered(document.resolved(registry), thread, order)
             )
         return order
 
@@ -699,124 +855,20 @@ class ThreadRelationships:
         }
         messages, limited = self._recent_messages()
 
-        def canonical(name: str) -> str:
-            return registry.canonical_name(name)
-
-        def entry(
-            name: str, *, message: Message | None = None, detail: str = ""
-        ) -> RelationshipEntry:
-            name = name if is_channel_target(name) else canonical(name)
-            return RelationshipEntry(
-                name,
-                "channel" if is_channel_target(name) else "thread",
-                people.get(name),
-                message.seq if message else 0,
-                message.timestamp if message else 0,
-                detail,
-            )
-
-        inbound: dict[str, RelationshipEntry] = {}
-        outbound: dict[str, RelationshipEntry] = {}
-        for message in reversed(messages):
-            if message.notice or message.membership is not None:
-                continue
-            detail = f"{message.sender} → {message.target}\n{message.body[:240]}"
-            if canonical(message.sender) == thread.name:
-                key = (
-                    canonical(message.target)
-                    if not is_channel_target(message.target)
-                    else message.target
-                )
-                outbound.setdefault(key, entry(message.target, message=message, detail=detail))
-            elif delivery.delivers(message.sender, message.target):
-                # Expose both the sender and the actual channel, not a fake author.
-                inbound.setdefault(
-                    canonical(message.sender), entry(message.sender, message=message, detail=detail)
-                )
-                if is_channel_target(message.target):
-                    inbound.setdefault(
-                        message.target, entry(message.target, message=message, detail=detail)
-                    )
-
-        orders = {"children": CreatedThreadSort, "collaborating": LastActivityThreadSort}
-        for row in state.orders:
-            if row.incarnation == thread.incarnation and row.group in orders:
-                orders[row.group] = row.order
-        sent = {}
-        for order in set(orders.values()):
-            sent.update(order.sent_timestamps(self.views))
-
-        def ordered(entries: list[RelationshipEntry], group: str) -> tuple[RelationshipEntry, ...]:
-            def key(item: RelationshipEntry) -> tuple[float, float, str]:
-                person = item.person
-                return orders[group].key(
-                    item.target,
-                    person.thread.created_at if person else 0,
-                    person.activity.timestamp if person else 0,
-                    sent.get(item.target, 0) if person else 0,
-                )
-
-            return tuple(sorted(entries, key=key))
-
-        children = [
-            entry(child.name)
-            for child in registry.threads.values()
-            if child.parent and canonical(child.parent) == thread.name
-        ]
-        collaborating: dict[ThreadIncarnation, RelationshipEntry] = {}
-        for edge in edges:
-            identity = edge.counterpart(thread)
-            if identity is None:
-                continue
-            other_name = identity.name
-            person = people.get(other_name)
-            available = person is not None and person.thread.incarnation == identity
-            collaborating[identity] = RelationshipEntry(
-                other_name,
-                "thread",
-                person if available else None,
-                detail=edge.note,
-                available=available,
-                sources=("explicit",),
-            )
-        for contact in goal_contacts:
-            contact_identity = contact.counterpart(thread)
-            if contact_identity is None:
-                continue
-            other_name = contact_identity.name
-            current = collaborating.get(contact_identity)
-            person = people.get(other_name)
-            available = person is not None and person.thread.incarnation == contact_identity
-            collaborating[contact_identity] = RelationshipEntry(
-                other_name,
-                "thread",
-                person if available else None,
-                detail=(
-                    f"{current.detail}\n{contact.note}" if current and current.detail else contact.note
-                ),
-                available=available,
-                sources=(*current.sources, "goal_mention") if current else ("goal_mention",),
-                goal_contacts=(*current.goal_contacts, contact) if current else (contact,),
-            )
+        context = RelationshipContext(
+            registry, thread, people, messages, delivery, edges, goal_contacts,
+            {row.group: row.order for row in state.orders if row.incarnation == thread.incarnation},
+            {},
+        )
+        for order in {
+            group.selected_order(context)
+            for group in SortableRelationshipGroup.members_with(SortableRelationshipGroup)
+        }:
+            context.sent.update(order.sent_timestamps(self.views))
         return ThreadCommsSnapshot(
             thread.name,
             str(self.root.resolve()),
-            (
-                RelationshipGroup("inbound", "Last inbound", tuple(inbound.values())),
-                RelationshipGroup("outbound", "Last outbound", tuple(outbound.values())),
-                RelationshipGroup(
-                    "parent", "Parent fork", (entry(thread.parent),) if thread.parent else ()
-                ),
-                RelationshipGroup(
-                    "children", "Children", ordered(children, "children"), orders["children"]
-                ),
-                RelationshipGroup(
-                    "collaborating",
-                    "Collaborating",
-                    ordered(list(collaborating.values()), "collaborating"),
-                    orders["collaborating"],
-                ),
-            ),
+            tuple(group.build(context) for group in RelationshipGroup.members_with(RelationshipGroup)),
             limited,
             len(messages),
             unresolved_goal_mentions=tuple(

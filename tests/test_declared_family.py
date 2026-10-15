@@ -49,6 +49,23 @@ def test_golden_names_decode_capability_and_slots_identity():
         HTTPReadyCase.decode("external-v1")
 
 
+def test_slots_root_keeps_its_declared_affix():
+    @dataclass(frozen=True, slots=True)
+    class Limits(DeclaredFamily, affix="Limit"):
+        value: int
+
+        @abstractmethod
+        def amount(self): ...
+
+    class ByteLimit(Limits):
+        def amount(self):
+            return self.value
+
+    assert Limits.names() == ("byte",)
+    assert Limits.decode("byte") is ByteLimit
+    assert ByteLimit(4).amount() == 4
+
+
 def test_collisions_fail_without_replacing_owner():
     with pytest.raises(DuplicateRegistryKeyError, match="http_ready"):
 

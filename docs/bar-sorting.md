@@ -48,15 +48,52 @@ Runtime family registration and Textual handlers require application checks.
 - Toad sorting uses the existing FormBridge/ObjectState form machinery and typed
   choices; visibility edits borrow the existing saved-settings state. No parallel
   sorting implementation or settings store.
+- ThreadSort and ChannelSort now own channel-scoped persistence as well; the
+  two UI `store_order` forwarding overrides and their abstract dispatch are deleted.
+- RelationshipGroup declarations own key/title/empty text/entry supply. The
+  SortableRelationshipGroup parent owns saved ordering, defaults, selection and
+  sorting. Snapshot supply derives from the existing family; the UI derives its
+  editable groups from snapshot capabilities. The Core membership/default/
+  constructor rosters, Toad GROUPS/EMPTY maps and duplicate presentation protocols
+  are deleted. Before this change a new group required at least five outside
+  answers; now its one declaration supplies them all. A crossing-capability check
+  composes inbound supply and selectable sorting through two parents, without
+  repeating either algorithm. Group identity also stays nominal through UI row
+  retention, expansion, selection and navigation; only DOM identifiers and the
+  existing codec render its declared name. The old flattened `key` property is
+  deleted rather than keeping an alternative semantic identity.
+- MutualThreadRelation owns entry annotation/merging for explicit and goal-derived
+  contacts, deleting the repeated implementations in contacts and snapshot supply.
+  Each relation retains its own relevance, source and goal-link behavior.
+- The existing family metaclass preserves the root's affix across slots-dataclass
+  recreation, rather than adding duplicate explicit names to each group.
+
+After evidence: `display_order.py` supplies both shared keys and persistence;
+`relationships.py` contains the nominal group declarations and shared algorithms.
+Search `GROUPS|EMPTY|store_order|group.key in|\\{\"children\"|\"children\":`
+in the production sorting/group consumers finds none of the replaced authorities.
+The final NRA index covers 320 Core / 280 Toad modules (one duplicate protocol
+module deleted). No parse omissions were reported; dynamic
+registry/handler binding still requires the real application.
 
 ## Delivery checklist
 
 - [x] Preserve unfinished native/route source on published branches.
 - [x] Core declaration-owned ordering and complete production-consumer migration.
-- [ ] Toad typed form/control and route-consumer migration.
-- [x] Focused Core sanity checks: 61 passed in 6.50 s (channels, catalog,
-  retirement and relationship families), pinned CPUs 4-9; after-search pending.
-- [ ] Paired clean runtime, real click/change/reopen/update journey, retained selection.
+- [x] Toad typed form/control and route-consumer migration.
+- [x] Focused Core sanity checks: 67 passed in 13.30 s (declared families,
+  channels, catalog, retirement, relationships); command exited 1 on the global
+  coverage minimum, not a test failure. A later no-coverage run passed 66 and
+  timed out waiting for the lock-helper process's initial ready signal (before
+  reading the adopter); the bounded serial check is recorded separately.
+  No full-package coverage claim. Pinned CPUs 4-9.
+- [x] Prior paired candidate in a separate runtime: real st/Xvfb saved-history
+  startup; independent channel and member click/change/persist/reopen, application
+  restart, mixed relationship ordering/change/reopen, live status/row updates,
+  visibility editing/persistence, retained selected thread/root and unsent draft.
+  Original live sort preferences restored. No input submitted or replayed.
+- [ ] Repeat affected interactions on the final relationship-family checkpoint.
+- [ ] Paired global installation and acceptance through codex.
 - [ ] Review and installed delivery through integration owner.
 
 Scratch owner: core-route-counts; purpose: source evidence and focused acceptance;
