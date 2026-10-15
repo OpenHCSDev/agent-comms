@@ -72,7 +72,7 @@ class Goals:
         """Project durable unresolved inputs; reading never schedules another attempt."""
         from .input_disposition import InputDispositions
 
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             self.registry.require(name)
             rows = (
                 InputDispositions(self.root)
@@ -91,7 +91,7 @@ class Goals:
         """Project durable notices using current owner queue facts when available."""
         from .input_disposition import InputDispositions
 
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
             return (
@@ -117,7 +117,7 @@ class Goals:
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
         """Project exact review eligibility for one current goal and dependency set."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             return self._goal_input_review(self.registry.require(name), goal_id, wait_for).public()
 
     def _goal_input_review(
@@ -178,7 +178,7 @@ class Goals:
         self, name: str, *, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read durable revisions for one thread incarnation and optional goal ID."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             return self.registry.goal_history(name, goal_id=goal_id)
 
     def goal_wait(self, name: str) -> GoalWait | None:

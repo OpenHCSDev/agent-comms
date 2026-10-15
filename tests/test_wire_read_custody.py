@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from agent_comms.bus_page_index import BusPageIndex, BusPageSource
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
+from agent_comms.wire_record import WireRecord
 
 
 def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture(
@@ -101,3 +102,31 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
         assert [row.seq for row in current.offsets(
             lower=None, upper=None, descending=False, targets=None
         )] == [first.seq, second.seq]
+
+
+def test_relationship_tail_decode_does_not_retain_publication_custody(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    for name in ("sender", "recipient"):
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+    comms.messaging.send_message("sender", "recipient", "first")
+    decoding = threading.Event()
+    release = threading.Event()
+    original = WireRecord.public_from_wire
+
+    def pause_decode(record):
+        decoding.set()
+        assert release.wait(timeout=5)
+        return original(record)
+
+    monkeypatch.setattr(WireRecord, "public_from_wire", pause_decode)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        reader = executor.submit(comms.relationships.snapshot, "recipient")
+        assert decoding.wait(timeout=5)
+        publication = executor.submit(
+            comms.messaging.send_message, "sender", "recipient", "during decode"
+        )
+        second = publication.result(timeout=5)
+        release.set()
+        reader.result(timeout=5)
+
+    assert second.seq == 2

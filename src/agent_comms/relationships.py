@@ -498,7 +498,7 @@ class ThreadRelationships:
         return self.views.revision()
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             registry = self.registry.snapshot()
             thread = self.registry.require(owner)
             edges = self.store.read().resolved(registry).collaborations
@@ -531,7 +531,7 @@ class ThreadRelationships:
         self, owner: str
     ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
         """Read-only mutual view; never changes an explicit contact or delivery."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             registry = self.registry.snapshot()
             thread = self.registry.require(owner)
             contacts, diagnostics = self._goal_contacts(registry)
@@ -542,7 +542,7 @@ class ThreadRelationships:
 
     def peer_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Every other registered thread with its relevance to ``owner``, most relevant first."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             registry = self.registry.snapshot()
             thread = self.registry.require(owner)
             edges = self.store.read().resolved(registry).collaborations
@@ -584,7 +584,7 @@ class ThreadRelationships:
 
     def contacts(self, owner: str) -> Contacts:
         """Combine manual and bound-goal contacts without reading a bus row."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             registry = self.registry.snapshot()
             thread = self.registry.require(owner)
             edges = self.store.read().resolved(registry).collaborations
@@ -658,20 +658,21 @@ class ThreadRelationships:
         return order
 
     def _recent_messages(self) -> tuple[tuple[Message, ...], bool]:
-        """Read bounded tail bytes once per bus revision, using core envelopes."""
-        path = self.root / "bus.jsonl"
+        """Decode a bounded tail from one fixed opened bus cut."""
+        path = self.bus.log.path
         revision = FileRevision.capture(path)
         with self._lock:
             if revision == self._recent_revision:
                 return self._recent, self._limited
-            try:
-                with _store_lock(path), path.open("rb") as stream:
-                    size = stream.seek(0, 2)
+            with self.bus.log._opened_wire_snapshot(need_sequence=False) as source:
+                revision = source.revision
+                if source.stream is None:
+                    data, start = b"", 0
+                else:
+                    size = source.boundary
                     start = max(0, size - self.RECENT_BYTES)
-                    stream.seek(start)
-                    data = stream.read(self.RECENT_BYTES)
-            except FileNotFoundError:
-                data, start = b"", 0
+                    source.stream.seek(start)
+                    data = source.stream.read(size - start)
             lines = data.splitlines(keepends=True)
             if start and lines:
                 lines.pop(0)  # The first record may be partial.
@@ -690,7 +691,7 @@ class ThreadRelationships:
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             thread = self.registry.require(owner)
             registry = self.registry.snapshot()
             state = self.store.read().resolved(registry)
