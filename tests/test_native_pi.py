@@ -1203,6 +1203,23 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
         FieldCodec.decode(NativeContextJournal, later).insert(db)
     assert NativeContextProof.read_evidence(session, INPUT_ID).request_generation == 2
     assert NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1) == recorded
+    assert recorded.corroborates_input(INPUT_ID)
+    assert not recorded.corroborates_input("e" * 32)
+
+    from dataclasses import replace
+    from agent_comms.native_pi import _verify_context
+    from agent_comms.pi_events import ContextCommitted, InputCommitted
+
+    input_event = InputCommitted(
+        input_id=INPUT_ID, session_id="sid", session_entry_id="entry"
+    )
+    context_event = ContextCommitted.from_wire({key: value for key, value in first.items() if key != "schema"})
+    assert _verify_context(session, INPUT_ID, "sid", input_event, context_event) == recorded
+    with pytest.raises(NativePiUnavailable, match="without matching durable proof"):
+        _verify_context(
+            session, INPUT_ID, "sid", input_event,
+            replace(context_event, llm_context_digest="d" * 64),
+        )
     with pytest.raises(NativePiUnavailable, match="no assembled-context"):
         NativeContextProof.read_evidence(session, INPUT_ID, request_generation=3)
 
