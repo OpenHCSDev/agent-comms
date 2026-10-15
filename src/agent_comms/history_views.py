@@ -387,12 +387,9 @@ class HistoryViews:
         """Local presentation scope, independent of agent delivery cursors."""
         viewer = self.messaging.user_identity(worktree).name
         with self.presentation.snapshot(viewer=viewer) as (basis, source):
-            scopes = basis.scopes
             captured_viewer = basis.viewer
             assert captured_viewer is not None
-            display_activity, display_unread = self.presentation.display_view_metrics(
-                source, scopes, scopes, captured_viewer, basis.viewer_names
-            )
+            display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(source=source, registry=basis.registry), display_activity,
