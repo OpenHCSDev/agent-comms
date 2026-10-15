@@ -45,8 +45,9 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert owner.persistent.custody.child.proc.alive()
     assert owner.persistent.custody.idle().current
     reopened_child = owner.persistent.custody.child.proc
-    # The deliberately oversized output tests framing, not permission to admit
-    # a later prompt beyond the model's stored-context budget.
+    # The deliberately oversized output tests framing and exceeds Core's
+    # immutable retained-context limit. Pi compacts it before settling; the
+    # history and split-turn prefix each require a summary provider request.
     owner.provider.text = "L" * (2 * 1024 * 1024 + 257)
     second = await owner.run("large response")
     assert second[-1].ok and second[-1].text == owner.provider.text, second[-1]
@@ -54,7 +55,23 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert len(owner.saved_inputs()) == 4
     print(f"ordinary_native_response_bytes={len(second[-1].text.encode())}")
 
-    assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 4
+    assert len(owner.starts) == len(owner.saved_inputs()) == 4
+    assert owner.provider.posts == len(owner.provider.requests) == 6
+    original_texts = ["first", "queued followup", "after validated reopen", "large response"]
+    for request, text in zip(owner.provider.requests[:4], original_texts, strict=True):
+        assert request["messages"][-1] == {
+            "role": "user", "content": [{"type": "text", "text": text}]
+        }
+    for request in owner.provider.requests[4:]:
+        assert request["messages"][0]["content"].startswith(
+            "You are a context summarization assistant."
+        )
+    compacted = [
+        row for row in map(json.loads, owner.session.read_text().splitlines())
+        if row["type"] == "compaction"
+    ]
+    assert len(compacted) == 1
+    assert compacted[0]["tokensBefore"] > 300_000
     assert len({row[1] for row in owner.starts}) == 4
     proofs = read_proof_rows(owner.session)
     assert {row["inputId"] for row in proofs} == {row[1] for row in owner.starts}
