@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from .channel_targets import is_channel_target
 from .command import Command
 from .declared_family import DeclaredFamily
-from .display_order import ThreadSort
+from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import UnregisteredThreadError
 from .goals import GoalMentionBinding
 from .locked_store import LockedStore
@@ -236,7 +236,7 @@ class RelationshipGroup:
     key: str
     title: str
     entries: tuple[RelationshipEntry, ...]
-    order: ThreadSort | None = None
+    order: type[ThreadSort] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -287,7 +287,7 @@ class RelationshipOrder:
     owner: str
     owner_created: float
     group: str
-    order: ThreadSort
+    order: type[ThreadSort]
 
     @property
     def incarnation(self) -> ThreadIncarnation:
@@ -324,7 +324,7 @@ class RelationshipDocument:
             orders=tuple(row.resolved(registry) for row in self.orders),
         )
 
-    def ordered(self, owner: Thread, group: str, order: ThreadSort) -> RelationshipDocument:
+    def ordered(self, owner: Thread, group: str, order: type[ThreadSort]) -> RelationshipDocument:
         row = RelationshipOrder(owner.name, owner.created_at, group, order)
         rows = tuple(saved for saved in self.orders if saved.identity != row.identity)
         return replace(self, orders=(*rows, row))
@@ -647,7 +647,7 @@ class ThreadRelationships:
             self.store.update(change)
             return result
 
-    def set_order(self, owner: str, group: str, order: ThreadSort) -> ThreadSort:
+    def set_order(self, owner: str, group: str, order: type[ThreadSort]) -> type[ThreadSort]:
         if group not in {"children", "collaborating"}:
             raise ValueError("This relationship group has no selectable sort")
         with _store_lock(self._wire_lock_path):
@@ -738,14 +738,13 @@ class ThreadRelationships:
                         message.target, entry(message.target, message=message, detail=detail)
                     )
 
-        orders = {"children": ThreadSort.CREATED, "collaborating": ThreadSort.LAST_ACTIVITY}
+        orders = {"children": CreatedThreadSort, "collaborating": LastActivityThreadSort}
         for row in state.orders:
             if row.incarnation == thread.incarnation and row.group in orders:
                 orders[row.group] = row.order
-        # Existing declaration-owned timestamp sort, shared with channel members.
-        sent = (
-            self.views.last_sent_timestamps() if ThreadSort.LAST_MESSAGE in orders.values() else {}
-        )
+        sent = {}
+        for order in set(orders.values()):
+            sent.update(order.sent_timestamps(self.views))
 
         def ordered(entries: list[RelationshipEntry], group: str) -> tuple[RelationshipEntry, ...]:
             def key(item: RelationshipEntry) -> tuple[float, float, str]:

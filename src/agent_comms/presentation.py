@@ -15,7 +15,7 @@ from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import is_channel_target
 from .channels import Channel
-from .display_order import ChannelSort
+from .display_order import ChannelSort, NameChannelSort
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
@@ -580,7 +580,7 @@ class ChannelView:
         snapshot: RegistrySnapshot,
         channels: Mapping[str, Channel],
         pins: Mapping[str, frozenset[str]],
-        order: ChannelSort,
+        order: type[ChannelSort],
         activity: Mapping[str, ObservedActivity],
         sent: Mapping[str, float],
         messages: Mapping[str, ChannelActivity],
@@ -758,7 +758,7 @@ class CoordinationSnapshot:
     unread: Mapping[str, int]
     last_sent: Mapping[str, float]
     channel_unread: Mapping[str, int] = field(default_factory=dict)
-    channel_order: ChannelSort = ChannelSort.NAME
+    channel_order: type[ChannelSort] = NameChannelSort
     thread_unread: Mapping[str, int] = field(default_factory=dict)
     unread_pending: frozenset[str] = frozenset()
     show_stopped: bool = True

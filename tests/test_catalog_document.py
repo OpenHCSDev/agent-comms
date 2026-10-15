@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.comms import wire
-from agent_comms.display_order import ChannelSort
+from agent_comms.display_order import CreatedChannelSort
 from agent_comms.messages import Message, InfoKind
 
 
@@ -76,7 +76,7 @@ def test_initial_publication_rechecks_current_catalog_revision(tmp_path, monkeyp
         # A noncooperating writer changes the source during admission. The
         # already-held wire lock is not itself evidence of unchanged bytes.
         with comms.channels.catalog.editing() as document:
-            document.list_order = ChannelSort.CREATED
+            document.list_order = CreatedChannelSort
         return result
 
     monkeypatch.setattr(audience_manifest, "freeze_audience", capture_then_change)

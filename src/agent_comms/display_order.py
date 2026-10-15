@@ -1,72 +1,128 @@
-"""Display order: declaration and persistence owners."""
+"""Persisted display choices own ordering; adapters never interpret their names."""
 
 from __future__ import annotations
 
-from enum import Enum
-from typing import TYPE_CHECKING, Self
+from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING, ClassVar
 
 from .channel_targets import BuiltinChannel
+from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
+    from .history_views import HistoryViews
     from .presentation import ChannelView
 
 
-class DisplayOrder(Enum):
-    """A persisted sorting choice with its adapter-independent display label."""
+class DisplayOrder(ABC):
+    title: ClassVar[str]
 
-    def __new__(cls, key: str, label: str = "") -> Self:
-        member = object.__new__(cls)
-        member._value_ = key
-        member.label = label
-        return member
-
-    label: str
+    @classmethod
+    def label(cls) -> str:
+        return cls.title
 
 
-class ThreadSort(DisplayOrder):
-    LAST_MESSAGE = "last_message_sent", "Last message sent"
-    CREATED = "created_at", "Date created"
-    LAST_ACTIVITY = "last_activity", "Last activity"
+class ThreadSort(DisplayOrder, DeclaredFamily, affix="ThreadSort"):
+    """Newest chosen clock, then creation time and case-folded name."""
 
+    @classmethod
     def key(
-        self, name: str, created: float, activity: float, sent: float
+        cls, name: str, created: float, activity: float, sent: float
     ) -> tuple[float, float, str]:
-        timestamp = {
-            self.CREATED: created,
-            self.LAST_ACTIVITY: activity,
-            self.LAST_MESSAGE: sent,
-        }[self]
-        return -timestamp, -created, name.casefold()
+        return -cls.timestamp(created, activity, sent), -created, name.casefold()
+
+    @staticmethod
+    @abstractmethod
+    def timestamp(created: float, activity: float, sent: float) -> float: ...
+
+    @staticmethod
+    def sent_timestamps(views: HistoryViews) -> dict[str, float]:
+        """Only ordering by sent messages requires this source."""
+        return {}
 
 
-class ChannelSort(DisplayOrder):
-    NAME = "name", "Name"
-    CREATED = "created_at", "Date created"
-    LAST_ACTIVITY = "last_activity", "Last activity"
-    LAST_USER_INPUT = "last_user_input", "Last user input"
+class LastMessageThreadSort(ThreadSort, declared_name="last_message_sent"):
+    title = "Last message sent"
 
-    def key(self, view: ChannelView) -> tuple[int, int, float, float, str]:
+    @staticmethod
+    def timestamp(created: float, activity: float, sent: float) -> float:
+        return sent
+
+    @staticmethod
+    def sent_timestamps(views: HistoryViews) -> dict[str, float]:
+        return views.last_sent_timestamps()
+
+
+class CreatedThreadSort(ThreadSort, declared_name="created_at"):
+    title = "Date created"
+
+    @staticmethod
+    def timestamp(created: float, activity: float, sent: float) -> float:
+        return created
+
+
+class LastActivityThreadSort(ThreadSort):
+    title = "Last activity"
+
+    @staticmethod
+    def timestamp(created: float, activity: float, sent: float) -> float:
+        return activity
+
+
+class ChannelSort(DisplayOrder, DeclaredFamily, affix="ChannelSort"):
+    """Pins partition every order; builtins keep their declared order in each partition."""
+
+    @classmethod
+    def key(cls, view: ChannelView) -> tuple[int, int, float, float, str]:
         builtins = tuple(BuiltinChannel)
         builtin = view.channel.builtin
         if builtin is not None:
-            return (
-                not view.channel.pinned,
-                builtins.index(builtin),
-                0,
-                0,
-                view.channel.name,
-            )
-        timestamp = {
-            self.NAME: 0,
-            self.CREATED: view.channel.created_at,
-            self.LAST_ACTIVITY: view.last_activity,
-            self.LAST_USER_INPUT: view.last_user_input,
-        }[self]
-        created = 0 if self is self.NAME else view.channel.created_at
-        return (
-            not view.channel.pinned,
-            len(builtins),
-            -timestamp,
-            -created,
-            view.channel.name.casefold(),
-        )
+            return not view.channel.pinned, builtins.index(builtin), 0, 0, view.channel.name
+        return not view.channel.pinned, len(builtins), *cls.sort_fields(view)
+
+    @classmethod
+    @abstractmethod
+    def sort_fields(cls, view: ChannelView) -> tuple[float, float, str]: ...
+
+
+class NameChannelSort(ChannelSort):
+    title = "Name"
+
+    @classmethod
+    def sort_fields(cls, view: ChannelView) -> tuple[float, float, str]:
+        return 0, 0, view.channel.name.casefold()
+
+
+class RecentChannelSort(ChannelSort):
+    """Clock-based channel orders share creation/name tie-breaks, not name ordering."""
+
+    @classmethod
+    def sort_fields(cls, view: ChannelView) -> tuple[float, float, str]:
+        return -cls.timestamp(view), -view.channel.created_at, view.channel.name.casefold()
+
+    @staticmethod
+    @abstractmethod
+    def timestamp(view: ChannelView) -> float: ...
+
+
+class CreatedChannelSort(RecentChannelSort, declared_name="created_at"):
+    title = "Date created"
+
+    @staticmethod
+    def timestamp(view: ChannelView) -> float:
+        return view.channel.created_at
+
+
+class LastActivityChannelSort(RecentChannelSort):
+    title = "Last activity"
+
+    @staticmethod
+    def timestamp(view: ChannelView) -> float:
+        return view.last_activity
+
+
+class LastUserInputChannelSort(RecentChannelSort):
+    title = "Last user input"
+
+    @staticmethod
+    def timestamp(view: ChannelView) -> float:
+        return view.last_user_input
