@@ -141,6 +141,39 @@ async def test_exchange_borrows_result_but_retains_cleanup_on_body_error(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_exchange_deadline_cancels_launch_verification_and_retires_child(monkeypatch) -> None:
+    command = (sys.executable, "-c", "import time; time.sleep(60)")
+    platform = Platform.current()
+    with platform.launch(command, ()) as launch:
+        launch_type = type(launch)
+    original_verify = launch_type.verify_async
+    original_release = launch_type.release
+    captured = []
+    verified = []
+
+    def release(launch, identity):
+        captured.append(identity)
+        original_release(launch, identity)
+
+    async def delayed_verify(launch):
+        await original_verify(launch)
+        verified.append(True)
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(launch_type, "release", release)
+    monkeypatch.setattr(launch_type, "verify_async", delayed_verify)
+    # This outer bound must fail the test, not masquerade as the operation's expiry.
+    async with asyncio.timeout(5):
+        with pytest.raises(TimeoutError):
+            async with BoundedRun.exchange(command, timeout=1):
+                pytest.fail("expired launch admitted a result")
+    assert verified == [True]
+    assert len(captured) == 1
+    assert not platform.matches(captured[0])
+    assert not platform.group_members(captured[0])
+
+
+@pytest.mark.asyncio
 async def test_cancellation_retains_child_cleanup(tmp_path: Path) -> None:
     receipt = tmp_path / "tree.json"
     task = asyncio.create_task(

@@ -1101,21 +1101,27 @@ class BoundedRun:
     ):
         """Borrow a collected result; this scope still owns child retirement.
 
-        Consumers may deliver a verified response before group cleanup completes.
-        Leaving the scope always joins that cleanup, including under cancellation.
+        Launch and collection consume one absolute deadline. Consumers may deliver
+        a verified response before group cleanup completes. Leaving the scope always
+        joins that cleanup, including under cancellation.
         """
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("A positive finite timeout is required")
+        deadline = asyncio.get_running_loop().time() + timeout
         try:
-            child = await AttachedChild.start(command, cwd=cwd, env=env, pass_fds=pass_fds)
+            async with asyncio.timeout_at(deadline):
+                child = await AttachedChild.start(command, cwd=cwd, env=env, pass_fds=pass_fds)
+        except TimeoutError:
+            raise  # A launch expiry is not evidence that user code never started.
         except OSError as error:
             yield ChildResult(FailedToStartOutcome(str(error)))
             return
         exchange = asyncio.create_task(child.process.communicate(input))
         try:
             try:
-                stdout, stderr = await asyncio.wait_for(asyncio.shield(exchange), timeout)
-                outcome = await child.wait()
+                async with asyncio.timeout_at(deadline):
+                    stdout, stderr = await asyncio.shield(exchange)
+                    outcome = await child.wait()
             except TimeoutError:
                 outcome = TimedOutOutcome(await child.stop())
                 stdout, stderr = await exchange
