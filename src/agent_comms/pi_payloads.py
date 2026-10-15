@@ -198,7 +198,9 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
         return ()
 
     def finish_tracked(self, session) -> None:
-        session.fail_terminal(self.final_error)
+        from .turn_failure import ProviderRetryExhausted
+
+        session.output.record_failure(ProviderRetryExhausted(self.final_error))
 
     def retry_wire(self) -> dict[str, object]:
         return {"success": False, "finalError": self.final_error}
@@ -637,9 +639,7 @@ class AssistantMessage(PiMessage):
         return self.stop_reason.permits_progress()
 
     def require_failed_terminal(self):
-        from .tracked_turn import SavedTurnEnd
-
-        SavedTurnEnd.require_failed(self)
+        self.stop_reason.require_failed_terminal()
 
     async def apply_end(self, session):
         from .agent_events import CommittedProgress

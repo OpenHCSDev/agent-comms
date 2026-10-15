@@ -27,7 +27,6 @@ from .native_pi import (
     NativeContextProof,
     NativePiPromptRejected,
     NativePiRpcLaunch,
-    NativePiTerminalFailure,
     NativePiUnavailable,
     NativeTurnResult,
     _verify_context,
@@ -45,7 +44,6 @@ from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .selected_session import SelectedSession
 from .turn_context import InputContributionCoordinates
-from .turn_failure import TurnFailure
 
 
 if TYPE_CHECKING:
@@ -86,25 +84,16 @@ class ObservedNativeCommit(NativeCommitObservation[T]):
 
 
 class TrackedTerminal(ABC):
-    """Terminal data owns failure, missing, unique and ambiguous observations."""
+    """Relate completed assistant responses to their streamed text."""
 
     def append(self, text: str) -> TrackedTerminal:
         return CompletedTrackedTerminal(text)
-
-    def fail(self, text: str) -> TrackedTerminal:
-        return FailedTrackedTerminal(text)
 
     def tool_round(self) -> TrackedTerminal:
         return PendingTrackedTerminal()
 
     def later_input(self, parts: list[str]) -> TrackedTerminal:
         return PendingTrackedTerminal()
-
-    def raise_if_failed(self, proof, provider, model, output) -> None:
-        return None
-
-    def require_failed(self) -> None:
-        raise ValueError("Saved assistant message did not end its turn as a failure")
 
     @abstractmethod
     def require_response(self, parts: list[str]) -> str: ...
@@ -156,62 +145,6 @@ class AnsweredTrackedTerminal(TrackedTerminal):
 class AmbiguousTrackedTerminal(PendingTrackedTerminal):
     def append(self, text):
         return self
-
-
-@dataclass(frozen=True)
-class FailedTrackedTerminal(TrackedTerminal):
-    text: str
-
-    def append(self, text):
-        return self
-
-    def tool_round(self):
-        return self
-
-    def raise_if_failed(self, proof, provider, model, output) -> None:
-        self.raise_failure(proof, provider, model, output.declared_failure)
-
-    def raise_failure(
-        self, proof, provider, model, failure: TurnFailure
-    ) -> None:
-        raise NativePiTerminalFailure(self.text, proof, provider, model, failure)
-
-    def later_input(self, parts):
-        return self
-
-    def require_failed(self) -> None:
-        return None
-
-    def require_response(self, parts):
-        raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
-
-
-class SavedTurnEnd:
-    """Apply the live turn-end decision to a saved assistant message.
-
-    A live turn and recovery share one definition of a failed turn: the stop
-    reason's ``tracked`` decision. A saved tool round cannot show whether the
-    live owner accepted it, so it never proves a failure.
-    """
-
-    def __init__(self) -> None:
-        self.terminal: TrackedTerminal = PendingTrackedTerminal()
-
-    def fail_terminal(self, text: str) -> None:
-        self.terminal = self.terminal.fail(text)
-
-    def accept_final_message(self, message) -> None:
-        self.terminal = self.terminal.append(message.authoritative_text)
-
-    def accept_tool_round(self, message) -> bool:
-        self.terminal = self.terminal.tool_round()
-        return True
-
-    @classmethod
-    def require_failed(cls, message) -> None:
-        ended = cls()
-        message.tracked_end(ended)
-        ended.terminal.require_failed()
 
 
 class TrackedTurnSession(TurnSession, MroDispatch):
@@ -583,11 +516,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             self.tool_socket.assert_complete()
         self.terminal = self.terminal.append(message.authoritative_text)
 
-    def fail_terminal(self, text: str):
-        self.terminal = self.terminal.fail(text)
-
     @handles(pi.NativeRetryEnd)
     async def native_retry_finished(self, event: pi.NativeRetryEnd) -> None:
+        event.record_result(self.output)
         event.outcome.finish_tracked(self)
 
     def request_retried(self) -> None:
@@ -632,9 +563,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         with self.startup.measurements.operation("native_terminal_result"):
             with self.startup.measurements.operation("native_terminal_proof"):
                 proof = await self.context_proof()
-            self.terminal.raise_if_failed(
-                proof, self.provider, self.model, self.output
-            )
+            self.output.raise_if_failed(proof, self.provider, self.model)
             if self.tool_socket is not None:
                 self.tool_socket.assert_complete()
             response = self.terminal.require_response(self.text_parts)

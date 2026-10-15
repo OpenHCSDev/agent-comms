@@ -232,10 +232,11 @@ class AutoRetryEnd(PiEvent):
         if self.attempt < 0:
             raise ValueError("Native retry count must be nonnegative")
 
+    def record_result(self, output) -> None:
+        output.retry_result = self.outcome.result(self.attempt, output.redact)
+
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        session.output.retry_result = self.outcome.result(
-            self.attempt, session.output.redact
-        )
+        self.record_result(session.output)
         session.watchdog.progress()
         for event in self.outcome.apply(self, session):
             yield event
