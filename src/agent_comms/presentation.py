@@ -863,8 +863,8 @@ class WireRevision:
         """Any observed store changed; the activity expiry tick is not a store."""
         return replace(self, expiry_tick=earlier.expiry_tick) != earlier
 
-    def sidebar_changed_since(self, earlier: WireRevision) -> bool:
-        """CLI text changes its transcript; activity and bus reads supply sidebar state.
+    def status_changed_since(self, earlier: WireRevision) -> bool:
+        """Activity, assignments and bus reads supply thread and sidebar status.
 
         Draft and finished CLI items share one store. Neither changes the
         sidebar's roster, activity or unread bus counts. Their own observer
@@ -872,3 +872,7 @@ class WireRevision:
         """
         return replace(self, external_transcripts=earlier.external_transcripts,
                        expiry_tick=earlier.expiry_tick) != earlier
+
+    def external_transcripts_changed_since(self, earlier: WireRevision) -> bool:
+        """CLI drafts and finished items changed, independently of coordination status."""
+        return self.external_transcripts != earlier.external_transcripts

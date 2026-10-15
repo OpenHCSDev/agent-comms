@@ -390,7 +390,7 @@ class SidebarReading(Observation[ObserveSidebar]):
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         while True:
             key = SidebarSent(revision.expiry_tick // EXPIRY_PERIOD, type(self.stage), revision)
-            changed = self.sent is None or revision.sidebar_changed_since(self.sent.revision)
+            changed = self.sent is None or revision.status_changed_since(self.sent.revision)
             if not changed and key == self.sent:
                 return
             result = self.stage.read(self.request, comms, revision)
@@ -440,7 +440,7 @@ class ThreadReading(Observation[ObserveThreads]):
         self.retry = False
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
-        if self.revision is not None and not revision.stores_changed_since(self.revision) and not self.retry:
+        if self.revision is not None and not revision.status_changed_since(self.revision) and not self.retry:
             return
         presentations, unavailable, busy = {}, {}, set()
         for name in self.request.names:
