@@ -11,8 +11,6 @@ session journal's durable user-message digest matches the binding.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from contextlib import contextmanager
-from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -108,11 +106,6 @@ class _BindingRoot(TypedRow):
 
 
 def install_prompt_binding_schema(store: Coordination) -> None:
-    """Explicit fresh-root install; ordinary callers may rely on _ensure."""
-    _ensure_binding_schema(store)
-
-
-def _ensure_binding_schema(store: Coordination) -> None:
     """Serialized snapshot installation; never repair an uncertain commit."""
     create_sidecar_file(binding_store_path(store), PromptBinding)
 
@@ -126,14 +119,13 @@ def bind_expected_prompt(
     generation: int,
     prompt: str,
 ) -> str:
-    """Commit the prelaunch native-request digest under a serialized fence.
+    """Persist the original reservation's immutable prelaunch request digest.
 
-    The coordination store WRITE transaction is held from the live owner
-    recheck through the sidecar insert, so an owner-generation advance cannot
-    interleave between validation and the durable binding (no
-    precheck/write/postcheck window). Must run after the input reservation and
-    before Pi launches; a crash in between leaves a reserved input without a
-    binding and nothing may advance on that input.
+    Capture the live owner and exact reservation in one committed SQL snapshot,
+    then release it before sidecar I/O. The frozen binding is original evidence,
+    not a current-owner grant. The send boundary checks the current owner,
+    reservation and source membership again under registry and SQL exclusion.
+    A crash before publication leaves the input reserved and never replayable.
 
     The digest covers the pinned native ``pi-input-request-v1`` request
     envelope exactly as ``AgentSession._claimNativeInput`` computes it — NOT
@@ -143,53 +135,51 @@ def bind_expected_prompt(
     if not FieldCodec.decode(str, prompt):
         raise ValueError("prompt binding requires nonempty original text")
     digest = native_request_digest(prompt)
+    if store.session._connection.in_transaction:
+        raise IdentityConflict("prompt binding requires an already committed reservation")
 
-    # Installation grants no owner authority. Recheck ownership after it, then
-    # hold SQL generation writers through insertion. Registry lifecycle writers
-    # are excluded separately by the final native-send boundary, not this SQL lock.
-    _ensure_binding_schema(store)
-    path = binding_store_path(store)
-    with sidecar_connection(path, PromptBinding) as sidecar:
-        with store.session.transaction() as db:
-            assert_native_runtime_schema(db)
-            assert_cohort_schema(db)
-            ParticipantOwner(owner, generation).require(store, stage.recipient_lookup)
-            reserved = NativeRuntimeInput.one(db, input_id=input_id)
-            if reserved is None:
-                raise IdentityConflict("prompt binding requires an already reserved input")
-            try:
-                NativeIdentityCheck(
-                    row=reserved,
-                    stage=stage,
-                    owner=ParticipantOwner(owner, generation).coordinator_identity(
-                        stage.recipient_lookup
-                    ),
-                ).require_valid()
-            except ReservationViolationError as error:
-                raise IdentityConflict(
-                    f"prompt binding identity differs from its reservation: {error}"
-                ) from error
-            stage.require_sources(db, input_id)
-            roots = {_binding_wire_root(store, original) for original in stage.assignments}
-            if len(roots) != 1:
-                raise IdentityConflict("Native sources belong to different canonical wire roots")
-            wire_root_id = next(iter(roots))
-            if PromptBinding.one(sidecar, input_id=input_id) is not None:
-                raise IdentityConflict("this input already has a prelaunch prompt binding")
-            expected = PromptBinding(
-                input_id=input_id,
-                stage=type(stage.execution),
-                **stage.execution.binding_fields(),
-                owner_lookup=stage.recipient_lookup,
-                owner_thread=owner.name,
-                owner_generation=generation,
-                wire_root_id=wire_root_id,
-                expected_prompt_digest=digest,
-                bound_at_ms=store.session.now(0),
-            )
-            inserted = expected.insert(sidecar)
-            if inserted.rowcount != 1 or PromptBinding.one(sidecar, input_id=input_id) != expected:
-                raise IdentityConflict("prelaunch binding insert did not preserve exact identity")
+    install_prompt_binding_schema(store)
+    with store.session.read():
+        db = store.session._connection
+        assert_native_runtime_schema(db)
+        assert_cohort_schema(db)
+        ParticipantOwner(owner, generation).require(store, stage.recipient_lookup)
+        reserved = NativeRuntimeInput.one(db, input_id=input_id)
+        if reserved is None:
+            raise IdentityConflict("prompt binding requires an already reserved input")
+        try:
+            NativeIdentityCheck(
+                row=reserved,
+                stage=stage,
+                owner=ParticipantOwner(owner, generation).coordinator_identity(
+                    stage.recipient_lookup
+                ),
+            ).require_valid()
+        except ReservationViolationError as error:
+            raise IdentityConflict(
+                f"prompt binding identity differs from its reservation: {error}"
+            ) from error
+        stage.require_sources(db, input_id)
+        roots = {_binding_wire_root(store, original) for original in stage.assignments}
+        if len(roots) != 1:
+            raise IdentityConflict("Native sources belong to different canonical wire roots")
+        expected = PromptBinding(
+            input_id=input_id,
+            stage=type(stage.execution),
+            **stage.execution.binding_fields(),
+            owner_lookup=stage.recipient_lookup,
+            owner_thread=owner.name,
+            owner_generation=generation,
+            wire_root_id=next(iter(roots)),
+            expected_prompt_digest=digest,
+            bound_at_ms=store.session.now(0),
+        )
+    with sidecar_connection(binding_store_path(store), PromptBinding) as sidecar:
+        if PromptBinding.one(sidecar, input_id=input_id) is not None:
+            raise IdentityConflict("this input already has a prelaunch prompt binding")
+        inserted = expected.insert(sidecar)
+        if inserted.rowcount != 1 or PromptBinding.one(sidecar, input_id=input_id) != expected:
+            raise IdentityConflict("prelaunch binding insert did not preserve exact identity")
     return digest
 
 
@@ -213,24 +203,14 @@ def _binding_wire_root(store: Coordination, assignment: WakeAssignment) -> str:
 def read_expected_prompt_binding(
     store: Coordination, input_id: str, *, blocking: bool = True
 ) -> PromptBinding | None:
-    """Return the immutable binding, or None when none was durably written."""
-    with expected_prompt_binding(store, input_id, blocking=blocking) as binding:
-        return binding
-
-
-@contextmanager
-def expected_prompt_binding(
-    store: Coordination, input_id: str, *, blocking: bool = True
-) -> Iterator[PromptBinding | None]:
-    """Keep the original sidecar snapshot in custody through dependent admission."""
+    """Capture immutable original evidence; release its sidecar before use."""
     if type(store) is not Coordination or type(input_id) is not str:
         raise ValueError("prompt binding lookup requires the coordinator store and input ID")
     path = binding_store_path(store)
     if not path.exists() and not path.is_symlink():
-        yield None
-        return
+        return None
     with sidecar_connection(path, PromptBinding, blocking=blocking) as db:
-        yield PromptBinding.one(db, input_id=input_id)
+        return PromptBinding.one(db, input_id=input_id)
 
 
 def expected_prompt_matches_journal(

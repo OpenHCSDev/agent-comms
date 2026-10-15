@@ -269,18 +269,18 @@ def journal_without_sql(monkeypatch):
     bound_prompt = private_send_stage.NativeSendStage.bound_prompt
     matches = private_send_stage.expected_prompt_matches_journal
 
-    @contextmanager
     def ordered_binding(stage, store, *args, **kwargs):
         assert not store.session._connection.in_transaction
         stores.append(store.session.path)
-        with bound_prompt(stage, store, *args, **kwargs) as binding:
-            yield binding
+        return bound_prompt(stage, store, *args, **kwargs)
 
     def check_journal(*args, **kwargs):
-        # Another real coordinator must admit a writer while the journal is read.
-        # A borrowed SQL reader here used to block that writer, while the inverse
-        # sidecar/SQL order could keep the reader waiting on the writer's sidecar.
+        # The immutable original carries its evidence, not a live sidecar lock.
+        # Both a new sidecar read and a coordinator writer must remain available
+        # while the journal is read, for both triage and full native stages.
         with Coordination(str(stores[-1]), contention=StoreBusy()) as other:
+            binding = read_expected_prompt_binding(other, args[1].input_id, blocking=False)
+            assert binding == args[1]
             with other.session.transaction():
                 journal_checks.append(True)
         return matches(*args, **kwargs)
@@ -832,6 +832,48 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
         ).run()
     assert calls == []
     assert "owner" in str(error.value).lower() or "generation" in str(error.value).lower()
+
+
+async def test_owner_change_during_binding_publication_cannot_grant_send(tmp_path, monkeypatch):
+    from agent_comms import native_prompt_binding, private_send_admission
+    from agent_comms.coordination_database import StoreBusy
+    from agent_comms.native_admission_epoch import UnrecordedNativeAdmission
+
+    root, root_id, comms, initial, people = _root(tmp_path)
+    fake, calls = _fake_model(decision="FULL")
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
+    real_bind = private_send_admission.bind_expected_prompt
+    sidecar = native_prompt_binding.sidecar_connection
+    captured = []
+
+    def bind(store, **kwargs):
+        def publish(*args, **options):
+            assert not store.session._connection.in_transaction
+            with Coordination(str(store.session.path), contention=StoreBusy()) as current:
+                current.participants.advance_generation(
+                    stable_thread_lookup(people[1].created_at), "alpha", expected_generation=1,
+                )
+            captured.append(kwargs["input_id"])
+            return sidecar(*args, **options)
+
+        with monkeypatch.context() as patch:
+            patch.setattr(native_prompt_binding, "sidecar_connection", publish)
+            return real_bind(store, **kwargs)
+
+    monkeypatch.setattr(private_send_admission, "bind_expected_prompt", bind)
+    with pytest.raises((IdentityConflict, StaleFence)):
+        await SelectedExecution(
+            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path,
+        ).run()
+    assert calls == []
+    assert len(captured) == 1
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        binding = read_expected_prompt_binding(store, captured[0])
+        assert binding.owner_generation == 1
+        assert store.participants.get(binding.owner_lookup).participant_generation == 2
+        original = NativeRuntimeInput.one(store.session._connection, input_id=binding.input_id)
+        assert original.session_entry_id is None
+        assert original.sent_owner_admission_generation == UnrecordedNativeAdmission()
 
 
 async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path, monkeypatch):
