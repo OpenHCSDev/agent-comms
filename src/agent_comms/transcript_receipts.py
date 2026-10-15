@@ -32,6 +32,14 @@ class AssignedSourceIdentity:
     root: str
     recipient: ThreadIncarnation
 
+    @property
+    def publication_key(self) -> tuple[str, float]:
+        """Published authorship survives a rename, not a new birth or wire."""
+        return self.root, self.recipient.created_at
+
+    def same_publication_source(self, other: AssignedSourceIdentity) -> bool:
+        return self.recipient.has_recorded_birth and self.publication_key == other.publication_key
+
 
 @dataclass(frozen=True)
 class AssignedSourceCursor:
@@ -266,6 +274,44 @@ class AssignedTranscriptSource(TranscriptSource):
     @classmethod
     def for_thread(cls, root, thread, log):
         return cls(root, thread.incarnation, log)
+
+    @classmethod
+    def open(cls, identity: AssignedSourceIdentity):
+        """Open only the recorded wire, without current registry or SQL authority."""
+        from .wire_log import WireLog
+
+        root = Path(identity.root)
+        return cls(root, identity.recipient, WireLog(root / "bus.jsonl"))
+
+    def resolve_sent(self, messages):
+        """Qualify reports against exact full rows in one bounded wire read.
+
+        A report is not publication evidence. Keep it unchanged unless this
+        sender's frozen assignments supply its reference, body, time and route.
+        Missing births cannot select an assignment, even if a name matches.
+        """
+        from .sent_message import PublishedSentMessage
+
+        messages = tuple(messages)
+        if not messages or not self.recipient.has_recorded_birth:
+            return messages
+        lookup = stable_thread_lookup(self.recipient.created_at)
+        marks = ",".join("?" for _ in messages)
+        originals = {
+            original.message.reference: original.message
+            for original in self.rows(
+                f"w.seq IN ({marks}) AND w.sender_lookup=?",
+                (*[message.source.seq for message in messages], lookup),
+                limit=len(messages),
+            )
+        }
+        scope = AssignedSourceIdentity(str(self.root), self.recipient)
+        return tuple(
+            PublishedSentMessage(message, scope)
+            if (original := originals.get(message.source)) is not None
+            and SentTranscript.from_message(original) == message else message
+            for message in messages
+        )
 
     def require_cursor(self, cursor):
         cursor.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
