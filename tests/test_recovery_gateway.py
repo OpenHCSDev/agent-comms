@@ -184,17 +184,13 @@ async def test_over_budget_is_bounded_before_reader_sort(private_root: Path):
     gateway = RecoveryGateway(private_root)
     await gateway.start()
     try:
-        with sqlite3.connect(private_root / "coordination.sqlite3") as connection:
-            # The 257th record is refused *before* the frozen reader sorts.
-            connection.executemany(
-                (
-                    "INSERT INTO executions (execution_id,origin,lifecycle,exact_target,owner_thr"
-                    "ead,owner_lookup,revision,max_attempts,reason_code,created_at_ms,updated_at_"
-                    "ms) VALUES (?,'acp',json_object('kind','pending'),NULL,'Alice','a',1,2,NULL,"
-                    "1,1)"
-                ),
-                ((f"many-{index}",) for index in range(256)),
-            )
+        from agent_comms.coordinator import Coordination
+        from agent_comms.coordination_tables.executions import ExecutionOrigin
+
+        # The existing execution plus these 256 exceeds the reader's bound.
+        with Coordination(private_root / "coordination.sqlite3") as store:
+            for index in range(256):
+                store.executions.create(f"many-{index}", ExecutionOrigin.ACP, "a", "Alice", 2)
         assert json.loads(await request(gateway.path))["reason"] == "gateway_unavailable"
     finally:
         await gateway.close()

@@ -1082,7 +1082,14 @@ class BoundedRun:
                 await child.stop()
 
     @classmethod
-    async def run(
+    async def run(cls, command: tuple[str, ...], *, timeout: float, **options) -> ChildResult:
+        """Collect a result and join retirement before returning it."""
+        async with cls.exchange(command, timeout=timeout, **options) as result:
+            return result
+
+    @classmethod
+    @asynccontextmanager
+    async def exchange(
         cls,
         command: tuple[str, ...],
         *,
@@ -1091,13 +1098,19 @@ class BoundedRun:
         cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
-    ) -> ChildResult:
+    ):
+        """Borrow a collected result; this scope still owns child retirement.
+
+        Consumers may deliver a verified response before group cleanup completes.
+        Leaving the scope always joins that cleanup, including under cancellation.
+        """
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("A positive finite timeout is required")
         try:
             child = await AttachedChild.start(command, cwd=cwd, env=env, pass_fds=pass_fds)
         except OSError as error:
-            return ChildResult(FailedToStartOutcome(str(error)))
+            yield ChildResult(FailedToStartOutcome(str(error)))
+            return
         exchange = asyncio.create_task(child.process.communicate(input))
         try:
             try:
@@ -1106,7 +1119,7 @@ class BoundedRun:
             except TimeoutError:
                 outcome = TimedOutOutcome(await child.stop())
                 stdout, stderr = await exchange
-            return ChildResult(outcome, stdout, stderr)
+            yield ChildResult(outcome, stdout, stderr)
         finally:
             try:
                 await child.stop()

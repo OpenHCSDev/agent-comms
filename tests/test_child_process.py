@@ -118,6 +118,29 @@ async def test_real_execution_and_external_returncode_family() -> None:
 
 
 @pytest.mark.asyncio
+async def test_exchange_borrows_result_but_retains_cleanup_on_body_error(monkeypatch) -> None:
+    retired = []
+    original_stop = AttachedChild.stop
+
+    async def stop(child):
+        outcome = await original_stop(child)
+        retired.append(child)
+        return outcome
+
+    monkeypatch.setattr(AttachedChild, "stop", stop)
+    with pytest.raises(LookupError, match="consumer failed"):
+        async with BoundedRun.exchange(
+            (sys.executable, "-c", 'print("verified")'), timeout=5
+        ) as result:
+            assert result.outcome == ExitedOutcome(0)
+            assert result.stdout == b"verified\n"
+            assert retired == []
+            raise LookupError("consumer failed")
+    assert len(retired) == 1
+    assert retired[0].retired
+
+
+@pytest.mark.asyncio
 async def test_cancellation_retains_child_cleanup(tmp_path: Path) -> None:
     receipt = tmp_path / "tree.json"
     task = asyncio.create_task(
@@ -329,7 +352,7 @@ def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("shape", ["run", "session"])
+@pytest.mark.parametrize("shape", ["run", "session", "exchange"])
 async def test_repeated_cancellation_joins_real_tree_before_return(
     tmp_path: Path, shape: str
 ) -> None:
@@ -340,7 +363,7 @@ async def test_repeated_cancellation_joins_real_tree_before_return(
         if shape == "run":
             await BoundedRun.run(command, timeout=20)
         else:
-            async with BoundedRun.session(command, timeout=20):
+            async with getattr(BoundedRun, shape)(command, timeout=20):
                 await asyncio.Event().wait()
 
     task = asyncio.create_task(operation())

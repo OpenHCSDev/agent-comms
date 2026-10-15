@@ -19,7 +19,7 @@ import sqlite3
 import stat
 import struct
 import sys
-from contextlib import closing, suppress
+from contextlib import asynccontextmanager, closing, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -185,8 +185,6 @@ class RecoveryGateway:
         self._lock_fd: int | None = None
         self._socket_identity: tuple[int, int] | None = None
         self._clients = asyncio.Semaphore(_MAX_CLIENTS)
-        self._worker_slots = asyncio.Semaphore(_MAX_CLIENTS)
-        self._workers: set[asyncio.Task[bytes]] = set()
         self._handlers: set[asyncio.Task[None]] = set()
         self._closing = False
         self._orphaned = False
@@ -284,12 +282,13 @@ class RecoveryGateway:
             await self.close()
             raise
 
-    async def _run_snapshot_process(self, requested: str) -> bytes:
-        """A12 owns deadline, parent loss, process group retirement and reap."""
+    @asynccontextmanager
+    async def _run_snapshot_process(self, requested: str):
+        """Borrow the snapshot; A12 retains deadline, parent loss and retirement."""
         invocation = SnapshotInvocation(str(self.root), requested)
         with ParentLifeline() as life:
             try:
-                result = await BoundedRun.run(
+                async with BoundedRun.exchange(
                     (
                         sys.executable,
                         "-m",
@@ -299,21 +298,22 @@ class RecoveryGateway:
                     timeout=_READ_TIMEOUT,
                     env=life.environment,
                     pass_fds=(life.read_fd,),
-                )
+                ) as result:
+                    response = result.stdout
+                    if (
+                        not result.outcome.successful
+                        or not response.endswith(b"\n")
+                        or len(response) > _MAX_REPLY
+                    ):
+                        raise GatewayUnavailableError("snapshot child failed or exceeded reply bound")
+                    yield response
+            except GatewayUnavailableError:
+                raise
             except (RuntimeError, TimeoutError):
                 # A12 could not attest retirement. Keep the reader admission
                 # and single-instance lock until this gateway process exits.
                 self._orphaned = self._closing = True
                 raise
-        response = result.stdout
-        if (
-            not result.outcome.successful
-            or not response.endswith(b"\n")
-            or len(response) > _MAX_REPLY
-        ):
-            raise GatewayUnavailableError("snapshot child failed or exceeded reply bound")
-        return response
-
     async def _handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         handler = asyncio.current_task()
         if handler is not None:
@@ -340,25 +340,15 @@ class RecoveryGateway:
                     if len(data) > _MAX_REQUEST:
                         raise ValueError("request too large")
                 requested = _decode_request(bytes(data))
-                if self._closing or self._orphaned or self._worker_slots.locked():
+                if self._closing or self._orphaned:
                     raise GatewayUnavailableError("snapshot workers are unavailable")
-                await self._worker_slots.acquire()
-                work = asyncio.create_task(self._run_snapshot_process(requested))
-                self._workers.add(work)
-
-                def finished(future: asyncio.Task[bytes]) -> None:
-                    self._workers.discard(future)
-                    if not self._orphaned:
-                        self._worker_slots.release()
-                    if not future.cancelled():
-                        future.exception()  # consume a detached child failure
-
-                work.add_done_callback(finished)
-                # The child has its own deadline and OS kill/reap. A client
-                # timeout cannot cancel cleanup or leave SQLite locks behind.
-                response = await asyncio.wait_for(asyncio.shield(work), timeout=_READ_TIMEOUT)
-                writer.write(response)
-                await asyncio.wait_for(writer.drain(), timeout=_READ_TIMEOUT)
+                async with self._run_snapshot_process(requested) as response:
+                    writer.write(response)
+                    with suppress(OSError, TimeoutError):
+                        await asyncio.wait_for(writer.drain(), timeout=_READ_TIMEOUT)
+                    # Response and EOF do not depend on process-group retirement.
+                    # This admitted handler still owns cleanup and the instance lock.
+                    writer.close()
         except (
             OSError,
             sqlite3.Error,
@@ -386,17 +376,15 @@ class RecoveryGateway:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
-        # Do not release the single-instance lock or unlink the endpoint while
-        # detached reads can still hold a rollback-journal snapshot.
-        for active in (self._handlers, self._workers):
-            if active:
-                _done, pending = await asyncio.wait(active, timeout=2 * _READ_TIMEOUT)
-                if pending:
-                    raise GatewayUnavailableError("gateway still has active snapshot work")
+        # Each admitted handler retains its child until retirement completes.
+        # Keep the instance lock and endpoint while any handler still owns work.
+        if self._handlers:
+            _done, pending = await asyncio.wait(self._handlers, timeout=2 * _READ_TIMEOUT)
+            if pending:
+                raise GatewayUnavailableError("gateway still has active snapshot work")
         if self._orphaned:
             raise GatewayUnavailableError("snapshot retirement was not attested")
         self._orphaned = False
-        self._worker_slots = asyncio.Semaphore(_MAX_CLIENTS)
         if self._socket_identity is not None:
             try:
                 info = self.path.lstat()
