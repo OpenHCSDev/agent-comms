@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import replace
+from difflib import unified_diff
 import json
 from typing import ClassVar, Generic, Literal, TypeVar
 
@@ -564,19 +565,45 @@ class PatchChange(TaggedWire, ABC):
     @abstractmethod
     def paths(self, path: str) -> tuple[str, str]: ...
 
+    @abstractmethod
+    def patch(self, path: str, content: str) -> ToolDiff | None: ...
 
-class AddedFile(PatchChange):
+
+class WholeFileChange(PatchChange, ABC):
+    """Codex supplies the complete file for additions and deletions."""
+
+    @abstractmethod
+    def versions(self, content: str) -> tuple[str, str]: ...
+
+    def patch(self, path: str, content: str) -> ToolDiff | None:
+        before, after = self.versions(content)
+        before_path, after_path = self.paths(path)
+        patch = ''.join(unified_diff(
+            before.splitlines(keepends=True), after.splitlines(keepends=True),
+            fromfile=before_path, tofile=after_path,
+        ))
+        # An empty file still has a creation/deletion event, but no changed lines.
+        return ToolDiff(patch) if patch else None
+
+
+class AddedFile(WholeFileChange):
     wire_tag = 'add'
 
     def paths(self, path: str) -> tuple[str, str]:
         return '/dev/null', path
 
+    def versions(self, content: str) -> tuple[str, str]:
+        return '', content
 
-class DeletedFile(PatchChange):
+
+class DeletedFile(WholeFileChange):
     wire_tag = 'delete'
 
     def paths(self, path: str) -> tuple[str, str]:
         return path, '/dev/null'
+
+    def versions(self, content: str) -> tuple[str, str]:
+        return content, ''
 
 
 class UpdatedFile(PatchChange):
@@ -586,6 +613,10 @@ class UpdatedFile(PatchChange):
     def paths(self, path: str) -> tuple[str, str]:
         return path, path if self.move_path is None else self.move_path
 
+    def patch(self, path: str, content: str) -> ToolDiff:
+        before, after = self.paths(path)
+        return ToolDiff(f'--- {before}\n+++ {after}\n{content}')
+
 
 class FileChange(WireModel):
     path: str
@@ -593,9 +624,8 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        before, after = self.kind.paths(self.path)
-        patch = ToolDiff(f'--- {before}\n+++ {after}\n{self.diff}')
-        return ToolCall(call_id, 'edit', {'file_path': self.path}).finished('', ok, diff=patch)
+        return ToolCall(call_id, 'edit', {'file_path': self.path}).finished(
+            '', ok, diff=self.kind.patch(self.path, self.diff))
 
 
 class FileChangeItem(Item):
