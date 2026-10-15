@@ -4,7 +4,7 @@ Finding a reference never creates a delivery mention or changes recipients.
 """
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
@@ -65,9 +65,11 @@ class DisplayReferenceMatch:
     end: int
 
 
-class ReferenceContext:
+class ReferenceContext(ABC):
     """Availability is not an empty successful catalog."""
-    description = ""
+    @property
+    @abstractmethod
+    def description(self): ...
 
     def find(self, text):
         return ()
@@ -78,15 +80,23 @@ class ReferenceContext:
     def accepts_history(self, root):
         return False
 
+    @abstractmethod
+    def for_source(self, source): ...
+
+
+@dataclass(frozen=True)
+class RootedReferences(ReferenceContext):
+    root: str
+
     def for_source(self, source):
-        if source is None:
-            return self
-        return DisplayReferences.recorded(self.root, source)
+        return self if source is None else DisplayReferences.recorded(self.root, source)
 
 
 @dataclass(frozen=True)
 class ProjectReferences(ReferenceContext):
     """An ordinary project view has no coordination identity to recognize."""
+    description = ""
+
     def for_source(self, source):
         if source is not None:
             raise ValueError("Recorded references require their original coordination root")
@@ -94,14 +104,12 @@ class ProjectReferences(ReferenceContext):
 
 
 @dataclass(frozen=True)
-class PendingReferences(ReferenceContext):
-    root: str
+class PendingReferences(RootedReferences):
     description = "Waiting for the original reference catalog."
 
 
 @dataclass(frozen=True)
-class UnavailableReferences(ReferenceContext):
-    root: str
+class UnavailableReferences(RootedReferences):
     reason: str
 
     @property
@@ -110,8 +118,7 @@ class UnavailableReferences(ReferenceContext):
 
 
 @dataclass(frozen=True)
-class ForeignReferences(ReferenceContext):
-    root: str
+class ForeignReferences(RootedReferences):
     observed_root: str
 
     @property
@@ -120,10 +127,10 @@ class ForeignReferences(ReferenceContext):
 
 
 @dataclass(frozen=True)
-class DisplayReferences(ReferenceContext):
+class DisplayReferences(RootedReferences):
     """One observation's unfiltered names; no store, widget or wake state."""
 
-    root: str
+    description = ""
     targets: Mapping[str, DisplayReference] = field(default_factory=dict)
 
     @classmethod

@@ -8,6 +8,7 @@ meaning (unread kinds, activity, labels) itself.
 from __future__ import annotations
 
 from collections.abc import Callable
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
@@ -89,13 +90,13 @@ class ChannelRowModel:
         )
 
 
-class SidebarObservation:
+class SidebarObservation(ABC):
     @property
     def snapshot(self):
         return None
 
-    def references_for(self, root):
-        raise NotImplementedError
+    @abstractmethod
+    def references_for(self, root): ...
 
 
 @dataclass(frozen=True)
