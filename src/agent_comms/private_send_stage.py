@@ -7,8 +7,6 @@ import secrets
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from contextlib import contextmanager
-from collections.abc import Iterator
 
 from .assignment_states import DeferredAssignment, FailedAssignment
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -29,7 +27,7 @@ from .native_entries import NativeEntry
 from .native_prompt_binding import (
     PromptBinding,
     expected_prompt_matches_journal,
-    expected_prompt_binding,
+    read_expected_prompt_binding,
 )
 from .native_runtime_input import NativeRuntimeInput
 from .private_sidecar import native_request_digest
@@ -143,21 +141,21 @@ class NativeSendStage(ABC):
     ) -> None:
         # The native boundary validated the live RPC events before returning.
         # Disk evidence corroborates those events, never authorizes recovery.
+        binding = self.bound_prompt(
+            store, input_id, owner, wire_root_id, prompt, blocking=True,
+        )
         with NativeEntry.open_input_evidence(context.session_file) as evidence:
             if not context.corroborates_input(input_id, evidence=evidence):
                 raise IdentityConflict(
                     "Pi live assembled context differs from its reserved input proof"
                 )
-            # Binding writers acquire sidecar before SQL. Keep that order here,
-            # and finish journal I/O before acquiring the coordinator snapshot.
-            with self.bound_prompt(
-                store, input_id, owner, wire_root_id, prompt, blocking=True,
-            ) as binding:
-                if not expected_prompt_matches_journal(context.session_file, binding, evidence=evidence):
-                    raise IdentityConflict("live native input lacks exact bound source prompt equality")
-                with store.session.read():
-                    original = self.pending_input(store, input_id, owner, token_digest)
-                    original.require_session_identity().require_context(context)
+            if not expected_prompt_matches_journal(context.session_file, binding, evidence=evidence):
+                raise IdentityConflict("live native input lacks exact bound source prompt equality")
+        # The binding is immutable original evidence. Only the reservation and
+        # current owner need a fresh SQL fence, after journal I/O has completed.
+        with store.session.read():
+            original = self.pending_input(store, input_id, owner, token_digest)
+            original.require_session_identity().require_context(context)
 
     def require_claim(self, store: Coordination) -> None:
         for captured in self.assignments:
@@ -194,19 +192,12 @@ class NativeSendStage(ABC):
         ):
             raise IdentityConflict("Native input changed its original source membership")
 
-    @contextmanager
     def bound_prompt(
         self, store: Coordination, input_id: str, owner: ParticipantOwner,
         wire_root_id: str, prompt: str, *, blocking: bool = False,
-    ) -> Iterator[PromptBinding]:
-        with expected_prompt_binding(store, input_id, blocking=blocking) as binding:
-            self.require_bound_prompt(binding, owner, wire_root_id, prompt)
-            yield binding
-
-    def require_bound_prompt(
-        self, binding: PromptBinding | None, owner: ParticipantOwner,
-        wire_root_id: str, prompt: str,
-    ) -> None:
+    ) -> PromptBinding:
+        """Capture and validate this stage's immutable original, without a live lock."""
+        binding = read_expected_prompt_binding(store, input_id, blocking=blocking)
         if binding is None:
             raise IdentityConflict("native send has no durable prompt binding")
         try:
@@ -221,6 +212,7 @@ class NativeSendStage(ABC):
             raise IdentityConflict(
                 f"native send differs from its durable prompt binding: {error}"
             ) from error
+        return binding
 
 
 class TriageNativeSend(NativeSendStage):
