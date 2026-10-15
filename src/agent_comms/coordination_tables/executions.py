@@ -226,9 +226,6 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
                     "CASE\n"
                     "        WHEN status = 'active' THEN 'active'\n"
                     "        WHEN status = 'completed' THEN 'succeeded'\n"
-                    "        WHEN status IN ({optional_attempt_execution_names}) AND "
-                    "current_attempt_ordinal IS NOT NULL\n"
-                    "          THEN 'attempt_failed'\n"
                     "    END"
                 )
             ),
@@ -382,6 +379,19 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
                 """CREATE TRIGGER execution_status_edge BEFORE UPDATE OF lifecycle ON executions
 WHEN json_extract(NEW.lifecycle, '$.kind') != json_extract(OLD.lifecycle, '$.kind') AND NOT ({execution_edges})
 BEGIN SELECT RAISE(ABORT, 'execution status transition is not declared'); END"""
+            ),
+            "execution_failed_attempt": (
+                """CREATE TRIGGER execution_failed_attempt BEFORE UPDATE OF lifecycle ON executions
+WHEN json_extract(NEW.lifecycle, '$.kind') IN ({optional_attempt_execution_names})
+ AND json_extract(NEW.lifecycle, '$.ordinal') IS NOT NULL
+ AND NOT EXISTS (
+   SELECT 1 FROM attempts a
+   WHERE a.execution_id = NEW.execution_id
+     AND a.attempt_ordinal = json_extract(NEW.lifecycle, '$.ordinal')
+     AND a.owner_lookup = NEW.owner_lookup
+     AND a.phase IN ({failed_attempt_phases})
+ )
+BEGIN SELECT RAISE(ABORT, 'failed execution requires a failed attempt'); END"""
             ),
             "execution_frozen_facts": (
                 """CREATE TRIGGER execution_frozen_facts BEFORE UPDATE ON executions

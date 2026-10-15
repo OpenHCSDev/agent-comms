@@ -130,14 +130,15 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
     @abstractmethod
     def result(self, attempt: int, redact): ...
 
-    @abstractmethod
-    def apply(self, event, session): ...
+    def apply(self, event, session):
+        self.finish_request(session)
+        return ()
 
     @abstractmethod
     def recovery_events(self, session): ...
 
     @abstractmethod
-    def finish_tracked(self, session) -> None: ...
+    def finish_request(self, session) -> None: ...
 
     @abstractmethod
     def retry_wire(self) -> dict[str, object]: ...
@@ -150,10 +151,6 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
 
         return ProviderRetryResult(success=True, attempt=attempt)
 
-    def apply(self, event, session):
-        session.output.error_message = None
-        return ()
-
     def recovery_events(self, session):
         from .turn_phase import ModelWaitPhase
 
@@ -161,7 +158,7 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
             "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
         ),)
 
-    def finish_tracked(self, session) -> None:
+    def finish_request(self, session) -> None:
         session.request_retried()
 
     def retry_wire(self) -> dict[str, object]:
@@ -186,6 +183,7 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
     def apply(self, event, session):
         from .turn_phase import ModelWaitPhase
 
+        super().apply(event, session)
         session.watchdog.retry_recovery_pending = False
         return (
             *event.exhausted(session),
@@ -197,7 +195,7 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
     def recovery_events(self, session):
         return ()
 
-    def finish_tracked(self, session) -> None:
+    def finish_request(self, session) -> None:
         from .turn_failure import ModelRequestFailed
 
         session.output.record_failure(ModelRequestFailed(self.final_error))

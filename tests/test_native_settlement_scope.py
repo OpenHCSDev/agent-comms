@@ -45,7 +45,7 @@ def test_historical_terminal_release_keeps_recorded_incarnation_and_path(monkeyp
         later = comms.bus.log.claim_projection()[str(later_file)]
         assert later.incarnation != claimed.incarnation
         with store.session.settlement() as boundary:
-            store.session.release_resources(terminal, boundary)
+            store.session.release_resources(terminal, terminal.attempt.lifecycle, boundary)
         assert dict(comms.bus.log.claim_projection()) == {str(later_file): later}
         release = comms.views.full_history()[-1]
         assert release.target == terminal.assignments[0].lifecycle.exact_target
@@ -64,7 +64,7 @@ def test_old_terminal_cleanup_preserves_later_generation_of_same_file(monkeypatc
         later = comms.bus.log.claim_projection()[str(resource)]
         before = (comms.root / "bus.jsonl").read_bytes()
         with store.session.settlement() as boundary:
-            store.session.release_resources(terminal, boundary)
+            store.session.release_resources(terminal, terminal.attempt.lifecycle, boundary)
         assert (comms.root / "bus.jsonl").read_bytes() == before
         assert dict(comms.bus.log.claim_projection()) == {str(resource): later}
 
