@@ -124,6 +124,28 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
         await agent.shutdown()
 
 
+@pytest.mark.parametrize("reason", ["error", "length", "aborted"])
+async def test_explicit_failed_terminal_is_not_a_missing_final_stop(tmp_path, reason):
+    records = [
+        {"type": "message_start", "message": {"role": "assistant", "content": []}},
+        {"type": "message_end", "message": {
+            "role": "assistant", "stopReason": reason,
+            "errorMessage": "terminated", "content": [],
+        }},
+        *_settled_records(),
+    ]
+    stub = _stub_with(tmp_path, records)
+    observed = [event async for event in one_turn_events(
+        stub, [], "distinct terminal mapping input", str(tmp_path), require_input_id=True,
+    )]
+    done = observed[-1]
+    assert isinstance(done, ae.Done) and not done.ok
+    assert done.reason_code == "model_request_failed"
+    assert done.text == "terminated"
+    assert len([event for event in observed if isinstance(event, ae.Done)]) == 1
+    assert [event.text for event in observed if isinstance(event, ae.Error)] == ["terminated"]
+
+
 @pytest.mark.asyncio
 async def test_exhausted_empty_responses_become_typed_provider_failure():
     reason = "Provider returned no authoritative response"

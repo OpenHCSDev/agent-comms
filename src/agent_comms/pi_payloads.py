@@ -151,7 +151,7 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
         return ProviderRetryResult(success=True, attempt=attempt)
 
     def apply(self, event, session):
-        session.output.error_message = None
+        session.request_retried()
         return ()
 
     def recovery_events(self, session):

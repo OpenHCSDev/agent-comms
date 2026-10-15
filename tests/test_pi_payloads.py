@@ -143,7 +143,9 @@ def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
         "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
     })
     failures = []
-    session = SimpleNamespace(fail_terminal=failures.append)
+    from agent_comms.turn_output import TurnOutput
+
+    session = SimpleNamespace(fail_terminal=failures.append, output=TurnOutput())
     event.message.tracked_end(session)
     assert failures == ["original provider rejection"]
 
@@ -187,7 +189,11 @@ def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
         "a" * 32, "session", "entry", 1, "b" * 64, 1_791_964_800_001, Path("original-session.jsonl")
     )
     with pytest.raises(NativePiTerminalFailure, match="original provider rejection") as failure:
-        failed.raise_failure(proof, "configured", "model")
+        from agent_comms.turn_failure import ModelRequestFailed
+
+        failed.raise_failure(
+            proof, "configured", "model", ModelRequestFailed("original provider rejection")
+        )
     assert failure.value.context is proof
 
 
