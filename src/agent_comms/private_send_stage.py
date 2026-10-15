@@ -148,19 +148,16 @@ class NativeSendStage(ABC):
                 raise IdentityConflict(
                     "Pi live assembled context differs from its reserved input proof"
                 )
-            with store.session.read():
-                original = self.pending_input(store, input_id, owner, token_digest)
-                original.require_session_identity().require_context(context)
-                binding = self.require_binding(
-                    store,
-                    input_id,
-                    owner,
-                    wire_root_id,
-                    prompt,
-                    blocking=True,
-                )
+            # Binding writers acquire sidecar before SQL. Keep that order here,
+            # and finish journal I/O before acquiring the coordinator snapshot.
+            with self.bound_prompt(
+                store, input_id, owner, wire_root_id, prompt, blocking=True,
+            ) as binding:
                 if not expected_prompt_matches_journal(context.session_file, binding, evidence=evidence):
                     raise IdentityConflict("live native input lacks exact bound source prompt equality")
+                with store.session.read():
+                    original = self.pending_input(store, input_id, owner, token_digest)
+                    original.require_session_identity().require_context(context)
 
     def require_claim(self, store: Coordination) -> None:
         for captured in self.assignments:
@@ -196,20 +193,6 @@ class NativeSendStage(ABC):
             row.assignment_id for row in self.assignments
         ):
             raise IdentityConflict("Native input changed its original source membership")
-
-    def require_binding(
-        self,
-        store: Coordination,
-        input_id: str,
-        owner: ParticipantOwner,
-        wire_root_id: str,
-        prompt: str,
-        *,
-        blocking: bool = False,
-    ) -> PromptBinding:
-        with self.bound_prompt(store, input_id, owner, wire_root_id, prompt,
-                               blocking=blocking) as binding:
-            return binding
 
     @contextmanager
     def bound_prompt(
