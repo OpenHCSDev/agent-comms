@@ -456,35 +456,6 @@ class BusPresentation:
         )
         return replace(snapshot, unread_pending=frozenset(pending))
 
-    @contextmanager
-    def snapshot(
-        self, viewer: str | None = None, target: str | None = None
-    ) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
-        """Capture display inputs once through their original document resources.
-
-        Open the bus before acquiring document resources: publication's lock
-        order is bus then registry. Cross-store writers share wire; direct
-        document writers cannot change the captured selection. Raw iteration
-        holds none of these locks. Later appends are outside the opened cut;
-        heartbeat changes cannot invalidate it.
-        """
-        if viewer is not None:
-            self.display_index(viewer)
-        prepared = self.bus.log.prepare_append_indexes()
-        with ExitStack() as stack:
-            with _store_lock(self._wire_lock_path, shared=True):
-                source = stack.enter_context(
-                    self.bus.log._opened_wire_snapshot(
-                        need_sequence=False, prepared_indexes=prepared,
-                    )
-                )
-                with DisplaySelection.reading(
-                    self.registry, self.catalog, self.bus.reads, viewer
-                ) as basis:
-                    if target is not None:
-                        basis.scope(target)
-            yield basis, source
-
     def channel_page(
         self,
         target: str,

@@ -7,10 +7,13 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms.bus_route_counts import BusRouteCounts, RouteEntryRow, RouteSourceRow
+from agent_comms.bus_route_counts import (
+    BusRouteCounts, OpenedRouteCounts, RouteEntryRow, RouteSourceRow,
+)
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
+from agent_comms.routing import DeliveryScope
 
 
 def consistent(comms, *names):
@@ -18,7 +21,7 @@ def consistent(comms, *names):
     for name in names:
         inbox = comms.bus.inbox(name)
         assert bulk[name] == comms.bus.pending_count(name) == len(inbox)
-        scope = comms.bus._delivery_scope(name)
+        scope = DeliveryScope.capture(name, comms.registry.snapshot(), comms.channels.catalog.read())
         assert comms.bus.pending_counts(name) == Counter(
             scope.conversation(row.sender, row.target) for row in inbox
         )
@@ -78,9 +81,8 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
     """A reader whose opened cut is behind the recorded index never rebuilds.
 
     While this reader holds its cut, another reader can index a later cut of
-    the same file. The recorded revision already covers every row of the
-    older cut, so pending counts answer without decoding and the recorded
-    revision does not regress.
+    the same file. Counts and unread listings stay inside the older cut,
+    without decoding or regressing the recorded projection.
     """
     comms = wire(tmp_path)
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
@@ -90,16 +92,21 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
     assert comms.bus.pending_counts(viewer) == {"sender": 5}
 
     reader = wire(tmp_path)
-    with reader.views.presentation.snapshot(viewer=viewer) as (basis, stale):
+    with reader.bus.snapshot(viewer=viewer) as (basis, stale):
         comms.messaging.send_message("sender", viewer, "after the reader's cut")
         # Another reader indexes a later cut while this cut is held.
         assert wire(tmp_path).bus.pending_counts(viewer) == {"sender": 6}
         with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
-            assert reader.bus.pending_counts_opened(stale, basis) == {"sender": 6}
+            assert reader.bus.pending_counts_opened(stale, basis) == {"sender": 5}
+            delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
+            with OpenedRouteCounts(
+                reader.bus.log.path, stale, basis.registry, {viewer: delivery}
+            ) as index:
+                assert len(index.unseen_deliveries(viewer, basis.seen)) == 5
             assert decode.call_count == 0
     with BusRouteCounts(comms.bus.log.path) as index:
         recorded = RouteSourceRow.select(index.connection)[0]
-    assert recorded.offset > stale.revision.size
+    assert recorded.revision.size > stale.revision.size
 
 
 def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
@@ -118,7 +125,7 @@ def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
     assert comms.bus.pending_counts(viewer) == {"sender": 5}
 
     reader = wire(tmp_path)
-    with reader.views.presentation.snapshot(viewer=viewer) as (basis, stale):
+    with reader.bus.snapshot(viewer=viewer) as (basis, stale):
         comms.messaging.send_message("sender", viewer, "after the reader's cut")
         comms.messaging.send_message("sender", viewer, "one more after it")
         assert wire(tmp_path).bus.pending_counts(viewer) == {"sender": 7}
@@ -127,7 +134,7 @@ def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
             scan.seek(stale.revision.size)
             boundary = stale.revision.size + len(scan.readline())
         with BusRouteCounts(path) as index:
-            recorded_offset = RouteSourceRow.select(index.connection)[0].offset
+            recorded_offset = RouteSourceRow.select(index.connection)[0].revision.size
         assert stale.revision.size < boundary < recorded_offset
         os.truncate(path, boundary)
         with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
@@ -135,7 +142,7 @@ def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
             assert decode.call_count > 0
     with BusRouteCounts(comms.bus.log.path) as index:
         recorded = RouteSourceRow.select(index.connection)[0]
-    assert recorded.offset == stale.revision.size
+    assert recorded.revision.size == stale.revision.size
 
 
 def test_route_storage_and_decoder_have_one_declaration_owner():
@@ -175,3 +182,54 @@ def test_new_route_table_is_created_and_reset_with_its_scope(tmp_path):
     assert routes.sync(None, None, lambda _: None).complete
     with routes as index:
         assert ExtraRouteStatisticRow.select(index.connection) == []
+
+
+@pytest.mark.parametrize("birth_crossing", [False, True])
+def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_crossing):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    birth = comms.registry.require(viewer).created_at
+    first = comms.bus.publisher.publish_ordinary(
+        Message("sender", viewer, "inside cut", InfoKind, timestamp=birth + 2)
+    )
+    with comms.bus.snapshot(viewer=viewer) as (basis, source):
+        later = comms.bus.publisher.publish_ordinary(Message(
+            "sender", viewer, "outside cut", InfoKind,
+            timestamp=birth - 1 if birth_crossing else birth + 3,
+        ))
+        comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
+            viewer, (later,), basis.registry, comms.bus.log.path,
+        ))
+        assert comms.bus.pending_counts(viewer) == {"sender": 1}
+        later_reads = comms.bus.reads.read().seen_sequences(
+            viewer, basis.registry, source.revision.identity
+        )
+        assert later_reads == {later.seq}
+        delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
+        with OpenedRouteCounts(
+            comms.bus.log.path, source, basis.registry, {viewer: delivery}
+        ) as index:
+            assert index.unseen_counts({viewer: later_reads}) == {viewer: {"sender": 1}}
+            assert [row.seq for row in index.unseen_deliveries(viewer, later_reads)] == [first.seq]
+
+
+def test_retained_source_uses_its_ledger_identity_after_path_replacement(tmp_path):
+    from shutil import copyfile
+
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    message = comms.messaging.send_message("sender", viewer, "already read")
+    comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
+        viewer, (message,), comms.registry.snapshot(), comms.bus.log.path,
+    ))
+    assert comms.bus.pending_counts(viewer) == {}
+    with comms.bus.snapshot(viewer=viewer) as (basis, source):
+        replacement = tmp_path / "replacement.jsonl"
+        copyfile(comms.bus.log.path, replacement)
+        replacement.replace(comms.bus.log.path)
+        assert comms.bus._pending_projection(source, basis, (viewer,)) == {viewer: {}}
+        assert comms.bus.pending_counts_opened(source, basis) == {}
+    # The new physical bus cannot inherit the old bus's paint evidence.
+    assert comms.bus.pending_counts(viewer) == {"sender": 1}

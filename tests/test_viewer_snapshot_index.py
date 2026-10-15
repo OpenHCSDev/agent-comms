@@ -70,7 +70,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     if not indexed:
         # Genuine disposable-store refusal; canonical source remains readable.
         comms.bus.log.path.with_name("bus_route_counts.sqlite3").mkdir()
-    with comms.views.presentation.snapshot(viewer=viewer.name) as (basis, source):
+    with comms.bus.snapshot(viewer=viewer.name) as (basis, source):
         before = comms.bus.pending_counts_opened(source, basis)
         sent = comms.views.last_sent_timestamps(source=source, registry=basis.registry)
         assert before == {"#team": 1}
@@ -373,7 +373,9 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
     )
     assert wire(tmp_path).bus.pending_counts(viewer) == {"bob": 2}
     comms.registry.rename("bob", "renamed-bob")
-    delivery = comms.bus._delivery_scope(viewer)
+    from agent_comms.routing import DeliveryScope
+
+    delivery = DeliveryScope.capture(viewer, comms.registry.snapshot(), comms.channels.catalog.read())
     expected = Counter(
         delivery.conversation(message.sender, message.target) for message in comms.bus.inbox(viewer)
     )
@@ -395,7 +397,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     comms, _ = _root(tmp_path)
     first = comms.messaging.send_initial_cohort('sender', '#team', '@Alice first')
     comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
-    with comms.views.presentation.snapshot(viewer='Alice') as (_, source):
+    with comms.bus.snapshot(viewer='Alice') as (_, source):
         assert isinstance(source, CertifiedOpenedWireSnapshot)
         # Original lock has ended. A genuine later publication cannot broaden
         # this descriptor's cut or make the captured observation visible.
@@ -455,6 +457,9 @@ def test_reserved_sequence_preserves_committed_read_cut_without_admission(tmp_pa
     with comms.bus.log._opened_wire_snapshot(need_sequence=False) as source:
         assert isinstance(source, CertifiedOpenedWireSnapshot)
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
+    with comms.bus.snapshot(viewer='Alice') as (basis, source):
+        assert source.through == first.seq < source.metadata.last_seq
+        assert comms.bus.pending_counts_opened(source, basis) == {'#team': 1}
     with pytest.raises(RelationViolationError, match='differs from its durable marker'):
         with comms.bus.log.certified_read() as source:
             source.require_current()
