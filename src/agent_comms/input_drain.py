@@ -242,152 +242,6 @@ class InputObservation:
         return metadata, addressed
 
 
-class InputDrain(InputObservation):
-    def __init__(
-        self,
-        comms: Comms,
-        sessions: SessionLifecycle,
-        runtime: RuntimeServer,
-        effects: InputEffects,
-        auto_wake: bool,
-    ):
-        self.comms = comms
-        self.sessions = sessions
-        self.runtime = runtime
-        self.effects = effects
-        self.drain_tasks: dict[str, asyncio.Task[None]] = {}
-        self.backend_inboxes: dict[str, asyncio.Queue[TurnInboxItem]] = {}
-        self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
-        self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
-        self.queue_revisions: dict[str, int] = {}
-        self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}
-        self.original_sources: dict[str, OriginalTurnInput] = {}
-        self.dispositions = InputDispositions(comms.root)
-        self.auto_wake = auto_wake
-        self.pending_turns: dict[str, list[ScheduledTurn]] = {}
-        self.drain_locks: dict[str, asyncio.Lock] = {}
-        self.closing = False
-        self.wake_tasks: dict[str, asyncio.Task[None]] = {}
-        self._observation_watchers: dict[str, WireWatch] = {}
-        # Only a completed, quiescent observation can suppress another scan.
-        # These revisions never authorize delivery, acceptance or a native send.
-        self._idle_private_revisions: dict[str, PrivateObservation] = {}
-        # The private observation owner records only a read that changed while
-        # it was being established. Its next stable read consumes this fact.
-        self._repeat_private_observations: set[str] = set()
-
-    async def clear_queued_inputs(self, session_id: str) -> None:
-        """Drop prompts queued against the backend for this session.
-
-        Pi's own queue is cleared, then the local deferred-display list is
-        reset. Callers may re-send the prompts they want to keep.
-        """
-        async with _async_store_lock(self.comms._wire_lock_path):
-            inbox = self.backend_inboxes.get(session_id)
-            if inbox is not None:
-                inbox.put_nowait({"type": "clear_queue"})
-            self.queued_inputs[session_id] = {
-                key: retained
-                for key, item in self.queued_inputs.get(session_id, {}).items()
-                if (retained := item.after_clear()) is not None
-            }
-            self.restored_inputs.pop(session_id, None)
-        await self.emit_queue_state(session_id)
-
-    async def queue_binding(self, session_id: str) -> QueueScope | None:
-        try:
-            owner, admission = await Coordination.run_worker(partial(
-                self.comms.registry.live_owner_with_admission,
-                self.sessions.bindings.get(session_id, session_id),
-            ))
-        except (RelationViolationError, UnregisteredThreadError):
-            # No live local owner turn: the queue has no current scope.
-            return None
-        return QueueScope(
-            session_id,
-            AdmissionIdentity(owner.incarnation, admission),
-            owner.pid,
-        )
-
-    async def queue_state(self, session_id: str) -> QueueChangedUpdate:
-        """The producer owns the complete exact-ID queue projection."""
-        scope = await self.queue_binding(session_id)
-        revision = self.queue_revisions.get(session_id, 0) + 1
-        self.queue_revisions[session_id] = revision
-        return QueueChangedUpdate(scope, revision, QueueProjection.capture(
-            scope,
-            tuple(self.queued_inputs.get(session_id, {}).values()),
-            tuple(self.restored_inputs.get(session_id, {}).values()),
-        ))
-
-    async def emit_queue_state(self, session_id: str, *, client: Any = None) -> None:
-        await (client or self.runtime).session_update(
-            session_id=session_id,
-            update=(await self.queue_state(session_id)).acp_chunk(),
-        )
-
-    async def emit_input_started(
-        self,
-        session_id: str,
-        text: str | None,
-        input_id: str | None = None,
-        source_scope: QueueScope | None = None,
-        *,
-        native_id: str | None,
-        client: Any = None,
-    ) -> None:
-        scope = await self.queue_binding(session_id)
-        if source_scope is None or scope is None or not source_scope.relation(scope).current:
-            scope = None
-        revision = None
-        if scope is not None:
-            revision = self.queue_revisions.get(session_id, 0) + 1
-            self.queue_revisions[session_id] = revision
-        await (client or self.runtime).session_update(
-            session_id=session_id,
-            update=InputStartedUpdate(input_id, text, scope, revision, native_id).acp_chunk(),
-        )
-
-    async def emit_input_disposition(
-        self, session_id: str, row: InputAttempt, client: Any = None
-    ) -> None:
-        await self.emit_input_delivery_changed(session_id, input_id=row.public_id, client=client)
-
-    async def emit_input_delivery_changed(
-        self, session_id: str, *, input_id: str | None = None, client: Any = None
-    ) -> None:
-        await (client or self.runtime).session_update(
-            session_id=session_id,
-            update=InputDeliveryChangedUpdate(input_id).acp_chunk(),
-        )
-
-    async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
-        """Refresh the producer-owned delivery ledger; this never replays an input."""
-        await self.emit_input_delivery_changed(session_id, client=client)
-
-    def input_keys(self, session_id: str) -> frozenset[str]:
-        """Live captured source membership, never rebuilt from durable notices."""
-        original = self.original_sources.get(session_id)
-        following = frozenset(
-            key for source in self.following_sources.get(session_id, {}).values()
-            for key in source.keys
-        )
-        return following.union(original.keys) if original is not None else following
-
-    async def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
-        """Derive delivery notices from existing owner queues; never create new authority."""
-        snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
-        owner = snapshot.require(self.sessions.require(session_id))
-        if owner.pid != os.getpid() or not snapshot.status(owner.name).running:
-            return None
-        keys = set(self.input_keys(session_id))
-        keys.update(
-            self.dispositions.bus_key(turn.origin, owner)
-            for turn in self.pending_turns.get(session_id, ())
-            if turn.origin is not None
-        )
-        return frozenset(keys)
-
     def ensure_live_drain(self, session_id: str) -> None:
         """Keep one background task per session pushing inbox messages live."""
         if self.closing:
@@ -540,11 +394,6 @@ class InputDrain(InputObservation):
                             # no wake task exists to produce another file change.
                             watcher.notify()
 
-    async def drain_inbox(self, session_id: str) -> int:
-        """Push undelivered messages to the client; returns count pushed."""
-        async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
-            return await self.drain_owned_inbox(session_id)
-
     def _bus_marker(self):
         return self.comms.bus.log._private_marker_unlocked()
 
@@ -667,6 +516,158 @@ class InputDrain(InputObservation):
                 session_id, self.effects._configured_root_id(), settled.wire, entry,
             )
             return observed == settled
+
+
+class InputDrain(InputObservation):
+    def __init__(
+        self,
+        comms: Comms,
+        sessions: SessionLifecycle,
+        runtime: RuntimeServer,
+        effects: InputEffects,
+        auto_wake: bool,
+    ):
+        self.comms = comms
+        self.sessions = sessions
+        self.runtime = runtime
+        self.effects = effects
+        self.drain_tasks: dict[str, asyncio.Task[None]] = {}
+        self.backend_inboxes: dict[str, asyncio.Queue[TurnInboxItem]] = {}
+        self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
+        self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
+        self.queue_revisions: dict[str, int] = {}
+        self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}
+        self.original_sources: dict[str, OriginalTurnInput] = {}
+        self.dispositions = InputDispositions(comms.root)
+        self.auto_wake = auto_wake
+        self.pending_turns: dict[str, list[ScheduledTurn]] = {}
+        self.drain_locks: dict[str, asyncio.Lock] = {}
+        self.closing = False
+        self.wake_tasks: dict[str, asyncio.Task[None]] = {}
+        self._observation_watchers: dict[str, WireWatch] = {}
+        # Only a completed, quiescent observation can suppress another scan.
+        # These revisions never authorize delivery, acceptance or a native send.
+        self._idle_private_revisions: dict[str, PrivateObservation] = {}
+        # The private observation owner records only a read that changed while
+        # it was being established. Its next stable read consumes this fact.
+        self._repeat_private_observations: set[str] = set()
+
+    async def clear_queued_inputs(self, session_id: str) -> None:
+        """Drop prompts queued against the backend for this session.
+
+        Pi's own queue is cleared, then the local deferred-display list is
+        reset. Callers may re-send the prompts they want to keep.
+        """
+        async with _async_store_lock(self.comms._wire_lock_path):
+            inbox = self.backend_inboxes.get(session_id)
+            if inbox is not None:
+                inbox.put_nowait({"type": "clear_queue"})
+            self.queued_inputs[session_id] = {
+                key: retained
+                for key, item in self.queued_inputs.get(session_id, {}).items()
+                if (retained := item.after_clear()) is not None
+            }
+            self.restored_inputs.pop(session_id, None)
+        await self.emit_queue_state(session_id)
+
+    async def queue_binding(self, session_id: str) -> QueueScope | None:
+        try:
+            owner, admission = await Coordination.run_worker(partial(
+                self.comms.registry.live_owner_with_admission,
+                self.sessions.bindings.get(session_id, session_id),
+            ))
+        except (RelationViolationError, UnregisteredThreadError):
+            # No live local owner turn: the queue has no current scope.
+            return None
+        return QueueScope(
+            session_id,
+            AdmissionIdentity(owner.incarnation, admission),
+            owner.pid,
+        )
+
+    async def queue_state(self, session_id: str) -> QueueChangedUpdate:
+        """The producer owns the complete exact-ID queue projection."""
+        scope = await self.queue_binding(session_id)
+        revision = self.queue_revisions.get(session_id, 0) + 1
+        self.queue_revisions[session_id] = revision
+        return QueueChangedUpdate(scope, revision, QueueProjection.capture(
+            scope,
+            tuple(self.queued_inputs.get(session_id, {}).values()),
+            tuple(self.restored_inputs.get(session_id, {}).values()),
+        ))
+
+    async def emit_queue_state(self, session_id: str, *, client: Any = None) -> None:
+        await (client or self.runtime).session_update(
+            session_id=session_id,
+            update=(await self.queue_state(session_id)).acp_chunk(),
+        )
+
+    async def emit_input_started(
+        self,
+        session_id: str,
+        text: str | None,
+        input_id: str | None = None,
+        source_scope: QueueScope | None = None,
+        *,
+        native_id: str | None,
+        client: Any = None,
+    ) -> None:
+        scope = await self.queue_binding(session_id)
+        if source_scope is None or scope is None or not source_scope.relation(scope).current:
+            scope = None
+        revision = None
+        if scope is not None:
+            revision = self.queue_revisions.get(session_id, 0) + 1
+            self.queue_revisions[session_id] = revision
+        await (client or self.runtime).session_update(
+            session_id=session_id,
+            update=InputStartedUpdate(input_id, text, scope, revision, native_id).acp_chunk(),
+        )
+
+    async def emit_input_disposition(
+        self, session_id: str, row: InputAttempt, client: Any = None
+    ) -> None:
+        await self.emit_input_delivery_changed(session_id, input_id=row.public_id, client=client)
+
+    async def emit_input_delivery_changed(
+        self, session_id: str, *, input_id: str | None = None, client: Any = None
+    ) -> None:
+        await (client or self.runtime).session_update(
+            session_id=session_id,
+            update=InputDeliveryChangedUpdate(input_id).acp_chunk(),
+        )
+
+    async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
+        """Refresh the producer-owned delivery ledger; this never replays an input."""
+        await self.emit_input_delivery_changed(session_id, client=client)
+
+    def input_keys(self, session_id: str) -> frozenset[str]:
+        """Live captured source membership, never rebuilt from durable notices."""
+        original = self.original_sources.get(session_id)
+        following = frozenset(
+            key for source in self.following_sources.get(session_id, {}).values()
+            for key in source.keys
+        )
+        return following.union(original.keys) if original is not None else following
+
+    async def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
+        """Derive delivery notices from existing owner queues; never create new authority."""
+        snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
+        owner = snapshot.require(self.sessions.require(session_id))
+        if owner.pid != os.getpid() or not snapshot.status(owner.name).running:
+            return None
+        keys = set(self.input_keys(session_id))
+        keys.update(
+            self.dispositions.bus_key(turn.origin, owner)
+            for turn in self.pending_turns.get(session_id, ())
+            if turn.origin is not None
+        )
+        return frozenset(keys)
+
+    async def drain_inbox(self, session_id: str) -> int:
+        """Push undelivered messages to the client; returns count pushed."""
+        async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
+            return await self.drain_owned_inbox(session_id)
 
     async def _drain_private_if_changed(self, session_id: str, root_id: str) -> int:
         # The caller still validates the current private marker each time. The
