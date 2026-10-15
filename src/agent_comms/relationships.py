@@ -36,6 +36,7 @@ from .messages import Message
 from .presentation import ThreadView, WireRevision
 from .private_path import FileRevision
 from .registry_document import RegistrySnapshot
+from .routing import DeliveryScope
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
@@ -686,12 +687,12 @@ class ThreadRelationships:
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.
         with _store_lock(self._wire_lock_path, shared=True):
-            thread = self.registry.require(owner)
             registry = self.registry.snapshot()
+            thread = registry.require(owner)
             state = self.store.read().resolved(registry)
             edges = state.collaborations
             goal_contacts, goal_diagnostics = self._goal_contacts(registry)
-            delivery = self.bus._delivery_scope(thread.name)
+            delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
         people = {
             view.thread.name: view
             for view in self.views.thread_views(show_stopped=True, show_archived=True)

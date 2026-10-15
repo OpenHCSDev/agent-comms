@@ -427,7 +427,7 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     assert comms.registry.status("a") == ArchivedThreadStatus()
 
 
-def test_pending_cache_observes_external_changes_without_rescanning(tmp_path):
+def test_pending_projection_observes_external_changes_without_rescanning(tmp_path):
     comms = setup_wire(tmp_path)
     other = wire(tmp_path)
     comms.messaging.send("other", "#api", "one")

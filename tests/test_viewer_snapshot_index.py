@@ -373,7 +373,9 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
     )
     assert wire(tmp_path).bus.pending_counts(viewer) == {"bob": 2}
     comms.registry.rename("bob", "renamed-bob")
-    delivery = comms.bus._delivery_scope(viewer)
+    from agent_comms.routing import DeliveryScope
+
+    delivery = DeliveryScope.capture(viewer, comms.registry.snapshot(), comms.channels.catalog.read())
     expected = Counter(
         delivery.conversation(message.sender, message.target) for message in comms.bus.inbox(viewer)
     )
@@ -455,6 +457,9 @@ def test_reserved_sequence_preserves_committed_read_cut_without_admission(tmp_pa
     with comms.bus.log._opened_wire_snapshot(need_sequence=False) as source:
         assert isinstance(source, CertifiedOpenedWireSnapshot)
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
+    with comms.bus.snapshot(viewer='Alice') as (basis, source):
+        assert source.through == first.seq < source.metadata.last_seq
+        assert comms.bus.pending_counts_opened(source, basis) == {'#team': 1}
     with pytest.raises(RelationViolationError, match='differs from its durable marker'):
         with comms.bus.log.certified_read() as source:
             source.require_current()
