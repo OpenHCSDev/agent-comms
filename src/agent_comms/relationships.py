@@ -427,6 +427,11 @@ class ThreadCommsSnapshot:
     unresolved_goal_mentions: tuple[GoalMentionDiagnostic, ...] = ()
 
     @property
+    def groups_by_type(self) -> dict[type[RelationshipGroup], RelationshipGroup]:
+        """Index the actual groups by exact nominal identity, never by a base capability."""
+        return {type(group): group for group in self.groups}
+
+    @property
     def sortable_groups(self) -> tuple[SortableRelationshipGroup, ...]:
         return tuple(selected for group in self.groups for selected in group.selectable())
 
