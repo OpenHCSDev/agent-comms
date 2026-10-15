@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, BinaryIO, Generic, Literal, TypeVar
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
+from .coordination_tables.publications import PublicationIntents
 from .errors import RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
@@ -41,7 +42,6 @@ if TYPE_CHECKING:
     from .wire_log import WireLog
     from .messages import Message
     from .message_reference import MessageReference
-    from .coordination_tables.publications import PublicationIntents
     from .retained_task_facts import ExactTaskFact
 
 OriginalSource = TypeVar("OriginalSource")
@@ -552,6 +552,8 @@ class CertifiedSourceRead:
 
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
+        if type(intent) is not PublicationIntents:
+            raise TypeError("Keyed response requires a validated PublicationIntents.")
         self.require_current()
         if ResponseKeys.one(self.connection, key=intent.publication_key) is None:
             return None

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from abc import abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
@@ -56,7 +57,7 @@ class WireAccess(DeclaredFamily, affix="Access"):
     def open_page_index(self, path: Path) -> BusPageIndex: ...
 
     @abstractmethod
-    def prepare_page_index(self, index: BusPageIndex) -> bool: ...
+    def prepare_page_index(self, index: BusPageIndex) -> Iterator[bool]: ...
 
     def context_manifests(self, source: CertifiedSourceRead, incarnation: ThreadIncarnation,
                           snapshot: RegistrySnapshot) -> Iterator[ContextManifest]:
@@ -91,8 +92,11 @@ class WritableAccess(WireAccess):
 
         return BusPageIndex(path)
 
+    @contextmanager
     def prepare_page_index(self, index):
-        return index.sync()
+        ready = index.sync()
+        with index.snapshot():
+            yield ready
 
     def context_resources(self, source, incarnation, snapshot, *, previous=()):
         return source.indexed_context_resources(incarnation, snapshot, previous=previous)
@@ -125,8 +129,10 @@ class ArchivedAccess(WireAccess):
 
         return BusPageIndex(path, readonly=True)
 
+    @contextmanager
     def prepare_page_index(self, index):
-        return index.current()
+        with index.snapshot():
+            yield index.current()
 
     def context_resources(self, source, incarnation, snapshot, *, previous=()):
         # Compact turn records require their entry/turn pointer tables. Cutover
