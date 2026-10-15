@@ -43,6 +43,8 @@ if TYPE_CHECKING:
     from .messages import Message
     from .message_reference import MessageReference
     from .retained_task_facts import ExactTaskFact
+    from .registration import Registration
+    from .turn_context import ContextEntryReference, ContextManifest, SegmentManifest
 
 OriginalSource = TypeVar("OriginalSource")
 
@@ -441,9 +443,6 @@ class CertifiedSourceRead:
 
         return decoded()
 
-    def context_manifests(self, incarnation: ThreadIncarnation, snapshot) -> Iterator[ContextManifest]:
-        return self.marker.access.context_manifests(self, incarnation, snapshot)
-
     def retained_task_facts(self, incarnation: ThreadIncarnation) -> Iterator[ExactTaskFact]:
         """Capture this owner's originals; their declarations own applicability.
 
@@ -511,57 +510,6 @@ class CertifiedSourceRead:
             if new_entries else ()
         )
         return (*records, ObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
-
-    def indexed_context_resources(self, incarnation: ThreadIncarnation, snapshot, *, previous=()):
-        """Resolve compact turn records through entry manifests recorded once."""
-        self.require_current()
-        storage = SqlStorage.for_type(ThreadIncarnation)
-        parameters = tuple(storage.to_sql(FieldCodec.encode(recorded))
-                           for recorded in incarnation.recorded_names(snapshot))
-        rows = tuple(RecordedContextManifestSources.select(
-            self.connection, where="thread IN (" + ",".join("?" for _ in parameters) + ")",
-            parameters=parameters, order_by=("offset",),
-        ))
-        retained = {resource.pointer: resource for resource in previous}
-        recorded_previous = tuple(
-            replace(
-                resource,
-                value=RecordedContextManifest.capture(resource.value)[0],
-            )
-            for resource in previous
-        )
-        captured = tuple(self.capture_resources(rows, previous=recorded_previous))
-        references = {
-            reference
-            for resource in captured
-            for segment in resource.value.segments
-            for reference in segment.entries
-        }
-        entry_rows = self.context_entry_rows(references)
-        entries = {}
-        geometries = {(row.offset, row.length): row for row in entry_rows}
-        for row in geometries.values():
-            raw = row.read_bytes(self.stream)
-            record = WireRecord.from_wire(json.loads(raw), self.witness.root_id)
-            for entry in record.context_entries():
-                if entry.reference in references:
-                    entries[entry.reference] = entry.manifest
-        if entries.keys() != references:
-            raise RelationViolationError("Recorded context entries are incomplete")
-
-        def decoded():
-            for resource in captured:
-                prior = retained.get(resource.pointer)
-                if prior is not None and prior.raw == resource.raw:
-                    yield prior
-                    continue
-                manifest = resource.value.restore(entries)
-                if manifest.thread.resolved(snapshot) != incarnation:
-                    raise RelationViolationError("Context source differs from recorded owner.")
-                yield replace(resource, value=manifest)
-
-        return decoded()
-
 
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
@@ -704,6 +652,68 @@ class RecordedContextManifestSources(
 ):
     thread: ThreadIncarnation
     indexes = (Index(("thread", "offset")), Index(("offset",), unique=True))
+
+    @classmethod
+    def for_owner(
+        cls, log: WireLog, name: str, registry: Registration, *,
+        previous: tuple[CapturedWireSource[ContextManifest], ...] = (),
+    ) -> tuple[CapturedWireSource[ContextManifest], ...]:
+        """Acquire turn bytes and their entry bytes; decode outside both locks.
+
+        Entry references come from the captured turn records. The second read
+        must contain that same prefix, and every entry must belong to it. Later
+        appends therefore cannot change this observation or fill a missing entry.
+        """
+        from .store_files import _store_lock
+
+        with _store_lock(log.path.parent / "wire", shared=True), log.certified_read() as source:
+            snapshot = registry.snapshot()
+            incarnation = snapshot.require(name).incarnation
+            storage = SqlStorage.for_type(ThreadIncarnation)
+            parameters = tuple(storage.to_sql(FieldCodec.encode(recorded))
+                               for recorded in incarnation.recorded_names(snapshot))
+            rows = tuple(cls.select(
+                source.connection, where="thread IN (" + ",".join("?" for _ in parameters) + ")",
+                parameters=parameters, order_by=("offset",),
+            ))
+            prefix = source.witness
+            # The certificate verifies the append-only prefix; carry installs
+            # replace the inode. A retained pointer from this same source is
+            # immutable, so a refresh reads only newly recorded turns.
+            retained = {item.pointer: item for item in previous
+                        if item.source == prefix.source_identity}
+            captured = tuple((row, row.read_bytes(source.stream)) for row in rows
+                             if row not in retained)
+
+        resources = {row: retained[row] for row in rows if row in retained}
+        changed = {row: row.decode_bytes(raw, prefix.root_id) for row, raw in captured}
+
+        references = {reference for recorded in changed.values()
+                      for segment in recorded.segments for reference in segment.entries}
+        entries: dict[ContextEntryReference, SegmentManifest] = {}
+        if references:
+            with log.certified_read() as source:
+                source.witness.require_read_window(prefix)
+                entry_rows = source.context_entry_rows(references)
+                geometries = {(row.offset, row.length): row for row in entry_rows}
+                if any(row.offset + row.length > prefix.offset for row in entry_rows):
+                    raise RelationViolationError("Context entry lies beyond its turn's source prefix")
+                entry_bytes = tuple(row.read_bytes(source.stream) for row in geometries.values())
+            for raw in entry_bytes:
+                record = WireRecord.from_wire(json.loads(raw), prefix.root_id)
+                for entry in record.context_entries():
+                    if entry.reference in references:
+                        entries[entry.reference] = entry.manifest
+            if entries.keys() != references:
+                raise RelationViolationError("Recorded context entries are incomplete")
+
+        for row, raw in captured:
+            if row in changed:
+                manifest = changed[row].restore(entries)
+                if manifest.thread.resolved(snapshot) != incarnation:
+                    raise RelationViolationError("Context source differs from recorded owner.")
+                resources[row] = CapturedWireSource(prefix.source_identity, row, raw, manifest)
+        return tuple(resources[row] for row in rows)
 
     def decode_bytes(self, raw: bytes, root_id: str):
         from .wire_record import WireRecord

@@ -390,17 +390,9 @@ class WireLog:
         return tuple(resource.value for resource in self.context_manifest_resources(name, registry))
 
     def context_manifest_resources(self, name: str, registry, *, previous=()):
-        """Capture original source and rename membership before decoding.
+        from .private_bus_checkpoint import RecordedContextManifestSources
 
-        The original wire -> bus -> registry order selects the read snapshot;
-        neither physical publication lock survives into its decoder.
-        """
-        with _store_lock(self.path.parent / "wire", shared=True), self.certified_read() as source:
-            snapshot = registry.snapshot()
-            incarnation = snapshot.require(name).incarnation
-            captured = source.marker.access.context_resources(
-                source, incarnation, snapshot, previous=previous)
-        return tuple(captured)
+        return RecordedContextManifestSources.for_owner(self, name, registry, previous=previous)
 
     @contextmanager
     def retained_sources(self, name: str, registry):
