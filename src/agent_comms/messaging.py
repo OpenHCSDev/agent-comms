@@ -17,7 +17,7 @@ from .message_bus import MessageBus
 from .messages import InfoKind, Message, MessageKind
 from .change_report import ChangeReport
 from .store_files import _store_lock
-from .thread_identity import ThreadRole
+from .thread_identity import ThreadIncarnation, ThreadRole
 from .threads import Thread
 from .task_sources import TaskAttachment, NoTaskAttachment
 from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
@@ -63,8 +63,9 @@ class Messaging:
         releases: Sequence[str | Path] = (),
         task: TaskAttachment = NoTaskAttachment(),
         report: ChangeReport | None = None,
+        sender_identity: ThreadIncarnation | None = None,
     ) -> Message:
-        """Return one committed envelope, including optional guarded claims."""
+        """Publish an envelope, binding an original sender when supplied."""
         type.require_sendable()
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             if sender not in self.registry:
@@ -91,9 +92,10 @@ class Messaging:
                     incarnation=str(owner.created_at),
                     claims=claims,
                     releases=releases,
+                    sender_identity=sender_identity,
                 )
             else:
-                committed = self.bus.publisher.publish_ordinary(message)
+                committed = self.bus.publisher.publish_ordinary(message, sender_identity=sender_identity)
         return committed
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:

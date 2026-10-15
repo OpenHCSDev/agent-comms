@@ -44,6 +44,7 @@ from .private_path import FileRevision
 from .private_registry_guard import _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import StoreLock, _store_lock
+from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
 
@@ -77,8 +78,12 @@ class Publisher:
     def _validate_publish_request(
         self, message: Message, *, registry_snapshot: RegistrySnapshot | None = None,
         catalog: CatalogDocument | None = None,
+        sender_identity: ThreadIncarnation | None = None,
     ) -> tuple[str, str]:
-        """Resolve the public route from the acquired declarations when supplied."""
+        """Resolve and bind the sender in the audience's publication snapshot."""
+        if sender_identity is not None:
+            if registry_snapshot is None:
+                registry_snapshot = self._registry.snapshot()
 
         def canonical(name: str) -> str:
             if registry_snapshot is None:
@@ -103,6 +108,9 @@ class Publisher:
         if not is_channel_target(message.target) and not exists(message.target):
             raise UnregisteredThreadError(f"Target {message.target!r} is not a registered thread.")
         sender = canonical(message.sender)
+        if sender_identity is not None:
+            if sender_identity.resolved(registry_snapshot) != registry_snapshot.require(sender).incarnation:
+                raise RelationViolationError("Publication sender incarnation changed before commit.")
         target = message.target
         if not is_channel_target(target) and canonical(target) == sender:
             raise RelationViolationError(f"Thread {sender!r} cannot message itself.")
@@ -144,7 +152,8 @@ class Publisher:
         )
 
     def publish_ordinary(
-        self, message: Message, *, _human_origin: HumanOrigin | None = None
+        self, message: Message, *, _human_origin: HumanOrigin | None = None,
+        sender_identity: ThreadIncarnation | None = None,
     ) -> Message:
         """Publish through the canonical audience/decision writer.
 
@@ -161,10 +170,11 @@ class Publisher:
                 # Refuse invalid input before creating a protocol on a fresh
                 # root. Established roots validate against the same guarded
                 # snapshot that selects the audience below.
-                self._validate_publish_request(message)
+                self._validate_publish_request(message, sender_identity=sender_identity)
                 self._initialize_private_protocol_unlocked()
             return self.publish_initial_cohort(
-                message, _bus_lock=bus_lock, _human_origin=_human_origin
+                message, _bus_lock=bus_lock, _human_origin=_human_origin,
+                sender_identity=sender_identity,
             )
 
     def initialize_private_protocol(self) -> str:
@@ -223,6 +233,7 @@ class Publisher:
         _locked_registry_snapshot: RegistrySnapshot | None = None,
         _bus_lock: StoreLock | None = None,
         _admission: WakeAdmission | None = None,
+        sender_identity: ThreadIncarnation | None = None,
     ) -> Message:
         """One guarded message and whole-set claim transition in ONE bus row.
 
@@ -260,7 +271,8 @@ class Publisher:
                 else _locked_registry_snapshot
             )
             snapshot.require_unambiguous_ownership()
-            sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
+            sender, target = self._validate_publish_request(
+                message, registry_snapshot=snapshot, sender_identity=sender_identity)
             transitions, verified_sequence = bus_lock.claim_transitions(self.log, metadata)
             projection = project_verified_transitions(transitions)
             # The verified bus high-water also covers rows left by an earlier
@@ -317,6 +329,7 @@ class Publisher:
         control: str = "ordinary",
         _bus_lock: StoreLock | None = None,
         _human_origin: HumanOrigin | None = None,
+        sender_identity: ThreadIncarnation | None = None,
     ) -> Message:
         """Commit public envelope and FULL N private decisions in the SAME fsynced row.
 
@@ -365,7 +378,7 @@ class Publisher:
             snapshot.require_unambiguous_ownership()
             catalog = self._channels.read()
             sender, target = self._validate_publish_request(
-                message, registry_snapshot=snapshot, catalog=catalog)
+                message, registry_snapshot=snapshot, catalog=catalog, sender_identity=sender_identity)
             sender_thread = snapshot.threads.get(sender)
             if sender_thread is None or not snapshot.statuses[sender].visible:
                 raise RelationViolationError("Initial sender must be visible and registered.")

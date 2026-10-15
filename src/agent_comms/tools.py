@@ -674,7 +674,8 @@ class CommsSendTool(ToolRequest):
         from .message_reference import AssignedSourceIdentity
         scope = AssignedSourceIdentity(str(comms.root), comms.registry.require(self.sender).incarnation)
         message = comms.messaging.send_message(
-            self.sender, self.target, self.body, self.type, report=self.report
+            self.sender, self.target, self.body, self.type, report=self.report,
+            sender_identity=scope.recipient,
         )
         from .pi_payloads import PublishedMessageToolDetails
         from .transcript_events import SentTranscript
