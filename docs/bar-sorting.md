@@ -90,7 +90,7 @@ registry/handler binding still requires the real application.
   timed out waiting for the lock-helper process's initial ready signal (before
   reading the adopter); the bounded serial check is recorded separately.
   The same lock-adopter check passed serially in 1.93 s. No full-package coverage
-  claim. Pinned CPUs 4-9. Final Core ratchet exits 0.
+  claim. Pinned CPUs 4-9. Prior Core ratchet exited 0.
 - [x] Prior paired candidate in a separate runtime: real st/Xvfb saved-history
   startup; independent channel and member click/change/persist/reopen, application
   restart, mixed relationship ordering/change/reopen, live status/row updates,
@@ -99,12 +99,24 @@ registry/handler binding still requires the real application.
 - [x] Real app on Core b52a6b21 + Toad fb9d7e63: member popup opens, changes
   to Date created and reopens; channel popup changes to Last user input and reopens.
   Source-root/tab and unsent draft remain. All live sort preferences are restored.
-- [ ] Check right-panel open/close and mixed-order popup in codex's combined build.
-  A real run found the last old `group.model.key` reader in
-  `session_thread_panels.py:65-66`; Toad 2c736b3e deletes that capture loop and
-  declares the tree's shared typed-state capture hook. The same owner now captures
-  state before identity changes. This final fix is pushed but not yet app-verified.
-  Codex requested no additional standalone build; integration/check is in the pair.
+- [x] Codex's combined real app opens the right panel and mixed-order popup without
+  either earlier crash. Toad 2c736b3e replaced the last `group.model.key` reader
+  with the tree's shared typed-state capture hook, also used before identity changes.
+- [ ] Verify the follow-up in that same combined build: a mixed popup must say
+  `Mixed orders`, offer real orders and show no `default: None`.
+  The observed form is absent until ordering arrives; a present form with no single
+  order means mixed, without a separate flag. Required form fields have no product
+  default. Placeholder text is declared once and shared by the label and editor.
+  FormView owns focus by FieldPath; SortDialog uses DeclaredField rather than
+  reaching into its editor dictionary. Snapshot owns the derived nominal group
+  index and current-entry resolution; RelationshipEntry owns identity/incarnation
+  revalidation. The UI retains its generation/root/owner/screen fences.
+  Before-edit NRA source indexes cover 320 Core, 280 Toad and 45 ObjectState/
+  PythonIntrospect modules; no parse omissions reported. These are syntax evidence,
+  not behavior proof. After-edit indexes cover 320/280 modules, 9,201/6,814
+  targets. The Core new-group check, extended for exact-group lookup, changed kind,
+  reused incarnation and unavailable target, passes in 1.74 s. No Toad tests run.
+  Codex owns the combined build and its next actual UI check.
 - [ ] Paired global installation and acceptance through codex.
 - [ ] Review and installed delivery through integration owner.
 

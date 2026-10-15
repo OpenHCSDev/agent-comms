@@ -1,5 +1,6 @@
 import json
 from concurrent.futures import ProcessPoolExecutor
+from dataclasses import replace
 
 import pytest
 
@@ -359,6 +360,25 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
         assert FieldCodec.encode(group)["key"] == "sorted_inbound"
         assert group.order is LastActivityThreadSort
         assert group.entries[0].target == "peer"
+        earlier = group.entries[0]
+        assert snapshot.groups_by_type[SortedInboundRelationshipGroup] is group
+        assert snapshot.current_entry(SortedInboundRelationshipGroup, earlier) is earlier
+        # The inbound capability is not the exact sorted-inbound group identity.
+        selected = replace(snapshot, groups=(group,))
+        assert selected.current_entry(InboundRelationshipGroup, earlier) is None
+        assert selected.current_entry(
+            SortedInboundRelationshipGroup, replace(earlier, kind="channel")
+        ) is None
+        reused = replace(earlier.person, thread=replace(
+            earlier.person.thread, created_at=earlier.person.thread.created_at + 1
+        ))
+        assert selected.current_entry(
+            SortedInboundRelationshipGroup, replace(earlier, person=reused)
+        ) is None
+        unavailable = replace(selected, groups=(replace(
+            group, entries=(replace(earlier, available=False),)
+        ),))
+        assert unavailable.current_entry(SortedInboundRelationshipGroup, earlier) is None
         assert all(group.order is None for group in snapshot.groups if not group.selectable())
         comms.relationships.set_order("owner", SortedInboundRelationshipGroup, LastActivityThreadSort)
         encoded = json.loads(comms.relationships.store.path.read_text())
