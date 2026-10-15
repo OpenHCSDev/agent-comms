@@ -33,7 +33,10 @@ from .threads import Thread
 from .turn_lease import TurnLeaseFence
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
-from .transcript_receipts import AssignedSourceCursor, AssignedTranscriptSource, TranscriptSource
+from .transcript_receipts import (
+    AssignedSourceCursor, AssignedSourceIdentity, AssignedTranscriptSource,
+    LiveAssignedTranscriptSource, TranscriptSource,
+)
 from .coordination_errors import StaleRevision, TranscriptChanged
 
 if TYPE_CHECKING:
@@ -241,7 +244,7 @@ class LiveTranscriptReadIdentity(TranscriptReadIdentity):
                    ExternalTranscript(owner.root, thread.incarnation))
         return PageSource(thread, session_file, inherited,
                           owner.root, owner.bus.log, owner.routes, records, cls,
-                          AssignedTranscriptSource.for_thread(owner.root, thread, owner.bus.log))
+                          LiveAssignedTranscriptSource.for_thread(owner.root, thread, owner.bus.log))
 
     def namespace(self, owner):
         return owner.registry.snapshot()
@@ -274,11 +277,13 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
         if source_file is not None and source_file != session_file:
             raise TranscriptChanged()
         root = Path(source.root)
+        log = WireLog(root / "bus.jsonl")
         records = (NativeTranscript(Path(session_file)) if session_file else
                    ExternalTranscript(root, thread.incarnation))
         return PageSource(thread, session_file, False, root,
-                          WireLog(root / "bus.jsonl"), TranscriptRoutes(root), records,
-                          partial(cls, source=source), records)
+                          log, TranscriptRoutes(root), records,
+                          partial(cls, source=source),
+                          AssignedTranscriptSource.for_recorded(root, thread, log, records))
 
     def namespace(self, owner):
         current = HistorySource.require(owner.bus.history, self.source.key)
