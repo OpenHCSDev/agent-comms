@@ -10,11 +10,13 @@ import json
 import os
 import sqlite3
 from collections.abc import Generator, Mapping
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO, Literal
 
+from .coordination_database import CoordinationStore
 from .private_path import FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
@@ -62,13 +64,15 @@ class BusPageIndex:
     def __init__(self, bus_path: Path, *, readonly: bool = False):
         self.bus_path = bus_path
         self.path = bus_path.with_name("bus_page_index.sqlite3")
-        self.connection = sqlite3.connect(
-            self.path.as_uri() + "?mode=ro" if readonly else self.path,
-            uri=readonly, timeout=30,
+        self.connection = (
+            CoordinationStore.read_snapshot(self.path)
+            if readonly
+            else CoordinationStore.writer(self.path)
         )
-        self.connection.execute("PRAGMA query_only=ON" if readonly else "PRAGMA synchronous=FULL")
+        if not readonly:
+            self.connection.execute("PRAGMA synchronous=FULL")
         try:
-            with self.connection:
+            with nullcontext() if readonly else self.connection:
                 if not readonly:
                     self.connection.execute("BEGIN IMMEDIATE")
                 actual = SQLiteSchemaObject.read(

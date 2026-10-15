@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
 
+from .coordination_database import CoordinationStore
 from .native_session_files import NativeSessionFiles
 from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedRow, TypedTable
 
@@ -44,10 +45,7 @@ class StoreSchemaReport:
 
     @classmethod
     def observe(cls, path: Path) -> StoreSchemaReport:
-        with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True,
-                                     timeout=1, isolation_level=None)) as db:
-            db.execute("PRAGMA query_only=ON")
-            db.execute("BEGIN")
+        with closing(CoordinationStore.read_snapshot(path)) as db:
             return cls.read(db, path)
 
     @classmethod

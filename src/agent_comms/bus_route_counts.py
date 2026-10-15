@@ -18,6 +18,7 @@ from typing import BinaryIO, ClassVar
 
 from .private_path import FileRevision
 from .coordination_errors import CoordinationReadUnavailable
+from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .store_files import _store_lock
@@ -128,9 +129,7 @@ class BusRouteCounts:
         out through SQLite's busy handler instead of failing the read.
         """
         self._initialize()
-        self.connection = sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro", uri=True)
-        self.connection.execute("PRAGMA query_only=ON")
-        self.connection.execute("BEGIN")
+        self.connection = CoordinationStore.read_snapshot(self.path)
         return self
 
     def __exit__(self, _error_type, _error, _traceback) -> None:
@@ -185,14 +184,14 @@ class BusRouteCounts:
     def _initialize(self) -> None:
         """The writer alone creates the WAL store; no source bytes are decoded here."""
         if self.path.exists():
-            with closing(sqlite3.connect(self.path.resolve().as_uri() + "?mode=ro", uri=True)) as current:
+            with closing(CoordinationStore.read_snapshot(self.path)) as current:
                 table = current.execute(
                     f"SELECT 1 FROM sqlite_master WHERE type='table' "
                     f"AND name='{RouteSourceRow.declared_name}'"
                 ).fetchone()
                 if table and current.execute("PRAGMA journal_mode").fetchone()[0] == "wal":
                     return
-        with _store_lock(self.path), closing(sqlite3.connect(self.path, timeout=30)) as connection:
+        with _store_lock(self.path), closing(CoordinationStore.writer(self.path)) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
             connection.execute("BEGIN IMMEDIATE")
@@ -267,7 +266,7 @@ class BusRouteCounts:
         checkpoint = replace(revision, size=through) if revision is not None else None
 
         try:
-            with _store_lock(self.path, blocking=blocking), closing(sqlite3.connect(self.path, timeout=30)) as connection:
+            with _store_lock(self.path, blocking=blocking), closing(CoordinationStore.writer(self.path)) as connection:
                 connection.execute("PRAGMA synchronous=FULL")
                 connection.execute("BEGIN IMMEDIATE")
                 current_rows = RouteSourceRow.select(connection)

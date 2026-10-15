@@ -15,7 +15,7 @@ class CoordinationReadUnavailable(CoordinationError):
     def raise_from(cls, error: sqlite3.OperationalError) -> Never:
         """Decode SQLite's contention codes once, never its error wording."""
         if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
-            raise cls("The database read is busy") from error
+            raise cls("The database store is busy") from error
         raise error
 
 

@@ -191,7 +191,6 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
         rows = None
         try:
             with BusPageIndex(Path(self.stream.name), readonly=True) as index:
-                index.connection.execute("BEGIN")
                 saved = BusPageSource.one(index.connection, singleton=1)
                 if saved is not None and saved.covers(self.stream, self.revision):
                     rows = tuple(

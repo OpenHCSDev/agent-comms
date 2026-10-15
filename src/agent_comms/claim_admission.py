@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
+from agent_comms.coordination_database import StoreBusy
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
@@ -340,7 +341,9 @@ def write_selected_claimed_file(
         # A separate fail-fast coordinator connection holds the transaction
         # through fsync. A concurrently settling attempt must not slip between
         # verification and irreversible file mutation.
-        with Coordination(str(store.session.path), lock_timeout=0) as scoped, scoped.session.transaction():
+        with Coordination(
+            str(store.session.path), contention=StoreBusy()
+        ) as scoped, scoped.session.transaction():
             _verify_selected_wake_state(initial, owner, generation, scoped, admission)
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
             transitions, _ = bus_lock.claim_transitions(bus.log, marker)

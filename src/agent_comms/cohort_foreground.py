@@ -257,7 +257,9 @@ async def run_foreground_once(
                             )
                         )
                     return observers
-                observers = await Coordination.run_async(root / "coordination.sqlite3", read_observers)
+                observers = await Coordination.run_read_async(
+                    root / "coordination.sqlite3", read_observers
+                )
                 return NoWakeReceipt(observers[0].wire_seq) if observers else None
             await asyncio.sleep(min(0.1, remaining))
 
