@@ -2,7 +2,9 @@
 
 import json
 import os
-from contextlib import contextmanager
+import sqlite3
+from contextlib import closing, contextmanager
+from multiprocessing import Pipe
 from unittest.mock import patch
 
 import pytest
@@ -10,10 +12,17 @@ import pytest
 from agent_comms.bus_display_index import BusDisplayIndex
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.comms import wire
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_errors import CoordinationReadUnavailable, StaleRevision
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
-from agent_comms.ui_model.observation import ObservationService, ObserveSidebar, SidebarObserved
+from agent_comms.ui_model.observation import (
+    ObservationService,
+    ObserveSidebar,
+    SidebarObserved,
+    SidebarReading,
+)
 from agent_comms.ui_model.unread import IndexingUnread
 
 
@@ -68,17 +77,32 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     seen = comms.bus.reads.capture(viewer.name, (direct,), comms.registry.snapshot(),
                                  comms.bus.log.path)
     comms.bus.reads.mark_displayed(viewer.name, seen)
+    index_path = BusRouteCounts(comms.bus.log.path).path
     if not indexed:
-        # Genuine disposable-store refusal; canonical source remains readable.
-        BusRouteCounts(comms.bus.log.path).path.mkdir()
+        # A refused store is not permission to introduce a full-source reader.
+        index_path.mkdir()
+        with pytest.raises(sqlite3.OperationalError) as unavailable:
+            with closing(CoordinationStore.read_snapshot(index_path)):
+                pass
     with comms.views.presentation.snapshot(viewer=viewer.name) as (basis, source):
-        before = comms.bus.pending_counts_opened(source, basis)
+        before = {"#team": 1}
         sent = comms.views.last_sent_timestamps(source=source, registry=basis.registry)
-        assert before == {"#team": 1}
+        if indexed:
+            assert comms.bus.pending_counts_opened(source, basis) == before
+        else:
+            with pytest.raises(sqlite3.OperationalError) as refused:
+                comms.bus.pending_counts_opened(source, basis)
+            assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
         comms.bus.reads.mark_displayed(viewer.name, comms.bus.reads.capture(
             viewer.name, (channel,), comms.registry.snapshot(), comms.bus.log.path))
         comms.messaging.send_message("bob", viewer.name, "later direct")
         comms.registry.rename("bob", "renamed-bob")
+        if not indexed:
+            with pytest.raises(sqlite3.OperationalError) as refused:
+                comms.bus.pending_counts_opened(source, basis)
+            assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
+            index_path.rmdir()
+        # Repair the derived resource, not the captured source or read ledger.
         assert comms.bus.pending_counts_opened(source, basis) == before
         assert comms.views.last_sent_timestamps(source=source, registry=basis.registry) == sent
         assert "bob" in sent and "renamed-bob" not in sent
@@ -87,7 +111,8 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     assert "renamed-bob" in latest.last_sent and "bob" not in latest.last_sent
 
 
-def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path):
+@pytest.mark.asyncio
+async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path):
     comms = wire(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.registry.register(viewer)
@@ -113,30 +138,37 @@ def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path):
 
     before = projection_bytes()
 
-    class Results:
-        def __init__(self):
-            self.values = []
-
-        def send(self, value):
-            self.values.append(value)
-
-    results = Results()
-    service = ObservationService(comms, results)
+    receiver, connection = Pipe()
+    service = ObservationService(comms, connection)
     request = ObserveSidebar(str(tmp_path), True, False)
-    service.interest = request.apply(service.interest)
+    request.receive(service)
+    results = []
+    original_snapshot = comms.views.viewer_snapshot
 
-    service.observe()
+    def complete(*args, **kwargs):
+        # The service can finish both stages in one observation. Inspect the
+        # actual pipe at the read boundary, not a presumed number of ticks.
+        while receiver.poll():
+            results.append(receiver.recv())
+        first = next(value for value in results if isinstance(value, SidebarObserved))
+        assert first.snapshot.unread_pending >= {"bob", "#team"}
+        assert isinstance(first.derived[0]["#team"].unread, IndexingUnread)
+        assert projection_bytes() == before
+        return original_snapshot(*args, **kwargs)
 
-    first = next(result for result in results.values if isinstance(result, SidebarObserved))
-    assert first.snapshot.unread_pending >= {"bob", "#team"}
-    assert isinstance(first.derived[0]["#team"].unread, IndexingUnread)
-    assert projection_bytes() == before
-
-    service.observe()
-
-    second = [result for result in results.values if isinstance(result, SidebarObserved)][-1]
-    assert second.snapshot == expected
-    assert second.snapshot.unread_pending == frozenset()
+    try:
+        with patch.object(comms.views, "viewer_snapshot", side_effect=complete):
+            await service.observe(set())
+        while receiver.poll():
+            results.append(receiver.recv())
+        completed = [value for value in results if isinstance(value, SidebarObserved)][-1]
+        assert completed.snapshot == expected
+        assert completed.snapshot.unread_pending == frozenset()
+        assert service.observations[SidebarReading].request is request
+    finally:
+        connection.close()
+        receiver.close()
+        comms.views.transcript_reads.close()
 
 
 def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
@@ -162,44 +194,59 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
     assert len(opened) == 1 and opened[0].stream.closed
 
 
-def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
-    """A changed opened cut is stale observation work, not an observer failure."""
+@pytest.mark.asyncio
+async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
+    """An actual stale-read outcome preserves the same observer and last answer."""
     comms = wire(tmp_path)
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
 
-    class Results:
-        def __init__(self):
-            self.values = []
-
-        def send(self, value):
-            self.values.append(value)
-
-    results = Results()
-    service = ObservationService(comms, results)
+    receiver, connection = Pipe()
+    service = ObservationService(comms, connection)
     request = ObserveSidebar(str(tmp_path), True, False)
-    service.interest = request.apply(service.interest)
-    service.observe()  # The cheap roster stage completes first.
+    request.receive(service)
+    try:
+        await service.observe(set())
+        results = []
+        while receiver.poll():
+            results.append(receiver.recv())
+        published = service.observations[SidebarReading].published
+        assert published.snapshot.channel_unread["#team"] == 1
+        observer = service.observations[SidebarReading]
+        original = comms.views.presentation.display_view_metrics
+        comms.messaging.send("bob", "#team", "second")
+        preserved = comms.bus.log.path.read_bytes()
 
-    original = comms.views.presentation.display_view_metrics
+        def change_source(*args, **kwargs):
+            original(*args, **kwargs)
+            # Append/mtime changes alone do not revoke a retained descriptor.
+            # The activity reader's named stale outcome is what defers work.
+            raise StaleRevision("Activity source changed before its captured read")
 
-    def change_source(*args, **kwargs):
-        metrics = original(*args, **kwargs)
-        source = comms.bus.log.path
-        observed = source.stat()
-        os.utime(source, ns=(observed.st_atime_ns, observed.st_mtime_ns + 1))
-        return metrics
+        monkeypatch.setattr(comms.views.presentation, "display_view_metrics", change_source)
+        await service.observe(set())
+        while receiver.poll():
+            result = receiver.recv()
+            assert not isinstance(result, SidebarObserved)
+        assert observer.published is published
+        assert service.observations[SidebarReading] is observer
+        assert observer.request is request
 
-    monkeypatch.setattr(comms.views.presentation, "display_view_metrics", change_source)
-    service.observe()
-    assert len([value for value in results.values if isinstance(value, SidebarObserved)]) == 1
-
-    monkeypatch.setattr(comms.views.presentation, "display_view_metrics", original)
-    comms.messaging.send("bob", "#team", "second")
-    service.observe()
-    snapshots = [value.snapshot for value in results.values if isinstance(value, SidebarObserved)]
-    assert len(snapshots) == 2
-    assert snapshots[-1].channel_unread["#team"] == 2
+        monkeypatch.setattr(comms.views.presentation, "display_view_metrics", original)
+        # No new append is needed to retry the deferred revision.
+        await service.observe(set())
+        recovered = []
+        while receiver.poll():
+            recovered.append(receiver.recv())
+        latest = [r for r in recovered if isinstance(r, SidebarObserved)][-1]
+        assert latest.snapshot.channel_unread["#team"] == 2
+        assert service.observations[SidebarReading] is observer
+        assert observer.request is request
+        assert comms.bus.log.path.read_bytes() == preserved
+    finally:
+        connection.close()
+        receiver.close()
+        comms.views.transcript_reads.close()
 
 
 def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
@@ -225,7 +272,8 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
         assert all(call.args[0]["text"] == "one new message" for call in decode.call_args_list)
 
     comms.channels.set_channel_any_mode("#team", True)
-    assert fresh.views.viewer_snapshot(str(tmp_path)) == wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    assert (fresh.views.viewer_snapshot(str(tmp_path))
+            == wire(tmp_path).views.viewer_snapshot(str(tmp_path)))
 
 
 def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
@@ -236,7 +284,9 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
     comms.messaging.send("bob", "#team", "second")
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
 
-    checkpoint = BusDisplayIndex(comms.bus.log.path, comms.messaging.user_identity(str(tmp_path)).name).path
+    checkpoint = BusDisplayIndex(
+        comms.bus.log.path, comms.messaging.user_identity(str(tmp_path)).name
+    ).path
     cached = json.loads(checkpoint.read_text())
     cached["counts"]["#team"] = 0
     checkpoint.write_text(json.dumps(cached))
@@ -332,14 +382,15 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
-    bus_path = comms.bus.log.path
     appended = []
     original = comms.bus.log._opened_wire_snapshot
 
     @contextmanager
     def append_before_open(*args, **kwargs):
         # _display_snapshot already holds the wire lock at this boundary.
-        appended.append(comms.bus.publisher.publish_ordinary(Message("bob", "#team", "raced append", InfoKind)))
+        appended.append(comms.bus.publisher.publish_ordinary(
+            Message("bob", "#team", "raced append", InfoKind)
+        ))
         with original(*args, **kwargs) as boundary:
             yield boundary
 
@@ -350,8 +401,8 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     assert team.last_activity == appended[0].timestamp
 
 
-def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tmp_path):
-    import sqlite3
+@pytest.mark.asyncio
+async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recover(tmp_path):
     from collections import Counter
 
     from agent_comms.bus_route_counts import BusRouteCounts
@@ -376,7 +427,9 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
     comms.registry.rename("bob", "renamed-bob")
     from agent_comms.routing import DeliveryScope
 
-    delivery = DeliveryScope.capture(viewer, comms.registry.snapshot(), comms.channels.catalog.read())
+    delivery = DeliveryScope.capture(
+        viewer, comms.registry.snapshot(), comms.channels.catalog.read()
+    )
     expected = Counter(
         delivery.conversation(message.sender, message.target) for message in comms.bus.inbox(viewer)
     )
@@ -386,8 +439,48 @@ def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_fallback(tm
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         assert wire(tmp_path).bus.pending_counts(viewer) == expected
         assert decode.call_count == 0
-    with patch.object(BusRouteCounts, "sync", side_effect=sqlite3.DatabaseError("unavailable")):
-        assert wire(tmp_path).bus.pending_counts(viewer) == expected
+    ledger = comms.bus.reads.read()
+    receiver, connection = Pipe()
+    service = ObservationService(comms, connection)
+    request = ObserveSidebar(str(tmp_path), True, False)
+    request.receive(service)
+    try:
+        await service.observe(set())
+        while receiver.poll():
+            receiver.recv()
+        observer = service.observations[SidebarReading]
+        published = observer.published
+        assert published.snapshot.unread == expected
+        with closing(CoordinationStore.writer(BusRouteCounts(comms.bus.log.path).path)) as writer:
+            writer.execute("BEGIN IMMEDIATE")
+            comms.messaging.send_message("renamed-bob", viewer, "during index contention")
+            # Use the real SQLite busy result, not a wording-only DatabaseError.
+            with patch.object(CoordinationStore, "writer_timeout", 0):
+                with pytest.raises(CoordinationReadUnavailable) as busy:
+                    wire(tmp_path).bus.pending_counts(viewer)
+                assert busy.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
+                await service.observe(set())
+            writer.rollback()
+        while receiver.poll():
+            result = receiver.recv()
+            assert not isinstance(result, SidebarObserved)
+        assert service.observations[SidebarReading] is observer
+        assert observer.published is published
+        assert observer.request is request
+        await service.observe(set())
+        recovered = []
+        while receiver.poll():
+            recovered.append(receiver.recv())
+        latest = [r for r in recovered if isinstance(r, SidebarObserved)][-1]
+        assert latest.snapshot.unread == {"renamed-bob": 3}
+        assert wire(tmp_path).bus.pending_counts(viewer) == {"renamed-bob": 3}
+        assert service.observations[SidebarReading] is observer
+        assert observer.request is request
+        assert comms.bus.reads.read() == ledger
+    finally:
+        connection.close()
+        receiver.close()
+        comms.views.transcript_reads.close()
 
 
 def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_path):
@@ -405,7 +498,9 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
         second = comms.messaging.send_initial_cohort('sender', '#team', '@Alice next')
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
     assert source.stream.closed
-    assert [message.message_id for message in comms.bus.log.full_history()] == [first.message_id, second.message_id]
+    assert [message.message_id for message in comms.bus.log.full_history()] == [
+        first.message_id, second.message_id
+    ]
 
     comms.views.viewer_snapshot(str(tmp_path))
     comms.channels.set_channel_any_mode('#team', True)
@@ -418,9 +513,12 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
 
 
 def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path):
-    from agent_comms.wire_log import WireLog, OpenedWireSnapshot
     from agent_comms.turn_context import RecordedContextManifest
-    from agent_comms.wire_record import ObservationWireRecord, RecordedContextManifestWireObservation
+    from agent_comms.wire_log import OpenedWireSnapshot, WireLog
+    from agent_comms.wire_record import (
+        ObservationWireRecord,
+        RecordedContextManifestWireObservation,
+    )
     from test_turn_context_wire import manifest
 
     tmp_path.chmod(0o700)

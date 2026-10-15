@@ -298,6 +298,12 @@ class BusRouteCounts:
         WAL reset, recovery after the last connection closed); it waits them
         out through SQLite's busy handler instead of failing the read.
         """
+        try:
+            return self._acquire()
+        except sqlite3.OperationalError as error:
+            CoordinationReadUnavailable.raise_from(error)
+
+    def _acquire(self) -> BusRouteCounts:
         self.connection = self._open()
         return self
 
@@ -456,9 +462,9 @@ class OpenedRouteCounts(BusRouteCounts):
     def _decode(self, record: Mapping) -> tuple[DeliveryMessage, ...]:
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
-    def __enter__(self) -> OpenedRouteCounts:
+    def _acquire(self) -> OpenedRouteCounts:
         self.sync(self.source.stream, self.source.revision, self._decode, blocking=False)
-        super().__enter__()
+        super()._acquire()
         try:
             self._appended = self._appended_deliveries()
             # SQLite borrows the original routing behavior. Do not decode all
