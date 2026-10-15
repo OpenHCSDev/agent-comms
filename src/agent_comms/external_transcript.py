@@ -153,7 +153,7 @@ class ExternalTranscript(TypedStore):
                events: tuple[TranscriptEvent, ...]) -> None:
         """Append a finished item once; an item with no presentation adds nothing."""
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
-        with self.transaction(write=True) as connection:
+        with self.writing() as connection:
             if events and ExternalItemRow.one(connection, **key) is None:
                 ExternalItemRow(seq=self._cut(connection).offset + 1, events=events,
                                 **key).insert(connection)
@@ -164,13 +164,13 @@ class ExternalTranscript(TypedStore):
 
     def draft(self, *, turn_id: str, item_id: str,
               events: tuple[TranscriptEvent, ...]) -> None:
-        with self.transaction(write=True) as connection:
+        with self.writing() as connection:
             ExternalDraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
 
     def end_turn(self) -> None:
         if not self.path.exists():
             return
-        with self.transaction(write=True) as connection:
+        with self.writing() as connection:
             connection.execute(f'DELETE FROM "{ExternalDraftRow.declared_name}" WHERE thread = ?',
                                (self.lookup,))
 
@@ -180,7 +180,7 @@ class ExternalTranscript(TypedStore):
         if not self.path.exists():
             yield ExternalTranscriptRead(self, None)
             return
-        with self.transaction(write=False) as connection:
+        with self.snapshot() as connection:
             yield ExternalTranscriptRead(self, connection)
 
     def _cut(self, connection) -> ExternalCut:

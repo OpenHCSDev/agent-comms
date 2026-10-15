@@ -682,21 +682,33 @@ class TypedStore:
             connection.execute("PRAGMA journal_mode=WAL")
 
     @contextmanager
-    def transaction(self, *, write: bool) -> Iterator[sqlite3.Connection]:
+    def snapshot(self) -> Iterator[sqlite3.Connection]:
+        """Read an existing store without acquiring any writer resources."""
+        from .coordination_database import CoordinationStore, StoreBusy
+
+        with CoordinationStore.observing(self.path, StoreBusy()) as connection:
+            self.require_schema(self._schema(connection))
+            yield connection
+
+    def require_schema(self, actual: list[SQLiteSchemaObject]) -> None:
+        if SQLiteSchemaObject.differences(actual, self.declared_schema()):
+            raise RelationViolationError(f"{self.filename} differs from its declaration")
+
+    @contextmanager
+    def writing(self) -> Iterator[sqlite3.Connection]:
         if not self.path.exists():
             self._install()  # owner-only before SQLite could create it world-readable
         connection = sqlite3.connect(self.path, timeout=5, isolation_level=None)
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
-            connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+            connection.execute("BEGIN IMMEDIATE")
             actual = self._schema(connection)
             if not actual:
                 connection.execute("ROLLBACK")
                 self._install()
-                connection.execute("BEGIN IMMEDIATE" if write else "BEGIN")
+                connection.execute("BEGIN IMMEDIATE")
                 actual = self._schema(connection)
-            if SQLiteSchemaObject.differences(actual, self.declared_schema()):
-                raise RelationViolationError(f"{self.filename} differs from its declaration")
+            self.require_schema(actual)
             yield connection
             connection.execute("COMMIT")
         except BaseException:
