@@ -8,9 +8,8 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 from collections.abc import Generator, Mapping
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from hashlib import sha256
 from pathlib import Path
@@ -100,6 +99,23 @@ class BusPageIndex:
 
     def __exit__(self, *_error: object) -> None:
         self.connection.close()
+
+    @contextmanager
+    def snapshot(self):
+        """Pin coverage and offsets to one SQLite revision.
+
+        Read-only indexes arrive with their snapshot already acquired. A
+        writable index commits preparation first, then borrows this read
+        transaction while consumers validate coverage and select offsets.
+        """
+        borrowed = self.connection.in_transaction
+        try:
+            if not borrowed:
+                CoordinationStore.begin_snapshot(self.connection)
+            yield self
+        finally:
+            if not borrowed and self.connection.in_transaction:
+                self.connection.execute("ROLLBACK")
 
     @staticmethod
     def _tail(stream: BinaryIO, offset: int) -> str:

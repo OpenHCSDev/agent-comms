@@ -44,12 +44,14 @@ _AUTHORITY_FILES = frozenset({
 
 
 @dataclass(frozen=True)
-class WatchSource:
+class WatchSource(ABC):
     """Files in one directory whose declared writes wake a reader."""
 
     directory: Path
-    names: frozenset[bytes]
     modified: ClassVar[bool] = False
+
+    @abstractmethod
+    def includes(self, name: bytes) -> bool: ...
 
     @classmethod
     def wire(cls, root: Path) -> WatchSource:
@@ -64,21 +66,37 @@ class WatchSource:
         return ModifiedWatchSource(path.parent, frozenset({os.fsencode(path.name)}))
 
 
+@dataclass(frozen=True)
 class ReplacedWatchSource(WatchSource):
     """Atomic replacement and directory-entry changes wake this source."""
 
+    names: frozenset[bytes]
 
-class ModifiedWatchSource(WatchSource):
+    def includes(self, name: bytes) -> bool:
+        return name in self.names
+
+
+class ModifiedWatchSource(ReplacedWatchSource):
     """In-place writes as well as directory-entry changes wake this source."""
 
     modified = True
 
 
+class DirectoryWatchSource(WatchSource):
+    """Observe entries whose names are allocated by the directory's writer."""
+
+    def includes(self, name: bytes) -> bool:
+        return True
+
+
 @dataclass(frozen=True)
 class WatchedDirectory:
-    names: frozenset[bytes]
+    sources: tuple[WatchSource, ...]
     modified: bool
     reopen: frozenset[bytes]
+
+    def includes(self, name: bytes) -> bool:
+        return any(source.includes(name) for source in self.sources)
 
 
 class WireWatch(ABC):
@@ -127,12 +145,10 @@ class WireChangeWatch(WireWatch):
     def __init__(
         self, fd: int, loop: asyncio.AbstractEventLoop,
         sources: tuple[WatchSource, ...],
-        names_by_watch: dict[int, frozenset[bytes]],
-        reopen_by_watch: dict[int, frozenset[bytes]],
+        directories: dict[int, WatchedDirectory],
     ):
         self.sources = sources
-        self.names_by_watch = names_by_watch
-        self.reopen_by_watch = reopen_by_watch
+        self.directories = directories
         self.fd = fd
         self.loop = loop
         self.changed = asyncio.Event()
@@ -175,12 +191,13 @@ class WireChangeWatch(WireWatch):
                     offset += _HEADER.size
                     name = raw[offset : offset + length].partition(b"\0")[0]
                     offset += length
-                    if name in self.names_by_watch.get(watch, ()) or mask & (
+                    directory = self.directories.get(watch)
+                    if (directory is not None and directory.includes(name)) or mask & (
                         _IN_Q_OVERFLOW | _IN_IGNORED | _IN_DELETE_SELF | _IN_MOVE_SELF
                     ):
                         self._schedule_changed()
                     if (
-                        name in self.reopen_by_watch.get(watch, ())
+                        (directory is not None and name in directory.reopen)
                         or mask & (_IN_IGNORED | _IN_DELETE_SELF | _IN_MOVE_SELF)
                     ):
                         self.invalid = True
@@ -224,21 +241,20 @@ def open_wire_watcher(*sources: WatchSource) -> WireWatch:
     grouped: dict[Path, WatchedDirectory] = {}
     for source in sources:
         directory = source.directory
-        names, reopen = source.names, frozenset()
+        observed, reopen = source, frozenset()
         while not directory.is_dir() and directory != directory.parent:
-            names = frozenset({os.fsencode(directory.name)})
-            reopen = names
+            reopen = frozenset({os.fsencode(directory.name)})
             directory = directory.parent
+            observed = ReplacedWatchSource(directory, reopen)
         current = grouped.get(
-            directory, WatchedDirectory(frozenset(), False, frozenset())
+            directory, WatchedDirectory((), False, frozenset())
         )
         grouped[directory] = WatchedDirectory(
-            current.names | names,
+            (*current.sources, observed),
             current.modified or (source.modified and not reopen),
             current.reopen | reopen,
         )
-    names_by_watch = {}
-    reopen_by_watch = {}
+    directories = {}
     for directory, watched in grouped.items():
         watch = add(
             fd, os.fsencode(directory),
@@ -250,12 +266,11 @@ def open_wire_watcher(*sources: WatchSource) -> WireWatch:
             error = OSError(ctypes.get_errno(), f"inotify_add_watch failed for {directory}")
             os.close(fd)
             raise error
-        names_by_watch[watch] = watched.names
-        reopen_by_watch[watch] = watched.reopen
+        directories[watch] = watched
     try:
         return WireChangeWatch(
             fd, asyncio.get_running_loop(), tuple(sources),
-            names_by_watch, reopen_by_watch,
+            directories,
         )
     except (NotImplementedError, OSError):
         os.close(fd)

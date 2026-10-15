@@ -263,10 +263,15 @@ class RefreshTranscript(ReadRequest):
     identity: TranscriptReadIdentity
 
     def read(self, comms: Comms) -> TranscriptSnapshotUpdate | None:
-        from agent_comms.transcripts import TranscriptRead
-
         identity = self.identity
-        if TranscriptRead(comms.transcripts, identity).content_current():
+        read = comms.transcripts.bind_page_read(
+            identity.requested_name,
+            identity,
+            before=identity.before,
+            after=identity.after,
+            through=identity.through,
+        )
+        if read.content_current():
             return None
         return ReadTranscript(
             self.root, identity.requested_name, before=identity.before, after=identity.after,
@@ -392,6 +397,7 @@ class SidebarSent:
     request: ObserveSidebar
     expiry_period: int
     stage: type[SidebarReadStage]
+    revision: WireRevision = field(compare=False)
 
 
 @dataclass(frozen=True)
@@ -615,8 +621,9 @@ class ObservationService:
                 if reading is not None and reading.request == sidebar
                 else RosterSidebarRead()
             )
-            key = SidebarSent(sidebar, revision.expiry_tick // EXPIRY_PERIOD, type(stage))
-            if stores or key != self.sent_sidebar:
+            key = SidebarSent(sidebar, revision.expiry_tick // EXPIRY_PERIOD, type(stage), revision)
+            sidebar_changed = self.sent_sidebar is None or revision.sidebar_changed_since(self.sent_sidebar.revision)
+            if sidebar_changed or key != self.sent_sidebar:
                 result = stage.read(sidebar, self.comms, revision)
                 if result is not None:
                     self.connection.send(result)

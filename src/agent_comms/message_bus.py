@@ -399,8 +399,8 @@ class MessageBus:
         from .peer_relevance import Prioritized
 
         try:
-            with self.log.locked(blocking=blocking):
-                marker = self.log._private_marker_unlocked()
+            with self.log.certified_read(blocking=blocking) as source:
+                marker = source.marker
                 rows = addressed_source_pointers_unlocked(
                     self.log, marker, stable_thread_lookup(owner.created_at)
                 )

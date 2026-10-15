@@ -441,9 +441,9 @@ def test_original_page_reuses_captured_frontier_between_admission_fences(tmp_pat
 
     monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
     page = read.read()
-    # Before admission, one bounded page query, and after admission. The original
-    # frontier is already certified: page preparation does not certify it again.
-    assert len(barriers) == 3
+    # One bounded page query and one final freshness check. The retained source
+    # removes the former pre-read identity reconstruction.
+    assert len(barriers) == 2
     assert page.after.receipts == read.identity.receipt_frontier
     assert tuple(event.source for event in page.events) == (initial.message.reference,)
 
@@ -451,14 +451,14 @@ def test_original_page_reuses_captured_frontier_between_admission_fences(tmp_pat
 def test_original_page_rejects_relevant_append_during_preparation(tmp_path, monkeypatch):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     read = comms.transcripts.capture_page_read("beta")
-    prepare = comms.transcripts.thread_transcript_page
+    prepare = comms.transcripts._thread_transcript_page
 
     def append_after_page(*args, **kwargs):
         page = prepare(*args, **kwargs)
         comms.messaging.send_message("sender", "beta", "Original concurrent append")
         return page
 
-    monkeypatch.setattr(comms.transcripts, "thread_transcript_page", append_after_page)
+    monkeypatch.setattr(comms.transcripts, "_thread_transcript_page", append_after_page)
     with pytest.raises(StaleRevision, match="during preparation"):
         read.read()
 

@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, BinaryIO, Generic, Literal, TypeVar
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
+from .coordination_tables.publications import PublicationIntents
 from .errors import RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
@@ -41,7 +42,6 @@ if TYPE_CHECKING:
     from .wire_log import WireLog
     from .messages import Message
     from .message_reference import MessageReference
-    from .coordination_tables.publications import PublicationIntents
     from .retained_task_facts import ExactTaskFact
 
 OriginalSource = TypeVar("OriginalSource")
@@ -383,6 +383,19 @@ class CertifiedSourceRead:
         except (sqlite3.Error, OSError, ValueError, TypeError) as error:
             raise RelationViolationError("Certified initial page is unavailable.") from error
 
+    def conversation_frontier(self, lookup: str) -> int:
+        """Latest original sender/recipient sequence without reconstructing a delivery."""
+        self.require_current()
+        row = self.connection.execute(
+            f"SELECT coalesce(max(seq), 0) FROM ("
+            f"SELECT max(seq) AS seq FROM {DeliverySources.declared_name} "
+            "WHERE sender_lookup=? UNION ALL "
+            f"SELECT max(seq) AS seq FROM {Addressed.declared_name} WHERE lookup=?"
+            ")",
+            (lookup, lookup),
+        ).fetchone()
+        return row[0]
+
     def conversation_sources(
         self,
         lookup: str,
@@ -552,6 +565,8 @@ class CertifiedSourceRead:
 
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
+        if type(intent) is not PublicationIntents:
+            raise TypeError("Keyed response requires a validated PublicationIntents.")
         self.require_current()
         if ResponseKeys.one(self.connection, key=intent.publication_key) is None:
             return None

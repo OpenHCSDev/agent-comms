@@ -236,7 +236,11 @@ class AssignedTranscriptSource:
 
     @property
     def frontier(self):
-        return self.window().cursor
+        lookup = stable_thread_lookup(self.recipient.created_at)
+        return AssignedSourceCursor(
+            str(self.root), self.recipient,
+            ConversationSourceWindowRequest.frontier(self.log, lookup),
+        )
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
         """One certified cut owns conversation, sent rows and their frontier."""

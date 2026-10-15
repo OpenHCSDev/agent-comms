@@ -502,8 +502,8 @@ class TranscriptSnapshotUpdate(AgentCommsUpdate):
 
     @classmethod
     def from_read(cls, read):
-        page = read.read()
-        return cls(page, read.identity, read.current_draft())
+        page, draft = read.read_snapshot()
+        return cls(page, read.identity, draft)
 
     @classmethod
     def capture(cls, transcripts, name, *, historical_source=None):

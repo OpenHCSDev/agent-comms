@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from sqlite3 import Connection
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -81,6 +82,54 @@ class ExternalCut(RecordsCut):
 
 
 @dataclass(frozen=True, slots=True)
+class ExternalTranscriptRead:
+    """One SQLite snapshot of a sessionless transcript's finished and draft rows."""
+
+    transcript: ExternalTranscript
+    connection: Connection | None
+
+    @property
+    def lookup(self) -> str:
+        return self.transcript.lookup
+
+    def current_draft(self) -> ExternalDraftRow | None:
+        if self.connection is None:
+            return None
+        return ExternalDraftRow.one(self.connection, thread=self.lookup)
+
+    def cut(self) -> ExternalCut:
+        if self.connection is None:
+            return ExternalCut(0)
+        return self.transcript._cut(self.connection)
+
+    def _records(self, where: str, parameters: tuple, *,
+                 descending: bool) -> Iterator[ExternalRecord]:
+        if self.connection is None:
+            return
+        rows = ExternalItemRow.stream(
+            self.connection, where=where, parameters=parameters, order_by=("seq",),
+            descending=descending, thread=self.lookup)
+        try:
+            for row in rows:
+                yield ExternalRecord(row.seq, row.events)
+        finally:
+            rows.close()
+
+    def forward(self, after: int, through: int) -> Iterator[ExternalRecord]:
+        return self._records("seq > ? AND seq <= ?", (after, through), descending=False)
+
+    def reverse(self, before: int) -> Iterator[ExternalRecord]:
+        return self._records("seq <= ?", (before,), descending=True)
+
+    @contextmanager
+    def projection(self, receipts, routes):
+        def project(records, *, max_records, max_bytes):
+            return ((record, record.events) for record in records)
+
+        yield project
+
+
+@dataclass(frozen=True, slots=True)
 class ExternalTranscript(TypedStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
@@ -125,50 +174,28 @@ class ExternalTranscript(TypedStore):
             connection.execute(f'DELETE FROM "{ExternalDraftRow.declared_name}" WHERE thread = ?',
                                (self.lookup,))
 
-    def current_draft(self) -> ExternalDraftRow | None:
+    @contextmanager
+    def reading(self):
+        """Retain one read transaction across cut, page records, and draft."""
         if not self.path.exists():
-            return None
+            yield ExternalTranscriptRead(self, None)
+            return
         with self.transaction(write=False) as connection:
-            return ExternalDraftRow.one(connection, thread=self.lookup)
+            yield ExternalTranscriptRead(self, connection)
 
     def _cut(self, connection) -> ExternalCut:
         return ExternalCut(*connection.execute(
             f'SELECT coalesce(max(seq), 0) FROM "{ExternalItemRow.declared_name}" '
             'WHERE thread = ?', (self.lookup,)).fetchone())
 
+    def current_draft(self) -> ExternalDraftRow | None:
+        with self.reading() as records:
+            return records.current_draft()
+
     def cut(self) -> ExternalCut:
-        if not self.path.exists():
-            return ExternalCut(0)  # No CLI has published an item.
-        with self.transaction(write=False) as connection:
-            return self._cut(connection)
+        with self.reading() as records:
+            return records.cut()
 
     def reply_revision(self, root: Path, thread) -> PublishedReplyRevision:
         return PublishedReplyRevision(0, 0)  # Core publishes no native replies here.
-
-    def _records(self, where: str, parameters: tuple, *,
-                 descending: bool) -> Iterator[ExternalRecord]:
-        if not self.path.exists():
-            return
-        with self.transaction(write=False) as connection:
-            rows = ExternalItemRow.stream(
-                connection, where=where, parameters=parameters, order_by=("seq",),
-                descending=descending, thread=self.lookup)
-            try:
-                for row in rows:
-                    yield ExternalRecord(row.seq, row.events)
-            finally:
-                rows.close()
-
-    def forward(self, after: int, through: int) -> Iterator[ExternalRecord]:
-        return self._records("seq > ? AND seq <= ?", (after, through), descending=False)
-
-    def reverse(self, before: int) -> Iterator[ExternalRecord]:
-        return self._records("seq <= ?", (before,), descending=True)
-
-    @contextmanager
-    def projection(self, receipts, routes):
-        def project(records, *, max_records, max_bytes):
-            return ((record, record.events) for record in records)
-
-        yield project
 

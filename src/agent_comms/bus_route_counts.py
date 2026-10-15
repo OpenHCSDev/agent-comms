@@ -296,7 +296,7 @@ class BusRouteCounts:
             return RouteIndexBehind(offset, size)
         return RouteIndexReady() if through == size else RouteIndexBehind(through, size)
 
-    _requests = """requests AS (
+    _requests = """requests AS MATERIALIZED (
                 SELECT json_extract(value, '$.actor') AS actor,
                        json_extract(value, '$.target') AS target,
                        json_extract(value, '$.sender') AS sender,
@@ -315,30 +315,37 @@ class BusRouteCounts:
         Common routes use prefix totals, without walking historical rows. A
         birth crossing a route uses its covering timestamp index; timestamps
         need not be monotonic. Seen sequences use the primary-key index once
-        per actor, not once per historical message or conversation.
+        per actor, not once per historical message or conversation. Aggregate
+        seen membership by route once, including each request's birth boundary.
         """
         return RouteUnread.read(
             self.connection.execute(
-                f'''WITH {self._requests}, painted AS (
-                SELECT json_extract(owner.value, '$.actor') AS actor,
-                       row.target, row.sender, row.sender_lookup, row.timestamp
-                FROM json_each(?) AS owner, json_each(owner.value, '$.sequences') AS seen
+                f'''WITH {self._requests}, actors AS MATERIALIZED (
+                SELECT json_extract(value, '$.actor') AS actor,
+                       json_extract(value, '$.sequences') AS sequences FROM json_each(?)
+            ), painted AS (
+                SELECT request.actor, request.target, request.sender,
+                       request.sender_lookup, count(*) AS count
+                FROM actors AS owner, json_each(owner.sequences) AS seen
                 CROSS JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq = seen.value
+                JOIN requests AS request
+                    ON request.actor=owner.actor
+                    AND request.target=row.target AND request.sender=row.sender
+                    AND request.sender_lookup=row.sender_lookup AND row.timestamp>=request.since
+                GROUP BY request.actor, request.target, request.sender, request.sender_lookup
             )
             SELECT request.actor, request.target, request.sender,
                 (CASE WHEN totals.oldest >= request.since THEN totals.total ELSE (
                     SELECT count(*) FROM "{RouteEntryRow.declared_name}" AS row
                     WHERE row.target=request.target AND row.sender=request.sender
                         AND row.sender_lookup=request.sender_lookup AND row.timestamp>=request.since
-                ) END) - (
-                    SELECT count(*) FROM painted WHERE painted.actor=request.actor
-                        AND painted.target=request.target AND painted.sender=request.sender
-                        AND painted.sender_lookup=request.sender_lookup
-                        AND painted.timestamp>=request.since
-                ) AS count
+                ) END) - coalesce(painted.count, 0) AS count
             FROM requests AS request JOIN "{RouteTotalRow.declared_name}" AS totals
                 ON totals.target=request.target AND totals.sender=request.sender
-                    AND totals.sender_lookup=request.sender_lookup''',
+                    AND totals.sender_lookup=request.sender_lookup
+            LEFT JOIN painted ON painted.actor=request.actor
+                AND painted.target=request.target AND painted.sender=request.sender
+                AND painted.sender_lookup=request.sender_lookup''',
                 (json.dumps(FieldCodec.encode(requests)), json.dumps(FieldCodec.encode(seen))),
             )
         )
