@@ -268,24 +268,12 @@ class ConversationSourceWindowRequest:
         log: WireLog,
         lookup: str,
         requests: tuple[ConversationSourceWindowRequest, ...],
-    ) -> tuple[ConversationSourceWindow, ...]:
-        """Capture all requests from the same certified wire cut."""
+    ) -> tuple[Iterator[CommittedDelivery], ...]:
+        """Copy each selection from one source; consumers decode after release."""
         if not log.path.exists() and not log.metadata_path.exists():
-            return tuple(ConversationSourceWindow(request, ()) for request in requests)
+            return tuple(iter(()) for request in requests)
         with log.certified_read() as source:
-            captured = tuple(request.capture(source, lookup) for request in requests)
-        return tuple(
-            ConversationSourceWindow(request, tuple(rows))
-            for request, rows in zip(requests, captured)
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class ConversationSourceWindow:
-    """One request and its rows from the same certified wire cut."""
-
-    request: ConversationSourceWindowRequest
-    sources: tuple[CommittedDelivery, ...]
+            return tuple(request.capture(source, lookup) for request in requests)
 
 
 class WireLog:
@@ -363,15 +351,10 @@ class WireLog:
         yield source
         source.require_current()
 
-    def conversation_sources(
-        self, lookup, predicate, parameters, *, limit, ascending,
-    ) -> Iterator[CommittedDelivery]:
+    def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Copy a bounded window under the lock; decode after releasing it."""
         request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending)
-        if not self.path.exists() and not self.metadata_path.exists():
-            return iter(())
-        with self.certified_read() as source:
-            return request.capture(source, lookup)
+        return request.capture_many(self, lookup, (request,))[0]
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.

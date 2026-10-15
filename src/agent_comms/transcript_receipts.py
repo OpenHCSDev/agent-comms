@@ -255,11 +255,11 @@ class AssignedTranscriptSource:
         conversation, sent = conversation_request.capture_many(
             self.log, lookup, (conversation_request, sent_request)
         )
-        rows = conversation.sources
+        rows = tuple(conversation)
         cursor = AssignedSourceCursor(
             str(self.root), self.recipient, rows[0].message.seq if rows else 0
         )
-        return AssignedSourceWindow(cursor, rows, sent.sources)
+        return AssignedSourceWindow(cursor, rows, tuple(sent))
 
     def page_rows(self, traversal, sequence, through, *, limit):
         predicate, parameters = traversal.predicate(sequence, through)
