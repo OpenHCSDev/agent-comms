@@ -518,7 +518,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.NativeRetryEnd)
     async def native_retry_finished(self, event: pi.NativeRetryEnd) -> None:
-        event.record_result(self.output)
         event.outcome.finish_tracked(self)
 
     def request_retried(self) -> None:

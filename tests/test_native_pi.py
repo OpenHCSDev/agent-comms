@@ -701,7 +701,7 @@ def durable_attempt(tmp_path):
         "eof-large",
     ],
 )
-async def test_copied_cli_private_policy_allows_one_local_http_attempt(
+async def test_copied_cli_private_policy_preserves_one_input_across_local_requests(
     tmp_path: Path, monkeypatch, outcome: str, durable_attempt
 ) -> None:
     """Explicit opt-in: real pinned CLI, loopback-only fake provider, no paid key."""
@@ -908,7 +908,6 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             prompt="Respond with X, fixture only",
             worktree=worktree,
             session=SelectedSession(sessions),
-            model_wait_timeout=15,
             provider=provider,
             model=model,
         )
@@ -983,7 +982,8 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                 await TrackedTurnSession.execute(package, **request)
             assert failed.value.context.input_id == INPUT_ID
             assert "agent_settled" in observed
-        assert calls == ["/v1/chat/completions"]
+        attempts = 4 if outcome == "429" else 1
+        assert calls == ["/v1/chat/completions"] * attempts
         assert not (sessions / ".native-pi-agent" / "auth.json").exists()
         assert not (sessions / ".native-pi-agent" / "models.json").exists()
         preflight_index, preflight = next(
@@ -1008,14 +1008,15 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         assert committed_context["inputId"] == INPUT_ID
         assert preflight_index < prompt_index < rpc_events.index(committed_input)
         assert waits_after_start and not any(waits_after_start)
-        assert observed.count("context_committed") == 1
+        assert observed.count("input_committed") == 1
+        assert observed.count("context_committed") == attempts
         assert "auto_retry_start" not in observed
         assert "compaction_start" not in observed
         proof_files = list(sessions.glob("*.jsonl.input-proof"))
         assert len(proof_files) == 1
         durable_proofs = read_proof_rows(Path(str(proof_files[0]).removesuffix(".input-proof")))
-        assert len(durable_proofs) == 1
-        assert durable_proofs[0]["requestGeneration"] == 1
+        assert len(durable_proofs) == attempts
+        assert [row["requestGeneration"] for row in durable_proofs] == list(range(1, attempts + 1))
         if outcome == "restarted":
             # A second real child reopens the first child's saved private history.
             # The outer worker still has its isolated PI_CODING_AGENT_DIR.

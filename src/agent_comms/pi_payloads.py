@@ -198,9 +198,9 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
         return ()
 
     def finish_tracked(self, session) -> None:
-        from .turn_failure import ProviderRetryExhausted
+        from .turn_failure import ModelRequestFailed
 
-        session.output.record_failure(ProviderRetryExhausted(self.final_error))
+        session.output.record_failure(ModelRequestFailed(self.final_error))
 
     def retry_wire(self) -> dict[str, object]:
         return {"success": False, "finalError": self.final_error}

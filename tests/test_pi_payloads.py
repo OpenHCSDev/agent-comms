@@ -142,10 +142,11 @@ def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
         "type": "message_end",
         "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
     })
-    failures = []
-    session = SimpleNamespace(fail_terminal=failures.append)
+    from agent_comms.turn_output import TurnOutput
+    from agent_comms.turn_failure import ModelRequestFailed
+    session = SimpleNamespace(output=TurnOutput())
     event.message.tracked_end(session)
-    assert failures == ["original provider rejection"]
+    assert session.output.failure == ModelRequestFailed("original provider rejection")
 
 
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():

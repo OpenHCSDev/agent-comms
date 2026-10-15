@@ -7,7 +7,7 @@ from agent_comms.tracked_turn import (
     TrackedTurnSession,
 )
 from agent_comms.turn_output import TurnOutput
-from agent_comms.turn_failure import ModelRequestFailed, ProviderRetryExhausted
+from agent_comms.turn_failure import ModelRequestFailed
 from agent_comms.native_pi import NativePiTerminalFailure
 
 
@@ -26,7 +26,6 @@ async def test_recovered_native_request_replaces_prior_refusal_terminal():
     await turn.native_retry_finished(event)
 
     assert turn.output.failure is None
-    assert turn.output.retry_result.success
     assert isinstance(turn.terminal, PendingTrackedTerminal)
 
 
@@ -51,8 +50,7 @@ async def test_exhausted_native_request_records_required_final_error(previous):
     }
     await turn.native_retry_finished(event)
 
-    assert turn.output.declared_failure == ProviderRetryExhausted("final refusal")
-    assert turn.output.retry_result.attempt == 3
+    assert turn.output.declared_failure == ModelRequestFailed("final refusal")
     with pytest.raises(NativePiTerminalFailure, match="final refusal") as caught:
         turn.output.raise_if_failed(None, "configured", "model")
     assert caught.value.failure == turn.output.declared_failure
