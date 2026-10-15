@@ -19,18 +19,13 @@ if TYPE_CHECKING:
 from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import ThreadIncarnation
+from .message_reference import AssignedSourceIdentity
 from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, UserTranscript
 
 from .wire_log import ConversationSourceWindowRequest
 
 if TYPE_CHECKING:
     from .wire_log import WireLog
-
-
-@dataclass(frozen=True)
-class AssignedSourceIdentity:
-    root: str
-    recipient: ThreadIncarnation
 
 
 @dataclass(frozen=True)
@@ -265,7 +260,31 @@ class AssignedTranscriptSource:
         predicate, parameters = traversal.predicate(sequence, through)
         return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
 
-    def native_records(self, fragments, routes, reader):
+    def _matching_sources(self, references, through):
+        through.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
+        references = tuple(reference for reference in references if through.covers(reference.seq))
+        if not references:
+            return ()
+        marks = ",".join("?" for _ in references)
+        return tuple(original for original in self.rows(
+            f"w.seq IN ({marks})", tuple(reference.seq for reference in references),
+            limit=len(references),
+        ) if original.message.reference in references)
+
+    def known_sources(self, references, through):
+        return frozenset(original.message.reference for original in self._matching_sources(references, through))
+
+    def sent_sources(self, references, through):
+        lookup = stable_thread_lookup(self.recipient.created_at)
+        return frozenset(original.message.reference for original in self._matching_sources(references, through)
+                         if original.audience.sender_lookup == lookup)
+
+    def display_events(self, events, through):
+        through.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
+        return tuple(projected for event in events for part in event.display_events(through.identity)
+                     for projected in part.assigned_events(self, through))
+
+    def native_records(self, fragments, routes, reader, through):
         """Native ancestry precedes one atomic SQL read per bounded fragment."""
         from .native_runtime_input import NativeRuntimeInput
         from .transcripts import TranscriptRead
@@ -289,39 +308,21 @@ class AssignedTranscriptSource:
                                   for record, user in selected)
             for record, projection in originals:
                 yield record, record.project(
-                    lambda record: self.native_events(record, routes, *projection)
+                    lambda record: self.native_events(record, routes, *projection, through=through)
                 )
 
-    def native_events(self, record, routes, project_events, references):
+    def native_events(self, record, routes, project_events, references, *, through):
         from .native_entries import TranscriptProjection
 
         entry = record.entry
         published = False
         routing = routes.get(entry.id)
-        lookup = stable_thread_lookup(self.recipient.created_at)
         events = project_events(TranscriptProjection(routing, routes.input_display(entry.input_id)))
         if entry.final_reply:
-            if routing is not None and routing.publications:
-                marks = ",".join("?" for _ in routing.publications)
-                originals = tuple(self.rows(
-                    f"w.seq IN ({marks})", tuple(ref.seq for ref in routing.publications),
-                    limit=len(routing.publications),
-                ))
-                published = all(
-                    any(original.message.reference == ref
-                        and original.audience.sender_lookup == lookup for original in originals)
-                    for ref in routing.publications
-                )
-            if not published and references:
-                marks = ",".join("?" for _ in references)
-                originals = tuple(self.rows(
-                    f"w.seq IN ({marks})", tuple(ref.seq for ref in references), limit=len(references),
-                ))
-                published = all(
-                    any(original.message.reference == ref
-                        and original.audience.sender_lookup == lookup for original in originals)
-                    for ref in references
-                )
+            for publications in (routing.publications if routing is not None else (), references):
+                if publications and set(publications) <= self.sent_sources(publications, through):
+                    published = True
+                    break
 
         result = []
         for event in events:
@@ -331,30 +332,19 @@ class AssignedTranscriptSource:
             # Its native prompt is a consumer of that record, not another input.
             if isinstance(event, UserTranscript) and event.routed:
                 requests = event.routing.requests
-                marks = ",".join("?" for _ in requests)
-                originals = tuple(self.rows(
-                    f"w.seq IN ({marks})",
-                    tuple(reference.seq for reference in requests),
-                    limit=len(requests),
-                ))
-                remaining = tuple(
-                    reference
-                    for reference in requests
-                    if not any(
-                        original.message.reference == reference for original in originals
-                    )
-                )
+                known = self.known_sources(requests, through)
+                remaining = tuple(reference for reference in requests if reference not in known)
                 if not remaining:
                     continue
                 event = replace(event, routing=TurnRouting(remaining, event.routing.reply))
             result.append(event)
-        return tuple(result)
+        return self.display_events(result, through)
 
     def events(self, original):
         message = original.message
         if original.audience.sender_lookup == stable_thread_lookup(self.recipient.created_at):
             return (
-                SentTranscript.from_message(message),
+                SentTranscript.from_message(message, scope=AssignedSourceIdentity(str(self.root), self.recipient)),
             )
         return (
             IncomingTranscript(

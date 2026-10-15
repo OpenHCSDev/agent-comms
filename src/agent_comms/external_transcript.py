@@ -127,9 +127,9 @@ class ExternalTranscriptRead:
         return self._records("seq <= ?", (before,), descending=True)
 
     @contextmanager
-    def projection(self, receipts, routes):
+    def projection(self, receipts, routes, through):
         def project(records, *, max_records, max_bytes):
-            return ((record, record.events) for record in records)
+            return ((record, receipts.display_events(record.events, through)) for record in records)
 
         yield project
 

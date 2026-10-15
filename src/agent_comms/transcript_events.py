@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .declared_family import DeclaredFamily
-from .message_reference import MessageReference
+from .message_reference import AssignedSourceIdentity, MessageReference, OutgoingMessageReference
 from .routing import MessageRoute, TurnRouting
 from .tool_results import ToolDiff
 from .transcript_merge import EventMerge, StreamingMerge
@@ -23,6 +23,17 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def as_context(self) -> TranscriptEvent:
         """Non-text native evidence retains its own presentation declaration."""
         return self
+
+    def display_events(self, scope):
+        """The source event owns any independently visible publications it carries."""
+        return (self,)
+
+    @property
+    def outgoing_sources(self) -> tuple[OutgoingMessageReference, ...]:
+        return ()
+
+    def assigned_events(self, source, through):
+        return (self,)
 
     @property
     def text_size(self) -> int:
@@ -133,12 +144,28 @@ class NoticeTranscript(AgentTextTranscript):
         return self
 
 
+@dataclass(frozen=True)
 class SentTranscript(OutgoingRoute, WireTextTranscript):
     """One immutable original wire row, separate from native assistant output."""
 
+    scope: AssignedSourceIdentity | None = field(default=None, kw_only=True)
+
+    def in_source(self, scope):
+        return replace(self, scope=scope) if self.scope is None else self
+
+    @property
+    def outgoing_sources(self) -> tuple[OutgoingMessageReference, ...]:
+        return () if self.scope is None else (OutgoingMessageReference(self.scope, self.source),)
+
+    def assigned_events(self, source, through):
+        # Retained tool evidence remains visible when this exact publication
+        # is absent from the captured wire source, including detached history.
+        return (() if self.scope == through.identity
+                and self.source in source.sent_sources((self.source,), through) else (self,))
+
     @classmethod
-    def from_message(cls, message):
-        return cls(message.body, timestamp=message.timestamp, source=message.reference,
+    def from_message(cls, message, *, scope=None):
+        return cls(message.body, timestamp=message.timestamp, source=message.reference, scope=scope,
                    routing=TurnRouting(reply=MessageRoute(message.sender, (message.target,))))
 
 
@@ -165,6 +192,14 @@ class ToolStartTranscript(ToolTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolEndTranscript(ToolTranscript):
+    def display_events(self, scope):
+        # Only this projection can compact tool details: it supplies the body
+        # itself or proves its exact canonical counterpart within the same cut.
+        if self.sent_message is None or not self.ok:
+            return (self,)
+        message = self.sent_message.in_source(scope)
+        return (replace(self, sent_message=message), message)
+
     @property
     def text_size(self) -> int:
         return len(self.text)

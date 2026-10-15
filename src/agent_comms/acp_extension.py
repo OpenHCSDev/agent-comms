@@ -468,6 +468,11 @@ class CoordinationChangedUpdate(AgentCommsUpdate):
     context_usage: ContextUsage | None
 
     @property
+    def source_identity(self):
+        from .message_reference import AssignedSourceIdentity
+        return AssignedSourceIdentity(self.wire_root, self.thread)
+
+    @property
     def persistence(self) -> str:
         return "shared on-disk wire"
 

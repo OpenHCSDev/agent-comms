@@ -33,7 +33,8 @@ from .threads import Thread
 from .turn_lease import TurnLeaseFence
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
-from .transcript_receipts import AssignedSourceCursor, AssignedSourceIdentity
+from .transcript_receipts import AssignedSourceCursor
+from .message_reference import AssignedSourceIdentity
 from .coordination_errors import StaleRevision, TranscriptChanged
 
 if TYPE_CHECKING:
@@ -628,7 +629,7 @@ class Transcripts:
                 raise ValueError("Cursor is outside the combined transcript source")
             traversal = LaterTranscript() if after is not None else EarlierTranscript()
             initial = cursor or frontier
-            with reader.projection(receipts, page.routes) as project:
+            with reader.projection(receipts, page.routes, frontier.receipts) as project:
                 consumed, records = traversal.read_records(
                     reader, project, receipts, initial, frontier,
                     max_messages=max_messages, max_bytes=max_bytes,

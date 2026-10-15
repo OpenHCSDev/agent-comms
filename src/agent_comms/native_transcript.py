@@ -175,13 +175,13 @@ class NativeTranscript:
             root, self, stable_thread_lookup(thread.created_at))
 
     @contextmanager
-    def projection(self, receipts, routes):
+    def projection(self, receipts, routes, through):
         """Project records through their native input and the session's routes."""
         with routes.for_session(str(self.path)) as session_routes:
             def project(records, *, max_records, max_bytes):
                 return receipts.native_records(
                     self.fragments(records, max_records=max_records, max_bytes=max_bytes),
-                    routes=session_routes, reader=self)
+                    routes=session_routes, reader=self, through=through)
 
             yield project
 
