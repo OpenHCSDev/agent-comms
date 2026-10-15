@@ -228,6 +228,7 @@ def test_retained_source_uses_its_ledger_identity_after_path_replacement(tmp_pat
     with comms.bus.snapshot(viewer=viewer) as (basis, source):
         replacement = tmp_path / "replacement.jsonl"
         copyfile(comms.bus.log.path, replacement)
+        replacement.chmod(0o600)
         replacement.replace(comms.bus.log.path)
         assert comms.bus._pending_projection(source, basis, (viewer,)) == {viewer: {}}
         assert comms.bus.pending_counts_opened(source, basis) == {}
