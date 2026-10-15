@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager
@@ -211,21 +210,17 @@ class TranscriptReadState(ThreadOwnedState):
     ) -> None:
         if not budget.available:
             return
-        unchanged = cached is not None and cached.revision == revision
-        append = (
+        resume = (
             cached is not None and cached.revision is not None
-            and cached.revision.identity == revision.identity
-            and revision.size > cached.revision.size
             and cached.through <= cached.revision.size
+            and cached.revision.holds_cut(revision, cached.revision.size)
         )
-        resume = unchanged or append
         through, total = (cached.through, cached.total) if resume else (0, 0)
         complete = False
         replies: list[TranscriptReply] = []
         # Native decoding has no SQLite transaction or cross-process writer lock.
         with Path(source).open("rb") as stream:
-            opened = FileRevision.from_stat(os.fstat(stream.fileno()))
-            if not revision.holds_cut(opened, revision.size):
+            if not revision.opened_by(stream):
                 return
             stream.seek(through)
             for _ in range(256):
