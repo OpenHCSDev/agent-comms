@@ -318,19 +318,24 @@ class TranscriptReadState(ThreadOwnedState):
             )
             try:
                 connection.execute("PRAGMA synchronous=NORMAL")
-                connection.execute("BEGIN IMMEDIATE")
                 (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
-                if version.user_version == 0:
-                    if _IndexTable.read(
-                        connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
-                    ):
+                # Opening an installed index is a read. Only initialization
+                # needs a writer; recheck after taking it because another
+                # process may have initialized the file since this read.
+                if version.user_version != _INDEX_VERSION:
+                    connection.execute("BEGIN IMMEDIATE")
+                    (version,) = SQLiteUserVersion.read(connection.execute("PRAGMA user_version"))
+                    if version.user_version == 0:
+                        if _IndexTable.read(
+                            connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                        ):
+                            raise ValueError("Reply index requires the quiet runtime reset")
+                        for table in TypedTable.members_with(ReplyIndexTable):
+                            table.create(connection)
+                        connection.execute(f"PRAGMA user_version={_INDEX_VERSION}")
+                    elif version.user_version != _INDEX_VERSION:
                         raise ValueError("Reply index requires the quiet runtime reset")
-                    for table in TypedTable.members_with(ReplyIndexTable):
-                        table.create(connection)
-                    connection.execute(f"PRAGMA user_version={_INDEX_VERSION}")
-                elif version.user_version != _INDEX_VERSION:
-                    raise ValueError("Reply index requires the quiet runtime reset")
-                connection.commit()
+                    connection.commit()
             except (sqlite3.DatabaseError, ValueError):
                 connection.close()
                 raise

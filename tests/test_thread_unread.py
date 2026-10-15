@@ -78,7 +78,14 @@ def test_new_process_uses_reply_index_without_reparsing_history(tmp_path):
     fresh = TranscriptReadState(comms.views.transcript_reads.path)
     sources = {"worker": str(source)}
     try:
-        assert fresh.counts(str(tmp_path), sources).counts["worker"] == 100
+        # Another process preparing an update must not prevent a fresh reader
+        # from opening the already committed index.
+        with ExitStack() as blocked:
+            database = sqlite3.connect(fresh.index_path)
+            blocked.callback(database.close)
+            blocked.callback(database.rollback)
+            database.execute("BEGIN IMMEDIATE")
+            assert fresh.counts(str(tmp_path), sources).counts["worker"] == 100
         assert fresh.preparation is None
         through = source.stat().st_size
         append(source)
