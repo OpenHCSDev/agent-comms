@@ -231,6 +231,10 @@ class TranscriptSource:
     source adds the separately acquired wire/publication capability below.
     """
 
+    def resolve_sent(self, messages):
+        """Records without a sender assignment cannot qualify Send reports."""
+        return tuple(messages)
+
     @property
     def frontier(self) -> AssignedSourceCursor | None:
         return None
@@ -281,7 +285,8 @@ class AssignedTranscriptSource(TranscriptSource):
         from .wire_log import WireLog
 
         root = Path(identity.root)
-        return cls(root, identity.recipient, WireLog(root / "bus.jsonl"))
+        return (cls(root, identity.recipient, WireLog(root / "bus.jsonl"))
+                if identity.recipient.has_recorded_birth else TranscriptSource())
 
     def resolve_sent(self, messages):
         """Qualify reports against exact full rows in one bounded wire read.
@@ -293,7 +298,7 @@ class AssignedTranscriptSource(TranscriptSource):
         from .sent_message import PublishedSentMessage
 
         messages = tuple(messages)
-        if not messages or not self.recipient.has_recorded_birth:
+        if not messages:
             return messages
         lookup = stable_thread_lookup(self.recipient.created_at)
         marks = ",".join("?" for _ in messages)

@@ -13,6 +13,16 @@ SENT_MESSAGE_MIME = "application/vnd.agent-comms.sent-message+json"
 
 
 @dataclass(frozen=True, slots=True)
+class ToolText:
+    """Plain tool output, shared by saved presentation and ACP encoding."""
+
+    text: str
+
+    def tool_content(self, tool_call_id):
+        return {"type": "content", "content": {"type": "text", "text": self.text}}
+
+
+@dataclass(frozen=True, slots=True)
 class ToolDiff:
     """A patch reported by the tool that performed the edit, never inferred later."""
 
@@ -46,7 +56,6 @@ def tool_result_content(
     from .transcript_events import ToolEndTranscript
 
     return [
-        {"type": "content", "content": {"type": "text", "text": part}}
-        if isinstance(part, str) else part.tool_content(tool_call_id)
+        part.tool_content(tool_call_id)
         for part in ToolEndTranscript.parts_for(output, diff, sent_message)
     ]

@@ -9,7 +9,7 @@ from typing import Any
 from .declared_family import DeclaredFamily
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
-from .tool_results import ToolDiff
+from .tool_results import ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 
 
@@ -190,7 +190,7 @@ class ToolEndTranscript(ToolTranscript):
         """The result owner selects its contents once, before transport or paint."""
         if sent_message is not None:
             return (sent_message,)
-        return ((diff,) if diff is not None else ()) + ((text,) if text else ())
+        return ((diff,) if diff is not None else ()) + ((ToolText(text),) if text else ())
 
     @property
     def result_parts(self):
