@@ -127,7 +127,7 @@ class MessageBus:
         catalog = self._channels.read()
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
-        seen = self.reads.seen_sequences(delivery.actor, snapshot)
+        seen = self.reads.membership(delivery.actor, snapshot)
         with self.log._opened_wire_snapshot() as source:
             with OpenedRouteCounts(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
@@ -166,7 +166,7 @@ class MessageBus:
                 for message in self.inbox(name, snapshot=snapshot):
                     displayed = self.reads.capture(name, (message,), snapshot, self.log.path)
                     yield message
-                    self.reads.mark_displayed(displayed.viewer, displayed)
+                    self.reads.mark_displayed(displayed.viewer, displayed, snapshot=snapshot)
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
@@ -203,11 +203,9 @@ class MessageBus:
             actor: DeliveryScope.capture(actor, basis.registry, basis.catalog)
             for actor in set(actors.values())
         }
-        seen = {
-            actor: basis.document.seen_sequences(
-                actor, basis.registry, source.revision.identity if source.revision else None
-            ) for actor in deliveries
-        }
+        from .read_ledger import ReadMask
+        readers = basis.document.memberships(basis.registry, source.revision.identity if source.revision else None)
+        seen = {actor: readers.get(actor, ReadMask()) for actor in deliveries}
         with OpenedRouteCounts(self.log.path, source, basis.registry, deliveries) as index:
             counts = index.unseen_counts(seen)
         return {name: counts[actor] for name, actor in actors.items()}
@@ -234,7 +232,7 @@ class MessageBus:
             if message.reference in requested
         )
         basis = self.reads.capture(name, messages, snapshot, self.log.path)
-        self.reads.mark_displayed(basis.viewer, basis)
+        self.reads.mark_displayed(basis.viewer, basis, snapshot=snapshot)
         return len(messages)
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
@@ -246,7 +244,7 @@ class MessageBus:
         messages = (message for message in self.inbox(canonical, snapshot=snapshot)
                     if message.seq <= sequence)
         displayed = self.reads.capture(canonical, messages, snapshot, self.log.path)
-        self.reads.mark_displayed(canonical, displayed)
+        self.reads.mark_displayed(canonical, displayed, snapshot=snapshot)
         return
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:

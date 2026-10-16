@@ -324,8 +324,12 @@ class FieldCodec(Sealed):
             return [cls.encode(item) for item in sorted(value)]
         if isinstance(value, (list, tuple)):
             return [cls.encode(item) for item in value]
-        if isinstance(value, dict) and all(type(key) is str for key in value):
-            return {key: cls.encode(item) for key, item in value.items()}
+        if isinstance(value, dict):
+            key_type, value_type = (
+                get_args(annotation) if get_origin(annotation) is dict
+                else (str if all(type(key) is str for key in value) else Any, None)
+            )
+            return _DictDecoder.for_key(key_type).encode(value, key_type, value_type)
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
     @classmethod
@@ -396,8 +400,8 @@ class FieldCodec(Sealed):
             return {**cls.value_schema(type(args[0])), "enum": list(args)}
         if origin in (list, tuple, frozenset):
             return {"type": "array", "items": cls.value_schema(args[0])}
-        if origin is dict and args[0] is str:
-            return {"type": "object", "additionalProperties": cls.value_schema(args[1])}
+        if origin is dict:
+            return _DictDecoder.for_key(args[0]).schema(*args)
         if origin is type and args and issubclass(args[0], DeclaredFamily):
             return {"type": "string", "enum": list(args[0].names())}
         if isinstance(annotation, type) and issubclass(annotation, Enum):
@@ -653,16 +657,59 @@ class _FixedTupleDecoder(ValueDecoder):
 
 @dataclass(frozen=True, slots=True)
 class _DictDecoder(ValueDecoder):
-    string_keys: bool
+    key: ValueDecoder
     value: ValueDecoder
 
+    @staticmethod
+    def for_key(annotation):
+        return _ObjectDictDecoder if annotation is str else _EntriesDictDecoder
+
+    @staticmethod
+    def collect(entries):
+        result = {}
+        for key, value in entries:
+            if key in result:
+                raise ValueError("Duplicate typed dictionary key.")
+            result[key] = value
+        return result
+
+
+class _ObjectDictDecoder(_DictDecoder):
     def decode(self, data):
-        if not isinstance(data, dict) or not self.string_keys:
+        if not isinstance(data, dict):
             raise ValueError("Expected a JSON object with string keys.")
-        return {
-            FieldCodec._decode_scalar(str, key): self.value.decode(value)
-            for key, value in data.items()
-        }
+        return self.collect((self.key.decode(key), self.value.decode(value))
+                            for key, value in data.items())
+
+    @staticmethod
+    def encode(values, key_type, value_type):
+        return {FieldCodec.decode(str, key): FieldCodec.encode(value, value_type)
+                for key, value in values.items()}
+
+    @staticmethod
+    def schema(key_type, value_type):
+        return {"type": "object", "additionalProperties": FieldCodec.value_schema(value_type)}
+
+
+class _EntriesDictDecoder(_DictDecoder):
+    def decode(self, data):
+        if not isinstance(data, list):
+            raise ValueError("Expected an array of typed dictionary entries.")
+        pair = _FixedTupleDecoder((self.key, self.value))
+        return self.collect(pair.decode(value) for value in data)
+
+    @staticmethod
+    def encode(values, key_type, value_type):
+        return [[FieldCodec.encode(key, key_type), FieldCodec.encode(value, value_type)]
+                for key, value in values.items()]
+
+    @staticmethod
+    def schema(key_type, value_type):
+        return {"type": "array", "items": {
+            "type": "array", "prefixItems": [FieldCodec.value_schema(key_type),
+                                                FieldCodec.value_schema(value_type)],
+            "minItems": 2, "maxItems": 2,
+        }}
 
 @dataclass(frozen=True, slots=True)
 class _FamilyRecordDecoder(ValueDecoder):
@@ -766,7 +813,9 @@ def _structural_decoder(target: object) -> ValueDecoder:
             return _VariadicTupleDecoder(compile_decoder(args[0]))
         return _FixedTupleDecoder(tuple(compile_decoder(item) for item in args))
     if origin is dict:
-        return _DictDecoder(args[0] is str, compile_decoder(args[1]))
+        return _DictDecoder.for_key(args[0])(
+            compile_decoder(args[0]), compile_decoder(args[1])
+        )
     if isinstance(target, type) and issubclass(target, DeclaredFamily):
         return _FamilyRecordDecoder(target)
     return _member_decoder(target)

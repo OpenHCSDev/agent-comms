@@ -37,6 +37,30 @@ class Conversation:
     def current(self, snapshot: RegistryProvenance) -> bool:
         return all(participant.current(snapshot) for participant in self.participants)
 
+    @classmethod
+    def from_names(cls, sender, target, incarnation):
+        from .channel_targets import BuiltinChannel
+        builtin = BuiltinChannel.lookup(target)
+        if builtin is not None or is_channel_target(target):
+            return cls(target=builtin.value if builtin is not None else target)
+        participants = {incarnation(name) for name in (sender, target)}
+        return cls(participants=tuple(sorted(participants, key=lambda p: (p.name, p.created_at))))
+
+    def resolved(self, snapshot):
+        return replace(self, participants=tuple(sorted(
+            {p.resolved(snapshot) for p in self.participants}, key=lambda p: (p.name, p.created_at))))
+
+    def route_targets(self, snapshot):
+        if self.target:
+            return frozenset((self.target,))
+        return frozenset(p.name for owner in self.participants for p in owner.recorded_names(snapshot))
+
+    def route_matcher(self, snapshot):
+        if self.target:
+            return lambda sender, target: target == self.target
+        names = frozenset(p.resolved(snapshot).name for p in self.participants)
+        return lambda sender, target: frozenset((snapshot.canonical_name(sender), snapshot.canonical_name(target))) == names
+
     def to_wire(self) -> dict:
         """Encode the persisted participant pair format."""
         data = FieldCodec.encode(replace(self, participants=()))
@@ -167,7 +191,6 @@ class DMDisplayBasis:
             peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
             bus_identity = bus.reads.bus_identity(bus.log.path)
-            read_revision = bus.reads.revision()
         # Native admission uses this same wire lock. Page preparation and the
         # older-unread scan use opened source boundaries, outside admission.
         page = bus.conversation_page(
@@ -175,15 +198,13 @@ class DMDisplayBasis:
         )
         older_unread = False
         if page.has_older and page.messages:
-            seen = bus.reads.seen_sequences(viewer_name, snapshot)
+            seen = bus.reads.membership(viewer_name, snapshot)
             with bus.log._record_snapshot(need_sequence=False) as (_, records):
                 older_unread = any(
                     scope.unread_before(message, page.messages[0].seq, seen)
                     for message, _ in records
                 )
         with _store_lock(root / "wire", shared=True), registry.store.reading() as document:
-            if bus.reads.revision() != read_revision:
-                raise ValueError("Read marker changed while paging; refresh the displayed page.")
             root_info = root.stat()
             basis = cls(
                 root=str(root.resolve()),
@@ -246,7 +267,7 @@ class DMDisplayBasis:
                 snapshot,
                 bus.reads.bus_identity(bus.log.path),
             )
-            bus.reads.mark_displayed(self.viewer, self.displayed.through(through))
+            bus.reads.mark_displayed(self.viewer, self.displayed.through(through), snapshot=snapshot)
 
     def accepts_tail(self, through: int) -> bool:
         return (
@@ -346,8 +367,8 @@ class DMDisplayScope(MessageDisplayScope):
     def inbound(self, message: Message) -> bool:
         return message.sender in self.second_names and message.target in self.first_names
 
-    def unread_before(self, message: Message, before: int, seen: frozenset[int]) -> bool:
-        return message.seq < before and message.seq not in seen and self.inbound(message)
+    def unread_before(self, message: Message, before: int, seen) -> bool:
+        return message.seq < before and not seen.contains(message) and self.inbound(message)
 
     @property
     def index_targets(self) -> frozenset[str]:

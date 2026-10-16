@@ -24,7 +24,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
-from .read_ledger import ReadLedger
+from .read_ledger import ReadLedger, ReadMask
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
@@ -226,7 +226,7 @@ class MessageNotification:
             return {}
         rows = assignment_read.resolve(root)
         reads = ReadLedger(root / ReadLedger.filename)
-        document = reads.read()
+        document = reads.observations(snapshot)
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
@@ -274,7 +274,7 @@ class MessageNotification:
             return None
         recipient = FrozenRecipient(stable_thread_lookup(target.created_at), target.name)
         displayed_to = reads.displayed_recipient(
-            message, recipient, snapshot, document=document
+            message, recipient, snapshot, readers=document
         )
         if not displayed_to:
             return None
@@ -352,7 +352,7 @@ class DisplaySelection:
     registry: RegistrySnapshot
     catalog: CatalogDocument
     viewer: str | None
-    seen: frozenset[int]
+    seen: ReadMask
     document: ReadDocument
 
     @classmethod
@@ -362,8 +362,8 @@ class DisplaySelection:
     ) -> DisplaySelection:
         canonical = snapshot.canonical_name(viewer) if viewer is not None else None
         seen = (
-            reads.seen_sequences(viewer, snapshot, document=document)
-            if viewer is not None else frozenset()
+            reads.membership(viewer, snapshot, document=document)
+            if viewer is not None else ReadMask()
         )
         return cls(snapshot, catalog, canonical, seen, document)
 
@@ -527,7 +527,7 @@ class BusPresentation:
                     displayed.validate(
                         viewer, basis.registry, self.bus.reads.bus_identity(self.bus.log.path)
                     )
-                    self.bus.reads.mark_displayed(viewer, displayed.through(through))
+                    self.bus.reads.mark_displayed(viewer, displayed.through(through), snapshot=basis.registry)
                     return
             # Explicit Mark Read selects the channel's messages in this whole
             # cut. The page index reads them once the registry is released,
@@ -538,6 +538,7 @@ class BusPresentation:
             self.bus.reads.mark_displayed(
                 viewer,
                 self.bus.reads.capture(viewer, page.messages, basis.registry, self.bus.log.path),
+                snapshot=basis.registry,
             )
 
     def display_view_metrics(

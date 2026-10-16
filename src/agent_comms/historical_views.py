@@ -318,6 +318,7 @@ class HistoricalDisplay:
         ReadLedger(Path(self.source.root) / ReadLedger.filename).mark_displayed(
             self.viewer,
             self.displayed,
+            snapshot=self.source.provenance,
         )
 
 

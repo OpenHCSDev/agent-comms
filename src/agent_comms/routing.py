@@ -243,7 +243,7 @@ class DeliveryScope(MessageDisplayScope):
         self, delivery: DeliveryMessage, snapshot: RegistrySnapshot, seen: frozenset[int]
     ) -> bool:
         message = delivery.message
-        if message.seq in seen:
+        if seen.contains(message):
             return False
         since = self.minimum_timestamp(
             message.sender, message.target, delivery.sender_lookup, snapshot

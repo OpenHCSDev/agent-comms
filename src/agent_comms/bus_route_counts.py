@@ -327,6 +327,56 @@ class BusRouteCounts:
     def __exit__(self, _error_type, _error, _traceback) -> None:
         self.connection.close()
 
+    def read_prefix(self, conversation, progress, snapshot, bus_identity):
+        """Compact only a proven indexed conversation prefix, never numeric adjacency."""
+        if not progress.sparse:
+            return progress.read_through
+        recorded = RouteSourceRow.one(self.connection, id=1)
+        maximum = max(progress.sparse)
+        if (recorded is None or recorded.revision is None
+                or recorded.revision.identity != FileIdentity(*bus_identity)
+                or not self.connection.execute(
+                    f'SELECT 1 FROM "{RouteEntryRow.declared_name}" WHERE seq=?',
+                    (maximum,),
+                ).fetchone()):
+            return None
+        self.connection.create_function('in_read_conversation', 2,
+                                        conversation.route_matcher(snapshot), deterministic=True)
+        try:
+            first = self.connection.execute(f'''
+                SELECT seq FROM "{RouteEntryRow.declared_name}"
+                WHERE target IN (SELECT value FROM json_each(:targets))
+                  AND seq>:through AND seq<=:maximum
+                  AND in_read_conversation(sender,target)
+                  AND seq NOT IN (SELECT value FROM json_each(:sparse))
+                ORDER BY seq LIMIT 1''', {
+                    'targets': json.dumps(sorted(conversation.route_targets(snapshot))),
+                    'through': progress.read_through, 'maximum': maximum,
+                    'sparse': json.dumps(sorted(progress.sparse)),
+                }).fetchone()
+        except sqlite3.OperationalError as error:
+            CoordinationReadUnavailable.raise_from(error)
+        return first[0] - 1 if first is not None else maximum
+
+    def changed_reads(self, previous, current):
+        self.connection.create_function('previously_read', 3, previous.contains_route, deterministic=True)
+        self.connection.create_function('currently_read', 3, current.contains_route, deterministic=True)
+        return frozenset(row[0] for row in self.connection.execute(f'''
+            WITH candidates AS (
+                SELECT row.seq,row.sender,row.target
+                FROM json_each(:ranges) AS span
+                JOIN "{RouteEntryRow.declared_name}" AS row
+                  ON row.seq>json_extract(span.value,'$[0]')
+                 AND row.seq<=json_extract(span.value,'$[1]')
+                UNION
+                SELECT row.seq,row.sender,row.target FROM json_each(:sparse) AS sparse
+                JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=sparse.value
+            ) SELECT seq FROM candidates
+              WHERE previously_read(sender,target,seq)!=currently_read(sender,target,seq)''', {
+                'ranges': json.dumps(current.changed_ranges(previous)),
+                'sparse': json.dumps(sorted(current.sparse ^ previous.sparse)),
+            }))
+
     @staticmethod
     def _decoded(
         source: BinaryIO, start: int, stop: int,
@@ -600,18 +650,38 @@ class OpenedRouteCounts(BusRouteCounts):
     # One eligibility implementation supplies both counts and listings. The
     # accepted frontier has disjoint subtrees; count uses their stored ranks,
     # while listing alone descends to the original delivery sequences.
-    _eligible = f"""timestamp_walk(actor,root,since,id,node) AS (
-                SELECT request.actor, request.root, request.since, tree.id, tree.node
-                FROM requests AS request JOIN "{RouteTimeRow.declared_name}" AS tree
-                    ON tree.id=request.root
+    _read_ranks = f'''read_requests AS MATERIALIZED (
+                SELECT *, read_through(actor,sender,target) AS frontier FROM requests
+            ), ranks AS (
+                SELECT actor,root,root AS tree_root,since,1 AS weight FROM read_requests
                 UNION ALL
-                SELECT walk.actor, walk.root, walk.since, child.id, child.node
+                SELECT request.actor,request.root,(
+                    SELECT prior.time_root FROM "{RouteEntryRow.declared_name}" AS prior
+                    WHERE prior.target=request.target AND prior.sender=request.sender
+                      AND prior.sender_lookup=request.sender_lookup
+                      AND prior.seq<=min(request.frontier,:through)
+                    ORDER BY prior.seq DESC LIMIT 1),request.since,-1
+                FROM read_requests AS request WHERE request.frontier>0
+            )'''
+
+    def _read_membership(self, masks):
+        self.connection.create_function('read_through', 3,
+            lambda actor,sender,target: masks[actor].progress(sender,target).read_through,
+            deterministic=True)
+        return json.dumps({actor: sorted(mask.sparse) for actor, mask in masks.items()})
+
+    _eligible = f"""timestamp_walk(actor,root,weight,since,id,node) AS (
+                SELECT request.actor, request.root, request.weight, request.since, tree.id, tree.node
+                FROM ranks AS request JOIN "{RouteTimeRow.declared_name}" AS tree
+                    ON tree.id=request.tree_root
+                UNION ALL
+                SELECT walk.actor, walk.root, walk.weight, walk.since, child.id, child.node
                 FROM timestamp_walk AS walk, json_each(walk.node,'$.children') AS edge
                 JOIN "{RouteTimeRow.declared_name}" AS child ON child.id=edge.value
                 WHERE json_extract(walk.node,'$.minimum')<walk.since
                     AND json_extract(walk.node,'$.maximum')>=walk.since
             ), eligible AS MATERIALIZED (
-                SELECT actor,root,id,node FROM timestamp_walk
+                SELECT actor,root,weight,id,node FROM timestamp_walk
                 WHERE json_extract(node,'$.minimum')>=since
             )"""
 
@@ -622,10 +692,11 @@ class OpenedRouteCounts(BusRouteCounts):
         node per route, even for nonmonotone timestamps. No later suffix or
         original historical message range is scanned.
         """
+        sparse = self._read_membership(seen)
         return RouteUnread.read(self.connection.execute(
-            f'''WITH RECURSIVE {self._requests}, {self._eligible},
+            f'''WITH RECURSIVE {self._requests}, {self._read_ranks}, {self._eligible},
             totals AS (
-                SELECT actor,root,sum(json_extract(node,'$.count')) AS count
+                SELECT actor,root,sum(weight*json_extract(node,'$.count')) AS count
                 FROM eligible GROUP BY actor,root
             ), actors AS MATERIALIZED (
                 SELECT key AS actor, value AS sequences FROM json_each(:seen)
@@ -633,11 +704,12 @@ class OpenedRouteCounts(BusRouteCounts):
                 SELECT request.actor, request.root, count(*) AS count
                 FROM actors AS owner, json_each(owner.sequences) AS seen
                 CROSS JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=seen.value
-                JOIN requests AS request
+                JOIN read_requests AS request
                     ON request.actor=owner.actor
                     AND request.target=row.target AND request.sender=row.sender
                     AND request.sender_lookup=row.sender_lookup AND row.timestamp>=request.since
-                WHERE row.seq<=:through GROUP BY request.actor,request.root
+                WHERE row.seq<=:through AND row.seq>request.frontier
+                GROUP BY request.actor,request.root
             )
             SELECT request.actor,request.target,request.sender,
                 coalesce(totals.count,0)-coalesce(painted.count,0) AS count
@@ -645,16 +717,17 @@ class OpenedRouteCounts(BusRouteCounts):
             LEFT JOIN totals ON totals.actor=request.actor AND totals.root=request.root
             LEFT JOIN painted ON painted.actor=request.actor AND painted.root=request.root''',
             self._request_bindings(self.deliveries) | {
-                "seen": json.dumps({actor: sorted(rows) for actor, rows in seen.items()}),
+                "seen": sparse,
             },
         ))
 
     def _read_deliveries(self, actor: str, seen: frozenset[int]) -> list[UnseenDelivery]:
         """Visit eligible original sequences, never a future timestamp range."""
+        self._read_membership({actor: seen})
         return UnseenDelivery.read(self.connection.execute(
-            f'''WITH RECURSIVE {self._requests}, {self._eligible},
+            f'''WITH RECURSIVE {self._requests}, {self._read_ranks}, {self._eligible},
             listing_nodes(id,node) AS (
-                SELECT id,node FROM eligible WHERE actor=:actor
+                SELECT id,node FROM eligible WHERE actor=:actor AND weight=1
                 UNION ALL
                 SELECT child.id,child.node
                 FROM listing_nodes AS parent, json_each(parent.node,'$.children') AS edge
@@ -669,6 +742,10 @@ class OpenedRouteCounts(BusRouteCounts):
             )
             SELECT row.seq,row.target FROM sequences AS listed
             JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=listed.seq
-            WHERE row.seq NOT IN (SELECT value FROM json_each(:seen)) ORDER BY row.seq''',
-            self._request_bindings((actor,)) | {"actor": actor, "seen": json.dumps(sorted(seen))},
+            JOIN read_requests AS request ON request.actor=:actor
+                AND request.target=row.target AND request.sender=row.sender
+                AND request.sender_lookup=row.sender_lookup
+            WHERE row.seq>request.frontier
+                AND row.seq NOT IN (SELECT value FROM json_each(:seen)) ORDER BY row.seq''',
+            self._request_bindings((actor,)) | {"actor": actor, "seen": json.dumps(sorted(seen.sparse))},
         ))

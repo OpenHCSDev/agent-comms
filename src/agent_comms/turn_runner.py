@@ -301,12 +301,11 @@ class TurnRunner:
                 return True
         if sent_seq:
             snapshot = self.comms.registry.snapshot()
-            document = self.comms.bus.reads.read()
-            for name in snapshot.threads:
-                if name != thread_name and sent_seq in self.comms.bus.reads.seen_sequences(
-                    name, snapshot, document=document
-                ):
-                    return True
+            readers = self.comms.bus.reads.observations(snapshot)
+            with self.comms.bus.log.certified_read() as source:
+                message = source.delivery(sent_seq).message
+            return any(name != thread_name and mask.contains(message)
+                       for name, mask in readers.items())
         return False
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:

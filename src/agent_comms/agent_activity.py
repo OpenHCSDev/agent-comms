@@ -45,7 +45,7 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
 
     def displayed_recipient(self, notification, source, reads, document, snapshot):
         return reads.displayed_recipient(
-            source.message, notification.recipient_identity, snapshot, document=document
+            source.message, notification.recipient_identity, snapshot, readers=document
         )
 
     def selected_response(
@@ -65,7 +65,7 @@ class RecordedRecipientActivity(RecipientActivity):
 
     def displayed_recipient(self, notification, source, reads, document, snapshot):
         return reads.historical_displayed_recipient(
-            source.message, notification.recipient_identity, snapshot, document=document
+            source.message, notification.recipient_identity, snapshot, readers=document
         )
 
 
@@ -74,9 +74,8 @@ class ExternalRecipientActivity(RecipientActivity):
     incarnation: ThreadIncarnation
 
     def after_inbox_read(self, notification, source, reads, document, snapshot):
-        if self.incarnation.current(snapshot) and source.message.seq in reads.seen_sequences(
-            self.incarnation.name, snapshot, document=document
-        ):
+        mask = document.get(self.incarnation.resolved(snapshot).name)
+        if self.incarnation.current(snapshot) and mask is not None and mask.contains(source.message):
             return replace(
                 notification,
                 state="Acknowledged",

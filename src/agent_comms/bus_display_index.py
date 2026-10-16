@@ -11,7 +11,8 @@ from .bus_projection import AppendCheckpoint, BusAppendIndex
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope
-from .read_ledger import ReadLedger
+from .read_ledger import ReadLedger, ReadMask
+from .bus_route_counts import BusRouteCounts
 
 if TYPE_CHECKING:
     from .wire_log import OpenedWireSnapshot
@@ -23,7 +24,7 @@ DisplayMetrics = tuple[dict[str, tuple[float, float]], dict[str, int]]
 class DisplayMetricScope:
     scopes: tuple[ChannelDisplayScope, ...]
     viewer_names: frozenset[str]
-    seen_sequences: frozenset[int]
+    reads: ReadMask
 
     @property
     def empty_metrics(self) -> DisplayMetrics:
@@ -31,7 +32,7 @@ class DisplayMetricScope:
                 dict.fromkeys((scope.channel for scope in self.scopes), 0))
 
     def unread(self, message: Message) -> bool:
-        return message.sender not in self.viewer_names and message.seq not in self.seen_sequences
+        return message.sender not in self.viewer_names and not self.reads.contains(message)
 
     def observe(self, message: Message, metrics: DisplayMetrics) -> None:
         clocks, counts = metrics
@@ -52,7 +53,7 @@ class DisplayCheckpoint(AppendCheckpoint):
     semantics: DisplayMetricScope
     activity: dict[str, tuple[float, float]]
     counts: dict[str, int]
-    schema: Literal[3] = field(default=3, kw_only=True)
+    schema: Literal[4] = field(default=4, kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -76,7 +77,7 @@ class DisplayCheckpoint(AppendCheckpoint):
         clocks, counts = metrics
         previous_scopes = {scope.channel: scope for scope in self.semantics.scopes}
         rebuild, changed_reads = [], []
-        same_reads = semantics.seen_sequences == self.semantics.seen_sequences
+        same_reads = semantics.reads == self.semantics.reads
         for scope in semantics.scopes:
             previous = previous_scopes.get(scope.channel)
             if scope == previous:
@@ -88,9 +89,11 @@ class DisplayCheckpoint(AppendCheckpoint):
                     continue
             rebuild.append(scope)
         rebuilt = DisplayMetricScope(tuple(rebuild), semantics.viewer_names,
-                                     semantics.seen_sequences)
-        changed_sequences = (self.semantics.seen_sequences ^ semantics.seen_sequences
-                             if changed_reads else frozenset())
+                                     semantics.reads)
+        changed_sequences = frozenset()
+        if changed_reads:
+            with BusRouteCounts(Path(opened.stream.name)) as reads:
+                changed_sequences = reads.changed_reads(self.semantics.reads, semantics.reads)
         records = (opened.public_records(before_offset=self.offset)
                    if rebuild else
                    opened.public_records_for(changed_sequences, before_offset=self.offset))
