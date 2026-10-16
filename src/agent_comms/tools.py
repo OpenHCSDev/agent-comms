@@ -873,7 +873,6 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
     tags: str | None = tool_field(
         "Comma-separated tags; omitted inherits parent tags", default=None
     )
-    prompt: str | None = tool_field("Initial prompt override", default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import ForkCliCommand
@@ -882,8 +881,7 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
         return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
                               project=parent.worktree, model=parent.model,
                               thinking_level=parent.thinking_level,
-                              tags=_tag_set(self.tags) if self.tags is not None else None,
-                              prompt=self.prompt).apply(comms)
+                              tags=_tag_set(self.tags) if self.tags is not None else None).apply(comms)
 
 
 class OwnerLifecycleControl:
