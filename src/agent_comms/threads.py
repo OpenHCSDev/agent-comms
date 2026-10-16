@@ -142,6 +142,7 @@ class Thread(ThreadProvenance):
         if generated:
             object.__setattr__(self, "created_at", float(self.created_at))
         super(Thread, self).__post_init__()
+        self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None:
             if self.active_turn.owner_pid != self.pid:

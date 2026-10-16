@@ -220,7 +220,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     async def session_update(self, **kwargs):
                         updates.append(kwargs["update"].model_dump(by_alias=True))
 
-                await agent.inputs.replay_unknown_inputs("worker", Client())
+                await agent.inputs.emit_input_delivery_changed("worker", client=Client())
                 assert any(
                     row["_meta"]["agentComms"]["inputDisposition"]["sequence"] == message.seq
                     for row in updates

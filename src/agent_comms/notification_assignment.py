@@ -357,10 +357,9 @@ class NotificationAssignment(NotificationSource):
     ) -> NotificationAssignmentRead:
         """Capture assignment evidence through the single observing connection owner."""
         from .coordination_database import CoordinationStore
-        from .recovery_projection import _preflight
 
         database = cls.database_path(root)
-        failure = _preflight(database)
+        failure = CoordinationStore.observation_failure(database)
         if failure == "missing":
             return NotificationAssignmentRead(tuple(sources), ())
         if failure:

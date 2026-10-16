@@ -19,7 +19,9 @@ from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import GenerationCounter, TurnId
-from .thread_status import RunningThreadStatus, StoppedThreadStatus, ThreadStatus
+from .thread_status import (
+    ConnectedThreadStatus, NoBridgeThreadStatus, RunningThreadStatus, ThreadStatus,
+)
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
@@ -55,7 +57,7 @@ class Registration:
                 raise RelationViolationError("Another live process owns this CLI endpoint.")
             bound = replace(thread, process_identity=process)
             self._commit_registration(edit, edit.document.prepare_registration(
-                bound, RunningThreadStatus(), new_owner=True))
+                bound, ConnectedThreadStatus(), new_owner=True))
             owner = edit.document.snapshot().owner_identity(bound.name)
         try:
             yield owner.incarnation
@@ -69,7 +71,7 @@ class Registration:
                 else:
                     current = snapshot.require(owner.incarnation.name)
                     self._commit_registration(edit, edit.document.prepare_registration(
-                        replace(current, process_identity=None), StoppedThreadStatus(),
+                        replace(current, process_identity=None), NoBridgeThreadStatus(),
                         new_owner=False))
 
     def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:

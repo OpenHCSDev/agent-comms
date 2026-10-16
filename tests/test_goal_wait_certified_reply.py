@@ -1,6 +1,7 @@
 """Dependency replies retain original certified identities across registry changes."""
 
 import os
+from agent_comms.tool_caller import NoThreadCaller
 import asyncio
 import json
 from dataclasses import replace
@@ -142,7 +143,7 @@ async def test_native(retained_native_acp_owner):
     agent.inputs.auto_wake = True
     sent = invoke_tool(comms, "comms_send", {
         "from": "peer", "to": sid, "body": "Original dependency reply",
-    })
+    }, caller=NoThreadCaller())
     original = comms.bus.log.message_by_id(sent["id"])
     with comms.bus.log.certified_read() as source:
         assert wait.matches(source.delivery(original.seq), owner.incarnation.require_recorded())

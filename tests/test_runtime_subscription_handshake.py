@@ -12,6 +12,8 @@ from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.field_codec import FieldCodec
+from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
 
@@ -99,6 +101,7 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, to
         try:
             request = json.loads(await reader.readline())
             assert request["action"] == "subscribe" and request["thread"] == "owner"
+            writer.write((json.dumps(FieldCodec.encode(OwnerAnnouncement())) + "\n").encode())
             writer.write((json.dumps({"ready": {}, **token_fields}) + "\n").encode())
             await writer.drain()
             # Rejection must close the attachment without sending a prompt or
@@ -129,3 +132,25 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, to
         await server.wait_closed()
         path.unlink(missing_ok=True)
         await client.shutdown()
+
+
+async def test_owner_announces_its_protocol_before_any_update(tmp_path):
+    """The real subscribe command sends the announcement before replaying anything."""
+    from types import SimpleNamespace
+
+    from agent_comms.runtime_requests import SubscribeRuntimeRequest
+
+    sent = []
+
+    class Stop(Exception):
+        pass
+
+    async def send(payload):
+        sent.append(payload)
+        raise Stop
+
+    ctx = SimpleNamespace(server=SimpleNamespace(agent=None), send=send)
+    with pytest.raises(Stop):
+        await SubscribeRuntimeRequest(thread="owner").apply(ctx)
+    assert sent == [FieldCodec.encode(OwnerAnnouncement())]
+    OwnerAnnouncement().require_same_core("owner", sent[0])

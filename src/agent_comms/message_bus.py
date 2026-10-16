@@ -12,13 +12,17 @@ from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
-from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest, UnreadBeforeRequest
+from .message_page import (
+    ConversationMessagePageRequest, MessagePage, MessagePageRequest, ReferencedMessagesRequest,
+    UnreadBeforeRequest,
+)
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
     ChannelDisplayScope,
     DMDisplayScope,
     ListedDeliveries,
+    DisplayBasis,
     MessageDisplayScope,
     WatchAcknowledgment,
 )
@@ -220,20 +224,31 @@ class MessageBus:
         ) as index:
             return index.unseen_counts({actor: selection.seen})[actor]
 
+    def delivered(
+        self, name: str, references: Sequence[MessageReference]
+    ) -> DisplayBasis:
+        """The named messages this reader received and has not yet read.
+
+        The page index finds each one by its sequence, so this costs the named
+        rows only: no route projection, unread listing or other body is read.
+        The caller marks the returned basis read.
+        """
+        snapshot = self._registry.snapshot()
+        delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
+        seen = self.reads.seen_sequences(delivery.actor, snapshot)
+        messages = ReferencedMessagesRequest(delivery, frozenset(references)).read(self.log)
+        return self.reads.capture(
+            name, tuple(message for message in messages if message.seq not in seen),
+            snapshot, self.log.path,
+        )
+
     def mark_delivered(
         self, name: str, references: Sequence[MessageReference]
     ) -> int:
         """Mark only the named unread messages delivered and return their count."""
-        requested = frozenset(references)
-        snapshot = self._registry.snapshot()
-        messages = tuple(
-            message
-            for message in self.inbox(name, snapshot=snapshot)
-            if message.reference in requested
-        )
-        basis = self.reads.capture(name, messages, snapshot, self.log.path)
+        basis = self.delivered(name, references)
         self.reads.mark_displayed(basis.viewer, basis)
-        return len(messages)
+        return basis.message_count
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
         """Advance a thread's global inbox cursor without loading messages."""
