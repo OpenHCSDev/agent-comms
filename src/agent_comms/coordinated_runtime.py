@@ -11,6 +11,7 @@ import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 from .pi_vocabulary import ThinkingLevel
 from .agent_events import CompactionEvent
@@ -29,12 +30,14 @@ from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
 from .selected_tool_broker import SelectedToolIntent
-from .selected_turn import SelectedConsideration
+from .selected_turn import SelectedAttempt, SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
 
 
 @dataclass(kw_only=True)
 class SelectedExecution:
+    max_attempts: ClassVar[int] = 3
+
     comms: Comms
     wire_root_id: str
     owner_name: str
@@ -129,6 +132,11 @@ class SelectedExecution:
         if self.selected_existing_file_write is not None:
             return self.selected_existing_file_write
         return session.default_action()
+
+    async def full(self, participant, session: SelectedSession, snapshot) -> CoordinatedTurn:
+        """Both direct work and a FULL verdict enter the same attempt lifecycle."""
+        attempt = await SelectedAttempt.engage(participant, snapshot)
+        return await attempt.run(self, session, self.action(session), self.write_authority)
 
     async def run(
         self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
