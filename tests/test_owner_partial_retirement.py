@@ -15,7 +15,8 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_cutover import PreserveOwnerRuntime
-from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from agent_comms.owner_launch import RetainedOwnerLaunch
+from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.owner_lifecycle import OwnerLifecycle
 from agent_comms.owner_restart import FencedOwnerBatch, OwnerRestartRequest, StoppedOwnerFailure
 from agent_comms.registry_document import RegistrySnapshot

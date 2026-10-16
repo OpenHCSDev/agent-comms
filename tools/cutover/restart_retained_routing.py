@@ -6,7 +6,7 @@ from pathlib import Path
 
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
-from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
+from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from retained_routing_cutover import RetainedRoutingCutover
 
 

@@ -43,6 +43,7 @@ from .agent_backend import (
 )
 
 if TYPE_CHECKING:
+    from .launch_runtime import LaunchRuntime
     from .agent_events import AgentEvent, AgentInfo
     from .comms import Comms
     from .native_arguments import NativeArguments
@@ -322,13 +323,13 @@ class PiNativeBackend(
     # -- Forks ------------------------------------------------------------
 
     @classmethod
-    async def fork(cls, parent: Thread, launcher: str) -> PiSessionFile:
+    async def fork(cls, parent: Thread, launcher: str, runtime: LaunchRuntime) -> PiSessionFile:
         """Copy the parent's whole saved history with Pi's own session manager."""
         from .coordinator import Coordination
         from .native_fork import fork_native_session
 
         identity = await Coordination.run_worker(partial(
-            fork_native_session, parent.require_saved_session(), parent.worktree, launcher,
+            fork_native_session, parent.require_saved_session(), parent.worktree, launcher, runtime,
         ))
         return PiSessionFile(identity.session_file)
 

@@ -34,7 +34,7 @@ from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .native_session_files import NativeSessionFiles
-from .owner_launch import RestartEnvironment
+from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import OwnerLifecycle
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
@@ -86,7 +86,7 @@ class NewThreadSpec:
         return self.task if self.prompt is None else self.prompt
 
     @contextmanager
-    def prepared(self, threads: ThreadManagement, pi_bin: str) -> Iterator[Thread]:
+    def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         from .fresh_private_session import create_fresh_private_session
 
         project = Path(self.project).expanduser().resolve(strict=True)
@@ -133,11 +133,11 @@ class ForkSpec(NewThreadSpec):
         return parent
 
     @contextmanager
-    def prepared(self, threads: ThreadManagement, pi_bin: str) -> Iterator[Thread]:
+    def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         # Copy saved history outside the wire lock, retaining writer→wire order.
         parent = self._parent(threads)
         threads.registry.require_declaration_available(self.child(parent, parent.require_saved_session()))
-        location = asyncio.run(parent.backend.fork(parent, pi_bin))
+        location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
         with _store_lock(threads._wire_lock_path):
             current = self._parent(threads)
             if current.incarnation != parent.incarnation or current.session_file != parent.session_file:
@@ -639,31 +639,28 @@ class ThreadManagement:
     def create(self, spec: NewThreadSpec, pi_bin: str | None = None) -> Thread:
         """Prepare the session, then register and launch the thread with its first input."""
         resolved_bin = NativeArguments.configured_binary(pi_bin)
-        with spec.prepared(self, resolved_bin) as child:
-            return self._create_unlocked(spec, resolved_bin, child)
+        runtime = LaunchRuntime.current()
+        with spec.prepared(self, resolved_bin, runtime) as child:
+            # A new incarnation's inbox already starts at its creation time
+            # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
+            child = self.registry._declare_unlocked(child)
 
-    def _create_unlocked(self, spec: NewThreadSpec, pi_bin: str, child: Thread) -> Thread:
-        """Register and launch the thread, removing its declaration if launch fails."""
-        # A new incarnation's inbox already starts at its creation time
-        # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
-        child = self.registry._declare_unlocked(child)
-
-        key = f"acp:{uuid4().hex}" if spec.initial_prompt else None
-        try:
-            owned = self.owners._launch_owner_unlocked(
-                replace(child, model=self.resolve_thread_model(child.name)),
-                pi_bin, startup_input_key=key,
-            )
-            if key is not None:
-                InputDispositions(self.root).record(
-                    key, seq=None, owner=owned.name, target=owned.name,
-                    admission=self.registry.snapshot().admission_generations[owned.name],
-                    text=spec.initial_prompt,
+            key = f"acp:{uuid4().hex}" if spec.initial_prompt else None
+            try:
+                owned = self.owners._launch_owner_unlocked(
+                    replace(child, model=self.resolve_thread_model(child.name)),
+                    resolved_bin, startup_input_key=key, launch_runtime=runtime,
                 )
-            return owned
-        except OSError:
-            self.registry.remove(spec.name)
-            raise
+                if key is not None:
+                    InputDispositions(self.root).record(
+                        key, seq=None, owner=owned.name, target=owned.name,
+                        admission=self.registry.snapshot().admission_generations[owned.name],
+                        text=spec.initial_prompt,
+                    )
+                return owned
+            except OSError:
+                self.registry.remove(spec.name)
+                raise
 
     def adopt_current(self) -> Thread:
         """Declare and register the current process's thread from env."""

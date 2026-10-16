@@ -11,12 +11,57 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from agent_comms.owner_launch import RetainedOwnerLaunch
+from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime, RestartEnvironment
+from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
+
+
+def test_selected_runtime_stays_pinned_when_current_changes(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True)
+    first, second = tmp_path / "first", tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    for prefix in (first, second):
+        (prefix / "bin").mkdir()
+        (prefix / "bin/python").symlink_to(LaunchRuntime.running().interpreter)
+    pointer.symlink_to(first)
+    selected = LaunchRuntime.current()
+    pointer.unlink()
+    pointer.symlink_to(second)
+    assert selected.interpreter == first / "bin/python"
+    assert LaunchRuntime.current().interpreter == second / "bin/python"
+    original = {"PATH": "/old/bin:/usr/bin", "VIRTUAL_ENV": "/old",
+                "PYTHONPATH": "/old/source", "AUTHORED_CREDENTIAL": "kept"}
+    projected = selected.environment(original)
+    assert projected["PATH"].split(os.pathsep)[0] == str(first / "bin")
+    assert projected["VIRTUAL_ENV"] == str(first)
+    assert "PYTHONPATH" not in projected
+    assert projected["AUTHORED_CREDENTIAL"] == "kept"
+    assert selected.environment(projected) == projected
+    assert RestoredRuntime(Path("/old/bin/python")).environment(original) == original
+    _, native_environment = NativePiRpcLaunch.bootstrap(
+        first / "package/dist/cli.js", (), tmp_path, original,
+        RestartEnvironment.inherit(original), selected,
+    )
+    assert native_environment["VIRTUAL_ENV"] == str(first)
+    assert native_environment["PATH"].split(os.pathsep)[0] == str(first / "bin")
+    assert "PYTHONPATH" not in native_environment
+
+
+@pytest.mark.parametrize("source", [{}, {"PYTHONPATH": ""}, {"PYTHONPATH": "/source"}])
+def test_import_path_preserves_absent_and_empty_then_removes_explicitly(source):
+    configuration = RestartEnvironment.inherit(source)
+    encoded = configuration.encode()
+    assert {key: value for key, value in encoded.items() if key == "PYTHONPATH"} == source
+    assert FieldCodec.decode(RestartEnvironment, encoded) == configuration
+    assert "PYTHONPATH" not in configuration.without_pythonpath().apply_runtime(source)
 
 
 @pytest.mark.parametrize(('inherited', 'expected'), [
@@ -86,7 +131,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", environment)
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     runtime = RestartEnvironment.inherit(environment)
-    original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None)
+    original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None, LaunchRuntime(Path("/target/bin/python")))
     encoded = FieldCodec.encode(original)
     assert set(encoded["owners"][0]) == {"owner", "admission", "launch"}
     decoded = FieldCodec.decode(OwnerRestartHandoff, encoded)
@@ -116,7 +161,7 @@ def test_handoff_restore_requires_each_authentic_interpreter_before_read_or_laun
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/other-python",
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
-    handoff = OwnerRestartHandoff("/authored", (owner,), RestartEnvironment.inherit({}), None, None)
+    handoff = OwnerRestartHandoff("/authored", (owner,), RestartEnvironment.inherit({}), None, None, LaunchRuntime(Path("/target/bin/python")))
     lifecycle = SimpleNamespace(root=Path("/authored"))
     # No registry/launch member supplied: refusal must precede either access.
     with pytest.raises(RelationViolationError, match="acquired source interpreter"):

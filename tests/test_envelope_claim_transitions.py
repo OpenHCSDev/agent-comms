@@ -218,6 +218,23 @@ def test_raw_path_aliases_cannot_acquire_or_release_same_file(tmp_path):
     assert ExistingFileClaim(Path(aliases[0])).normalized(worktree) == a
 
 
+def test_stored_claims_decode_without_resolving_changed_filesystem(tmp_path, monkeypatch):
+    _, a, b = resources(tmp_path)
+    claimed = transition(1, claims=(a,), generation=G1)
+    records = (claimed, ClaimRelease(a, G1), claimed.claimed(a))
+    encoded = tuple(FieldCodec.encode(record) for record in records)
+    Path(a).unlink()
+    Path(a).symlink_to(b)
+
+    def forbidden_resolve(*args, **kwargs):
+        raise AssertionError("Stored resource decoding must not resolve current files")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "resolve", forbidden_resolve)
+        for record, raw in zip(records, encoded, strict=True):
+            assert FieldCodec.decode(type(record), raw) == record
+
+
 def test_no_claim_state_or_sidecar_is_written_by_pure_application(tmp_path):
     worktree, a, _ = resources(tmp_path)
     before = set(worktree.iterdir())
