@@ -91,6 +91,11 @@ class InputDelivery:
         return bool(self.current or self.historical_count or self.dismissed_historical_count)
 
     @property
+    def summary(self) -> str:
+        """Waiting input jobs are not per-recipient message totals."""
+        return f"Delivery · {self.current} {self.pending}"
+
+    @property
     def pending(self) -> str:
         return "awaiting start" if self.owner_queue else "unconfirmed"
 
