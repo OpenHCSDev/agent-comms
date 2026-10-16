@@ -564,17 +564,10 @@ class BusPresentation:
 
         The captured selection owns channel inclusion, viewer aliases and read
         membership. None is supplied independently by the metrics caller.
-        Caches may be reused or published only for an unchanged bus revision.
+        The index reads the captured complete-line cut; read and write errors propagate.
         """
         semantics = DisplayMetricScope(selection.scopes, selection.viewer_names, selection.seen)
-        initial = semantics.empty_metrics
-        projected = self.display_index(selection.require_viewer()).snapshot(source, semantics)
-        if projected is None:
-            metrics = initial
-            for message, _ in source.public_records():
-                semantics.observe(message, metrics)
-        else:
-            metrics = projected.metrics
+        metrics = self.display_index(selection.require_viewer()).snapshot(source, semantics).metrics
         return ({name: ChannelActivity(*clocks) for name, clocks in metrics[0].items()},
                 dict(metrics[1]))
 

@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import hashlib
-from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex
+from .coordination_errors import StaleRevision
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope
@@ -45,6 +45,17 @@ class DisplayMetricScope:
                     if ReadLedger.human(message.sender_role) else last_user,
                 )
                 counts[scope.channel] += int(unread)
+
+
+@dataclass(frozen=True)
+class EmptyDisplaySnapshot:
+    """A captured absent bus has no messages, not an unavailable index answer."""
+
+    semantics: DisplayMetricScope
+
+    @property
+    def metrics(self) -> DisplayMetrics:
+        return self.semantics.empty_metrics
 
 
 @dataclass(frozen=True)
@@ -113,14 +124,13 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
         super().__init__(bus_path, path)
 
     def snapshot(self, opened: OpenedWireSnapshot,
-                 semantics: DisplayMetricScope) -> DisplayCheckpoint | None:
+                 semantics: DisplayMetricScope) -> DisplayCheckpoint | EmptyDisplaySnapshot:
         source, stream = opened.revision, opened.stream
-        if source is None or stream is None or not source.opened_by(stream):
-            return None
-        if source.size:
-            stream.seek(source.size - 1)
-            if stream.read(1) != b"\n":
-                return None
+        if source is None:
+            return EmptyDisplaySnapshot(semantics)
+        if not source.opened_by(stream):
+            raise StaleRevision("Display source changed before its captured read")
+        boundary = opened.boundary
         checkpoint = opened.append_checkpoint(self)
         if checkpoint is not None and checkpoint.current_for(source, semantics):
             return checkpoint
@@ -130,11 +140,10 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
             metrics, offset = checkpoint.rebase(opened, semantics), checkpoint.offset
         for message, _ in opened.public_records(offset):
             semantics.observe(message, metrics)
-        projected = DisplayCheckpoint(source, source.size,
-                     AppendCheckpoint.fingerprint(stream, source.size),
+        projected = DisplayCheckpoint(source, boundary,
+                     AppendCheckpoint.fingerprint(stream, boundary),
                      semantics, *metrics)
+        if checkpoint is None or checkpoint.semantics != semantics or offset != boundary:
+            self.write(projected)
         opened.remember_append_checkpoint(self, projected)
-        if checkpoint is None or checkpoint.semantics != semantics or offset != source.size:
-            with suppress(OSError):
-                self.write(projected)
         return projected

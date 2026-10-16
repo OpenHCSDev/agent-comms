@@ -3,14 +3,12 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable, Iterable, Mapping
-from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex
 from .coordination_errors import StaleRevision
-from .private_path import FileRevision
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
@@ -32,9 +30,6 @@ class ActivityCheckpoint(AppendCheckpoint):
     def snapshot(self) -> ActivitySnapshot:
         return self.channels, self.sent
 
-    def current_for(self, revision: FileRevision) -> bool:
-        return (self.source, self.offset) == (revision, revision.size)
-
 
 class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
     record_type = ActivityCheckpoint
@@ -50,23 +45,20 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
             return {}, {}
         if not source.opened_by(stream):
             raise StaleRevision("Activity source changed before its captured read")
-        if source.size:
-            stream.seek(source.size - 1)
-            if stream.read(1) != b"\n":
-                raise RelationViolationError("Activity source has an incomplete original row")
+        boundary = opened.boundary
         checkpoint = opened.append_checkpoint(self)
         if checkpoint is None:
             channels, sent, offset = {}, {}, 0
         else:
             channels, sent = dict(checkpoint.channels), dict(checkpoint.sent)
             offset = checkpoint.offset
-        if offset == source.size:
+        if offset == boundary:
             return (checkpoint or ActivityCheckpoint(
-                source, source.size, AppendCheckpoint.fingerprint(stream, source.size),
+                source, boundary, AppendCheckpoint.fingerprint(stream, boundary),
                 channels, sent)).snapshot
         stream.seek(offset)
-        while stream.tell() < source.size:
-            raw = stream.readline(source.size - stream.tell())
+        while stream.tell() < boundary:
+            raw = stream.readline(boundary - stream.tell())
             if not raw.endswith(b"\n"):
                 raise RelationViolationError("Activity source has an incomplete original row")
             if not raw.strip():
@@ -80,11 +72,10 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
                                     max(last_user, timestamp) if is_user else last_user)
                 if is_sent:
                     sent[sender] = max(sent.get(sender, 0.0), timestamp)
-        projected = ActivityCheckpoint(source, source.size,
-                    AppendCheckpoint.fingerprint(stream, source.size), channels, sent)
+        projected = ActivityCheckpoint(source, boundary,
+                    AppendCheckpoint.fingerprint(stream, boundary), channels, sent)
+        self.write(projected)
         opened.remember_append_checkpoint(self, projected)
-        with suppress(OSError):
-            self.write(projected)
         return projected.snapshot
 
 
