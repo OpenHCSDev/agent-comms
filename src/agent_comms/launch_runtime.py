@@ -153,8 +153,8 @@ class RestartEnvironment:
         object.__setattr__(self, "agent_directory", self.absolute(self.agent_directory))
 
     def absolute(self, directory: Path) -> Path:
-        if directory.parts and directory.parts[0] == "~":
-            directory = Path(self.home or Path.home()).joinpath(*directory.parts[1:])
+        if directory.is_relative_to("~"):
+            directory = Path(self.home or Path.home()) / directory.relative_to("~")
         return directory.expanduser().resolve()
 
     @classmethod

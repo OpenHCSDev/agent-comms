@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
 from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
 from .native_session_reopen import NativeSessionIdentity
+from .native_pi import NativePiRpcLaunch
 from .launch_runtime import LaunchRuntime
 from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
 
@@ -55,15 +57,16 @@ class ForkSessionHelper(PiHelper):
         )
 
 
-def fork_native_session(file: str, worktree: str, launcher: str) -> NativeSessionIdentity:
+def fork_native_session(
+    file: str, worktree: str, launcher: str, runtime: LaunchRuntime,
+) -> NativeSessionIdentity:
     """Copy the parent's history once under the native writer locks, before any wire lock.
 
     The native owner fsyncs the new history. An uncertain helper outcome is not
     retried or inferred from an orphan file, and no input is sent.
     """
-    from .native_pi import NativePiRpcLaunch
-
-    package = NativePiRpcLaunch.package_for_command(launcher, LaunchRuntime.running())
+    package = NativePiRpcLaunch.package_for_command(launcher, runtime)
     return asyncio.run(ForkSessionHelper.run(
         ForkSessionRequest(str(package), file, worktree), cwd=Path(worktree),
+        env=runtime.environment(os.environ),
     ))
