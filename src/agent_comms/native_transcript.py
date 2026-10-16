@@ -139,10 +139,8 @@ class NativeTranscript(TranscriptSource):
         return None
 
     def latest_tool(self):
-        from .session_revision import SessionRevision
         from .tool_activity import NativeToolSelectorUnavailable
 
-        SessionRevision.observe(str(self.path)).require_available()
         return NativeToolSelectorUnavailable()
 
     def imported_sources(self):

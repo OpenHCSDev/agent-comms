@@ -391,6 +391,9 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         return SelfDirectedGoalAuthor()
 
     def change(self, ctx: GoalActionContext) -> Goal:
+        current = ctx.thread.goal
+        if current is not None and not current.state.terminal:
+            current.author.require_self_direction()
         goal = Goal(text=self.text.strip(), id=uuid4().hex, revision=1, deadline=self.deadline)
         goal = replace(
             goal,
@@ -424,11 +427,9 @@ class OrderGoalAction(SetGoalAction):
         if current.state.terminal:
             raise ValueError("A completed goal needs a new goal, not an implicit restart.")
         revised_author = current.author.revised(author, snapshot, now)
-        revised = EditGoalAction(text=self.text).change(ctx)
-        assert revised.mention_source is not None
-        return replace(revised, deadline=self.deadline, mention_source=replace(
-            revised.mention_source, author=revised_author
-        ))
+        return replace(current.with_text(
+            self.text, ctx.thread, snapshot, author=revised_author,
+        ), deadline=self.deadline)
 
     def before_publish(self, goal, ctx):
         if ctx.thread.goal is None or goal.id != ctx.thread.goal.id:
@@ -450,19 +451,9 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = ctx.require_goal()
-        text = self.text.strip()
-        if not text:
-            raise ValueError("A goal requires text.")
-        revision = goal.revision + 1
-        return replace(
-            goal,
-            text=text,
-            revision=revision,
-            mention_source=bind_goal_mentions(
-                text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot(),
-                author=goal.author,
-            ),
-        )
+        goal.author.require_self_direction()
+        return goal.with_text(self.text, ctx.thread, ctx.goals.registry.snapshot(),
+                              author=goal.author)
 
 
 def required_block_reason(reason: str | None) -> str:

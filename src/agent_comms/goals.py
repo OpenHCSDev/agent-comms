@@ -129,6 +129,9 @@ class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
     def require_completion(self, progress) -> None: ...
 
     @abstractmethod
+    def require_self_direction(self) -> None: ...
+
+    @abstractmethod
     def revised(self, author: ThreadIncarnation, registry, now: float): ...
 
     @abstractmethod
@@ -156,6 +159,9 @@ class SelfDirectedGoalAuthor(GoalAuthor):
         pass
 
     def require_completion(self, progress) -> None:
+        pass
+
+    def require_self_direction(self):
         pass
 
     def revised(self, author, registry, now):
@@ -194,6 +200,9 @@ class CommandedGoalAuthor(GoalAuthor):
     def require_completion(self, progress) -> None:
         self.require_report(progress)
         progress.require_report().delivery.require_completion()
+
+    def require_self_direction(self):
+        raise ValueError("Use an order from the original commander to revise this goal.")
 
     def has_report(self, recorded):
         return recorded.since(self.issued_at)
@@ -383,6 +392,17 @@ class Goal:
     )
     notice: GoalNotice = field(default_factory=NoGoalNotice,
                                metadata={"wire_omit_default": True})
+
+    def with_text(self, text, owner, registry, *, author: GoalAuthor):
+        from .goal_mentions import bind_goal_mentions
+
+        text = text.strip()
+        if not text:
+            raise ValueError("A goal requires text.")
+        revision = self.revision + 1
+        return replace(self, text=text, revision=revision, mention_source=bind_goal_mentions(
+            text, self.id, revision, owner, registry, author=author,
+        ))
 
     @property
     def author(self) -> GoalAuthor:

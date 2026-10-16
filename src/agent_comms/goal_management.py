@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
-from .coordination_errors import StaleFence
+from .coordination_errors import StaleFence, PublicationUncertain
 from .errors import RelationViolationError
 from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
@@ -127,18 +127,15 @@ class Goals:
                     # A Core notice must not implicitly answer the unit's input.
                     published = self.bus.publisher.publish_ordinary(message)
                     result = SentGoalNotice(published.reference)
-                except Exception as error:
+                except PublicationUncertain as error:
                     result = UnconfirmedGoalNotice(target, f"{type(error).__name__}: {error}")
                     _LOG.exception("State saved; commander notice unconfirmed; no automatic resend")
                 current = self.registry.require(unit.name)
                 if current.goal is not None and current.goal.id == after.goal.id:
                     # Communication receipts do not reset the work clock.
-                    try:
-                        self.registry.register(replace(current, goal=replace(
-                            current.goal, notice=result, revision=current.goal.revision + 1,
-                        )), self.registry.status(current.name))
-                    except Exception:
-                        _LOG.exception("Commander notice outcome could not be recorded; state remains saved")
+                    self.registry.register(replace(current, goal=replace(
+                        current.goal, notice=result, revision=current.goal.revision + 1,
+                    )), self.registry.status(current.name))
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

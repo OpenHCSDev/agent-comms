@@ -88,10 +88,10 @@ class NativeThreadExecution(ThreadExecution):
     def latest_tool(cls, root, thread: Thread):
         from pathlib import Path
         from .native_transcript import NativeTranscript
-        from .tool_activity import NoToolActivity
+        from .tool_activity import NativeToolSelectorUnavailable
 
         if not thread.session_file:
-            return NoToolActivity()
+            return NativeToolSelectorUnavailable()
         return NativeTranscript(Path(thread.session_file)).latest_tool()
 
     @classmethod
