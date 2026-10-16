@@ -88,7 +88,12 @@ class ReadProgress:
 
     def mark(self, sequences: Iterable[int], prefix: Callable[[ReadProgress], PrefixResult]) -> ReadProgress:
         marked = self.merge(type(self)(sparse=frozenset(n for n in sequences if n > 0)))
-        return prefix(marked).apply(marked)
+        return marked.compact(prefix)
+
+    def compact(self, prefix: Callable[[ReadProgress], PrefixResult]) -> ReadProgress:
+        if not self.sparse:
+            return self
+        return prefix(self).apply(self)
 
 
 @dataclass(frozen=True, slots=True, eq=False)
@@ -472,7 +477,7 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
             raise ValueError('Display bus changed; refresh the displayed page.')
         if viewer != displayed.viewer:
             raise ValueError('Display belongs to a different viewer.')
-        if not displayed.conversations:
+        if not displayed:
             return
         from .bus_route_counts import BusRouteCounts, OpenedRouteCounts
         from .coordination_errors import CoordinationReadUnavailable

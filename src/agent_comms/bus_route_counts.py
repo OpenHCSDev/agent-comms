@@ -352,11 +352,9 @@ class BusRouteCounts(ReadSnapshot):
         self.connection.close()
 
     def read_prefix(self, conversation, progress, snapshot, bus_identity):
-        """Compact only a proven indexed conversation prefix, never numeric adjacency."""
+        """Prove the sparse frontier admitted by ReadProgress.compact; never adjacency."""
         from .read_ledger import ReadPrefix, PrefixUnavailable
 
-        if not progress.sparse:
-            return ReadPrefix(progress.read_through)
         maximum = max(progress.sparse)
         if not RouteSourceRow.proves_sequence(self.connection, FileIdentity(*bus_identity), maximum):
             return PrefixUnavailable()

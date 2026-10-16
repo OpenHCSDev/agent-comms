@@ -63,6 +63,33 @@ def test_prefix_family_never_grants_unproven_sparse_paint():
     assert state.mark((6,), lambda _: ReadPrefix(4)) == ReadProgress(4, frozenset((6,)))
 
 
+def test_progress_owns_empty_frontier_without_requesting_index_proof():
+    def unexpected(_progress):
+        raise AssertionError('An empty sparse frontier must not request an index proof')
+
+    state = ReadProgress(4)
+    assert state.compact(unexpected) is state
+    assert state.mark((1, 2, 4), unexpected) == state
+
+
+def test_display_basis_owns_empty_selected_paint_without_opening_authority(tmp_path):
+    from agent_comms.read_basis import DisplayBasis, DisplayedConversation
+
+    comms = wire(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path))
+    conversation = Conversation(target='#team')
+    shown = DisplayBasis(viewer.name, viewer.created_at,
+                         (DisplayedConversation(conversation, (1,)),), None)
+    assert shown
+    for empty in (shown.select(()), shown.through(0)):
+        assert not empty
+        assert empty.viewer_identity == viewer.incarnation
+        assert empty.bus_identity is None
+        assert not empty.conversations[0]
+        comms.bus.reads.mark_displayed(viewer.name, empty, snapshot=comms.registry.snapshot())
+        assert not comms.bus.reads.path.exists()
+
+
 def test_undeclared_dictionary_is_not_guessed_from_its_values():
     for value in ({}, {'a': 1}, {1: 2}):
         with pytest.raises(TypeError, match='declared dict'):

@@ -78,6 +78,9 @@ class DisplayedConversation:
     conversation: Conversation
     sequences: tuple[int, ...]
 
+    def __bool__(self) -> bool:
+        return bool(self.sequences)
+
 
 @dataclass(frozen=True, slots=True)
 class DisplayBasis:
@@ -85,6 +88,9 @@ class DisplayBasis:
     viewer_created_at: float
     conversations: tuple[DisplayedConversation, ...]
     bus_identity: tuple[int, int] | None
+
+    def __bool__(self) -> bool:
+        return any(self.conversations)
 
     @property
     def viewer_identity(self) -> ThreadIncarnation:
