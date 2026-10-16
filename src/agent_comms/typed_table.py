@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import types
 from abc import abstractmethod
@@ -551,8 +552,18 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return tuple(cls.schema_objects().values())
 
     @classmethod
-    def create(cls, db: sqlite3.Connection) -> None:
+    def create(cls, db: sqlite3.Connection, *, if_not_exists: bool = False) -> None:
+        """Create the declared schema, optionally admitting concurrent initializers.
+
+        SQLite owns the existence check. Apply its clause only to the CREATE
+        header of our canonical DDL; bodies and schema comparison stay unchanged.
+        """
         for statement in cls.ddl():
+            if if_not_exists:
+                statement = re.sub(
+                    r"\ACREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER)\b",
+                    r"\g<0> IF NOT EXISTS", statement, count=1,
+                )
             db.execute(statement)
 
     @classmethod

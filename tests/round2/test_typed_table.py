@@ -91,6 +91,20 @@ def test_declared_table_family(tmp_path):
         assert TableChildRow.select(db)[0].weight is None
 
 
+def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation():
+    from agent_comms.native_pi import NativeContextJournal
+    from agent_comms.typed_table import SQLiteSchemaObject
+
+    with sqlite3.connect(':memory:') as db:
+        NativeContextJournal.create(db, if_not_exists=True)
+        NativeContextJournal.create(db, if_not_exists=True)
+        actual = SQLiteSchemaObject.read(db.execute(
+            "SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL"))
+        assert SQLiteSchemaObject.differences(actual, NativeContextJournal.schema_objects()) == ()
+        with pytest.raises(sqlite3.OperationalError, match='already exists'):
+            NativeContextJournal.create(db)
+
+
 def test_new_row_declaration_needs_no_other_edit():
     @dataclass(frozen=True)
     class AddedTableRow(TypedTable):

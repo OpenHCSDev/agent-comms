@@ -182,8 +182,7 @@ class DeliveryJournal:
         self.db = sqlite3.connect(self.path)
         self.db.execute('PRAGMA synchronous=FULL')
         for row in (Binding, DeliveryRow):
-            if not row.present(self.db):
-                row.create(self.db)
+            row.create(self.db, if_not_exists=True)
         self.db.commit()
 
     def bind(self, requested: Binding | None) -> Binding:
