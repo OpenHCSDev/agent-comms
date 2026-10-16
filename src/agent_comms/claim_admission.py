@@ -29,7 +29,6 @@ from .envelope_claim_transitions import (
     ExistingFileClaim,
     FileClaimPath,
     WakeAdmission,
-    project_verified_transitions,
 )
 from .errors import RelationViolationError
 from .messages import ClaimNoticeKind, Message
@@ -187,22 +186,18 @@ def publish_selected_resource_claim(
         initial,
     ):
         resource = resource_path.normalized(Path(owner.worktree))
-        transitions, _ = bus_lock.claim_transitions(bus.log, metadata)
-        existing = project_verified_transitions(transitions).get(resource)
-        if existing is not None:
-            if (
-                existing.admission == admission
-                and existing.incarnation == str(owner.created_at)
-                and existing.owner == owner.name
-            ):
-                return existing
-            raise ClaimConflict(existing)
-        if any(
-            transition.admission is not None
-            and transition.admission.operation_id == admission.operation_id
-            for transition in transitions
-        ):
-            raise IdentityConflict("Wake claim operation was already consumed")
+        with bus_lock.current_source(bus.log, metadata) as source:
+            existing = source.claim(resource)
+            if existing is not None:
+                if (
+                    existing.admission == admission
+                    and existing.incarnation == str(owner.created_at)
+                    and existing.owner == owner.name
+                ):
+                    return existing
+                raise ClaimConflict(existing)
+            if source.claim_operation_used(admission.operation_id):
+                raise IdentityConflict("Wake claim operation was already consumed")
         target = initial.message.sender
         if target == owner.name:
             target = BuiltinChannel.ALL.value
@@ -346,10 +341,9 @@ def write_selected_claimed_file(
         ) as scoped, scoped.session.transaction():
             _verify_selected_wake_state(initial, owner, generation, scoped, admission)
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
-            transitions, _ = bus_lock.claim_transitions(bus.log, marker)
-            projection = project_verified_transitions(transitions)
-            if claimed.admission != admission or projection.get(normalized) != claimed:
-                raise IdentityConflict("Selected write has no current exact resource claim")
+            with bus_lock.current_source(bus.log, marker) as source:
+                if claimed.admission != admission or source.claim(normalized) != claimed:
+                    raise IdentityConflict("Selected write has no current exact resource claim")
             with _opened_selected_file(Path(owner.worktree), normalized) as (fd, stable):
                 os.ftruncate(fd, 0)
                 view = memoryview(contents)

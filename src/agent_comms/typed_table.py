@@ -576,15 +576,23 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             db.execute(statement)
 
     @classmethod
-    def _query(
-        cls, db: sqlite3.Connection, where: str, parameters: tuple,
-        order_by: tuple[str, ...], descending: bool, key: dict[str, object]
-    ) -> sqlite3.Cursor:
+    def _condition(
+        cls, where: str, parameters: tuple, key: dict[str, object]
+    ) -> tuple[str, tuple]:
+        """Compile declared key values once for reads and keyed removals."""
         selected = cls._fields_named(tuple(key))
         if selected:
             where = "(" + where + ") AND " + " AND ".join(
                 f"{_identifier(item.name)} IS ?" for item in selected)
             parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
+        return where, parameters
+
+    @classmethod
+    def _query(
+        cls, db: sqlite3.Connection, where: str, parameters: tuple,
+        order_by: tuple[str, ...], descending: bool, key: dict[str, object]
+    ) -> sqlite3.Cursor:
+        where, parameters = cls._condition(where, parameters, key)
         cls._fields_named(order_by)
         direction = " DESC" if descending else ""
         return db.execute(
@@ -670,6 +678,14 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         writable = cls._writable_fields(tuple(values) or None)
         return db.execute(cls.insertion_statement(tuple(item.name for item in writable)),
                           tuple(item.encode(values[item.name]) for item in writable))
+
+    @classmethod
+    def delete(
+        cls, db: sqlite3.Connection, *, where: str = "1",
+        parameters: tuple = (), **key: object,
+    ) -> sqlite3.Cursor:
+        where, parameters = cls._condition(where, parameters, key)
+        return db.execute(f"DELETE FROM {_identifier(cls.declared_name)} WHERE {where}", parameters)
 
     def _insertion(self) -> tuple[str, tuple]:
         writable = self._writable_fields()

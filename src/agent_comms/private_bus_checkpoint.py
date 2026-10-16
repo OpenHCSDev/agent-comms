@@ -27,11 +27,15 @@ from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
+from .coordination_errors import IdentityConflict
+from .envelope_claim_transitions import (
+    ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
+)
 from .coordination_tables.publications import PublicationIntents
 from .errors import HumanAdmissionBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
-from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedRow, TypedTable
+from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedRow, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
 from .thread_identity import ThreadIncarnation
@@ -260,6 +264,24 @@ class CertifiedSourceRead:
         """Every committed message; its certified row is not checked a second time."""
         for row in self.message_rows():
             yield from WireRecord.certified_public_messages(row)
+
+    def claim(self, resource: str) -> ClaimOwner | None:
+        """One current normalized resource, through the certified checkpoint."""
+        self.require_open_prefix()
+        return ResourceClaims.owner_for(self.connection, resource)
+
+    def claim_operation_used(self, operation_id: str) -> bool:
+        self.require_open_prefix()
+        return ClaimCommits.operation_used(self.connection, operation_id)
+
+    def prepare_claim(self, transition: ClaimTransition) -> None:
+        self.require_open_prefix()
+        ClaimCommits.prepare(self.connection, transition)
+
+    def claim_projection(self) -> ClaimProjection:
+        """Explicit current-claim inspection; no historical bus rows are decoded."""
+        self.require_open_prefix()
+        return ResourceClaims.projection(self.connection)
 
     def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
         """Lend bounded original bytes, not this lock/connection, to decoding.
@@ -568,6 +590,90 @@ class CheckpointTable:
 @dataclass(frozen=True)
 class ResponseKeys(CheckpointTable, TypedTable):
     key: str = field(metadata={"sql": Column(primary_key=True)})
+
+
+@dataclass(frozen=True)
+class ClaimCommits(CheckpointTable, TypedTable):
+    """Original claim facts, including operation IDs consumed before release.
+
+    Generated columns belong to the typed transition, not another authored
+    encoding. One admitted envelope may acquire several normalized resources.
+    """
+
+    transition: ClaimTransition
+    seq: int | None = field(default=None, init=False, compare=False, metadata={
+        "sql": Column(unique=True, generated="json_extract(transition,'$.seq')"),
+    })
+    operation_id: str | None = field(default=None, init=False, compare=False, metadata={
+        "sql": Column(unique=True, generated="json_extract(transition,'$.admission.operation_id')"),
+    })
+
+    @classmethod
+    def latest_sequence(cls, db: sqlite3.Connection) -> int:
+        original = cls.one(db, where=f'"seq"=(SELECT MAX("seq") FROM "{cls.declared_name}")')
+        return original.transition.seq if original is not None else 0
+
+    @classmethod
+    def operation_used(cls, db: sqlite3.Connection, operation_id: str) -> bool:
+        return cls.one(db, operation_id=operation_id) is not None
+
+    @classmethod
+    def prepare(cls, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
+        projected = transition.apply(ResourceClaims.projection(db, transition.resources))
+        transition.require_new_operation(lambda operation: cls.operation_used(db, operation))
+        return projected
+
+    def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
+        """Apply this original in the caller's existing prefix transaction."""
+        try:
+            projected = self.prepare(db, self.transition)
+        except (ClaimTransitionError, IdentityConflict) as error:
+            raise RelationViolationError("Committed claim transition is inconsistent.") from error
+        inserted = super().insert(db)
+        marks = ",".join("?" for _ in self.transition.resources)
+        ResourceClaims.delete(db, where=f'"resource" IN ({marks})',
+                              parameters=self.transition.resources)
+        for owner in projected.values():
+            ResourceClaims(owner.resource, owner.seq).insert(db)
+        return inserted
+
+
+@dataclass(frozen=True)
+class ResourceClaims(CheckpointTable, TypedTable):
+    """Current membership references its original typed acquisition, never a copy."""
+
+    resource: str = field(metadata={"sql": Column(primary_key=True)})
+    claim_seq: int
+    @classmethod
+    def references(cls) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(("claim_seq",), ClaimCommits, ("seq",),
+                           deferred=True, on_delete="CASCADE"),)
+
+    @classmethod
+    def owner_for(cls, db: sqlite3.Connection, resource: str) -> ClaimOwner | None:
+        original = ClaimCommits.one(
+            db, where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
+            parameters=(resource,),
+        )
+        return original.transition.claimed(resource) if original is not None else None
+
+    @classmethod
+    def projection(
+        cls, db: sqlite3.Connection, resources: tuple[str, ...] | None = None,
+    ) -> ClaimProjection:
+        if resources is None:
+            current = cls.select(db)
+        else:
+            marks = ",".join("?" for _ in resources)
+            current = cls.select(db, where=f'"resource" IN ({marks})', parameters=resources)
+        owners = {}
+        if current:
+            sequences = tuple(sorted({row.claim_seq for row in current}))
+            marks = ",".join("?" for _ in sequences)
+            originals = ClaimCommits.select(db, where=f'"seq" IN ({marks})', parameters=sequences)
+            transitions = {row.transition.seq: row.transition for row in originals}
+            owners = {row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current}
+        return ClaimProjection(ClaimCommits.latest_sequence(db), owners)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1169,7 +1275,7 @@ def _recover_pending_unlocked(
 
     with db:
         for owner in TypedTable.members_with(CheckpointTable):
-            db.execute(f'DELETE FROM "{owner.declared_name}"')
+            owner.delete(db)
 
         def collect(offset, raw, record):
             nonlocal digest, prior_seen, prior_seq, last_seq, count, size
@@ -1359,43 +1465,9 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *, sh
             db.execute("PRAGMA query_only=ON")
         except (sqlite3.Error, OSError) as error:
             raise RelationViolationError(
-                "Private bus checkpoint verification is unavailable."
+                "Private bus checkpoint verification is unavailable; durability is UNKNOWN."
             ) from error
         yield CertifiedSourceRead(bus.path, marker, db, stream, saved)
-
-
-@contextmanager
-def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata, *,
-                                 shared: bool = False):
-    """Use the durable certificate, or flush and scan an uncertified source."""
-    if certificate_enabled(bus.path) or private_marker.requires_checkpoint:
-        # A shared reader verifies the exact bus revision and final seal. The
-        # writer already flushed those bytes before sealing them. Unfinished
-        # writes raise CheckpointNeedsRepair; the lock owner retries exclusively.
-        with opened_private_checkpoint_unlocked(bus, private_marker, shared=shared) as source:
-            yield source
-        return
-    with ExitStack() as resources:
-        try:
-            flags = os.O_RDONLY | os.O_NOFOLLOW
-            try:
-                descriptor = os.open(bus.path, flags)
-            except FileNotFoundError:
-                descriptor = None
-            if descriptor is not None:
-                stream = resources.enter_context(os.fdopen(descriptor, "rb"))
-                if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-                    raise RelationViolationError("Claim bus is not a regular file.")
-                os.fsync(stream.fileno())
-                scan = WireScan(private_marker)
-                while line := stream.readline(scan.max_row_bytes + 1):
-                    scan.read(line)
-            _directory_sync(bus.path)
-        except OSError as error:
-            raise RelationViolationError("Claim bus durability is UNKNOWN.") from error
-        # Caller exceptions keep their own cause and disposition. Closing
-        # borrowed resources does not run another admission or proof check.
-        yield None
 
 
 def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:
