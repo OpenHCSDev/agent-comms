@@ -51,7 +51,10 @@ def test_competing_readers_do_not_return_an_older_published_cut(tmp_path, monkey
     log = ActivityLog(path)
     log.emit(Activity("a", ActivityState.THINKING))
     log.all_current()
-    log.emit(Activity("b", ActivityState.THINKING))
+    # External appends still enter through the read path. Canonical writers
+    # now fold and persist their own checkpoint before returning.
+    with path.open("a") as stream:
+        stream.write(encoded("b") + "\n")
     earlier_size = path.stat().st_size
     earlier_ready, later_ready = threading.Event(), threading.Event()
     publish_earlier, publish_later = threading.Event(), threading.Event()
@@ -71,7 +74,8 @@ def test_competing_readers_do_not_return_an_older_published_cut(tmp_path, monkey
     with ThreadPoolExecutor(max_workers=2) as readers:
         earlier = readers.submit(log.all_current)
         assert earlier_ready.wait(5)
-        log.emit(Activity("c", ActivityState.THINKING))
+        with path.open("a") as stream:
+            stream.write(encoded("c") + "\n")
         later_size = path.stat().st_size
         later = readers.submit(log.all_current)
         try:
@@ -152,8 +156,46 @@ def test_malformed_complete_record_never_returns_stale_success(tmp_path):
     for _ in range(2):
         with pytest.raises(json.JSONDecodeError):
             reader.all_current()
+    before = path.read_bytes()
+    with pytest.raises(json.JSONDecodeError):
+        reader.emit(Activity("new", ActivityState.THINKING))
+    assert path.read_bytes() == before
     _atomic_write_text(path, encoded("fixed") + "\n")
     assert set(reader.all_current()) == {"fixed"}
+
+
+def test_reading_new_events_does_not_wait_for_checkpoint_writer(tmp_path):
+    path = tmp_path / "activity.jsonl"
+    log = ActivityLog(path)
+    log.emit(Activity("a", ActivityState.THINKING))
+    with path.open("a") as stream:
+        stream.write(encoded("b") + "\n")
+    # This is the real UI failure: a warm observer must not publish its read
+    # and wait behind another process writing the disposable document.
+    with ThreadPoolExecutor(max_workers=1) as readers:
+        with log.checkpoint.locked():
+            assert set(readers.submit(log.all_current).result(2)) == {"a", "b"}
+    assert set(log.checkpoint.read().latest) == {"a"}
+
+
+def test_source_writers_publish_checkpoint_and_noop_updates_do_not(tmp_path):
+    from agent_comms.activity_checkpoint import ActivityCheckpointStore
+    from agent_comms.private_path import FileRevision
+
+    log = ActivityLog(tmp_path / "activity.jsonl")
+    log.emit(Activity("a", ActivityState.THINKING))
+    checkpoint = log.checkpoint.read()
+    assert checkpoint.source == FileRevision.capture(log._path)
+    assert set(checkpoint.latest) == {"a"}
+    assert log.update("b", lambda _: Activity("b", ActivityState.WORKING))
+    assert set(log.checkpoint.read().latest) == {"a", "b"}
+    log.rename_thread("a", "renamed")
+    checkpoint = log.checkpoint.read()
+    assert checkpoint.source == FileRevision.capture(log._path)
+    assert set(checkpoint.latest) == {"renamed", "b"}
+    with patch.object(ActivityCheckpointStore, "replace") as publish:
+        assert not log.update("b", lambda _: None)
+        publish.assert_not_called()
 
 
 def test_cached_activity_still_expires_unless_its_thread_is_active(tmp_path):

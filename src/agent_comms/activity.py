@@ -319,6 +319,9 @@ class ActivityLog(ThreadOwnedState):
         """
         with _store_lock(self._path):
             before = FileRevision.capture(self._path)
+            # Validate existing source before committing an event: corruption
+            # must fail before append, not masquerade as a failed committed write.
+            self._latest_events()
             yield
             if FileRevision.capture(self._path) != before:
                 self._latest_events()
