@@ -85,11 +85,11 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     assert configured.service_tier.value == "standard"
 
 
-def test_native_arguments_configured_has_one_default(monkeypatch):
+def test_native_arguments_configured_uses_constructor_and_environment(monkeypatch):
     monkeypatch.delenv(NativeArguments.arguments_key, raising=False)
     monkeypatch.delenv(NativeArguments.binary_key, raising=False)
     assert NativeArguments.configured_binary() == NativeArguments.default_binary
-    assert NativeArguments.configured().argv == NativeArguments.default
+    assert NativeArguments.configured() == NativeArguments(entries=())
     monkeypatch.setenv(NativeArguments.binary_key, "/fixture/pi")
     monkeypatch.setenv(NativeArguments.arguments_key, '--model "fixture/model" --thinking off')
     assert NativeArguments.configured_binary() == "/fixture/pi"
