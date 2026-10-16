@@ -349,15 +349,14 @@ class WakeCandidateIndex(TypedStore):
                     if current == recorded:
                         tail = self._source_end(stream, batch.next_offset)
                         self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
-                if current != recorded:
-                    # Another writer's committed row owns progress. Release SQL
-                    # custody before validating its source; never replay a batch.
-                    advanced = self._checkpoint_start(
-                        current, stream, os.fstat(stream.fileno()), root_id,
-                        rebuild=False,
-                    )
-                    return advanced.byte_offset >= source.boundary
-                return batch.next_offset >= source.boundary
+                        return batch.next_offset >= source.boundary
+                # Another writer's committed row owns progress. Release SQL
+                # custody before validating its source; never replay a batch.
+                advanced = self._checkpoint_start(
+                    current, stream, os.fstat(stream.fileno()), root_id,
+                    rebuild=False,
+                )
+                return advanced.byte_offset >= source.boundary
         except (
             OSError,
             ValueError,
