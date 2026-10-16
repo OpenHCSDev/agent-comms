@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -12,7 +12,10 @@ from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
-from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest, UnreadBeforeRequest
+from .message_page import (
+    ConversationMessagePageRequest, MessagePage, MessagePageRequest, ReferencedMessagesRequest,
+    UnreadBeforeRequest,
+)
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
@@ -124,14 +127,8 @@ class MessageBus:
         The route index lists which deliveries are unread, as it does for the
         pending counts, and the page index reads only those rows.
         """
-        return self._unread(name, target, snapshot or self._registry.snapshot(),
-                            lambda seq: True)
-
-    def _unread(
-        self, name: str, target: str | None, snapshot: RegistrySnapshot,
-        wanted: Callable[[int], bool],
-    ) -> list[Message]:
-        """Decode only the wanted unread deliveries; the route index lists them."""
+        if snapshot is None:
+            snapshot = self._registry.snapshot()
         catalog = self._channels.read()
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
@@ -140,8 +137,7 @@ class MessageBus:
             with OpenedRouteCounts(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
             ) as index:
-                unread = [row for row in index.unseen_deliveries(delivery.actor, seen)
-                          if wanted(row.seq)]
+                unread = index.unseen_deliveries(delivery.actor, seen)
             if not unread:
                 return []
             listed = ListedDeliveries(
@@ -231,19 +227,20 @@ class MessageBus:
     def delivered(
         self, name: str, references: Sequence[MessageReference]
     ) -> DisplayBasis:
-        """Read only the named unread messages; the caller marks the basis read.
+        """The named messages this reader received and has not yet read.
 
-        The other unread deliveries are neither decoded nor touched.
+        The page index finds each one by its sequence, so this costs the named
+        rows only: no route projection, unread listing or other body is read.
+        The caller marks the returned basis read.
         """
-        requested = frozenset(references)
-        sequences = frozenset(reference.seq for reference in requested)
         snapshot = self._registry.snapshot()
-        messages = tuple(
-            message
-            for message in self._unread(name, None, snapshot, sequences.__contains__)
-            if message.reference in requested
+        delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
+        seen = self.reads.seen_sequences(delivery.actor, snapshot)
+        messages = ReferencedMessagesRequest(delivery, frozenset(references)).read(self.log)
+        return self.reads.capture(
+            name, tuple(message for message in messages if message.seq not in seen),
+            snapshot, self.log.path,
         )
-        return self.reads.capture(name, messages, snapshot, self.log.path)
 
     def mark_delivered(
         self, name: str, references: Sequence[MessageReference]
