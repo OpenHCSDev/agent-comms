@@ -32,6 +32,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -40,7 +41,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def marked(tmp_path: Path) -> Comms:
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     marker = comms.root / "bus_meta.json"  # existing private-root marker, not claim authority
     assert json.loads(marker.read_text())["claim_envelopes_version"] == 1
@@ -129,7 +130,7 @@ def _participants(tmp_path: Path) -> tuple[Comms, Path]:
     worktree.mkdir()
     (worktree / "a.py").write_text("one")
     (worktree / "b.py").write_text("two")
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True, private_claim_writes=True)
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current(), private_initial_writes=True, private_claim_writes=True)
     for name in ("alice", "bob", "observer"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(worktree)))
     comms.messaging.initialize_private_initial_protocol()
@@ -174,7 +175,7 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
         {"seq": sent.seq, "message_id": sent.message_id}
     ]
     comms.transcripts.routes.record("session", ("entry",), routing)
-    with Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()).transcripts.routes.for_session("session") as routes:
+    with Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).transcripts.routes.for_session("session") as routes:
         assert routes.get("entry") == routing
     assert comms.views.full_history() == [sent]
     projection = comms.bus.log.claim_projection()
@@ -191,7 +192,7 @@ def test_one_message_is_the_only_claim_authority_and_loser_has_no_row(
     assert loss.value.existing.owner == "alice"
     assert comms.views.full_history() == [sent]
     assert comms.bus.inbox("bob")[0].claim_transition == sent.claim_transition
-    fresh = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
+    fresh = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert fresh.views.full_history() == [sent]
 
 
@@ -205,7 +206,7 @@ def test_absolute_claim_outside_worktree_uses_one_global_key(tmp_path: Path) -> 
     )
     assert claimed.claim_transition is not None
     assert claimed.claim_transition.claims == (str(outside),)
-    projection = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()).bus.log.claim_projection()
+    projection = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).bus.log.claim_projection()
     assert list(projection) == [str(outside)]
     assert projection[str(outside)].owner == "alice"
     with pytest.raises(ClaimConflict):
@@ -334,7 +335,7 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
     )
     assert next_thread.name != "alice" and next_thread.created_at != original.created_at
 
-    reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert reopened.bus.log.claim_projection()[path].owner == "alice"
     with pytest.raises(ClaimTransitionError, match="exact owner"):
         reopened.messaging.send_message(
@@ -366,7 +367,7 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
             "alice", "bob", "Old alias cannot release Bob", releases=["a.py"]
         )
     assert len(reopened.views.full_history()) == 3
-    assert Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()).bus.log.claim_projection()[path].owner == "bob"
+    assert Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).bus.log.claim_projection()[path].owner == "bob"
 
 
 def test_rename_back_to_own_alias_preserves_claim_release(
@@ -386,7 +387,7 @@ def test_rename_back_to_own_alias_preserves_claim_release(
 
     assert comms.threads.rename_self("alice", caller=ThreadCaller("alice-new")).current == "alice"
 
-    reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert reopened.registry.snapshot().aliases == {"alice-new": "alice"}
     assert reopened.bus.log.claim_projection()[path].owner == "alice"
     released = reopened.messaging.send_message(
@@ -428,7 +429,7 @@ def test_saved_colliding_creation_id_blocks_claim_write_before_append(tmp_path: 
         threads = edit.document.threads
         threads["bob"] = replace(threads["bob"], created_at=threads["alice"].created_at)
         edit.commit()
-    comms = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     with pytest.raises(RelationViolationError, match="creation identities collide"):
         comms.messaging.send_message(
             "bob", "alice", "Cannot release under duplicate ID", releases=["a.py"]
@@ -472,7 +473,7 @@ def test_concurrent_whole_set_exactly_one_winner(tmp_path: Path) -> None:
     simultaneous = Barrier(2)
 
     def attempt(name: str) -> str:
-        owner = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime(), private_claim_writes=True)
+        owner = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current(), private_claim_writes=True)
         simultaneous.wait(timeout=3)
         try:
             owner.messaging.send_message(
@@ -549,7 +550,7 @@ def test_large_transition_reopens_and_exports_without_a_second_parser_limit(
         claims=[ExistingFileClaim(Path(path)) for path in resources],
     )
     assert len(json.dumps(committed.to_wire()["claim_transition"])) > 16_384
-    assert len(Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()).bus.log.claim_projection()) == len(resources)
+    assert len(Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).bus.log.claim_projection()) == len(resources)
     assert comms.views.full_history() == [committed]
     assert comms.bus.log.message_by_id(committed.message_id) == committed
     assert all(owner.owner == "alice" for owner in comms.bus.log.claim_projection().values())

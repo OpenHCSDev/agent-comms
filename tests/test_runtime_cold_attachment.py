@@ -17,6 +17,7 @@ from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -28,7 +29,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     await fixture.run("Parent saved history for cold attachment")
     await fixture.persistent.close()
     fixture.provider.text = "Cold fork first reply received."
-    comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
     arguments = [

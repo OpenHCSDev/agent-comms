@@ -20,10 +20,11 @@ from agent_comms.thread_identity import UnrecordedThreadIncarnation
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def saved_history(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     session = tmp_path / "saved.jsonl"
     session.write_text(json.dumps({
         "type": "message", "id": "saved-answer", "parentId": None,

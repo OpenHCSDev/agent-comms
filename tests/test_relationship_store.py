@@ -16,10 +16,11 @@ from test_locked_store import _hold_lock, event, process
 from test_relationships import setup_wire
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _read_adopter(root, done):
-    service = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).relationships
+    service = Comms(LocalRoute(root), runtime=LaunchRuntime.current()).relationships
     service.collaborations("owner")
     service.contacts("owner")
     service.snapshot("owner")

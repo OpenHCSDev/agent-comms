@@ -14,6 +14,7 @@ from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from pi_session_turn import one_turn_events
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 1)])
@@ -162,7 +163,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         caller_project = base / "caller-project"
         project.mkdir()
         caller_project.mkdir()
-        comms = Comms(LocalRoute(base / "wire"), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(LocalRoute(base / "wire"), runtime=LaunchRuntime.current())
         root_id = comms.messaging.initialize_private_initial_protocol()
         comms.registry.declare(Thread("headless", frozenset(), str(project)))
         env = dict(

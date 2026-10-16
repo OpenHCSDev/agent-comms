@@ -11,10 +11,11 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_attachment_does_not_implicitly_start_a_stopped_or_archived_thread(tmp_path, monkeypatch):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread("worker", frozenset(), str(tmp_path), session_file="/saved.jsonl")
     )
@@ -38,7 +39,7 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     source = tmp_path / "saved.jsonl"
     source.touch()
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(
         comms.root, root_id, Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])

@@ -18,6 +18,7 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _thread(root: Path, name: str) -> Thread:
@@ -25,7 +26,7 @@ def _thread(root: Path, name: str) -> Thread:
 
 
 def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_path: Path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for index in range(50):
@@ -55,7 +56,7 @@ def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_pa
 
 
 def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_path: Path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     for name in ("peer", "other", "executor"):
         comms.registry.declare(_thread(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -79,7 +80,7 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
         through=painted,
         expected_display_basis=proof,
     )
-    reopened = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     assert [message.body for message in reopened.bus.inbox(viewer, "peer")] == ["after paint"]
     assert reopened.bus.pending_count(viewer, "peer") == 1
     assert reopened.bus.pending_count(viewer, "other") == 1
@@ -92,7 +93,7 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
 
 
 def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_path: Path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     for name in ("peer", "other"):
         comms.registry.declare(_thread(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -125,7 +126,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
 
 
 def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path: Path):
-    first, second = Comms(resolve_comms_route(tmp_path / "first"), native=NativeThreadDefaults.from_runtime()), Comms(resolve_comms_route(tmp_path / "second"), native=NativeThreadDefaults.from_runtime())
+    first, second = Comms(resolve_comms_route(tmp_path / "first"), runtime=LaunchRuntime.current()), Comms(resolve_comms_route(tmp_path / "second"), runtime=LaunchRuntime.current())
     for comms in (first, second):
         for name in ("peer", "other"):
             comms.registry.declare(_thread(comms.root, name))
@@ -151,7 +152,7 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
 
 
 def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted")
@@ -176,7 +177,7 @@ def durable_root():
 @pytest.mark.skipif(os.name != "posix", reason="POSIX directory fsync")
 def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root, monkeypatch):
     tmp_path = durable_root
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send("peer", viewer, "painted")

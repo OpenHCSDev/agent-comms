@@ -28,6 +28,7 @@ from stored_inputs import sent_text, stored_inputs
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def test_saved_native_autonomous_goal_compacts_before_original_input(
@@ -59,7 +60,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
         )
     )
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
     agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, arguments=tuple([
             "--provider=response-local",
             "--model=fixture",
@@ -168,7 +169,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
     await native.persistent.close()
     history = native.session.read_bytes()
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
     agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, arguments=tuple([
             "--provider=response-local", "--model=fixture", "--thinking=off", "--offline",
             "--no-extensions", "--no-skills", "--no-context-files",
@@ -251,7 +252,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert not agent.inputs.pending_turns.get(sid)
             assert len(native.saved_inputs()) == 3
             if owner_pauses:
-                reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
+                reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
                 paused = reopened.registry.require(sid).goal
                 assert paused.state.pause_source.instruction()
                 assert reopened.goals.goal_history(sid)[-1].after == paused

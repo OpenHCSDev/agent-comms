@@ -30,6 +30,7 @@ from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from stored_inputs import stored_inputs
 from agent_comms.active_route import LocalRoute
+from agent_comms.launch_runtime import LaunchRuntime
 
 tmp_path = private_root_fixture
 
@@ -112,7 +113,7 @@ class ForkOwnerCase(OwnerAdmissionCase):
             saved = comms.relationships.collaborations(owner.name)
             assert len(saved) == 1
             assert saved[0].counterpart(owner) == peer.incarnation
-        reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
+        reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
         assert reopened.relationships.collaborations(parent.name) == (edge,)
         assert reopened.registry.require(parent.name) == parent
 
@@ -177,9 +178,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     )
     debug_log = native.project / "runtime-debug.log"
     monkeypatch.setenv("AGENT_COMMS_DEBUG_LOG", str(debug_log))
-    comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults(
-        binary=NativeThreadDefaults.runtime_binary(), arguments=("--offline", "--no-extensions", "--no-skills", "--no-context-files"),
-    ))
+    comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             "physical-parent",

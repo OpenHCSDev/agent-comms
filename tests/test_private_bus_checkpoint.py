@@ -24,12 +24,13 @@ from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _root(tmp_path: Path) -> tuple[Comms, str]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     for name, tags, stamp in (
         ("sender", {"team"}, 17001.0),
         ("Alice", {"team"}, 17002.0),
@@ -144,7 +145,7 @@ def test_marker_bound_complete_addressed_pages(tmp_path: Path) -> None:
     assert witness.offset == comms.bus.log.path.stat().st_size
     assert witness.latest_source_seq == three.seq
     assert witness.offset > 0
-    reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert [item.message.seq for item in _page(reopened, alice)[1]] == [one.seq, three.seq]
     # Source completeness says nothing about native injection or SQL receipts.
     assert len(rows[0].decisions) == 2
@@ -502,7 +503,7 @@ def test_reopened_root_preserves_certified_source_and_supports_append(
     two = comms.messaging.send_initial_cohort("sender", "outsider", "other audience")
     original = comms.bus.log.path.read_bytes()
     inode = comms.bus.log.path.stat().st_ino
-    reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     witness = _page(reopened, RecordedThreadIncarnation("fixture", 17002.0).lookup)[0]
     assert (witness.root_id, witness.through_seq, witness.offset) == (
         root_id,

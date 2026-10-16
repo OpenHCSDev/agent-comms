@@ -13,6 +13,7 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _open_source(comms):
@@ -34,7 +35,7 @@ def _case(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
     )
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path)))
     comms.messaging.send_message("sender", "recipient", "first")

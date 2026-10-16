@@ -16,11 +16,12 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def make_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/base")
-    selected_comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    selected_comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "test/base"])))
     await agent.new_session(str(tmp_path / "project"))
     return agent

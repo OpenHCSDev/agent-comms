@@ -13,11 +13,12 @@ from routing_carry import prepare_original
 from routing_recovery import retain_originals
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def main():
     root, target_python, installer, root_id, receipt, provenance_declaration = sys.argv[1:]
-    service = Comms(LocalRoute(Path(root)), native=NativeThreadDefaults.from_runtime())
+    service = Comms(LocalRoute(Path(root)), runtime=LaunchRuntime.current())
     environment = dict(os.environ)
     environment.pop('PYTHONPATH', None)
     with (service.bus.log.locked() as custody,

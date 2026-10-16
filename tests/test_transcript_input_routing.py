@@ -10,6 +10,7 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def append_input(path, native_id, text, *, role="user"):
@@ -32,7 +33,7 @@ def append_input(path, native_id, text, *, role="user"):
 
 @pytest.mark.parametrize("paged", [False, True])
 def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(tmp_path, paged):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     first = comms.messaging.send_message("peer", "worker", "Original input")
@@ -52,7 +53,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     comms.transcripts.routes.record(
         str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first,), None)
     )
-    reopened = Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
     events = (
         reopened.transcripts.thread_transcript_page("worker").events
         if paged
@@ -64,7 +65,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
 
 
 def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     incoming = comms.messaging.send_message("peer", "worker", "Verified input")

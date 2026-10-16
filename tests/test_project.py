@@ -24,6 +24,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path, monkeypatch):
@@ -31,7 +32,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     new = tmp_path / "new project"
     old.mkdir()
     new.mkdir()
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             name="worker",
@@ -65,7 +66,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     comms.threads.attach_session(
         comms.registry.require("worker"), str(old / "session.jsonl")
     )
-    restored = Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime()).registry.require("worker")
+    restored = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).registry.require("worker")
     assert restored.worktree == str(new) and restored.previous_worktrees == (str(old),)
     assert len(comms.registry.all_threads()) == 1
 
@@ -75,7 +76,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
     new = tmp_path / "new"
     old.mkdir()
     new.mkdir()
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])))
     session = (await agent.new_session(str(old))).session_id
     updates = []
@@ -184,7 +185,7 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
     old, new = tmp_path / "old", tmp_path / "new"
     old.mkdir()
     new.mkdir()
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])))
     session = (await agent.new_session(str(old))).session_id
     changed = asyncio.Event()
@@ -214,7 +215,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
     old, new = tmp_path / "old", tmp_path / "new"
     old.mkdir()
     new.mkdir()
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
     session = (await owner.new_session(str(old))).session_id
     proxies, updates = [], [[], []]

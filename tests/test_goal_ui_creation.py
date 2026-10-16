@@ -21,6 +21,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="ACP runtime uses Unix domain sockets")
 
@@ -31,7 +32,7 @@ def _models_without_pi_discovery(monkeypatch):
 
 
 async def _owner(tmp_path, monkeypatch):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     private = comms.root / "goal-private"
     private.mkdir(mode=0o700)
     GoalAttemptStore.initialize(private)

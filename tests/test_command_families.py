@@ -11,7 +11,8 @@ from types import SimpleNamespace
 import pytest
 
 from agent_comms.cli import build_parser, main
-from agent_comms.cli_commands import CliCommand, option
+from agent_comms.cli_commands import CliCommand
+from agent_comms.cli_options import option
 from agent_comms.comms import Comms
 from agent_comms.messages import InfoKind
 from agent_comms.pi_vocabulary import ServiceTier
@@ -26,12 +27,13 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
     monkeypatch.setenv("COLUMNS", "80")
     monkeypatch.setenv("NO_COLOR", "1")
-    parser = build_parser(NativeThreadDefaults.from_runtime())
+    parser = build_parser(NativeThreadDefaults.from_runtime(LaunchRuntime.current()))
     sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
     actual = {
         "help": parser.format_help(),
@@ -42,7 +44,7 @@ def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
 
 
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
-    parser = build_parser(NativeThreadDefaults.from_runtime())
+    parser = build_parser(NativeThreadDefaults.from_runtime(LaunchRuntime.current()))
 
     def parse(args):
         return CliCommand.from_namespace(parser.parse_args(args))
@@ -64,7 +66,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     explicit = parse(["restart", "--all", "--agent-bin", "/a pi", "--agent-args", '--label "two words"'])
     assert explicit.agent_bin == "/a pi"
     assert explicit.agent_args == ["--label", "two words"]
-    assert build_parser(NativeThreadDefaults.from_runtime()).parse_args(["restart", "--all"]).agent_bin is None
+    assert build_parser(NativeThreadDefaults.from_runtime(LaunchRuntime.current())).parse_args(["restart", "--all"]).agent_bin is None
 
 
 def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, capsys, monkeypatch):
@@ -78,7 +80,7 @@ def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, caps
         def apply(self, ctx):
             return {"amount": self.amount + 1, "root": str(ctx.root)}
 
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.messaging.initialize_private_initial_protocol()
     monkeypatch.delenv(ROOT_ID_ENV, raising=False)
     monkeypatch.delenv(PACKAGE_ENV, raising=False)
@@ -156,7 +158,7 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
         async def result(self, ctx):
             return {"amount": self.amount + 1, "session": ctx.session_id, "owner": ctx.name}
 
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     def require_owned_session(owner, snapshot):
         assert owner.name == "owner"
@@ -212,7 +214,7 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
 def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     tmp_path, capsys, monkeypatch, arguments, key
 ):
-    old, live = Comms(LocalRoute(tmp_path / "old"), native=NativeThreadDefaults.from_runtime()), Comms(LocalRoute(tmp_path / "live"), native=NativeThreadDefaults.from_runtime())
+    old, live = Comms(LocalRoute(tmp_path / "old"), runtime=LaunchRuntime.current()), Comms(LocalRoute(tmp_path / "live"), runtime=LaunchRuntime.current())
     for comms in (old, live):
         for name in ("alice", "bob"):
             comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))

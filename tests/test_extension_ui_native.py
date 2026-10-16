@@ -12,6 +12,7 @@ from native_event_host import install_event_host
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -19,7 +20,7 @@ pytest_plugins = ("test_backend_native_lifecycle",)
 async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_backend, monkeypatch):
     fixture = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    selected_comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults.from_runtime())
+    selected_comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
     owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple([
             "--provider",
             "response-local",

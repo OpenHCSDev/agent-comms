@@ -17,10 +17,11 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def populated(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     for name, tags in (
         ("alice", {"api"}),
         ("carol", {"api"}),
@@ -50,7 +51,7 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
 
     selected = comms.channels.set_channel_any_mode("#api", True)
     assert selected.exact and selected.any_mode
-    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).channels.catalog.read().resolve("#api").any_mode
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).channels.catalog.read().resolve("#api").any_mode
     page = comms.views.channel_display_page("#api")
     assert bodies(page) == [
         "exact target",
@@ -275,10 +276,10 @@ def test_failed_document_write_does_not_publish_mode(tmp_path):
     ):
         comms.channels.set_channel_any_mode("#api", True)
     assert not comms.channels.catalog.read().resolve("#api").any_mode
-    assert not Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).channels.catalog.read().resolve("#api").any_mode
+    assert not Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).channels.catalog.read().resolve("#api").any_mode
     comms.channels.set_channel_any_mode("#api", True)
     comms.channels.create_tag("later")
-    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).channels.catalog.read().resolve("#api").any_mode
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).channels.catalog.read().resolve("#api").any_mode
 
 
 def test_public_retag_and_send_cannot_leak_new_nonmember_into_page(tmp_path):
@@ -408,7 +409,7 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
     failures = []
 
     def burst():
-        other = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+        other = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
         try:
             started.set()
             for n in range(20):

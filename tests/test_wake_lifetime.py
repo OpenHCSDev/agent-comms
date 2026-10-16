@@ -13,10 +13,11 @@ from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private(tmp_path):
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             "owner",

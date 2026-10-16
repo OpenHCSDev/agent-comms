@@ -44,7 +44,7 @@ class EnsuringSessionLoadAdmission(SessionLoadAdmission):
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
         return await Coordination.run_worker(partial(
             lifecycle.comms.owners.ensure_owner, thread.name,
-            native=NativeThreadDefaults(binary=lifecycle.agent_bin, arguments=lifecycle.agent_args.argv),
+            native=lifecycle.native, launch_runtime=lifecycle.comms.runtime,
         ))
 
 

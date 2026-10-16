@@ -21,11 +21,12 @@ from agent_comms.wake_candidate_index import WakeCandidateIndex
 from agent_comms.wire_record import WireRecord
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def main(root: Path) -> None:
     root.mkdir(mode=0o700, parents=True)
-    comms = Comms(LocalRoute(root / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root / "wire"), runtime=LaunchRuntime.current())
     births = {"sender": 17001.0, "Alice": 17002.0}
     for name, birth in births.items():
         comms.registry.declare(Thread(

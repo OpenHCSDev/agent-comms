@@ -31,44 +31,14 @@ from .store_files import _store_lock
 from .thread_identity import AdmissionIdentity, OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
+from .owner_launch import OwnerRestartSelection
+from .owner_restart import OwnerRestartRequest, OwnerRestartResult, RestartTarget
 
 _LOG = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
-class OwnerRestartSelection:
-    identity: OwnerIdentity
-    process: ProcessIdentity
-    admission_generation: int
-
-    @classmethod
-    def capture(cls, snapshot: RegistrySnapshot, name: str):
-        owner = snapshot.require_active(name)
-        return cls(
-            snapshot.owner_identity(owner.name),
-            owner.require_process(),
-            snapshot.admission_generations[owner.name],
-        )
-
-    @property
-    def name(self) -> str:
-        return self.identity.incarnation.name
-
-    def require_current(self, snapshot: RegistrySnapshot) -> Thread:
-        try:
-            snapshot.require_owner_process(self.identity, self.process)
-        except RelationViolationError as error:
-            raise OwnerSelectionChangedRefusal() from error
-        if snapshot.admission_generations[self.name] != self.admission_generation:
-            raise OwnerGenerationChangedRefusal()
-        return snapshot.require_active(self.name)
 
 
-@dataclass(frozen=True, slots=True)
-class OwnerRestartResult:
-    thread: str
-    previous_pid: int
-    pid: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,7 +208,7 @@ class OwnerLifecycle:
             return owned
 
     def ensure_owner(
-        self, name: str, *, native: NativeThreadDefaults,
+        self, name: str, *, native: NativeThreadDefaults, launch_runtime: LaunchRuntime,
     ) -> Thread:
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
@@ -249,8 +219,7 @@ class OwnerLifecycle:
             return (
                 thread
                 if thread.process_alive
-                else self._launch_owner_unlocked(thread, native,
-                                                 launch_runtime=LaunchRuntime.current())
+                else self._launch_owner_unlocked(thread, native, launch_runtime=launch_runtime)
             )
 
     def start(
@@ -288,7 +257,7 @@ class OwnerLifecycle:
 
     def restart_owners(
         self,
-        targets: tuple[tuple[OwnerRestartSelection, NativeThreadDefaults], ...],
+        targets: tuple[RestartTarget, ...],
         *,
         launch_runtime: LaunchRuntime,
         runtime: RestartEnvironment | None = None,
@@ -301,8 +270,6 @@ class OwnerLifecycle:
         original exits and before any replacement launches. It owns its writer
         proof and operation; failure leaves the fenced batch stopped for review.
         """
-        from .owner_restart import OwnerRestartRequest
-
         request = OwnerRestartRequest(targets, launch_runtime, runtime, source_interpreter)
         request.validate()
         return cutover.restart(self, request)

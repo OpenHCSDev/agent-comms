@@ -18,10 +18,11 @@ from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monkeypatch):
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = Thread(
         "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )
@@ -44,7 +45,7 @@ async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monke
 
 
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = Thread(
         "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )

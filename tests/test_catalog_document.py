@@ -13,10 +13,11 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_update_failure_restores_whole_document_not_just_mode(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.channels.create_tag("api")
     comms.channels.set_channel_pinned("api", True)
     before = comms.channels.catalog.path.read_bytes()
@@ -24,13 +25,13 @@ def test_update_failure_restores_whole_document_not_just_mode(tmp_path):
         with pytest.raises(OSError, match="disk full"):
             comms.channels.set_channel_any_mode("api", True)
     assert comms.channels.catalog.path.read_bytes() == before
-    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).channels.catalog.read().resolve("#api").pinned
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).channels.catalog.read().resolve("#api").pinned
     assert not comms.channels.catalog.read().resolve("#api").any_mode
 
 
 def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):
     def create(index):
-        client = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+        client = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
         name = f"tag-{index}"
         client.channels.create_tag(name)
         client.channels.set_channel_pinned(name, True)
@@ -38,7 +39,7 @@ def test_independent_writers_merge_under_wire_then_document_lock(tmp_path):
 
     with ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(create, range(8)))
-    document = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).channels.catalog.read()
+    document = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).channels.catalog.read()
     assert document.tags == {f"tag-{i}" for i in range(8)}
     assert all(
         document.resolve(f"#tag-{i}").pinned and document.resolve(f"#tag-{i}").any_mode

@@ -27,6 +27,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
@@ -85,7 +86,7 @@ async def until(predicate, timeout=10):
 async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
     from acp.exceptions import RequestError
 
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
     client = canonical_agent(comms, native=comms.owners.native_defaults)
     response = await owner.new_session(str(tmp_path / "project"))
@@ -124,7 +125,7 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
 async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, monkeypatch):
-    comms = Comms(resolve_comms_route(tmp_path / ("long-wire-" * 16)), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / ("long-wire-" * 16)), runtime=LaunchRuntime.current())
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
     client = canonical_agent(comms, native=comms.owners.native_defaults)
     updates = []
@@ -194,7 +195,7 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
 async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     tmp_path, runtime_processes
 ):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
@@ -321,7 +322,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
 async def test_request_only_proxy_never_replays_after_request_was_received(
     tmp_path, runtime_processes
 ):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
@@ -369,7 +370,7 @@ async def test_request_only_proxy_never_replays_after_request_was_received(
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
 async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
     client = canonical_agent(comms, native=comms.owners.native_defaults)
     updates = []
@@ -415,7 +416,7 @@ async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
 async def test_attached_client_receives_owner_model_options(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one,test/two")
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple(["--provider", "test", "--model", "one"])), runtime_enabled=True)
     client = canonical_agent(comms, native=comms.owners.native_defaults)
     response = await owner.new_session(str(tmp_path / "project"))
@@ -448,7 +449,7 @@ async def test_attached_client_receives_owner_model_options(tmp_path, monkeypatc
 
 @pytest.mark.asyncio
 async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo"))
     try:
         response = await agent.new_session(str(tmp_path / "project"))
@@ -467,7 +468,7 @@ async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
 async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo"), runtime_enabled=True)
     client = canonical_agent(comms, native=comms.owners.native_defaults)
     updates = []
@@ -511,7 +512,7 @@ async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
 def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
     from agent_comms.errors import RelationViolationError
 
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     session = tmp_path / "parent.jsonl"
     session.write_text("")
     comms.registry.declare(

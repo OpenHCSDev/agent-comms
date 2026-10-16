@@ -28,6 +28,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
@@ -362,7 +363,7 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
     monkeypatch.setattr(GoalWaits, "clear", unavailable)
     with pytest.raises(OSError, match="wait-clear failure"):
         comms.goals.recover_closed_goal_wait("alice")
-    reopened = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     assert reopened.registry.require("alice").goal.state.active
     assert reopened.goals.goal_execution("alice").state is GoalExecutionState.STANDBY
     monkeypatch.setattr(GoalWaits, "clear", original_clear)

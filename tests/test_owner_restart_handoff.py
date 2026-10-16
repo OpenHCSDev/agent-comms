@@ -15,7 +15,7 @@ from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime, RestartEnvironment
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_settings import NativeThreadDefaults
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_launch import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus

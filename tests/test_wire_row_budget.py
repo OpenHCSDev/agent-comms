@@ -16,6 +16,7 @@ from agent_comms.wire_metadata import WireMetadata
 from agent_comms.wire_record import WireRecord, WireScan
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _row(size: int, newline: bool) -> bytes:
@@ -63,7 +64,7 @@ def test_scan_and_candidate_share_physical_boundary(tmp_path, extra, newline):
 
 
 def test_oversized_append_preserves_marker_and_sequence(tmp_path):
-    comms = Comms(LocalRoute(tmp_path / 'wire'), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / 'wire'), runtime=LaunchRuntime.current())
     comms.messaging.initialize_private_initial_protocol()
     log = comms.bus.log
     before = log.path.read_bytes(), log.metadata_path.read_bytes()

@@ -30,6 +30,7 @@ from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.comms import Comms
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 tmp_path = private_root_fixture
 
@@ -208,7 +209,7 @@ async def test_native_full_four_tools_publish_and_release(
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     execution = SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()),
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
         wire_root_id=root_id,
         owner_name="beta",
         native_package=Path(package),

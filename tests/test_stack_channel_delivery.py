@@ -21,6 +21,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize(
@@ -108,7 +109,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             "--thinking",
             "off",
         ]
-        comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
         agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
@@ -153,7 +154,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 assert warmup_proc is not None and warmup_proc.returncode is not None
             elif case == "reopen":
                 await agent.shutdown()
-                selected_comms = Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime())
+                selected_comms = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
                 agent = CommsAgent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
                 monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "worker")
@@ -204,7 +205,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     assert row.declared_name == "started"
                     assert row.native_id == matched[0]["inputId"]
                     assert origin.body in json.dumps(matched[0])
-                replayed = Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime()).transcripts.thread_transcript_page("worker").events
+                replayed = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).transcripts.thread_transcript_page("worker").events
                 incoming = [
                     event
                     for event in replayed

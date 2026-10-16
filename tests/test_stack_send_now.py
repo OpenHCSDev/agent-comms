@@ -24,6 +24,7 @@ from stored_inputs import stored_inputs
 from agent_comms.comms import Comms
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
@@ -291,7 +292,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             from agent_comms.acp import CommsAgent
 
 
-            selected_comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+            selected_comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
             owner = CommsAgent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary=native_bin, arguments=tuple(native_args)), runtime_enabled=False, auto_wake=False)
 
             class Client:
@@ -599,7 +600,7 @@ async def _mounted_send_now(
         if goal_mode:
 
 
-            comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+            comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
             await until(lambda: not view.queued_prompts and len(requests) == 3)
             goal = comms.registry.require("project").goal
             assert goal is not None and goal.state.active, goal

@@ -27,6 +27,7 @@ from shared_bus_restart_native import attach
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def run(stage, package):
@@ -43,7 +44,7 @@ async def run(stage, package):
     assert stage.is_relative_to(Path('/home/ts/wt'))
     stage.mkdir(mode=0o700, exist_ok=False)
     verify_native_package(package)
-    public = Comms(resolve_comms_route(), native=NativeThreadDefaults.from_runtime())
+    public = Comms(resolve_comms_route(), runtime=LaunchRuntime.current())
     snapshot = public.registry.snapshot()
     source = snapshot.require_active('openhcs-helper')
     launch = RetainedOwnerLaunch.capture(source, snapshot)
@@ -59,7 +60,7 @@ async def run(stage, package):
             settings_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     # Only the offline canonical fork helper's output directory differs. Workers
     # retain the actual original model/settings/auth/extension environment.
-    service = Comms(LocalRoute(stage / 'w'), native=NativeThreadDefaults.from_runtime())
+    service = Comms(LocalRoute(stage / 'w'), runtime=LaunchRuntime.current())
     fork = await ForkSessionHelper.run(
         ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
         cwd=Path(source.worktree),

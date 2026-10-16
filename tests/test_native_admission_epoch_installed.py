@@ -34,6 +34,7 @@ from test_selected_input_lifetime_native import (
 )
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def released_native_owner(directory, package, output, exit_allowed):
@@ -117,7 +118,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
         exit_allowed.set()
         await asyncio.to_thread(process.join, 5)
         assert process.exitcode == 0
-        comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
+        comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True)
         source = next(
             row
             for row in SelectedNativeJourney(root, root_id, comms, Path(package), True).records()

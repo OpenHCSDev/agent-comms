@@ -9,11 +9,12 @@ from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.errors import RelationViolationError
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def main():
     root = Path(sys.argv[1])
-    service = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    service = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     assert all(not thread.process_alive for thread in service.registry.all_threads().values())
     registry = root / 'registry.json'
     before = json.loads(registry.read_text())

@@ -34,6 +34,7 @@ from agent_comms.threads import Thread
 from native_context_budget_installed_journey import ReceiptSubscriber
 from stored_inputs import stored_inputs
 from agent_comms.active_route import LocalRoute
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 REASON = "Controlled provider usage limit has been reached; original input not retried"
@@ -121,9 +122,9 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
         "compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
     }))
-    native = NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary(), arguments=("--offline", "--no-extensions", "--no-skills",
+    native = NativeThreadDefaults(binary=LaunchRuntime.current().native_entrypoint, arguments=("--offline", "--no-extensions", "--no-skills",
                                              "--no-context-files", "--no-tools"))
-    comms = Comms(LocalRoute(root), native=native)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(root, root_id, package)
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)

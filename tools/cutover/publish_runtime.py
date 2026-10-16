@@ -93,8 +93,8 @@ def main() -> None:
     route = read_active_route()
     if route is None:
         raise ValueError('Runtime publication requires the installed route')
-    comms = Comms(route, native=NativeThreadDefaults.from_runtime())
-    owners = tuple(OwnerRestartRequest().threads(comms.registry.snapshot()))
+    comms = Comms(route, runtime=LaunchRuntime.current())
+    owners = tuple(comms.registry.snapshot().restart_candidates)
     if options.check:
         print(f'{publication.runtime}: {len(owners)} native workers would be queued for idle reload')
         return

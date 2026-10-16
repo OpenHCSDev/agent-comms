@@ -23,7 +23,7 @@ from agent_comms.native_settings import NativeThreadDefaults
 
 
 def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> None:
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
@@ -45,7 +45,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         from agent_comms.coordination_errors import PublicationActivationBlocked
         from agent_comms.owner_cutover import StoppedOwnerInstallation
 
-        unpinned = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+        unpinned = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
         before = comms.registry.snapshot()
         with pytest.raises(PublicationActivationBlocked, match="explicit matching root and package"):
             unpinned.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
@@ -95,7 +95,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
 def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None:
     child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     try:
-        comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
         comms.registry.declare(
             Thread(
                 "stale",
@@ -120,7 +120,7 @@ def test_restart_preflights_all_owners_before_signalling(tmp_path: Path) -> None
         for _ in range(2)
     ]
     try:
-        comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
         for index, child in enumerate(children):
             comms.registry.declare(
                 Thread(
@@ -146,7 +146,7 @@ def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> Non
 
     child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     try:
-        comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
         owner = Thread("owner", frozenset(), str(tmp_path))
         peer = Thread(
             "peer",
@@ -175,7 +175,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     """The production detached launch retains a failure before socket creation."""
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", "invalid")
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", "/missing/native")
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("failed-start", frozenset(), str(tmp_path)))
     result = comms.owners.start("failed-start")
     owner = comms.registry.require("failed-start")
@@ -208,7 +208,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openai-codex/gpt-6.1-sol")
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
@@ -449,7 +449,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         from agent_comms.active_route import ActiveRoute, active_route_path
         from agent_comms.field_codec import FieldCodec
         from agent_comms.owner_cutover import PreserveOwnerRuntime
-        from agent_comms.owner_lifecycle import OwnerRestartSelection
+        from agent_comms.owner_launch import OwnerRestartSelection
         import publish_retained_summary as publisher
         from runtime_installation import PreserveRuntimeInstallation
 

@@ -17,12 +17,13 @@ from agent_comms.threads import Thread
 from agent_comms.turn_phase import PreparingPhase
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("goal_changed", [False, True])
 async def test_begin_callback_and_native_attachment_share_original_owner(tmp_path, goal_changed):
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid())))
     agent = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
@@ -62,7 +63,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
 
 @pytest.mark.parametrize("replacement", ["same-turn-id", "new-admission"])
 def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement):
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn("owner", "same-id")
@@ -78,7 +79,7 @@ def test_source_attachment_refuses_replaced_original_owner(tmp_path, replacement
 
 
 def test_native_source_publication_retains_captured_configuration(tmp_path):
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()), model="test/old"))
     original = comms.agents.begin_turn("owner", "configuration-source-check")

@@ -23,6 +23,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkeypatch):
@@ -197,7 +198,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
                 yield event
 
         monkeypatch.setattr(backend, "stream_agent_events", collect_events)
-        comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
         agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:

@@ -32,6 +32,7 @@ from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
@@ -41,7 +42,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
     """Actual ACP owner and native producer; only the localhost provider is controlled."""
     native = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
     agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([
             "--provider=response-local",
             "--model=fixture",
@@ -189,7 +190,7 @@ def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
     assert comms.goals.release_waits_after_terminal_turn(other_fence) == ()
     child_fence = _finish(comms, "child", "child-turn")
     assert comms.goals.release_waits_after_terminal_turn(child_fence) == ("owner",)
-    reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     continued = reopened.registry.require("owner").goal
     assert continued.id == goal.id and continued.state.declared_name == "active"
     assert continued.revision == goal.revision + 2
@@ -251,7 +252,7 @@ def test_progress_write_precedes_wait_clear_on_crash_and_stays_in_standby(tmp_pa
     monkeypatch.setattr(GoalWaits, "clear", crash_before_wait_clear)
     with pytest.raises(OSError, match="injected crash"):
         comms.goals.release_waits_after_terminal_turn(child_fence)
-    reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert reopened.registry.require("owner").goal.state.declared_name == "active"
     assert reopened.registry.require("owner").goal.id == goal.id
     assert reopened.goals.goal_execution("owner").state.value == "standby"

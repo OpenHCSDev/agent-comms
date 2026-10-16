@@ -35,10 +35,11 @@ from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     thread = Thread(
         "beta", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )

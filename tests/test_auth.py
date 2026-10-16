@@ -18,7 +18,7 @@ import dataclasses
 
 
 async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
-    selected_comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    selected_comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     agent = CommsAgent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi"))
     assert not (await agent.initialize(1, {})).auth_methods
     methods = (await agent.initialize(1, {"auth": {"terminal": True}})).auth_methods
@@ -73,7 +73,7 @@ def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
     assert "AGENT_COMMS_THREAD" not in captured["env"]
     assert "AGENT_COMMS_MANAGED" not in captured["env"]
     with pytest.raises(ValueError):
-        run_login("invalid\ncommand", settings=NativeThreadDefaults.from_runtime())
+        run_login("invalid\ncommand", settings=NativeThreadDefaults.from_runtime(LaunchRuntime.current()))
 
 
 async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
@@ -89,7 +89,7 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
         return models
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)
-    selected_comms_2 = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    selected_comms_2 = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     agent = canonical_agent(selected_comms_2, native=dataclasses.replace(selected_comms_2.owners.native_defaults,
         binary=LaunchRuntime.running().native_entrypoint, arguments=("--model", "test/base")))
     # Exercise the explicit refresh path without the background drain racing it.

@@ -14,10 +14,11 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def registered(root):
-    comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(root), runtime=LaunchRuntime.current())
     comms.registry.register(Thread(
         'owner', frozenset({'team'}), str(root),
         process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g'),

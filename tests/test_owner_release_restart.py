@@ -19,6 +19,7 @@ from agent_comms.child_process import (
 )
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
@@ -48,7 +49,7 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
     assert len(names) == 1
     name = names.pop()
     async with native_backend_fixture(tmp_path) as native, AsyncExitStack() as resources:
-        comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
         comms.owners.pin_private_nk_launch(native.root,
             os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'],
             Path(os.environ['PI_COMPACTION_TEST_PACKAGE']))
@@ -139,7 +140,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         assert native.provider.posts == 0
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_launch import OwnerRestartSelection
 from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
 
 
@@ -183,7 +184,7 @@ while True: time.sleep(0.01)
 
     native = NativeThreadDefaults(binary=sys.executable, arguments=(str(script),))
     child = ParentedProcess.launch((sys.executable, str(script), *native.cli_arguments), env=env)
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     try:
         wait_for(root / "ready")
         yield comms, child
@@ -289,7 +290,7 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
     from agent_comms.coordination_errors import PublicationActivationBlocked
     from agent_comms.threads import Thread
 
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current(), private_initial_writes=True)
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path),
                                   process_identity=ProcessIdentity.capture(os.getpid())))

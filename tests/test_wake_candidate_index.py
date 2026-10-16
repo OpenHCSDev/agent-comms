@@ -33,6 +33,7 @@ from agent_comms.wake_candidate_index import (
 from agent_comms.wake_policy import FullWake
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="private N/K bus requires POSIX")
 
@@ -50,7 +51,7 @@ def _maintain_in_process(root: str, root_id: str, through_bytes: int, start, res
     """One independent runtime connection bootstrapping the shared WAL."""
     start.wait()
     try:
-        index = WakeCandidateIndex(Comms(LocalRoute(Path(root)), native=NativeThreadDefaults.from_runtime()).bus.log)
+        index = WakeCandidateIndex(Comms(LocalRoute(Path(root)), runtime=LaunchRuntime.current()).bus.log)
         outcome = index.catch_up_committed_append(
             index.notify_committed_append(root_id=root_id, through_bytes=through_bytes),
             bootstrap_new=True, max_rows=256, max_bytes=8 * 1024 * 1024,
@@ -64,7 +65,7 @@ def _maintain_in_process(root: str, root_id: str, through_bytes: int, start, res
 def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     created = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
     for name, identity in created.items():
         comms.registry.declare(

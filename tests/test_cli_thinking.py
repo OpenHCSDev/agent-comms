@@ -10,6 +10,7 @@ from agent_comms.pi_commands import GetAvailableModels, GetAvailableThinkingLeve
 from agent_comms.pi_payloads import ModelsData, ReportedModel, ThinkingLevelsData
 from agent_comms.pi_vocabulary import HighThinkingLevel, OffThinkingLevel, ServiceTier
 from agent_comms.threads import Thread
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize("change", ["thinking", "model"])
@@ -86,7 +87,7 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
 
 
 def test_native_arguments_configured_uses_typed_selection():
-    defaults = NativeThreadDefaults.from_runtime()
+    defaults = NativeThreadDefaults.from_runtime(LaunchRuntime.current())
     assert NativeArguments.parse(defaults.arguments) == NativeArguments(entries=())
     selected = NativeThreadDefaults(
         binary="/fixture/pi", arguments=("--model", "fixture/model", "--thinking", "off"),

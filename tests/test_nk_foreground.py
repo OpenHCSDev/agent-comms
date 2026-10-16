@@ -33,6 +33,7 @@ from test_cohort_foreground import _configured_thread, _fake_package
 from test_coordinated_runtime import _fake_model
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private foreground N/K requires Linux /var/tmp and fork"
@@ -56,7 +57,7 @@ def _private_root(tmp_path: Path):
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
     (root / "work").mkdir(mode=0o700)
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True)
     comms.registry.declare(
         Thread(
             "sender",

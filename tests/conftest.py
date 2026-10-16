@@ -116,7 +116,7 @@ def root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def comms(root: Path) -> Comms:
-    return Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    return Comms(LocalRoute(root), runtime=LaunchRuntime.current())
 
 
 @pytest.fixture

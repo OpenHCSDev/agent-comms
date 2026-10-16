@@ -35,7 +35,7 @@ from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
 from .threads import Thread
 from agent_comms.active_route import LocalRoute
-from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 _MAX_GO_WAIT_SECONDS = 120
 _GO = re.compile(r"GO (0|[1-9][0-9]{0,17})\Z")
@@ -102,7 +102,7 @@ def reserve_foreground_owner(
     _trusted_package(package)  # Reject before touching the recipient registry.
     worktree = root / "work"
     _private_session_dir(worktree)
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     with comms.bus.log.certified_read() as source:
         marker = source.marker
     if marker.root_id != wire_root_id:

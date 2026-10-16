@@ -30,6 +30,7 @@ from agent_comms.threads import Thread
 from pi_session_turn import one_turn_events
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, monkeypatch) -> None:
@@ -141,7 +142,7 @@ def test_maintenance_operator_rejects_invalid_external_text(text: object) -> Non
 
 
 def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
-    gate = Comms(LocalRoute(tmp_path / 'fresh'), native=NativeThreadDefaults.from_runtime()).owners.maintenance
+    gate = Comms(LocalRoute(tmp_path / 'fresh'), runtime=LaunchRuntime.current()).owners.maintenance
     assert gate.read().phase is ReadyPhase
     hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'operator'))
     assert gate.read() == hold
@@ -164,7 +165,7 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
         def complete(self, stopped):
             raise AssertionError('No process should be stopped by a phase check')
 
-    comms = Comms(LocalRoute(tmp_path / 'wire'), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / 'wire'), runtime=LaunchRuntime.current())
     hold = comms.owners.maintenance.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
@@ -227,7 +228,7 @@ def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) 
 
 
 def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -> None:
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     gate = comms.owners.maintenance
     assert gate.read().phase is ReadyPhase
     comms.registry.declare(
@@ -318,7 +319,7 @@ def test_enabled_witness_damage_never_restores_default_off(tmp_path: Path, fault
 
 async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp_path: Path) -> None:
     root = tmp_path / "wire"
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     q: mp.Queue = mp.Queue()
     ready = mp.Event()
     proc = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
@@ -375,7 +376,7 @@ def test_unknown_parent_fsync_does_not_reopen_admission(
 
 
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = Thread(
         name="owner",
         tags=frozenset(),
@@ -395,7 +396,7 @@ def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path
 
 def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> None:
     root = tmp_path / "wire"
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     q: mp.Queue = mp.Queue()
     ready = mp.Event()
     child = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))

@@ -22,6 +22,7 @@ from test_coordinated_runtime import _root
 from agent_comms.comms import Comms
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(not PACKAGE, reason="Reviewed prepared native package required")
@@ -144,7 +145,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
     started = time.monotonic()
     task = asyncio.create_task(
         SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()),
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
             wire_root_id=root_id,
             owner_name="beta",
             native_package=package,
@@ -200,7 +201,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
         before = provider.posts
         try:
             replay = await SelectedExecution(
-                comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()),
+                comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
                 wire_root_id=root_id,
                 owner_name="beta",
                 native_package=package,

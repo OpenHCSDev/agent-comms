@@ -14,11 +14,12 @@ from agent_comms.wire_record import PublicWireRecord
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize('rebound', [False, True])
 def test_discovery_ignores_retired_source_history(tmp_path, rebound):
-    c = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    c = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     c.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
     viewer = c.messaging.user_identity(str(tmp_path)).name
     original = c.messaging.send_message('sender', viewer, 'current source')
@@ -57,7 +58,7 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound):
 
 
 def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
-    c = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    c = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     c.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
     viewer = c.messaging.user_identity(str(tmp_path)).name
     original = c.messaging.send_message('sender', viewer, 'assigned source')

@@ -46,8 +46,10 @@ from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
+from .cli_options import option
+from .owner_restart import KeepRecorded, NativeChoice
 from .owner_launch import RetainedOwnerLaunch
-from .owner_lifecycle import OwnerRestartSelection
+from .owner_launch import OwnerRestartSelection
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .change_report import ChangeReport
 from .message_reference import MessageReference
@@ -99,37 +101,6 @@ def _message_reference(value: str) -> dict[str, object]:
     return {"seq": int(sequence), "message_id": message_id}
 
 
-def option(
-    *flags: str,
-    default: Any = MISSING,
-    default_factory: Any = MISSING,
-    group: str | None = None,
-    normalize: Callable[..., Any] | None = None,
-    wire_name: str | None = None,
-    parser_default: Any = MISSING,
-    parser_default_factory: Any = MISSING,
-    setting: Any = MISSING,
-    multiline: bool = False,
-    target_bound: bool = False,
-    editor_format: Callable[[Any], str] | None = None,
-    **parser_options: Any,
-) -> Any:
-    """One field owns both its CLI projection and JSON boundary conversion."""
-    metadata = {
-        "multiline": multiline,
-        "target_bound": target_bound,
-        "editor_format": editor_format,
-        "flags": flags,
-        "parser_options": parser_options,
-        "group": group,
-        "normalize": normalize,
-        "parser_default": parser_default,
-        "parser_default_factory": parser_default_factory,
-        "setting": setting,
-    }
-    if wire_name is not None:
-        metadata["wire_name"] = wire_name
-    return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
 @dataclass(frozen=True)
@@ -435,9 +406,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         bound = self.for_editor(comms, target.name, project)
         return TargetAction((bound,), target.names)
 
-    def run(self, ctx: Comms, output: TextIO, *, overrides: dict[str, Any]) -> int:
+    def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
-        result = self.apply_cli(ctx, overrides)
+        result = self.apply(ctx)
         json.dump(self.encode_result(result), output, indent=2)
         output.write("\n")
         return self.result_exit_code(result)
@@ -562,59 +533,15 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls)
         for declared in fields(cls):
-            metadata = declared.metadata
-            group = metadata["group"]
+            group = declared.metadata["group"]
             owner = parser
             if group is not None:
                 if group not in groups:
                     groups[group] = parser.add_mutually_exclusive_group(required=True)
                 owner = groups[group]
-            options = dict(metadata["parser_options"])
-            annotation = hints[declared.name]
-            scalar = (
-                get_args(annotation)[0] if get_origin(annotation) is types.UnionType else annotation
-            )
-            if scalar is bool:
-                options.setdefault("action", "store_true")
-            elif scalar in (int, float):
-                options.setdefault("type", scalar)
-            elif isinstance(scalar, type) and issubclass(scalar, Enum):
-                options["choices"] = [kind.value for kind in scalar]
-            elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
-                options.setdefault("choices", scalar.names())
-            elif (
-                get_origin(scalar) is type and get_args(scalar)
-                and issubclass(get_args(scalar)[0], DeclaredFamily)
-            ):
-                options.setdefault("choices", get_args(scalar)[0].names())
-            if metadata["setting"] is not MISSING:
-                options["default"] = metadata["setting"](settings)
-            elif metadata["parser_default"] is not MISSING:
-                options["default"] = metadata["parser_default"]
-            elif metadata["parser_default_factory"] is not MISSING:
-                options["default"] = metadata["parser_default_factory"]()
-            elif declared.default is not MISSING:
-                options["default"] = declared.default
-            elif declared.default_factory is not MISSING:
-                options["default"] = declared.default_factory()
-            else:
-                options["required"] = True
-            if isinstance(options.get("default"), DeclaredFamily):
-                options["default"] = options["default"].declared_name
-            elif (
-                isinstance(options.get("default"), type)
-                and issubclass(options["default"], DeclaredFamily)
-            ):
-                options["default"] = options["default"].declared_name
-            if any(flag.startswith("-") for flag in metadata["flags"]):
-                options["dest"] = metadata.get("wire_name", declared.name)
-            else:
-                options.pop("required", None)
-            owner.add_argument(*metadata["flags"], **options)
+            declared.attach(owner, hints[declared.name], settings)
         return parser
 
-    def apply_cli(self, ctx: Comms, overrides: dict[str, Any]) -> Any:
-        return self.apply(ctx)
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
@@ -934,7 +861,7 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
     def apply(self, ctx: Comms) -> AsyncIterator[Message]:
         return ctx.bus.watch(self.thread)
 
-    def run(self, ctx: Comms, output: TextIO, *, overrides: dict[str, Any]) -> int:
+    def run(self, ctx: Comms, output: TextIO) -> int:
         import asyncio
         from contextlib import aclosing
 
@@ -1270,6 +1197,8 @@ class StopCliCommand(CliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class RestartCliCommand(CliCommand):
+    native: NativeChoice = option(NativeThreadDefaults.value_flag, default_factory=KeepRecorded,
+        type=NativeChoice.from_json, normalize=FieldCodec.encode)
     help = "Restart process"
     name: str | None = option(
         "--name", help="One running thread (aliases supported)", group="scope", default=None,
@@ -1283,11 +1212,6 @@ class RestartCliCommand(CliCommand):
         wire_name="all",
         target_bound=True,
     )
-    @classmethod
-    def add_parser(cls, subparsers: Any, settings: NativeThreadDefaults) -> Any:
-        parser = super().add_parser(subparsers, settings)
-        NativeThreadDefaults.add_override_arguments(parser)
-        return parser
 
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
@@ -1307,20 +1231,13 @@ class RestartCliCommand(CliCommand):
         return (cls(name=thread.name),)
 
     def apply(self, ctx: Comms) -> Any:
-        return self.apply_cli(ctx, {})
-
-    def apply_cli(self, ctx: Comms, overrides: dict[str, Any]) -> Any:
-        runtime = ctx.runtime
         snapshot = ctx.registry.snapshot()
         threads = snapshot.restart_candidates if self.all_ else (snapshot.require_active(self.name),)
-        targets = []
-        for thread in threads:
-            selection = OwnerRestartSelection.capture(snapshot, thread.name)
-            source = RetainedOwnerLaunch.capture(thread, snapshot)
-            values = {"binary": ctx.owners.restart_entrypoint(source.native.binary, runtime), **overrides}
-            targets.append((selection, replace(source.native, **values)))
-        results = ctx.owners.restart_owners(tuple(targets), launch_runtime=runtime)
+        targets = tuple(self.native.target(OwnerRestartSelection.capture(snapshot, thread.name), snapshot)
+                        for thread in threads)
+        results = ctx.owners.restart_owners(targets, launch_runtime=ctx.runtime)
         return {"restarted": [asdict(result) for result in results]}
+
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1402,7 +1319,9 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
         spec = self.spec_type(**{item.name: getattr(self, item.name)
                                  for item in fields(self.spec_type)})
-        child = ctx.threads.create(spec, pi_bin=self.pi_bin)
+        native = replace(ctx.owners.native_defaults, binary=self.pi_bin,
+                         model=self.model, thinking_level=self.thinking_level)
+        child = ctx.threads.create(spec, native=native, runtime=ctx.runtime)
         return ThreadCreatedResult(child.name, child.pid)
 
 
@@ -1578,6 +1497,8 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
 
 @dataclass(frozen=True, kw_only=True)
 class StartCliCommand(CliCommand):
+    native: NativeThreadDefaults = option(NativeThreadDefaults.value_flag,
+        setting=lambda settings: settings, type=NativeThreadDefaults.from_json, normalize=FieldCodec.encode)
     help = 'Start thread'
     multiple_targets = True
     name: str = option('--name', target_bound=True)
@@ -1585,7 +1506,7 @@ class StartCliCommand(CliCommand):
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsStartTool
-        return (cls(name=thread.name),) if CommsStartTool.available_for_thread(thread, status) else ()
+        return (cls(name=thread.name, native=comms.owners.native_defaults),) if CommsStartTool.available_for_thread(thread, status) else ()
 
     @classmethod
     def channel_bindings(cls, comms, channel, *, snapshot=None):
@@ -1597,12 +1518,9 @@ class StartCliCommand(CliCommand):
             return super().reconnect_targets(result)
         return (result.thread,) if result.launched else ()
 
-    def apply(self, ctx: Comms) -> OwnerStartResult:
-        return self.apply_cli(ctx, {})
+    def apply(self, ctx: Comms) -> Any:
+        return ctx.owners.start(self.name, native=self.native, launch_runtime=ctx.runtime)
 
-    def apply_cli(self, ctx: Comms, overrides: dict[str, Any]) -> Any:
-        native = replace(ctx.owners.native_defaults, **overrides)
-        return ctx.owners.start(self.name, native=native, launch_runtime=ctx.runtime)
 
 
 @dataclass(frozen=True, kw_only=True)

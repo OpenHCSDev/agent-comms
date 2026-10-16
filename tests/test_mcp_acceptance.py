@@ -41,6 +41,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="POSIX PTY acceptance")
 TIMEOUT = 40
@@ -471,7 +472,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
             ]
             retirement = AsyncExitStack()
             try:
-                selected_comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+                selected_comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
                 owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary=binary, arguments=tuple(args)), runtime_enabled=True, auto_wake=False)
                 retirement.push_async_callback(owner.shutdown)
 

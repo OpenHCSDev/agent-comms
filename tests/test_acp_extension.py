@@ -43,12 +43,13 @@ from agent_comms.turn_context import ContextManifest, NextContextTurn
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
 
     from agent_comms.threads import Thread
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("pilot", frozenset(), str(tmp_path)))
     read = comms.transcripts.capture_page_read("pilot")
     owner = AdmissionIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)

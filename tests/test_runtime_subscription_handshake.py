@@ -17,12 +17,13 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
 
 async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplog):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, auto_wake=False)
     client = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
     session_file = tmp_path / "owner.jsonl"
@@ -85,7 +86,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
     ids=["missing", "null", "number", "empty", "short", "long"],
 )
 async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, token_fields):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             "owner",

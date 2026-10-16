@@ -12,6 +12,8 @@ from . import launch_runtime
 from .native_settings import NativeThreadDefaults
 from .registry_document import RegistrySnapshot
 from .threads import Thread
+from .thread_identity import OwnerIdentity
+from .restart_refusals import OwnerGenerationChangedRefusal, OwnerSelectionChangedRefusal
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,3 +57,35 @@ class RetainedOwnerLaunch:
             raise RelationViolationError("Owner launch names another registry incarnation")
         snapshot.require_owner_process(snapshot.owner_identity(thread.name), process)
         return cls(process, observed_interpreter, environment, native)
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerRestartSelection:
+    identity: OwnerIdentity
+    process: ProcessIdentity
+    admission_generation: int
+
+    @classmethod
+    def capture(cls, snapshot: RegistrySnapshot, name: str):
+        owner = snapshot.require_active(name)
+        return cls(
+            snapshot.owner_identity(owner.name),
+            owner.require_process(),
+            snapshot.admission_generations[owner.name],
+        )
+
+    def recorded_native(self, snapshot: RegistrySnapshot) -> NativeThreadDefaults:
+        return RetainedOwnerLaunch.capture(self.require_current(snapshot), snapshot).native
+
+    @property
+    def name(self) -> str:
+        return self.identity.incarnation.name
+
+    def require_current(self, snapshot: RegistrySnapshot) -> Thread:
+        try:
+            snapshot.require_owner_process(self.identity, self.process)
+        except RelationViolationError as error:
+            raise OwnerSelectionChangedRefusal() from error
+        if snapshot.admission_generations[self.name] != self.admission_generation:
+            raise OwnerGenerationChangedRefusal()
+        return snapshot.require_active(self.name)

@@ -26,10 +26,11 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def setup_wire(path):
-    comms = Comms(resolve_comms_route(path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(path), runtime=LaunchRuntime.current())
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("both", {"api", "ui"}), ("other", set())):
         comms.registry.declare(Thread(name=name, tags=frozenset(tags), worktree=str(path)))
     return comms
@@ -41,7 +42,7 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     channel = comms.channels.set_channel_metadata("api", parent="#ui", archived=True)
     assert channel.parent == "#ui" and channel.archived
 
-    observer = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    observer = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     projected = {view.channel.name: view for view in observer.views.channel_views(show_archived=True)}
     assert projected["#api"].channel.parent == "#ui"
     assert projected["#api"].channel.archived
@@ -56,7 +57,7 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     assert observer.channels.catalog.read().resolve("#ui").parent is None
 
 def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread('inactive', frozenset({'cohort'}), str(tmp_path)), StoppedThreadStatus())
     comms.registry.declare(Thread('active', frozenset({'cohort'}), str(tmp_path),
                                  process_identity=ProcessIdentity.capture(os.getpid())), RunningThreadStatus())
@@ -79,7 +80,7 @@ def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_pa
 
 
 def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / 'wire'), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / 'wire'), runtime=LaunchRuntime.current())
     saved = {}
     for name, tags, status in (
         ('single', {'remove'}, StoppedThreadStatus()),
@@ -124,7 +125,7 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
 
 
 def test_exclusive_tag_deletion_never_deletes_a_stopped_owner_that_is_still_alive(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / 'wire'), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / 'wire'), runtime=LaunchRuntime.current())
     original = Thread('still-alive', frozenset({'remove'}), str(tmp_path),
                       process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(original, StoppedThreadStatus())
@@ -140,7 +141,7 @@ def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path)
     import cProfile
     import pstats
 
-    comms = Comms(resolve_comms_route(tmp_path / 'wire'), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / 'wire'), runtime=LaunchRuntime.current())
     for index in range(40):
         comms.registry.declare(Thread(f'member-{index}', frozenset({'remove', 'keep'}),
                                      str(tmp_path)), StoppedThreadStatus())
@@ -195,7 +196,7 @@ def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
         created_at=123,
     )
     assert comms.channels.set_saved_view(view) == view
-    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).channels.catalog.read().saved_views == {"api-and-ui": view}
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).channels.catalog.read().saved_views == {"api-and-ui": view}
     assert [
         name
         for name, thread in comms.registry.all_threads().items()
@@ -205,7 +206,7 @@ def test_saved_views_are_typed_persistent_and_non_routable(tmp_path):
     with pytest.raises(ValueError, match="not a routable target"):
         comms.messaging.send("other", "#api-and-ui", "must fail")
     comms.channels.delete_saved_view("api-and-ui")
-    assert not Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).channels.catalog.read().saved_views
+    assert not Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).channels.catalog.read().saved_views
 
 
 def test_any_is_non_routable(tmp_path):
@@ -239,7 +240,7 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     assert comms.registry.snapshot() == before_conflict
 
     comms.channels.rename_tag("ui", "docs")
-    observer = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    observer = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     assert observer.channels.catalog.read().resolve("#api").parent == "#docs"
     assert observer.channels.catalog.read().resolve("#api").archived
     docs = observer.channels.catalog.read().resolve("#docs")
@@ -270,7 +271,7 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
             ViewPredicate(AllOfMatch, frozenset({"docs"})),
         )
     )
-    restarted = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    restarted = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     assert restarted.channels.catalog.read().resolve("#child").parent is None
     assert not restarted.channels.catalog.read().resolve("#api").archived
     assert [message.body for message in restarted.views.channel_history("#api")] == [
@@ -289,7 +290,7 @@ def test_deleted_exact_tag_gets_fresh_order_and_creation_on_reuse(tmp_path):
 
     with patch("agent_comms.channels.time.time", return_value=200):
         comms.channels.create_tag("temporary")
-    recreated = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).channels.catalog.read().resolve("#temporary")
+    recreated = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).channels.catalog.read().resolve("#temporary")
     assert first.created_at == 100
     assert recreated.created_at == 200
     assert recreated.order is CreatedThreadSort
@@ -418,7 +419,7 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     )
     invoke_tool(comms, "comms_tags", {"action": "rename", "name": "api", "new_name": "backend"})
     assert "backend" in comms.registry.require("a").tags
-    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).channels.catalog.read().resolve("#team").tags == frozenset(
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).channels.catalog.read().resolve("#team").tags == frozenset(
         {"backend", "ui"}
     )
     invoke_tool(comms, "comms_delete_view", {"name": "team"})
@@ -436,7 +437,7 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
 
 def test_pending_projection_observes_external_changes_without_rescanning(tmp_path):
     comms = setup_wire(tmp_path)
-    other = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    other = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.messaging.send("other", "#api", "one")
     assert comms.bus.pending_count("a") == 1
     with patch.object(
@@ -494,7 +495,7 @@ def test_none_membership_and_independent_channel_order(tmp_path):
     assert not comms.bus.inbox("b")
     comms.channels.set_channel_sort("#api", LastMessageThreadSort)
     comms.channels.set_channel_sort("#none", LastActivityThreadSort)
-    views = {view.channel.name: view for view in Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.channel_views()}
+    views = {view.channel.name: view for view in Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.channel_views()}
     assert views["#api"].channel.order is LastMessageThreadSort
     assert views["#none"].channel.order is LastActivityThreadSort
     assert views["#any"].channel.order is CreatedThreadSort
@@ -524,7 +525,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
         ]
 
     comms.channels.set_channel_order(CreatedChannelSort)
-    created_names = names(Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()))
+    created_names = names(Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()))
     assert set(created_names) == {"#api", "#ui", "#alpha", "#zeta"}
     assert created_names.index("#alpha") < created_names.index("#zeta")
     comms.channels.set_channel_sort("#zeta", LastMessageThreadSort)
@@ -535,9 +536,9 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     comms.messaging.send_user_message("#alpha", "Human input", worktree=str(tmp_path))
     comms.messaging.send("b", "#zeta", "Later agent output")
     invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"})
-    assert names(Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()))[0] == "#alpha"
+    assert names(Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()))[0] == "#alpha"
     assert [view.channel.name for view in comms.views.coordination_snapshot("a").channels] == [
-        view.channel.name for view in Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.coordination_snapshot("b").channels
+        view.channel.name for view in Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.coordination_snapshot("b").channels
     ]
     assert comms.views.coordination_snapshot().channel_order is LastUserInputChannelSort
     # Reading or re-sorting must never redefine a channel's creation time.
@@ -549,7 +550,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
 
 
 def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("moving", frozenset(), str(tmp_path)))
     comms.registry.declare(
         Thread(
@@ -568,7 +569,7 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     comms.channels.update_tags("moving", remove=frozenset({"api"}))
     assert len(comms.views.channel_history("#api")) == 2
     comms.channels.update_tags("moving", remove=frozenset({"ui"}))
-    history = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.channel_history("#api")
+    history = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.channel_history("#api")
     assert [message.membership.value for message in history] == ["joined", "left"]
     assert all(not message.starts_turn for message in history)
     assert not comms.views.coordination_snapshot().participants("#api")
@@ -585,7 +586,7 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
     comms = setup_wire(tmp_path)
     comms.channels.set_channel_order(order)
     original = [view.channel.name for view in comms.views.channel_views()]
-    observer = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    observer = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     observer.views.channel_views()  # Populate the observer cache before the external writes.
     for channel in ("#ui", "#none"):
         result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True})
@@ -616,7 +617,7 @@ def test_member_pins_are_persistent_channel_scoped_and_preserve_sort(tmp_path, o
         comms, "comms_pin_thread", {"channel": "team", "name": "a", "pinned": True}
     )
     assert result["pinned_members"] == ["a"]
-    observer = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    observer = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     views = {view.channel.name: view for view in observer.views.channel_views()}
     assert views["#team"].members == ("a", *(name for name in original["#team"] if name != "a"))
     assert views["#any"].members == original["#any"]
@@ -640,7 +641,7 @@ def test_pin_lifecycle_tracks_identity_and_membership(tmp_path):
         replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.threads.rename_managed_thread("a", "renamed", owner_pid=os.getpid())
-    observer = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    observer = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     assert observer.channels.catalog.read().pinned_threads("#team") == {"renamed"}
     assert observer.channels.catalog.read().pinned_threads("#any") == {"renamed"}
     comms.channels.update_tags("renamed", remove=frozenset({"api"}))
@@ -661,7 +662,7 @@ def test_tag_view_pins_follow_rename_and_clear_on_delete(tmp_path):
     comms.channels.set_channel_pinned("api", True)
     comms.channels.set_thread_pinned("api", "a", True)
     comms.channels.rename_tag("api", "backend")
-    observer = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    observer = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     assert observer.channels.catalog.read().resolve("#backend").pinned
     assert observer.channels.catalog.read().pinned_threads("#backend") == {"a"}
     assert not observer.channels.catalog.read().pinned_threads("#api")

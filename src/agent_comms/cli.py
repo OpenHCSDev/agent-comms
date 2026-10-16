@@ -21,7 +21,7 @@ from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import Comms
 from .owner_restart import StoppedOwnerFailure
-from .owner_launch import LaunchRuntime
+from .launch_runtime import LaunchRuntime
 
 
 def _fail(error: BaseException) -> int:
@@ -39,8 +39,6 @@ class CliArgumentParser(argparse.ArgumentParser):
 
 def build_parser(settings: NativeThreadDefaults) -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
-    parser.set_defaults(native_settings=settings)
-    NativeThreadDefaults.add_cli_arguments(parser, required=False)
     parser.add_argument(
         "--root",
         default=None,
@@ -62,8 +60,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.admit_client())
             comms = Comms(route, runtime=runtime)
-            return command.run(comms, sys.stdout,
-                               overrides=NativeThreadDefaults.cli_overrides(args, settings))
+            return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130
     except StoppedOwnerFailure as exc:

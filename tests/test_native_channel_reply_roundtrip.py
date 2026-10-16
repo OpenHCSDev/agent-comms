@@ -31,6 +31,7 @@ from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.active_route import LocalRoute
+from agent_comms.launch_runtime import LaunchRuntime
 
 # Reuse the existing sealed-runtime persistent /var/tmp test root.
 tmp_path = private_root_fixture
@@ -218,10 +219,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         monkeypatch.setenv(key, value)
     for key in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(key, raising=False)
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults(
-        binary=str(Path(sys.executable).with_name("pi-comms-native")),
-        arguments=("--offline", "--no-extensions", "--no-skills", "--no-context-files"),
-    ))
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     projects = {}
     for name in (("questioner", "answerer", "answerer2") if broadcast else ("questioner", "answerer")):
         project = tmp_path / name
@@ -521,7 +519,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
     pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     if not pin:
         pytest.skip("Actual immutable native bundle required")
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     before = comms.registry.snapshot()
     entered, release, completed = threading.Event(), threading.Event(), threading.Event()
@@ -539,7 +537,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
             completed.set()
 
     monkeypatch.setattr(SelectedExecution, "validate", observed_validation)
-    execution = SelectedExecution(comms=Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id,
+    execution = SelectedExecution(comms=Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()), wire_root_id=root_id,
                                   owner_name="unregistered", native_package=Path(pin))
     task = asyncio.create_task(execution.run())
     try:
@@ -562,7 +560,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
     # A separate invalid acquisition still refuses before participant/claim
     # selection; no cancellation or prior validation grants it trust.
     monkeypatch.setattr(SelectedExecution, "validate", validate)
-    invalid = SelectedExecution(comms=Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id,
+    invalid = SelectedExecution(comms=Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()), wire_root_id=root_id,
                                 owner_name="unregistered", native_package=tmp_path)
     with pytest.raises(NativePiUnavailable):
         await invalid.run()

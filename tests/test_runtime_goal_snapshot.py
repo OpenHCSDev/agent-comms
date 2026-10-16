@@ -30,6 +30,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
@@ -37,7 +38,7 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 @pytest.fixture
 async def goal_owner(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id

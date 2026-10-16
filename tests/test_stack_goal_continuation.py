@@ -20,6 +20,7 @@ from agent_comms.native_settings import NativeThreadDefaults
 from native_backend_fixture import native_run_command
 from agent_comms.comms import Comms
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
@@ -210,7 +211,7 @@ async def test_mounted_goal_continues_without_progress_tool(
             },
             project_dir=str(project),
         )
-        comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
 
         async def until(predicate, timeout=45):
             async with asyncio.timeout(timeout):

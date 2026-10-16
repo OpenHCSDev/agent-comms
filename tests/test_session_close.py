@@ -16,6 +16,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 class AttachmentClient:
@@ -41,7 +42,7 @@ class AttachmentClient:
 async def test_close_retires_one_real_subscription_and_permission(tmp_path, monkeypatch):
     # This declared model catalogue avoids SDK/model discovery; no model runs.
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one")
-    comms = Comms(resolve_comms_route(tmp_path / "w"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "w"), runtime=LaunchRuntime.current())
     owner = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, auto_wake=False)
     client = CommsClient(comms, native=comms.owners.native_defaults, auto_wake=False, use_unstable_protocol=True)
     other = CommsClient(comms, native=comms.owners.native_defaults, auto_wake=False, use_unstable_protocol=True)
@@ -102,7 +103,7 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
 
 @pytest.mark.asyncio
 async def test_close_joins_unsent_request_and_capability_requires_admission(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / "w"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "w"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("cold", frozenset(), str(tmp_path),
                                  process_identity=ProcessIdentity.capture(os.getpid())))
     client = CommsClient(comms, native=comms.owners.native_defaults, auto_wake=False, use_unstable_protocol=True)

@@ -12,6 +12,7 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _entry(message, *, text=None, row_id="input"):
@@ -38,7 +39,7 @@ def _session(path: Path, *entries):
 def _case(tmp_path):
     root = tmp_path / "wire"
     session = tmp_path / "session.jsonl"
-    comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(root), runtime=LaunchRuntime.current())
     for name in ("peer", "owner", "other"):
         comms.registry.declare(
             Thread(
@@ -76,7 +77,7 @@ def test_unbound_saved_whole_prompt_stays_plain_until_exact_entry_is_annotated(t
 def test_attached_foreign_session_with_identical_message_never_infers_local_from(tmp_path):
     source_root = tmp_path / "B"
     source_session = tmp_path / "B-pi-session.jsonl"
-    source = Comms(resolve_comms_route(source_root), native=NativeThreadDefaults.from_runtime())
+    source = Comms(resolve_comms_route(source_root), runtime=LaunchRuntime.current())
     for name in ("peer", "owner"):
         source.registry.declare(
             Thread(
@@ -89,7 +90,7 @@ def test_attached_foreign_session_with_identical_message_never_infers_local_from
     foreign = source.messaging.send_message("peer", "owner", "the same routine message")
     _session(source_session, _entry(foreign))
 
-    viewer = Comms(resolve_comms_route(tmp_path / "A"), native=NativeThreadDefaults.from_runtime())
+    viewer = Comms(resolve_comms_route(tmp_path / "A"), runtime=LaunchRuntime.current())
     for name in ("peer", "owner"):
         viewer.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     local = viewer.messaging.send_message("peer", "owner", "the same routine message")

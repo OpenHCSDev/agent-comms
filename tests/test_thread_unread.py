@@ -17,6 +17,7 @@ from native_unread_fixture import completed_counts, completed_snapshot
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def append(path, role="assistant", content="Reply"):
@@ -30,7 +31,7 @@ def append(path, role="assistant", content="Reply"):
 def setup_thread(tmp_path):
     source = tmp_path / "session.jsonl"
     source.touch()
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("worker", frozenset({"ci"}), str(tmp_path), session_file=str(source)))
     return comms, source
 
@@ -46,7 +47,7 @@ def test_reply_counts_are_persistent_human_read_positions(tmp_path):
     shown = comms.transcripts.transcript_checkpoint("worker")
     append(source, content="Arrived after the displayed checkpoint")
     comms.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=shown)
-    assert completed_snapshot(Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime()), str(tmp_path)).thread_unread["worker"] == 1
+    assert completed_snapshot(Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()), str(tmp_path)).thread_unread["worker"] == 1
     assert completed_snapshot(comms, str(tmp_path / "other-project")).thread_unread["worker"] == 1
     comms.messaging.send("worker", "#ci", "Channel reply")
     comms.views.mark_channel_view_read("#ci", worktree=str(tmp_path))
@@ -249,7 +250,7 @@ def test_open_views_share_one_incremental_index_without_sharing_markers(tmp_path
     for _ in range(30):
         append(source)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 30
-    second = Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime())
+    second = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
     assert second.views.transcript_reads is comms.views.transcript_reads
     assert second.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 30
     assert second.views.transcript_reads.preparation is None
@@ -440,7 +441,7 @@ def test_reopen_wire_does_not_reuse_cancelled_index_owner(tmp_path):
     append(source)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread == {"worker": 1}
     comms.views.transcript_reads.close()
-    fresh = Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime())
+    fresh = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
     assert fresh.views.transcript_reads is not comms.views.transcript_reads
     assert fresh.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 1}
 

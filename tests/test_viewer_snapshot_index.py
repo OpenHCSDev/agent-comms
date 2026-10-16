@@ -28,6 +28,7 @@ from agent_comms.ui_model.unread import IndexingUnread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_display_metrics_encode_one_viewer_read_set_for_all_channels(tmp_path):
@@ -46,7 +47,7 @@ def test_display_metrics_encode_one_viewer_read_set_for_all_channels(tmp_path):
 
 
 def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("bob", frozenset({"team", "extra"}), str(tmp_path / "bob")))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     first = comms.messaging.send_message("bob", "#team", "first")
@@ -58,7 +59,7 @@ def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp
         comms.bus.reads.capture(viewer, (first,), comms.registry.snapshot(), comms.bus.log.path),
     )
     comms.channels.set_channel_any_mode("#extra", True)
-    after = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path))
+    after = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path))
     assert after.channel_unread["#team"] == 1
     assert after.channel_unread["#extra"] == 2
     def clock(snapshot):
@@ -72,7 +73,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
     """Later append/ACK/rename cannot broaden an acquired viewer snapshot."""
     from dataclasses import replace
 
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.registry.register(replace(viewer, tags=frozenset({"team"})))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
@@ -117,7 +118,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
 
 @pytest.mark.asyncio
 async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path, monkeypatch):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.registry.register(viewer)
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
@@ -202,7 +203,7 @@ async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_
 ):
     from agent_comms.store_files import _store_lock
 
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     for body in ("first", "second"):
@@ -236,7 +237,7 @@ async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_
 
 
 def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.messaging.send_message("bob", viewer.name, "direct")
@@ -261,7 +262,7 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
     """An actual stale-read outcome preserves the same observer and last answer."""
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
 
@@ -314,7 +315,7 @@ async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
 
 
 def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     for number in range(100):
@@ -322,7 +323,7 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     expected = comms.views.viewer_snapshot(str(tmp_path))
     assert expected.channel_unread["#team"] == 100
 
-    fresh = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    fresh = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         assert fresh.views.viewer_snapshot(str(tmp_path)) == expected
         assert decode.call_count == 0
@@ -337,11 +338,11 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
 
     comms.channels.set_channel_any_mode("#team", True)
     assert (fresh.views.viewer_snapshot(str(tmp_path))
-            == Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path)))
+            == Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path)))
 
 
 def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
@@ -354,7 +355,7 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
     cached = json.loads(checkpoint.read_text())
     cached["counts"]["#team"] = 0
     checkpoint.write_text(json.dumps(cached))
-    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
 
     bus_path = comms.bus.log.path
     replacement = bus_path.with_name("replacement.jsonl")
@@ -362,12 +363,12 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
     replacement.chmod(0o600)
     os.replace(replacement, bus_path)
     with pytest.raises(RelationViolationError, match="checkpoint root/inode/size changed"):
-        Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path))
+        Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path))
 
 
 def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
     """Real page coverage and read receipts keep clocks independent of unread."""
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
@@ -382,7 +383,7 @@ def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
                                        comms.registry.snapshot(), comms.bus.log.path),
     )
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
-        after = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path))
+        after = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path))
         assert after.channel_unread["#team"] == 98
         assert decode.call_count == 2
         assert {call.args[0]["seq"] for call in decode.call_args_list} == {
@@ -391,11 +392,11 @@ def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
     assert after.channels == before.channels
     # A new row still contributes once, after the rebased old prefix.
     comms.messaging.send_message("bob", "#team", "appended")
-    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 99
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 99
 
 
 def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
                 for n in range(10)]
@@ -409,7 +410,7 @@ def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
     assert not index_path.exists()
 
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
-        after = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path))
+        after = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path))
         assert after.channel_unread["#team"] == 9
         assert decode.call_count == 10
     assert after.channels == before.channels
@@ -419,7 +420,7 @@ def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
 def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
     from dataclasses import replace
 
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     message = comms.messaging.send_message("bob", "#team", "retained")
     viewer = comms.messaging.user_identity(str(tmp_path))
@@ -429,12 +430,12 @@ def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
         viewer.name, comms.bus.reads.capture(viewer.name, (message,),
                                             comms.registry.snapshot(), comms.bus.log.path),
     )
-    read = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path))
+    read = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path))
     assert read.channel_unread["#team"] == 0
     # Metadata updates preserve identity; removal and a new declaration do not.
     comms.registry.remove(viewer.name)
     comms.registry.register(replace(viewer, created_at=viewer.created_at + 1))
-    returned = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path))
+    returned = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).views.viewer_snapshot(str(tmp_path))
     assert returned.channel_unread["#team"] == 1
     assert returned.channels == read.channels
 
@@ -442,7 +443,7 @@ def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
 def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     tmp_path, monkeypatch
 ):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
@@ -471,7 +472,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
 
     from agent_comms.bus_route_counts import BusRouteCounts
 
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset(), str(tmp_path / "bob")))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -487,7 +488,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
             viewer, (messages[1], messages[4]), comms.registry.snapshot(), comms.bus.log.path
         ),
     )
-    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).bus.pending_counts(viewer) == {"bob": 2}
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).bus.pending_counts(viewer) == {"bob": 2}
     comms.registry.rename("bob", "renamed-bob")
     from agent_comms.routing import DeliveryScope
 
@@ -501,7 +502,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
     # The untagged human inbox still excludes channel rows.
     assert expected == {"renamed-bob": 2}
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
-        assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).bus.pending_counts(viewer) == expected
+        assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).bus.pending_counts(viewer) == expected
         assert decode.call_count == 0
     ledger = comms.bus.reads.read()
     receiver, connection = Pipe()
@@ -521,7 +522,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
             # Use the real SQLite busy result, not a wording-only DatabaseError.
             with patch.object(CoordinationStore, "writer_timeout", 0):
                 with pytest.raises(CoordinationReadUnavailable) as busy:
-                    Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).bus.pending_counts(viewer)
+                    Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).bus.pending_counts(viewer)
                 assert busy.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
                 await service.observe(set())
             writer.rollback()
@@ -537,7 +538,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
             recovered.append(receiver.recv())
         latest = [r for r in recovered if isinstance(r, SidebarObserved)][-1]
         assert latest.snapshot.unread == {"renamed-bob": 3}
-        assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).bus.pending_counts(viewer) == {"renamed-bob": 3}
+        assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).bus.pending_counts(viewer) == {"renamed-bob": 3}
         assert service.observations[SidebarReading] is observer
         assert observer.request is request
         assert comms.bus.reads.read() == ledger

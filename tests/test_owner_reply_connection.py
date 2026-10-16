@@ -11,6 +11,7 @@ from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import OwnerRead, ReadAnswered, ReadRefused
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 class GoalRead(OwnerRead):
@@ -36,7 +37,7 @@ class Writer:
 
 
 def owner_read(tmp_path):
-    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     thread = Thread(
         "worker", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),

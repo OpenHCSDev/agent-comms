@@ -17,17 +17,18 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, monkeypatch):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
     comms.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
     )
-    reopened = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     paused = reopened.registry.require("worker").goal
     assert paused.state.declared_name == "paused"
     assert reopened.registry.require("worker").goal.state.pause_source.declared_name == "owner"
@@ -54,7 +55,7 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
 
 
 def test_model_cannot_pause(tmp_path, monkeypatch):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))

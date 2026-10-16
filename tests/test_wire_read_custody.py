@@ -11,12 +11,13 @@ from agent_comms.wire_record import WireRecord
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture(
     tmp_path, monkeypatch
 ):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path)))
     first = comms.messaging.send_message("sender", "recipient", "first")
@@ -68,7 +69,7 @@ def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture
 
 
 def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     for name in ("sender", "recipient"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     first = comms.messaging.send_message("sender", "recipient", "first")
@@ -108,7 +109,7 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
 
 
 def test_relationship_tail_decode_does_not_retain_publication_custody(tmp_path, monkeypatch):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     for name in ("sender", "recipient"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     comms.messaging.send_message("sender", "recipient", "first")

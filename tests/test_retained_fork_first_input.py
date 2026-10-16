@@ -21,6 +21,7 @@ from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 from agent_comms.active_route import LocalRoute
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -49,10 +50,7 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
-    comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary(), arguments=(
-        "--offline", "--no-extensions", "--no-skills", "--no-context-files",
-        "--no-prompt-templates", "--no-tools",
-    )))
+    comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
     comms.owners.pin_private_nk_launch(fixture.root, root_id, package)

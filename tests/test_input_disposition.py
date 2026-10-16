@@ -12,6 +12,7 @@ from stored_inputs import stored_inputs
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize("invalid_text", [["list"], [], {"text": "dict"}, 7, False, None])
@@ -60,7 +61,7 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
 
     from agent_comms.threads import Thread
 
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             name="kid",

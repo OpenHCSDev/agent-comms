@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_document import RegistryDocument
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_launch import OwnerRestartSelection
 
 if TYPE_CHECKING:
     from recorded_owner_read import RecordedOwnerRead

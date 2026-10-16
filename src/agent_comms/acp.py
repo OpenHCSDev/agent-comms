@@ -57,6 +57,7 @@ from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms
 from .native_settings import NativeThreadDefaults
+from .launch_runtime import LaunchRuntime
 from .coordination_cohort import next_sealed_assignment
 from .field_codec import FieldCodec
 from .cursor_publication import CursorPublication
@@ -149,7 +150,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             reply_quiet=reply_quiet,
         )
         self.sessions = self.session_lifecycle_class(
-            comms, self.turns.agent_bin, self.turns.agent_args, self._runtime, runtime_enabled, self
+            comms, native, self.turns.agent_args, self._runtime, runtime_enabled, self
         )
         self.inputs = InputDrain(comms, self.sessions, self._runtime, self, auto_wake)
         self.turns.bind(self.sessions, self.inputs)
@@ -523,7 +524,8 @@ class CommsClient(CommsAgent):
 
 def main() -> int:
     from .active_route import resolve_comms_route
-    native = NativeThreadDefaults.from_cli(sys.argv[1:], NativeThreadDefaults.from_runtime())
+    runtime = LaunchRuntime.current()
+    native = NativeThreadDefaults.from_cli(sys.argv[1:], NativeThreadDefaults.from_runtime(runtime))
     with resolve_comms_route().admit_client():
         if "--login" in sys.argv[1:]:
             from .login import run_login
@@ -546,7 +548,7 @@ def main() -> int:
 
         private_nk = private_nk_from_environment()
         comms = Comms(resolve_comms_route(private_nk.validated_root if private_nk is not None else None),
-                            native=native)
+                            runtime=runtime)
         if private_nk is not None:
             comms.owners.pin_private_nk_launch(
                 private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
@@ -572,7 +574,7 @@ def main() -> int:
 
                 asyncio.create_task(watchdog())
             agent = CommsClient(
-                comms,
+                comms, native=native,
                 runtime_enabled=True,
                 use_unstable_protocol=True,
                 private_nk_native_package=private_nk.native_package if private_nk else None,

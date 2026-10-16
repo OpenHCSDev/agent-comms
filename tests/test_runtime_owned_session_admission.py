@@ -18,6 +18,7 @@ from agent_comms.runtime_requests import GoalHistoryRuntimeRequest
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.skipif(os.name == "nt", reason="original Unix owner socket")
@@ -25,7 +26,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
     root = tmp_path / "wire"
     project = tmp_path / "project"
     project.mkdir()
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     owner = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, auto_wake=False)
     client = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
     registered = await asyncio.to_thread(

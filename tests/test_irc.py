@@ -11,6 +11,7 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
@@ -137,7 +138,7 @@ class TestChannelsDerived:
         assert chat.channels.channels() == ["#any", "#none", "#all", "#ci", "#docs"]
 
     def test_channels_empty_wire(self, tmp_path):
-        comms = Comms(resolve_comms_route(tmp_path / "fresh"), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(resolve_comms_route(tmp_path / "fresh"), runtime=LaunchRuntime.current())
         assert comms.channels.channels() == ["#any", "#none", "#all"]
 
 

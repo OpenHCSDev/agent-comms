@@ -34,11 +34,12 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
 def owner(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep the durable objective"))
     return comms, goal
@@ -57,7 +58,7 @@ def test_experiment_a_one_new_pause_source_carries_all_behavior(owner, monkeypat
     edited = comms.goals.update_goal("worker", EditGoalAction(text="Revised objective"))
     assert edited.state.source.declared_name == "spend_cap"
     assert comms.registry.require("worker").goal.state.pause_source.instruction() == SpendCapPause().instruction()
-    assert Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime()).registry.require("worker").goal.state.source == SpendCapPause()
+    assert Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).registry.require("worker").goal.state.source == SpendCapPause()
     failed = comms.goals.block_goal_after_failed_turn(
         "worker", started_goal=goal, expected_worktree=str(comms.root), diagnostic="Backend failed"
     )
@@ -88,7 +89,7 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
             comms, {"status": "checkpoint", "goal_id": goal.id, "progress": "Evidence recorded"},
             caller=ThreadCaller("worker")
         )
-        event = Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime()).goals.goal_changed("worker", previous)
+        event = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).goals.goal_changed("worker", previous)
         assert isinstance(event, GoalChanged)
         assert event.goal.progress == "Evidence recorded"
         updates = []
@@ -128,7 +129,7 @@ def test_experiment_c_every_pause_preserving_action_keeps_owner(owner, action):
     assert not (comms.root / "goal_pause_events.json").exists()
     rewritten = replace(changed, progress="new report", revision=changed.revision + 1)
     comms.registry.register(replace(comms.registry.require("worker"), goal=rewritten))
-    assert Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime()).registry.require("worker").goal.state == paused.state
+    assert Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).registry.require("worker").goal.state == paused.state
     assert comms.goals.goal_history("worker")[-1].after.state == paused.state
     assert (
         comms.goals.block_goal_after_failed_turn(
@@ -219,4 +220,4 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner):
     )
     assert result.returncode == 1, result.stderr
     assert "paused by the owner" in json.loads(result.stdout)["error"]
-    assert Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime()).registry.require("worker").goal == paused
+    assert Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).registry.require("worker").goal == paused

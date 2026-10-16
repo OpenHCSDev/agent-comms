@@ -26,6 +26,7 @@ from delivery_owner_fixture import canonical_agent
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
@@ -44,7 +45,7 @@ async def owner(tmp_path, monkeypatch):
     monkeypatch.setattr(ModelConfigOption, "discover", models)
     monkeypatch.setattr(ThinkingLevelConfigOption, "discover", levels)
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
-    selected_comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    selected_comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "test/one"])), auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     try:
@@ -54,7 +55,7 @@ async def owner(tmp_path, monkeypatch):
 
 
 async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owner, tmp_path):
-    selected_comms_2 = Comms(LocalRoute(tmp_path / "other"), native=NativeThreadDefaults.from_runtime())
+    selected_comms_2 = Comms(LocalRoute(tmp_path / "other"), runtime=LaunchRuntime.current())
     other = CommsClient(selected_comms_2, native=dataclasses.replace(selected_comms_2.owners.native_defaults, binary="pi"))
     assert type(owner.sessions) is SessionLifecycle
     assert type(other.sessions) is AttachedSessionLifecycle
@@ -180,7 +181,7 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
         False,
     )
     assert changed["configOptions"][-1]["currentValue"] == "high"
-    assert Comms(LocalRoute(owner._comms.root), native=NativeThreadDefaults.from_runtime()).registry.require(response.session_id).task == "high"
+    assert Comms(LocalRoute(owner._comms.root), runtime=LaunchRuntime.current()).registry.require(response.session_id).task == "high"
 
     # Polling must use the same declaration catalog as parser/set dispatch.
     # A newly declared option backed by another Thread field is not invisible.

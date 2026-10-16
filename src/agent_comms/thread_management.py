@@ -632,14 +632,11 @@ class ThreadManagement:
         )
 
 
-    def create(self, spec: NewThreadSpec, pi_bin: str | None = None) -> Thread:
-        """Prepare the session, then register and launch the thread with its first input."""
-        native = self.owners.native_defaults
-        if pi_bin is not None:
-            native = replace(native, binary=pi_bin)
-        resolved_bin = native.binary
-        runtime = LaunchRuntime.current()
-        with spec.prepared(self, resolved_bin, runtime) as child:
+    def create(self, spec: NewThreadSpec, *, native: NativeThreadDefaults,
+               runtime: LaunchRuntime) -> Thread:
+        """Prepare and launch using the caller's one complete selection."""
+        runtime.require_available()
+        with spec.prepared(self, native.binary, runtime) as child:
             # A new incarnation's inbox already starts at its creation time
             # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
             child = self.registry._declare_unlocked(child)

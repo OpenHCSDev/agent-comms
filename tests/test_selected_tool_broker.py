@@ -23,6 +23,7 @@ from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _wire(token: str, **changes: object) -> bytes:
@@ -190,7 +191,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
     root.mkdir(mode=0o700)
     session_dir = tmp_path / "session"
     session_dir.mkdir(mode=0o700)
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     admission = WakeAdmission(
         wire_root_id="a" * 32,
         source_seq=1,

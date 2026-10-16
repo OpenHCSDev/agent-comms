@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO/'tests'))
@@ -104,7 +105,7 @@ class Provider(LoopbackProvider):
             yield {},'stop'
         else:
             assert original.stage is FullNativeExecution
-            message=Comms(LocalRoute(self.root), native=NativeThreadDefaults.from_runtime()).bus.log.message_by_id(assignment.message_id)
+            message=Comms(LocalRoute(self.root), runtime=LaunchRuntime.current()).bus.log.message_by_id(assignment.message_id)
             assert message.reference==assignment.source
             response=Message(original.owner_thread, message.exact_reply_target,
                              self.text,InfoKind,timestamp=0)
@@ -131,7 +132,7 @@ async def main():
     (config/'settings.json').write_text(json.dumps({'compaction':{'enabled':False},'retry':{'enabled':False}}))
     os.environ.update(AGENT_COMMS_NATIVE_CONFIG_DIR=str(config),PI_CODING_AGENT_DIR=str(config),
                       AGENT_COMMS_ROOT=str(root),AC_NATIVE_COPIED_PACKAGE=str(PACKAGE))
-    comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(),private_initial_writes=True)
+    comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current(),private_initial_writes=True)
     identity=ProcessIdentity.capture(os.getpid())
     comms.registry.declare(Thread('sender',frozenset(),str(base),process_identity=identity))
     comms.registry.declare(Thread('beta',frozenset({'team'}),str(base),process_identity=identity,

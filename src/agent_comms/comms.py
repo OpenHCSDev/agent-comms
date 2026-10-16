@@ -15,7 +15,7 @@ from .message_bus import MessageBus
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
 from .native_settings import NativeThreadDefaults
-from .owner_launch import LaunchRuntime
+from .launch_runtime import LaunchRuntime
 from .relationships import ThreadRelationships
 from .thread_management import ThreadManagement
 from .thread_configuration import ThreadConfiguration

@@ -15,6 +15,7 @@ from delivery_owner_fixture import canonical_agent
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -28,7 +29,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
     original_native = native.session.read_bytes()
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, arguments=tuple([
             "--provider=response-local",
             "--model=fixture",
@@ -131,7 +132,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
             await client.load_session(cwd=str(native.project), session_id=sender, mcp_servers=[])
             replay = await snapshots.get()
             assert [event for event in replay.events if event.source == original.reference] == sent
-            assert Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime()).transcripts.capture_page_read(sender).read() == page
+            assert Comms(LocalRoute(native.root), runtime=LaunchRuntime.current()).transcripts.capture_page_read(sender).read() == page
             assert len(native.saved_inputs()) == 2
             assert native.provider.posts == 3
     finally:

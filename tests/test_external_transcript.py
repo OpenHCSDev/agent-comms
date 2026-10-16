@@ -12,10 +12,11 @@ from agent_comms.transcripts import TranscriptReadIdentity
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_finished_cli_items_append_once_and_page(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("codex", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     transcript.finish(turn_id="t1", item_id="compaction",
@@ -50,7 +51,7 @@ def test_finished_cli_items_append_once_and_page(tmp_path):
 
 
 def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("codex", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     transcript.draft(
@@ -87,7 +88,7 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
 
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("pi", frozenset(), str(tmp_path),
                                   session_file=str(tmp_path / "session.jsonl")))
     with pytest.raises(ValueError, match="native session"):
@@ -98,7 +99,7 @@ def test_a_native_session_thread_takes_no_cli_items(tmp_path):
 def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     from agent_comms.acp_extension import TranscriptSnapshotUpdate, encode_updates, decode_updates
     from agent_comms.coordination_errors import StaleRevision
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("codex", frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hel"),))

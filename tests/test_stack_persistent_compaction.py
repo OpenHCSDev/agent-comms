@@ -32,6 +32,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _history(session: Path, project: Path) -> None:
@@ -205,7 +206,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         project.mkdir()
         session = root / "saved.jsonl"
         _history(session, project)
-        comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
         owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple([
                 "--provider",
                 "openrouter",

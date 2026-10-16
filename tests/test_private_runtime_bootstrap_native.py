@@ -16,6 +16,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.active_route import LocalRoute
+from agent_comms.launch_runtime import LaunchRuntime
 
 # The native package executes against only the loopback model declared below.
 tmp_path = private_root_fixture
@@ -99,9 +100,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "selected-offline/fixture")
     for name in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(name, raising=False)
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults(
-        binary=NativeThreadDefaults.runtime_binary(), arguments=("--offline", "--no-extensions", "--no-skills", "--no-context-files"),
-    ))
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for name in ("sender", "recipient"):
         comms.registry.declare(
             Thread(

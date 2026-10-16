@@ -35,6 +35,7 @@ from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
@@ -53,7 +54,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         parent.mkdir(mode=0o700)
         resource = parent / "module.py"
         resource.write_text("value = 1\n")
-        comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.registry.declare(
                 Thread(
@@ -146,7 +147,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     publish_selected_resource_claim(
                         comms, store, admission, owner.name, ExistingFileClaim(Path(resource))
                     )
-            selected_owner = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).bus.log.claim_projection()[str(resource)]
+            selected_owner = Comms(LocalRoute(root), runtime=LaunchRuntime.current()).bus.log.claim_projection()[str(resource)]
             assert selected_owner.admission == admission
             assert selected_owner.resource == str(resource)
             assert (

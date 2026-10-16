@@ -44,6 +44,7 @@ from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux" or Path("/var").is_symlink() or Path("/var/tmp").is_symlink(),
@@ -78,7 +79,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         resource.write_bytes(b"before\n")
         package = base / "fake-package"
         package.mkdir(mode=0o700)
-        comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True, private_claim_writes=True)
+        comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True, private_claim_writes=True)
         for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
             comms.registry.declare(
                 Thread(
@@ -212,7 +213,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             assert isinstance(failure, NativeInputDrainDiagnostic)
             assert failure.error_type == "NativePiUnavailable"
             assert len(calls) == 1 and resource.read_bytes() == b"before\n"
-            assert not list(Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).bus.log.claim_projection())
+            assert not list(Comms(LocalRoute(root), runtime=LaunchRuntime.current()).bus.log.claim_projection())
             await agent.shutdown()
             return
         if scenario in {"reconnect", "lost_process_state"}:
@@ -236,7 +237,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         assert await agent._drain_private_nk("beta", root_id) == 1
         await reply_turn_finished(agent, "beta")
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
-        claim = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).bus.log.claim_projection()[str(resource)]
+        claim = Comms(LocalRoute(root), runtime=LaunchRuntime.current()).bus.log.claim_projection()[str(resource)]
         assert claim.admission is not None and claim.admission.operation_id == receipt.operation_id
         rows = list((root / "selected-write-plans").glob("*.json"))
         assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
@@ -258,7 +259,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         resource.write_bytes(b"before\n")
         package = base / "fake-package"
         package.mkdir(mode=0o700)
-        comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True, private_claim_writes=True)
+        comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True, private_claim_writes=True)
         sender_pid = os.getpid()
         comms.registry.declare(
             Thread(
@@ -372,7 +373,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             result = event("terminal")
             assert result["pid"] == process.pid and result["drained"] == 1
             assert result["fake_inputs"] == 1 and resource.read_bytes() == b"after second pid\n"
-            owner = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).bus.log.claim_projection()[str(resource)]
+            owner = Comms(LocalRoute(root), runtime=LaunchRuntime.current()).bus.log.claim_projection()[str(resource)]
             assert owner.owner == "beta" and owner.admission is not None
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 assert (

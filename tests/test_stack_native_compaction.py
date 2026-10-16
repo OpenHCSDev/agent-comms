@@ -30,6 +30,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
@@ -295,7 +296,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     """The owner's turn shows 'Compacting context' while Pi summarizes, then replies."""
     for key, value in child_env.items():
         monkeypatch.setenv(key, value)
-    comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     package_path = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     assert package_path, "Set PI_COMPACTION_TEST_PACKAGE to the verified native package"

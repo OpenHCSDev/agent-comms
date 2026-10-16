@@ -21,10 +21,11 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_path):
-    comms = Comms(LocalRoute(tmp_path / 'wire'), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / 'wire'), runtime=LaunchRuntime.current())
     store = comms.goals.open_goal_store()
     goal = Goal(text='Historical objective; past execution is uncertain', id=uuid4().hex,
                 state=BlockedGoal('Inspect uncertain original work before explicit Retry'))

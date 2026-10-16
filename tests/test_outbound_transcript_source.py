@@ -19,6 +19,7 @@ import pytest
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_path):  # noqa: F811
@@ -284,7 +285,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     assert sent.routing.reply.targets == (message.target,)
     # Renaming cannot reassign the old sender's source to today's spelling.
     comms.registry.rename("beta", "renamed")
-    reopened = Comms(resolve_comms_route(comms.root), native=NativeThreadDefaults.from_runtime()).transcripts.capture_page_read("renamed").read()
+    reopened = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).transcripts.capture_page_read("renamed").read()
     assert reopened.events == events
     assert comms.bus.log.full_history()[-1] == message
 
@@ -413,7 +414,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     with pytest.raises(StaleRevision, match="original thread"):
         comms.transcripts.bind_page_read("alpha", identity)
     with pytest.raises(StaleRevision, match="another root"):
-        Comms(resolve_comms_route(tmp_path / "other"), native=NativeThreadDefaults.from_runtime()).transcripts.bind_page_read("beta", identity)
+        Comms(resolve_comms_route(tmp_path / "other"), runtime=LaunchRuntime.current()).transcripts.bind_page_read("beta", identity)
     with pytest.raises(StaleRevision, match="page window"):
         comms.transcripts.bind_page_read(
             "beta", identity,

@@ -78,7 +78,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
         pytest.raises(RelationViolationError, match="Maintenance"),
     ):
         await runtime.SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert comms.owners.maintenance.read().phase == MaintenancePhase.decode("paused")
     writes = [json.loads(line) for line in received.read_text().splitlines()]

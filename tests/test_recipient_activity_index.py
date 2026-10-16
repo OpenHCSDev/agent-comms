@@ -27,6 +27,7 @@ from agent_comms.thread_identity import (
 )
 from agent_comms.threads import Thread
 from goal_owner_fixture import canonical_goal_wire
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
@@ -112,7 +113,7 @@ def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path):
 
 
 def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_owner(tmp_path):
-    comms = Comms(tmp_path / "bus")
+    comms = Comms(resolve_comms_route(tmp_path / "bus"), runtime=LaunchRuntime.current())
     for name, birth in (("old", 1700.0), ("second", 1701.0)):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path), created_at=birth))
     source = comms.registry.snapshot()

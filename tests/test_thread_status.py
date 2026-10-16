@@ -27,10 +27,11 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
         thread = Thread("owner", frozenset(), str(tmp_path),
@@ -57,7 +58,7 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
 
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])
 def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     thread = Thread(
         "owner",
         frozenset({"team"}),

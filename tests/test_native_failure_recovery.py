@@ -29,6 +29,7 @@ from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.comms import Comms
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def failed_owner(directory, output, exit_allowed):
@@ -68,7 +69,7 @@ def failed_owner(directory, output, exit_allowed):
     try:
         asyncio.run(
             runtime.SelectedExecution(
-                comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+                comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
             ).run()
         )
     except NativePiUnavailable:
@@ -161,7 +162,7 @@ def test_restart_recovery_preserves_native_outcome_without_replaying(released_fa
     rows = [json.loads(line) for line in session_file.read_text().splitlines()]
     rows[-1]["message"]["stopReason"] = stop
     session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     owner = comms.registry.require("beta")
     with pytest.raises(OwnerBusyRefusal):
         comms.owners.require_restart_idle(owner)
@@ -252,7 +253,7 @@ def replacement_release(root):
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
 
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     owner = comms.registry.require("beta")
     comms.registry.register(
         replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), new_owner=True

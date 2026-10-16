@@ -11,11 +11,12 @@ from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def main():
     root = Path(sys.argv[1])
-    service = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    service = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     for name in ('original_sender', 'alpha', 'beta'):
         service.registry.declare(Thread(
             name, frozenset({'team'}) if name != 'original_sender' else frozenset(),

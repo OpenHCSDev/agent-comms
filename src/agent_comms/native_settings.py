@@ -6,27 +6,28 @@ import argparse
 import json
 import shlex
 from collections.abc import Sequence
-from dataclasses import dataclass, field, fields
-from typing import Any, TYPE_CHECKING, ClassVar
+from dataclasses import dataclass
+from typing import ClassVar
 
 from .field_codec import FieldCodec
+from .cli_options import CliRecord, option
+from .launch_runtime import LaunchRuntime
 from .pi_vocabulary import HighThinkingLevel, ThinkingLevel
 
-if TYPE_CHECKING:
-    from .owner_launch import LaunchRuntime
-
-
 @dataclass(frozen=True)
-class NativeThreadDefaults:
+class NativeThreadDefaults(CliRecord):
     """Creation defaults and one owner's explicit native launch selection."""
 
-    binary: str = field(metadata={"flags": ("--agent-bin",), "parse": str})
-    arguments: tuple[str, ...] = field(default=(), metadata={
-        "flags": ("--agent-args",), "parse": lambda value: tuple(shlex.split(value)),
-    })
+    binary: str = option("--agent-bin")
+    arguments: tuple[str, ...] = option("--agent-args", default=(),
+                                      normalize=lambda value: tuple(shlex.split(value)))
     model: str = "openai-codex/gpt-6.1-sol"
     thinking_level: type[ThinkingLevel] = HighThinkingLevel
     value_flag: ClassVar[str] = "--native-settings"
+
+    def __post_init__(self) -> None:
+        if not self.binary.strip():
+            raise ValueError("Native launch binary cannot be empty")
 
     @classmethod
     def from_runtime(cls, runtime: LaunchRuntime) -> NativeThreadDefaults:
@@ -49,22 +50,6 @@ class NativeThreadDefaults:
         parser.add_argument(cls.value_flag, type=cls.from_json, dest="native_settings",
                             metavar="JSON", required=required, default=argparse.SUPPRESS,
                             help="Explicit typed native launch defaults")
-
-    @classmethod
-    def add_override_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        for declared in fields(cls):
-            if "flags" in declared.metadata:
-                parser.add_argument(*declared.metadata["flags"], dest=declared.name,
-                                    type=declared.metadata["parse"], default=argparse.SUPPRESS)
-
-    @classmethod
-    def cli_overrides(cls, namespace: argparse.Namespace, defaults: NativeThreadDefaults) -> dict[str, Any]:
-        selected = namespace.native_settings
-        values = {} if selected is defaults else {declared.name: getattr(selected, declared.name)
-                                                 for declared in fields(cls)}
-        values.update((declared.name, vars(namespace)[declared.name]) for declared in fields(cls)
-                      if "flags" in declared.metadata and declared.name in vars(namespace))
-        return values
 
     @classmethod
     def from_cli(cls, arguments: Sequence[str], settings: NativeThreadDefaults) -> NativeThreadDefaults:

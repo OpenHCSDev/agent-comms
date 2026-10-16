@@ -21,6 +21,7 @@ from agent_comms.runtime_requests import SubscribeRuntimeRequest, SetConfigOptio
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def exchange(service, name, request):
@@ -123,7 +124,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = stage / 'project'
     project.mkdir()
-    service = Comms(LocalRoute(stage / 'wire'), native=NativeThreadDefaults.from_runtime())
+    service = Comms(LocalRoute(stage / 'wire'), runtime=LaunchRuntime.current())
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     environment = dict(os.environ)

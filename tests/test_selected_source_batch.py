@@ -23,6 +23,7 @@ from agent_comms.selected_turn import SelectedPrompt
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
@@ -31,7 +32,7 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
 ):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True)
     for name in ("sender", "receiver"):
         comms.registry.declare(Thread(
             name, frozenset({"team"}), str(tmp_path),
@@ -141,7 +142,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path):
     """
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True)
     for name in ("sender", "receiver"):
         comms.registry.declare(Thread(
             name, frozenset({"team"}), str(tmp_path),
@@ -185,7 +186,7 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
 
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True)
     for name in ("sender", "receiver"):
         comms.registry.declare(Thread(
             name, frozenset({"team"}), str(tmp_path),

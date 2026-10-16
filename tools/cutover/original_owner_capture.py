@@ -14,7 +14,7 @@ import subprocess
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_launch import OwnerRestartSelection
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.historical_views import HistorySource
 from agent_comms.threads import Thread

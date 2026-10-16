@@ -45,7 +45,7 @@ from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
 from .threads import Thread
 from agent_comms.active_route import LocalRoute
-from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,7 +164,7 @@ async def run_foreground_once(
     await Coordination.run_worker(partial(
         _preflight, root, wire_root_id, native_package, opt_in,
     ))
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     def retire(thread):
         with _store_lock(comms._wire_lock_path):
             try:

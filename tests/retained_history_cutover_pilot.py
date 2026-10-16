@@ -14,6 +14,7 @@ from agent_comms.wire_log import WireLog
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 
@@ -52,7 +53,7 @@ def test_all_declared_saved_checkpoints_keep_original_certificates():
 
 def test_current_saved_history_has_no_live_admission_or_delivery(tmp_path):
     original=max(current_sources(),key=lambda source:(Path(source.root)/'bus.jsonl').stat().st_size)
-    comms=Comms(resolve_comms_route(tmp_path/'destination'), native=NativeThreadDefaults.from_runtime())
+    comms=Comms(resolve_comms_route(tmp_path/'destination'), runtime=LaunchRuntime.current())
     comms.messaging.initialize_private_initial_protocol()
     reference_actual_history(comms.root, Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
     source=max(comms.bus.history.sources(),key=lambda source:source.size)

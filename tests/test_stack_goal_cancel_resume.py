@@ -23,6 +23,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -116,7 +117,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             "NODE_OPTIONS": f"--require={preload}",
         }.items():
             monkeypatch.setenv(name, value)
-        comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
         owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native_bin, arguments=tuple([
                 "--offline",
                 "--no-extensions",

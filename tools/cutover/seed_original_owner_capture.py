@@ -14,6 +14,7 @@ from agent_comms.turn_lease import ActiveTurn
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def author_model_report(service, name, turn):
@@ -55,7 +56,7 @@ def runtime_owners(root, package):
     from native_backend_fixture import NativeBackendFixture
 
     root.mkdir(mode=0o700)
-    service = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
+    service = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(root, root_id, package)
     os.environ.update(AGENT_COMMS_ROOT=str(root),

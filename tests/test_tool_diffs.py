@@ -19,6 +19,7 @@ from pi_session_turn import one_turn_events
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -121,7 +122,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
         )
         + "\n"
     )
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=1)
     assert len(page.events) == 1
@@ -162,7 +163,7 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     from agent_comms.tools import invoke_tool
     from agent_comms.transcript_events import SentTranscript
 
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path)))
     published = invoke_tool(comms, "comms_send", {

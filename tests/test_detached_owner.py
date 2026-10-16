@@ -16,6 +16,7 @@ from compaction_loopback import LoopbackProvider
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX detached owner")
@@ -72,7 +73,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         return launch(*args, **{**kwargs, "output": owner_output})
 
     monkeypatch.setattr(ParentedProcess, "launch", logged_launch)
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     options = dict(

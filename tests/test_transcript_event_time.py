@@ -16,13 +16,14 @@ from agent_comms.transcript_events import AssistantTranscript, UserTranscript
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 @pytest.mark.parametrize("stamp", ["2026-09-28T23:12:33.123Z", "2026-09-28T19:12:33.123-04:00"])
 def test_original_record_clock_survives_split_and_routed_projection(tmp_path, stamp):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for name in ("peer", "owner"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     requests = tuple(
@@ -92,7 +93,7 @@ async def test_actual_native_saved_clocks_survive_acp_snapshot_and_rebuild(
         if row["type"] == "message"
     ]
     assert len(expected) == 2
-    comms = Comms(resolve_comms_route(native.root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(native.root), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread("clock", frozenset(), str(native.project), session_file=str(native.session))
     )
@@ -137,7 +138,7 @@ async def test_actual_native_saved_clocks_survive_acp_snapshot_and_rebuild(
             assert received == page
             await client.load_session(cwd=str(native.project), session_id="clock", mcp_servers=[])
             assert await snapshots.get() == received
-        rebuilt = Comms(resolve_comms_route(native.root), native=NativeThreadDefaults.from_runtime()).transcripts.thread_transcript_page("clock", through=page.after)
+        rebuilt = Comms(resolve_comms_route(native.root), runtime=LaunchRuntime.current()).transcripts.thread_transcript_page("clock", through=page.after)
         assert rebuilt == received
     finally:
         writer.close()

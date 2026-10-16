@@ -17,6 +17,7 @@ from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -29,7 +30,7 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
     native = native_backend
     arguments = ["--provider=response-local", "--model=fixture", "--thinking=off", "--offline", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"]
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    selected_comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
     agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, arguments=tuple(arguments)), auto_wake=False, runtime_enabled=False)
     child = None
     try:

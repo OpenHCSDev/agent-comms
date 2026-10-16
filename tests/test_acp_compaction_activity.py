@@ -11,6 +11,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
@@ -19,7 +20,7 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
     tmp_path, monkeypatch, aborted
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
@@ -59,7 +60,7 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
 @pytest.mark.asyncio
 async def test_compaction_eof_still_finishes_activity(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))

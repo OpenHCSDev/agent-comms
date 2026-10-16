@@ -14,6 +14,7 @@ from agent_comms.goal_waits import NoGoalWait
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def configured_terminal(owner, thread, output, receipt, marker):
@@ -212,7 +213,7 @@ async def run_configured(options):
         project = root / 'project'
         project.mkdir(mode=0o700)
         environment = dict(captured.retained.environment)
-        service = Comms(LocalRoute(root / 'wire'), native=NativeThreadDefaults.from_runtime())
+        service = Comms(LocalRoute(root / 'wire'), runtime=LaunchRuntime.current())
         identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
             str(original_file), str(project), str(root / 'native-forks')), cwd=project, env=environment)
         assert Path(identity.session_file).is_relative_to(root)
@@ -362,7 +363,7 @@ def complete_goal_controls(root):
     from agent_comms.cli_commands import ContextCliCommand
 
     started = time.monotonic()
-    service = Comms(LocalRoute(root / 'wire'), native=NativeThreadDefaults.from_runtime())
+    service = Comms(LocalRoute(root / 'wire'), runtime=LaunchRuntime.current())
     originals = FieldCodec.decode(tuple[InputAttempt, ...], json.loads(
         (root / 'context-journey' / 'original-inputs.json').read_text()))
     dispositions = InputDispositions(service.root)
@@ -451,7 +452,7 @@ def complete_history_controls(root):
     root.mkdir(mode=0o700)
     wire = root / 'wire'
     wire.mkdir(mode=0o700)
-    service = Comms(LocalRoute(wire), native=NativeThreadDefaults.from_runtime())
+    service = Comms(LocalRoute(wire), runtime=LaunchRuntime.current())
     owner = Thread('history-original', frozenset(), str(root),
                    process_identity=ProcessIdentity.capture(os.getpid()), created_at=18002.0)
     service.registry.register(owner)
@@ -499,7 +500,7 @@ def complete_history_controls(root):
     assert difference == continuation.changed_since(originals[0])
     assert query('history-original', '--diff') == future.changed_since(continuation)
     assert 'No preceding recorded turn' in query('history-renamed', '--turn', '1', '--diff', accepted=False)['error']
-    reopened = Comms(LocalRoute(wire), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(LocalRoute(wire), runtime=LaunchRuntime.current())
     assert reopened.bus.log.context_manifests('history-original', reopened.registry) == expected
     service.registry.unregister('history-renamed')
     service.registry.remove('history-renamed')

@@ -14,6 +14,7 @@ import sys
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def main():
@@ -63,7 +64,7 @@ def main():
 
     from agent_comms.field_codec import FieldCodec
     from agent_comms.read_ledger import ReadLedger
-    service = Comms(resolve_comms_route(), native=NativeThreadDefaults.from_runtime())
+    service = Comms(resolve_comms_route(), runtime=LaunchRuntime.current())
     root = service.root
 
     def protected():

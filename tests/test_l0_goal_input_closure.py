@@ -35,6 +35,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def register(comms, name):
@@ -49,7 +50,7 @@ def register(comms, name):
 
 
 def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     register(comms, "owner")
     goal = Goal(
         "Retained objective", "retained", progress="Unrelated progress", state=UnrecordedBlockGoal()
@@ -66,7 +67,7 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
         before = database.execute(
             f"SELECT * FROM {GoalHistoryEntry.declared_name} ORDER BY sequence"
         ).fetchall()
-    reopened = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    reopened = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     assert reopened.goals.goal_history("owner") == history
     assert not reopened.relationships._goal_contacts(reopened.registry.snapshot())[0]
     with sqlite3.connect(tmp_path / "goal_history.sqlite3") as database:
@@ -86,7 +87,7 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
     "state", [BlockedGoal("Inspect the failed attempt"), UnrecordedBlockGoal()]
 )
 def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, state):
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     register(comms, "owner")
     goal = Goal("Objective", "goal", state=state)
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
@@ -185,7 +186,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     configured_model = NativeArguments.parse(arguments).model
     assert configured_model is not None
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(arguments)), runtime_enabled=True, auto_wake=False)
     from goal_owner_fixture import activate_empty_source
 

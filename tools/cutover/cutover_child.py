@@ -16,7 +16,7 @@ def restore_stopped_batch(stopped):
     import json
     from pathlib import Path
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.owner_lifecycle import OwnerRestartResult
+    from agent_comms.owner_restart import OwnerRestartResult
 
     source = stopped.handoff.owners[0].launch
     result = run_cutover_child([

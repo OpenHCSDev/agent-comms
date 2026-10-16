@@ -30,6 +30,7 @@ from test_coordinated_runtime import _fake_model
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 tmp_path = private_root_fixture
 
@@ -48,7 +49,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     tmp_path, monkeypatch, target, body, decision, expected_calls, expected_k, disposition
 ):
     root = tmp_path / "wire"
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             "sender",
@@ -129,7 +130,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
 
 
 def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tmp_path):
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for name in ("sender", "beta"):
         comms.registry.declare(
             Thread(
@@ -155,7 +156,7 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
 
 
 def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for name in ("sender", "beta"):
         comms.registry.declare(
             Thread(
@@ -179,7 +180,7 @@ def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
 
 
 def test_explicitly_disabled_private_writer_refuses(tmp_path):
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for name in ("sender", "beta"):
         comms.registry.declare(
             Thread(
@@ -191,7 +192,7 @@ def test_explicitly_disabled_private_writer_refuses(tmp_path):
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     before = comms.bus.log.path.read_bytes()
-    disabled = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=False)
+    disabled = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current(), private_initial_writes=False)
     with pytest.raises(RelationViolationError, match="Private initial publication is disabled"):
         disabled.messaging.send_message("sender", "beta", "disabled writer")
     meta = json.loads((comms.root / "bus_meta.json").read_text())

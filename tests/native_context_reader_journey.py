@@ -20,6 +20,7 @@ from native_backend_fixture import native_backend_fixture
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def read_original_context(
@@ -48,7 +49,7 @@ async def read_original_context(
         fixture.project = seed_root / 'project'
     before = fixture.session.read_bytes()
     original_inputs = fixture.saved_inputs()
-    selected_comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults.from_runtime())
+    selected_comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
     owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "response-local/fixture", "--offline"])), auto_wake=False, runtime_enabled=True)
     # This fixture owns the root; the existing owner launch and RPC reader remain real.
     try:

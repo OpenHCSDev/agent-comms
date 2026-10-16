@@ -19,6 +19,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch):
@@ -27,7 +28,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
         pytest.skip("Requires the prepared native Pi stack")
     with TemporaryDirectory(prefix="ac-native-routed-progress-", dir="/var/tmp") as directory:
         root = Path(directory)
-        comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
         requests: list[dict] = []
         observed: list[tuple[str, bool]] = []
         failures: list[str] = []

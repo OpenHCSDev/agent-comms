@@ -19,6 +19,7 @@ from agent_comms.wire_record import WireRecord
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 class Client:
@@ -33,7 +34,7 @@ async def main(output, package, launcher, provider, model, thinking):
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = output / 'project'
     project.mkdir(mode=0o700)
-    comms = Comms(LocalRoute(output / 'wire'), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(output / 'wire'), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     os.environ.update({
         'AGENT_COMMS_ROOT': str(comms.root), ROOT_ID_ENV: root_id,

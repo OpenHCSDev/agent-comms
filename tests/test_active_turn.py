@@ -25,10 +25,11 @@ from agent_comms.turn_phase import (
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             "worker",
@@ -79,7 +80,7 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
 
 @pytest.mark.asyncio
 async def test_repeated_turn_preparation_displays_real_native_drain_failure(tmp_path):
-    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             "worker",

@@ -25,13 +25,14 @@ from native_backend_fixture import native_backend_fixture
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def declared_owner(tmp_path):
     old, new = tmp_path / "old", tmp_path / "new"
     old.mkdir()
     new.mkdir()
-    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread(
         "owner", frozenset(), str(old), process_identity=ProcessIdentity.capture(os.getpid()),
     ))

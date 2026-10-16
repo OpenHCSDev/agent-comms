@@ -9,6 +9,7 @@ from agent_comms.cli import main
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.comms import Comms
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
@@ -200,7 +201,7 @@ class TestStatusCommand:
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
 
 
-        comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
         comms.agents.set_activity("a", ActivityState.WORKING, "bash: echo hi")
         code, out = cli(tmp_path, "status")
         row = out["status"][0]
@@ -243,7 +244,7 @@ class TestSelectedTargetActions:
         from agent_comms.thread_status import StoppedThreadStatus
         from agent_comms.threads import Thread
 
-        comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(resolve_comms_route(root), runtime=LaunchRuntime.current())
         for name, tags in (("alpha", {"team"}), ("beta", {"other"})):
             comms.registry.declare(Thread(name, frozenset(tags), str(root)), StoppedThreadStatus())
         return comms
@@ -295,7 +296,7 @@ class TestSelectedTargetActions:
         assert explicit.agent_bin == '/operator/native'
         assert explicit.agent_args == ['--no-extensions']
         from agent_comms.cli import build_parser
-        parsed = CliCommand.from_namespace(build_parser(NativeThreadDefaults.from_runtime()).parse_args([
+        parsed = CliCommand.from_namespace(build_parser(NativeThreadDefaults.from_runtime(LaunchRuntime.current())).parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
             '--agent-args=--no-extensions']))
         assert parsed == explicit

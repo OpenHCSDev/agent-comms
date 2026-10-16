@@ -24,10 +24,11 @@ from agent_comms.threads import Thread
 from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnContext
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _wire(tmp_path, *threads):
-    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for created, (name, tags) in enumerate(threads, start=1):
         comms.registry.declare(
             Thread(name, frozenset(tags), str(tmp_path), created_at=20000.0 + created)

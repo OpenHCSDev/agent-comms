@@ -41,7 +41,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
 from agent_comms.presentation import WireRevision
 from agent_comms.comms import Comms
-from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
     from concurrent.futures import Future
@@ -923,7 +923,7 @@ def serve(route: CommsRoute, connection: Connection) -> None:
 
     try:
         with route.admit_client():
-            asyncio.run(ObservationService(Comms(route, native=NativeThreadDefaults.from_runtime()), connection).run())
+            asyncio.run(ObservationService(Comms(route, runtime=LaunchRuntime.running()), connection).run())
     except BaseException:
         try:
             connection.send(ObservationFailed(traceback.format_exc()))

@@ -27,6 +27,7 @@ from delivery_owner_fixture import canonical_agent
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -99,7 +100,7 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
                             "facts": [type(fact).__name__ for fact in facts],
                             "marker": text if "LATENCY_" in text else ""})
 
-    comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(["--offline", "--no-extensions", "--extension", str(extension),
                     "--no-skills", "--no-context-files", "--no-prompt-templates", "--tools", "read"])), runtime_enabled=True, auto_wake=False)
     attachment = CommsClient(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"])

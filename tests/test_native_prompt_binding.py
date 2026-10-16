@@ -50,6 +50,7 @@ from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture(autouse=True)
@@ -72,7 +73,7 @@ def tmp_path(tmp_path_factory):
 def _root(tmp_path: Path):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True)
     people = [
         Thread(
             "sender",
@@ -133,7 +134,7 @@ async def test_suppressed_binding_insert_denies_native_send(tmp_path, monkeypatc
     monkeypatch.setattr(binding, "sidecar_connection", suppressed)
     with pytest.raises(IdentityConflict, match="insert did not preserve exact identity"):
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert calls == []
 
@@ -154,14 +155,14 @@ async def test_uncertain_binding_commit_denies_native_send_and_retry(tmp_path, m
     monkeypatch.setattr(private_sidecar, "_publish", uncertain)
     with pytest.raises(private_sidecar.SidecarCommitUnknown):
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert calls == []
     # Reservation is already deferred: a new run cannot resend this input even
     # when durable binding bytes happen to be present after an uncertain return.
     assert (
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
         is None
     )
@@ -297,7 +298,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     turn = await SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert journal_without_sql == [True]
     assert turn is not None
@@ -353,7 +354,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
         before = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
         assert before.covered_seq == 0 and before.blocked_seq == first.message.seq
     first_turn = await SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert first_turn is not None and first_turn.cursor_status == "proven"
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -366,7 +367,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(bus, root_id, second.seq, store)
     second_turn = await SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert second_turn is not None and second_turn.cursor_status == "proven"
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -388,14 +389,14 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
     monkeypatch.setattr(TrackedTurnSession, "execute", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     second = comms.messaging.send_initial_cohort("sender", "alpha", "Second selected source.")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
     later = await SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert later is not None and later.cursor_status == "blocked_gap"
     assert len(calls) == 1
@@ -442,7 +443,7 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     assert (
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
         is not None
     )
@@ -473,7 +474,7 @@ async def test_source_coverage_stops_at_triage_without_required_full(tmp_path, m
     monkeypatch.setattr(TrackedTurnSession, "execute", fail_full)
     with pytest.raises(NativePiUnavailable):
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -493,7 +494,7 @@ async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monk
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert turn is not None and turn.cursor_status == "proven"
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -518,7 +519,7 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert turn is not None and turn.cursor_status == "proven"
     comms.registry.unregister("alpha")
@@ -570,7 +571,7 @@ async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert turn is not None and turn.cursor_status == "proven"
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -588,7 +589,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     old_turn = await SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert old_turn is not None and old_turn.cursor_status == "proven"
     lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
@@ -603,7 +604,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     fresh = await SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha-new", native_package=tmp_path
     ).run()
     assert fresh is not None and fresh.cursor_status == "blocked_gap"
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -625,7 +626,7 @@ async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, 
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     turn = await SelectedExecution(
-        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert journal_without_sql == [True, True]
     assert turn is not None
@@ -655,7 +656,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()),
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
             wire_root_id=root_id,
             owner_name="alpha",
             native_package=tmp_path,
@@ -680,7 +681,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
     # The uncertain, already reserved input remains deferred, not retried.
     assert (
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()),
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
             wire_root_id=root_id,
             owner_name="alpha",
             native_package=tmp_path,
@@ -703,7 +704,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
     monkeypatch.setattr(TrackedTurnSession, "execute", corrupt_full)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -724,7 +725,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
         ]
     assert (
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
         is None
     )
@@ -771,7 +772,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
         IdentityConflict, match="native send differs from its durable prompt binding"
     ):
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert len(calls) == (1 if stage == "triage" else 2)
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -792,7 +793,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
 
     assert (
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
         is None
     )
@@ -826,7 +827,7 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
     )
     with pytest.raises((IdentityConflict, StaleFence)) as error:
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()),
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
             wire_root_id=root_id,
             owner_name="alpha",
             native_package=tmp_path,
@@ -845,7 +846,7 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", dying)
     with pytest.raises(NativePiUnavailable):
         await SelectedExecution(
-            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()),
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
             wire_root_id=root_id,
             owner_name="alpha",
             native_package=tmp_path,

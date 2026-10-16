@@ -10,6 +10,7 @@ import sys
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 def main():
     (descriptor,) = sys.argv[1:]
@@ -18,7 +19,7 @@ def main():
     from agent_comms.owner_restart import OwnerRestartHandoff, StoppedOwnerBatch
 
     handoff = FieldCodec.decode(OwnerRestartHandoff, json.load(sys.stdin))
-    service = Comms(resolve_comms_route(Path(handoff.root)), native=NativeThreadDefaults.from_runtime())
+    service = Comms(resolve_comms_route(Path(handoff.root)), runtime=LaunchRuntime.current())
     stopped = StoppedOwnerBatch.accept(service.owners, int(descriptor), handoff)
     results = stopped.handoff.restore(stopped.lifecycle)
     print(json.dumps(FieldCodec.encode(results)), flush=True)

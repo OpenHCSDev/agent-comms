@@ -23,7 +23,7 @@ from .opencode_protocol import (
 )
 from .opencode_parts import SavedMessage, UserMessage
 from agent_comms.comms import Comms
-from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.active_route import resolve_comms_route
 
 
@@ -74,17 +74,18 @@ class Attach(Watch):
 
         if options.session is None:
             raise ValueError('Attach requires the selected native session')
-        comms = Comms(resolve_comms_route(options.root), native=NativeThreadDefaults.from_runtime())
+        root = resolve_comms_route(options.root).root
         name = options.bus_thread or f'opencode-{options.session}'
         options.state = options.state / options.session
-        return Binding(str(comms.root), name, options.session)
+        return Binding(str(root), name, options.session)
 
     def start(self, bridge: OpenCodeBridge, tasks: asyncio.TaskGroup) -> None:
 
         from agent_comms.cli_commands import RegisterCliCommand
 
+        runtime = LaunchRuntime.current()
         RegisterCliCommand(name=bridge.binding.bus, worktree=str(bridge.options.directory),
-                           pid=self.pid).apply(Comms(resolve_comms_route(bridge.binding.root), native=NativeThreadDefaults.from_runtime()))
+                           pid=self.pid).apply(Comms(resolve_comms_route(bridge.binding.root), runtime=runtime))
         super().start(bridge, tasks)
 
 

@@ -28,6 +28,7 @@ from runtime_fixture import stop_test_children, stop_test_owners
 from saved_state_user_journey_pilot import submit_editor
 from stored_inputs import stored_inputs
 from agent_comms.active_route import LocalRoute
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 class ObservedApp(ToadApp):
@@ -97,9 +98,9 @@ async def run(arguments):
     (config / "auth.json").write_text(json.dumps({"wait-local": {"type": "api_key", "key": "local-only"}}))
     (config / "settings.json").write_text(json.dumps({"compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
-    native = NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary(), arguments=("--provider", "wait-local", "--model", "fixture",
+    native = NativeThreadDefaults(binary=LaunchRuntime.current().native_entrypoint, arguments=("--provider", "wait-local", "--model", "fixture",
         "--no-extensions", "--no-skills", "--no-context-files"))
-    service = Comms(LocalRoute(stage / "wire"), private_initial_writes=True, native=native)
+    service = Comms(LocalRoute(stage / "wire"), private_initial_writes=True, runtime=LaunchRuntime.current())
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     environment = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),

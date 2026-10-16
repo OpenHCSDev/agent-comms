@@ -30,6 +30,7 @@ from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
@@ -350,7 +351,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             yield from chunks()
 
         monkeypatch.setattr(native.provider, "response_chunks", with_progress)
-    comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
     owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([
             "--provider", "response-local", "--model", "fixture", "--thinking", "off",
             "--offline", "--no-extensions", "--no-skills", "--no-context-files",
@@ -416,7 +417,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
     settings = json.loads((config / "settings.json").read_text())
     settings["compaction"] = {"enabled": True, "reserveTokens": 128, "keepRecentTokens": 32}
     (config / "settings.json").write_text(json.dumps(settings))
-    comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
     owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]))
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])

@@ -43,6 +43,7 @@ from test_backend_native_lifecycle import native_backend as native_backend
 from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 tmp_path = private_root_fixture
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
@@ -50,7 +51,7 @@ pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 def _session(tmp_path, *, package=True):
     root = tmp_path / "wire"
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             "sender",
@@ -96,7 +97,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     root = tmp_path / "wire"
     project = tmp_path / "proj"
     project.mkdir()
-    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             "sender",

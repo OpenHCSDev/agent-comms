@@ -22,10 +22,11 @@ from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_unconfigured_launch_has_no_provider_or_model_policy():
-    defaults = NativeThreadDefaults.from_runtime()
+    defaults = NativeThreadDefaults.from_runtime(LaunchRuntime.current())
     arguments = NativeArguments.parse(defaults.arguments)
     assert arguments.argv == ()
     assert arguments.model is None
@@ -141,7 +142,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
     proof_path = native.session.with_suffix(native.session.suffix + ".input-proof")
     proof = read_proof_rows(native.session)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    selected_comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
     owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, arguments=tuple([
             "--provider=response-local",
             "--model=fixture",

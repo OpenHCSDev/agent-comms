@@ -7,6 +7,7 @@ from pathlib import Path
 from agent_comms.acp import CommsAgent
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def native_model(*, decision="FULL", fail_on=None):
@@ -61,6 +62,6 @@ def drain_diagnostic(comms, thread):
     from agent_comms.comms import Comms
 
     view = next(
-        view for view in Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()).views.thread_views() if view.thread.name == thread
+        view for view in Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).views.thread_views() if view.thread.name == thread
     )
     return view.activity.readiness.source_diagnostic()

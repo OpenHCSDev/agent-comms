@@ -32,6 +32,7 @@ from agent_comms.threads import Thread
 from native_backend_fixture import native_backend_fixture
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
@@ -44,7 +45,7 @@ def alice_batch(*sent: tuple[str, str]):
     with TemporaryDirectory(prefix="ac-answer-", dir="/var/tmp") as dirname:
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
-        comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
+        comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
             comms.registry.declare(Thread(
                 name, frozenset({"team"}), dirname,
