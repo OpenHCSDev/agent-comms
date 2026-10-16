@@ -113,7 +113,8 @@ class RegistryDocument(RegistryPresence):
         thread's declaration is neither decoded nor validated here.
         """
         try:
-            canonical = raw["aliases"].get(name, name)
+            aliases = raw["aliases"]
+            canonical = aliases.get(name, name)
 
             def own(rows: dict) -> dict:
                 return {canonical: rows[canonical]} if canonical in raw["threads"] else {}
@@ -126,7 +127,7 @@ class RegistryDocument(RegistryPresence):
                 "statuses": own(raw["statuses"]),
                 "last_seen": own(raw["last_seen"]),
                 "aliases": {
-                    alias: target for alias, target in raw["aliases"].items()
+                    alias: target for alias, target in aliases.items()
                     if target == canonical
                 },
                 "owners": counter(raw["owners"]),
@@ -537,14 +538,10 @@ class RegistryEntry:
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> Thread:
         """The exact saved owner lease, current name and process still agree."""
-        if not self.matches_name(owner.incarnation.name) or (
-            owner.incarnation.renamed(self.thread.name) != self.thread.incarnation
-        ):
+        if not self.matches_name(owner.incarnation.name):
             raise RelationViolationError("Thread incarnation changed during owner attachment")
         self.status.require_active()
-        if self.owner_generation != owner.generation:
-            raise RelationViolationError("Owner lease changed during attachment")
-        self.thread.require_local_process(process)
+        owner.require_current(self.thread, self.owner_generation, process)
         return self.thread
 
     @property
@@ -629,17 +626,6 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching
         }
 
-    def entry(self, name: str) -> RegistryEntry:
-        thread = self.require(name)
-        return RegistryEntry(
-            thread=thread,
-            status=self.statuses[thread.name],
-            last_seen=self.last_seen[thread.name],
-            owner_generation=self.owner_generations[thread.name],
-            admission_generation=self.admission_generations[thread.name],
-            names=RegistryEntry.names_for(thread, self.aliases),
-        )
-
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.canonical_name(name)
         return OwnerIdentity(self.threads[canonical].incarnation, self.owner_generations[canonical])
@@ -655,13 +641,8 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
         """A read attachment retains its owner lease across startup, not across restart."""
-        try:
-            entry = self.entry(owner.incarnation.name)
-        except UnregisteredThreadError as error:
-            raise RelationViolationError(
-                "Thread incarnation changed during owner attachment"
-            ) from error
-        entry.require_owner_process(owner, process)
+        thread = self.require_active(owner.incarnation.name)
+        owner.require_current(thread, self.owner_generations[thread.name], process)
 
     def require_stopping_owner(self, expected: Thread, admission: int) -> None:
         """A fenced stop may target a stopped owner, but never a later birth/lease."""
