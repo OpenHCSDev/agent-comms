@@ -18,7 +18,7 @@ from .coordination_database import CoordinationStore
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
-from .wire_record import WireRecord, WireScan
+from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .wire_log import OpenedWireSnapshot
@@ -180,9 +180,11 @@ class BusPageIndex:
         stream.seek(offset)
         while stream.tell() < size and stream.tell() - offset < self.batch_bytes:
             row_offset = stream.tell()
-            raw = stream.readline(min(WireScan.max_row_bytes + 1, size - row_offset))
-            if len(raw) > WireScan.max_row_bytes:
-                raise OversizedIndexedBusRowError("Bus row exceeds its declared byte limit")
+            raw = stream.readline(min(WireRecord.max_row_bytes + 1, size - row_offset))
+            WireRecord.require_row_size(
+                raw, error_type=OversizedIndexedBusRowError,
+                message="Bus row exceeds its declared byte limit",
+            )
             if not raw.endswith(b"\n"):
                 return None
             if not raw.strip():
