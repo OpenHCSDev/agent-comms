@@ -21,6 +21,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .private_bus_checkpoint import ContextManifestReference
 from .goal_actions import GoalAction
+from .owner_protocol import OwnerAnnouncement
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
 from .thread_identity import ThreadIncarnation
@@ -136,6 +137,7 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
 class SubscribeRuntimeRequest(RuntimeRequest):
     async def apply(self, ctx: RuntimeRequestContext) -> None:
         agent = ctx.server.agent
+        await ctx.send(FieldCodec.encode(OwnerAnnouncement()))
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
         await agent.sessions.transcript.replay(
@@ -144,7 +146,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
             client=ctx.client,
         )
         await agent.turns.publish_turn_state(ctx.session_id, client=ctx.client)
-        await agent.inputs.replay_unknown_inputs(ctx.session_id, client=ctx.client)
+        await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
         async with agent.sessions.config.session_options(ctx.name) as config_options:
             metadata = await agent.sessions.metadata(ctx.name)
             await ctx.send(
