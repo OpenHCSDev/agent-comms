@@ -611,8 +611,7 @@ class ClaimCommits(CheckpointTable, TypedTable):
     @classmethod
     def prepare(cls, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
         projected = transition.apply(ResourceClaims.projection(db, transition.resources))
-        if transition.admission is not None and cls.operation_used(db, transition.admission.operation_id):
-            raise IdentityConflict("Wake claim operation was already consumed")
+        transition.require_new_operation(lambda operation: cls.operation_used(db, operation))
         return projected
 
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:

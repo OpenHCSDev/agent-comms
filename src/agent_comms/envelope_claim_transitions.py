@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import stat
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 from typing import ClassVar, Literal
 
+from .coordination_errors import IdentityConflict
 from .errors import RelationViolationError
 from .message_reference import MessageReference
 from .field_codec import FieldCodec
@@ -265,6 +266,11 @@ class ClaimTransition:
             type(self.admission) is not WakeAdmission or not self.claims or self.releases
         ):
             raise ClaimTransitionError("Wake admission requires a claim-only transition.")
+
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        """A selected operation stays consumed even after its resources release."""
+        if self.admission is not None and is_used(self.admission.operation_id):
+            raise IdentityConflict("Wake claim operation was already consumed")
 
     @property
     def resources(self) -> tuple[str, ...]:
