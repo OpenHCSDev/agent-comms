@@ -26,7 +26,7 @@ from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import (
     DeliveredOutcome, EmittedOutcome, Outcome, TaggedWire,
-    UnconfirmedOutcome, WatchItem, WatchLine, WireModel,
+    UnconfirmedOutcome, WatchLine, WireModel,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_database import CoordinationStore
@@ -504,7 +504,8 @@ class DeliveryJournal:
                 raise ValueError('This state directory belongs to another Core/CLI conversation')
             return current
 
-    def begin(self, message: Message, payload: str, outcome: type[Outcome]) -> bool:
+    def begin(self, message: Message, outcome: type[Outcome]) -> bool:
+        payload = json.dumps(message.to_wire(), separators=(',', ':')) + '\n'
         with self.db:
             return DeliveryRow(message.message_id, payload, outcome).insert_if_absent(self.db).rowcount == 1
 
@@ -554,14 +555,14 @@ class CoreConnection:
             self.comms.messaging.send, self.binding.bus, target, body, kind)
         return SendResult(id=message_id)
 
-    async def watch(self, state: Path) -> AsyncIterator[WatchItem]:
+    async def watch(self, state: Path) -> AsyncIterator[WatchLine]:
         with (state / 'watch.stderr.log').open('a') as errors:
             child = await asyncio.create_subprocess_exec(
                 self.executable, '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
                 '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment),
                 stdout=asyncio.subprocess.PIPE, stderr=errors)
             try:
-                item = await WatchLine.read(child)
+                item = await WatchLine.read_next(child)
                 while item is not None:
                     yield item
                     item = await item.read_next(child)

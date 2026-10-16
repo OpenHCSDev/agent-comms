@@ -19,7 +19,7 @@ from agent_comms.cli_bridges.shared import (
     MonitorAttemptRow,
 )
 from agent_comms.cli_protocol import (
-    CORE_ERROR, FailedCoreError, UnavailableCoreError, UnconfirmedOutcome, DeliveredOutcome,
+    WATCH_LINE, FailedCoreError, UnavailableCoreError, UnconfirmedOutcome, DeliveredOutcome,
 )
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
@@ -36,7 +36,7 @@ def test_exception_declaration_encodes_one_line(error, expected, capsys):
     assert _fail(error) == 1
     output = capsys.readouterr().out
     assert len(output.splitlines()) == 1
-    decoded = CORE_ERROR.validate_json(output)
+    decoded = WATCH_LINE.validate_json(output)
     assert type(decoded) is expected
     assert decoded.error == str(error)
     assert json.loads(output)['type'] == expected.wire_tag
@@ -49,16 +49,14 @@ def test_error_keeps_cause_without_using_cause_text_as_policy(capsys):
         error = CoordinationReadUnavailable('not ready')
         error.__cause__ = cause
     _fail(error)
-    decoded = CORE_ERROR.validate_json(capsys.readouterr().out)
+    decoded = WATCH_LINE.validate_json(capsys.readouterr().out)
     assert isinstance(decoded, UnavailableCoreError)
     assert 'ValueError: bad\ninput' in decoded.error
 
 
 def test_unknown_error_kind_is_not_a_retry():
     with pytest.raises(ValidationError):
-        CORE_ERROR.validate_python({'type': 'new-unknown', 'error': 'database is locked'})
-    with pytest.raises(RuntimeError, match='Core send'):
-        UnavailableCoreError(error='read unavailable').raise_failure('send')
+        WATCH_LINE.validate_python({'type': 'new-unknown', 'error': 'database is locked'})
 
 
 @pytest.mark.parametrize('arguments', [[], ['not-a-command'], ['watch']])
@@ -66,7 +64,7 @@ def test_argument_errors_use_the_same_single_line(arguments, capsys):
     assert main(arguments) == 1
     output = capsys.readouterr().out
     assert len(output.splitlines()) == 1
-    assert isinstance(CORE_ERROR.validate_json(output), FailedCoreError)
+    assert isinstance(WATCH_LINE.validate_json(output), FailedCoreError)
 
 
 @pytest.mark.asyncio
@@ -125,15 +123,15 @@ print('opened', flush=True)
     journal = DeliveryJournal(tmp_path)
     try:
         assert journal.bind(binding) == binding
-        assert journal.begin(message, 'original payload', UnconfirmedOutcome)
+        assert journal.begin(message, UnconfirmedOutcome)
+        pending, = DeliveryRow.select(journal.db)
     finally:
         journal.close()
     await open_together()
     journal = DeliveryJournal(tmp_path)
     try:
         assert journal.bind(None) == binding
-        assert DeliveryRow.select(journal.db) == [
-            DeliveryRow(message.message_id, 'original payload', UnconfirmedOutcome)]
+        assert DeliveryRow.select(journal.db) == [pending]
     finally:
         journal.close()
 
@@ -148,7 +146,8 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
                       body='retained delivery', timestamp=1.0, seq=1)
     journal = DeliveryJournal(tmp_path)
     try:
-        assert journal.begin(message, 'original payload', UnconfirmedOutcome)
+        assert journal.begin(message, UnconfirmedOutcome)
+        pending, = DeliveryRow.select(journal.db)
     finally:
         journal.close()
     results = concurrent_bindings(tmp_path, (first, other if conflicting else first))
@@ -164,9 +163,8 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
         loser = other if winner == first else first
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
             journal.bind(loser)
-        assert not journal.begin(message, 'must not replace', DeliveredOutcome)
-        assert DeliveryRow.select(journal.db) == [
-            DeliveryRow(message.message_id, 'original payload', UnconfirmedOutcome)]
+        assert not journal.begin(message, DeliveredOutcome)
+        assert DeliveryRow.select(journal.db) == [pending]
         assert Binding.select(journal.db) == [winner]
     finally:
         journal.close()

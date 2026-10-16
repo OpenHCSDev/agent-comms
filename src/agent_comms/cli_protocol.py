@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import builtins
-import json
 import sys
 from abc import ABC, abstractmethod
 from graphlib import TopologicalSorter
-from typing import TYPE_CHECKING, Annotated, ClassVar, Never, Union
+from typing import TYPE_CHECKING, Annotated, ClassVar, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
 from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field
@@ -44,18 +43,13 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
         return self.wire_tag
 
     @classmethod
-    def members(cls) -> tuple[builtins.type[TaggedWire], ...]:
-        return tuple(member for member in cls.__registry_config__.registry_dict.values()
-                     if issubclass(member, cls))
-
-    @classmethod
     def declared_union(cls) -> object:
         def tag(value: object) -> str:
             if isinstance(value, cls):
                 return value.wire_tag
             return cls.header.model_validate(value).type
         by_tag: dict[str, list[builtins.type[TaggedWire]]] = {}
-        for member in cls.members():
+        for member in cls.__registry_config__.registry_dict.values():
             by_tag.setdefault(member.wire_tag, []).append(member)
         variants = []
         for wire_tag, members in by_tag.items():
@@ -67,13 +61,6 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
             alternatives = Union[tuple(reversed(tuple(hierarchy.static_order())))]
             variants.append(Annotated[alternatives, Tag(wire_tag)])
         return Annotated[Union[tuple(variants)], Discriminator(tag)]
-
-
-class WatchItem(ABC):
-    """One item of a Core watch stream; it knows how a CLI bridge takes it."""
-
-    @abstractmethod
-    async def handle(self, bridge: CliBridge) -> None: ...
 
 
 class Outcome(DeclaredFamily, affix='Outcome'):
@@ -110,21 +97,21 @@ class EmittedOutcome(UnconfirmedOutcome):
     pass
 
 
-class WatchLine(TaggedWire, WatchItem):
+class WatchLine(TaggedWire):
     """One declared Core watch line, including its continuation behavior."""
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
     )
 
+    @abstractmethod
+    async def handle(self, bridge: CliBridge) -> None: ...
+
     @staticmethod
-    async def read(child: asyncio.subprocess.Process) -> WatchLine:
+    async def read_next(child: asyncio.subprocess.Process) -> WatchLine | None:
         line = await child.stdout.readline()
         if not line:
             raise RuntimeError(f'Core watch ended, exit {await child.wait()}')
         return WATCH_LINE.validate_json(line)
-
-    async def read_next(self, child: asyncio.subprocess.Process) -> WatchLine | None:
-        return await self.read(child)
 
 
 class CoreError(WatchLine):
@@ -134,7 +121,9 @@ class CoreError(WatchLine):
 
     @classmethod
     def from_exception(cls, error: BaseException) -> CoreError:
-        members = {member.exception_type: member for member in cls.members()}
+        members = {member.exception_type: member
+                   for member in cls.__registry_config__.registry_dict.values()
+                   if issubclass(member, cls)}
         message = str(error)
         cause = error.__cause__ or (None if error.__suppress_context__ else error.__context__)
         while cause is not None:
@@ -145,39 +134,28 @@ class CoreError(WatchLine):
                 return members[declaration](error=message)
         raise TypeError('No declared Core error handles this exception')
 
-    def raise_failure(self, operation: str) -> Never:
-        raise RuntimeError(f'Core {operation}: {self.error}')
-
-    async def read_next(self, child: asyncio.subprocess.Process) -> None:
+    @staticmethod
+    async def read_next(child: asyncio.subprocess.Process) -> None:
         """An error is the final record, never another message subscription."""
         return None
-
-    @abstractmethod
-    def watch_delay(self) -> float:
-        """Delay another read subscription, or raise for a permanent failure."""
-
-    async def handle(self, bridge: CliBridge) -> None:
-        """Core ended this read stream; wait before the bridge opens the next."""
-        delay = self.watch_delay()
-        print(f'Core watch unavailable: {self.error}; reconnecting read stream',
-              file=sys.stderr, flush=True)
-        await asyncio.sleep(delay)
 
 
 class UnavailableCoreError(CoreError):
     wire_tag = 'unavailable'
     exception_type = CoordinationReadUnavailable
 
-    def watch_delay(self) -> float:
-        return 0.25
+    async def handle(self, bridge: CliBridge) -> None:
+        print(f'Core watch unavailable: {self.error}; reconnecting read stream',
+              file=sys.stderr, flush=True)
+        await asyncio.sleep(0.25)
 
 
 class FailedCoreError(CoreError):
     wire_tag = 'failed'
     exception_type = BaseException
 
-    def watch_delay(self) -> float:
-        self.raise_failure('watch')
+    async def handle(self, bridge: CliBridge) -> None:
+        raise RuntimeError(f'Core watch: {self.error}')
 
 
 class ArrivedMessage(WatchLine):
@@ -185,15 +163,11 @@ class ArrivedMessage(WatchLine):
     wire_tag = 'message'
     message: InstanceOf[Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(Message.to_wire)]]
 
-    @property
-    def payload(self) -> str:
-        return json.dumps(self.message.to_wire(), separators=(',', ':')) + '\n'
-
     async def handle(self, bridge: CliBridge) -> None:
         message = self.message
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        if not bridge.journal.begin(message, self.payload, outcome):
+        if not bridge.journal.begin(message, outcome):
             await bridge.journal.outcome(message).acknowledge(bridge.core, message)
             return
         if not conversation:
@@ -205,5 +179,4 @@ class ArrivedMessage(WatchLine):
               file=sys.stderr, flush=True)
 
 
-CORE_ERROR = TypeAdapter(CoreError.declared_union())
 WATCH_LINE = TypeAdapter(WatchLine.declared_union())

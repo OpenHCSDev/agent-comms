@@ -49,7 +49,7 @@ async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, r
         bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,journal)
         bridge.core=Core()
         message=Message(sender='claude-code',target='viewer',type=InfoKind,body='x'*3000,timestamp=1.,seq=1)
-        assert journal.begin(message,json.dumps(message.to_wire()),UnconfirmedOutcome)
+        assert journal.begin(message,UnconfirmedOutcome)
         parts=ClaudeMonitorFrame(message).parts
         journal.emitting(message,len(parts))
         journal.finish(message,EmittedOutcome)
@@ -124,7 +124,7 @@ async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(tmp_p
         binding=Binding(str(tmp_path),'viewer','session')
         bridge=ClaudeBridge(Options(Watch(),None,None,None,tmp_path),binding,journal)
         message=Message(sender='peer',target='viewer',type=InfoKind,body='original',timestamp=1.,seq=1)
-        journal.begin(message,json.dumps(message.to_wire()),EmittedOutcome)
+        journal.begin(message,EmittedOutcome)
         journal.emitting(message,1)
         frame=MonitorPart(id=message.message_id,sender='peer',number=1,total=1,body='different')
         await frame.confirm(bridge,ObservedMonitor('record',1.))
@@ -136,10 +136,10 @@ async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(tmp_p
 def test_old_emission_has_no_invented_evidence_or_replay(tmp_path):
     message=Message(sender='peer',target='viewer',type=InfoKind,body='retained',timestamp=1.,seq=1)
     with closing(DeliveryJournal(tmp_path)) as journal:
-        journal.begin(message,json.dumps(message.to_wire()),EmittedOutcome)
+        journal.begin(message,EmittedOutcome)
         frame=MonitorPart(id=message.message_id,sender='peer',number=1,total=1,body='retained')
         assert journal.monitor_attempt(frame) is NO_MONITOR_ATTEMPT
-        assert not journal.begin(message,'do not replace',UnconfirmedOutcome)
+        assert not journal.begin(message,UnconfirmedOutcome)
         assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
         assert MonitorAttemptRow.select(journal.db)==[]
 
