@@ -255,7 +255,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert comms.bus.log.path.read_bytes().startswith(raw)
     assert b'PRIVATE INPUT' not in comms.bus.log.path.read_bytes()[len(raw):]
     assert comms.bus.log.latest_sequence()==first.seq
-    assert comms.bus.log.total_messages()==1
+    assert len(comms.bus.log.full_history())==1
     assert _page(comms,lookup)[0].offset>prior[0].offset
     assert _page(comms,lookup)[1:]==prior[1:]
     assert comms.bus.channel_activity()==activity

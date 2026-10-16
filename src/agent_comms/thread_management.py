@@ -70,7 +70,6 @@ class NewThreadSpec:
     thinking_level: type[ThinkingLevel]
     task: str = ""
     tags: frozenset[str] | None = None
-    prompt: str | None = None
 
     def __post_init__(self) -> None:
         if not self.model:
@@ -79,10 +78,6 @@ class NewThreadSpec:
         if not separator or not provider or not model:
             raise ValueError("Choose a provider-qualified model for the new thread")
         object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
-
-    @property
-    def initial_prompt(self) -> str:
-        return self.task if self.prompt is None else self.prompt
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
@@ -635,16 +630,16 @@ class ThreadManagement:
         )
 
 
-    def create(self, spec: NewThreadSpec, pi_bin: str | None = None) -> Thread:
-        """Prepare the session, then register and launch the thread with its first input."""
-        resolved_bin = NativeArguments.configured_binary(pi_bin)
+    def create(self, spec: NewThreadSpec) -> Thread:
+        """Prepare the session, then register and launch the thread with its task as first input."""
+        resolved_bin = NativeArguments.configured_binary()
         runtime = LaunchRuntime.current()
         with spec.prepared(self, resolved_bin, runtime) as child:
             # A new incarnation's inbox already starts at its creation time
             # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
             child = self.registry._declare_unlocked(child)
 
-            key = f"acp:{uuid4().hex}" if spec.initial_prompt else None
+            key = f"acp:{uuid4().hex}" if spec.task else None
             try:
                 owned = self.owners._launch_owner_unlocked(
                     child, resolved_bin, startup_input_key=key, launch_runtime=runtime,
@@ -653,7 +648,7 @@ class ThreadManagement:
                     InputDispositions(self.root).record(
                         key, seq=None, owner=owned.name, target=owned.name,
                         admission=self.registry.snapshot().admission_generations[owned.name],
-                        text=spec.initial_prompt,
+                        text=spec.task,
                     )
                 return owned
             except OSError:
