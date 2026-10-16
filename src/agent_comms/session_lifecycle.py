@@ -39,7 +39,7 @@ from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistryEntry
 from .transcript_updates import TranscriptReplay
 from .owner_protocol import IncompatibleOwnerError
 from .session_load import SessionLoadPlan, ExistingSessionLoadPlan, FailedSessionLoadPlan
@@ -127,15 +127,15 @@ class SessionLifecycle:
             raise RequestError.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
         return name
 
-    def require_owned_session(self, thread: Thread, snapshot: RegistrySnapshot) -> str:
+    def require_owned_session(self, entry: RegistryEntry) -> str:
         """Resolve an original loaded resource; registration grants no attachment."""
         for session_id, name in self.bindings.items():
-            if snapshot.canonical_name(name) == thread.name:
+            if entry.matches_name(name):
                 return session_id
         raise RequestError.invalid_params({
-            "reason": f"Registered owner {thread.name!r} has no loaded ACP session. "
+            "reason": f"Registered owner {entry.thread.name!r} has no loaded ACP session. "
                       "PID registration does not attach a session.",
-            "owner": thread.name,
+            "owner": entry.thread.name,
         })
 
     @staticmethod
