@@ -32,6 +32,7 @@ from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
 from .native_session_files import NativeSessionFiles
 from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import OwnerLifecycle
@@ -538,7 +539,7 @@ class ThreadManagement:
                 self.registry.register(updated, self.registry.status(thread.name))
             return updated
 
-    def resolve_thread_model(self, name: str, default: str | None = None) -> str | None:
+    def resolve_thread_model(self, name: str, default: str = NativeThreadDefaults.model) -> str:
         """Prefer a saved selection, then the resumed session's last model."""
         thread = self.registry.require(name)
         if thread.model is not None:
@@ -546,7 +547,7 @@ class ThreadManagement:
         if thread.session_file and (model := _session_model(Path(thread.session_file))):
             return "/".join(model)
         info = self.agents.agent_info_of(thread.name)
-        return (info.model if info else None) or default
+        return info.model_or(default)
 
     def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
         """Attach authoritative Pi runtime state to an existing thread."""

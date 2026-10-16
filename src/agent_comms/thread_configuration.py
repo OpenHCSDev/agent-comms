@@ -8,7 +8,6 @@ from pathlib import Path
 from .acp_extension import CoordinationChangedUpdate
 from .pi_vocabulary import ThinkingLevel
 from .registration import Registration
-from .runtime_info import AgentRuntimeInfo
 from .thread_identity import RecordedThreadIncarnation
 from .thread_management import ThreadManagement
 from .agent_activity import AgentActivity
@@ -24,7 +23,6 @@ class ThreadConfiguration:
     def answer(self, name: str) -> CoordinationChangedUpdate:
         thread = self.registry.require(name)
         info = self.agents.agent_info_of(thread.name)
-        usage = AgentRuntimeInfo.optional_context_usage(info)
         return CoordinationChangedUpdate(
             RecordedThreadIncarnation(thread.name, thread.created_at),
             str(self.root.resolve()),
@@ -33,5 +31,5 @@ class ThreadConfiguration:
             self.threads.resolve_thread_model(thread.name),
             ThinkingLevel.optional_name(thread.thinking_level),
             thread.title or thread.name,
-            usage,
+            info.context_reading(),
         )
