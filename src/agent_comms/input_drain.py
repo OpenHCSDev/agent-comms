@@ -173,6 +173,12 @@ class SettledTick:
     entry: RegistryEntry
     admission_after_seq: int | None = None
     through_seq: int = 0
+    change_token: tuple[WireWatch, int] | None = None
+
+    def unchanged_native(self, token: tuple[WireWatch, int] | None, local: tuple) -> bool:
+        if token is None:
+            return False
+        return self.change_token == token and local == self.revision.other[1:]
 
 
 class InputObservation:
@@ -189,16 +195,19 @@ class InputObservation:
             auth=configuration.native_config / "auth.json",
         )
 
-    def _tick_revision(
-        self, session_id: str, paths: TickRevisionPaths | None = None,
-    ) -> TickRevision:
-        """Stat every declared physical dependency plus process-local inputs."""
-        return (paths or self._tick_paths()).capture((
+    def _tick_local(self, session_id: str) -> tuple:
+        return (
             self.sessions.bindings.get(session_id),
             self.auto_wake,
             self.sessions.runtime_enabled,
             self.effects._private_nk_native_package,
-        ))
+        )
+
+    def _tick_revision(
+        self, session_id: str, paths: TickRevisionPaths | None = None,
+    ) -> TickRevision:
+        """Stat every declared physical dependency plus process-local inputs."""
+        return (paths or self._tick_paths()).capture(self._tick_local(session_id))
 
     def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
         if self.drain_tasks.get(session_id) is task:
@@ -302,6 +311,14 @@ class InputObservation:
         async with aclosing(WireWatch.observations(*paths.watch_sources)) as observations:
             async for watcher in observations:
                 self._observation_watchers[session_id] = watcher
+                token = watcher.change_token if watcher is not None else None
+                if (settled is not None and self._quiescent(session_id)
+                        and settled.unchanged_native(token, self._tick_local(session_id))):
+                    # Native watcher reports no file change. Process-local work
+                    # and configuration are unchanged too; even stat calls are
+                    # redundant. Polling and replaced/overflowed watches have
+                    # no matching token and still take the full revision.
+                    continue
                 # A tick whose stores and inputs are unchanged since a settled
                 # tick has nothing new to observe; any change runs it in full.
                 # Another owner's registry or coordination change is not this
@@ -335,8 +352,8 @@ class InputObservation:
                     and revision.coordination == settled.revision.coordination
                 )
                 if idle and shared_unchanged:
-                    settled = SettledTick(
-                        revision, entry, settled.admission_after_seq, settled.through_seq,
+                    settled = replace(
+                        settled, revision=revision, entry=entry, change_token=token,
                     )
                     continue
                 if idle and not shared_unchanged:
@@ -350,7 +367,7 @@ class InputObservation:
                         session_id, settled, revision, entry,
                     )
                     if outcome is not None:
-                        settled = outcome
+                        settled = replace(outcome, change_token=token)
                         continue
                 settled = None
                 thread = self.sessions.require(session_id)
@@ -387,6 +404,7 @@ class InputObservation:
                             settled = SettledTick(
                                 revision, entry, marker.admission_after_seq, marker.last_seq,
                             )
+                            settled = replace(settled, change_token=token)
                         elif self._repeat_observation_ready(session_id, drained):
                             # The first empty private observation may advance its
                             # own durable cursor. Re-read that transition now;
