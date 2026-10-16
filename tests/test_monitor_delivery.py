@@ -23,7 +23,7 @@ def notification(line, record_id='notification-record'):
     return CLAUDE_RECORD.validate_python(dict(
         type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
         sessionId='session', promptId='prompt', origin=dict(kind='task-notification'),
-        message=dict(content='<task-notification><event>'+escape(line)+
+        message=dict(content='<task-notification><summary>Monitor event: "feed"</summary><event>'+escape(line)+
                      '</event></task-notification>')))
 
 
@@ -32,7 +32,7 @@ def attachment_notification(line, record_id='notification-record'):
         type='attachment', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
         attachment=dict(type='queued_command', commandMode='task-notification',
             origin=dict(kind='task-notification', producer='session-task'),
-            prompt='<task-notification><event>'+escape(line)+'</event></task-notification>')))
+            prompt='<task-notification><summary>Monitor event: "feed"</summary><event>'+escape(line)+'</event></task-notification>')))
 
 
 @pytest.mark.asyncio
@@ -101,7 +101,7 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
     assert notice.events[0].text == 'Another task producer'
     observed, rendered = notification('ordinary monitor output').updates(ClaudeSession())
     assert isinstance(observed.frame, ForeignMonitorFrame)
-    assert rendered.events[0].text == 'ordinary monitor output'
+    assert rendered.events[0].text == 'Monitor event: "feed"\nordinary monitor output'
     from xml.etree.ElementTree import ParseError
     with pytest.raises(ParseError):
         CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',

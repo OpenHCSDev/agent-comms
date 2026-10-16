@@ -37,7 +37,7 @@ from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.thread_identity import ThreadRole
 from agent_comms import tool_declaration
 from agent_comms.tool_results import ToolDiff
-from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolPendingTranscript, ToolStartTranscript, TranscriptEvent, NoticeTranscript
+from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolPendingTranscript, ToolStartTranscript, TranscriptEvent
 from agent_comms.typed_table import Column, TypedTable
 
 
@@ -877,7 +877,7 @@ class MonitorFrame(TaggedWire, ABC):
     @abstractmethod
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None: ...
 
-    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+    def notice_lines(self) -> tuple[str, ...]:
         return ()  # Comms control frames are metadata, never duplicate messages.
 
 
@@ -917,8 +917,8 @@ class ForeignMonitorFrame(MonitorFrame):
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
         """Another monitor's output is not comms delivery evidence."""
 
-    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(self.text, timestamp=timestamp),)
+    def notice_lines(self) -> tuple[str, ...]:
+        return (self.text,)
 
 
 MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())

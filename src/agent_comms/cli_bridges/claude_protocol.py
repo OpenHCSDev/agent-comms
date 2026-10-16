@@ -355,10 +355,13 @@ class TaskEnvelope(WireModel, ABC):
         # Claude Code appends sibling blocks (system-reminder) after the envelope in the same record.
         envelope, terminator, _ = text.partition(closing)
         root = ElementTree.fromstring(envelope + terminator)  # Incomplete XML still raises ParseError.
-        event = root.find('event')
+        summary, event = root.findtext('summary'), root.find('event')
+        if summary is None:
+            raise ValueError('Claude task notification has no summary')
         if event is None:
-            return ForeignTaskNotification(text='\n'.join(root.itertext()).strip())
-        return MonitorTaskNotification(frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
+            return ForeignTaskNotification(text=summary)  # A finished task: its summary, not its report.
+        return MonitorTaskNotification(summary=summary,
+                                       frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
 
     @abstractmethod
     def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
@@ -373,14 +376,18 @@ class ForeignTaskNotification(TaskEnvelope):
 
 
 class MonitorTaskNotification(TaskEnvelope):
+    summary: str
     frames: tuple[MonitorFrame, ...]
 
     def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
         observations = tuple(MonitorObservation(frame,
                                                 ObservedMonitor(record.uuid, record.timestamp))
                              for frame in self.frames)
-        events = tuple(event for frame in self.frames for event in frame.events(record.timestamp))
-        return observations + ((FinishedItem(record.uuid, record.uuid, events),) if events else ())
+        lines = tuple(line for frame in self.frames for line in frame.notice_lines())
+        if not lines:
+            return observations
+        notice = NoticeTranscript('\n'.join((self.summary, *lines)), timestamp=record.timestamp)
+        return (*observations, FinishedItem(record.uuid, record.uuid, (notice,)))
 
 
 class TaskContent(WireModel):
