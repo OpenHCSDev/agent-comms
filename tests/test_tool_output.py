@@ -15,7 +15,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 from agent_comms.tool_output import MAX_INLINE_OUTPUT_BYTES, materialize_oversized_output
 from agent_comms.tools import invoke_tool
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.field_codec import FieldCodec
 from agent_comms.text_digest import TextDigest
 from stored_inputs import insert_inputs, stored_inputs
@@ -62,7 +62,7 @@ def test_large_inbox_is_bounded_lossless_private_and_does_not_ack(inbox_comms, c
         "unresolved_inputs": comms.goals.unresolved_inputs("b"),
     }
 
-    result = invoke_tool(comms, "comms_inbox", {"thread": "b"})
+    result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
 
     assert len(json.dumps(result, indent=2).encode()) < MAX_INLINE_OUTPUT_BYTES
     assert result["complete"] is False
@@ -84,7 +84,7 @@ def test_large_inbox_is_bounded_lossless_private_and_does_not_ack(inbox_comms, c
     assert "private-native-prompt" not in artifact.read_text()
     assert "native_id" not in artifact.read_text()
     snapshot_stat = artifact.stat()
-    assert invoke_tool(comms, "comms_inbox", {"thread": "b"}) == result
+    assert invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller()) == result
     assert artifact.stat().st_ino == snapshot_stat.st_ino
     assert artifact.stat().st_mtime_ns == snapshot_stat.st_mtime_ns
 
@@ -100,7 +100,7 @@ def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
         "unresolved_inputs": comms.goals.unresolved_inputs("b"),
     }
     authority_before = ledger.path.read_bytes()
-    assert invoke_tool(comms, "comms_inbox", {"thread": "b", "ack": ack}) == expected
+    assert invoke_tool(comms, "comms_inbox", {"thread": "b", "ack": ack}, caller=NoThreadCaller()) == expected
     assert comms.bus.pending_count("b") == int(not ack)
     assert ledger.path.read_bytes() == authority_before
     assert not (comms.root / "tool-output").exists()
@@ -118,11 +118,11 @@ def test_message_arriving_between_inbox_read_and_ack_remains_unread(
         return acknowledge(name, references)
 
     monkeypatch.setattr(comms.messaging, "acknowledge", append_then_acknowledge)
-    result = invoke_tool(comms, "comms_inbox", {"thread": "b"})
+    result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
 
     assert result["messages"] == [first.to_wire()]
     assert result["acknowledged"] == 1
-    remaining = invoke_tool(comms, "comms_inbox", {"thread": "b", "ack": False})
+    remaining = invoke_tool(comms, "comms_inbox", {"thread": "b", "ack": False}, caller=NoThreadCaller())
     assert [message["text"] for message in remaining["messages"]] == ["arrived after read"]
 
 
@@ -137,7 +137,7 @@ def test_publication_failure_precedes_ack(inbox_comms, monkeypatch):
 
     monkeypatch.setattr("agent_comms.tool_output._atomic_write_text", fail)
     with pytest.raises(OSError, match="artifact publication failed"):
-        invoke_tool(comms, "comms_inbox", {"thread": "b"})
+        invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
     assert comms.bus.pending_count("b") == 1
     assert ledger.path.read_bytes() == authority_before
 
@@ -185,7 +185,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     result = invoke_tool(
         comms,
         "comms_inbox",
-        {"thread": "b", "ack": False, "goal_id": goal.id, "wait_for": ["a"]},
+        {"thread": "b", "ack": False, "goal_id": goal.id, "wait_for": ["a"]}, caller=NoThreadCaller(),
     )
     assert result["standby_review"] == {
         "complete": False,
@@ -286,7 +286,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     )
     before = stored_inputs(dispositions.root)
     result = invoke_tool(
-        comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}
+        comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}, caller=NoThreadCaller()
     )
     review = result["standby_review"]
     assert [row["text"] for row in review["messages"]] == [messages[1].body]
@@ -326,7 +326,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
         invoke_tool(comms, "comms_goal", report, caller=ThreadCaller("b"))
     assert stored_inputs(dispositions.root) == after_arrival
     fresh = invoke_tool(
-        comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}
+        comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}, caller=NoThreadCaller()
     )["standby_review"]
     assert fresh["reviewed_inputs"] == [f"bus:{messages[1].seq}", f"bus:{late.seq}"]
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]}, caller=ThreadCaller("b"))
