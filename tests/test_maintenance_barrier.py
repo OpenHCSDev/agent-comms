@@ -418,14 +418,14 @@ async def test_real_backend_fake_rpc_never_writes_prompt_after_pause(tmp_path: P
         f"    open({str(marker)!r}, 'w').write('PROMPT')\n"
     )
     stub.chmod(0o700)
-    result = [
-        row
-        async for row in one_turn_events(
-            str(stub), [], "fake-only", str(tmp_path), env_extra={"AGENT_COMMS_ROOT": str(root)}
-        )
-    ]
+    with pytest.raises(RelationViolationError, match='Maintenance admission closed'):
+        _ = [
+            row
+            async for row in one_turn_events(
+                str(stub), [], "fake-only", str(tmp_path), env_extra={"AGENT_COMMS_ROOT": str(root)}
+            )
+        ]
     assert ready.read_text() == "RPC_READY"  # Real RPC capability preflight ran.
-    assert result[-1].ok is False
     assert not marker.exists()
 
 
