@@ -7,10 +7,8 @@ from typing import ClassVar, Literal, TYPE_CHECKING
 from metaclass_registry import RegistryConfig
 from pydantic import JsonValue, TypeAdapter
 
-from .shared import (
-    RegisteredWireMeta, TaggedWire, TranscriptUpdate, TurnStarted,
-    TurnEnded, WireModel,
-)
+from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
+from .shared import TranscriptUpdate, TurnStarted, TurnEnded
 from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
 
 if TYPE_CHECKING:

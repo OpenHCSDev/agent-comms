@@ -9,6 +9,7 @@ from typing import ClassVar
 from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
+from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.activity import ActivityState
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -18,8 +19,7 @@ from agent_comms.transcript_events import (
     UserTranscript,
 )
 from .shared import (
-    ActiveItem, FinishedItem, TaggedWire, ToolCall, TranscriptUpdate, TurnEnded,
-    TurnStarted, WireHeader, WireModel,
+    ActiveItem, FinishedItem, ToolCall, TranscriptUpdate, TurnEnded, TurnStarted,
 )
 
 

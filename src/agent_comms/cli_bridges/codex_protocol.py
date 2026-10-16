@@ -16,6 +16,7 @@ from pydantic import (
     Field, JsonValue, TypeAdapter,
 )
 
+from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
 from agent_comms.activity import ActivityState
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
@@ -25,8 +26,8 @@ from agent_comms.transcript_events import (
 
 
 from .shared import (
-    ActiveItem, DraftItem, FinishedItem, RegisteredWireMeta, TranscriptUpdate,
-    TurnEnded, TurnStarted, WireModel, TaggedWire, ToolCall,
+    ActiveItem, DraftItem, FinishedItem, TranscriptUpdate,
+    TurnEnded, TurnStarted, ToolCall,
 )
 
 

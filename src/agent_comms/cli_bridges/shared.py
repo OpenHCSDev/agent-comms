@@ -2,9 +2,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-import builtins
 import argparse
-from contextlib import suppress
+from contextlib import aclosing, suppress
 import asyncio
 from dataclasses import dataclass
 from enum import Enum
@@ -15,10 +14,10 @@ from pathlib import Path
 import signal
 import sqlite3
 import sys
-from typing import Annotated, AsyncIterator, ClassVar, Generic, TypeVar, Union
+from typing import AsyncIterator, ClassVar, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, Discriminator, Tag, JsonValue, computed_field
-from metaclass_registry import AutoRegisterMeta
+from pydantic import JsonValue, TypeAdapter
+from agent_comms.cli_protocol import CORE_ERROR, CoreError, WireModel
 from agent_comms.messages import Message, MessageKind
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.activity import ActivityState
@@ -29,49 +28,8 @@ from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TranscriptEvent, ToolStartTranscript, ToolEndTranscript
 
 
-class WireModel(BaseModel):
-    """Strict fields at an external protocol boundary; unused metadata stays outside."""
-    model_config = ConfigDict(strict=True)
-
-class RegisteredWireMeta(AutoRegisterMeta, type(WireModel)):
-    """Compose declaration registration with external-field validation."""
-
-class WireHeader(WireModel):
-    type: str
-
-
-class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
-    """An external object whose JSON ``type`` names its declared class."""
-    wire_tag: ClassVar[str]
-    header: ClassVar[builtins.type[WireHeader]] = WireHeader
-
-    @computed_field
-    @property
-    def type(self) -> str:
-        return self.wire_tag
-
-    @classmethod
-    def declared_union(cls) -> object:
-        """The wire grammar of every declared member, discriminated by its tag."""
-        def tag(value: object) -> str:
-            if isinstance(value, cls):
-                return value.wire_tag
-            return cls.header.model_validate(value).type
-        return Annotated[
-            Union[tuple(Annotated[member, Tag(member.wire_tag)]
-                        for member in cls.__registry_config__.registry_dict.values())],
-            Discriminator(tag),
-        ]
-
-
-class CoreError(WireModel):
-    error: str
-
 class SendResult(WireModel):
     id: str
-
-class WatchDatabaseBusy(RuntimeError):
-    """Only a failed Core read stream may be reconnected automatically."""
 
 @dataclass(frozen=True)
 class ToolCall:
@@ -277,32 +235,22 @@ class CoreConnection:
         print(stderr.decode(), end='', file=sys.stderr, flush=True)
         result = SEND_RESULT.validate_json(stdout)
         if isinstance(result, CoreError):
-            raise RuntimeError(f'Core send: {result.error}')
+            result.raise_failure('send')
         if child.returncode:
             raise RuntimeError(f'Core send exited {child.returncode}; inspect the printed result')
         return result
 
-    async def watch(self, state: Path) -> AsyncIterator[tuple[Message, str]]:
+    async def watch(self, state: Path) -> AsyncIterator[tuple[Message, str] | CoreError]:
         with (state / 'watch.stderr.log').open('a') as errors:
             child = await asyncio.create_subprocess_exec(
                 self.executable, '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
                 stdout=asyncio.subprocess.PIPE, stderr=errors)
             try:
                 while line := await child.stdout.readline():
-                    try:
-                        wire = json.loads(line)
-                    except json.JSONDecodeError:
-                        # The CLI emits one multiline JSON error before exiting.
-                        async with asyncio.timeout(5):
-                            line += await child.stdout.read()
-                            await child.wait()
-                        (state / 'watch-failure.txt').write_bytes(line)
-                        wire = json.loads(line)
+                    wire = json.loads(line)
                     if isinstance(wire, dict) and 'error' in wire:
-                        error = CoreError.model_validate(wire)
-                        if error.error == 'database is locked':
-                            raise WatchDatabaseBusy(error.error)
-                        raise RuntimeError(f'Core watch: {error.error}')
+                        yield CORE_ERROR.validate_python(wire)
+                        return
                     yield Message.from_wire(wire), line.decode()
                 raise RuntimeError(f'Core watch ended, exit {await child.wait()}')
             finally:
@@ -320,7 +268,7 @@ class CoreConnection:
             child.kill()
             await child.wait()
 
-SEND_RESULT = TypeAdapter(SendResult | CoreError)
+SEND_RESULT = TypeAdapter(SendResult | CoreError.declared_union())
 
 BridgeOptions = TypeVar('BridgeOptions', bound=Options)
 OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
@@ -439,20 +387,29 @@ class CliBridge(ABC, Generic[BridgeOptions]):
     async def watch(self) -> None:
         self.journal.report_unconfirmed()
         print(f'Watching {self.binding.bus} → {self.binding.thread}', file=sys.stderr, flush=True)
-        async for message, payload in self.core.watch(self.options.state):
-            conversation = message.type.conversation_message
-            outcome = Outcome.UNCONFIRMED if conversation else Outcome.FILTERED
-            if not self.journal.begin(message, payload, outcome) or not conversation:
-                continue
-            result = await self.deliver(message)
-            self.journal.finish(message, result)
-            print(f'{result.value}: {message.message_id} from {message.sender}',
-                  file=sys.stderr, flush=True)
+        while True:
+            async with aclosing(self.core.watch(self.options.state)) as stream:
+                async for item in stream:
+                    if isinstance(item, CoreError):
+                        delay = item.watch_delay()
+                        print(f'Core watch unavailable: {item.error}; reconnecting read stream',
+                              file=sys.stderr, flush=True)
+                        await asyncio.sleep(delay)
+                        break
+                    message, payload = item
+                    conversation = message.type.conversation_message
+                    outcome = Outcome.UNCONFIRMED if conversation else Outcome.FILTERED
+                    if not self.journal.begin(message, payload, outcome) or not conversation:
+                        continue
+                    result = await self.deliver(message)
+                    self.journal.finish(message, result)
+                    print(f'{result.value}: {message.message_id} from {message.sender}',
+                          file=sys.stderr, flush=True)
 
     async def run(self) -> None:
         try:
             await self.options.operation.run(self)
-        except (WatchDatabaseBusy, BlockingIOError, asyncio.CancelledError):
+        except (BlockingIOError, asyncio.CancelledError):
             raise
         except Exception as error:
             failure = f'Comms bridge stopped: {type(error).__name__}: {error}'
@@ -568,9 +525,6 @@ def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptio
             runner.run(interruptible())
     except asyncio.CancelledError:
         pass
-    except WatchDatabaseBusy as error:
-        print(f'Core watch busy: {error}; reconnecting read stream', file=sys.stderr)
-        sys.exit(75)
     except BlockingIOError:
         sys.exit('Another watcher owns this conversation')
     finally:

@@ -9,11 +9,11 @@ from typing import ClassVar, Literal
 from metaclass_registry import RegistryConfig
 from pydantic import ConfigDict, Field, JsonValue
 
+from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.activity import ActivityState
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TranscriptEvent
 from .shared import (
-    ActiveItem, DraftItem, FinishedItem, TaggedWire, ToolCall, TranscriptUpdate,
-    WireHeader, WireModel,
+    ActiveItem, DraftItem, FinishedItem, ToolCall, TranscriptUpdate,
 )
 
 
