@@ -24,6 +24,12 @@ from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
 
 
+async def wait_for(predicate):
+    async with asyncio.timeout(30):
+        while not predicate():
+            await asyncio.sleep(0.01)
+
+
 class NativeBackendFixture:
     def __init__(self, root, project, session, provider, config):
         self.root, self.project, self.session, self.provider = root, project, session, provider
