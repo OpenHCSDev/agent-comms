@@ -31,6 +31,7 @@ from .registration import Registration
 from .routing import TurnRouting
 from .threads import Thread
 from .turn_lease import TurnLeaseFence
+from .turn_digests import ThreadTurns, TurnDigestRead
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_receipts import (
@@ -510,6 +511,9 @@ class Transcripts:
             after,
             through,
         )
+
+    def turns(self, name: str, *, last: int = TurnDigestRead.last) -> ThreadTurns:
+        return TurnDigestRead(self.root, self.registry.snapshot().require(name), last).read()
 
     def external(self, name: str) -> ExternalTranscript:
         """Where a CLI bridge publishes the items of its sessionless bus thread."""

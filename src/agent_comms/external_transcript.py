@@ -37,6 +37,23 @@ class ExternalItemRow(TypedTable):
     events: tuple[TranscriptEvent, ...]
     unique = (("thread", "seq"),)
 
+    @classmethod
+    def recent_turn_ids(cls, connection: Connection, thread: str, last: int) -> tuple[str, ...]:
+        """Find recent identities without decoding bodies or grouping the full history."""
+        turn_field, = cls._fields_named(("turn_id",))
+        cursor = connection.execute(
+            f'SELECT {cls._column_list(("turn_id",))} FROM "{cls.declared_name}" '
+            'WHERE thread = ? ORDER BY seq DESC', (thread,))
+        identities: dict[str, None] = {}
+        try:
+            for value, in cursor:
+                identities[turn_field.decode(value)] = None
+                if len(identities) >= last:
+                    break
+        finally:
+            cursor.close()
+        return tuple(identities)
+
 
 @dataclass(frozen=True)
 class ExternalDraftRow(TypedTable):
@@ -120,6 +137,19 @@ class ExternalTranscriptRead:
                 yield ExternalRecord(row.seq, row.events)
         finally:
             rows.close()
+
+    def turns(self, last: int):
+        from .turn_digests import TurnDigest
+
+        if self.connection is None:
+            return ()
+        return tuple(
+            TurnDigest(turn_id, tuple(
+                event
+                for row in ExternalItemRow.select(
+                    self.connection, thread=self.lookup, turn_id=turn_id, order_by=("seq",))
+                for event in row.events))
+            for turn_id in ExternalItemRow.recent_turn_ids(self.connection, self.lookup, last))
 
     def forward(self, after: int, through: int) -> Iterator[ExternalRecord]:
         return self._records("seq > ? AND seq <= ?", (after, through), descending=False)

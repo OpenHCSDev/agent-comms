@@ -32,6 +32,7 @@ from .task_sources import (
     TaskScopeSelection, OriginalTaskChange,
 )
 from .thread_identity import TurnId
+from .turn_digests import TurnDigestRead
 from .relationships import RelationshipEdit
 from .thread_status import ThreadStatus
 from .tool_output import (
@@ -580,6 +581,17 @@ class CommsGoalHistoryTool(ThreadToolRequest):
         requested = self.goal_id.strip()
         entries = comms.goals.goal_history(caller.name, goal_id=requested or None)
         return {"history": [entry.to_wire() for entry in entries]}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTurnsTool(ToolRequest):
+    description = "Read a unit's recent turns with ordered original transcript facts."
+    context = "thread"
+    thread: str = tool_field("Thread whose own saved turn records to read", binding=SubjectBinding)
+    last: int = tool_field("Number of newest turns", default=TurnDigestRead.last)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+        return FieldCodec.encode(comms.transcripts.turns(self.thread, last=self.last))
 
 
 @dataclass(frozen=True, kw_only=True)
