@@ -6,6 +6,7 @@ from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
+import time
 from uuid import uuid4
 
 from .child_process import ProcessIdentity
@@ -23,7 +24,10 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWait, GoalWaits
-from .goals import Goal, GoalDeadline, NoDeadline
+from .goals import (
+    Goal, GoalDeadline, NoDeadline, CommandedGoalAuthor, RecordedGoalReportTime,
+    SelfDirectedGoalAuthor,
+)
 from .goal_progress import GoalProgress
 from .threads import Thread
 
@@ -167,6 +171,8 @@ class TransitionGoalAction(GoalAction):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = ctx.require_goal()
+        if ctx.model_report:
+            goal.author.require_report(self.progress)
         state = self.next_state(ctx)
         goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
         self.before_transition(ctx)
@@ -176,6 +182,8 @@ class TransitionGoalAction(GoalAction):
             revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
             reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn,
+            report_time=(RecordedGoalReportTime(time.time()) if ctx.model_report
+                         else goal.report_time),
         )
 
     def before_transition(self, ctx: GoalActionContext) -> None:
@@ -325,6 +333,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
 @dataclass(frozen=True, kw_only=True)
 class CompletedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
     def next_state(self, ctx: GoalActionContext) -> GoalState:
+        ctx.require_goal().author.require_completion(self.progress)
         return CompletedGoal()
 
 
@@ -383,16 +392,52 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
 
+    def goal_author(self, ctx):
+        return SelfDirectedGoalAuthor()
+
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = Goal(text=self.text.strip(), id=uuid4().hex, revision=1, deadline=self.deadline)
         goal = replace(
             goal,
             mention_source=bind_goal_mentions(
-                goal.text, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot()
+                goal.text, goal.id, goal.revision, ctx.thread, ctx.goals.registry.snapshot(),
+                author=self.goal_author(ctx),
             ),
         )
         ctx.goals.open_goal_store().create_goal(goal.id)
         return goal
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrderGoalAction(SetGoalAction):
+    """A first order creates a Goal; send-back edits it without resuming attempts."""
+    author: str
+    preserve_wait = True
+
+    def goal_author(self, ctx):
+        return CommandedGoalAuthor(
+            ctx.goals.registry.snapshot().require(self.author).incarnation, time.time()
+        )
+
+    def change(self, ctx: GoalActionContext) -> Goal:
+        snapshot = ctx.goals.registry.snapshot()
+        author = snapshot.require(self.author).incarnation
+        now = time.time()
+        current = ctx.thread.goal
+        if current is None:
+            return super().change(ctx)
+        if current.state.terminal:
+            raise ValueError("A completed goal needs a new goal, not an implicit restart.")
+        revised_author = current.author.revised(author, snapshot, now)
+        revised = EditGoalAction(text=self.text).change(ctx)
+        assert revised.mention_source is not None
+        return replace(revised, deadline=self.deadline, mention_source=replace(
+            revised.mention_source, author=revised_author
+        ))
+
+    def before_publish(self, goal, ctx):
+        if ctx.thread.goal is None or goal.id != ctx.thread.goal.id:
+            super().before_publish(goal, ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -419,7 +464,8 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
             text=text,
             revision=revision,
             mention_source=bind_goal_mentions(
-                text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
+                text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot(),
+                author=goal.author,
             ),
         )
 

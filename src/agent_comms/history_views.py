@@ -496,6 +496,60 @@ class HistoryViews:
     def _presence_views(self):
         return sorted(self.thread_views(), key=lambda view: view.thread.name)
 
+    def fleet(self) -> list[dict[str, object]]:
+        """Read latest facts without hiding ongoing work behind an inbox failure."""
+        import sqlite3
+        from .errors import RelationViolationError
+        from .bus_publication import stable_thread_lookup
+        from .fleet import (
+            FleetEntry, KnownUnreadCount, UnavailableUnreadCount,
+            KnownSentMessages, UnavailableSentMessages,
+        )
+        from .tool_activity import UnavailableToolActivity
+        from .wake_candidate_index import ProjectionUnavailableError
+
+        snapshot = self.registry.snapshot()
+        views = tuple(view for view in ThreadView.roster(
+            snapshot, self.agents, self.agents.all_activity(snapshot=snapshot),
+            GoalWaits(self.root / GoalWaits.filename),
+            show_stopped=False, show_archived=False,
+        ) if view.status.running)
+        names = tuple(view.thread.name for view in views)
+        read_errors = (OSError, ValueError, sqlite3.Error,
+                       RelationViolationError, ProjectionUnavailableError)
+        try:
+            counts = self.bus.pending_counts_all(names)
+            unread = {name: KnownUnreadCount(counts[name]) for name in names}
+        except read_errors as error:
+            unread = {name: UnavailableUnreadCount(
+                f"{type(error).__name__}: {error}"
+            ) for name in names}
+        try:
+            messages = self.bus.latest_sent_messages(tuple(view.thread for view in views))
+            sent = {
+                view.thread.name: KnownSentMessages(
+                    (message,) if (message := messages.get(
+                        stable_thread_lookup(view.thread.created_at)
+                    )) is not None else ()
+                ) for view in views
+            }
+        except read_errors as error:
+            sent = {name: UnavailableSentMessages(
+                f"{type(error).__name__}: {error}"
+            ) for name in names}
+        entries = []
+        now = time.time()
+        for view in views:
+            try:
+                tool = view.thread.execution.latest_tool(self.root, view.thread)
+            except read_errors as error:
+                tool = UnavailableToolActivity(f"{type(error).__name__}: {error}")
+            entries.append(FleetEntry(view, tool, unread[view.thread.name],
+                                      sent[view.thread.name], now))
+        return [entry.to_wire() for entry in sorted(
+            entries, key=lambda entry: entry.last_activity, reverse=True
+        )]
+
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""
         snapshot = self.registry.snapshot()

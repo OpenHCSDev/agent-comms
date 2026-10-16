@@ -138,6 +138,15 @@ class NativeTranscript(TranscriptSource):
         """Native in-progress output belongs to the ACP stream."""
         return None
 
+    def latest_tool(self):
+        from .session_revision import SessionRevision
+        from .tool_activity import UnavailableToolActivity
+
+        SessionRevision.observe(str(self.path)).require_available()
+        return UnavailableToolActivity(
+            "The native session reader has no exact bounded tool selector yet."
+        )
+
     def imported_sources(self):
         """Read original metadata before conversation, including native configuration.
 

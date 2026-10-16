@@ -24,6 +24,9 @@ class Delivery(DeclaredFamily):
     @abstractmethod
     def summary(self) -> str: ...
 
+    def require_completion(self) -> None:
+        raise ValueError("A commanded goal is complete only with WorksInApp evidence.")
+
     def block_reason(self, next_step: str) -> str:
         return next_step
 
@@ -57,6 +60,9 @@ class Installed(Delivery):
 class WorksInApp(Delivery):
     evidence: str
     works_in_app = True
+
+    def require_completion(self) -> None:
+        pass
 
     @property
     def summary(self) -> str:
@@ -112,6 +118,13 @@ class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
     @abstractmethod
     def block_reason(self) -> str: ...
 
+    @property
+    def works_in_app(self) -> bool:
+        return False
+
+    def require_report(self) -> GoalReport:
+        raise ValueError("A commanded goal requires stupid, deleted, delivery and next.")
+
     def noted(self, note: str) -> Self:
         # Runtime notes must not replace facts in an agent's last report.
         return self
@@ -148,6 +161,13 @@ class TextGoalProgress(GoalProgress, JsonShapeMember):
 @dataclass(frozen=True)
 class ReportedGoalProgress(GoalProgress, JsonShapeMember):
     value: GoalReport
+
+    @property
+    def works_in_app(self) -> bool:
+        return self.value.delivery.works_in_app
+
+    def require_report(self) -> GoalReport:
+        return self.value
 
     @property
     def summary(self) -> str:

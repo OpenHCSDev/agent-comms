@@ -378,7 +378,11 @@ class MessageBus:
         ).read(self.log)
 
     def latest_sent_messages(self, threads: Sequence[Thread]):
-        lookups = tuple(thread.incarnation.stable_thread_lookup for thread in threads)
+        if not threads:
+            return {}
+        from .bus_publication import stable_thread_lookup
+
+        lookups = tuple(stable_thread_lookup(thread.created_at) for thread in threads)
         with self.log.certified_read() as certified:
             originals = certified.latest_sender_sources(lookups)
         return {original.audience.sender_lookup: original.message for original in originals}

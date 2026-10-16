@@ -34,7 +34,7 @@ class ExternalToolEvents:
         f"json_extract(events, '$[0].{ToolStartTranscript.family_discriminator}')"
         f" = {sql_literal(ToolStartTranscript)}"
     )
-    tool_at: float = field(init=False, metadata={"sql": Column(
+    tool_at: float = field(init=False, compare=False, repr=False, metadata={"sql": Column(
         generated="coalesce(json_extract(events, '$[0].timestamp'), 0)"
     )})
 

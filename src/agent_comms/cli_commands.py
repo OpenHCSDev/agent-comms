@@ -26,7 +26,8 @@ from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, JsonShapeFamily
+from .goals import GoalDeadline, NoDeadline
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .exporting import (
@@ -155,18 +156,35 @@ class TargetField:
             return formatter(self.value)
         if self.value is None:
             return ''
-        if isinstance(self.value, DeclaredFamily):
+        if isinstance(self.value, DeclaredFamily) and self.choices:
             return FieldCodec.encode(type(self.value))
         encoded = FieldCodec.encode(self.value)
         return encoded if isinstance(encoded, str) else json.dumps(encoded)
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
+        schema = FieldCodec.value_schema(self.annotation)
         if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
-            return tuple((member.label, FieldCodec.encode(member))
-                         for member in self.annotation.members_with(self.annotation))
-        return tuple((str(value), str(value))
-                     for value in FieldCodec.value_schema(self.annotation).get('enum', ()))
+            variants = schema.get('oneOf', ())
+            tag = self.annotation.family_discriminator
+            if variants and all(set(variant.get('properties', ())) == {tag}
+                                for variant in variants):
+                return tuple((member.declared_name, FieldCodec.encode(member))
+                             for member in self.annotation.members_with(self.annotation))
+        return tuple((str(value), str(value)) for value in schema.get('enum', ()))
+
+    @staticmethod
+    def family_argument(annotation, value):
+        """Shell/editor syntax only; FieldCodec still owns the record decode."""
+        if isinstance(value, DeclaredFamily):
+            return FieldCodec.encode(value)
+        if not isinstance(value, str):
+            return value
+        if value.lstrip().startswith('{'):
+            return json.loads(value)
+        if issubclass(annotation, JsonShapeFamily):
+            return value
+        return {annotation.family_discriminator: value}
 
     @property
     def required(self) -> bool:
@@ -466,7 +484,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif normalize is not None:
                 result[key] = normalize(text)
             elif isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
-                result[key] = {'kind': text}
+                result[key] = TargetField.family_argument(annotation, text)
             elif FieldCodec.value_schema(annotation).get('type') == 'string' or str in get_args(annotation):
                 result[key] = text
             else:
@@ -577,7 +595,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif isinstance(scalar, type) and issubclass(scalar, Enum):
                 options["choices"] = [kind.value for kind in scalar]
             elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
-                options.setdefault("choices", scalar.names())
+                choices = TargetField(declared, scalar, None).choices
+                if choices:
+                    options.setdefault("choices", tuple(value for _, value in choices))
             elif (
                 get_origin(scalar) is type and get_args(scalar)
                 and issubclass(get_args(scalar)[0], DeclaredFamily)
@@ -594,7 +614,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             else:
                 options["required"] = True
             if isinstance(options.get("default"), DeclaredFamily):
-                options["default"] = options["default"].declared_name
+                options["default"] = FieldCodec.encode(options["default"])
             elif (
                 isinstance(options.get("default"), type)
                 and issubclass(options["default"], DeclaredFamily)
@@ -620,7 +640,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif isinstance(hints[declared.name], type) and issubclass(
                 hints[declared.name], DeclaredFamily
             ):
-                value = {"kind": value}
+                value = TargetField.family_argument(hints[declared.name], value)
             payload[key] = value
         return member.from_payload(payload)
 
@@ -1080,6 +1100,31 @@ class ChannelsCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> Any:
         return {"channels": list(ctx.channels.channels())}
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrderCliCommand(CliCommand):
+    help = "Issue a Goal or send back the same author's current order"
+    author: str = option("--from")
+    name: str = option("--name")
+    text: str = option("--text")
+    deadline: GoalDeadline = option("--deadline", default_factory=NoDeadline)
+
+    def apply(self, ctx: Comms) -> Any:
+        from .goal_actions import OrderGoalAction
+
+        goal = ctx.goals.update_goal(self.name, OrderGoalAction(
+            author=self.author, text=self.text, deadline=self.deadline,
+        ))
+        return {"thread": ctx.registry.require(self.name).name, "goal": goal.to_wire()}
+
+
+@dataclass(frozen=True, kw_only=True)
+class FleetCliCommand(CliCommand):
+    help = "Running threads, original goals and latest activity, newest first"
+
+    def apply(self, ctx: Comms) -> Any:
+        return {"threads": ctx.views.fleet()}
 
 
 @dataclass(frozen=True, kw_only=True)

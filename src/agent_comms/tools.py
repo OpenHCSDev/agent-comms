@@ -583,6 +583,32 @@ class CommsGoalHistoryTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsOrderTool(ToolRequest):
+    label = "Issue order"
+    description = "Issue a Goal with a deadline, or revise your own existing order without resuming it."
+    thread: str = tool_field("Thread receiving the order")
+    text: str = tool_field("Goal text")
+    deadline: GoalDeadline = tool_field("Goal deadline", default_factory=NoDeadline)
+
+    def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import OrderCliCommand
+
+        return OrderCliCommand(author=_executing_thread(), name=self.thread,
+                               text=self.text, deadline=self.deadline).apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsFleetTool(ToolRequest):
+    label = "Fleet"
+    description = "Running threads, goals, deadlines and latest original tool/message activity, newest first."
+
+    def apply(self, comms: Comms) -> JsonObject:
+        from .cli_commands import FleetCliCommand
+
+        return FleetCliCommand().apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsThreadsTool(ToolRequest):
     label = "Comms Threads"
     description = (

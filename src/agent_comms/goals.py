@@ -119,6 +119,71 @@ class ResolvedMentionBinding(GoalMentionBinding):
         ), ()
 
 
+class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
+    @abstractmethod
+    def require_report(self, progress) -> None: ...
+
+    @abstractmethod
+    def require_completion(self, progress) -> None: ...
+
+    @abstractmethod
+    def revised(self, author: ThreadIncarnation, registry, now: float): ...
+
+    @abstractmethod
+    def has_report(self, recorded: GoalReportTime) -> bool: ...
+
+    @property
+    @abstractmethod
+    def revision_count(self) -> int: ...
+
+
+@dataclass(frozen=True)
+class SelfDirectedGoalAuthor(GoalAuthor):
+    def require_report(self, progress) -> None:
+        pass
+
+    def require_completion(self, progress) -> None:
+        pass
+
+    def revised(self, author, registry, now):
+        raise ValueError("This existing goal was not issued by a commander.")
+
+    def has_report(self, recorded):
+        return recorded.since(0)
+
+    @property
+    def revision_count(self):
+        return 0
+
+
+@dataclass(frozen=True)
+class CommandedGoalAuthor(GoalAuthor):
+    thread: ThreadIncarnation
+    issued_at: float
+    revisions: int = 0
+
+    def require_report(self, progress) -> None:
+        if progress is None:
+            raise ValueError("A commanded goal requires a complete structured report.")
+        progress.require_report()
+
+    def require_completion(self, progress) -> None:
+        self.require_report(progress)
+        progress.require_report().delivery.require_completion()
+
+    def has_report(self, recorded):
+        return recorded.since(self.issued_at)
+
+    @property
+    def revision_count(self):
+        return self.revisions
+
+    def revised(self, author, registry, now):
+        if self.thread.resolved(registry) != author:
+            raise ValueError("Only this goal's original author can send it back.")
+        return replace(self, issued_at=now, revisions=self.revisions + 1)
+
+
 @dataclass(frozen=True, slots=True)
 class GoalMentionSource:
     """Text-revision and owner-incarnation proof saved with its registry Goal."""
@@ -129,6 +194,7 @@ class GoalMentionSource:
     owner_name: str
     owner_created_at: float
     bindings: tuple[GoalMentionBinding, ...]
+    author: GoalAuthor = field(kw_only=True)
 
     def __post_init__(self) -> None:
         from .text_digest import TextDigest
@@ -217,6 +283,24 @@ class Deadline(GoalDeadline):
         return now > self.at
 
 
+class GoalReportTime(DeclaredFamily, affix="GoalReportTime"):
+    def since(self, at: float) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class NeverReportedGoalReportTime(GoalReportTime):
+    pass
+
+
+@dataclass(frozen=True)
+class RecordedGoalReportTime(GoalReportTime):
+    at: float
+
+    def since(self, at: float) -> bool:
+        return self.at >= at
+
+
 @dataclass(frozen=True)
 class Goal:
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
@@ -231,6 +315,15 @@ class Goal:
     deadline: GoalDeadline = field(
         default_factory=NoDeadline, metadata={"wire_omit_default": True}
     )
+    report_time: GoalReportTime = field(
+        default_factory=NeverReportedGoalReportTime, metadata={"wire_omit_default": True}
+    )
+
+    @property
+    def author(self) -> GoalAuthor:
+        if self.mention_source is None:
+            raise ValueError("This goal has no recorded author; it cannot be treated as self-directed.")
+        return self.mention_source.author
 
     def after_failed_turn(self, diagnostic: str) -> Goal:
         return self._failure_projection(

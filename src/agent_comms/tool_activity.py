@@ -15,6 +15,14 @@ class ToolActivity(DeclaredFamily, affix="ToolActivity"):
         return (RecordedToolActivity(max(calls, key=lambda call: call.timestamp or 0))
                 if calls else NoToolActivity())
 
+    @property
+    def timestamps(self) -> tuple[float, ...]:
+        return ()
+
+    @property
+    @abstractmethod
+    def description(self) -> str: ...
+
     @abstractmethod
     def silent_since(self, busy_since: float, now: float, seconds: float) -> bool:
         """Only a known source can establish the absence of a recent tool."""
@@ -22,6 +30,10 @@ class ToolActivity(DeclaredFamily, affix="ToolActivity"):
 
 @dataclass(frozen=True)
 class NoToolActivity(ToolActivity):
+    @property
+    def description(self):
+        return "No tool call recorded"
+
     def silent_since(self, busy_since, now, seconds):
         return now - busy_since >= seconds
 
@@ -29,6 +41,14 @@ class NoToolActivity(ToolActivity):
 @dataclass(frozen=True)
 class RecordedToolActivity(ToolActivity):
     call: ToolStartTranscript
+
+    @property
+    def timestamps(self):
+        return (self.call.timestamp,) if self.call.timestamp is not None else ()
+
+    @property
+    def description(self):
+        return self.call.title
 
     def silent_since(self, busy_since, now, seconds):
         # Missing external timestamps are unrecorded, never the time of this read.
@@ -39,6 +59,10 @@ class RecordedToolActivity(ToolActivity):
 @dataclass(frozen=True)
 class UnavailableToolActivity(ToolActivity):
     reason: str
+
+    @property
+    def description(self):
+        return f"Tool history unavailable: {self.reason}"
 
     def silent_since(self, busy_since, now, seconds):
         return False
