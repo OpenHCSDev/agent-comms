@@ -125,6 +125,30 @@ def test_aborted_tail_uses_indexed_last_committed_entry(tmp_path, monkeypatch):
     assert captured.through_sequence == 10
 
 
+def test_observation_seeks_pending_and_committed_through_the_declared_state_index(tmp_path, monkeypatch):
+    registry = authored_history(tmp_path / "journal", 250)
+    thread = registry.require("owner")
+    journal = GoalHistoryStore(registry.store.path)
+    statements = []
+    connect = GoalHistoryStore._connect
+
+    def traced(self):
+        connection = connect(self)
+        connection.set_trace_callback(statements.append)
+        return connection
+
+    monkeypatch.setattr(GoalHistoryStore, "_connect", traced)
+    journal.observe(thread.created_at, thread.goal)
+    selected = [sql for sql in statements if sql.startswith("SELECT") and "goal_history_entry" in sql]
+    assert len(selected) == 2
+    state_index = next(name for name, sql in GoalHistoryEntry.index_schema().items() if "state" in sql)
+    with closing(CoordinationStore.read_snapshot(journal.path)) as connection:
+        for sql in selected:
+            plan = [row[3] for row in connection.execute("EXPLAIN QUERY PLAN " + sql)]
+            assert any("SEARCH" in detail and state_index in detail for detail in plan)
+            assert not any("SCAN goal_history_entry" in detail for detail in plan)
+
+
 @pytest.mark.parametrize("pending_count", [3, 105])
 def test_every_pending_decision_is_reconciled_without_a_page_or_cardinality_cap(tmp_path, pending_count):
     registry = authored_history(tmp_path / "journal", 1)
