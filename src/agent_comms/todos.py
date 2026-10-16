@@ -469,10 +469,19 @@ class CommandedGoalAuthor(GoalAuthor):
                 "\"evidence\":\"actual application evidence\"}. Core executes the problem's "
                 "declared acceptance check; a mismatch cannot complete the order.")
 
+    def require_commander(self, actor, snapshot):
+        if self.thread.resolved(snapshot) != actor:
+            raise TodoError("Only this order's original commander can judge it or send it back.")
+
     def revised(self, author, registry, now):
-        if self.thread.resolved(registry) != author:
-            raise TodoError("Only this order's original commander can send it back.")
+        self.require_commander(author, registry)
         return replace(self, issued_at=now, revisions=self.revisions + 1)
+
+    def release(self, goals, reference):
+        current = self.todo.require_current(goals.root, reference)
+        TodoStore(goals.root).release(current.id, expected_revision=current.revision,
+                                      previous=current.assignment.require_assigned(current),
+                                      goals=goals)
 
 
 @dataclass(frozen=True)

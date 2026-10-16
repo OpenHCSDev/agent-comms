@@ -171,7 +171,13 @@ class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
     def require_self_direction(self) -> None: ...
 
     @abstractmethod
+    def require_commander(self, actor: ThreadIncarnation, snapshot) -> None: ...
+
+    @abstractmethod
     def revised(self, author: ThreadIncarnation, registry, now: float): ...
+
+    @abstractmethod
+    def release(self, goals, reference: GoalRef) -> None: ...
 
     @abstractmethod
     def has_report(self, recorded: EventTime) -> bool: ...
@@ -211,8 +217,14 @@ class SelfDirectedGoalAuthor(GoalAuthor):
     def require_self_direction(self):
         pass
 
-    def revised(self, author, registry, now):
+    def require_commander(self, actor, snapshot):
         raise ValueError("This existing goal was not issued by a commander.")
+
+    def revised(self, author, registry, now):
+        self.require_commander(author, registry)
+
+    def release(self, goals, reference):
+        pass  # A self-directed goal is no commander's order to take away.
 
     def has_report(self, recorded):
         return recorded.since(0)

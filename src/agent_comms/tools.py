@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Literal, Type
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
@@ -41,6 +41,8 @@ from .turn_digests import TurnDigestRead
 from .relationships import RelationshipEdit
 from .thread_status import ThreadStatus
 from .work_branches import WorkBranches
+from .order_records import CaughtStage, Order, StrikeCause
+from .plain_text import PlainText
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
     materialize_oversized_output,
@@ -726,6 +728,71 @@ class CommsWorkBranchesTool(ToolRequest):
         branches = WorkBranches(Path(self.checkout)).read(comms.registry.snapshot())
         return {"branches": FieldCodec.encode(tuple(
             branch for branch in branches if not (self.unlinked_only and branch.linked)))}
+
+
+@dataclass(frozen=True, kw_only=True)
+class _OrderJudgementTool(ThreadToolRequest):
+    """The order's own commander judges the unit holding it."""
+
+    unit: str = tool_field("Thread holding the order")
+    goal_id: str = tool_field("The order's Goal ID")
+
+    def order(self, comms: Comms, caller: ThreadCaller) -> Order:
+        return Order.judged_by(comms.goals, self.unit, self.goal_id, caller.name)
+
+
+@dataclass(frozen=True, kw_only=True)
+class _ToolCallVerdictTool(_OrderJudgementTool):
+    tool_call: str = tool_field("Tool call ID from comms_turns")
+    quoted: str = tool_field("Exact text from that call's input the verdict is about")
+    reason: Annotated[str, PlainText] = tool_field("What the call did and why, in plain words (10+)")
+
+    def turns(self, comms: Comms):
+        return comms.transcripts.turns(self.unit, last=Order.judged_turns)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsAcceptTool(_ToolCallVerdictTool):
+    label = "Accept tool call"
+    description = "Accept one tool call of the unit's order work; the reason must cite the order it serves."
+    serves: str = tool_field("4+ exact words of the order this call serves")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        row = self.order(comms, caller).accept(
+            self.turns(comms), self.tool_call, self.quoted, self.serves, self.reason)
+        return {"verdict": FieldCodec.encode(row)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSendBackTool(_ToolCallVerdictTool):
+    label = "Send back tool call"
+    description = (
+        "Send one tool call back: replace the order's text with the edits now required and "
+        "strike the unit. At the strike limit the unit loses its order."
+    )
+    text: str = tool_field("Replacement order text: the exact edits now required")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        return FieldCodec.encode(self.order(comms, caller).send_back(
+            self.turns(comms), self.tool_call, self.quoted, self.reason, self.text))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsStrikeTool(_OrderJudgementTool):
+    label = "Strike"
+    description = (
+        "Strike a miss that is not a judged tool call: a missed deadline, a false done claim "
+        "or missing evidence, against the unit or the commander. At the limit the struck "
+        "thread loses its order."
+    )
+    struck: str = tool_field("Thread the strike counts against: the unit, or the commander")
+    cause: type[StrikeCause] = tool_field("What was missed")
+    what_happened: Annotated[str, PlainText] = tool_field("What actually happened, in plain words (10+)")
+    caught: type[CaughtStage] = tool_field("Where it was caught")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        return FieldCodec.encode(self.order(comms, caller).strike(
+            self.struck, self.cause, self.what_happened, self.caught))
 
 
 @dataclass(frozen=True, kw_only=True)

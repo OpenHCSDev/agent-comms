@@ -212,6 +212,18 @@ class ToolStartTranscript(ToolTranscript):
     def tool_calls(self):
         return (self,)
 
+    def quotes(self, text: str) -> bool:
+        """Whether one string the caller sent contains this exact text."""
+        pending = [self.raw_input]
+        for value in pending:
+            if isinstance(value, str) and text in value:
+                return True
+            if isinstance(value, dict):
+                pending.extend(value.values())
+            elif isinstance(value, (list, tuple)):
+                pending.extend(value)
+        return False
+
     @property
     def selection_order(self) -> tuple[bool, float]:
         # Without a recorded selection time, no known call proves it is newer.
