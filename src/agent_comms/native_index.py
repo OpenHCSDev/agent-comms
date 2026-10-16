@@ -24,8 +24,7 @@ class NativeEntryPosition:
         stream.seek(self.start)
         raw = stream.read(self.end - self.start)
         record = NativeRecord.read(self.start, self.end, raw)
-        if (not record.complete or record.entry is None
-                or record.entry.require_entry_id() != self.entry_id):
+        if not record.complete or record.annotation_id != self.entry_id:
             raise ValueError("Native index does not select its original entry")
         return record
 

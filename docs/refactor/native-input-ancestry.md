@@ -148,7 +148,10 @@ only the owned EntryStore module. The real native saved-session loader, native
 append, fresh-process production helper, exact source-position protocol and
 query plan are exercised on 1,000 private synthetic entries. Warm saved-session
 startup and selection read zero original JSONL bytes; missing/stale query indexes
-also read zero and create no index. An older real call survives 996 subsequent
+also read zero and create no index. A query answers while an actual SQLite writer
+is held; native writers are configured to wait for short selector commits rather
+than immediately fail an already-persisted append on transient contention.
+An older persisted call survives 996 subsequent
 non-tool entries and an opaque extension's fake call. No-tool proof, partial
 source refusal, native writer reopen, private index mode and dead/live preparer
 custody pass. Existing native store checks: 2 passed. Python projection/shared
@@ -157,7 +160,7 @@ physical-paint/latency result. No original saved session or uncertain input ran.
 
 Evidence owner: core-retry. Small disposable source fixtures and receipts live
 under `/home/ts/.cache/agent-scratch/core-native-ancestry-8302/latest-*`; accepted
-source run is `latest-source-f`, with `latest-store-tests-a.log` and
+source run is `latest-source-h`, with `latest-store-tests-c.log` and
 `latest-pytest-final.log`. Earlier generated fixture runs are superseded, not
 borrower-verified for retirement. No large saved-session rebuild, dependency
 clone, parallel agent or provider operation was started under critical headroom.
