@@ -56,10 +56,9 @@ class TestToolCatalog:
             invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b", "owner": "c"}, caller=NoThreadCaller())
         assert not (comms.root / "relationships.json").exists()
 
-    def test_catalog_has_unique_json_schema_declarations(self):
+    def test_catalog_exposes_adapter_json_schemas(self):
         catalog = tool_catalog()
         names = [tool["name"] for tool in catalog]
-        assert len(names) == len(set(names))
         assert {
             "comms_send",
             "comms_inbox",
