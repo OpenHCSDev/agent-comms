@@ -16,6 +16,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.relationships import RelationshipEdit
 from agent_comms.threads import Thread
 from native_backend_fixture import native_backend_fixture
+from explicit_private_owner_installed_journey import Subscriber
 
 
 def user_text(request):
@@ -40,18 +41,23 @@ async def run(root: Path, *, after: bool):
             data['compaction']['keepRecentTokens'] = 16
             settings.write_text(json.dumps(data))
             await fixture.author_history()
-            async with fixture.open_owner(runtime_enabled=True) as (agent, name):
+            subscriber = Subscriber()
+            children = []
+            async with fixture.open_owner(runtime_enabled=True, client=subscriber) as (agent, name):
                 comms = agent._comms
                 result['thread'] = name
 
                 async def prompt(label, text):
                     before_posts = fixture.provider.posts
+                    before_updates = len(subscriber.updates)
                     response = await agent.prompt(name, [TextContentBlock(type='text', text=text)])
                     assert response.stop_reason == 'end_turn', response
                     request = fixture.provider.requests[-1]
                     body = user_text(request)
                     (root / f'{label}-request.json').write_text(json.dumps(request, indent=2))
                     assert text in body, body[-100:]
+                    assert 'Write the answer as your reply text' in body
+                    assert fixture.provider.text in json.dumps(subscriber.updates[before_updates:])
                     result['measurements'][label] = {
                         'envelope_bytes': len(body.encode()) - len(text.encode()),
                         'input_bytes': len(body.encode()),
@@ -80,6 +86,7 @@ async def run(root: Path, *, after: bool):
                     thread = comms.registry.require(name)
                     backend = agent.turns.backend_for(name, thread)
                     original_child = backend.custody.idle().child.proc
+                    children.append(original_child)
                     compacted = await backend.compact(thread, 'Preserve the task. Do not invent identity.')
                     assert isinstance(compacted, PlacedCompaction), compacted
                     result['compaction_summary'] = compacted.summary
@@ -90,9 +97,104 @@ async def run(root: Path, *, after: bool):
                     await prompt('after-resume', 'resume-check895')
                     reopened = backend.custody.idle().child.proc
                     assert reopened is not original_child and reopened.alive()
+                    children.append(reopened)
                     result['native_pids'] = [original_child.pid, reopened.pid]
                     result['compaction_and_native_resume'] = True
+                    project = root / 'changed-project'
+                    project.mkdir(mode=0o700)
+                    changed = comms.threads.set_project(name, str(project))
+                    assert changed.changed
+                    await prompt('after-project-change', 'project-check895')
+                    moved = backend.custody.idle().child.proc
+                    assert moved is not reopened and not reopened.alive()
+                    children.append(moved)
+                    result['project_change'] = True
                 result['state'] = 'PASS'
+            assert all(child.retired for child in children)
+            result['all_native_children_retired'] = True
+    except BaseException as error:
+        result.update(state='FAILED_NO_REPLAY', error=repr(error))
+        raise
+    finally:
+        (root / 'result.json').write_text(json.dumps(result, indent=2))
+        print(json.dumps(result), flush=True)
+
+
+async def detached(root: Path):
+    """Actual installed CLI worker and two stdio-ACP attachments, no live roots."""
+    from acp import spawn_agent_process
+    from agent_comms.acp_extension import CompactRequest, encode_request
+    from agent_comms.comms import Comms
+    from agent_comms.runtime import socket_path
+    from explicit_private_owner_installed_journey import cli
+
+    assert 'site-packages' in Path(agent_comms.__file__).parts
+    root.mkdir(mode=0o700)
+    result = {'state': 'unfinished', 'core': agent_comms.__file__,
+              'thread': 'worker895', 'worker_pids': [], 'paid_provider_calls': 0}
+    try:
+        async with native_backend_fixture(root) as fixture:
+            settings = fixture.config / 'settings.json'
+            data = json.loads(settings.read_text())
+            data['compaction']['keepRecentTokens'] = 16
+            settings.write_text(json.dumps(data))
+            await fixture.author_history()
+            comms = Comms(fixture.root)
+            comms.registry.declare(Thread('worker895', frozenset(), str(fixture.project),
+                session_file=str(fixture.session), model='response-local/fixture', thinking_level='off'))
+            env = {key: value for key, value in os.environ.items()
+                   if not key.startswith(('AGENT_COMMS_', 'PI_')) and key != 'PYTHONPATH'}
+            with comms.bus.log.locked():
+                root_id = comms.bus.log.read_metadata_unlocked().root_id
+            env.update(AGENT_COMMS_ROOT=str(fixture.root),
+                AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
+                AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=os.environ['PI_COMPACTION_TEST_PACKAGE'],
+                AGENT_COMMS_NATIVE_CONFIG_DIR=str(fixture.config),
+                PI_CODING_AGENT_DIR=str(fixture.config), AGENT_COMMS_AGENT_BIN='pi',
+                AGENT_COMMS_AGENT_MODELS='response-local/fixture',
+                AGENT_COMMS_AGENT_ARGS='--offline --no-extensions --no-skills --no-context-files --no-tools',
+                PATH=str(Path(sys.executable).parent) + os.pathsep + env.get('PATH', os.defpath))
+            for phase in ('compaction', 'resume'):
+                try:
+                    status, reply, stderr = await cli(env, root, ['--root', str(fixture.root)],
+                                                      {'name': 'worker895'})
+                    assert status == 0 and reply['launched'], (reply, stderr)
+                    owner = comms.registry.require('worker895')
+                    assert owner.pid == reply['pid'] and owner.pid != os.getpid()
+                    result['worker_pids'].append(owner.pid)
+                    async with asyncio.timeout(20):
+                        while not socket_path(comms.root, owner.pid).exists():
+                            assert owner.process_alive
+                            await asyncio.sleep(.05)
+                    subscriber = Subscriber()
+                    async with spawn_agent_process(subscriber, sys.executable, '-m', 'agent_comms.acp',
+                            env=env, cwd=fixture.project) as (connection, process):
+                        async with asyncio.timeout(40):
+                            await connection.initialize(protocol_version=1)
+                            await connection.load_session(cwd=str(fixture.project), session_id='worker895', mcp_servers=[])
+                            if phase == 'compaction':
+                                response = await connection.prompt('worker895', [TextContentBlock(type='text', text='before-compact895')])
+                                assert response.stop_reason == 'end_turn'
+                                await connection.prompt('worker895', [TextContentBlock(type='text', text='')],
+                                    **encode_request(CompactRequest(instructions='Preserve the task.')))
+                                assert any(json.loads(line).get('type') == 'compaction'
+                                           for line in fixture.session.read_text().splitlines())
+                            response = await connection.prompt('worker895', [TextContentBlock(
+                                type='text', text=f'after-{phase}895')])
+                            assert response.stop_reason == 'end_turn'
+                        assert any(fixture.provider.text in str(update) for update in subscriber.updates)
+                    request = fixture.provider.requests[-1]
+                    assert "thread 'worker895'" in system_text(request)
+                    assert repr(str(fixture.project)) in system_text(request)
+                    assert 'Write the answer as your reply text' in user_text(request)
+                    assert 'Maintenance results' not in user_text(request)
+                    (root / f'{phase}-request.json').write_text(json.dumps(request, indent=2))
+                    assert process.returncode is not None
+                    result[phase] = True
+                finally:
+                    await asyncio.to_thread(comms.owners.stop, 'worker895')
+            assert len(set(result['worker_pids'])) == 2
+            result['state'] = 'PASS'
     except BaseException as error:
         result.update(state='FAILED_NO_REPLAY', error=repr(error))
         raise
@@ -105,7 +207,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('root', type=Path)
     parser.add_argument('--after', action='store_true')
+    parser.add_argument('--detached', action='store_true')
     options = parser.parse_args()
     # This is a fresh isolated owner, never the inherited live worker.
     os.environ.pop('AGENT_COMMS_THREAD', None)
-    asyncio.run(run(options.root, after=options.after))
+    asyncio.run(detached(options.root) if options.detached else run(options.root, after=options.after))
