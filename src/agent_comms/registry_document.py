@@ -102,6 +102,9 @@ class RegistryDocument(RegistryPresence):
             last_seen=self.last_seen[thread.name],
             owner_generation=self.owners.generations[thread.name],
             admission_generation=self.admissions.generations[thread.name],
+            names=frozenset({thread.name, *(
+                alias for alias, target in self.aliases.items() if target == thread.name
+            )}),
         )
 
     @classmethod
@@ -124,7 +127,10 @@ class RegistryDocument(RegistryPresence):
                 "threads": own(raw["threads"]),
                 "statuses": own(raw["statuses"]),
                 "last_seen": own(raw["last_seen"]),
-                "aliases": {name: canonical} if name != canonical else {},
+                "aliases": {
+                    alias: target for alias, target in raw["aliases"].items()
+                    if target == canonical
+                },
                 "owners": counter(raw["owners"]),
                 "admissions": counter(raw["admissions"]),
             }
@@ -518,6 +524,10 @@ class RegistryEntry:
     last_seen: float
     owner_generation: int
     admission_generation: int
+    names: frozenset[str]
+
+    def matches_name(self, name: str) -> bool:
+        return name in self.names
 
     @property
     def owner_identity(self) -> OwnerIdentity:

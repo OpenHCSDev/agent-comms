@@ -674,9 +674,9 @@ class InputDrain(InputObservation):
 
     async def awaiting_input_keys(self, session_id: str) -> frozenset[str] | None:
         """Derive delivery notices from existing owner queues; never create new authority."""
-        snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
-        owner = snapshot.require(self.sessions.require(session_id))
-        if owner.pid != os.getpid() or not snapshot.status(owner.name).running:
+        entry = (await self._own_entry(session_id)).entry
+        owner = entry.thread
+        if owner.pid != os.getpid() or not entry.status.running:
             return None
         keys = set(self.input_keys(session_id))
         keys.update(
