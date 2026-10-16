@@ -106,7 +106,6 @@ class ClaudeMonitorFrame(IncomingFrame):
 
 @dataclass
 class ClaudeSession:
-    id: str
     turn: str = ''
     tools: dict[str, ToolCall] = field(default_factory=dict)
     catching_up: bool = True
@@ -145,10 +144,10 @@ class ClaudeHeader(WireHeader):
         # Local slash commands (/login, /cost) are written as user records
         # without a prompt; they never reach the model. Decode that shape here.
         if value.get('type') == 'user':
-            if 'promptId' not in value:
-                return {'type': LocalCommandOutput.wire_tag}
             if value.get('origin', {}).get('kind') == TaskNotification.wire_tag:
                 return {'type': TaskUserRecord.wire_tag}
+            if 'promptId' not in value:
+                return {'type': LocalCommandOutput.wire_tag}
         return value
 
 
@@ -338,21 +337,21 @@ class TaskEnvelope(WireModel, ABC):
         return MonitorTaskNotification(frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
 
     @abstractmethod
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]: ...
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
 
 
 class ForeignTaskNotification(TaskEnvelope):
     text: str
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
         return ()
 
 
 class MonitorTaskNotification(TaskEnvelope):
     frames: tuple[MonitorFrame, ...]
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return tuple(MonitorObservation(frame, session.id,
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return tuple(MonitorObservation(frame,
                                         ObservedMonitor(record.uuid, record.timestamp))
                      for frame in self.frames)
 
@@ -366,8 +365,8 @@ class TaskContent(WireModel):
     def envelope(cls, value: str) -> TaskEnvelope:
         return TaskEnvelope.from_text(value)
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return self.text.updates(record, session)
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return self.text.updates(record)
 
 
 class TaskText(TaskContent):
@@ -376,6 +375,9 @@ class TaskText(TaskContent):
 
 class TaskMessage(ContentBlocks):
     content: list[TaskText]
+
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return tuple(update for block in self.content for update in block.updates(record))
 
 
 class ToolResult(UserBlock, ContentBlocks):
@@ -400,7 +402,6 @@ class UserMessage(ContentBlocks):
 class UserRecord(ClaudeRecord, TimedRecord):
     wire_tag = 'user'
     promptId: str
-    sessionId: str
     message: UserMessage
     origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
     isMeta: bool = False
@@ -412,10 +413,13 @@ class UserRecord(ClaudeRecord, TimedRecord):
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
 
-class TaskUserRecord(UserRecord):
+class TaskUserRecord(ClaudeRecord, TimedRecord):
     wire_tag = 'task-user'
     origin: TaskNotification
     message: TaskMessage
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return self.message.updates(self)
 
 
 class SubtypeHeader(WireHeader):
@@ -504,7 +508,7 @@ class AttachmentPayload(TaggedWire, ABC):
     header = AttachmentHeader
 
     @abstractmethod
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]: ...
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
 
 
 class QueuedTaskNotification(TaskContent, AttachmentPayload):
@@ -516,7 +520,7 @@ class QueuedTaskNotification(TaskContent, AttachmentPayload):
 class ForeignAttachment(AttachmentPayload):
     wire_tag = 'foreign'
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
         return ()
 
 
@@ -525,7 +529,7 @@ class Attachment(ClaudeRecord, TimedRecord):
     attachment: AttachmentPayload.declared_union()
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return self.attachment.updates(self, session)
+        return self.attachment.updates(self)
 
 
 class QueueOperation(MetadataRecord):

@@ -28,7 +28,7 @@ class ClaudeBridge(LineMonitorBridge):
         if len(matches) != 1:
             raise ValueError(f'Expected one Claude transcript for {self.binding.thread}; found {len(matches)}')
         path, = matches
-        session = ClaudeSession(self.binding.thread)
+        session = ClaudeSession()
         last_status: TranscriptUpdate | None = None
         with path.open('rb') as stream:
             original = FileRevision.from_file(stream)

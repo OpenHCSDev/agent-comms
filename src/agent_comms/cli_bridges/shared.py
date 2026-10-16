@@ -916,12 +916,10 @@ MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())
 @dataclass(frozen=True)
 class MonitorObservation(TranscriptUpdate):
     frame: MonitorFrame
-    source_session: str
     record: ObservedMonitor
 
     async def observed(self, bridge: LineMonitorBridge) -> None:
-        if self.source_session == bridge.binding.thread:
-            await self.frame.confirm(bridge, self.record)
+        await self.frame.confirm(bridge, self.record)
 
     def publish(self, output: ThreadOutput) -> None:
         """Delivery is not a second conversation item."""

@@ -37,7 +37,7 @@ def attachment_notification(line, record_id='notification-record'):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('record_factory', (notification, attachment_notification))
-async def test_parts_require_matching_session_and_complete_exact_body_then_reopen(tmp_path, capsys, record_factory):
+async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, record_factory):
     state=tmp_path/'state'
     acknowledgments=[]
     class Core:
@@ -56,12 +56,9 @@ async def test_parts_require_matching_session_and_complete_exact_body_then_reope
         lines=[json.dumps(part,ensure_ascii=False) for part in parts]
         assert len(lines)==7
         assert all(len(line.encode('utf-16-le'))//2 <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
-        for update in record_factory(lines[0]).updates(ClaudeSession('different-session')):
-            await update.observed(bridge)
-        assert MonitorPartRow.select(journal.db)==[]
         # Out-of-order observations and repeated history must not count twice.
         for number in (6,1,3,1,5,2):
-            for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession('session')):
+            for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(bridge)
         assert not acknowledgments
         assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
@@ -69,11 +66,11 @@ async def test_parts_require_matching_session_and_complete_exact_body_then_reope
         bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,journal)
         bridge.core=Core()
         for number in (0,4):
-            for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession('session')):
+            for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(bridge)
         assert acknowledgments==[message.reference]
         for line in lines:
-            for update in record_factory(line,record_id='later-overlap').updates(ClaudeSession('session')):
+            for update in record_factory(line,record_id='later-overlap').updates(ClaudeSession()):
                 await update.observed(bridge)
         assert acknowledgments==[message.reference]
     with closing(DeliveryJournal(state)) as reopened:
@@ -100,7 +97,7 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
         sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
         message=dict(content='Another task producer')))
     assert isinstance(record.message.content[0].text,ForeignTaskNotification)
-    assert record.updates(ClaudeSession('session'))==()
+    assert record.updates(ClaudeSession())==()
     from xml.etree.ElementTree import ParseError
     with pytest.raises(ParseError):
         CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
@@ -115,10 +112,10 @@ def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
         timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='queued_command',
         origin=dict(kind='peer'), prompt='Not a Monitor notification')))
     assert isinstance(record.attachment, ForeignAttachment)
-    assert record.updates(ClaudeSession('session'))==()
+    assert record.updates(ClaudeSession())==()
     queued=CLAUDE_RECORD.validate_python(dict(type='queue-operation', operation='enqueue',
         sessionId='session', content='<task-notification><event>not yet received</event></task-notification>'))
-    assert queued.updates(ClaudeSession('session'))==()
+    assert queued.updates(ClaudeSession())==()
 
 
 @pytest.mark.asyncio
