@@ -31,7 +31,7 @@ from .coordination_tables.publications import PublicationIntents
 from .errors import HumanAdmissionBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
-from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, TypedTable
+from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedRow, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
 from .thread_identity import ThreadIncarnation
@@ -50,6 +50,14 @@ OriginalSource = TypeVar("OriginalSource")
 
 _SEED = hashlib.sha256(b"agent-comms:private-bus-prefix:v1\0").digest()
 _TAIL_BYTES = 4096
+
+
+@dataclass(frozen=True)
+class ContextByteRange(TypedRow):
+    """The byte ranges skipped by the certified public-row iterator."""
+
+    offset: int
+    length: int
 
 
 @dataclass(frozen=True)
@@ -209,17 +217,18 @@ class CertifiedSourceRead:
 
         self.require_open_prefix()
         try:
-            context_rows = self.connection.execute(
+            context_rows = ContextByteRange.read(self.connection.execute(
                 f'SELECT DISTINCT offset,length FROM ('
                 f'SELECT offset,length FROM "{ContextEntrySources.declared_name}" '
                 f'UNION ALL SELECT offset,length FROM "{RecordedContextManifestSources.declared_name}"'
                 f') WHERE offset < ? ORDER BY offset',
                 (self.witness.offset,),
-            ).fetchall()
+            ))
         except sqlite3.Error as error:
             raise RelationViolationError("Checkpoint context-row index is unavailable.") from error
         position = 0
-        for offset, length in (*context_rows, (self.witness.offset, 0)):
+        for region in (*context_rows, ContextByteRange(self.witness.offset, 0)):
+            offset, length = region.offset, region.length
             if offset < position:
                 raise RelationViolationError("Checkpoint context-row ranges overlap.")
             if offset > position:
@@ -351,9 +360,9 @@ class CertifiedSourceRead:
         Callers that consume the selected rows consult the index, then capture
         and decode only those originals.
         """
-        rows = self._addressed_after(bus, lookup, after_seq).fetchall()
+        rows = SqlValue.for_annotation(int).read(self._addressed_after(bus, lookup, after_seq))
         self.require_current()
-        return tuple(seq for seq, in rows)
+        return tuple(rows)
 
     def addressed_page(
         self, bus: WireLog, request: AddressedPage, *, prefix: PrefixWitness | None = None,
@@ -400,15 +409,15 @@ class CertifiedSourceRead:
     def conversation_frontier(self, lookup: str) -> int:
         """Latest original sender/recipient sequence without reconstructing a delivery."""
         self.require_current()
-        row = self.connection.execute(
+        rows = SqlValue.for_annotation(int).read(self.connection.execute(
             f"SELECT coalesce(max(seq), 0) FROM ("
             f"SELECT max(seq) AS seq FROM {DeliverySources.declared_name} "
             "WHERE sender_lookup=? UNION ALL "
             f"SELECT max(seq) AS seq FROM {Addressed.declared_name} WHERE lookup=?"
             ")",
             (lookup, lookup),
-        ).fetchone()
-        return row[0]
+        ))
+        return rows[0]
 
     def conversation_sources(
         self,
@@ -601,7 +610,7 @@ class PublicMessages(CheckpointTable, TypedTable):
 
     @classmethod
     def require_contiguous(cls, db: sqlite3.Connection) -> None:
-        if db.execute(f'SELECT 1 FROM "{cls.declared_name}" WHERE {cls.gap} LIMIT 1').fetchone():
+        if cls.exists(db, where=cls.gap):
             raise HumanAdmissionBlockedError(
                 "Private bus sequence gap has UNKNOWN outcome; "
                 "human send blocked, do not retry."
@@ -609,10 +618,7 @@ class PublicMessages(CheckpointTable, TypedTable):
 
     @classmethod
     def require_unused(cls, db: sqlite3.Connection, sender: str, message_id: str) -> None:
-        if db.execute(
-            f'SELECT 1 FROM "{cls.declared_name}" WHERE sender=? AND message_id=? LIMIT 1',
-            (sender, message_id),
-        ).fetchone():
+        if cls.exists(db, where="sender=? AND message_id=?", parameters=(sender, message_id)):
             raise RelationViolationError(
                 "Human initial ID already exists; inspect its receipt, do not retry."
             )
@@ -708,11 +714,9 @@ class ContextManifestCursor(ABC):
     def descending(self) -> bool: ...
 
     def available(self, connection, owners):
-        exists = connection.execute(
-            f'SELECT 1 FROM "{RecordedContextManifestSources.declared_name}" WHERE '
-            'thread IN (' + ','.join('?' for _ in owners) + ') '
-            f'AND offset {self.comparison} ? LIMIT 1', (*owners, self.offset),
-        ).fetchone()
+        exists = RecordedContextManifestSources.exists(connection,
+            where='thread IN (' + ','.join('?' for _ in owners) + ') '
+            f'AND offset {self.comparison} ?', parameters=(*owners, self.offset))
         return self if exists else None
 
 
@@ -908,13 +912,9 @@ class Addressed(CheckpointTable, TypedTable):
             if witness.revision != source:
                 raise RelationViolationError("Address index does not cover the observed wire")
             marker.seal.check_final(witness, path)
-            row = db.execute(
-                f'SELECT 1 FROM "{cls.declared_name}" '
-                "WHERE lookup=? AND seq>? LIMIT 1",
-                (lookup, after_seq),
-            ).fetchone()
+            found = cls.exists(db, where="lookup=? AND seq>?", parameters=(lookup, after_seq))
         require_captured_sources()
-        return marker, row is not None
+        return marker, found
 
 
 @dataclass(frozen=True)

@@ -226,14 +226,13 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
     def native_contract(cls) -> dict[str, Any]:
         """Generate the native writer's SQLite contract from this declaration."""
         table = cls.declared_name
-        columns = cls.columns()
         return {
             "objects": cls.schema_objects(),
             "columns": [
                 {"name": item.name, "wire": item.metadata.get("wire_name", item.name)}
                 for item in fields(cls)
             ],
-            "insert": f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+            "insert": cls.insertion_statement(),
             "head": f"SELECT COALESCE(MAX(request_generation),0) AS generation FROM {table}",
             "session": f"SELECT session_id AS id FROM {table} ORDER BY session_id LIMIT 1",
             "current": f"SELECT input_id,session_entry_id FROM {table} "

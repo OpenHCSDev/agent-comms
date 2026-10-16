@@ -282,15 +282,25 @@ class ForeignKey:
 
 
 @dataclass(frozen=True)
-class _Field:
-    name: str
-    init: bool
+class SqlValue:
+    """A compiled SQLite value; named record fields add their column declaration."""
+
     annotation: object
-    nullable: bool
     storage: type[SqlStorage]
-    column: Column
-    # The annotation's compiled decoder, resolved with the column.
     value: ValueDecoder
+
+    @classmethod
+    def for_annotation(cls, annotation: object) -> SqlValue:
+        return cls(annotation, SqlStorage.for_type(annotation), compile_decoder(annotation))
+
+    def read(self, cursor: sqlite3.Cursor) -> list:
+        """Read a single-column projection without losing empty or nullable results."""
+        try:
+            if cursor.description is None or len(cursor.description) != 1:
+                raise ValueError("Scalar projection requires exactly one SQLite column")
+            return [self.decode(row[0]) for row in cursor]
+        finally:
+            cursor.close()
 
     def encode(self, value: object) -> object:
         # Validate before SQLite can coerce a wrong Python value into its affinity.
@@ -300,6 +310,14 @@ class _Field:
 
     def decode(self, value: object) -> object:
         return self.value.decode(None if value is None else self.storage.from_sql(value))
+
+
+@dataclass(frozen=True)
+class _Field(SqlValue):
+    name: str
+    init: bool
+    nullable: bool
+    column: Column
 
 
 def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
@@ -319,13 +337,13 @@ class TypedRow:
         hints = get_type_hints(cls, include_extras=True)
         return tuple(
             _Field(
-                item.name,
-                item.init,
-                hints[item.name],
-                _base_type(hints[item.name])[1] or item.metadata.get("sql", Column()).nullable,
-                item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
-                item.metadata.get("sql", Column()),
-                compile_decoder(hints[item.name]),
+                name=item.name,
+                init=item.init,
+                annotation=hints[item.name],
+                nullable=_base_type(hints[item.name])[1] or item.metadata.get("sql", Column()).nullable,
+                storage=item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
+                column=item.metadata.get("sql", Column()),
+                value=compile_decoder(hints[item.name]),
             )
             for item in fields(cls)
         )
@@ -591,17 +609,58 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             raise ValueError(f"Expected one {cls.declared_name} for {tuple(key)}")
         return next(iter(rows), None)
 
+    @classmethod
+    def present(cls, db: sqlite3.Connection) -> bool:
+        return SqlValue.for_annotation(bool).read(db.execute(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)",
+            (cls.declared_name,)))[0]
+
+    @classmethod
+    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = ()) -> bool:
+        return SqlValue.for_annotation(bool).read(db.execute(
+            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {where})",
+            parameters))[0]
+
+    @classmethod
+    def column_values(cls, db: sqlite3.Connection, name: str, *,
+                      where: str = "1", parameters: tuple = ()) -> list:
+        selected, = cls._fields_named((name,))
+        return selected.read(db.execute(
+            f"SELECT {_identifier(selected.name)} FROM {_identifier(cls.declared_name)} WHERE {where}",
+            parameters))
+
+    @classmethod
+    def _insertion_fields(cls, columns: tuple[str, ...] = ()) -> tuple[_Field, ...]:
+        writable = cls._fields_named(columns) if columns else tuple(
+            item for item in cls._fields() if item.column.generated is None)
+        if any(item.column.generated is not None for item in writable):
+            raise ValueError("Generated columns cannot be inserted")
+        return writable
+
+    @classmethod
+    def insertion_statement(cls, columns: tuple[str, ...] = ()) -> str:
+        writable = cls._insertion_fields(columns)
+        return (f"INSERT INTO {_identifier(cls.declared_name)} "
+                f"({cls._column_list(tuple(item.name for item in writable))}) "
+                f"VALUES ({', '.join('?' for _ in writable)})")
+
+    @classmethod
+    def insert_values(cls, db: sqlite3.Connection, **values: object) -> sqlite3.Cursor:
+        writable = cls._insertion_fields(tuple(values))
+        return db.execute(cls.insertion_statement(tuple(item.name for item in writable)),
+                          tuple(item.encode(values[item.name]) for item in writable))
+
     def _insertion(self) -> tuple[str, tuple]:
-        writable = tuple(item for item in self._fields() if item.column.generated is None)
-        return (
-            f"INSERT INTO {_identifier(self.declared_name)} "
-            f"({self._column_list(tuple(item.name for item in writable))}) "
-            f"VALUES ({', '.join('?' for _ in writable)})",
-            tuple(item.encode(getattr(self, item.name)) for item in writable),
-        )
+        writable = self._insertion_fields()
+        return (self.insertion_statement(),
+                tuple(item.encode(getattr(self, item.name)) for item in writable))
 
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         return db.execute(*self._insertion())
+
+    def insert_if_absent(self, db: sqlite3.Connection) -> sqlite3.Cursor:
+        statement, values = self._insertion()
+        return db.execute(statement + " ON CONFLICT DO NOTHING", values)
 
     def upsert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
         """Replace writable values on a declared primary-key conflict."""
