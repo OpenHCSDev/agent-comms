@@ -43,6 +43,8 @@ Earlier family-only measurement was 17.74 ms at H=10,000; the table uses the lat
 
 ## Verification
 
+Qualification: the 42-pass private-installed selection below ran at `d759ec41`, before the shared public revision declaration at `7564d843`. The latter has unchanged-DDL and public-codec roundtrip confirmation plus a successfully built private Core/Toad pair; its physical GoalDetails check has not run. Codex's 12516 migration stop window currently forbids a new UI/provider/build run. No automated Toad tests were run.
+
 - Source: 40 focused checks passed.
 - Current-main private file-wheel installation: **42 passed, zero skipped, 34.35 s**. Includes actual immutable Pi child/owner/CLI lifecycle using controlled localhost provider responses.
 - Native nested goal-history call: one fresh input, one actual checked tool call with OneGoal/Before, exact retained row returned, two provider requests, original authored session prefix preserved, no diagnostic, child retired.
@@ -65,7 +67,7 @@ Removed owner paths: optional retained sequence, optional scope/cursor scalars, 
 - Codex owns current-main integration/default installation. Keep #966's stopped-worker claim carry and UNKNOWN-launch handling intact. Its `_condition()` already serves the public SELECT builder and deletion; do not restore `_query` or a second predicate compiler.
 - Existing goal journals need **four nonunique indexes only** through `tools/cutover/goal_history_indexes.py`, default read-only plan, reviewed apply with old strict writers stopped. Do not use the superseded five-index/unique-pending proposal. No goal rows/table/state labels are rewritten.
 - **Paired Toad migration blocks merge/install.** Core-goal-retry owns it end to end under Claude's explicit 11578 assignment. Toad-close-lifecycle retains #677 only. The owned checkout is `/home/ts/wt/toad-goal-history-pages`, branch `feat/goal-history-pages`. The modal requests Newest/Before pages, renders in returned order and replaces one bounded page rather than accumulating the whole journal. Newest/refresh and Older controls preserve access to the complete history. The paired PR must pin this Core branch and pass isolated plain-st/Xvfb acceptance; no automated Toad tests or synthetic app. Do not install this standalone wheel over newer main work.
-- Separate pre-existing defect: `thread_format_retirement.py` still accesses the removed `Thread.last_goal_report_turn` carrier member. Its earlier 11 preservation failures were reproduced on the untouched baseline; this change migrates its state comparisons but does not claim its carrier contract is repaired. Codex was asked to assign that repair; those failures are not included in the 42-pass selection.
+- Separate pre-existing source-carrier defect: Codex assigned the complete retirement/read-producer contract to change-report (12255). Their #969/#971 repairs retain the original bytes and do not restore the deleted Thread member; the latest recorded-path check waits on core-retry's JsonValue support. This branch only migrates the state comparisons and claims neither that separate repair nor its physical cutover. The earlier 11 baseline failures are not included in the 42-pass selection.
 
 ## Retained evidence and scratch ownership
 
