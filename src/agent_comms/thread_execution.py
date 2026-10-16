@@ -10,6 +10,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
+    from .thread_status import ThreadStatus
     from .threads import Thread
     from .registry_document import RegistrySnapshot
     from .thread_presentation import ThreadPresentation, ThreadOwnerBinding
@@ -41,6 +42,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
     @classmethod
     def native_command_available(cls, command, status, *, owner_pid: int) -> bool:
         return False
+
+    @classmethod
+    def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
+        """The lifecycle a registration installs; Core launched this owner."""
+        return requested
 
     @classmethod
     def restart_candidates(cls, thread: Thread, status):
@@ -121,6 +127,15 @@ class ExternalThreadExecution(ThreadExecution):
     @classmethod
     def require_external(cls) -> None:
         pass
+
+    @classmethod
+    def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
+        """Core launches no process here: the inbox is connected while its bridge lives."""
+        from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus
+
+        if requested.active and thread.process_alive:
+            return ConnectedThreadStatus()
+        return NoBridgeThreadStatus()
 
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,

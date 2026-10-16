@@ -95,6 +95,10 @@ class DisplayBasis:
     def viewer_identity(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.viewer, self.viewer_created_at)
 
+    @property
+    def message_count(self) -> int:
+        return sum(len(item.sequences) for item in self.conversations)
+
     def select(self, sequences: Collection[int]) -> DisplayBasis:
         """Retain painted members of this proof; never introduce new sequences."""
         selected = frozenset(sequences)

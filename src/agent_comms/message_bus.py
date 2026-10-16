@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,6 +19,7 @@ from .read_basis import (
     ChannelDisplayScope,
     DMDisplayScope,
     ListedDeliveries,
+    DisplayBasis,
     MessageDisplayScope,
     WatchAcknowledgment,
 )
@@ -123,8 +124,14 @@ class MessageBus:
         The route index lists which deliveries are unread, as it does for the
         pending counts, and the page index reads only those rows.
         """
-        if snapshot is None:
-            snapshot = self._registry.snapshot()
+        return self._unread(name, target, snapshot or self._registry.snapshot(),
+                            lambda seq: True)
+
+    def _unread(
+        self, name: str, target: str | None, snapshot: RegistrySnapshot,
+        wanted: Callable[[int], bool],
+    ) -> list[Message]:
+        """Decode only the wanted unread deliveries; the route index lists them."""
         catalog = self._channels.read()
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
@@ -133,7 +140,8 @@ class MessageBus:
             with OpenedRouteCounts(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
             ) as index:
-                unread = index.unseen_deliveries(delivery.actor, seen)
+                unread = [row for row in index.unseen_deliveries(delivery.actor, seen)
+                          if wanted(row.seq)]
             if not unread:
                 return []
             listed = ListedDeliveries(
@@ -220,20 +228,30 @@ class MessageBus:
         ) as index:
             return index.unseen_counts({actor: selection.seen})[actor]
 
+    def delivered(
+        self, name: str, references: Sequence[MessageReference]
+    ) -> DisplayBasis:
+        """Read only the named unread messages; the caller marks the basis read.
+
+        The other unread deliveries are neither decoded nor touched.
+        """
+        requested = frozenset(references)
+        sequences = frozenset(reference.seq for reference in requested)
+        snapshot = self._registry.snapshot()
+        messages = tuple(
+            message
+            for message in self._unread(name, None, snapshot, sequences.__contains__)
+            if message.reference in requested
+        )
+        return self.reads.capture(name, messages, snapshot, self.log.path)
+
     def mark_delivered(
         self, name: str, references: Sequence[MessageReference]
     ) -> int:
         """Mark only the named unread messages delivered and return their count."""
-        requested = frozenset(references)
-        snapshot = self._registry.snapshot()
-        messages = tuple(
-            message
-            for message in self.inbox(name, snapshot=snapshot)
-            if message.reference in requested
-        )
-        basis = self.reads.capture(name, messages, snapshot, self.log.path)
+        basis = self.delivered(name, references)
         self.reads.mark_displayed(basis.viewer, basis)
-        return len(messages)
+        return basis.message_count
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
         """Advance a thread's global inbox cursor without loading messages."""

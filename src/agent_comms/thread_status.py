@@ -39,6 +39,12 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
 
         raise RelationViolationError("Retired owner is no longer stopped")
 
+    def require_self_rename(self) -> None:
+        """Only the thread's present participant may rename it."""
+        from .errors import RelationViolationError
+
+        raise RelationViolationError("Only a running thread can rename itself.")
+
     def require_mutable(self, name: str) -> None:
         """Registration/heartbeat may update this thread's presence."""
 
@@ -101,6 +107,9 @@ class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):
     def require_running(self) -> None:
         pass
 
+    def require_self_rename(self) -> None:
+        pass
+
 
 class IdleThreadStatus(ActiveThreadPresence, ThreadStatus):
     pass
@@ -115,6 +124,46 @@ class StoppedThreadStatus(ThreadStatus):
 
     def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
         return show_stopped
+
+
+class ConnectedThreadStatus(RunningThreadStatus):
+    """A CLI inbox whose bridge process is watching it.
+
+    Only the bridge's own registration publishes or retires this presence.
+    """
+
+    def restored(self) -> ThreadStatus:
+        return NoBridgeThreadStatus()
+
+    def after_heartbeat(self, name: str) -> ThreadStatus:
+        self.require_mutable(name)
+        return self
+
+
+class NoBridgeThreadStatus(StoppedThreadStatus):
+    """A CLI inbox with no bridge attached; its messages wait unread.
+
+    It has no launched process to stop or restart, so it stays in every view.
+    """
+
+    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
+        return True
+
+    def restored(self) -> ThreadStatus:
+        return self
+
+    def require_self_rename(self) -> None:
+        """The CLI participant itself calls rename; it needs no bridge."""
+
+    def after_heartbeat(self, name: str) -> ThreadStatus:
+        """A CLI command is not a bridge; only the bridge attaches the inbox."""
+        self.require_mutable(name)
+        return self
+
+    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
+        from .thread_presentation import ThreadPresentation
+
+        return ThreadPresentation(title, "○", "CLI inbox · no bridge")
 
 
 class ArchivedThreadStatus(ThreadStatus):

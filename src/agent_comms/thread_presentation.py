@@ -53,7 +53,7 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
 @dataclass(frozen=True, slots=True)
 class IdleThreadPresentationStatus(ThreadPresentationStatus):
     def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        return replace(ordinary, marker="@", summary="CLI participant")
+        return replace(ordinary, marker="@", summary="CLI inbox · connected")
 
 
 @dataclass(frozen=True, slots=True)

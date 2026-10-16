@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -47,7 +48,7 @@ class TestCliSuccess:
             "--tool",
             "comms_threads",
             "--arguments",
-            '{"active_only": true}',
+            '{"active_only": false}',
         )
         assert code == 0 and out["threads"][0]["name"] == "a"
 
@@ -73,16 +74,48 @@ class TestCliSuccess:
         code, out = cli(tmp_path, "inbox", "--thread", "b")
         assert out == {"messages": []}
 
+    def test_acknowledge_marks_only_its_references_beside_a_reader(self, cli, tmp_path):
+        import fcntl
+        import threading
+        from agent_comms.comms import wire
+
+        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        cli(tmp_path, "register", "--name", "b", "--worktree", "/wt")
+        for body in ("one", "two", "three"):
+            cli(tmp_path, "send", "--from", "a", "--to", "b", "--body", body)
+        comms = wire(tmp_path)
+        second = comms.bus.inbox("b")[1]
+        # A page reader holds the shared wire lock; an acknowledgment must not
+        # wait for it, so it never queues readers behind an exclusive request.
+        with open(tmp_path / ".wire.lock", "rb") as reader:
+            fcntl.flock(reader, fcntl.LOCK_SH)
+            acknowledged = []
+            worker = threading.Thread(target=lambda: acknowledged.append(
+                comms.messaging.acknowledge("b", (second.reference,))))
+            worker.start()
+            worker.join(10)
+            assert not worker.is_alive()
+        assert acknowledged == [1]
+        assert [message.body for message in comms.bus.inbox("b")] == ["one", "three"]
+
     def test_thread_detail_and_stop_and_heartbeat(self, cli, tmp_path):
+        # A CLI registration is an inbox; only an attached process connects it.
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
         code, out = cli(tmp_path, "thread", "--name", "a")
-        assert out["name"] == "a" and out["status"] == "running"
+        assert out["name"] == "a" and out["status"] == "no_bridge"
+        code, out = cli(tmp_path, "heartbeat", "--name", "a")
+        assert out == {"heartbeat": "a"}
+        assert cli(tmp_path, "thread", "--name", "a")[1]["status"] == "no_bridge"
+        from agent_comms.child_process import ProcessIdentity
+        from agent_comms.comms import wire
+
+        with wire(tmp_path).registry.external_process("a", ProcessIdentity.capture(os.getpid())):
+            assert cli(tmp_path, "thread", "--name", "a")[1]["status"] == "connected"
+        assert cli(tmp_path, "thread", "--name", "a")[1]["status"] == "no_bridge"
         code, out = cli(tmp_path, "stop", "--name", "a")
         assert out == {"stopped": "a"}
         code, out = cli(tmp_path, "thread", "--name", "a")
-        assert out["status"] == "stopped"
-        code, out = cli(tmp_path, "heartbeat", "--name", "a")
-        assert out == {"heartbeat": "a"}
+        assert out["status"] == "no_bridge"
 
     def test_archive_retains_thread_declaration(self, cli, tmp_path):
         cli(tmp_path, "register", "--name", "archived", "--worktree", "/wt")
@@ -194,7 +227,7 @@ class TestStatusCommand:
     def test_status_shows_activity(self, cli, tmp_path):
         from agent_comms.activity import ActivityState
 
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt", "--pid", str(os.getpid()))
         from agent_comms.comms import wire
 
         comms = wire(tmp_path)
