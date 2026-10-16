@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 
 from agent_comms.thread_presentation import (
     IdleThreadPresentationStatus,
+    StatusPending,
+    ThreadRetired,
     ThreadPresentation,
     ThreadPresentationStatus,
 )
@@ -20,7 +22,7 @@ from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.delivery import InputDelivery
 
 if TYPE_CHECKING:
-    from agent_comms.ui_model.observation import ThreadsObserved
+    from agent_comms.ui_model.observation import ThreadsObserved, UnreadableHistory
 
 NOTIFICATION_EXCERPT = 110
 
@@ -44,15 +46,7 @@ class ThreadStatusModel:
         return replace(self, presentation=delivery.presentation(self.presentation))
 
     @classmethod
-    def require(cls, row: ThreadStatusModel | None) -> ThreadStatusModel:
-        if row is None:
-            raise ValueError("Thread status has not been acquired")
-        return row
-
-    @classmethod
     def known(cls, name: str, presentation: ThreadPresentation) -> ThreadStatusModel:
-        if presentation is None:
-            raise ValueError(f"Thread {name!r} has no presentation")
         lines = [presentation.summary]
         excerpts = []
         for receipt in presentation.notifications:
@@ -75,9 +69,17 @@ class ThreadStatusModel:
                    summary=tuple(summary))
 
     @classmethod
-    def unavailable(cls, name: str, reason: str = "Agent status unavailable") -> ThreadStatusModel:
+    def pending(cls, name: str) -> ThreadStatusModel:
+        return cls.known(name, StatusPending().presentation(name))
+
+    @classmethod
+    def retired(cls, name: str) -> ThreadStatusModel:
+        return cls.known(name, ThreadRetired().presentation(name))
+
+    @classmethod
+    def unreadable(cls, name: str, error: UnreadableHistory) -> ThreadStatusModel:
         return cls.known(name, ThreadPresentation(
-            name, "○", reason, status=IdleThreadPresentationStatus().with_attention()))
+            name, "!", str(error), status=IdleThreadPresentationStatus().with_attention()))
 
 
 class OpenThreadStatus:
@@ -87,25 +89,25 @@ class OpenThreadStatus:
         self.rows: KeyedModel[str, ThreadStatusModel] = KeyedModel(schedule)
 
     def open(self, name: str) -> ThreadStatusModel:
-        """Admission has an explicit unavailable presentation until observation arrives."""
-        return self.rows.rows.get(name) or ThreadStatusModel.unavailable(
-            name, "Waiting for agent status")
+        """Register the first observation gap; every open view holds a real member."""
+        if name not in self.rows.rows:
+            self.rows.replace({**self.rows.rows, name: ThreadStatusModel.pending(name)})
+        return self.rows.rows[name]
 
     def observed(self, result: ThreadsObserved) -> None:
         """Publish one observation of the open threads.
 
-        A thread whose store was busy keeps its previous row (or shows
-        unavailable until a first read succeeds); the service reads it again.
+        A thread whose store was busy keeps its previous row, or its initial
+        StatusPending member until the service completes its first read.
         """
         rows = {
-            name: (ThreadStatusModel.unavailable(name, "Thread is no longer available")
+            name: (ThreadStatusModel.retired(name)
                    if presentation is None else ThreadStatusModel.known(name, presentation))
             for name, presentation in result.presentations.items()
         }
-        rows.update((name, ThreadStatusModel.unavailable(name, str(error)))
+        rows.update((name, ThreadStatusModel.unreadable(name, error))
                     for name, error in result.unavailable.items())
-        rows.update((name, self.rows.rows.get(name) or ThreadStatusModel.unavailable(name))
-                    for name in result.busy)
+        rows.update((name, self.open(name)) for name in result.busy)
         self.rows.replace(rows)
 
     def clear(self) -> None:
