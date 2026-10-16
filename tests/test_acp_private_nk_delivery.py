@@ -652,7 +652,7 @@ async def test_contended_cursor_refresh_still_invalidates_replaced_owner(tmp_pat
         "agent_comms.cursor_publication.NativeSourceCursor.read", replacement_during_read
     )
     await agent.cursors.publish("beta", "beta")
-    assert updates[-1].status == "busy"
+    assert updates[-1].status == "replaced"
     assert updates[-1].scope.admission_generation > scope.admission_generation
 
 

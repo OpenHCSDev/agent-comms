@@ -139,18 +139,18 @@ class CursorPublication:
                 CoordinationReadUnavailable.raise_from(error)
         except (BlockingIOError, CoordinationReadUnavailable):
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
-            if defer_busy and current == scope:
+            observed = CursorEnvelope.observed(scope, current, revision, BusyCursorObservation())
+            if defer_busy and observed.observation.needs_refresh:
                 raise
-            return CursorEnvelope(current, revision, BusyCursorObservation())
+            return observed
         except (IdentityConflict, StaleFence):
             current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
-            return CursorEnvelope(current, revision, ReplacedOwnerCursorObservation())
+            return CursorEnvelope.observed(
+                scope, current, revision, ReplacedOwnerCursorObservation()
+            )
         current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
-        if current != scope:
-            return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        return CursorEnvelope(
-            scope,
-            revision,
+        return CursorEnvelope.observed(
+            scope, current, revision,
             EmptyCursorObservation() if cursor is None else VerifiedCursorObservation(cursor),
         )
 

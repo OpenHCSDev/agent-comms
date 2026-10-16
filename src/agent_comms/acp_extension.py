@@ -219,23 +219,23 @@ class CursorObservation(DeclaredFamily, affix="CursorObservation"):
         return False
 
 
-@dataclass(frozen=True)
-class UnavailableCursorObservation(CursorObservation):
+class RefreshableCursorObservation(CursorObservation):
+    """Unsettled evidence is revisited without resubmitting any input."""
+
     @property
     def needs_refresh(self) -> bool:
         return True
 
+
+@dataclass(frozen=True)
+class UnavailableCursorObservation(RefreshableCursorObservation):
     @property
     def status(self) -> str:
         return "unavailable"
 
 
 @dataclass(frozen=True)
-class BusyCursorObservation(CursorObservation):
-    @property
-    def needs_refresh(self) -> bool:
-        return True
-
+class BusyCursorObservation(RefreshableCursorObservation):
     @property
     def status(self) -> str:
         return "busy"
@@ -249,12 +249,7 @@ class ReplacedOwnerCursorObservation(CursorObservation):
 
 
 @dataclass(frozen=True)
-class EmptyCursorObservation(CursorObservation):
-    @property
-    def needs_refresh(self) -> bool:
-        # Absence of a durable projection does not settle an original proof.
-        return True
-
+class EmptyCursorObservation(RefreshableCursorObservation):
     @property
     def status(self) -> str:
         return "none"
@@ -294,6 +289,17 @@ class CursorEnvelope:
     @property
     def status(self) -> str:
         return self.observation.status
+
+    @classmethod
+    def observed(
+        cls, original: CursorScope, current: CursorScope | None,
+        revision: int, observation: CursorObservation,
+    ) -> CursorEnvelope:
+        """Bind evidence only to the owner whose read produced it."""
+        return cls(
+            current, revision,
+            observation if current == original else ReplacedOwnerCursorObservation(),
+        )
 
     def same_observation(self, other: CursorEnvelope) -> bool:
         """Publication equality excludes only the local observation revision."""
