@@ -18,8 +18,10 @@ from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_request import ResultRuntimeRequest, RuntimeRequest
+from agent_comms.runtime_socket import RuntimeSocket
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import ToolCaller, NoThreadCaller
 
 
 def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
@@ -53,7 +55,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     assert send.type is InfoKind
     configured = parse(["configure", "--name", "a", "--service-tier", "standard"])
     assert configured.service_tier is ServiceTier.STANDARD
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError, match="invalid choice"):
         parser.parse_args(["configure", "--name", "a", "--service-tier", "fast"])
     restart = parse(["restart", "--all"])
     assert restart.all_ is True
@@ -74,7 +76,8 @@ def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, caps
         help = "Test extension through declaration membership"
         amount: int = option("--amount")
 
-        def apply(self, ctx):
+        def apply(self, ctx, *, caller: ToolCaller):
+            assert isinstance(caller, NoThreadCaller)
             return {"amount": self.amount + 1, "root": str(ctx.root)}
 
     comms = Comms(tmp_path)
@@ -182,9 +185,10 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
             await proxy.request("contract_probe", amount=True)
         with pytest.raises(RuntimeError, match="Unknown fields.*futureExtension"):
             await proxy.request("contract_probe", amount=40, futureExtension=True)
-        with pytest.raises(RuntimeError, match="Unknown runtime request field: kind"):
+        with pytest.raises(RuntimeError, match="Unknown fields.*kind"):
             await proxy.request("contract_probe", amount=40, kind="cancel")
-        reader, writer = await asyncio.open_unix_connection(server.path)
+        with RuntimeSocket(server.path).bound() as destination:
+            reader, writer = await asyncio.open_unix_connection(destination.path)
         try:
             writer.write(b'{"action":"not-a-request","thread":"owner"}\n')
             await writer.drain()

@@ -16,7 +16,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from .cli_commands import CliCommand
-from .tool_caller import ToolCaller
+from .tool_caller import ToolCaller, ThreadCaller
 from .active_route import resolve_comms_route
 from .cli_protocol import CoreError
 from .comms import wire
@@ -38,6 +38,7 @@ class CliArgumentParser(argparse.ArgumentParser):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
+    ThreadCaller.add_cli_arguments(parser, required=False, dest="caller")
     parser.add_argument(
         "--root",
         default=None,
