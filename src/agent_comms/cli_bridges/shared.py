@@ -86,13 +86,16 @@ class DraftAccumulator:
 
 
 class NoPrefixDraft(DraftAccumulator):
-    """An item whose prefix this subscription has not observed."""
+    """No observed prefix; retain no per-item state so the instance can be shared."""
 
     def __init__(self) -> None:
         super().__init__(UnrecordedEventTime())
 
     def append(self, text: str, section: int) -> None:
         """Drop the suffix: without an observed prefix it cannot form a whole item."""
+
+
+NO_PREFIX = NoPrefixDraft()
 
 
 @dataclass
@@ -148,10 +151,7 @@ class ThreadOutput:
             update.publish(self)
 
     def draft(self, key: tuple[str, str]) -> DraftAccumulator:
-        try:
-            return self.drafts[key]
-        except KeyError:
-            return NoPrefixDraft()
+        return self.drafts.get(key, NO_PREFIX)
 
     def start_item(self, update: StartedItem) -> tuple[TranscriptUpdate, ...]:
         key = update.turn_id, update.item_id
