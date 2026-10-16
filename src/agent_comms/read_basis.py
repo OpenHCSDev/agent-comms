@@ -205,6 +205,9 @@ class DMDisplayBasis:
                     for message, _ in records
                 )
         with _store_lock(root / "wire", shared=True), registry.store.reading() as document:
+            # Read progress is not page identity. It only adds seen messages
+            # while these incarnations live; an older-unread result can become
+            # conservative, but another view cannot invalidate this page.
             root_info = root.stat()
             basis = cls(
                 root=str(root.resolve()),

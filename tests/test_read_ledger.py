@@ -8,6 +8,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.threads import Thread
+from tests.read_membership import displayed_sequences
 
 
 def prepared(root):
@@ -25,11 +26,13 @@ def test_conversation_persisted_pairs_decode_once_without_an_encode_round_trip()
     from agent_comms.thread_identity import ThreadIncarnation
 
     conversation = Conversation(participants=(ThreadIncarnation("alice", 1.0),))
-    encoded = conversation.to_wire()
-    assert encoded == {"target": "", "participants": [["alice", 1.0]]}
-    with patch.object(FieldCodec, "encode", side_effect=AssertionError("Already decoded")):
-        assert Conversation.from_wire(encoded) == conversation
-    assert encoded == {"target": "", "participants": [["alice", 1.0]]}
+    from agent_comms.read_ledger import ConversationKey, ReadDocument, ReadProgress
+    document = ReadDocument({ConversationKey(ThreadIncarnation('viewer', 2.0), conversation): ReadProgress(3)})
+    encoded = FieldCodec.encode(document)
+    decoded = FieldCodec.decode(ReadDocument, encoded)
+    with patch.object(FieldCodec, 'encode', side_effect=AssertionError('Already decoded')):
+        assert decoded == document
+        assert next(iter(decoded.messages)).conversation == conversation
 
 
 @pytest.mark.parametrize("raw", [
@@ -43,7 +46,8 @@ def test_conversation_pair_boundary_retains_strict_codec_validation(raw):
     from agent_comms.read_basis import Conversation
 
     with pytest.raises((TypeError, ValueError)):
-        Conversation.from_wire(raw)
+        from agent_comms.field_codec import FieldCodec
+        FieldCodec.decode(Conversation, raw)
 
 
 def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
@@ -98,7 +102,7 @@ def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp
     comms.channels.update_tags("bob", add=frozenset({"team"}))
     reopened = wire(tmp_path)
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
-    seen = reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot())
+    seen = displayed_sequences(reopened, viewer)
     assert hidden.seq not in seen and shown.seq in seen
     assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
 
@@ -136,7 +140,7 @@ def test_agent_sent_dm_includes_independent_human_read(tmp_path):
     displayed = comms.bus.reads.capture(
         "reader", (message,), snapshot, comms.bus.log.path
     )
-    comms.bus.reads.mark_displayed("reader", displayed)
+    comms.bus.reads.mark_displayed("reader", displayed, snapshot=snapshot)
     sender_view = comms.views.thread_presentation("alice")
     assert sender_view is not None
     outcome = next(
@@ -188,7 +192,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     comms.registry.remove("alice")
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     fresh = comms.messaging.send_message("alice", viewer, "new incarnation unseen")
-    assert old.seq not in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert not comms.bus.reads.membership(viewer, comms.registry.snapshot()).contains(old)
     assert comms.bus.pending_count(viewer, "alice") == 1
     assert [row.seq for row in comms.bus.inbox(viewer, "alice")] == [fresh.seq]
 
@@ -222,7 +226,7 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
                 expected_scope=scope,
             )
         comms = wire(tmp_path)
-        seen = comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+        seen = displayed_sequences(comms, viewer)
         assert seen == shown
 
 
@@ -242,9 +246,9 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     basis = comms.bus.reads.capture(
         viewer, page.messages, comms.registry.snapshot(), comms.bus.log.path
     )
-    comms.bus.reads.mark_displayed(viewer, basis)
+    comms.bus.reads.mark_displayed(viewer, basis, snapshot=comms.registry.snapshot())
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
-    assert comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot()) == {2, 4, 6}
+    assert displayed_sequences(comms, viewer) == {2, 4, 6}
 
 
 def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
@@ -263,7 +267,7 @@ def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
 
     with pytest.raises(RelationViolationError, match="checkpoint root/inode/size changed"):
         comms.views.viewer_snapshot(str(tmp_path))
-    assert not comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+    assert not comms.bus.reads.membership(viewer, comms.registry.snapshot()).conversations
 
 
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
@@ -287,7 +291,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
         comms.registry.register(Thread("unrelated", frozenset(), str(tmp_path)))
     reopened = wire(tmp_path)
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
-    assert reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot()) == {
+    assert displayed_sequences(reopened, viewer) == {
         messages[2].seq,
         messages[4].seq,
     }
@@ -401,6 +405,6 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
             )
             assert child.returncode == 9, child.stderr.decode()
             comms = wire(tmp_path)
-        seen = comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
+        seen = displayed_sequences(comms, viewer)
         assert seen <= current_sequences(painted), (seed, index, operation)
         assert seen == current_sequences(acknowledged), (seed, index, operation)
