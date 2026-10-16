@@ -46,7 +46,10 @@ class ThreadStatusModel:
         return replace(self, presentation=delivery.presentation(self.presentation))
 
     @classmethod
-    def known(cls, name: str, presentation: ThreadPresentation) -> ThreadStatusModel:
+    def known(cls, name: str, presentation: ThreadPresentation | None) -> ThreadStatusModel:
+        """Decode the observation's nullable presentation once, for local and foreign views."""
+        if presentation is None:
+            return cls.retired(name)
         lines = [presentation.summary]
         excerpts = []
         for receipt in presentation.notifications:
@@ -100,11 +103,8 @@ class OpenThreadStatus:
         A thread whose store was busy keeps its previous row, or its initial
         StatusPending member until the service completes its first read.
         """
-        rows = {
-            name: (ThreadStatusModel.retired(name)
-                   if presentation is None else ThreadStatusModel.known(name, presentation))
-            for name, presentation in result.presentations.items()
-        }
+        rows = {name: ThreadStatusModel.known(name, presentation)
+                for name, presentation in result.presentations.items()}
         rows.update((name, ThreadStatusModel.unreadable(name, error))
                     for name, error in result.unavailable.items())
         rows.update((name, self.open(name)) for name in result.busy)
