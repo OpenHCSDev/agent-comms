@@ -45,7 +45,8 @@ from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersio
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
 from .native_arguments import NativeArguments
-from .pi_vocabulary import ServiceTier
+from .native_settings import NativeThreadDefaults
+from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
@@ -152,17 +153,20 @@ class TargetField:
         formatter = self.declaration.metadata['editor_format']
         if formatter is not None:
             return formatter(self.value)
-        if self.choices:
+        if self.value is None:
+            return ''
+        if isinstance(self.value, DeclaredFamily):
             return FieldCodec.encode(type(self.value))
-        return ('' if self.value is None else self.value if isinstance(self.value, str)
-                else json.dumps(FieldCodec.encode(self.value)))
+        encoded = FieldCodec.encode(self.value)
+        return encoded if isinstance(encoded, str) else json.dumps(encoded)
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
         if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
             return tuple((member.label, FieldCodec.encode(member))
                          for member in self.annotation.members_with(self.annotation))
-        return ()
+        return tuple((str(value), str(value))
+                     for value in FieldCodec.value_schema(self.annotation).get('enum', ()))
 
     @property
     def required(self) -> bool:
@@ -463,7 +467,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                 result[key] = normalize(text)
             elif isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
                 result[key] = {'kind': text}
-            elif annotation is str or str in get_args(annotation):
+            elif FieldCodec.value_schema(annotation).get('type') == 'string' or str in get_args(annotation):
                 result[key] = text
             else:
                 result[key] = json.loads(text)
@@ -1354,10 +1358,15 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     prompt: str | None = option("--prompt", default=None, multiline=True)
     pi_bin: str = option("--pi-bin", default_factory=NativeArguments.configured_binary)
     project: str = option("--project", parser_default_factory=os.getcwd)
+    model: str = option("--model", parser_default=NativeThreadDefaults.model)
+    thinking_level: type[ThinkingLevel] = option(
+        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level)
 
     @classmethod
     def project_bindings(cls, comms, project):
-        return (cls(name='', project=project),)
+        defaults = NativeThreadDefaults()
+        return (cls(name='', project=project, model=defaults.model,
+                    thinking_level=defaults.thinking_level),)
 
     @classmethod
     def open_targets(cls, result: ThreadCreatedResult) -> tuple[str, ...]:
@@ -1383,7 +1392,8 @@ class ForkCliCommand(NewThreadCliCommand):
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsForkTool
-        return (cls(name='', parent=thread.name, tags=thread.tags, project=thread.worktree),) if CommsForkTool.available_for_thread(thread, status) else ()
+        return (cls(name='', parent=thread.name, tags=thread.tags, project=thread.worktree,
+                    model=thread.model, thinking_level=thread.thinking_level),) if CommsForkTool.available_for_thread(thread, status) else ()
 
 
 @dataclass(frozen=True, kw_only=True)

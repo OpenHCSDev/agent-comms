@@ -35,7 +35,7 @@ from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
 from .owner_launch import RestartEnvironment
 from .owner_lifecycle import OwnerLifecycle
-from .pi_vocabulary import ServiceTier
+from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
@@ -66,9 +66,19 @@ class NewThreadSpec:
 
     name: str
     project: str
+    model: str
+    thinking_level: type[ThinkingLevel]
     task: str = ""
     tags: frozenset[str] | None = None
     prompt: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.model:
+            raise ValueError("Choose a model for the new thread")
+        provider, separator, model = self.model.partition("/")
+        if not separator or not provider or not model:
+            raise ValueError("Choose a provider-qualified model for the new thread")
+        object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
 
     @property
     def initial_prompt(self) -> str:
@@ -81,10 +91,9 @@ class NewThreadSpec:
         project = Path(self.project).expanduser().resolve(strict=True)
         if not project.is_dir():
             raise ValueError(f"Project path is not a directory: {project}")
-        arguments = NativeArguments.configured()
         thread = Thread(name=self.name, task=self.task, tags=self.tags or frozenset(),
-                        worktree=str(project), model=arguments.model,
-                        thinking_level=arguments.thinking)
+                        worktree=str(project), model=self.model,
+                        thinking_level=self.thinking_level)
         threads.registry.require_declaration_available(thread)
         fresh = create_fresh_private_session(threads.root / "sessions", worktree=project)
         with _store_lock(threads._wire_lock_path):
@@ -107,8 +116,8 @@ class ForkSpec(NewThreadSpec):
             task=self.task,
             session_file=session_file,
             process_identity=None,
-            model=parent.model,
-            thinking_level=parent.thinking_level,
+            model=self.model,
+            thinking_level=self.thinking_level,
         )
 
     def _parent(self, threads: ThreadManagement) -> Thread:

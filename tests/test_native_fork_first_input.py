@@ -75,11 +75,14 @@ class ForkOwnerCase(OwnerAdmissionCase):
     repetitions = 900
 
     async def create(self, comms):
+        parent = comms.registry.require("physical-parent")
         return await asyncio.to_thread(
             comms.threads.create,
             ForkSpec(
                 name="physical-child",
-                project=comms.registry.require("physical-parent").worktree,
+                project=parent.worktree,
+                model=parent.model,
+                thinking_level=parent.thinking_level,
                 parent="physical-parent",
                 task="hey Boss",
             ),
