@@ -25,6 +25,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
         return self
 
     @property
+    def tool_calls(self) -> tuple[ToolStartTranscript, ...]:
+        return ()
+
+    @property
     def text_size(self) -> int:
         return 0
 
@@ -200,6 +204,10 @@ class ToolStartTranscript(ToolTranscript):
         from .tool_declaration import ToolDeclaration
 
         return ToolDeclaration.caption(self.tool_name, self.detail)
+
+    @property
+    def tool_calls(self) -> tuple[ToolStartTranscript, ...]:
+        return (self,)
 
 
 @dataclass(frozen=True, kw_only=True)
