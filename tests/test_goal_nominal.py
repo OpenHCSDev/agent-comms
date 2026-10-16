@@ -189,7 +189,7 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner):
 
     comms, goal = owner
     paused = comms.goals.update_goal("worker", PausedGoalAction(), actor=OwnerInvocable)
-    environment = {**os.environ, "AGENT_COMMS_THREAD": "worker"}
+    environment = dict(os.environ)
     result = subprocess.run(
         [
             sys.executable,
@@ -198,6 +198,8 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner):
             "--root",
             str(comms.root),
             "invoke",
+            "--from",
+            "worker",
             "--tool",
             "comms_goal",
             "--arguments",
