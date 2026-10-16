@@ -32,7 +32,7 @@ from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
 if TYPE_CHECKING:
-    from .presentation import BusPresentation
+    from .presentation import BusPresentation, WireRevision
 
 
 class HistoryView(ABC):
@@ -83,6 +83,12 @@ class HistoryView(ABC):
 class ConversationHistoryView:
     """Historical views that present conversation content, not owner state."""
 
+    @classmethod
+    def display_changed_since(cls, revision: WireRevision, earlier: WireRevision) -> bool:
+        """Only stores which can replace the viewer, participants or history source."""
+        return ((revision.registry, revision.history) != (earlier.registry, earlier.history)
+                or revision.bus_replaced_since(earlier))
+
     def page_request(self, scope, traversal, limit, max_bytes) -> MessagePageRequest:
         return ConversationMessagePageRequest(scope, traversal, limit, max_bytes)
 
@@ -103,6 +109,11 @@ class ChannelHistory(HistoryView):
 class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     channel: Channel
     viewer: str | None = None
+
+    @classmethod
+    def display_changed_since(cls, revision: WireRevision, earlier: WireRevision) -> bool:
+        return (revision.catalog != earlier.catalog
+                or super(ChannelDisplayHistory, cls).display_changed_since(revision, earlier))
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
         return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
