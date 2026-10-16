@@ -216,8 +216,9 @@ class DeliveryScope(MessageDisplayScope):
         source = snapshot.threads.get(self.canonical(sender))
         if source is None:
             return None
-        incarnation = source.incarnation
-        if sender_lookup not in incarnation.sender_lookups(incarnation.require_recorded):
+        from .bus_publication import stable_thread_lookup
+
+        if sender_lookup != stable_thread_lookup(source.incarnation.created_at):
             return None
         return max(source.created_at, snapshot.threads[self.actor].created_at)
 

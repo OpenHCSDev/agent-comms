@@ -118,6 +118,27 @@ def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) ->
     assert count == distinct_count
 
 
+def test_missing_checkpoint_is_named_and_cannot_prove_a_source_prefix(tmp_path):
+    from agent_comms.wake_candidate_index import CandidateCheckpoint, NoCandidateCheckpoint
+
+    comms, root_id, _ = _private(tmp_path)
+    comms.messaging.send_initial_cohort('sender', 'Alice', 'unindexed source')
+    index = WakeCandidateIndex(comms.bus.log)
+    with index.writing() as db:
+        state = CandidateCheckpoint.current(db)
+    assert state == NoCandidateCheckpoint()
+    with pytest.raises(ProjectionUnavailableError, match='stale or unrelated'):
+        state.required()
+    with comms.bus.log.path.open('rb') as stream:
+        info = os.fstat(stream.fileno())
+        with pytest.raises(ProjectionRebuildRequiredError, match='initial rebuild'):
+            state.start(stream, info, root_id, rebuild=False)
+        assert state.start(stream, info, root_id, rebuild=False, bootstrap_new=True).byte_offset == 0
+    assert index.maintain(bootstrap_new=True)
+    with index.snapshot() as db:
+        assert CandidateCheckpoint.current(db).required().byte_offset == comms.bus.log.path.stat().st_size
+
+
 def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path):
     comms, root_id, lookup = _private(tmp_path)
     message = comms.messaging.send_initial_cohort('sender', 'Alice', 'fixture')

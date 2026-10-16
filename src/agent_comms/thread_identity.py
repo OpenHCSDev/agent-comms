@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, replace
-from collections.abc import Callable, Iterator
 from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar
 
@@ -50,21 +49,6 @@ class ThreadIncarnation:
     def require_recorded(self) -> None:
         if not self.has_recorded_birth:
             raise ValueError("Thread incarnation requires a positive recorded birth")
-
-    @property
-    def sender_lookup(self) -> str | None:
-        from .bus_publication import stable_thread_lookup
-
-        return stable_thread_lookup(self.created_at) if self.has_recorded_birth else None
-
-    def sender_lookups(self, on_unrecorded: Callable[[], None]) -> Iterator[str]:
-        """Unstamped rows match before a recorded birth is required."""
-        yield ""
-        lookup = self.sender_lookup
-        if lookup is None:
-            on_unrecorded()
-        else:
-            yield lookup
 
     def resolved(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""

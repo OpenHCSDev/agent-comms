@@ -42,23 +42,25 @@ def test_sqlite_connections_and_busy_policy_have_one_owner():
 
 def test_reader_binds_temp_parameters_without_ever_writing_main(tmp_path):
     from agent_comms.bus_route_counts import RouteSenderBindingRow
+    from agent_comms.coordination_database import ReadSnapshot
 
     path = tmp_path / 'coordination.sqlite3'
     with CoordinationStore(path):
         pass
     calls = []
 
-    def bind(connection):
-        calls.append(1)
-        with pytest.raises(sqlite3.OperationalError, match='readonly'):
-            connection.execute('CREATE TABLE main.not_admitted (value TEXT)')
-        RouteSenderBindingRow.create(connection)
-        RouteSenderBindingRow('reader', None).insert(connection)
+    class BoundReader(ReadSnapshot):
+        def bind(self, connection):
+            calls.append(1)
+            with pytest.raises(sqlite3.OperationalError, match='readonly'):
+                connection.execute('CREATE TABLE main.not_admitted (value TEXT)')
+            RouteSenderBindingRow.create(connection)
+            RouteSenderBindingRow('reader', '1' * 32).insert(connection)
 
-    connection = CoordinationStore.read_snapshot(path, bind=bind)
+    connection = BoundReader().acquire(path)
     try:
         assert calls == [1]
-        assert RouteSenderBindingRow.one(connection, sender='reader').sender_lookup is None
+        assert RouteSenderBindingRow.one(connection, sender='reader').sender_lookup == '1' * 32
         assert connection.execute('PRAGMA query_only').fetchone()[0] == 1
         with pytest.raises(sqlite3.OperationalError, match='readonly'):
             connection.execute(f'DELETE FROM "{RouteSenderBindingRow.declared_name}"')

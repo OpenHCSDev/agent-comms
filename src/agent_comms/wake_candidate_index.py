@@ -12,6 +12,7 @@ import json
 import os
 import sqlite3
 import time
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -45,8 +46,25 @@ class CandidateTable:
     """Disposable projections: source identity, recipient hints, and duplicate response keys."""
 
 
+class CandidateCheckpointState(ABC):
+    """A captured checkpoint is either recorded or explicitly not initialized."""
+
+    def start(self, stream, stat: os.stat_result, root_id: str, *, rebuild: bool,
+              bootstrap_new: bool = False) -> CandidateCheckpoint:
+        if rebuild:
+            return CandidateCheckpoint.initial(stat, root_id)
+        return self.resume(stream, stat, root_id, bootstrap_new=bootstrap_new)
+
+    @abstractmethod
+    def resume(self, stream, stat: os.stat_result, root_id: str, *,
+               bootstrap_new: bool) -> CandidateCheckpoint: ...
+
+    @abstractmethod
+    def required(self) -> CandidateCheckpoint: ...
+
+
 @dataclass(frozen=True)
-class CandidateCheckpoint(CandidateTable, TypedTable):
+class CandidateCheckpoint(CandidateCheckpointState, CandidateTable, TypedTable):
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
     version: Literal[3]
     root_id: str
@@ -58,11 +76,24 @@ class CandidateCheckpoint(CandidateTable, TypedTable):
 
 
     @classmethod
-    def current(cls, db: sqlite3.Connection) -> CandidateCheckpoint | None:
+    def current(cls, db: sqlite3.Connection) -> CandidateCheckpointState:
         try:
-            return cls.one(db, singleton=1)
+            rows = cls.select(db, singleton=1)
+            return rows[0] if rows else NoCandidateCheckpoint()
         except (ValueError, TypeError) as error:
             raise ProjectionRebuildRequiredError("candidate index schema is unavailable") from error
+
+    @classmethod
+    def initial(cls, stat: os.stat_result, root_id: str) -> CandidateCheckpoint:
+        return cls(1, 3, root_id, stat.st_dev, stat.st_ino, 0, "", 0)
+
+    def resume(self, stream, stat: os.stat_result, root_id: str, *,
+               bootstrap_new: bool) -> CandidateCheckpoint:
+        self.require_source(stream, stat, root_id)
+        return self
+
+    def required(self) -> CandidateCheckpoint:
+        return self
 
     @property
     def source_identity(self) -> PrefixSource:
@@ -75,6 +106,20 @@ class CandidateCheckpoint(CandidateTable, TypedTable):
             raise ProjectionRebuildRequiredError("candidate bus prefix was truncated")
         if AppendCheckpoint.fingerprint(stream, self.byte_offset) != self.tail_digest:
             raise ProjectionRebuildRequiredError("candidate bus prefix changed")
+
+
+@dataclass(frozen=True)
+class NoCandidateCheckpoint(CandidateCheckpointState):
+    """Schema exists, but no source prefix has been committed yet."""
+
+    def resume(self, stream, stat: os.stat_result, root_id: str, *,
+               bootstrap_new: bool) -> CandidateCheckpoint:
+        if not bootstrap_new:
+            raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
+        return CandidateCheckpoint.initial(stat, root_id)
+
+    def required(self) -> CandidateCheckpoint:
+        raise ProjectionUnavailableError("candidate projection is stale or unrelated")
 
 
 @dataclass(frozen=True)
@@ -187,24 +232,6 @@ class WakeCandidateIndex(TypedStore):
             raise ValueError("max_rows must be between 1 and 256")
         if type(max_bytes) is not int or not 1 <= max_bytes <= WireRecord.max_row_bytes:
             raise ValueError("max_bytes must be a bounded positive byte count")
-
-    @staticmethod
-    def _checkpoint_start(
-        checkpoint: CandidateCheckpoint | None,
-        stream: Any,
-        stat: os.stat_result,
-        root_id: str,
-        *,
-        rebuild: bool,
-        bootstrap_new: bool = False,
-    ) -> CandidateCheckpoint:
-        """Derive replay coordinates from the one originally captured stored row."""
-        if checkpoint is None and not (rebuild or bootstrap_new):
-            raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
-        if rebuild or checkpoint is None:
-            return CandidateCheckpoint(1, 3, root_id, stat.st_dev, stat.st_ino, 0, "", 0)
-        checkpoint.require_source(stream, stat, root_id)
-        return checkpoint
 
     @staticmethod
     def _parse_row(record: dict[str, Any], root_id: str, last_seq: int) -> _ParsedRow:
@@ -343,8 +370,8 @@ class WakeCandidateIndex(TypedStore):
                     # TypedStore installs schema atomically. Capture the stored
                     # row, then release SQL custody before reading or decoding.
                     recorded = CandidateCheckpoint.current(db)
-                checkpoint = self._checkpoint_start(
-                    recorded, stream, stat, root_id,
+                checkpoint = recorded.start(
+                    stream, stat, root_id,
                     rebuild=rebuild, bootstrap_new=bootstrap_new,
                 )
                 batch = self._replay_prefix(
@@ -359,8 +386,8 @@ class WakeCandidateIndex(TypedStore):
                         return batch.next_offset >= source.boundary
                 # Another writer's committed row owns progress. Release SQL
                 # custody before validating its source; never replay a batch.
-                advanced = self._checkpoint_start(
-                    current, stream, os.fstat(stream.fileno()), root_id,
+                advanced = current.start(
+                    stream, os.fstat(stream.fileno()), root_id,
                     rebuild=False,
                 )
                 return advanced.byte_offset >= source.boundary
@@ -402,8 +429,7 @@ class WakeCandidateIndex(TypedStore):
             with self.snapshot() as db:
                 with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
-                    checkpoint = self._checkpoint_start(
-                        CandidateCheckpoint.current(db),
+                    checkpoint = CandidateCheckpoint.current(db).start(
                         stream, stat, root_id, rebuild=False,
                     )
                 return checkpoint
@@ -493,10 +519,9 @@ class WakeCandidateIndex(TypedStore):
                      limit=limit, delivery_only=delivery_only)
         try:
             with self.snapshot() as db:
-                checkpoint = CandidateCheckpoint.current(db)
+                checkpoint = CandidateCheckpoint.current(db).required()
                 if (
-                    checkpoint is None
-                    or checkpoint.root_id != request.root_id
+                    checkpoint.root_id != request.root_id
                     or checkpoint.last_seq < request.required_through_seq
                 ):
                     raise ProjectionUnavailableError("candidate projection is stale or unrelated")

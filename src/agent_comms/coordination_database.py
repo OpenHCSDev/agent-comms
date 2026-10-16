@@ -7,7 +7,6 @@ import sqlite3
 import stat
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -77,6 +76,52 @@ class StoreBusy(StoreContention):
 DEFAULT_STORE_CONTENTION = StoreWait()
 
 
+class ReadSnapshot:
+    """An opened reader owns its preparation, sealing and snapshot admission."""
+
+    @staticmethod
+    def _connection(path: Path, contention: StoreContention) -> sqlite3.Connection:
+        return contention.reader(path.resolve().as_uri() + "?mode=ro")
+
+    def bind(self, connection: sqlite3.Connection) -> None:
+        """An ordinary reader has no connection-local namespace to prepare."""
+
+    def open(
+        self, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
+    ) -> sqlite3.Connection:
+        connection = self._connection(path, contention)
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA foreign_keys=ON")
+            self.bind(connection)
+            connection.execute("PRAGMA query_only=ON")
+            return connection
+        except BaseException:
+            connection.close()
+            raise
+
+    def acquire(
+        self, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
+    ) -> sqlite3.Connection:
+        connection = self.open(path, contention)
+        try:
+            CoordinationStore.begin_snapshot(connection)
+            return connection
+        except BaseException:
+            connection.close()
+            raise
+
+
+class RecoveringReadSnapshot(ReadSnapshot):
+    """SQLite may recover an existing hot journal before sealing this reader."""
+
+    @staticmethod
+    def _connection(path: Path, contention: StoreContention) -> sqlite3.Connection:
+        return CoordinationStore.writer(
+            path.resolve().as_uri() + "?mode=rw", contention, uri=True,
+        )
+
+
 class CoordinationStore:
     """Own SQLite read snapshots and the shared writer busy policy."""
 
@@ -99,53 +144,16 @@ class CoordinationStore:
         _TableName.read(db.execute("SELECT name FROM sqlite_master LIMIT 1"))
 
     @staticmethod
-    def _configure_reader(
-        db: sqlite3.Connection, bind: Callable[[sqlite3.Connection], None] | None = None,
-    ) -> sqlite3.Connection:
-        try:
-            db.row_factory = sqlite3.Row
-            db.execute("PRAGMA foreign_keys=ON")
-            if bind is not None:
-                bind(db)
-            db.execute("PRAGMA query_only=ON")
-            return db
-        except BaseException:
-            db.close()
-            raise
-
-    @classmethod
-    def _open_reader(
-        cls, path: Path, contention: StoreContention,
-        bind: Callable[[sqlite3.Connection], None] | None = None,
-    ) -> sqlite3.Connection:
-        # Bind connection-local parameters while URI mode=ro still forbids
-        # canonical writes; seal query_only before admitting the reader.
-        return cls._configure_reader(
-            contention.reader(path.resolve().as_uri() + "?mode=ro"), bind,
-        )
-
-    @classmethod
-    def _acquire_snapshot(cls, db: sqlite3.Connection) -> sqlite3.Connection:
-        try:
-            cls.begin_snapshot(db)
-            return db
-        except BaseException:
-            db.close()
-            raise
-
-    @classmethod
     def read_snapshot(
-        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
-        *, bind: Callable[[sqlite3.Connection], None] | None = None,
+        path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> sqlite3.Connection:
-        """Bind local parameters, seal read-only access, then acquire one WAL cut."""
-        return cls._acquire_snapshot(cls._open_reader(path, contention, bind))
+        """Acquire one sealed, committed read through the opened reader owner."""
+        return ReadSnapshot().acquire(path, contention)
 
-    @classmethod
-    def recovering_snapshot(cls, path: Path) -> sqlite3.Connection:
-        """Acquire evidence after SQLite is allowed to recover an existing hot journal."""
-        uri = path.resolve().as_uri() + "?mode=rw"
-        return cls._acquire_snapshot(cls._configure_reader(cls.writer(uri, uri=True)))
+    @staticmethod
+    def recovering_snapshot(path: Path) -> sqlite3.Connection:
+        """Acquire evidence after SQLite may recover an existing hot journal."""
+        return RecoveringReadSnapshot().acquire(path)
 
     @staticmethod
     @contextmanager
@@ -154,7 +162,7 @@ class CoordinationStore:
     ):
         """Own a configured read connection whose consumers bound each snapshot."""
         try:
-            with closing(CoordinationStore._open_reader(path, contention)) as db:
+            with closing(ReadSnapshot().open(path, contention)) as db:
                 yield db
         except sqlite3.OperationalError as error:
             CoordinationReadUnavailable.raise_from(error)

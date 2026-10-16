@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from agent_comms.coordination_database import (
     DEFAULT_STORE_CONTENTION,
     CoordinationStore,
+    ReadSnapshot,
     StoreContention,
 )
 from agent_comms.coordination_errors import (
@@ -174,10 +175,10 @@ class ReadNativeCoordinationSession(NativeCoordinationSession):
         self._private_file()
 
     def _open_connection(self, contention: StoreContention) -> sqlite3.Connection:
-        return self._open_reader(self.path, contention)
+        return ReadSnapshot().open(self.path, contention)
 
     def _configure_connection(self) -> None:
-        pass  # _open_reader configured query-only behavior before publication.
+        pass  # The opened reader sealed query-only behavior before publication.
 
     def _initialize_schema(self) -> None:
         pass  # Consumers validate exactly the typed tables they read.

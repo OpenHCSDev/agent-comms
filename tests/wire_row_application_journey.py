@@ -59,11 +59,14 @@ def main(root: Path) -> None:
     )
     assert len(page.entries) == 1
     assert page.entries[0].message_id == message.message_id
+    assert comms.bus.pending_counts('Alice') == {'sender': 1}
+    assert [row.message_id for row in comms.bus.inbox('Alice')] == [message.message_id]
     assert log.path.read_bytes() == before
     receipt = {
         "accepted": True, "package": agent_comms.__file__, "python": sys.executable,
         "physical_limit": WireRecord.max_row_bytes, "row_bytes": len(before),
         "batch_bytes": 1, "complete_read": True, "candidate_page": True,
+        "bound_route_counts_and_inbox": True,
         "original_written_bytes_unchanged": True, "provider_called": False,
     }
     (root / "result.json").write_text(json.dumps(receipt, indent=2) + "\n")

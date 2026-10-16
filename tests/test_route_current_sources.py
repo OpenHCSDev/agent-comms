@@ -52,29 +52,25 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound):
         assert measured() <= initial + 32
 
 
-def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
+def test_unstamped_and_zero_birth_sources_cannot_match_current_delivery(tmp_path):
     c = wire(tmp_path)
     c.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
     viewer = c.messaging.user_identity(str(tmp_path)).name
     original = c.messaging.send_message('sender', viewer, 'assigned source')
     with c.bus.snapshot(viewer=viewer) as (basis, source):
+        current = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
+        ordinary, = PublicWireRecord(original).delivery_messages()
+        assert not current.unread(ordinary, basis.registry, basis.seen)
         threads = dict(basis.registry.threads)
         threads['sender'] = replace(threads['sender'], created_at=0.0)
         recorded = replace(basis.registry, threads=threads)
         scope = DeliveryScope.capture(viewer, recorded, basis.catalog)
-        # The existing public-record owner supplies the unstamped saved format;
-        # a current send always has an assigned stamp, even publish_ordinary.
-        ordinary, = PublicWireRecord(original).delivery_messages()
-        assert scope.unread(ordinary, recorded, basis.seen)
-        with OpenedRouteCounts(c.bus.log.path, source, recorded, {viewer: scope}) as index:
-            bindings = index._request_bindings((viewer,))
-            assert 'senders' not in bindings and 'unrecorded' not in bindings
-            assert list(recorded.threads['sender'].incarnation.sender_lookups(lambda: None)) == ['']
-            assert RouteSenderBindingRow.one(index.connection, sender='sender').sender_lookup is None
-            with pytest.raises(sqlite3.OperationalError, match='user-defined function'):
-                index.unseen_counts({viewer: basis.seen})
-        # The read never grants the same participant identity-bound publication.
-        with pytest.raises(ValueError, match='positive recorded birth'):
+        with pytest.raises(ValueError, match='creation identity is unavailable'):
+            scope.unread(ordinary, recorded, basis.seen)
+        with pytest.raises(ValueError, match='creation identity is unavailable'):
+            with OpenedRouteCounts(c.bus.log.path, source, recorded, {viewer: scope}):
+                pytest.fail('A namespace without creation identity cannot be admitted')
+        with pytest.raises(ValueError, match='creation identity is unavailable'):
             scope.minimum_timestamp('sender', viewer, '1'*32, recorded)
 
 
