@@ -388,7 +388,7 @@ class BusRouteCounts:
         size = revision.size if revision is not None else 0
         if source is not None:
             # Touching or unlinking a retained inode does not change its cut.
-            # The source owns read custody; the row owns projection continuity.
+            # Read the captured open file; the stored row checks index continuity.
             if revision.identity != FileIdentity.from_stat(os.fstat(source.fileno())):
                 raise RelationViolationError(
                     "Route projection source changed before its captured read"
