@@ -312,7 +312,10 @@ async def second(value):
     if value == "three": return 3
 '''} )
     status, report = repo.compare(before, head)
-    assert status == 0
+    # This checks the three-arm dispatch measure's scope. The separate
+    # family measure also reports these literal comparisons.
+    assert status == 1
+    assert report["head"][f"FamilyFlattened:{repo.root}/scope.py"] > 0
     assert report["head"][f"StringDispatch:{repo.root}/scope.py"] == 0
     assert report["head"][f"StringDispatchArms:{repo.root}/scope.py"] == 0
 
