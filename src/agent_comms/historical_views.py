@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -190,30 +192,27 @@ class HistorySource:
             raise ValueError("Recorded provenance lost original wire custody")
 
     @classmethod
-    def require(cls, archive: HistoryArchive, key: str) -> HistorySource:
-        source = next((item for item in archive.sources() if item.key == key), None)
+    def require(cls, sources: tuple[HistorySource, ...], key: str) -> HistorySource:
+        source = next((item for item in sources if item.key == key), None)
         if source is None:
             raise ValueError("Historical source detached; refresh history")
         source.validate()
         return source
 
-    def notification_references(self, archive: HistoryArchive, references):
-        """Borrow this attached namespace's frozen deliveries and durable receipts."""
+    def notification_references(self, sources: tuple[HistorySource, ...], references):
+        """Read this namespace within its archive's current catalogue read."""
         from functools import partial
 
         from .presentation import MessageNotification
 
-        def require_selected():
-            if self.require(archive, self.key) != self:
-                raise ValueError("Historical source changed; refresh history")
-
-        require_selected()
+        if self.require(sources, self.key) != self:
+            raise ValueError("Historical source changed; refresh history")
         root = Path(self.root)
         result = MessageNotification.read_references(
             WireLog(root / "bus.jsonl"), references,
             partial(MessageNotification.recorded_delivery_window, root, self.provenance),
         )
-        require_selected()
+        self.validate()
         return result
 
 
@@ -336,6 +335,19 @@ class HistoryArchive:
         except FileNotFoundError:
             return ()
         return FieldCodec.decode(tuple[HistorySource, ...], raw)
+
+    @contextmanager
+    def read_sources(self) -> Iterator[tuple[HistorySource, ...]]:
+        """Decode one read's catalogue; reject changes without decoding it again."""
+        revision = FileRevision.capture(self.path)
+        sources = self.sources()
+        self._require_revision(revision)
+        yield sources
+        self._require_revision(revision)
+
+    def _require_revision(self, revision: FileRevision | None) -> None:
+        if FileRevision.capture(self.path) != revision:
+            raise ValueError("Historical source catalogue changed; refresh history")
 
     def attach(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Snapshot a preserved source, then publish it for ordinary display.

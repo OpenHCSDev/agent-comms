@@ -342,8 +342,9 @@ class ReadRecordedNotifications(ReadNotifications):
     def read(self, comms: Comms):
         from agent_comms.historical_views import HistorySource
 
-        source = HistorySource.require(comms.bus.history, self.source)
-        return source.notification_references(comms.bus.history, self.references)
+        with comms.bus.history.read_sources() as sources:
+            source = HistorySource.require(sources, self.source)
+            return source.notification_references(sources, self.references)
 
     def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
         return revision.history != previous.history
