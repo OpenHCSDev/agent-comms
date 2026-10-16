@@ -85,13 +85,6 @@ class TurnState:
     def started_at(self) -> float | None:
         return self.active.started_at if self.active is not None else None
 
-    @property
-    def busy_time(self):
-        from .recorded_time import RecordedEventTime, UnrecordedEventTime
-
-        return (RecordedEventTime(self.active.started_at) if self.active is not None
-                else UnrecordedEventTime())
-
     def matches(self, turn_id: str | None) -> bool:
         return turn_id is None or (self.managed_id or self.finished_turn_id) == turn_id
 

@@ -19,7 +19,6 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .private_path import FileRevision
-from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .store_files import (
     _append_jsonl,
     _atomic_write_text,
@@ -62,39 +61,12 @@ class ActivityState(Enum):
     def busy(self) -> bool:
         return bool(self.presentation_status.working_members(self))
 
-    def busy_time(self, activity):
-        if not self.busy or activity.timestamp <= 0:
-            return UnrecordedEventTime()
-        return activity.interval.busy_since.continued_from(activity.timestamp)
-
     @property
     def retires_thread(self) -> bool:
         return self is self.DELETED
 
     def presentation(self, title: str, detail: str) -> ThreadPresentation:
         return self.presentation_status.activity_presentation(title, self.value, detail)
-
-
-@dataclass(frozen=True)
-class ActivityInterval:
-    state_since: EventTime = field(default_factory=UnrecordedEventTime)
-    busy_since: EventTime = field(default_factory=UnrecordedEventTime)
-
-    def continued(self, previous, event):
-        original_at = previous.timestamp if previous.timestamp > 0 else event.timestamp
-        state = (self.state_since.continued_from(original_at)
-                 if event.state is previous.state else RecordedEventTime(event.timestamp))
-        busy = UnrecordedEventTime()
-        if event.state.busy:
-            busy = (self.busy_since.continued_from(original_at) if previous.state.busy
-                    else RecordedEventTime(event.timestamp))
-        return type(self)(state, busy)
-
-    def projected(self, before: ActivityState, after: ActivityState):
-        if before is after:
-            return self
-        return type(self)(UnrecordedEventTime(), self.busy_since
-                          if before.busy and after.busy else UnrecordedEventTime())
 
 
 @dataclass(frozen=True)
@@ -243,8 +215,6 @@ class ActivityData:
     timestamp: float = field(
         default_factory=time.time, metadata={"wire_name": "ts", "wire_required": True}
     )
-    interval: ActivityInterval = field(default_factory=ActivityInterval, kw_only=True,
-                                       metadata={"wire_omit_default": True})
 
     @classmethod
     def format_detail(cls, detail: str) -> str:
@@ -253,8 +223,7 @@ class ActivityData:
 
     def with_status(self, state: ActivityState, detail: str) -> Self:
         """Project current status without changing this activity's provenance."""
-        return replace(self, state=state, detail=self.format_detail(detail),
-                       interval=self.interval.projected(self.state, state))
+        return replace(self, state=state, detail=self.format_detail(detail))
 
     def ordinary_presentation(self, title: str) -> ThreadPresentation:
         """Activity alone; the view joins readiness after selecting its source."""
@@ -300,13 +269,12 @@ class ObservedActivity(ActivityData):
     @classmethod
     def acquire(cls, event: Activity, owner: OwnerIdentity) -> ObservedActivity:
         return cls(event.thread, event.state, event.detail, event.timestamp,
-                   interval=event.interval,
                    readiness=DrainReadiness.acquire(event.diagnostic, owner))
 
     def source_event(self) -> Activity:
         """Write through the original event boundary; never persist a second state."""
         return Activity(self.thread, self.state, self.detail, self.timestamp,
-                        self.readiness.source_diagnostic(), interval=self.interval)
+                        self.readiness.source_diagnostic())
 
     def presentation(self, title: str) -> ThreadPresentation:
         """An acquired activity can also be presented independently of a thread view."""
@@ -403,11 +371,9 @@ class ActivityLog(ThreadOwnedState):
         the log unchanged; an append cannot overtake its own comparison.
         """
         with self._writing() as snapshot:
-            previous = self._observed(thread, snapshot.latest, active=True, now=time.time())
-            event = transition(previous)
+            event = transition(self._observed(thread, snapshot.latest, active=True, now=time.time()))
             if event is None:
                 return False
-            event = replace(event, interval=previous.interval.continued(previous, event))
             _append_jsonl(self._path, FieldCodec.encode(event))
             return True
 

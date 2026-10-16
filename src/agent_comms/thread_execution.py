@@ -68,32 +68,8 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         """External participants report their own activity events."""
         return activity
 
-    @classmethod
-    def busy_time(cls, thread: Thread, activity):
-        return activity.state.busy_time(activity)
-
-    @classmethod
-    def latest_tool(cls, root, thread: Thread):
-        from .external_transcript import ExternalTranscript
-
-        return ExternalTranscript(root, thread.incarnation).latest_tool()
-
 
 class NativeThreadExecution(ThreadExecution):
-    @classmethod
-    def busy_time(cls, thread: Thread, activity):
-        return thread.turn_state.busy_time
-
-    @classmethod
-    def latest_tool(cls, root, thread: Thread):
-        from pathlib import Path
-        from .native_transcript import NativeTranscript
-        from .tool_activity import NativeToolSelectorUnavailable
-
-        if not thread.session_file:
-            return NativeToolSelectorUnavailable()
-        return NativeTranscript(Path(thread.session_file)).latest_tool()
-
     @classmethod
     def native_command_available(cls, command, status, *, owner_pid: int) -> bool:
         return command.available_for(status, owner_pid=owner_pid)

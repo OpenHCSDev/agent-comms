@@ -190,7 +190,7 @@ class TargetField:
             tag = self.annotation.family_discriminator
             if variants and all(set(variant.get('properties', ())) == {tag}
                                 for variant in variants):
-                return tuple((member.label, FieldCodec.encode(member))
+                return tuple((member.declared_name, FieldCodec.encode(member))
                              for member in self.annotation.members_with(self.annotation))
         values = schema.get('enum')
         return None if values is None else tuple((str(value), str(value)) for value in values)

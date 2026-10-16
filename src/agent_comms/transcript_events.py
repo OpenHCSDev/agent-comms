@@ -212,11 +212,6 @@ class ToolStartTranscript(ToolTranscript):
     def tool_calls(self):
         return (self,)
 
-    @property
-    def selection_order(self) -> tuple[bool, float]:
-        # Without a recorded selection time, no known call proves it is newer.
-        return self.timestamp is None, self.timestamp or 0
-
     def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None):
         return (self, ToolEndTranscript(
             tool_call_id=self.tool_call_id, tool_name=self.tool_name,
