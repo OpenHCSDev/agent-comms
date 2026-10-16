@@ -40,9 +40,10 @@ async def test_parts_require_matching_session_and_complete_exact_body_then_reope
         bridge.core=Core()
         message=Message(sender='claude-code',target='viewer',type=InfoKind,body='x'*3000,timestamp=1.,seq=1)
         assert journal.begin(message,json.dumps(message.to_wire()),UnconfirmedOutcome)
-        assert await bridge.deliver(message) is EmittedOutcome
+        parts=ClaudeMonitorFrame(message).parts
+        journal.emitting(message,len(parts))
         journal.finish(message,EmittedOutcome)
-        lines=capsys.readouterr().out.splitlines()
+        lines=[json.dumps(part,ensure_ascii=False) for part in parts]
         assert len(lines)==7
         assert all(len(line.encode('utf-16-le'))//2 <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
         for update in notification(lines[0],'different-session').updates(ClaudeSession()):

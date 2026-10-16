@@ -95,7 +95,7 @@ Put CLI-specific connection options on an `Options` subclass and pass it to
 and cleanup are inherited unchanged. The Codex adapter is `agent_comms.cli_bridges.codex` (command `agent-comms-codex-bridge`).
 Harnesses with line monitors compose `LineMonitorBridge` with `TranscriptBridge`,
 as Claude does. Its decoded session notifications must confirm the fresh startup
-challenge and each complete typed message frame; a pipe write alone stays pending.
+challenge and the complete numbered body parts; a pipe write alone stays pending.
 
 Transcript export is a separate capability still being implemented, represented
 by `TranscriptBridge`. The running service explicitly selects `inbox`. Its shared

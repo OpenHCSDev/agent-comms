@@ -497,6 +497,7 @@ class MonitorAttemptRow(TypedTable, MonitorAttempt):
                 evidence = evidence.accepted(self.parts)
                 evidence.record(bridge.journal, self.id)
         await evidence.confirm(bridge, self, record)
+        bridge.part_observed(self.id, notification.number)
 
 
 class DeliveryJournal:
@@ -759,7 +760,7 @@ class CliBridge(ABC, Generic[BridgeOptions]):
 
     @abstractmethod
     async def deliver(self, message: Message) -> type[Outcome]:
-        """DELIVERED requires harness evidence; emission alone stays pending."""
+        """Record through finish_delivery only on harness evidence, never on a pipe write."""
 
     @abstractmethod
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
@@ -779,10 +780,14 @@ class CliBridge(ABC, Generic[BridgeOptions]):
     def confirm_probe(self, probe: MonitorProbe) -> None:
         """API transports do not use a line monitor."""
 
+    def part_observed(self, message_id: str, number: int) -> None:
+        """API transports do not await monitor part notifications."""
+
     async def finish_delivery(self, message: Message, outcome: type[Outcome],
-                              evidence: MonitorEvidence = UnrecordedMonitor()) -> None:
+                              evidence: MonitorEvidence = UnrecordedMonitor()) -> type[Outcome]:
         self.journal.finish(message, outcome, evidence)
         await outcome.acknowledge(self.core, message)
+        return outcome
 
     async def watch(self) -> None:
         await self.prepare_delivery()
@@ -807,7 +812,6 @@ class CliBridge(ABC, Generic[BridgeOptions]):
                         await self.finish_delivery(message, outcome)
                         continue
                     result = await self.deliver(message)
-                    await self.finish_delivery(message, result)
                     print(f'{result.declared_name}: {message.message_id} from {message.sender}',
                           file=sys.stderr, flush=True)
 
@@ -929,13 +933,16 @@ class MonitorObservation(TranscriptUpdate):
         """Delivery is not a second conversation item."""
 
 
-class LineMonitorBridge(CliBridge[Options]):
-    """Harnesses whose monitor injects each stdout line as a notification."""
+class LineMonitorBridge(TranscriptBridge[Options]):
+    """Monitor delivery requires the same live transcript subscription."""
+
+    operations = (Send, Watch)
 
     def __init__(self, options: Options, binding: Binding, journal: DeliveryJournal) -> None:
         super().__init__(options, binding, journal)
         self.probe = MonitorProbe(session=binding.thread, token=secrets.token_hex(24))
         self.monitor_ready = asyncio.Event()
+        self.part_events: dict[tuple[str, int], asyncio.Event] = {}
 
     async def prepare_delivery(self) -> None:
         print(self.probe.model_dump_json(), flush=True)
@@ -947,6 +954,13 @@ class LineMonitorBridge(CliBridge[Options]):
         if probe == self.probe:
             self.monitor_ready.set()
 
+    def part_observed(self, message_id: str, number: int) -> None:
+        # Watch admits one message at a time. Unknown/startup observations retain
+        # no waiters; there is no mirrored delivery state here, only wake signals.
+        for key, event in self.part_events.items():
+            if key == (message_id, number):
+                event.set()
+
     @staticmethod
     def emit(text: str) -> None:
         # One reversible JSON string per line; no truncation or lost line breaks.
@@ -955,9 +969,19 @@ class LineMonitorBridge(CliBridge[Options]):
     async def deliver(self, message: Message) -> type[Outcome]:
         parts = self.incoming_frame(message).parts
         self.journal.emitting(message, len(parts))
-        for part in parts:
-            self.emit(part)
-        return EmittedOutcome  # Only the complete set of session parts can confirm it.
+        for number, part in enumerate(parts, 1):
+            event = asyncio.Event()
+            key = message.message_id, number
+            self.part_events[key] = event
+            try:
+                self.emit(part)
+                self.journal.finish(message, EmittedOutcome)
+                # Monitor may combine stdout writes into one capped event. The
+                # session's observation, not a timer, releases the next part.
+                await event.wait()
+            finally:
+                del self.part_events[key]
+        return self.journal.outcome(message)
 
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
         self.emit(self.sent_text(result, target, body))
