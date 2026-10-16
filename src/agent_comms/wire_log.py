@@ -26,7 +26,7 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
-from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
+from .bus_page_index import BusPageIndex, StaleBusPageIndexError
 from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
@@ -102,15 +102,6 @@ class OpenedWireSnapshot:
         finally:
             stream.seek(position)
 
-    def require_page_index_coverage(self, index: BusPageIndex) -> None:
-        if self.stream is None or self.revision is None:
-            raise RelationViolationError("Index coverage requires an opened wire source")
-        saved = BusPageSource.one(index.connection, singleton=1)
-        if saved is None:
-            raise StaleBusPageIndexError("Page index has no prepared source")
-        if not saved.covers(self.stream, self.revision):
-            raise StaleBusPageIndexError("Page index does not cover its opened source")
-
     def query_page_index[T](
         self, read: Callable[[BusPageIndex], T], *, empty: Callable[[], T]
     ) -> T:
@@ -118,13 +109,14 @@ class OpenedWireSnapshot:
         if self.stream is None:
             return empty()
         access = self.metadata.access
-        with access.open_page_index(Path(self.stream.name)) as index:
+        with BusPageIndex(Path(self.stream.name)) as index:
             try:
-                with access.prepare_page_index(index, self):
+                with index.prepared(self):
                     return read(index)
             except StaleBusPageIndexError:
-                access.repair_page_index(index)
-            with access.prepare_page_index(index, self):
+                access.require_append()
+                index.invalidate()
+            with index.prepared(self):
                 return read(index)
 
     def indexed_records(self, index: BusPageIndex, rows, *, before_offset: int):
