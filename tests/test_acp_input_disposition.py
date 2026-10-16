@@ -15,7 +15,6 @@ from acp.schema import TextContentBlock
 from agent_comms import backend
 from agent_comms import pi_commands as commands
 from agent_comms import pi_events as pi
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp_failure import RequestFailure
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, QueuePromptRequest, SteerPromptRequest, decode_updates, encode_request
 from agent_comms.child_process import BoundedRun, ExitedOutcome
@@ -27,13 +26,12 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
-from agent_comms.threads import Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
-from stored_inputs import stored_inputs
+from stored_inputs import sent_text, stored_inputs
 from test_backend_native_lifecycle import native_backend
 
 
@@ -44,6 +42,21 @@ class Updates:
     async def session_update(self, *, session_id, update):
         self.rows.append(update if isinstance(update, dict) else
                          update.model_dump(by_alias=True, exclude_none=True))
+
+
+async def prepare_sender(native, owner, session):
+    """Declare the real author and the saved recipient's selected-work participant."""
+    def prepare():
+        comms = owner._comms
+        receiver = comms.registry.require(session)
+        lookup = receiver.incarnation.require_recorded().lookup
+        comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+        with Coordination(str(native.root / "coordination.sqlite3")) as store:
+            install_private_cohort_schema(store)
+            store.participants.register(lookup, session, session, committed=True)
+        return lookup
+
+    return await Coordination.run_worker(prepare)
 
 
 async def wait_for(predicate):
@@ -90,8 +103,14 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
     await native.author_history()
     saved = native.session.read_bytes()
     native.provider.response_gate = asyncio.Event()
-    acknowledgements = []
+    acknowledgements, sent = [], []
     decode = PiRpcChannel.decode_record
+    command_bytes = PiRpcChannel.command_bytes
+
+    def observed_command(command):
+        if isinstance(command, commands.Prompt):
+            sent.append(command)
+        return command_bytes(command)
 
     def observed_response(raw, **options):
         event = decode(raw, **options)
@@ -100,6 +119,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
         return event
 
     monkeypatch.setattr(PiRpcChannel, "decode_record", staticmethod(observed_response))
+    monkeypatch.setattr(PiRpcChannel, "command_bytes", staticmethod(observed_command))
     async with native.open_owner(runtime_enabled=True) as (owner, session):
         turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
         attachment = canonical_agent(owner._comms, auto_wake=False)
@@ -128,6 +148,10 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             unknown = stored_inputs(owner.inputs.dispositions.root).lookup(key)
             assert unknown.unresolved and unknown.has_native_binding
             assert not unknown.has_started  # Original RPC ACK is not native STARTED.
+            command, = (command for command in sent if command.id == public_id)
+            assert command.input_id == unknown.native_id
+            assert command.message.endswith("followup")
+            assert unknown.sent_digest.matches(command.message)
             assert len(native.saved_inputs()) == 2 and native.provider.posts == 1
             if second_start:
                 native.provider.response_gate.set()
@@ -147,7 +171,11 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             assert final[key].unresolved is (not second_start)
             assert final[key].has_started is second_start
             assert len({row.native_id for row in final.values()}) == 2
-            assert sent_text(native, final[key]).endswith("followup")
+            assert final[key].sent_digest == unknown.sent_digest
+            if second_start:
+                assert sent_text(native, final[key]) == command.message
+            else:
+                assert all("followup" not in json.dumps(message) for message in native.saved_inputs())
             assert len(native.saved_inputs()) == (3 if second_start else 2)
             overview = await proxy.request("input_dispositions", include_history=True)
             assert overview["inputs"] == []
@@ -226,21 +254,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
     async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
         comms = owner._comms
         root_id = owner._private_nk_wire_root_id
-        receiver = await Coordination.run_worker(partial(comms.registry.require, session))
-        lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
-
-        def prepare():
-            comms.registry.register(
-                Thread(
-                    name="sender", tags=frozenset(), worktree=str(native.project),
-                    created_at=61001.0,
-                )
-            )
-            with Coordination(str(native.root / "coordination.sqlite3")) as store:
-                install_private_cohort_schema(store)
-                store.participants.register(lookup, session, session, committed=True)
-
-        await Coordination.run_worker(prepare)
+        lookup = await prepare_sender(native, owner, session)
         turn = asyncio.create_task(
             owner.prompt(session, [TextContentBlock(type="text", text="first")])
         )
@@ -276,8 +290,8 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
                 outcome for outcome in sender_view.sent_notifications
                 if outcome.message.reference == message.reference
             )
-            assert sent_read.state.startswith("Read ")
-            assert sent_read.read_at_ms == assignment.updated_at_ms
+            assert sent_read.state.startswith("Read ") and sent_read.progress.read
+            assert sent_read.progress.at_ms == assignment.updated_at_ms
             assert sent_read.changed
             # One turn, two inputs: the prompt and the message, each sent once.
             assert native.provider.posts == 2
@@ -325,21 +339,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
         runtime_enabled=True, auto_wake=True, native_options=("--tools", "bash"),
     ) as (owner, session):
         comms = owner._comms
-        receiver = await Coordination.run_worker(partial(comms.registry.require, session))
-        lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
-
-        def prepare():
-            comms.registry.register(
-                Thread(
-                    name="sender", tags=frozenset(), worktree=str(native.project),
-                    created_at=61002.0,
-                )
-            )
-            with Coordination(str(native.root / "coordination.sqlite3")) as store:
-                install_private_cohort_schema(store)
-                store.participants.register(lookup, session, session, committed=True)
-
-        await Coordination.run_worker(prepare)
+        lookup = await prepare_sender(native, owner, session)
         initial = await Coordination.run_worker(partial(
             Comms(native.root, private_initial_writes=True).messaging.send_message,
             "sender", session, "first",
@@ -353,15 +353,18 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 Comms(native.root, private_initial_writes=True).messaging.send_message,
                 "sender", session, "deliver as soon as following input opens",
             ))
-            await wait_for(lambda: session in owner.inputs._idle_private_revisions)
             key = message.seq, message.message_id
             pending, = comms.views.message_notifications([message])[key]
-            assert pending.state == "Sent" and not pending.busy
+            assert not pending.progress.delivered and not pending.progress.read
+            assert not pending.busy
+            assert not any(
+                "deliver as soon as following input opens" in json.dumps(message)
+                for message in native.saved_inputs()
+            )
             open_release.set()
             await asyncio.wait_for(started.wait(), 30)
             in_flight, = comms.views.message_notifications([message])[key]
-            assert in_flight.state == "Sent"
-            assert in_flight.read_at_ms is None
+            assert not in_flight.progress.read
             started_release.set()
             # Opening is the retry trigger; no second bus append or observation
             # tick is needed to reserve the waiting input.
@@ -379,8 +382,10 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             ]
             assert type(assignments[-1].lifecycle) is DeliveredAssignment
             read, = comms.views.message_notifications([message])[key]
-            assert read.state.startswith("Read ") and not read.busy
-            assert read.read_at_ms == assignments[-1].updated_at_ms
+            # A selected turn may also have published its answer by now;
+            # both Read and Answered must retain this input's proved read.
+            assert read.progress.delivered and read.progress.read and not read.busy
+            assert read.progress.at_ms == assignments[-1].updated_at_ms
             assert native.provider.posts == 2
             rows = [json.loads(line) for line in native.session.read_text().splitlines()]
             tool_result = next(
@@ -399,30 +404,20 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             started_release.set()
 
 
-async def test_waiting_messages_follow_the_original_on_the_changed_model(
+async def test_waiting_messages_reach_changed_model_once_in_one_steering_batch(
     native_backend,
 ):
     native = native_backend
     await native.author_history()
+    settings_path = native.config / "settings.json"
+    settings = json.loads(settings_path.read_text())
+    settings["steeringMode"] = "all"
+    settings_path.write_text(json.dumps(settings))
     held = asyncio.Event()
     native.provider.response_gate = held
     async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
         comms = owner._comms
-        receiver = await Coordination.run_worker(partial(comms.registry.require, session))
-        lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
-
-        def prepare():
-            comms.registry.register(
-                Thread(
-                    name="sender", tags=frozenset(), worktree=str(native.project),
-                    created_at=61001.0,
-                )
-            )
-            with Coordination(str(native.root / "coordination.sqlite3")) as store:
-                install_private_cohort_schema(store)
-                store.participants.register(lookup, session, session, committed=True)
-
-        await Coordination.run_worker(prepare)
+        await prepare_sender(native, owner, session)
         turn = asyncio.create_task(
             owner.prompt(session, [TextContentBlock(type="text", text="first")])
         )
@@ -441,23 +436,27 @@ async def test_waiting_messages_follow_the_original_on_the_changed_model(
             await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 3)
             held.set()
             assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
-            # Bus inputs are follow-ups, not steering. Pi's default takes each
-            # separately after the original answer, both using the changed model.
-            assert native.provider.posts == 3
-            first, second = native.provider.requests[1:]
-            for request in (first, second):
-                assert request["model"] == "fixture-second"
-                previous = request["messages"][-2]
-                assert previous["role"] == "assistant"
-                assert previous["content"] == native.provider.text
-            assert "first question" in json.dumps(first["messages"])
-            assert "second question" not in json.dumps(first["messages"])
+            # Busy bus deliveries steer at the next boundary (0712b1e1d).
+            # Explicit all-mode takes both distinct inputs in one model call.
+            assert native.provider.posts == 2
+            request = native.provider.requests[1]
+            assert request["model"] == "fixture-second"
+            assert any(
+                message["role"] == "assistant" and message["content"] == native.provider.text
+                for message in request["messages"]
+            )
             assert all(
-                body in json.dumps(second["messages"])
+                body in json.dumps(request["messages"])
+                and body not in json.dumps(native.provider.requests[0]["messages"])
                 for body in ("first question", "second question")
             )
             rows = stored_inputs(owner.inputs.dispositions.root).rows
             assert len(rows) == 3 and all(row.has_started for row in rows.values())
+            assert len({row.native_id for row in rows.values()}) == 3
+            assert len({row.turn_id for row in rows.values()}) == 1
+            assert len(native.saved_inputs()) == 4
+            for body in ("first question", "second question"):
+                assert sum(body in sent_text(native, row) for row in rows.values()) == 1
         finally:
             held.set()
             turn.cancel()
@@ -544,9 +543,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
     native.provider.response_gate = held
     async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
         comms = owner._comms
-        receiver = await Coordination.run_worker(partial(comms.registry.require, session))
-        lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
-        comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+        lookup = await prepare_sender(native, owner, session)
         try:
             first = comms.messaging.send_message("sender", session, "which parser is slow?")
             await owner.inputs.drain_inbox(session)
