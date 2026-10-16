@@ -5,11 +5,14 @@ from __future__ import annotations
 
 import argparse
 import ast
+import io
 import json
 import subprocess
+import tokenize
 import typing
 from abc import abstractmethod
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
 from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
@@ -99,8 +102,12 @@ class ChangedSource:
     """One head module and the new-side lines changed by its Git patch."""
 
     path: str
-    tree: ast.Module
+    source: bytes
     lines: frozenset[int]
+
+    @cached_property
+    def tree(self) -> ast.Module:
+        return ast.parse(self.source, self.path)
 
     @classmethod
     def read(cls, repo: Path, base: str, head: str, path: str) -> ChangedSource:
@@ -114,7 +121,7 @@ class ChangedSource:
                 start = int(span[0])
                 count = int(span[1]) if len(span) == 2 else 1
                 lines.update(range(start, start + count))
-        return cls(path, ast.parse(git(repo, "show", f"{head}:{path}"), path), frozenset(lines))
+        return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines))
 
 
 class CleanChangedLines:
@@ -157,6 +164,33 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
     def site_lines(node: ast.AST) -> range:
         line = node.end_lineno if isinstance(node, ast.Attribute) else node.lineno
         return range(line, line + 1)
+
+    @classmethod
+    def prose_lines(cls, source: bytes, tree: ast.Module) -> frozenset[int]:
+        docstrings: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                match node.body:
+                    case [ast.Expr(value=ast.Constant(value=str()) as value), *_]:
+                        docstrings.update(range(value.lineno, value.end_lineno + 1))
+        found: set[int] = set()
+        for token in tokenize.tokenize(io.BytesIO(source).readline):
+            if token.type == tokenize.COMMENT or (
+                token.type == tokenize.STRING and token.start[0] in docstrings
+            ):
+                for line, text in enumerate(token.string.splitlines(), token.start[0]):
+                    if any(word in text.casefold() for word in cls.words):
+                        found.add(line)
+        return frozenset(found)
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        tree = ast.parse(source, filename)
+        return sum(cls.occurrences(node) for node in ast.walk(tree)) + len(cls.prose_lines(source, tree))
+
+    @classmethod
+    def count_changed(cls, source: ChangedSource) -> int:
+        return super().count_changed(source) + len(cls.prose_lines(source.source, source.tree) & source.lines)
 
 
 class FunctionLocalImport(PerFileMeasure):
