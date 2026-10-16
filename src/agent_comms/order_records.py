@@ -101,7 +101,7 @@ class VerdictRow(TypedTable):
         return self.goal.owner.name
 
     def add(self, connection) -> None:
-        if not self.insert_if_absent(connection).rowcount:
+        if self.insert_if_absent(connection).rowcount == 0:
             raise OrderRecordError(f"Tool call {self.tool_call} already has a verdict on this order.")
 
 
