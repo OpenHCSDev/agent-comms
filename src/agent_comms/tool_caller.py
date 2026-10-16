@@ -98,7 +98,7 @@ class ThreadCaller(ToolCaller):
 
     @classmethod
     def from_json(cls, payload: str) -> ThreadCaller:
-        return cls(ThreadIncarnation.from_json(payload).require_recorded())
+        return cls(ThreadIncarnation.from_json(payload))
 
     @property
     def name(self) -> str:
