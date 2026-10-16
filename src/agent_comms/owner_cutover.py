@@ -7,6 +7,8 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
+from .owner_launch import LaunchRuntime
+
 if TYPE_CHECKING:
     from .maintenance_barrier import MaintenanceState
     from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult
@@ -109,7 +111,11 @@ class StoppedOwnerInstallation(OwnerCutover):
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
         self.after_stopped(stopped.lifecycle)
         self.bind_target_launch(stopped.lifecycle)
-        return stopped.launch()
+        return stopped.launch(self.launch_runtime(stopped))
+
+    def launch_runtime(self, stopped: StoppedOwnerBatch) -> LaunchRuntime:
+        """An installation selects the runtime after publishing its pointer."""
+        return LaunchRuntime.current()
 
     def bind_target_launch(self, lifecycle: OwnerLifecycle) -> None:
         """Bind installed launch authority after conversion, before any launch.
@@ -126,6 +132,9 @@ class StoppedOwnerInstallation(OwnerCutover):
 
 class PreserveOwnerRuntime(StoppedOwnerInstallation):
     """Normal retained restart needs no wire/index installation."""
+
+    def launch_runtime(self, stopped: StoppedOwnerBatch) -> LaunchRuntime:
+        return stopped.handoff.launch_runtime
 
     def require_selection(self, snapshot: RegistrySnapshot, owners: Sequence[Thread]) -> None:
         pass

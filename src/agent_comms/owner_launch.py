@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import shlex
+import sys
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
@@ -16,14 +17,58 @@ from typing import Annotated, ClassVar
 from .child_process import Platform, ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, PathText
-from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
 from .native_arguments import NativeArguments
+from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
 from .registry_document import RegistrySnapshot
 from .threads import Thread
 
 
 class CallingThreadUnavailable(RelationViolationError):
     """The process environment does not declare its owner thread."""
+
+
+@dataclass(frozen=True)
+class LaunchRuntime:
+    """One selected installation for a worker and its native executable."""
+
+    interpreter: Annotated[Path, PathText]
+
+    @classmethod
+    def current(cls) -> LaunchRuntime:
+        # Resolve the directory, not Python's symlink into the shared interpreter.
+        return cls(cls.current_pointer().resolve(strict=True) / "bin/python")
+
+    @staticmethod
+    def current_pointer() -> Path:
+        return Path.home() / ".local/share/agent-comms/current"
+
+    @classmethod
+    def running(cls) -> LaunchRuntime:
+        """Identify the decoder already running, for watcher checks and restoration."""
+        return cls(Path(sys.executable))
+
+    @property
+    def native_entrypoint(self) -> str:
+        return str(self.interpreter.with_name("pi-comms-native"))
+
+    def environment(self, source: Mapping[str, str]) -> dict[str, str]:
+        configuration = replace(
+            RestartEnvironment.inherit(source).for_interpreter(self.interpreter),
+            virtual_env=str(self.interpreter.parent.parent),
+            pythonpath=None,
+        )
+        return configuration.apply_runtime(source)
+
+    def require_available(self) -> None:
+        if not self.interpreter.is_file() or not os.access(self.interpreter, os.X_OK):
+            raise ValueError("Target interpreter is unavailable")
+
+
+class RestoredRuntime(LaunchRuntime):
+    """Original-process recovery preserves its original import environment too."""
+
+    def environment(self, source: Mapping[str, str]) -> dict[str, str]:
+        return dict(source)
 
 
 @dataclass(frozen=True)

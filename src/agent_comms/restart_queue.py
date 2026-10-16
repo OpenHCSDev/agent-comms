@@ -8,29 +8,28 @@ review. No credentials or owner environment are written to the queue.
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import json
 import os
 import sys
 import uuid
-from dataclasses import dataclass, field, replace
-from typing import ClassVar
 from collections.abc import Mapping
-
-from .child_process import ProcessIdentity, ParentedProcess
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
-from .owner_lifecycle import OwnerRestartSelection
-from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
-from .native_arguments import NativeArguments
-from .owner_restart import StoppedOwnerFailure
-from .restart_refusals import RestartRefusal
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import ClassVar
 
-import fcntl
-
+from .child_process import ParentedProcess, ProcessIdentity
 from .comms import Comms, wire
 from .coordinator import Coordination
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
+from .native_arguments import NativeArguments
+from .owner_cutover import PreserveOwnerRuntime
+from .owner_launch import LaunchRuntime, RestartEnvironment, RetainedOwnerLaunch
+from .owner_lifecycle import OwnerRestartSelection
+from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
+from .restart_refusals import RestartRefusal
 from .store_files import _store_lock
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
 
@@ -83,27 +82,34 @@ class RestartTarget:
 
     @classmethod
     def capture(cls, comms: Comms, source: Mapping[str, str]):
+        selected = LaunchRuntime.current()
         runtime = RestartEnvironment.inherit(
-            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode())
+            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), selected)
         )
         return cls(
-            sys.executable,
+            str(selected.interpreter),
             runtime,
-            comms.owners.restart_entrypoint(source[NativeArguments.binary_key]),
+            comms.owners.restart_entrypoint(source[NativeArguments.binary_key], selected),
         )
 
-    def require_watcher(self, comms: Comms) -> None:
-        current = RestartEnvironment.inherit(
-            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode())
-        )
-        if self.interpreter != sys.executable or self.runtime != current:
-            raise ValueError("Watcher target runtime changed")
-        if self.agent_bin != comms.owners.restart_entrypoint(self.agent_bin):
+    @property
+    def launch_runtime(self) -> LaunchRuntime:
+        return LaunchRuntime(Path(self.interpreter))
+
+    def require_available(self, comms: Comms) -> None:
+        self.launch_runtime.require_available()
+        if self.agent_bin != comms.owners.restart_entrypoint(self.agent_bin, self.launch_runtime):
             raise ValueError("Target agent entrypoint differs from reviewed launch authority")
-        if not Path(self.interpreter).is_file() or not os.access(self.interpreter, os.X_OK):
-            raise ValueError("Target interpreter is unavailable")
         if Path(self.agent_bin).is_absolute() and not os.access(self.agent_bin, os.X_OK):
             raise ValueError("Target agent entrypoint is unavailable")
+
+    def require_watcher(self, comms: Comms) -> None:
+        self.require_available(comms)
+        current = RestartEnvironment.inherit(
+            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), self.launch_runtime)
+        )
+        if self.launch_runtime != LaunchRuntime.running() or self.runtime != current:
+            raise ValueError("Watcher target runtime changed")
 
 
 @dataclass(frozen=True)
@@ -167,7 +173,7 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
         target = RestartTarget.capture(comms, launch.environment)
-        target.require_watcher(comms)
+        target.require_available(comms)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with _store_lock(directory / "queue"):
             for _, previous in _records(comms):
@@ -182,15 +188,15 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
                 )
                 _save(directory / f"{result.id}.json", result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
-    _start_watcher(comms.root, target.runtime)
+    _start_watcher(comms.root, target)
     return result
 
 
-def _start_watcher(root: Path, environment: RestartEnvironment) -> ParentedProcess:
+def _start_watcher(root: Path, target: RestartTarget) -> ParentedProcess:
     # The resident watcher inherits only its declared runtime configuration.
     return ParentedProcess.launch(
-        (sys.executable, "-m", "agent_comms.restart_queue", str(root.resolve())),
-        env=environment.encode(),
+        (str(target.launch_runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve())),
+        env=target.runtime.encode(),
     )
 
 
@@ -247,13 +253,15 @@ def step(comms: Comms) -> None:
         if not record.state.attempting:
             continue
         try:
-            (receipt,) = comms.owners.restart_owners(
-                [owner.name],
+            request = OwnerRestartRequest(
+                (owner.name,),
                 expected=record.selection,
                 runtime=record.target.runtime,
                 agent_bin=record.target.agent_bin,
                 source_interpreter=record.source_interpreter,
+                launch_runtime=record.target.launch_runtime,
             )
+            (receipt,) = PreserveOwnerRuntime().restart(comms.owners, request)
         except RestartRefusal as refusal:
             record = record.transition(refusal.queue_state())
         except StoppedOwnerFailure as exc:
