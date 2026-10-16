@@ -631,13 +631,13 @@ class ThreadManagement:
 
 
     def create(self, spec: NewThreadSpec, pi_bin: str | None = None) -> Thread:
-        """Prepare the declared source, then share admission, launch and first input."""
+        """Prepare the session, then register and launch the thread with its first input."""
         resolved_bin = NativeArguments.configured_binary(pi_bin)
         with spec.prepared(self, resolved_bin) as child:
             return self._create_unlocked(spec, resolved_bin, child)
 
     def _create_unlocked(self, spec: NewThreadSpec, pi_bin: str, child: Thread) -> Thread:
-        """One launch/rollback tail for fresh and parent-derived sources."""
+        """Register and launch the thread, removing its declaration if launch fails."""
         # A new incarnation's inbox already starts at its creation time
         # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
         child = self.registry._declare_unlocked(child)

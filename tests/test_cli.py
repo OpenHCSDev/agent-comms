@@ -210,6 +210,10 @@ class TestDeclaredTargetActions:
         assert inherited.keys() == shared.keys() | {'parent'}
         assert all(inherited[name] is item for name, item in shared.items())
         assert ForkCliCommand.apply is NewThreadCliCommand.apply
+        with pytest.raises(TypeError):
+            NewThreadSpec(name='missing-project')
+        with pytest.raises(TypeError):
+            NewThreadCliCommand(name='missing-project')
         comms = wire(tmp_path)
         actions = CliCommand.target_catalog(comms, ProjectTarget(str(tmp_path)), project=str(tmp_path))
         assert [action.declaration for action in actions] == [NewThreadCliCommand]
