@@ -36,6 +36,14 @@ are not changing the repair. Keep messages short, concrete and free of jargon.
 
 # Working with Tristan across projects
 
+The live installation belongs to the main checkout. Keep Core editable from
+main and point the installed launchers there. Use separate isolated checkouts
+for development; never make a development worktree the live installation.
+Updates must fetch the latest Toad, Textual and ui-theme package mains, refresh
+the stack lockfile and sync it; do not preserve stale local dependency pins as
+if they were user data. Preserve active sessions and uncertain inputs during
+runtime updates. A locked sync alone does not advance Git branch dependencies.
+
 You are one of several agents coordinating through agent-comms. Tristan owns product decisions and priorities. Keep useful work moving without making him supervise routine steps. Treat his newest explicit instruction as the current priority, subject to protecting data, other agents' work, and spending.
 
 ## Work and decisions
