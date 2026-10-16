@@ -399,7 +399,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             started_release.set()
 
 
-async def test_waiting_messages_and_a_model_change_reach_the_next_model_call_together(
+async def test_waiting_messages_follow_the_original_on_the_changed_model(
     native_backend,
 ):
     native = native_backend
@@ -441,16 +441,23 @@ async def test_waiting_messages_and_a_model_change_reach_the_next_model_call_tog
             await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 3)
             held.set()
             assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
-            # One further model call took both messages, on the new model.
-            assert native.provider.posts == 2
-            request = native.provider.requests[1]
-            assert request["model"] == "fixture-second"
+            # Bus inputs are follow-ups, not steering. Pi's default takes each
+            # separately after the original answer, both using the changed model.
+            assert native.provider.posts == 3
+            first, second = native.provider.requests[1:]
+            for request in (first, second):
+                assert request["model"] == "fixture-second"
+                previous = request["messages"][-2]
+                assert previous["role"] == "assistant"
+                assert previous["content"] == native.provider.text
+            assert "first question" in json.dumps(first["messages"])
+            assert "second question" not in json.dumps(first["messages"])
             assert all(
-                body in json.dumps(request["messages"])
+                body in json.dumps(second["messages"])
                 for body in ("first question", "second question")
             )
             rows = stored_inputs(owner.inputs.dispositions.root).rows
-            assert all(row.has_started for row in rows.values())
+            assert len(rows) == 3 and all(row.has_started for row in rows.values())
         finally:
             held.set()
             turn.cancel()
