@@ -1,49 +1,39 @@
-# Goal-report retirement: source-runtime contract
+# Current read protocol; old records have one carry
 
-The retained amended720 P operation is the only operation here that retires
-Thread.last_goal_report_turn. It still requires its original stored declaration,
-full committed report/history relation and strict target postimage. It is not
-current-format capture, recorded provenance, or the current claim migration.
-No current Thread field, property, fallback or alternate decoder is added.
+Claude12686 supersedes the shared old-producer projection in #971. Both ends of
+normal acquisition use current declarations. CurrentTypedCapture has no source-
+shape selector or generic old-producer base. CurrentThreadProjection acquires the
+selection and RegistryDocument together; OriginalOwnerRead carries only those
+current facts. The stdio boundary encodes the record once through FieldCodec.
 
-Source bytes remain in Git: amended720 producer
-`1c5ac5a86a5c8550bf82004bff1289658b72184f`; original retirement/control bytes
-`60fa56eccaeff749675346fcc55a1986d2a332b8` under tools/cutover and
- tests/test_goal_report_preservation.py. The unchanged original 11-case control
-file was acquired from that commit and executed under P's actual source and its
-compatible cached metaclass-registry dependency. It was not run against today's
-Thread. The source and original control hashes are recorded in the PR evidence.
-This qualifies those source controls, not an installed old-format release.
+Deleted: RetiredGoalReportProjection, its RetiredOwnerRead transport, the generic
+OriginalTypedCapture source-shape API, the forwarding LiveOwnerReadProjection
+layer, and both legacy fixture default modes. A request for the old projection
+is rejected, not discovered from missing fields or adapted into the current
+shape. There is no old-shape reader in src. Old source/control bytes and earlier
+observations remain in Git, not an executable compatibility path.
 
-OriginalTypedCapture requires an explicit projection. CurrentTypedCapture keeps
-the current projection as its own declaration; the old pilot explicitly chooses
-the retirement projection. The retirement owner validates the actual stored
-source member through dataclasses.fields before acquiring a journal. Old read,
-restart and fixture entrypoints reject a current producer before root access or
-writes. Selection is explicit, never discovered from missing record values.
+RecordedOwnerRead separately owns current recorded acquisition and typed
+FileRevision proofs. It encodes RegistryDocument through that owner's declaration;
+there are no copied thread/alias grammars. Only codec-produced provenance is a
+JSON value. JsonValue handling remains with FieldCodec's existing JSON owner;
+#950's unresolved capability is not worked around in these tools.
 
-OriginalOwnerRead owns the live response declaration at the producer and target.
-RetiredOwnerRead uses a declared registry-to-document wire alias for the converted
-postimage, but keeps selection/history typed. Neither response imports recorded
-acquisition's FileRevision dependency: genuine P does not provide that module.
+## Durable old records
 
-RecordedOwnerRead owns recorded acquisition and its revision proofs in a separate
-module, selected only by RecordedRegistryProjection. It encodes the producer's
-RegistryDocument through that document's declaration; it does not copy the thread
-or alias container grammars. Its target declaration chooses provenance keys.
-Only already-encoded postimages use a JSON-value grammar. RoutingCarryPlan keeps
-the typed response rather than an untyped packet mirror. The read_original_owner
-stdio boundary encodes these records with the producer's public codec before
-JSON; callers must not bypass that boundary.
+The actual one-shot entrypoint is tools/cutover/restart_thread_format.py. Its
+original-process kernel is restart_original_thread_format.py; the existing
+ThreadRetirementCutover in thread_retirement_cutover.py validates complete
+registry/release/history carriers, retains originals and uses OwnerCutover's
+stopped-batch lifetime. GoalReportMemberRetirement belongs only to that tool,
+not the current read protocol. This carry has not been executed or physically
+qualified here. Codex owns reviewed execution/disposition and deletion of the
+one-shot family afterwards. No conversion or install is authorized by this file.
 
-Verified on the configured installed interpreter and actual saved live root:
-current owner selection and recorded-source acquisition strictly decode, and
-explicit old-member retirement refuses the current producer. No input, stop,
-launch, migration or provider call was issued. Current controls cover report
-preservation and early wrong-producer refusal; the unchanged P controls retain
-all original missing/conflicting/pending/uncertain/gap/baseline refusals.
-
-#958's query family, claim migration, old physical-release qualification and
-shared publication remain separate. No installed prefix or original source/root
-bytes were modified by this repair. Detailed receipts remain under the owned
-`.artifacts/goal-report-retirement/` checkout evidence for PR review.
+A bounded shared-lock read of the live root's two authoritative Thread carriers
+found zero last_goal_report_turn rows: 220 registry Threads plus 145 release
+receipt Threads. This is a point-in-time read-only count of 365 carriers, not a
+claim about frozen fixtures, external roots or historical wire. No wire/database
+was opened. Receipt: .artifacts/current-only-capture/live-carrier-count.json.
+Source originals, saved sessions, UNKNOWN inputs and completed effects remain
+untouched. #958 and the separate route-identity/claim carries are not this work.

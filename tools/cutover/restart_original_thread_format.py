@@ -10,9 +10,9 @@ def main():
     from agent_comms.owner_restart import OwnerRestartRequest
     from agent_comms.owner_launch import RestartEnvironment
     from thread_retirement_cutover import ThreadRetirementCutover
-    from owner_read_projection import RetiredGoalReportProjection
+    from thread_format_retirement import GoalReportMemberRetirement
 
-    RetiredGoalReportProjection.require_source_runtime()
+    GoalReportMemberRetirement.require_original_declaration()
     packet = json.load(sys.stdin)
     operation = ThreadRetirementCutover(
         Path(packet['target_python']), packet['target_environment'],
