@@ -17,7 +17,6 @@ from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
 from .owner_lifecycle import OwnerRestartSelection
 from .native_settings import NativeThreadDefaults
-from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
 from .thread_identity import AdmissionIdentity, OwnerIdentity
 
@@ -30,34 +29,22 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class OwnerRestartRequest:
-    names: tuple[str, ...] | None = None
-    agent_bin: str | None = None
-    agent_args: tuple[str, ...] | None = None
-    expected: OwnerRestartSelection | None = None
+    targets: tuple[tuple[OwnerRestartSelection, NativeThreadDefaults], ...]
+    launch_runtime: LaunchRuntime
     runtime: RestartEnvironment | None = None
     source_interpreter: str | None = None
-    launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.current, kw_only=True)
 
-    def validate(self, defaults: NativeThreadDefaults) -> None:
-        # Refuse invalid overrides before fencing or stopping any original owner.
-        selected = defaults
-        if self.agent_bin is not None:
-            selected = replace(selected, binary=self.agent_bin)
-        if self.agent_args is not None:
-            replace(selected, arguments=self.agent_args)
+    def validate(self) -> None:
+        # Refuse invalid selections before fencing or stopping any original owner.
+        names = [selection.name for selection, _ in self.targets]
+        if len(names) != len(set(names)):
+            raise RelationViolationError("Restart contains duplicate owners")
+        for _, native in self.targets:
+            if not native.binary.strip():
+                raise ValueError("Native launch binary cannot be empty")
 
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
-        if self.names is None:
-            return [candidate for thread in snapshot.threads.values()
-                    for candidate in thread.restart_candidates(snapshot.statuses[thread.name])]
-        return list({snapshot.require_active(name).name: snapshot.require_active(name)
-                     for name in self.names}.values())
-
-    def require_selection(self, snapshot: RegistrySnapshot, threads: list[Thread]) -> None:
-        if self.expected is not None:
-            if len(threads) != 1 or threads[0].name != self.expected.name:
-                raise OwnerSelectionChangedRefusal()
-            self.expected.require_current(snapshot)
+        return [selection.require_current(snapshot) for selection, _ in self.targets]
 
     def environment(self, lifecycle: OwnerLifecycle) -> RestartEnvironment:
         self.launch_runtime.require_available()
@@ -72,14 +59,15 @@ class RetiredOwnerLaunch:
     owner: OwnerIdentity
     admission: AdmissionIdentity
     launch: RetainedOwnerLaunch
+    native: NativeThreadDefaults
 
     @classmethod
     def capture_retired(cls, snapshot: RegistrySnapshot, original: Thread,
-                        launch: RetainedOwnerLaunch) -> RetiredOwnerLaunch:
+                        launch: RetainedOwnerLaunch, native: NativeThreadDefaults) -> RetiredOwnerLaunch:
         """Acquire the original post-retirement allocations, never live admission."""
         original.require_local_process(launch.process)
         owner = cls(snapshot.owner_identity(original.name),
-                    snapshot.admission_identity(original.name), launch)
+                    snapshot.admission_identity(original.name), launch, native)
         if owner.owner.incarnation != original.incarnation:
             raise RelationViolationError('Retired owner incarnation changed')
         owner.require_current(snapshot)
@@ -110,17 +98,12 @@ class OwnerRestartHandoff:
     root: str
     owners: tuple[RetiredOwnerLaunch, ...]
     runtime: RestartEnvironment
-    agent_bin: str | None
-    agent_args: tuple[str, ...] | None
     launch_runtime: LaunchRuntime
 
     def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
-        def target(thread, source):
-            native = replace(source.native,
-                binary=lifecycle.restart_entrypoint(source.native.binary, runtime) if self.agent_bin is None else self.agent_bin,
-                arguments=self.agent_args if self.agent_args is not None else source.native.arguments)
+        def target(thread, owner):
             return lifecycle._launch_owner_unlocked(
-                thread, native, environment=self.runtime.apply_runtime(source.environment),
+                thread, owner.native, environment=self.runtime.apply_runtime(owner.launch.environment),
                 launch_runtime=runtime,
             )
 
@@ -132,8 +115,8 @@ class OwnerRestartHandoff:
         if any(owner.launch.interpreter != str(runtime.interpreter) for owner in self.owners):
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
-        return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner_unlocked(
-            thread, source.native, environment=source.environment, launch_runtime=runtime,
+        return self._launch(lifecycle, lambda thread, owner: lifecycle._launch_owner_unlocked(
+            thread, owner.launch.native, environment=owner.launch.environment, launch_runtime=runtime,
         ))
 
     def _launch(self, lifecycle: OwnerLifecycle, launch) -> tuple[OwnerRestartResult, ...]:
@@ -146,7 +129,7 @@ class OwnerRestartHandoff:
         threads = tuple(owner.require_current(snapshot) for owner in self.owners)
         return tuple(OwnerRestartResult(
             thread.name, owner.launch.process.pid,
-            launch(thread, owner.launch).pid,
+            launch(thread, owner).pid,
         ) for thread, owner in zip(threads, self.owners, strict=True))
 
 
@@ -247,7 +230,8 @@ class FencedOwnerBatch:
     def complete(self, cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
         progress = self
         try:
-            for (thread, generation), launch in zip(self.captured, self.launches, strict=True):
+            for (thread, generation), launch, (_, native) in zip(
+                    self.captured, self.launches, self.request.targets, strict=True):
                 self.lifecycle._stop_process(thread, generation)
                 if thread.process_alive:
                     raise RelationViolationError('Owner survived retirement')
@@ -257,7 +241,7 @@ class FencedOwnerBatch:
                 with self.lifecycle.restart_wire():
                     self.lifecycle._require_same_stop_owner(thread, generation)
                     snapshot = self.lifecycle.registry.snapshot()
-                    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
+                    owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch, native)
                 progress = replace(progress, retired=progress.retired + (owner,))
             wire = self.custody.enter_context(self.lifecycle.restart_wire())
             snapshot = self.lifecycle.registry.snapshot()
@@ -267,7 +251,6 @@ class FencedOwnerBatch:
                 owner.require_current(snapshot)
                 progress = replace(progress, retired=progress.retired + (owner,))
             handoff = OwnerRestartHandoff(str(self.lifecycle.root), progress.retired, self.runtime,
-                                         self.request.agent_bin, self.request.agent_args,
                                          self.request.launch_runtime)
             stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, self.custody.pop_all())
         except BaseException as cause:
@@ -292,7 +275,6 @@ class AdmittedOwnerBatch:
             cutover.require_restart_phase(lifecycle)
             snapshot = lifecycle.registry.snapshot()
             threads = request.threads(snapshot)
-            request.require_selection(snapshot, threads)
             cutover.require_selection(snapshot, threads)
             captured = []
             for thread in threads:

@@ -46,6 +46,8 @@ from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
+from .owner_launch import RetainedOwnerLaunch
+from .owner_lifecycle import OwnerRestartSelection
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .change_report import ChangeReport
 from .message_reference import MessageReference
@@ -106,6 +108,7 @@ def option(
     wire_name: str | None = None,
     parser_default: Any = MISSING,
     parser_default_factory: Any = MISSING,
+    setting: Any = MISSING,
     multiline: bool = False,
     target_bound: bool = False,
     editor_format: Callable[[Any], str] | None = None,
@@ -122,6 +125,7 @@ def option(
         "normalize": normalize,
         "parser_default": parser_default,
         "parser_default_factory": parser_default_factory,
+        "setting": setting,
     }
     if wire_name is not None:
         metadata["wire_name"] = wire_name
@@ -431,9 +435,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         bound = self.for_editor(comms, target.name, project)
         return TargetAction((bound,), target.names)
 
-    def run(self, ctx: Comms, output: TextIO) -> int:
+    def run(self, ctx: Comms, output: TextIO, *, overrides: dict[str, Any]) -> int:
         """Run this command and write its declared result."""
-        result = self.apply(ctx)
+        result = self.apply_cli(ctx, overrides)
         json.dump(self.encode_result(result), output, indent=2)
         output.write("\n")
         return self.result_exit_code(result)
@@ -553,7 +557,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
     @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
+    def add_parser(cls, subparsers: Any, settings: NativeThreadDefaults) -> Any:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls)
@@ -583,7 +587,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                 and issubclass(get_args(scalar)[0], DeclaredFamily)
             ):
                 options.setdefault("choices", get_args(scalar)[0].names())
-            if metadata["parser_default"] is not MISSING:
+            if metadata["setting"] is not MISSING:
+                options["default"] = metadata["setting"](settings)
+            elif metadata["parser_default"] is not MISSING:
                 options["default"] = metadata["parser_default"]
             elif metadata["parser_default_factory"] is not MISSING:
                 options["default"] = metadata["parser_default_factory"]()
@@ -605,6 +611,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             else:
                 options.pop("required", None)
             owner.add_argument(*metadata["flags"], **options)
+        return parser
+
+    def apply_cli(self, ctx: Comms, overrides: dict[str, Any]) -> Any:
+        return self.apply(ctx)
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
@@ -924,7 +934,7 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
     def apply(self, ctx: Comms) -> AsyncIterator[Message]:
         return ctx.bus.watch(self.thread)
 
-    def run(self, ctx: Comms, output: TextIO) -> int:
+    def run(self, ctx: Comms, output: TextIO, *, overrides: dict[str, Any]) -> int:
         import asyncio
         from contextlib import aclosing
 
@@ -1273,12 +1283,11 @@ class RestartCliCommand(CliCommand):
         wire_name="all",
         target_bound=True,
     )
-    agent_bin: str | None = option("--agent-bin", default=None)
-    agent_args: list[str] | None = option(
-        "--agent-args",
-        default=None,
-        normalize=_shell_words,
-    )
+    @classmethod
+    def add_parser(cls, subparsers: Any, settings: NativeThreadDefaults) -> Any:
+        parser = super().add_parser(subparsers, settings)
+        NativeThreadDefaults.add_override_arguments(parser)
+        return parser
 
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
@@ -1298,9 +1307,19 @@ class RestartCliCommand(CliCommand):
         return (cls(name=thread.name),)
 
     def apply(self, ctx: Comms) -> Any:
-        results = ctx.owners.restart_owners(
-            None if self.all_ else [self.name], agent_bin=self.agent_bin, agent_args=self.agent_args
-        )
+        return self.apply_cli(ctx, {})
+
+    def apply_cli(self, ctx: Comms, overrides: dict[str, Any]) -> Any:
+        runtime = ctx.runtime
+        snapshot = ctx.registry.snapshot()
+        threads = snapshot.restart_candidates if self.all_ else (snapshot.require_active(self.name),)
+        targets = []
+        for thread in threads:
+            selection = OwnerRestartSelection.capture(snapshot, thread.name)
+            source = RetainedOwnerLaunch.capture(thread, snapshot)
+            values = {"binary": ctx.owners.restart_entrypoint(source.native.binary, runtime), **overrides}
+            targets.append((selection, replace(source.native, **values)))
+        results = ctx.owners.restart_owners(tuple(targets), launch_runtime=runtime)
         return {"restarted": [asdict(result) for result in results]}
 
 
@@ -1364,16 +1383,16 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
-    pi_bin: str = option("--pi-bin", default_factory=NativeThreadDefaults.runtime_binary)
+    pi_bin: str = option("--pi-bin", setting=lambda settings: settings.binary)
     project: str = option("--project", parser_default_factory=os.getcwd)
-    model: str = option("--model", parser_default=NativeThreadDefaults.model)
+    model: str = option("--model", setting=lambda settings: settings.model)
     thinking_level: type[ThinkingLevel] = option(
-        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level)
+        "--thinking-level", setting=lambda settings: settings.thinking_level)
 
     @classmethod
     def project_bindings(cls, comms, project):
-        defaults = ctx.owners.native_defaults
-        return (cls(name='', project=project, model=defaults.model,
+        defaults = comms.owners.native_defaults
+        return (cls(name='', project=project, pi_bin=defaults.binary, model=defaults.model,
                     thinking_level=defaults.thinking_level),)
 
     @classmethod
@@ -1401,6 +1420,7 @@ class ForkCliCommand(NewThreadCliCommand):
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsForkTool
         return (cls(name='', parent=thread.name, tags=thread.tags, project=thread.worktree,
+                    pi_bin=comms.owners.native_defaults.binary,
                     model=thread.model, thinking_level=thread.thinking_level),) if CommsForkTool.available_for_thread(thread, status) else ()
 
 
@@ -1578,7 +1598,11 @@ class StartCliCommand(CliCommand):
         return (result.thread,) if result.launched else ()
 
     def apply(self, ctx: Comms) -> OwnerStartResult:
-        return ctx.owners.start(self.name)
+        return self.apply_cli(ctx, {})
+
+    def apply_cli(self, ctx: Comms, overrides: dict[str, Any]) -> Any:
+        native = replace(ctx.owners.native_defaults, **overrides)
+        return ctx.owners.start(self.name, native=native, launch_runtime=ctx.runtime)
 
 
 @dataclass(frozen=True, kw_only=True)

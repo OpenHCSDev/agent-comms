@@ -21,6 +21,7 @@ from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import Comms
 from .owner_restart import StoppedOwnerFailure
+from .owner_launch import LaunchRuntime
 
 
 def _fail(error: BaseException) -> int:
@@ -47,20 +48,22 @@ def build_parser(settings: NativeThreadDefaults) -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
-        declaration.add_parser(subparsers)
+        declaration.add_parser(subparsers, settings)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         with ExitStack() as route_guard:
-            settings = NativeThreadDefaults.from_runtime()
+            runtime = LaunchRuntime.current()
+            settings = NativeThreadDefaults.from_runtime(runtime)
             args = build_parser(settings).parse_args(argv)
             command = CliCommand.from_namespace(args)
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.admit_client())
-            comms = Comms(route, native=args.native_settings)
-            return command.run(comms, sys.stdout)
+            comms = Comms(route, runtime=runtime)
+            return command.run(comms, sys.stdout,
+                               overrides=NativeThreadDefaults.cli_overrides(args, settings))
     except KeyboardInterrupt:
         return 130
     except StoppedOwnerFailure as exc:

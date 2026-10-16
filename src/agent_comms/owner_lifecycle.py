@@ -254,7 +254,7 @@ class OwnerLifecycle:
             )
 
     def start(
-        self, name: str, *, agent_bin: str | None = None, agent_args: Sequence[str] | None = None
+        self, name: str, *, native: NativeThreadDefaults, launch_runtime: LaunchRuntime
     ) -> OwnerStartResult:
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
@@ -267,12 +267,8 @@ class OwnerLifecycle:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.pid, False)
-            native = self.native_defaults
-            if agent_bin is not None:
-                native = replace(native, binary=agent_bin)
-            if agent_args is not None:
-                native = replace(native, arguments=tuple(agent_args))
-            owner = self._launch_owner_unlocked(thread, native, launch_runtime=LaunchRuntime.current())
+            launch_runtime.require_available()
+            owner = self._launch_owner_unlocked(thread, native, launch_runtime=launch_runtime)
             return OwnerStartResult(owner.name, owner.pid, True)
 
     def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
@@ -292,11 +288,9 @@ class OwnerLifecycle:
 
     def restart_owners(
         self,
-        names: Sequence[str] | None = None,
+        targets: tuple[tuple[OwnerRestartSelection, NativeThreadDefaults], ...],
         *,
-        agent_bin: str | None = None,
-        agent_args: Sequence[str] | None = None,
-        expected: OwnerRestartSelection | None = None,
+        launch_runtime: LaunchRuntime,
         runtime: RestartEnvironment | None = None,
         source_interpreter: str | None = None,
         cutover: OwnerCutover = PreserveOwnerRuntime(),
@@ -309,12 +303,8 @@ class OwnerLifecycle:
         """
         from .owner_restart import OwnerRestartRequest
 
-        request = OwnerRestartRequest(
-            tuple(names) if names is not None else None, agent_bin,
-            tuple(agent_args) if agent_args is not None else None,
-            expected, runtime, source_interpreter,
-        )
-        request.validate(self.native_defaults)
+        request = OwnerRestartRequest(targets, launch_runtime, runtime, source_interpreter)
+        request.validate()
         return cutover.restart(self, request)
 
     @contextmanager
@@ -340,6 +330,7 @@ class OwnerLifecycle:
                 if RestartEnvironment.called_by(
                     thread.name,
                     canonicalize=lambda caller: self.registry.require(caller).name,
+                    environment=os.environ,
                 ):
                     self._release_current_owner_unlocked(thread.name)
                 else:
@@ -450,7 +441,8 @@ class OwnerLifecycle:
 
         with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
-                (str(launch_runtime.interpreter), "-m", "agent_comms.worker", *native.cli_arguments),
+                (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
+                 *native.cli_arguments, *thread.incarnation.cli_arguments),
                 env=env,
                 cwd=thread.worktree,
                 output=output,

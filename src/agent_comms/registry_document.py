@@ -584,6 +584,11 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             raise UnregisteredThreadError("Recipient lookup is not in the original message.")
         return RetiredRecipient(lookup)
 
+    @property
+    def restart_candidates(self) -> tuple[Thread, ...]:
+        return tuple(candidate for thread in self.threads.values()
+                     for candidate in thread.restart_candidates(self.statuses[thread.name]))
+
     def retired(self, name: str) -> bool:
         """Removal keeps the name's generations; they are the deletion record."""
         return name not in self.threads and name in self.admission_generations
