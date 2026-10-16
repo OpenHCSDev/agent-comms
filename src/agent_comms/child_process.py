@@ -829,7 +829,9 @@ async def join_retirement(task: asyncio.Future):
     try:
         while not task.done():
             try:
-                await asyncio.shield(task)
+                # wait does not cancel the original future or replace its own
+                # typed cancellation with shield's synthetic CancelledError.
+                await asyncio.wait((task,))
             except asyncio.CancelledError as error:
                 interrupted = error
         result = task.result()
@@ -867,6 +869,14 @@ class ChildProcess(Sealed, ABC):
     def retired(self) -> bool:
         """Exact child and its owned group are gone, independent of pipe callbacks."""
         return not self.alive() and not self.platform.group_members(self.identity)
+
+    @property
+    def cleanup_complete(self) -> bool:
+        """The original retirement operation completed, including owned IO and reap."""
+        task = self._stop_task
+        if task is None or not task.done():
+            return False
+        return not task.cancelled() and task.exception() is None
 
     @abstractmethod
     async def wait(self) -> ChildOutcome: ...

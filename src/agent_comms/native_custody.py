@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .child_process import AttachedChild
+from .child_process import AttachedChild, join_retirement
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
@@ -29,6 +29,7 @@ class PiSessionChild:
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
     resources: ExitStack = field(default_factory=ExitStack, repr=False)
+    _resource_retirement: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
 
     async def reply_ui(self, response) -> None:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
@@ -61,10 +62,42 @@ class PiSessionChild:
             tail = (tail + chunk)[-16000:]
         return tail.decode(errors="replace").strip()
 
+    @property
+    def retired(self) -> bool:
+        """Receipt for the whole child lifecycle, not merely process death."""
+        if not self.proc.cleanup_complete:
+            return False
+        task = self._resource_retirement
+        if task is None or not task.done():
+            return False
+        return not task.cancelled() and task.exception() is None
+
     async def close(self) -> None:
-        await self.proc.stop()
-        await asyncio.gather(self.stderr_task, return_exceptions=True)
-        self.resources.close()
+        try:
+            await self.proc.stop()
+        except BaseException as error:
+            if not self.proc.retired:
+                raise  # Live or uncertain process custody still needs these resources.
+            try:
+                await self._join_resources()
+            except asyncio.CancelledError:
+                raise  # New caller cancellation still outranks an earlier failure.
+            except BaseException as cleanup_error:
+                raise error from cleanup_error
+            raise
+        else:
+            await self._join_resources()
+
+    async def _join_resources(self) -> None:
+        if self._resource_retirement is None:
+            self._resource_retirement = asyncio.create_task(self._release_resources())
+        await join_retirement(self._resource_retirement)
+
+    async def _release_resources(self) -> None:
+        try:
+            await asyncio.gather(self.stderr_task, return_exceptions=True)
+        finally:
+            self.resources.close()
 
     @asynccontextmanager
     async def failures(self):
@@ -138,7 +171,7 @@ class RetiringNative(NativeCustody):
 
     @property
     def settled(self) -> NativeCustody:
-        return self.successor if self.task.done() and self.child.proc.retired else self
+        return self.successor if self.task.done() and self.child.retired else self
 
     async def closed(self) -> None:
         # Waiting does not cancel the retained task or replace its cancellation

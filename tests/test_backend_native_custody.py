@@ -6,10 +6,84 @@ from uuid import uuid4
 
 import pytest
 
-from agent_comms.child_process import ChildRetirementCancelled, ChildRetirementError
+from agent_comms.child_process import ChildRetirementCancelled, ChildRetirementError, ChildRetirementFailed
 from agent_comms.native_session_reopen import NativeSessionIdentity
 
 pytest_plugins = ("test_backend_native_lifecycle",)
+
+
+@pytest.mark.parametrize("stage", ["release_io", "reap"])
+@pytest.mark.parametrize("fault", [RuntimeError, TimeoutError])
+async def test_stop_failure_accounts_for_native_resources_and_retains_uncertainty(
+    tmp_path, monkeypatch, stage, fault
+):
+    from native_backend_fixture import native_backend_fixture
+    from agent_comms.native_custody import RetiringNative
+
+    failure = fault("lost process cleanup receipt")
+    with pytest.raises(ChildRetirementFailed) as fixture_failure:
+        async with native_backend_fixture(tmp_path) as owner:
+            assert (await owner.run("Before process cleanup receipt failure"))[-1].ok
+            child = owner.persistent.custody.child
+            resource = child.resources.enter_context((tmp_path / "child-resource").open("w"))
+            calls = []
+            if stage == "release_io":
+                def fail_release():
+                    assert child.proc.retired
+                    calls.append(stage)
+                    raise failure
+                monkeypatch.setattr(child.proc, "_release_retired_io", fail_release)
+            else:
+                wait = child.proc.wait
+                async def fail_reap():
+                    await wait()
+                    assert child.proc.retired
+                    calls.append(stage)
+                    raise failure
+                monkeypatch.setattr(child.proc, "wait", fail_reap)
+            with pytest.raises(ChildRetirementFailed) as stopped:
+                await owner.persistent.close_idle()
+            assert stopped.value.__cause__ is failure
+            assert calls == [stage]
+            assert child.proc.retired and not child.proc.cleanup_complete
+            assert child.stderr_task.done() and resource.closed
+            assert not child.retired
+            assert isinstance(owner.persistent.custody, RetiringNative)
+            assert owner.persistent.custody.child is child
+            assert not owner.persistent.available
+            assert owner.provider.posts == len(owner.saved_inputs()) == 1
+    # Fixture teardown still joins all other resources, then reports the cached
+    # failed process receipt; it never clears/retries the original stop task.
+    assert fixture_failure.value.__cause__ is failure
+    assert calls == [stage]
+
+
+async def test_resource_release_failure_retains_exact_native_child(tmp_path):
+    from native_backend_fixture import native_backend_fixture
+    from agent_comms.native_custody import RetiringNative
+
+    failure = RuntimeError("native resource release failed")
+    with pytest.raises(RuntimeError) as fixture_failure:
+        async with native_backend_fixture(tmp_path) as owner:
+            assert (await owner.run("Before resource cleanup receipt failure"))[-1].ok
+            child = owner.persistent.custody.child
+            resource = child.resources.enter_context((tmp_path / "child-resource").open("w"))
+            def fail_release():
+                raise failure
+            child.resources.callback(fail_release)
+            with pytest.raises(RuntimeError) as stopped:
+                await owner.persistent.close_idle()
+            assert stopped.value is failure
+            retirement = child._resource_retirement
+            assert retirement.done() and retirement.exception() is failure
+            assert child.proc.cleanup_complete and child.stderr_task.done() and resource.closed
+            assert not child.retired
+            assert isinstance(owner.persistent.custody, RetiringNative)
+            assert owner.persistent.custody.child is child
+            with pytest.raises(RuntimeError) as repeated:
+                await owner.persistent.close_idle()
+            assert repeated.value is failure and child._resource_retirement is retirement
+    assert fixture_failure.value is failure
 
 
 async def test_actual_native_attestation_refuses_foreign_expected_identity(native_backend):
