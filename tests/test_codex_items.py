@@ -36,7 +36,8 @@ def test_codex_stream_reports_activity_and_finishes_items():
     assert receive("turn/started", turn={"id": "t1"}) == (TurnStarted(),)
     assert receive("item/started", turnId="t1", item=command, startedAtMs=1000) == (
         DraftItem("t1", "c1", (ToolStartTranscript(
-            tool_call_id="c1", tool_name="bash", raw_input={"command": "ls -la"}, timestamp=1.0,
+            tool_call_id="c1", tool_name="bash", raw_input={"command": "ls -la"},
+            detail="ls -la", timestamp=1.0,
         ),)),
         ActiveItem("t1", "c1", ActivityState.WORKING, "Run ls -la"),
     )
@@ -44,10 +45,12 @@ def test_codex_stream_reports_activity_and_finishes_items():
                    delta="a") == ()
     finished, = receive("item/completed", turnId="t1", completedAtMs=2000,
                        item=command | {"status": "completed", "exitCode": 0,
+                                       "command": "ls -la --color=never",
                                        "aggregatedOutput": "a\n"})
     assert finished == FinishedItem("t1", "c1", (
         ToolStartTranscript(tool_call_id="c1", tool_name="bash",
-                            raw_input={"command": "ls -la"}, detail="ls -la", timestamp=1.0),
+                            raw_input={"command": "ls -la --color=never"},
+                            detail="ls -la --color=never", timestamp=1.0),
         ToolEndTranscript(tool_call_id="c1", tool_name="bash", text="a\n", ok=True,
                           timestamp=1.0)))
     thinking = {"type": "reasoning", "id": "r1", "summary": []}
