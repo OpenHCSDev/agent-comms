@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channels import Channel
+from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
 from .message_page import (
     ConversationMessagePageRequest,
@@ -22,17 +23,23 @@ from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
-from .read_basis import ChannelDisplayScope, DisplayBasis, DMDisplayScope, MessageDisplayScope
+from .read_basis import (
+    ChannelDisplayScope, ChannelSelection, DisplayBasis, DisplaySelection,
+    DMDisplayScope, DMSelection, HistoricalSelection, MessageDisplayScope,
+)
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy, ResponsePolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
-from .thread_identity import ThreadProvenance
+from .thread_identity import ThreadIncarnation, ThreadProvenance, UnrecordedThreadIncarnation
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
 if TYPE_CHECKING:
-    from .presentation import BusPresentation
+    from .presentation import BusPresentation, WireRevision
+    from .history_views import HistoryViews
+    from .registry_document import RegistrySnapshot
+    from .catalog_document import CatalogDocument
 
 
 class HistoryView(ABC):
@@ -80,8 +87,47 @@ class HistoryView(ABC):
         return MessagePageRequest(scope, traversal, limit, max_bytes)
 
 
+@dataclass(frozen=True, slots=True)
+class ConversationRevision:
+    """Core's captured selection and original store observation for one view."""
+
+    stores: WireRevision
+    selection: DisplaySelection
+
+    def display_changed_since(self, earlier: ConversationRevision) -> bool:
+        return (self.selection != earlier.selection
+                or FileRevision.source_changed(earlier.stores.bus_log, self.stores.bus_log))
+
+
 class ConversationHistoryView:
     """Historical views that present conversation content, not owner state."""
+
+    @classmethod
+    def same_display(cls, page: MessagePage, earlier: MessagePage) -> bool:
+        """Read-scope safety uses the original pages, never a client identity copy."""
+        return page.selection == earlier.selection
+
+    @classmethod
+    def has_display_evidence(cls, page: MessagePage) -> bool:
+        return page.selection.has_evidence
+
+    @classmethod
+    def revision(cls, views: HistoryViews, target: str, *, worktree: str) -> ConversationRevision:
+        worktree = str(Path(worktree).resolve())
+        viewer = views.messaging.user_identity(worktree).name
+        with views.registry.store.reading() as registry, views.channels.catalog.reading() as catalog:
+            stores = views.revision()
+            return ConversationRevision(
+                stores, cls._selection(
+                    views, registry.snapshot(), catalog, viewer, target, worktree, stores.history,
+                ),
+            )
+
+    @classmethod
+    @abstractmethod
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+                   viewer: str, target: str, worktree: str,
+                   history_revision: FileRevision | None) -> DisplaySelection: ...
 
     def page_request(self, scope, traversal, limit, max_bytes) -> MessagePageRequest:
         return ConversationMessagePageRequest(scope, traversal, limit, max_bytes)
@@ -103,6 +149,19 @@ class ChannelHistory(HistoryView):
 class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     channel: Channel
     viewer: str | None = None
+
+    @classmethod
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+                   viewer: str, target: str, worktree: str,
+                   history_revision: FileRevision | None) -> ChannelSelection:
+        channel = catalog.views(snapshot.threads).get(target)
+        if channel is None:
+            raise ValueError(f"Unknown channel: {target!r}")
+        return ChannelSelection(
+            viewer=snapshot.require(viewer).incarnation,
+            bus_identity=views.bus.reads.bus_identity(views.bus.log.path),
+            scope=ChannelDisplayScope.capture(channel, snapshot), history_revision=history_revision,
+        )
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
         return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
@@ -126,6 +185,23 @@ class DMHistory(HistoryView):
 @dataclass(frozen=True, slots=True)
 class DMDisplayHistory(ConversationHistoryView, DMHistory):
     worktree: str
+
+    @classmethod
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+                   viewer: str, target: str, worktree: str,
+                   history_revision: FileRevision | None) -> DMSelection:
+        try:
+            peer = snapshot.participant(target).incarnation
+        except UnregisteredThreadError:
+            peer = UnrecordedThreadIncarnation(snapshot.canonical_name(target))
+        root = views.root.stat()
+        return DMSelection(
+            root_identity=(root.st_dev, root.st_ino),
+            bus_identity=views.bus.reads.bus_identity(views.bus.log.path),
+            worktree=worktree, requested_peer=target,
+            viewer=snapshot.require(viewer).incarnation, peer=peer,
+            scope=DMDisplayScope.capture(viewer, target, snapshot), history_revision=history_revision,
+        )
 
     @property
     def viewer(self) -> str:
@@ -292,6 +368,11 @@ class HistoricalThread:
 class HistoricalDisplay:
     source: HistorySource
     displayed: DisplayBasis
+
+    def selection(self, history_revision: FileRevision | None) -> HistoricalSelection:
+        return HistoricalSelection(
+            viewer=self.displayed.viewer_identity, history_revision=history_revision,
+        )
 
     @property
     def viewer(self) -> str:

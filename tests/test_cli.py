@@ -90,10 +90,9 @@ class TestCliSuccess:
         code, out = cli(tmp_path, "archive", "--name", "archived")
         assert code == 0 and out == {"archived": "archived"}
 
-    def test_rename_self_uses_process_identity(self, cli, tmp_path, monkeypatch):
+    def test_rename_self_uses_declared_caller(self, cli, tmp_path):
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        code, out = cli(tmp_path, "rename-self", "--to", "renamed")
+        code, out = cli(tmp_path, "rename-self", "--from", "a", "--to", "renamed")
         assert code == 0
         assert out == {"previous": "a", "current": "renamed", "changed": True}
         _, detail = cli(tmp_path, "thread", "--name", "a")

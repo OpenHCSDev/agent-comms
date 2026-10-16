@@ -236,3 +236,11 @@ class ToolEndTranscript(ToolTranscript):
     ok: bool = True
     diff: ToolDiff | None = field(default=None, metadata={"wire_omit_default": True})
     sent_message: SentTranscript | None = field(default=None, metadata={"wire_omit_default": True})
+
+
+@dataclass(frozen=True)
+class TurnDigest:
+    """One turn's events in their recorded order, read from the unit's own records."""
+
+    turn_id: str
+    events: tuple[TranscriptEvent, ...]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Mapping
+from pathlib import Path
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar, Literal, Type
 
@@ -33,8 +34,10 @@ from .task_sources import (
     TaskScopeSelection, OriginalTaskChange,
 )
 from .thread_identity import TurnId
+from .turn_digests import TurnDigestRead
 from .relationships import RelationshipEdit
 from .thread_status import ThreadStatus
+from .work_branches import WorkBranches
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
     materialize_oversized_output,
@@ -584,6 +587,17 @@ class CommsGoalHistoryTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsTurnsTool(ToolRequest):
+    label = "Recent turns"
+    description = "Read a unit's recent turns with ordered original transcript facts."
+    thread: str = tool_field("Thread whose own saved turn records to read")
+    last: int = tool_field("Number of newest turns", default=TurnDigestRead.last)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+        return FieldCodec.encode(comms.transcripts.turns(self.thread, last=self.last))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsThreadsTool(ToolRequest):
     label = "Comms Threads"
     description = (
@@ -596,6 +610,23 @@ class CommsThreadsTool(ToolRequest):
         from .cli_commands import ThreadsCliCommand
 
         return caller.listing(comms, ThreadsCliCommand(active_only=self.active_only).apply(comms))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsWorkBranchesTool(ToolRequest):
+    label = "Work branches"
+    description = (
+        "Branches with commits not on main, newest first, each with its open PR or linked "
+        "open issue and the threads that have it checked out. Work on a problem must be on "
+        "main or on a linked branch; unlinked_only lists the branches breaking that rule."
+    )
+    checkout: str = tool_field("Path of a checkout of the repository (its worktrees name owners)")
+    unlinked_only: bool = tool_field("List only branches with no open PR or issue", default=True)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+        branches = WorkBranches(Path(self.checkout)).read(comms.registry.snapshot())
+        return {"branches": FieldCodec.encode(tuple(
+            branch for branch in branches if not (self.unlinked_only and branch.linked)))}
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -8,9 +8,6 @@ from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_
 
 
 def test_tool_entry_decodes_caller_states_once():
-    assert ToolCaller.from_environment({}) == NoThreadCaller()
-    assert ToolCaller.from_environment({"AGENT_COMMS_THREAD": ""}) == NoThreadCaller()
-    assert ToolCaller.from_environment({"AGENT_COMMS_THREAD": "owner"}) == ThreadCaller("owner")
     assert ToolCaller.from_actor(None) == NoThreadCaller()
     assert ToolCaller.from_actor("owner") == ThreadCaller("owner")
 

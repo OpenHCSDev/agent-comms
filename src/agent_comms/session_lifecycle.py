@@ -41,7 +41,7 @@ from .session_effects import SessionEffects
 from .threads import Thread
 from .registry_document import RegistrySnapshot
 from .transcript_updates import TranscriptReplay
-from .session_load import SessionLoadAdmission, ExistingSessionLoadAdmission, FailedSessionLoadAdmission
+from .session_load import SessionLoadPlan, ExistingSessionLoadPlan, FailedSessionLoadPlan
 
 
 class SessionLifecycle:
@@ -258,7 +258,7 @@ class SessionLifecycle:
             await self.retire_proxy(session_id)
             snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
             binding = snapshot.owner_binding(thread.name)
-            failed_command = FailedSessionLoadAdmission(binding)
+            failed_command = FailedSessionLoadPlan(binding)
             proxy = await Coordination.run_worker(partial(self.effects._create_runtime_proxy, thread, session_id))
             try:
                 snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
@@ -274,7 +274,7 @@ class SessionLifecycle:
                     await proxy.close()
             return LoadSessionResponse(
                 config_options=metadata.pop("configOptions", []),
-                field_meta={**metadata, **ExistingSessionLoadAdmission(binding).metadata()},
+                field_meta={**metadata, **ExistingSessionLoadPlan(binding).metadata()},
             )
 
     async def sync_identity(self, session_id: str) -> str:
@@ -416,8 +416,8 @@ class AttachedSessionLifecycle(SessionLifecycle):
         self.reject_foreign_mcp(mcp_servers)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         try:
-            admission = SessionLoadAdmission.at_ingress(kwargs.get("agentCommsLoad"))
-            owner = await admission.resolve(self, thread)
+            plan = SessionLoadPlan.at_ingress(kwargs.get("agentCommsLoad"))
+            owner = await plan.resolve(self, thread)
         except (OSError, RuntimeError, TypeError, ValueError) as error:
             raise RequestError.invalid_params(
                 {"reason": f"Session load not admitted for {thread.name!r}: {error}"}
