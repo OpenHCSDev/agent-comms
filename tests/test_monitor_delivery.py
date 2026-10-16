@@ -11,9 +11,8 @@ from agent_comms.cli_bridges.claude_protocol import (
     ForeignAttachment,
 )
 from agent_comms.cli_bridges.shared import (
-    Binding, DeliveryJournal, DeliveryRow, MonitorAttemptRow, MonitorPartRow,
-    MonitorPart, ForeignMonitorFrame, Options,
-    ObservedMonitor, MismatchedMonitor, NO_MONITOR_ATTEMPT, Watch,
+    Binding, DeliveryJournal, DeliveryRow, MonitorAttemptRow, MonitorPartRow, MonitorPart,
+    ForeignMonitorFrame, Options, ObservedMonitor, MismatchedMonitor, NO_MONITOR_ATTEMPT, Watch,
 )
 from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message

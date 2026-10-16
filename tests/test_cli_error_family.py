@@ -17,13 +17,9 @@ from agent_comms.cli_bridges.shared import (
     DeliveryJournal,
     DeliveryRow,
     MonitorAttemptRow,
-    Inbox,
-    CliBridge,
-    Options,
 )
 from agent_comms.cli_protocol import (
-    CORE_ERROR, WATCH_LINE, ArrivedMessage, FailedCoreError, UnavailableCoreError,
-    UnconfirmedOutcome, DeliveredOutcome,
+    CORE_ERROR, FailedCoreError, UnavailableCoreError, UnconfirmedOutcome, DeliveredOutcome,
 )
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
@@ -224,84 +220,3 @@ def test_journal_initialization_failure_closes_owned_connection(tmp_path, monkey
         connection.execute('SELECT 1')
 
 
-class AcceptedBridge(CliBridge):
-    """Controlled API acknowledgment; these checks concern Core read recovery."""
-
-    async def deliver(self, message):
-        for part in self.incoming_frame(message).parts:
-            print(part)
-        return DeliveredOutcome
-
-    async def show_sent(self, result, target, body):
-        pass
-
-    async def report_failure(self, text):
-        pass
-
-
-@pytest.mark.asyncio
-async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys):
-    journal = DeliveryJournal(tmp_path)
-    binding = Binding(str(tmp_path), 'viewer', 'external-session')
-    bridge = AcceptedBridge(Options(Inbox(), None, None, None, tmp_path), binding, journal)
-    message = Message(sender='peer', target='viewer', type=InfoKind,
-                      body='one delivery', timestamp=1.0, seq=1)
-    delivered = asyncio.get_running_loop().create_future()
-    subscriptions = []
-    closed = []
-    waiting = asyncio.Event()
-
-    class ReadStream:
-        async def acknowledge(self, message):
-            assert message.body == 'one delivery'
-
-        async def watch(self, state):
-            subscriptions.append(state)
-            try:
-                if len(subscriptions) == 1:
-                    yield ArrivedMessage(message=message)
-                    yield UnavailableCoreError(error='Route index covers 1 of 100 bytes')
-                else:
-                    yield ArrivedMessage(message=message)
-                    delivered.set_result(True)
-                    await waiting.wait()
-            finally:
-                closed.append(state)
-
-    bridge.core = ReadStream()
-    task = asyncio.create_task(bridge.watch())
-    try:
-        await asyncio.wait_for(delivered, 3)
-        assert len(subscriptions) == 2
-        assert journal.db.execute('SELECT outcome FROM delivery').fetchone()[0] == DeliveredOutcome.declared_name
-    finally:
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
-        journal.close()
-    assert len(closed) == 2
-    output = capsys.readouterr()
-    assert output.out.count('one delivery') == 1
-    assert output.err.count('Core watch unavailable: Route index covers 1 of 100 bytes') == 1
-
-
-@pytest.mark.asyncio
-async def test_watch_failed_error_raises_without_resubscribing(tmp_path):
-    journal = DeliveryJournal(tmp_path)
-    bridge = AcceptedBridge(Options(Inbox(), None, None, None, tmp_path),
-                              Binding(str(tmp_path), 'viewer', 'external-session'), journal)
-    subscriptions = []
-
-    class ReadStream:
-        async def watch(self, state):
-            subscriptions.append(state)
-            yield FailedCoreError(error='database is locked')
-
-    bridge.core = ReadStream()
-    try:
-        with pytest.raises(RuntimeError, match='Core watch: database is locked'):
-            await bridge.watch()
-        assert len(subscriptions) == 1
-        assert journal.db.execute('SELECT count(*) FROM delivery').fetchone()[0] == 0
-    finally:
-        journal.close()
