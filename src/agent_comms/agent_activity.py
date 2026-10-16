@@ -142,7 +142,6 @@ class AgentActivity:
 
     def observe_recipients(self, recipients: Iterable[FrozenRecipient], *, snapshot: RegistrySnapshot) -> Mapping[str, RecipientActivity]:
         """Acquire one bounded window's recipients from the original source snapshot."""
-        snapshot.require_unambiguous_ownership()
         observations: dict[str, RecipientActivity] = {}
         for recipient in recipients:
             lookup = recipient.recipient_lookup

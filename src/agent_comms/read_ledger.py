@@ -160,7 +160,7 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         revision = FileRevision.capture(self.path.with_name("bus.jsonl"))
         return document.seen_sequences(viewer, snapshot, revision.identity if revision else None)
 
-    def displayed_recipient(self, message, recipient, snapshot, *, document=None):
+    def displayed_recipient(self, message, recipient, snapshot: RegistrySnapshot, *, document=None):
         """Return recorded human display evidence for this exact frozen recipient.
 
         Processing, assignment acceptance and a reply cannot grant this fact.
@@ -176,7 +176,9 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
             return ()
         return self._displayed_recipient(message, thread, snapshot, document=document)
 
-    def historical_displayed_recipient(self, message, recipient, snapshot, *, document=None):
+    def historical_displayed_recipient(
+        self, message, recipient, snapshot: RegistryProvenance, *, document=None
+    ):
         """Read this archive's human paint ledger, never an original CLI ACK.
 
         HistoryArchive does not copy the source's read ledger. Its new ledger

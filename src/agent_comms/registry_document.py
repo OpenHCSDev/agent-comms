@@ -540,26 +540,18 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        # An archive may retain two names with the same birth. Neither may be
-        # selected by lookup alone; live publication refuses that snapshot.
+        # This is a live ownership cut. Archived namespaces use the separate
+        # RegistryProvenance type and do not invent a lookup for duplicate births.
         indexed: dict[str, Thread] = {}
-        collisions: set[str] = set()
         for thread in self.threads.values():
             incarnation = thread.incarnation
             if not incarnation.has_recorded_birth:
-                continue
+                raise RelationViolationError("Live registry creation identity is unrecorded.")
             lookup = incarnation.require_recorded().lookup
             if lookup in indexed:
-                del indexed[lookup]
-                collisions.add(lookup)
-            elif lookup not in collisions:
-                indexed[lookup] = thread
+                raise RelationViolationError("Registry creation identities collide.")
+            indexed[lookup] = thread
         object.__setattr__(self, "by_lookup", MappingProxyType(indexed))
-
-    def require_unambiguous_ownership(self) -> None:
-        """Archives can be ambiguous; live ownership cannot."""
-        if len(self.by_lookup) != len(self.threads):
-            raise RelationViolationError("Registry creation identities are ambiguous or unrecorded.")
 
     def thread_for_recipient(self, lookup: str, name: str) -> Thread:
         """Resolve a recorded recipient by its unique creation identity."""

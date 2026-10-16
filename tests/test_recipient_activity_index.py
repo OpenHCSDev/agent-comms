@@ -15,6 +15,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.read_ledger import ReadLedger
+from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.thread_identity import (
     DeletedThreadIncarnation,
     RecordedThreadIncarnation,
@@ -80,14 +81,18 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     for name, birth in (("old", 1700.0), ("second", 1701.0)):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path), created_at=birth))
     source = comms.registry.snapshot()
-    archived = replace(source, threads={
-        **source.threads,
-        "second": replace(source.threads["second"], created_at=1700.0),
+    with pytest.raises(RelationViolationError, match="creation identities collide"):
+        replace(source, threads={
+            **source.threads,
+            "second": replace(source.threads["second"], created_at=1700.0),
+        })
+    recorded = RegistryProvenance.capture(source)
+    archived = replace(recorded, threads={
+        **recorded.threads,
+        "second": replace(recorded.threads["second"], created_at=1700.0),
     })
     lookup = source.threads["old"].incarnation.lookup
-    assert archived.by_lookup.get(lookup) is None
-    with pytest.raises(KeyError):
-        archived.thread_for_recipient(lookup, "old")
+    assert type(archived) is RegistryProvenance and not hasattr(archived, "by_lookup")
     ledger = ReadLedger(tmp_path / "archive-reads.json")
     with patch.object(ReadLedger, "seen_sequences", return_value=frozenset({7})):
         for name in ("old", "second"):
@@ -97,17 +102,17 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
         assert ledger.historical_displayed_recipient(
             SimpleNamespace(seq=7), FrozenRecipient("wrong-lookup", "old"), archived
         ) == ()
-    with pytest.raises(RelationViolationError, match="creation identities are ambiguous"):
-        archived.require_unambiguous_ownership()
-    unrecorded = replace(source, threads={
-        **source.threads,
-        "second": replace(source.threads["second"], created_at=0.0),
+    with pytest.raises(RelationViolationError, match="creation identity is unrecorded"):
+        replace(source, threads={
+            **source.threads,
+            "second": replace(source.threads["second"], created_at=0.0),
+        })
+    unrecorded = replace(recorded, threads={
+        **recorded.threads,
+        "second": replace(recorded.threads["second"], created_at=0.0),
     })
     assert isinstance(unrecorded.threads["second"].incarnation, UnrecordedThreadIncarnation)
     assert not hasattr(unrecorded.threads["second"].incarnation, "lookup")
-    assert lookup in unrecorded.by_lookup
-    with pytest.raises(RelationViolationError, match="creation identities are ambiguous or unrecorded"):
-        unrecorded.require_unambiguous_ownership()
 
 
 def test_activity_log_projects_only_requested_threads(tmp_path):

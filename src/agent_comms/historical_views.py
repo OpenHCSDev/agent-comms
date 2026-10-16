@@ -387,9 +387,8 @@ class HistoryArchive:
                 ]
                 revisions = tuple(FileRevision.capture(path) for path in paths)
                 if source_read is None:
-                    provenance = RegistryProvenance.capture(
-                        Registration(source_root / "registry.json").snapshot()
-                    )
+                    with Registration(source_root / "registry.json").store.reading() as original:
+                        provenance = RegistryProvenance.capture(original)
                 else:
                     source_read.require_original(source_root)
                     provenance = source_read.provenance

@@ -256,7 +256,6 @@ class Publisher:
                 if _locked_registry_snapshot is None
                 else _locked_registry_snapshot
             )
-            snapshot.require_unambiguous_ownership()
             sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
             with bus_lock.current_source(self.log, metadata) as source:
                 # The checkpoint high-water also covers a prior visible append;
@@ -350,7 +349,6 @@ class Publisher:
             )
             before_revisions = tuple(FileRevision.capture(path) for path in source_paths)
             snapshot = self._registry.snapshot()
-            snapshot.require_unambiguous_ownership()
             catalog = self._channels.read()
             sender, target = self._validate_publish_request(
                 message, registry_snapshot=snapshot, catalog=catalog)
