@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import subprocess
-from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -47,19 +46,11 @@ class IssueBranchLink(BranchLink):
 class BranchCheckout(DeclaredFamily, affix="BranchCheckout"):
     """Where a branch is checked out; the owner is whoever works there."""
 
-    @property
-    @abstractmethod
-    def summary(self) -> str: ...
-
 
 @dataclass(frozen=True)
 class ThreadBranchCheckout(BranchCheckout):
     threads: tuple[str, ...]
     worktree: str
-
-    @property
-    def summary(self) -> str:
-        return ", ".join(self.threads)
 
 
 @dataclass(frozen=True)
@@ -67,10 +58,6 @@ class UnregisteredBranchCheckout(BranchCheckout):
     """Checked out in a worktree that no registered thread works in."""
 
     worktree: str
-
-    @property
-    def summary(self) -> str:
-        return f"no thread ({self.worktree})"
 
 
 @dataclass(frozen=True)
@@ -84,10 +71,6 @@ class WorkBranch:
     @projected(view="wire")
     def linked(self) -> bool:
         return bool(self.links)
-
-    @property
-    def owners(self) -> str:
-        return ", ".join(checkout.summary for checkout in self.checkouts) or "not checked out"
 
 
 class ForgeAnswer(WireModel):
