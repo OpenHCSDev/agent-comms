@@ -1,13 +1,14 @@
-"""Run ONLY under the authentic original runtime; emit one acquired read.
+"""Run under the selected current runtime; emit one typed acquired read.
 
 No registry or guard write, process signal, native request or input admission.
-The existing registry owner validates the document under its shared lock. A
-target Thread is never handed an original-format record.
+The current registry owner validates the document under its shared lock. Old
+records must be carried once before this reader can consume them.
 """
 import json
 from pathlib import Path
 import sys
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.registration import Registration
 from owner_read_projection import OwnerReadProjection
 
@@ -21,7 +22,7 @@ def main():
     expected = sys.stdin.read()
     registry = Registration(registry_path)
     packet = projection.read(registry, Path(root), name, json.loads(expected) if expected else None)
-    print(json.dumps(packet), flush=True)
+    print(json.dumps(FieldCodec.encode(packet)), flush=True)
 
 
 if __name__ == '__main__':

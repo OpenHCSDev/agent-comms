@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import builtins
 from abc import ABC, abstractmethod
-from dataclasses import replace
 from typing import ClassVar, Literal
 
 from metaclass_registry import RegistryConfig
@@ -11,12 +10,16 @@ from pydantic import ConfigDict, Field, JsonValue
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
-from agent_comms.transcript_events import (
-    AssistantTranscript, ThinkingTranscript, TranscriptEvent, ToolStartTranscript,
-)
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TextTranscript, TranscriptEvent
 
 from .shared import (
-    ActiveItem, DraftItem, FinishedItem, TranscriptUpdate,
+    ActiveItem,
+    CompletedItem,
+    StartedItem,
+    TextDraft,
+    ToolCall,
+    TranscriptUpdate,
 )
 
 
@@ -40,9 +43,6 @@ class MessageInfo(TaggedWire, ABC):
     @abstractmethod
     def present(self, part: Part) -> tuple[TranscriptUpdate, ...]: ...
 
-    @abstractmethod
-    def append_text(self, part: Part, delta: str) -> tuple[TranscriptUpdate, ...]: ...
-
 
 class UserMessage(MessageInfo):
     wire_tag = 'user'
@@ -50,9 +50,6 @@ class UserMessage(MessageInfo):
 
     def present(self, part: Part) -> tuple[TranscriptUpdate, ...]:
         # Wire history owns incoming bus messages; never echo them as CLI output.
-        return ()
-
-    def append_text(self, part: Part, delta: str) -> tuple[TranscriptUpdate, ...]:
         return ()
 
 
@@ -64,9 +61,6 @@ class AssistantMessage(MessageInfo):
     def present(self, part: Part) -> tuple[TranscriptUpdate, ...]:
         return part.present(self)
 
-    def append_text(self, part: Part, delta: str) -> tuple[TranscriptUpdate, ...]:
-        return part.append_text(delta, self)
-
 
 class Part(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
@@ -77,9 +71,6 @@ class Part(TaggedWire, ABC):
 
     def matches(self, session: str, text: str) -> bool:
         return False
-
-    def append_text(self, delta: str, message: MessageInfo) -> tuple[TranscriptUpdate, ...]:
-        raise ValueError(f'OpenCode sent a text delta for {self.wire_tag}')
 
     def finished(self, message: MessageInfo) -> bool:
         return message.time.completed is not None
@@ -96,27 +87,22 @@ class PartTime(WireModel):
 class TextualPart(Part, ABC):
     text: str
     time: PartTime | None = None
-    event_type: ClassVar[builtins.type[TranscriptEvent]]
+    event_type: ClassVar[builtins.type[TextTranscript]]
     activity: ClassVar[ActivityState]
     detail: ClassVar[str]
 
-    def append_text(self, delta: str, message: MessageInfo) -> tuple[TranscriptUpdate, ...]:
-        self.text += delta
-        return (DraftItem(message.id, self.id, self.events(message)),)
-
-    def events(self, message: MessageInfo) -> tuple[TranscriptEvent, ...]:
-        timestamp = (self.time.start if self.time is not None else message.time.created) / 1000
-        return (self.event_type(self.text, timestamp=timestamp),) if self.text else ()
+    def accumulator(self, message: MessageInfo) -> TextDraft:
+        started_at = RecordedEventTime((self.time.start if self.time is not None else message.time.created) / 1000)
+        return TextDraft.from_parts(self.event_type, (self.text,), started_at)
 
     def finished(self, message: MessageInfo) -> bool:
         return super().finished(message) or (self.time is not None and self.time.end is not None)
 
     def present(self, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
-        events = self.events(message)
+        accumulator = self.accumulator(message)
         if self.finished(message):
-            return (FinishedItem(message.id, self.id, events),)
-        return (ActiveItem(message.id, self.id, self.activity, self.detail),
-                DraftItem(message.id, self.id, events))
+            return (CompletedItem(message.id, self.id, accumulator.events),)
+        return (StartedItem(message.id, self.id, self.activity, self.detail, accumulator),)
 
 
 class TextPart(TextualPart):
@@ -157,38 +143,24 @@ class ToolState(TaggedWire, ABC):
     @abstractmethod
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
 
-    def call(self, part: ToolPart) -> ToolStartTranscript:
-        return ToolStartTranscript(
-            tool_call_id=part.callID, tool_name=part.tool,
-            raw_input=self.input.model_dump(by_alias=True, exclude_unset=True),
-            detail=self.input.filePath or '',
-        )
-
-    def started_at(self, message: MessageInfo) -> float:
-        return message.time.created / 1000
+    def call(self, part: ToolPart) -> ToolCall:
+        return ToolCall(part.callID, part.tool,
+                        self.input.model_dump(exclude_unset=True), self.input.filePath or '')
 
 
 class PendingTool(ToolState):
     wire_tag = 'pending'
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
-        return ActiveItem.tool_started(
-            message.id, part.id, replace(self.call(part), timestamp=self.started_at(message))
-        )
+        return (ActiveItem(message.id, part.id, ActivityState.WORKING, self.call(part).title),)
 
 
-class TimedTool(ToolState, ABC):
-    time: PartTime
-
-    def started_at(self, message: MessageInfo) -> float:
-        return self.time.start / 1000
-
-
-class RunningTool(PendingTool, TimedTool):
+class RunningTool(PendingTool):
     wire_tag = 'running'
 
 
-class EndedTool(TimedTool, ABC):
+class EndedTool(ToolState, ABC):
+    time: PartTime
     ok: ClassVar[bool]
     finished = True
 
@@ -197,10 +169,9 @@ class EndedTool(TimedTool, ABC):
     def result(self) -> str: ...
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
-        events = replace(self.call(part), timestamp=self.started_at(message)).finished(
-            self.result, self.ok
-        )
-        return (FinishedItem(message.id, part.id, events),)
+        event_time = RecordedEventTime(self.time.start / 1000)
+        events = tuple(event_time.stamp(event) for event in self.call(part).finished(self.result, self.ok))
+        return (CompletedItem(message.id, part.id, events),)
 
 
 class CompletedTool(EndedTool):

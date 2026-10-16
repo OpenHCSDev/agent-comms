@@ -53,10 +53,9 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
         cls(singleton=1, ddl_digest=_digest(schema)).insert(db)
 
     @classmethod
-    def triggers(cls) -> dict[str, str]:
+    def trigger_bodies(cls) -> dict[str, str]:
         return {
-            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_"
-            f"{operation.lower()}_guard "
+            f"{cls.declared_name}_{operation.lower()}_guard": " "
             f"BEFORE {operation} ON {cls.declared_name} "
             "BEGIN SELECT RAISE(ABORT,'native runtime schema is frozen'); END"
             for operation in ("UPDATE", "DELETE")
@@ -278,10 +277,10 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             raise StaleFence("native proof was previously committed")
 
     @classmethod
-    def triggers(cls) -> dict[str, str]:
+    def trigger_bodies(cls) -> dict[str, str]:
         name = cls.declared_name
         return {
-            f"{name}_identity_guard": f"""CREATE TRIGGER {name}_identity_guard
+            f"{name}_identity_guard": f"""
             BEFORE UPDATE ON {name}
             WHEN NEW.input_id IS NOT OLD.input_id OR NEW.stage IS NOT OLD.stage
                 OR NEW.execution_id IS NOT OLD.execution_id
@@ -300,7 +299,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
                 OR OLD.session_entry_id IS NOT NULL
                 OR (NEW.session_id IS NULL AND NEW.sent_owner_admission_generation IS NULL)
             BEGIN SELECT RAISE(ABORT,'native runtime input identity is frozen'); END""",
-            f"{name}_delete_guard": f"CREATE TRIGGER {name}_delete_guard BEFORE DELETE ON {name} "
+            f"{name}_delete_guard": f" BEFORE DELETE ON {name} "
             "BEGIN SELECT RAISE(ABORT,'native runtime input cannot be deleted'); END",
         }
 
@@ -356,10 +355,10 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
     )
 
     @classmethod
-    def triggers(cls) -> dict[str, str]:
+    def trigger_bodies(cls) -> dict[str, str]:
         name = cls.declared_name
         return {
-            f"{name}_update_guard": f"""CREATE TRIGGER {name}_update_guard BEFORE UPDATE ON {name}
+            f"{name}_update_guard": f""" BEFORE UPDATE ON {name}
             WHEN NEW.wire_root_id IS NOT OLD.wire_root_id
                 OR NEW.recipient_lookup IS NOT OLD.recipient_lookup
                 OR NEW.owner_thread IS NOT OLD.owner_thread
@@ -368,6 +367,6 @@ class CurrentNativeCursor(NativeInputContext, NativeRuntimeTable, TypedTable):
                 OR NEW.covered_seq < OLD.covered_seq OR NEW.injected_seq < OLD.injected_seq
                 OR (NEW.injected_seq = OLD.injected_seq AND NEW.input_id IS NOT OLD.input_id)
             BEGIN SELECT RAISE(ABORT,'native source cursor cannot regress'); END""",
-            f"{name}_delete_guard": f"CREATE TRIGGER {name}_delete_guard BEFORE DELETE ON {name} "
+            f"{name}_delete_guard": f" BEFORE DELETE ON {name} "
             "BEGIN SELECT RAISE(ABORT,'native source cursor cannot be deleted'); END",
         }

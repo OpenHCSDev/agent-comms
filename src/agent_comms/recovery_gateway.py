@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import errno
-
 import fcntl
 import json
 import os
@@ -22,18 +21,18 @@ import sys
 from contextlib import asynccontextmanager, closing, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations
 
 from .child_process import BoundedRun, ChildRetirementError, ParentLifeline
-from .field_codec import FieldCodec
-from .pi_rpc import unique_fields
 from .coordination_database import CoordinationStore
+from .field_codec import FieldCodec
+from .launch_runtime import LaunchRuntime
+from .pi_rpc import unique_fields
+from .private_path import PrivateSocketRole
 from .recovery_projection import RecoveryRequest, RecoverySelection
 from .typed_table import SQLiteJournalMode
-from .private_path import PrivateSocketRole
 
 _MAX_REQUEST = 1024
 _MAX_REPLY = 4096
@@ -286,17 +285,19 @@ class RecoveryGateway:
     async def _run_snapshot_process(self, requested: str):
         """Borrow the snapshot; A12 retains deadline, parent loss and retirement."""
         invocation = SnapshotInvocation(str(self.root), requested)
+        runtime = LaunchRuntime.current()
+        runtime.require_available()
         with ParentLifeline() as life:
             try:
                 async with BoundedRun.exchange(
                     (
-                        sys.executable,
+                        str(runtime.interpreter),
                         "-m",
                         "agent_comms.recovery_gateway",
                         json.dumps(FieldCodec.encode(invocation)),
                     ),
                     timeout=_READ_TIMEOUT,
-                    env=life.environment,
+                    env=runtime.environment(life.environment),
                     pass_fds=(life.read_fd,),
                 ) as result:
                     response = result.stdout

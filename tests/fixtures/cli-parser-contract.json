@@ -16,7 +16,7 @@
     "drop-constraint": "usage: agent-comms drop-constraint [-h] --source SOURCE [--worktree WORKTREE]\n                                   thread\n\npositional arguments:\n  thread\n\noptions:\n  -h, --help           show this help message and exit\n  --source SOURCE\n  --worktree WORKTREE\n",
     "export-retained": "usage: agent-comms export-retained [-h] --output OUTPUT [--overwrite] thread\n\npositional arguments:\n  thread\n\noptions:\n  -h, --help       show this help message and exit\n  --output OUTPUT\n  --overwrite\n",
     "inbox": "usage: agent-comms inbox [-h] --thread THREAD\n\noptions:\n  -h, --help       show this help message and exit\n  --thread THREAD\n",
-    "watch": "usage: agent-comms watch [-h] --thread THREAD\n\noptions:\n  -h, --help       show this help message and exit\n  --thread THREAD\n",
+    "watch": "usage: agent-comms watch [-h] --thread THREAD\n                         [--acknowledgment {on_read,explicit}]\n\noptions:\n  -h, --help            show this help message and exit\n  --thread THREAD\n  --acknowledgment {on_read,explicit}\n",
     "ack": "usage: agent-comms ack [-h] --thread THREAD\n\noptions:\n  -h, --help       show this help message and exit\n  --thread THREAD\n",
     "who": "usage: agent-comms who [-h]\n\noptions:\n  -h, --help  show this help message and exit\n",
     "status": "usage: agent-comms status [-h]\n\noptions:\n  -h, --help  show this help message and exit\n",

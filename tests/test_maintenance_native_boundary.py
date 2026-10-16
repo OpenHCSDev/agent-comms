@@ -1,6 +1,6 @@
 """A real local RPC child pauses the owner before the fenced prompt write."""
 
-from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
 import json
 import os
@@ -66,7 +66,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
             env,
             SelectedSession(session_dir),
             tmp_path,
-            configuration=RestartEnvironment.inherit(env),
+            runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
         )
 
     with (

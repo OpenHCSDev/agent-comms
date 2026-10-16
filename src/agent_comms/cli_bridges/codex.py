@@ -13,7 +13,7 @@ from uuid import uuid4
 import aiohttp
 from pydantic import JsonValue
 from agent_comms.messages import Message
-from .shared import TranscriptBridge, Options, Outcome, SendResult, TranscriptUpdate, shared_parser, parse_options, run_bridge
+from .shared import TranscriptBridge, Options, Outcome, DeliveredOutcome, SendResult, TranscriptUpdate, shared_parser, parse_options, run_bridge
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcFailure, RpcNotification, RpcSuccess, TextInput,
@@ -108,16 +108,19 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
             buffered = tuple(codex.pending)
             codex.pending.clear()
             for notification in buffered:
-                for update in stream.receive(notification):
+                update = stream.receive(notification)
+                if update is not None:
                     yield update
             async for notification in codex.notifications():
-                for update in stream.receive(notification):
+                update = stream.receive(notification)
+                if update is not None:
                     yield update
 
-    async def deliver(self, message: Message) -> Outcome:
+    async def deliver(self, message: Message) -> type[Outcome]:
         async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
-            await codex.message(self.incoming_text(message), message.message_id)
-        return Outcome.DELIVERED
+            for part in self.incoming_frame(message).parts:
+                await codex.message(part, message.message_id)
+        return DeliveredOutcome
 
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
         async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:

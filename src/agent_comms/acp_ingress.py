@@ -92,7 +92,8 @@ class AcpIngress:
     def _project_launch(self, child_env: dict[str, str]) -> None:
         """Publish the captured root into the child only after locked admission."""
         from .active_route import read_active_route
-        from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
+        from .private_nk_entrypoint import PrivateNkLaunch
+        from .launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 
         root = self.selection.root
         child_env["AGENT_COMMS_ROOT"] = str(root)

@@ -42,7 +42,7 @@ export const nativeProofSchema = {
       "wire": "type"
     }
   ],
-  "insert": "INSERT INTO native_context_journal (input_id,session_id,session_entry_id,request_generation,llm_context_digest,committed_at_ms,schema,type) VALUES (?,?,?,?,?,?,?,?)",
+  "insert": "INSERT INTO \"native_context_journal\" (\"input_id\", \"session_id\", \"session_entry_id\", \"request_generation\", \"llm_context_digest\", \"committed_at_ms\", \"schema\", \"type\") VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
   "head": "SELECT COALESCE(MAX(request_generation),0) AS generation FROM native_context_journal",
   "session": "SELECT session_id AS id FROM native_context_journal ORDER BY session_id LIMIT 1",
   "current": "SELECT input_id,session_entry_id FROM native_context_journal WHERE request_generation=(SELECT MAX(request_generation) FROM native_context_journal)"

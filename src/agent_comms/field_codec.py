@@ -10,6 +10,7 @@ from datetime import datetime
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
+from typing_extensions import TypeAliasType
 from typing import (
     Annotated,
     Any,
@@ -231,6 +232,11 @@ class FieldCodec(Sealed):
         ]
         if len(representations) > 1:
             raise TypeError("A field must have one representation")
+        if isinstance(target, TypeAliasType):
+            from pydantic import JsonValue
+
+            if target is JsonValue:
+                return Any, representations[0] if representations else _AnyDecoder
         if representations:
             return target, representations[0]
         if isinstance(target, type) and issubclass(target, WireValue):
@@ -577,10 +583,28 @@ class _RepresentedDecoder(ValueDecoder):
         return representation.decode(data)
 
 @dataclass(frozen=True, slots=True)
-class _AnyDecoder(ValueDecoder):
-    def decode(self, data):
-        FieldCodec.encode(data)  # still require valid JSON data
-        return data
+class _AnyDecoder(ValueDecoder, FieldRepresentation):
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def validator():
+        from pydantic import ConfigDict, JsonValue, TypeAdapter
+
+        return TypeAdapter(JsonValue, config=ConfigDict(allow_inf_nan=False))
+
+    @classmethod
+    def decode(cls, data):
+        try:
+            return cls.validator().validate_python(data, strict=True)
+        except ValueError as error:
+            raise TypeError("Expected a JSON value with string keys and finite numbers") from error
+
+    @classmethod
+    def encode(cls, value):
+        return cls.decode(value)
+
+    @classmethod
+    def schema(cls):
+        return {}
 
 @dataclass(frozen=True, slots=True)
 class _FamilyNameDecoder(ValueDecoder):

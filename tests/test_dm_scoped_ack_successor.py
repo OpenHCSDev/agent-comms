@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -193,17 +192,16 @@ def test_read_progress_after_older_check_keeps_conservative_page(tmp_path: Path,
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     older = comms.messaging.send_message("peer", viewer, "older")
     newest = comms.messaging.send_message("peer", viewer, "newest")
-    scan = comms.bus.log._record_snapshot
+    query = comms.bus.conversation_older_unread
 
-    @contextmanager
-    def progress_after_scan(*args, **kwargs):
-        with scan(*args, **kwargs) as source:
-            yield source
+    def progress_after_query(*args, **kwargs):
+        result = query(*args, **kwargs)
         comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
             viewer, (older,), comms.registry.snapshot(), comms.bus.log.path,
         ))
+        return result
 
-    monkeypatch.setattr(comms.bus.log, "_record_snapshot", progress_after_scan)
+    monkeypatch.setattr(comms.bus, "conversation_older_unread", progress_after_query)
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=1)
     assert page.messages == (newest,)
     assert page.display_basis is not None and page.display_basis.older_unread

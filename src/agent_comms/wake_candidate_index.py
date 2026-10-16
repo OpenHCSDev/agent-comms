@@ -12,7 +12,6 @@ import json
 import os
 import sqlite3
 import time
-from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -23,17 +22,15 @@ from .bus_publication import (
 )
 from .bus_source_page import CandidateQuery
 from .checkpoint_seals import PrefixSource
-from .coordination_database import CoordinationStore, StoreBusy
 from .delivery_policy import KeyedResponseReceipt
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .typed_table import Column, Index, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
 from .wake import NoWakeDecision, WakeDecision
 from .wake_policy import WakePolicy
 from .wire_log import OpenedWireSnapshot, WireLog
 from .wire_metadata import WireRootIdText
-
-_MAX_ROW = 8 * 1024 * 1024
+from .wire_record import WireRecord
 
 
 class ProjectionUnavailableError(RuntimeError):
@@ -59,6 +56,13 @@ class CandidateCheckpoint(CandidateTable, TypedTable):
     tail_digest: str
     last_seq: int = field(metadata={"sql": Column(check="last_seq>=0")})
 
+
+    @classmethod
+    def current(cls, db: sqlite3.Connection) -> CandidateCheckpoint | None:
+        try:
+            return cls.one(db, singleton=1)
+        except (ValueError, TypeError) as error:
+            raise ProjectionRebuildRequiredError("candidate index schema is unavailable") from error
 
     @property
     def source_identity(self) -> PrefixSource:
@@ -144,7 +148,7 @@ class _ReplayBatch:
     response_keys: tuple[CandidateResponseKey, ...]
 
 
-class WakeCandidateIndex:
+class WakeCandidateIndex(TypedStore):
     """Read-only candidate pages plus an explicit, bounded maintenance API.
 
     Never call ``maintain`` in the send or wake path. Each call only
@@ -153,55 +157,35 @@ class WakeCandidateIndex:
     exact page is NOT evidence of a sealed claim or a model-accepted input.
     """
 
+    batch_rows = 64
+    batch_bytes = 256 * 1024
+    batch_seconds = 0.2
+
+    filename = "wake_candidates.sqlite3"
+    rows = tuple(TypedTable.members_with(CandidateTable))
+
     def __init__(self, log: WireLog):
         if type(log) is not WireLog or log.path.name != "bus.jsonl":
             raise TypeError("candidate index requires the canonical wire log")
         self.log = log
-        self.path = log.path.with_name("wake_candidates.sqlite3")
 
-    @staticmethod
-    def _connect(path: Path, *, readonly: bool) -> sqlite3.Connection:
-        if readonly:
-            db = CoordinationStore.read_snapshot(path, StoreBusy())
-        else:
-            db = CoordinationStore.writer(path)
-            if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode=WAL")) != [
-                SQLiteJournalMode("wal")
-            ]:
-                db.close()
-                raise ProjectionUnavailableError("candidate index requires WAL")
-            db.execute("PRAGMA synchronous=FULL")
-        return db
+    @property
+    def root(self) -> Path:
+        return self.log.path.parent
 
-    @staticmethod
-    def _schema(db: sqlite3.Connection, *, create: bool) -> None:
-        schema = {
-            name: sql
-            for table in TypedTable.members_with(CandidateTable)
-            for name, sql in table.schema_objects().items()
-        }
+    def require_schema(self, actual: list[SQLiteSchemaObject]) -> None:
         try:
-            actual = SQLiteSchemaObject.read(
-                db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
-            )
-            if not actual and create:
-                with db:
-                    for table in TypedTable.members_with(CandidateTable):
-                        table.create(db)
-                return
-            if SQLiteSchemaObject.differences(actual, schema):
-                raise ProjectionRebuildRequiredError(
-                    "candidate index schema changed; reset required"
-                )
-            CandidateCheckpoint.one(db, singleton=1)
-        except (sqlite3.DatabaseError, ValueError, TypeError) as error:
-            raise ProjectionRebuildRequiredError("candidate index schema is unavailable") from error
+            super().require_schema(actual)
+        except RelationViolationError as error:
+            raise ProjectionRebuildRequiredError(
+                "candidate index schema changed; reset required"
+            ) from error
 
     @staticmethod
     def _validate_limits(max_rows: int, max_bytes: int) -> None:
         if type(max_rows) is not int or not 1 <= max_rows <= 256:
             raise ValueError("max_rows must be between 1 and 256")
-        if type(max_bytes) is not int or not 1 <= max_bytes <= _MAX_ROW:
+        if type(max_bytes) is not int or not 1 <= max_bytes <= WireRecord.max_row_bytes:
             raise ValueError("max_bytes must be a bounded positive byte count")
 
     @staticmethod
@@ -269,7 +253,7 @@ class WakeCandidateIndex:
         start = time.monotonic()
         admitted = 0
         for _ in range(max_rows):
-            if time.monotonic() - start > 0.2:
+            if time.monotonic() - start > cls.batch_seconds:
                 break  # Bounded maintenance; no expensive hot-path rebuild.
             available = max_bytes - (stream.tell() - offset)
             if available <= 0:
@@ -277,9 +261,10 @@ class WakeCandidateIndex:
             remaining = source.boundary - stream.tell()
             if remaining <= 0:
                 break
-            raw = stream.readline(min(_MAX_ROW + 1, remaining))
+            raw = stream.readline(min(WireRecord.max_row_bytes + 1, remaining))
             if not raw:
                 break
+            WireRecord.require_row_size(raw, error_type=ProjectionUnavailableError)
             if not raw.endswith(b"\n"):
                 raise ProjectionUnavailableError("incomplete candidate bus row")
             if len(raw) > available and admitted:
@@ -289,7 +274,7 @@ class WakeCandidateIndex:
                 break
             # A first record larger than the batch budget is admitted alone:
             # every batch with remaining source bytes must advance the
-            # checkpoint, and the record itself stays bounded by _MAX_ROW.
+            # checkpoint; WireRecord independently admits its physical size.
             admitted += 1
             record = json.loads(raw, object_pairs_hook=unique_wire_object)
             if not isinstance(record, dict):
@@ -342,7 +327,7 @@ class WakeCandidateIndex:
 
     def maintain(
         self, *, rebuild: bool = False, bootstrap_new: bool = False,
-        max_rows: int = 64, max_bytes: int = 256 * 1024,
+        max_rows: int = batch_rows, max_bytes: int = batch_bytes,
     ) -> bool:
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
@@ -354,11 +339,10 @@ class WakeCandidateIndex:
                     raise ProjectionUnavailableError("candidate bus source is missing")
                 root_id = source.metadata.root_id
                 stat = os.fstat(stream.fileno())
-                with closing(self._connect(self.path, readonly=False)) as db:
-                    # Bootstrap is schema work only. Capture the stored row once,
-                    # then release the connection before reading or decoding.
-                    self._schema(db, create=True)
-                    recorded = CandidateCheckpoint.one(db, singleton=1)
+                with self.writing() as db:
+                    # TypedStore installs schema atomically. Capture the stored
+                    # row, then release SQL custody before reading or decoding.
+                    recorded = CandidateCheckpoint.current(db)
                 checkpoint = self._checkpoint_start(
                     recorded, stream, stat, root_id,
                     rebuild=rebuild, bootstrap_new=bootstrap_new,
@@ -367,26 +351,19 @@ class WakeCandidateIndex:
                     source, checkpoint.byte_offset, checkpoint.last_seq,
                     max_rows=max_rows, max_bytes=max_bytes,
                 )
-                with closing(self._connect(self.path, readonly=False)) as db:
-                    db.execute("BEGIN IMMEDIATE")
-                    try:
-                        current = CandidateCheckpoint.one(db, singleton=1)
-                        if current != recorded:
-                            db.rollback()
-                            # Another writer's committed row, not this stale
-                            # batch, owns progress. Validate it without replay.
-                            advanced = self._checkpoint_start(
-                                current, stream, os.fstat(stream.fileno()), root_id,
-                                rebuild=False,
-                            )
-                            return advanced.byte_offset >= source.boundary
+                with self.writing() as db:
+                    current = CandidateCheckpoint.current(db)
+                    if current == recorded:
                         tail = self._source_end(stream, batch.next_offset)
                         self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
-                        db.commit()
-                    except BaseException:
-                        db.rollback()
-                        raise
-                return batch.next_offset >= source.boundary
+                        return batch.next_offset >= source.boundary
+                # Another writer's committed row owns progress. Release SQL
+                # custody before validating its source; never replay a batch.
+                advanced = self._checkpoint_start(
+                    current, stream, os.fstat(stream.fileno()), root_id,
+                    rebuild=False,
+                )
+                return advanced.byte_offset >= source.boundary
         except (
             OSError,
             ValueError,
@@ -422,12 +399,11 @@ class WakeCandidateIndex:
             marker = self.log._private_marker_unlocked()
             if marker.root_id != root_id:
                 raise ProjectionRebuildRequiredError("candidate private root changed")
-            with closing(self._connect(self.path, readonly=True)) as db:
-                self._schema(db, create=False)
+            with self.snapshot() as db:
                 with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
                     checkpoint = self._checkpoint_start(
-                        CandidateCheckpoint.one(db, singleton=1),
+                        CandidateCheckpoint.current(db),
                         stream, stat, root_id, rebuild=False,
                     )
                 return checkpoint
@@ -438,8 +414,8 @@ class WakeCandidateIndex:
         self,
         hint: CommittedAppendHint,
         *,
-        max_rows: int = 64,
-        max_bytes: int = 256 * 1024,
+        max_rows: int = batch_rows,
+        max_bytes: int = batch_bytes,
         bootstrap_new: bool = False,
     ) -> CandidateCatchUp:
         """Replay at most ONE bounded batch after a durable append notification.
@@ -516,9 +492,8 @@ class WakeCandidateIndex:
                      after_seq=after_seq, required_through_seq=required_through_seq,
                      limit=limit, delivery_only=delivery_only)
         try:
-            with closing(self._connect(self.path, readonly=True)) as db:
-                self._schema(db, create=False)
-                checkpoint = CandidateCheckpoint.one(db, singleton=1)
+            with self.snapshot() as db:
+                checkpoint = CandidateCheckpoint.current(db)
                 if (
                     checkpoint is None
                     or checkpoint.root_id != request.root_id

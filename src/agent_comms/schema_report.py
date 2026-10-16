@@ -68,9 +68,9 @@ class StoreSchemaReport:
             expected.update(declarations)
             compared.update(declarations)
             # Extra triggers or indexes attached to a known table also differ.
-            compared.update(row[0] for row in db.execute(
+            compared.update(row.name for row in _StoredTable.read(db.execute(
                 "SELECT name FROM sqlite_master WHERE tbl_name=? AND sql IS NOT NULL",
-                (table.name,)))
+                (table.name,))))
         changes = SQLiteSchemaObject.differences(
             [item for item in actual if item.name in compared], expected)
         return cls(str(path), changes, tuple(sorted(unknown)))

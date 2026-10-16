@@ -11,7 +11,7 @@ from agent_comms import Registration
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.owner_launch import CallingThreadUnavailable
+from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.goals import Goal
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, HandoffKind, InfoKind

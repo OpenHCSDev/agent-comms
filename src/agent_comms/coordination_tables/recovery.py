@@ -60,10 +60,10 @@ class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivit
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "connectivity_observation_monotonic": (
-                """CREATE TRIGGER connectivity_observation_monotonic
+                """
     BEFORE UPDATE ON connectivity
     WHEN NEW.execution_id IS NOT OLD.execution_id
      OR NEW.revision != OLD.revision + 1
@@ -73,7 +73,7 @@ class ConnectivityFacet(CoordinatorTable, TypedTable, declared_name="connectivit
     END"""
             ),
             "connectivity_delete_frozen": (
-                """CREATE TRIGGER connectivity_delete_frozen BEFORE DELETE ON connectivity BEGIN
+                """ BEFORE DELETE ON connectivity BEGIN
         SELECT RAISE(ABORT, 'connectivity cannot be deleted');
     END"""
             ),
@@ -124,17 +124,17 @@ class RecoveryAudit(CoordinatorTable, TypedTable):
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "recovery_audit_update_frozen": (
-                """CREATE TRIGGER recovery_audit_update_frozen
+                """
 BEFORE UPDATE ON recovery_audit
 BEGIN
     SELECT RAISE(ABORT, 'recovery audit is append-only');
 END"""
             ),
             "recovery_audit_delete_frozen": (
-                """CREATE TRIGGER recovery_audit_delete_frozen
+                """
 BEFORE DELETE ON recovery_audit
 BEGIN
     SELECT RAISE(ABORT, 'recovery audit is append-only');

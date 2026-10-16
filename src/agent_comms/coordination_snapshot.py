@@ -336,16 +336,17 @@ class RecoverySnapshot:
         belonging to a later attempt (or an unbound manual claim) is untouched.
         The caller retains wire/bus/registry exclusion through terminal commit.
         """
-        from .envelope_claim_transitions import ClaimRelease, project_verified_transitions
+        from .envelope_claim_transitions import ClaimRelease, ClaimTransition
         from .messages import ClaimNoticeKind, Message
         from itertools import groupby
 
         bus, bus_lock, registry = boundary.bus, boundary.bus_lock, boundary.registry
         attempt = self.require_attempt()
         metadata = bus.log._private_marker_unlocked()
-        transitions, _ = bus_lock.claim_transitions(bus.log, metadata)
+        with bus_lock.current_source(bus.log, metadata) as source:
+            current = source.claim_projection()
         owned = tuple(
-            claim for claim in project_verified_transitions(transitions).values()
+            claim for claim in current.values()
             if claim.admission is not None
             and claim.admission.execution_id == attempt.execution_id
             and claim.admission.attempt_ordinal == attempt.attempt_ordinal
@@ -384,8 +385,8 @@ class RecoverySnapshot:
             ordered, key=lambda claim: (claim.incarnation, target_of(claim))
         ):
             recorded = tuple(records)
-            for offset in range(0, len(recorded), 32):
-                released = recorded[offset:offset + 32]
+            for offset in range(0, len(recorded), ClaimTransition.max_resources):
+                released = recorded[offset:offset + ClaimTransition.max_resources]
                 names = ", ".join(display_resource(claim) for claim in released)
                 bus.publisher.publish_claim_envelope(
                     Message(owner.name, target,

@@ -30,6 +30,7 @@ from .field_codec import FieldCodec, JsonShapeFamily
 from .goals import GoalDeadline, NoDeadline
 from .comms import Comms
 from .declared_family import DeclaredFamily
+from .read_basis import WatchAcknowledgment, OnReadWatchAcknowledgment
 from .exporting import (
     ChannelScope,
     DmScope,
@@ -764,7 +765,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
         import asyncio
 
         from .config_options import ConfigOptions
-        from .owner_launch import RestartEnvironment
+        from .launch_runtime import RestartEnvironment
         from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
 
@@ -940,9 +941,10 @@ class InboxCliCommand(CliCommand):
 class WatchCliCommand(CliCommand, declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
     thread: str = option("--thread")
+    acknowledgment: type[WatchAcknowledgment] = option("--acknowledgment", default=OnReadWatchAcknowledgment)
 
     def apply(self, ctx: Comms) -> AsyncIterator[Message]:
-        return ctx.bus.watch(self.thread)
+        return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         import asyncio
@@ -1402,7 +1404,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
-    pi_bin: str = option("--pi-bin", default_factory=NativeArguments.owner_launcher)
+    pi_bin: str = option("--pi-bin", default=NativeArguments.default_binary)
     project: str = option("--project", parser_default_factory=os.getcwd)
     model: str = option("--model", parser_default=NativeThreadDefaults.model)
     thinking_level: type[ThinkingLevel] = option(

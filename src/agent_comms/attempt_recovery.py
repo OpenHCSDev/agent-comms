@@ -225,17 +225,36 @@ class RecoveryMonitorCapability:
     def recover_owner(cls, root: Path, owner) -> None:
         """Resolve an exited predecessor once, before this worker begins draining."""
         from .bus_publication import stable_thread_lookup
+        from .coordination_response import PublicationAppendDispatches
         from .coordination_tables.executions import CurrentExecutions
 
         path = root / "coordination.sqlite3"
         if not path.exists():
             return
         with Coordination(str(path)) as store:
-            pointer = CurrentExecutions.one(
-                store.session._connection, owner_lookup=stable_thread_lookup(owner.created_at)
-            )
+            lookup = stable_thread_lookup(owner.created_at)
+            pointer = CurrentExecutions.one(store.session._connection, owner_lookup=lookup)
+            if pointer is None or not pointer.unresolved:
+                return
+            # A frozen response may already exist on the bus. The released
+            # owner proves exclusion; the original keyed dispatch proves this
+            # exact publication. Resolve it before considering UNKNOWN input.
+            with VerifiedOwnerLoss.observe_native_release(store, pointer.execution_id) as loss:
+                loss.require_native_exit()
+                PublicationAppendDispatches.resolve_retained(
+                    store, loss.boundary.bus, loss.boundary,
+                    owner_lookup=lookup, owner_thread=owner.name,
+                    execution_id=pointer.execution_id,
+                )
+            pointer = CurrentExecutions.one(store.session._connection, owner_lookup=lookup)
             if pointer is not None and pointer.unresolved:
-                cls.recover_released_native_attempt(store, pointer.execution_id)
+                try:
+                    cls.recover_released_native_attempt(store, pointer.execution_id)
+                except RecoveryBlocked:
+                    # Stop cannot reconstruct absent or broken provider proof.
+                    # The existing monitor still demands the same exact release
+                    # and native exit before recording UNKNOWN, never replay.
+                    cls.abandon_released_native_attempt(store, pointer.execution_id)
 
     @classmethod
     def recover_released_native_attempt(cls, store, execution_id):

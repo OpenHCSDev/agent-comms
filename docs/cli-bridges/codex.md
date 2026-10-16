@@ -59,7 +59,7 @@ attempts are in `~/.local/state/codex-comms-inbox/delivery.sqlite3`.
 For another conversation, register a distinct Core identity and supply
 `--root`, `--bus-thread`, `--session` and a new `--state` directory.
 Later starts read that saved binding. Conflicting bindings are rejected.
-A file lock prevents concurrent watchers for the same state.
+The shared session lock prevents concurrent watchers even with different state directories.
 
 ## Failure and delivery semantics
 
@@ -74,10 +74,12 @@ after two seconds. This does not retry sends or uncertain Codex requests. Other
 failures stop the service and attempt one visible failure report. Full multiline
 Core errors are retained in `watch-failure.txt`.
 
-There is no distributed exactly-once guarantee. Core marks an emitted message
-displayed when the watch generator advances, not when Codex acknowledges it.
-A crash between emission and journal commit remains a delivery gap. An App-server
-acknowledgment also does not prove a particular terminal painted the message.
+There is no distributed exactly-once guarantee. Bridge watches explicitly
+acknowledge exact Core message references only after the harness confirms.
+Advancing the watch stream does not mark a bridge message read. A crash after
+journal confirmation but before Core acknowledgment is repaired by repeating
+only that idempotent acknowledgment, never by resubmitting the message.
+An App-server acknowledgment does not prove a particular terminal painted it.
 
 Original envelopes remain in `delivery.payload`. Visible bodies are complete,
 preserving line breaks and human/agent origin labels.
@@ -91,9 +93,9 @@ actual input and display protocol. `deliver` returns the actual transport outcom
 Put CLI-specific connection options on an `Options` subclass and pass it to
 `parse_options` and `run_bridge`. Core decoding, filtering, journaling, locking
 and cleanup are inherited unchanged. The Codex adapter is `agent_comms.cli_bridges.codex` (command `agent-comms-codex-bridge`).
-Harnesses with line monitors can use `LineMonitorBridge` directly, as the Claude
-entrypoint does. It prints complete JSON strings rather than collapsing whitespace
-or truncating notifications.
+Harnesses with line monitors compose `LineMonitorBridge` with `TranscriptBridge`,
+as Claude does. Its decoded session notifications must confirm the fresh startup
+challenge and the complete numbered body parts; a pipe write alone stays pending.
 
 Transcript export is a separate capability still being implemented, represented
 by `TranscriptBridge`. The running service explicitly selects `inbox`. Its shared

@@ -8,9 +8,27 @@ import pytest
 
 from agent_comms import HistoricalMessage, HistoryCursor
 from agent_comms.comms import Comms
+from agent_comms.historical_views import HistoryArchive
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
+
+
+@pytest.mark.parametrize('exists', [False, True])
+def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
+    archive = HistoryArchive(tmp_path / 'bus.jsonl')
+    if exists:
+        archive.path.write_text('[]')
+    with pytest.raises(ValueError, match='catalogue changed'):
+        with archive.read_sources() as sources:
+            assert sources == ()
+            archive.path.write_text('[ ]')
+
+
+def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
+    archive = HistoryArchive(tmp_path / 'bus.jsonl')
+    assert archive.sources() == ()
+    assert not archive.path.exists()
 
 
 def setup(root, count=5):
@@ -219,7 +237,10 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     assert native.read_bytes() == original_native
 
 
-def test_original_recorded_projection_is_strict_and_attaches_before_destination_decode(tmp_path):
+def test_original_recorded_projection_is_strict_and_attaches_before_destination_decode(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'tools' / 'cutover'))
     from agent_comms.field_codec import FieldCodec
     from agent_comms.historical_views import HistorySource
     from agent_comms.registry_provenance import RegistryProvenance
@@ -228,9 +249,9 @@ def test_original_recorded_projection_is_strict_and_attaches_before_destination_
 
     old, live = setup(tmp_path / "old", 0), setup(tmp_path / "live", 0)
     original = (old.root / "registry.json").read_bytes()
-    packet = json.loads(json.dumps(RecordedRegistryProjection.read(
+    packet = json.loads(json.dumps(FieldCodec.encode(RecordedRegistryProjection.read(
         old.registry, old.root, "", FieldCodec.record_schema(RegistryProvenance)
-    )))
+    ))))
     observed = FieldCodec.decode(HistorySource, packet)
     assert observed.provenance == RegistryProvenance.capture(old.registry.snapshot())
     observed.require_original(old.root)

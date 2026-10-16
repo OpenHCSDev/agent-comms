@@ -196,7 +196,7 @@ class OwnerRead(AwaitedRead):
             answer = await self.answer(service.comms)
         finally:
             service.owner_reads.pop(self.request_id, None)
-        service.connection.send(answer)
+        service.send(answer)
 
     async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
         try:
@@ -342,8 +342,9 @@ class ReadRecordedNotifications(ReadNotifications):
     def read(self, comms: Comms):
         from agent_comms.historical_views import HistorySource
 
-        source = HistorySource.require(comms.bus.history, self.source)
-        return source.notification_references(comms.bus.history, self.references)
+        with comms.bus.history.read_sources() as sources:
+            source = HistorySource.require(sources, self.source)
+            return source.notification_references(sources, self.references)
 
     def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
         return revision.history != previous.history
@@ -796,13 +797,32 @@ class ObservationService:
         self.owner_reads: dict[int, asyncio.Future] = {}
         self.closed = False
 
+    def retire(self) -> None:
+        """Either pipe direction ending retires this service's outstanding work once."""
+        if self.closed:
+            return
+        self.closed = True
+        for asking in tuple(self.owner_reads.values()):
+            asking.cancel()
+        self.changed.set()
+
+    def send(self, result: ServiceResult) -> None:
+        """Every ordinary reply shares the peer's lifetime, not just received EOF."""
+        if self.closed:
+            return
+        try:
+            self.connection.send(result)
+        except BrokenPipeError:
+            self.retire()
+
     def receive(self) -> None:
+        if self.closed:
+            return
         while self.connection.poll():
             try:
                 request = self.connection.recv()
             except (EOFError, ConnectionResetError):
-                self.closed = True
-                self.changed.set()
+                self.retire()
                 return
             request.receive(self)
 
@@ -836,7 +856,7 @@ class ObservationService:
                 continue
             attempted.add(request_id)
             answer = request.answer(self.comms)
-            self.connection.send(answer)
+            self.send(answer)
             if not isinstance(answer, ReadBusy):
                 self.pending.pop(request_id)
             await asyncio.sleep(0)
@@ -844,7 +864,7 @@ class ObservationService:
     async def observe(self, attempted: set[int]) -> None:
         revision = self.comms.views.revision()
         if self.revision is None or revision.stores_changed_since(self.revision):
-            self.connection.send(RevisionObserved(revision))
+            self.send(RevisionObserved(revision))
         self.revision = revision
         for kind, observation in tuple(self.observations.items()):
             # Fresh foreground requests take precedence at every read boundary.
@@ -855,11 +875,14 @@ class ObservationService:
                 continue
             for result in observation.read(self.comms, revision):
                 if result is not None:
-                    self.connection.send(result)
+                    self.send(result)
                 await self.answer_pending(attempted)
-                if self.closed or self.observations.get(kind) is not observation:
+                if self.closed:
+                    return
+                if self.observations.get(kind) is not observation:
                     break
-            observation.after_read(self)
+            if self.observations.get(kind) is observation:
+                observation.after_read(self)
 
     async def expire(self) -> None:
         """Time-based sidebar state belongs to the sidebar observer, not file watching."""
@@ -883,12 +906,12 @@ class ObservationService:
                     self.observe_due = False
                     await self.observe(attempted)
         finally:
-            self.closed = True
+            self.retire()
+            loop.remove_reader(self.connection.fileno())
             watching.cancel()
             expiring.cancel()
-            for asking in self.owner_reads.values():
-                asking.cancel()
-            loop.remove_reader(self.connection.fileno())
+            self.pending.clear()
+            self.observations.clear()
             self.comms.views.transcript_reads.close()
 
 
