@@ -37,7 +37,7 @@ from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedRow, TypedTable
 from .wire_metadata import WireMetadata
-from .wire_record import WireRecord, WireScan
+from .wire_record import WireRecord
 from .thread_identity import ThreadIncarnation
 from .turn_context import ContextEntryManifest, RecordedContextManifest
 
@@ -45,7 +45,6 @@ if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .wire_log import WireLog
     from .messages import Message
-    from .message_reference import MessageReference
     from .retained_task_facts import ExactTaskFact
     from .registration import Registration
     from .turn_context import ContextEntryReference, ContextManifest, SegmentManifest
@@ -176,8 +175,11 @@ class CertifiedSourceRead:
                 digest = _SEED
                 self.stream.seek(0)
                 with os.fdopen(fd, "wb") as output:
-                    while raw := self.stream.readline(WireScan.max_row_bytes + 1):
-                        if len(raw) > WireScan.max_row_bytes or not raw.endswith(b"\n"):
+                    while raw := self.stream.readline(WireRecord.max_row_bytes + 1):
+                        WireRecord.require_row_size(
+                            raw, message="Carried source has an invalid row boundary",
+                        )
+                        if not raw.endswith(b"\n"):
                             raise RelationViolationError("Carried source has an invalid row boundary")
                         output.write(raw)
                         digest = _chain(digest, raw)

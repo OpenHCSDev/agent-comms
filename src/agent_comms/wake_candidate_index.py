@@ -32,8 +32,7 @@ from .wake import NoWakeDecision, WakeDecision
 from .wake_policy import WakePolicy
 from .wire_log import OpenedWireSnapshot, WireLog
 from .wire_metadata import WireRootIdText
-
-_MAX_ROW = 8 * 1024 * 1024
+from .wire_record import WireRecord
 
 
 class ProjectionUnavailableError(RuntimeError):
@@ -153,6 +152,10 @@ class WakeCandidateIndex:
     exact page is NOT evidence of a sealed claim or a model-accepted input.
     """
 
+    batch_rows = 64
+    batch_bytes = 256 * 1024
+    batch_seconds = 0.2
+
     def __init__(self, log: WireLog):
         if type(log) is not WireLog or log.path.name != "bus.jsonl":
             raise TypeError("candidate index requires the canonical wire log")
@@ -201,7 +204,7 @@ class WakeCandidateIndex:
     def _validate_limits(max_rows: int, max_bytes: int) -> None:
         if type(max_rows) is not int or not 1 <= max_rows <= 256:
             raise ValueError("max_rows must be between 1 and 256")
-        if type(max_bytes) is not int or not 1 <= max_bytes <= _MAX_ROW:
+        if type(max_bytes) is not int or not 1 <= max_bytes <= WireRecord.max_row_bytes:
             raise ValueError("max_bytes must be a bounded positive byte count")
 
     @staticmethod
@@ -269,7 +272,7 @@ class WakeCandidateIndex:
         start = time.monotonic()
         admitted = 0
         for _ in range(max_rows):
-            if time.monotonic() - start > 0.2:
+            if time.monotonic() - start > cls.batch_seconds:
                 break  # Bounded maintenance; no expensive hot-path rebuild.
             available = max_bytes - (stream.tell() - offset)
             if available <= 0:
@@ -277,9 +280,10 @@ class WakeCandidateIndex:
             remaining = source.boundary - stream.tell()
             if remaining <= 0:
                 break
-            raw = stream.readline(min(_MAX_ROW + 1, remaining))
+            raw = stream.readline(min(WireRecord.max_row_bytes + 1, remaining))
             if not raw:
                 break
+            WireRecord.require_row_size(raw, error_type=ProjectionUnavailableError)
             if not raw.endswith(b"\n"):
                 raise ProjectionUnavailableError("incomplete candidate bus row")
             if len(raw) > available and admitted:
@@ -289,7 +293,7 @@ class WakeCandidateIndex:
                 break
             # A first record larger than the batch budget is admitted alone:
             # every batch with remaining source bytes must advance the
-            # checkpoint, and the record itself stays bounded by _MAX_ROW.
+            # checkpoint; WireRecord independently admits its physical size.
             admitted += 1
             record = json.loads(raw, object_pairs_hook=unique_wire_object)
             if not isinstance(record, dict):
@@ -342,7 +346,7 @@ class WakeCandidateIndex:
 
     def maintain(
         self, *, rebuild: bool = False, bootstrap_new: bool = False,
-        max_rows: int = 64, max_bytes: int = 256 * 1024,
+        max_rows: int = batch_rows, max_bytes: int = batch_bytes,
     ) -> bool:
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
@@ -438,8 +442,8 @@ class WakeCandidateIndex:
         self,
         hint: CommittedAppendHint,
         *,
-        max_rows: int = 64,
-        max_bytes: int = 256 * 1024,
+        max_rows: int = batch_rows,
+        max_bytes: int = batch_bytes,
         bootstrap_new: bool = False,
     ) -> CandidateCatchUp:
         """Replay at most ONE bounded batch after a durable append notification.

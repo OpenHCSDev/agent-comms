@@ -72,7 +72,7 @@ def _drain_candidate(root: Path) -> None:
                 target = _pending[root][1]
             hint = index.notify_committed_append(root_id=root_id, through_bytes=target)
             result = index.catch_up_committed_append(
-                hint, max_rows=64, max_bytes=256 * 1024, bootstrap_new=True
+                hint, bootstrap_new=True
             )
             with log._opened_wire_snapshot(need_sequence=False) as source:
                 route_result = routes.sync(
