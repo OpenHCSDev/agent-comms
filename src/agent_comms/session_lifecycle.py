@@ -163,8 +163,8 @@ class SessionLifecycle:
             self.thread_name_for(cwd),
             tags=frozenset({"acp"}),
             worktree=cwd,
-            model=self.comms.settings.parsed_arguments.model,
-            thinking_level=self.comms.settings.parsed_arguments.thinking,
+            model=self.comms.settings.model,
+            thinking_level=self.comms.settings.thinking_level,
             auto_title_pending=True,
         )
         self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))
