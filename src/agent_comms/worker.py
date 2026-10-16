@@ -12,10 +12,12 @@ from .acp import CommsAgent
 from .comms import wire
 from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
 from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
+from .child_process import ProcessIdentity
 from .owner_launch import RestartEnvironment
 
 
-async def run() -> None:
+async def run(settings: NativeThreadDefaults) -> None:
     # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
     lower_priority()
     private_nk = PrivateNkLaunch.current()
@@ -35,7 +37,8 @@ async def run() -> None:
         private_nk_native_package=private_nk.native_package if private_nk else None,
         private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
         private_nk_verified_cli=verified_cli,
-        agent_bin=NativeArguments.owner_launcher(),
+        agent_bin=NativeArguments.configured_binary(settings),
+        agent_args=list(settings.arguments),
     )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -99,13 +102,16 @@ def main() -> int:
     before consulting a route or wire so discovery cannot admit an owner.
     Registration belongs to the original thread management operation.
     """
-    argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         prog="agent-comms-agent", description=__doc__,
         epilog=(
             f"Select an existing owner with {RestartEnvironment.owner_key}. "
             "Use agent-comms for commands."
         ),
-    ).parse_args()
+    )
+    NativeThreadDefaults.add_launch_argument(parser, required=True)
+    namespace = parser.parse_args()
+    settings = NativeThreadDefaults.from_descriptor(namespace.native_settings_fd)
     name = RestartEnvironment.calling_thread()
 
     launch = private_nk_from_environment()
@@ -113,12 +119,13 @@ def main() -> int:
         raise ValueError("Headless execution requires a configured native route")
     comms = wire(launch.validated_root)
     thread = comms.registry.require(name)
-    if thread.process_identity is not None and thread.process_identity.alive():
+    if (thread.process_identity is not None and thread.process_identity.alive()
+            and thread.process_identity != ProcessIdentity.capture(os.getpid())):
         raise ValueError(f"Thread {thread.name!r} already has a live owner")
     with suppress(KeyboardInterrupt):
-        asyncio.run(run())
+        asyncio.run(run(settings))
     return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    raise SystemExit(main())
