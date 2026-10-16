@@ -127,7 +127,7 @@ class OpenedWireSnapshot:
         records = []
         while self.stream.tell() < self.boundary:
             raw = self.stream.readline(
-                min(scan.max_row_bytes + 1, self.boundary - self.stream.tell())
+                min(WireRecord.max_row_bytes + 1, self.boundary - self.stream.tell())
             )
             if not raw:
                 break
@@ -498,7 +498,7 @@ class WireLog:
         with self.path.open("rb") as stream:
             while True:
                 offset = stream.tell()
-                line = stream.readline(scan.max_row_bytes + 1)
+                line = stream.readline(WireRecord.max_row_bytes + 1)
                 if not line:
                     break
                 record = scan.read(line)
@@ -514,8 +514,7 @@ class WireLog:
         StoreLock.current_release().require_active()
         metadata.access.require_append()
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
-        if len(encoded) > 8 * 1024 * 1024:
-            raise RelationViolationError("Private bus row exceeds the byte limit.")
+        WireRecord.require_row_size(encoded, message="Private bus row exceeds the byte limit.")
         record = WireRecord.from_wire(row, metadata.root_id)
         metadata.last_seq = record.sequence_after(metadata.last_seq)
         self.write_metadata_unlocked(metadata)
@@ -659,7 +658,7 @@ class WireLog:
     def _snapshot_records(metadata, stream, boundary):
         scan = WireScan(metadata)
         while stream is not None and stream.tell() < boundary:
-            raw = stream.readline(min(scan.max_row_bytes + 1, boundary - stream.tell()))
+            raw = stream.readline(min(WireRecord.max_row_bytes + 1, boundary - stream.tell()))
             if not raw:
                 break
             yield scan.read(raw)
