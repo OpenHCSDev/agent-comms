@@ -28,6 +28,7 @@ from agent_comms.cli_protocol import CORE_ERROR, CoreError, TaggedWire, WireMode
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageKind
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
@@ -549,7 +550,7 @@ class CoreConnection:
         with (state / 'watch.stderr.log').open('a') as errors:
             child = await asyncio.create_subprocess_exec(
                 self.executable, '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-                '--acknowledgment', ExplicitWatchAcknowledgment.declared_name,
+                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment),
                 stdout=asyncio.subprocess.PIPE, stderr=errors)
             try:
                 while line := await child.stdout.readline():
