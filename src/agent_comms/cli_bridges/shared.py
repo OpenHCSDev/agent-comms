@@ -12,10 +12,10 @@ import sys
 from abc import ABC, abstractmethod
 from contextlib import aclosing, suppress
 from collections.abc import Iterable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import AsyncIterator, ClassVar, Generic, TypeVar
+from typing import AsyncIterator, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue, TypeAdapter
 
@@ -25,6 +25,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import CORE_ERROR, CoreError, WireModel
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.messages import Message, MessageKind
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
@@ -60,11 +61,11 @@ class Binding:
     thread: str
 
 
-class DraftAccumulator(ABC):
+@dataclass
+class DraftAccumulator:
     """One subscription's item prefix; the shared output owns its lifetime."""
 
-    @abstractmethod
-    def started_at(self) -> float | None: ...
+    started_at: EventTime
 
     def restarted(self, replacement: DraftAccumulator) -> DraftAccumulator:
         return replacement
@@ -84,29 +85,14 @@ class DraftAccumulator(ABC):
 
 
 @dataclass
-class NonTextDraft(DraftAccumulator):
-    timestamp: float | None
-
-    def started_at(self) -> float | None:
-        return self.timestamp
-
-
-@dataclass
 class TextDraft(DraftAccumulator):
-    template: TextTranscript
+    event_type: type[TextTranscript]
     sections: dict[int, list[str]]
     separator: ClassVar[str] = ''
 
     @classmethod
-    def from_event(cls, event: TextTranscript) -> TextDraft:
-        return cls.from_parts(event, (event.text,))
-
-    @classmethod
-    def from_parts(cls, template: TextTranscript, parts: Iterable[str]) -> TextDraft:
-        return cls(replace(template, text=''), {index: [text] for index, text in enumerate(parts)})
-
-    def started_at(self) -> float | None:
-        return self.template.timestamp
+    def from_parts(cls, event_type: type[TextTranscript], parts: Iterable[str], started_at: EventTime) -> Self:
+        return cls(started_at, event_type, {index: [text] for index, text in enumerate(parts)})
 
     def append(self, text: str, section: int) -> None:
         self.sections.setdefault(section, []).append(text)
@@ -115,7 +101,7 @@ class TextDraft(DraftAccumulator):
     def events(self) -> tuple[TranscriptEvent, ...]:
         text = self.separator.join(text for index in sorted(self.sections)
                                    if (text := ''.join(self.sections[index])))
-        return (replace(self.template, text=text),) if text else ()
+        return (self.started_at.stamp(self.event_type(text)),) if text else ()
 
     def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
         return (DraftItem(turn_id, item_id, self),)
@@ -125,7 +111,7 @@ class ParagraphDraft(TextDraft):
     separator = '\n\n'
 
 
-class ClosedDraft(NonTextDraft):
+class ClosedDraft(DraftAccumulator):
     """Completed snapshots reject overlapping older starts and late suffixes."""
 
     def restarted(self, replacement: DraftAccumulator) -> DraftAccumulator:
@@ -172,10 +158,9 @@ class ThreadOutput:
     def finish_item(self, update: CompletedItem) -> FinishedItem:
         key = update.turn_id, update.item_id
         current = self.drafts.get(key)
-        timestamp = current.started_at() if current is not None else None
-        self.drafts[key] = ClosedDraft(timestamp)
-        events = update.events if timestamp is None else tuple(
-            replace(event, timestamp=timestamp) for event in update.events)
+        started_at = current.started_at if current is not None else UnrecordedEventTime()
+        self.drafts[key] = ClosedDraft(started_at)
+        events = tuple(started_at.stamp(event) for event in update.events)
         return FinishedItem(update.turn_id, update.item_id, events)
 
     def end_turn(self, turn_id: str) -> None:

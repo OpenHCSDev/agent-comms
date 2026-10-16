@@ -109,11 +109,12 @@ def test_deltas_require_start_and_finish_retires_the_assembly(tmp_path):
 
 def test_coalescing_preserves_completion_and_unrelated_updates():
     from agent_comms.cli_bridges.shared import DraftItem, FinishedItem, TextDraft, TranscriptUpdate, TurnEnded
+    from agent_comms.recorded_time import UnrecordedEventTime
     from agent_comms.transcript_events import AssistantTranscript
 
-    first = DraftItem("t", "a", TextDraft.from_event(AssistantTranscript("H")))
-    newer = DraftItem("t", "a", TextDraft.from_event(AssistantTranscript("Hello")))
-    other = DraftItem("t", "b", TextDraft.from_event(AssistantTranscript("Other")))
+    first = DraftItem("t", "a", TextDraft.from_parts(AssistantTranscript, ("H",), UnrecordedEventTime()))
+    newer = DraftItem("t", "a", TextDraft.from_parts(AssistantTranscript, ("Hello",), UnrecordedEventTime()))
+    other = DraftItem("t", "b", TextDraft.from_parts(AssistantTranscript, ("Other",), UnrecordedEventTime()))
     final = FinishedItem("t", "a", (AssistantTranscript("Hello!"),))
     end = TurnEnded()
     assert TranscriptUpdate.coalesced([first, other, newer]) == [other, newer]

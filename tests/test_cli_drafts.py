@@ -3,16 +3,17 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_bridges.shared import (
-    ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, FinishedItem,
-    FinishedTurn, NonTextDraft, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
+    ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, DraftAccumulator, FinishedItem,
+    FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
 from test_codex_items import _output
 
 
 def start(turn, item, text='', accumulator=TextDraft):
     return StartedItem(turn, item, ActivityState.WORKING, 'Replying',
-                       accumulator.from_event(AssistantTranscript(text, timestamp=1.0)))
+                       accumulator.from_parts(AssistantTranscript, (text,), RecordedEventTime(1.0)))
 
 
 def test_batched_deltas_materialize_only_the_surviving_view(tmp_path):
@@ -73,7 +74,7 @@ def test_paragraph_identity_not_arrival_order_owns_summary_joining(tmp_path):
     from agent_comms.cli_bridges.codex_protocol import ReasoningItem
 
     output = _output(tmp_path)
-    accumulator = ParagraphDraft.from_parts(ThinkingTranscript('', timestamp=2.0), [])
+    accumulator = ParagraphDraft.from_parts(ThinkingTranscript, [], RecordedEventTime(2.0))
     output.publish_batch([
         StartedItem('t', 'r', ActivityState.THINKING, '', accumulator),
         AppendDraftItem('t', 'r', 'Two', 1), AppendDraftItem('t', 'r', 'One', 0),
@@ -87,10 +88,32 @@ def test_paragraph_identity_not_arrival_order_owns_summary_joining(tmp_path):
 
 def test_non_text_items_never_acquire_invented_text(tmp_path):
     output = _output(tmp_path)
-    output.publish_batch([StartedItem('t', 'tool', ActivityState.WORKING, 'Run', NonTextDraft(1.0))])
+    output.publish_batch([StartedItem('t', 'tool', ActivityState.WORKING, 'Run', DraftAccumulator(RecordedEventTime(1.0)))])
     with pytest.raises(ValueError, match='non-text item'):
         AppendDraftItem('t', 'tool', 'not a reply').accumulate(output)
     assert output.transcript.current_draft() is None
+
+
+@pytest.mark.parametrize('started_at, expected', [
+    (RecordedEventTime(0.0), 0.0), (RecordedEventTime(1.0), 1.0), (UnrecordedEventTime(), 9.0),
+])
+def test_time_family_preserves_real_zero_and_unrecorded_completion_fallback(tmp_path, started_at, expected):
+    output = _output(tmp_path)
+    output.publish_batch([
+        StartedItem('t', 'a', ActivityState.WORKING, '', DraftAccumulator(started_at)),
+        CompletedItem('t', 'a', (AssistantTranscript('finished', timestamp=9.0),)),
+    ])
+    with output.transcript.reading() as snapshot:
+        row, = snapshot.forward(0, snapshot.cut().offset)
+        assert row.events[0].timestamp == expected
+
+
+def test_optional_wire_start_preserves_recorded_epoch_zero():
+    from agent_comms.cli_bridges.codex_protocol import ItemEntry
+
+    entry = ItemEntry(turnId='t', item={'type': 'agentMessage', 'id': 'a', 'text': 'epoch'},
+                      startedAtMs=0, completedAtMs=2000)
+    assert entry.publication().events[0].timestamp == 0.0
 
 
 def test_completed_only_sources_do_not_retain_draft_state(tmp_path):

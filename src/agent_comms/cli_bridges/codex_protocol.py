@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from dataclasses import replace
 from difflib import unified_diff
 from typing import ClassVar, Generic, Literal, TypeVar
 
@@ -20,6 +19,7 @@ from pydantic import (
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -35,7 +35,6 @@ from .shared import (
     CompletedItem,
     DraftAccumulator,
     FinishedTurn,
-    NonTextDraft,
     ParagraphDraft,
     StartedItem,
     TextDraft,
@@ -273,8 +272,8 @@ class Item(TaggedWire, ABC):
     def events(self) -> tuple[TranscriptEvent, ...]:
         """The finished item's presentation."""
 
-    def accumulator(self, timestamp: float | None) -> DraftAccumulator:
-        return NonTextDraft(timestamp)
+    def accumulator(self, started_at: EventTime) -> DraftAccumulator:
+        return DraftAccumulator(started_at)
 
     @property
     def activity_detail(self) -> str:
@@ -283,11 +282,11 @@ class Item(TaggedWire, ABC):
 class TextBody(WireModel):
     text: str
 
-    def accumulator(self, timestamp: float | None) -> TextDraft:
-        return TextDraft.from_event(AssistantTranscript(self.text, timestamp=timestamp))
+    def accumulator(self, started_at: EventTime) -> TextDraft:
+        return TextDraft.from_parts(AssistantTranscript, (self.text,), started_at)
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return self.accumulator(None).events
+        return self.accumulator(UnrecordedEventTime()).events
 
 
 class AssistantItem(TextBody, Item):
@@ -305,12 +304,12 @@ class ReasoningItem(Item):
     activity = ActivityState.THINKING
     summary: list[str] = Field(default_factory=list)
 
-    def accumulator(self, timestamp: float | None) -> ParagraphDraft:
+    def accumulator(self, started_at: EventTime) -> ParagraphDraft:
         # Only public summaries; private/raw reasoning is never projected.
-        return ParagraphDraft.from_parts(ThinkingTranscript('', timestamp=timestamp), self.summary)
+        return ParagraphDraft.from_parts(ThinkingTranscript, self.summary, started_at)
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return self.accumulator(None).events
+        return self.accumulator(UnrecordedEventTime()).events
 
 
 class UserItem(Item):
@@ -735,9 +734,10 @@ class ItemEntry(WireModel):
     def publication(self) -> CompletedItem:
         if self.completedAtMs is None:
             raise ValueError(f'Item {self.item.id} has not finished')
-        timestamp = self.startedAtMs or self.completedAtMs
+        started_at = EventTime.capture(None if self.startedAtMs is None else self.startedAtMs / 1000)
+        event_time = started_at.continued_from(self.completedAtMs / 1000)
         return CompletedItem(self.turnId, self.item.id, tuple(
-            replace(event, timestamp=timestamp / 1000) for event in self.item.events()))
+            event_time.stamp(event) for event in self.item.events()))
 
 
 class ItemsPage(WireModel):
@@ -786,7 +786,7 @@ class Started(ItemNotification):
 
     def apply(self, stream: ItemStream) -> TranscriptUpdate:
         return StartedItem(self.turnId, self.item.id, self.item.activity, self.item.activity_detail,
-                           self.item.accumulator(self.startedAtMs / 1000))
+                           self.item.accumulator(RecordedEventTime(self.startedAtMs / 1000)))
 
 
 class Completed(ItemNotification):
