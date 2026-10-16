@@ -11,7 +11,6 @@ const pkg=process.env.PI_COMPACTION_TEST_PACKAGE;
 assert.ok(pkg,'Matched installed native bundle required');
 const artifacts=resolve('.artifacts');mkdirSync(artifacts,{recursive:true});
 const root=mkdtempSync(join(artifacts,'fork-context-'));
-process.env.AGENT_COMMS_SESSION_INDEX_DIR=join(root,'indexes');
 process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
 const requests=[];
 const server=createServer(async(request,response)=>{

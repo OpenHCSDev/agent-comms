@@ -4,22 +4,22 @@ from __future__ import annotations
 
 import json
 import re
-from contextlib import ExitStack, contextmanager
 from abc import abstractmethod
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any, ClassVar, Literal
 
-from .pi_vocabulary import ThinkingLevel
 from . import agent_backend as pivot
 from .declared_family import DeclaredFamily
+from .importing import ImportedSessionMetadata
 from .pi_payloads import PiMessage, PiPayload
 from .pi_rpc import unique_fields
+from .pi_vocabulary import ThinkingLevel
 from .routing import TurnRouting
 from .transcript_events import NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputDisplay
-from .importing import ImportedSessionMetadata
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,11 @@ class NativeEntryCoordinates(PiPayload):
     """Original external ancestry fields; opaque entries project this same owner."""
     id: str | None = None
     parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
+    input_boundary: ClassVar[bool] = False
+
+    @property
+    def source_coordinates(self):
+        return self
 
     @property
     def original_id(self):
@@ -48,7 +53,6 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     timestamp: str | None = None
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
-    input_boundary: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
 
     def imported_sources(self):
@@ -70,6 +74,23 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
     @classmethod
     def read(cls, raw: bytes) -> NativeEntry:
         return cls.from_wire(json.loads(raw))
+
+    @classmethod
+    def read_ancestry(cls, raw: bytes, parents) -> NativeEntryCoordinates:
+        """Decode only original coordinates unless a queried input is reached.
+
+        The same PiPayload/FieldCodec boundary owns both projections. Unrelated
+        message bodies cannot contribute to this parent-chain query.
+        """
+        value = json.loads(raw)
+        coordinates = NativeEntryCoordinates.from_wire(value)
+        if coordinates.id in parents:
+            return cls.wire_member(value).input_ancestor(value, coordinates)
+        return coordinates
+
+    @classmethod
+    def input_ancestor(cls, value, coordinates):
+        return cls.from_wire(value) if cls.input_boundary else coordinates
 
     @classmethod
     def from_evidence(cls, raw: dict) -> NativeEntry:
@@ -141,10 +162,6 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
 
     def require_entry_id(self) -> str:
         return self.source_coordinates.original_id
-
-    @property
-    def source_coordinates(self):
-        return self
 
     def require_tracked_user(self) -> MessageEntry:
         tracked = self.tracked_user
@@ -421,6 +438,13 @@ class SessionEntry(NativeEntry):
 @dataclass(frozen=True, kw_only=True)
 class MessageEntry(NativeEntry):
     @classmethod
+    def input_ancestor(cls, value, coordinates):
+        # The declared message role, not a nearby user or an opaque payload,
+        # owns whether this original parent is an input boundary.
+        member = PiMessage.wire_type(value.get("message"))
+        return cls.from_wire(value) if member.user else coordinates
+
+    @classmethod
     def input_evidence(cls, raw: dict) -> NativeEntry | None:
         message = raw["message"]
         if not isinstance(message, dict):
@@ -452,8 +476,8 @@ class MessageEntry(NativeEntry):
 
     @property
     def tracked_user(self) -> MessageEntry | None:
-        from .native_pi import _DIGEST
         from .native_input_record import NativeInputIdText
+        from .native_pi import _DIGEST
 
         if self.message.input_id is None:
             return None
@@ -508,7 +532,8 @@ class CustomEntry(NativeEntry):
 
     @classmethod
     def wire_variant(cls, value):
-        return ImportedMetadataEntry if value.get("customType") == "agent-comms-import" else UnknownEntry
+        return (ImportedMetadataEntry
+                if value.get("customType") == "agent-comms-import" else UnknownEntry)
 
 
 @dataclass(frozen=True, kw_only=True)

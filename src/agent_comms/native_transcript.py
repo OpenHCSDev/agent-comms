@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from abc import abstractmethod
+from collections import defaultdict
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -16,32 +16,31 @@ from .transcript_receipts import TranscriptSource
 
 
 def _reverse_records(
-    path: Path, before: int, *, floor: int = 0
-) -> Generator[tuple[int, int, bytes], None, None]:
+    stream, before: int, *, floor: int = 0
+) -> Generator[tuple[int, int, bytes]]:
     """Scan offsets in fixed chunks, then read each complete record exactly once.
 
     Record size is independent of scan-buffer size. In particular, images/tool
     output exceeding a buffer are neither dropped nor repeatedly concatenated.
     """
-    with path.open("rb") as stream:
-        position = end = before
-        while position > floor:
-            count = min(position - floor, 65536)
-            position -= count
-            stream.seek(position)
-            block = stream.read(count)
-            stop = len(block)
-            while (boundary := block.rfind(b"\n", 0, stop)) >= 0:
-                start = position + boundary + 1
-                stop = boundary
-                if start == end:
-                    continue
-                stream.seek(start)
-                yield start, end, stream.read(end - start)
-                end = start
-        if floor == 0 and end:
-            stream.seek(0)
-            yield 0, end, stream.read(end)
+    position = end = before
+    while position > floor:
+        count = min(position - floor, 65536)
+        position -= count
+        stream.seek(position)
+        block = stream.read(count)
+        stop = len(block)
+        while (boundary := block.rfind(b"\n", 0, stop)) >= 0:
+            start = position + boundary + 1
+            stop = boundary
+            if start == end:
+                continue
+            stream.seek(start)
+            yield start, end, stream.read(end - start)
+            end = start
+    if floor == 0 and end:
+        stream.seek(0)
+        yield 0, end, stream.read(end)
 
 
 class RecordsCut(DeclaredFamily, affix="Cut"):
@@ -69,13 +68,17 @@ class SessionCut(RecordsCut):
     revision: FileRevision | None  # None until the native session file exists
 
     @property
+    def present(self) -> bool:
+        return self.revision is not None
+
+    @property
     def offset(self) -> int:
-        return self.revision.size if self.revision is not None else 0
+        return self.revision.size if self.present else 0
 
     def contains(self, current: SessionCut, through: int) -> bool:
         # A session is append-only within one inode: later bytes belong to the
         # next update. Replacement, truncation or a rewrite changes the cut.
-        if self.revision is None or current.revision is None:
+        if not self.present or not current.present:
             return self.revision == current.revision
         return self.revision.holds_cut(current.revision, through)
 
@@ -129,10 +132,21 @@ class NativeTranscript(TranscriptSource):
     def __init__(self, path: Path):
         self.path = path
 
+    def _open(self):
+        return self.path.open("rb")
+
     @contextmanager
     def reading(self):
-        """Keep the native record owner bound across one page projection."""
-        yield self
+        """Bind records, header and ancestry to one original file resource."""
+        try:
+            stream = self._open()
+        except FileNotFoundError:
+            # A newly created thread has a named source before its first file.
+            # Its absent SessionCut remains explicit; reading bytes still fails.
+            yield self
+        else:
+            with stream:
+                yield OpenedNativeTranscript(self.path, stream)
 
     def current_draft(self) -> None:
         """Native in-progress output belongs to the ACP stream."""
@@ -148,7 +162,10 @@ class NativeTranscript(TranscriptSource):
         from .session_revision import SessionRevision
 
         revision = SessionRevision.observe(str(self.path)).require_available()
-        with self.path.open("rb") as stream:
+        with self._open() as stream:
+            if FileRevision.from_file(stream) != revision.native:
+                raise ValueError("Imported context saved source changed while opening")
+            stream.seek(0)
             header = NativeEntry.read(stream.readline())
             if not isinstance(header, SessionEntry):
                 raise ValueError("Imported source has no original native session header")
@@ -170,7 +187,7 @@ class NativeTranscript(TranscriptSource):
         from .bus_publication import stable_thread_lookup
         from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 
-        if not self.path.is_file():
+        if not self.cut().present:
             return PublishedReplyRevision(0, 0)
         return NativeRuntimeInput.publication_revision(
             root, self, stable_thread_lookup(thread.created_at))
@@ -207,7 +224,8 @@ class NativeTranscript(TranscriptSource):
 
     @property
     def session_id(self):
-        with self.path.open("rb") as stream:
+        with self._open() as stream:
+            stream.seek(0)
             entry = NativeEntry.read(stream.readline())
         return entry.id if isinstance(entry, SessionEntry) else None
 
@@ -226,7 +244,8 @@ class NativeTranscript(TranscriptSource):
         from .native_pi import NativeContextJournal, _private_session_dir
 
         _private_session_dir(self.path.parent)
-        with self.path.open("rb") as stream:
+        with self._open() as stream:
+            stream.seek(0)
             header = NativeEntry.read(stream.readline())
         if not isinstance(header, SessionEntry):
             raise ValueError("Native publication has no original session header")
@@ -238,42 +257,50 @@ class NativeTranscript(TranscriptSource):
             return proof.corroborate(self.path.absolute(), header, {user.input_id: user})
 
     def inputs_for(self, records) -> tuple:
-        """Each record's original input, found in one reverse walk for the batch.
+        """Resolve actual parent chains, reusing the fragment's original records."""
+        with self.reading() as reader:
+            return reader._inputs_for(records)
 
-        Parent IDs are followed back from the latest record; every intervening
-        record is visited once for the whole batch, and the walk stops when each
-        chain reaches a user boundary or a root. Tool rounds and branches cannot
-        lend another input's publication proof.
-        """
+    def _inputs_for(self, records) -> tuple:
         found = [None] * len(records)
-        waiting: dict[str | None, list[int]] = defaultdict(list)
-        latest = 0
-        for position, record in enumerate(records):
-            entry = record.entry
+        waiting: dict[str, list[int]] = defaultdict(list)
+
+        def visit(entry, position=None):
             if entry is None:
-                continue
+                return
+            coordinates = entry.source_coordinates
+            chain = waiting.pop(coordinates.id, [])
+            if position is not None:
+                chain.append(position)
             if entry.input_boundary:
-                found[position] = entry
-            else:
-                waiting[entry.parent_id].append(position)
-                latest = max(latest, record.start)
-        # A chain that reaches a root (no parent) has no input.
-        waiting.pop(None, None)
-        if waiting:
-            for ancestor in self.reverse(latest):
-                entry = ancestor.entry
-                if entry is None or entry.id not in waiting:
-                    continue
-                chain = waiting.pop(entry.id)
-                if entry.input_boundary:
-                    for position in chain:
-                        found[position] = entry
-                else:
-                    waiting[entry.parent_id].extend(chain)
-                    waiting.pop(None, None)
-                if not waiting:
-                    break
+                for target in chain:
+                    found[target] = entry
+            elif coordinates.parent_id is not None and chain:
+                waiting[coordinates.parent_id].extend(chain)
+
+        before = 0
+        for position, record in sorted(enumerate(records), key=lambda item: item[1].start,
+                                       reverse=True):
+            if waiting and before > record.end:
+                # Include the known delimiter before this gap's first record,
+                # not the already decoded original on the other side of it.
+                for entry in self._ancestors(before, waiting, floor=record.end - 1):
+                    visit(entry)
+            visit(record.entry, position)
+            before = record.start
+        for entry in self._ancestors(before, waiting):
+            visit(entry)
         return tuple(found)
+
+    def _ancestors(self, before, waiting, *, floor=0):
+        if not waiting:
+            return
+        with self._open() as stream:
+            for _, _, raw in _reverse_records(stream, before, floor=floor):
+                if raw.endswith(b"\n"):
+                    yield NativeEntry.read_ancestry(raw, waiting)
+                if not waiting:
+                    return
 
     def input_for(self, record: NativeRecord):
         """The native record and its parent chain own the original input."""
@@ -287,38 +314,74 @@ class NativeTranscript(TranscriptSource):
         """
         from .errors import RelationViolationError
 
-        for record in self.reverse(through):
-            if record.start < after:
-                break
-            producer = record.publication_producer()
-            if producer is None:
-                continue
-            user = self.input_for(record)
-            if user is None:
-                raise RelationViolationError("Native publication has no tracked input ancestry")
-            user = user.require_tracked_user()
-            self.require_publication_context(user)
-            return record, user
+        with self.reading() as reader:
+            for record in reader.reverse(through):
+                if record.start < after:
+                    break
+                producer = record.publication_producer()
+                if producer is None:
+                    continue
+                user = reader.input_for(record)
+                if user is None:
+                    raise RelationViolationError("Native publication has no tracked input ancestry")
+                user = user.require_tracked_user()
+                reader.require_publication_context(user)
+                return record, user
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
 
+    def latest_tool(self):
+        """Select by original persisted order, never a lifetime tail or clock max."""
+        from .native_index import NativeIndexHelper
+        from .native_pi import NativePiUnavailable
+        from .tool_activity import NativeToolSelectorUnavailable
+
+        try:
+            with self.reading() as reader, reader._open() as stream:
+                return NativeIndexHelper.observe(reader.path).tool_activity(reader.path, stream)
+        except (OSError, TypeError, ValueError, NativePiUnavailable):
+            return NativeToolSelectorUnavailable()
+
     def tail(self, *, max_bytes: int | None = None):
-        end = self.path.stat().st_size
-        floor = max(0, end - max_bytes) if max_bytes is not None else 0
-        for _, _, raw in _reverse_records(self.path, end, floor=floor):
-            # Skip only the record still being appended; corrupt history raises.
-            if raw.endswith(b"\n"):
-                yield NativeEntry.read(raw)
+        with self._open() as stream:
+            end = FileRevision.from_file(stream).size
+            floor = max(0, end - max_bytes) if max_bytes is not None else 0
+            for _, _, raw in _reverse_records(stream, end, floor=floor):
+                # Skip only the record still being appended; corrupt history raises.
+                if raw.endswith(b"\n"):
+                    yield NativeEntry.read(raw)
 
     def forward(self, after: int, through: int):
-        with self.path.open("rb") as stream:
-            stream.seek(after)
-            while stream.tell() < through:
-                start = stream.tell()
-                raw = stream.readline(through - start)
+        with self._open() as stream:
+            position = after
+            while position < through:
+                stream.seek(position)
+                raw = stream.readline(through - position)
                 if not raw:
                     return
-                yield NativeRecord.read(start, stream.tell(), raw)
+                end = stream.tell()
+                yield NativeRecord.read(position, end, raw)
+                position = end
 
     def reverse(self, before: int):
-        for start, end, raw in _reverse_records(self.path, before):
-            yield NativeRecord.read(start, end, raw)
+        with self._open() as stream:
+            for start, end, raw in _reverse_records(stream, before):
+                yield NativeRecord.read(start, end, raw)
+
+
+class OpenedNativeTranscript(NativeTranscript):
+    """An acquired descriptor; inherited traversal never reopens its pathname."""
+
+    def __init__(self, path, stream):
+        super().__init__(path)
+        self._stream = stream
+
+    @contextmanager
+    def _open(self):
+        yield self._stream
+
+    @contextmanager
+    def reading(self):
+        yield self
+
+    def cut(self) -> SessionCut:
+        return SessionCut(FileRevision.from_file(self._stream))

@@ -1,0 +1,207 @@
+# Native input ancestry: owned source pass
+
+Implementation owner: core-retry. Integration/observation/UI owner: codex.
+Base: Core173d2bfd, paired Toad pinned in native-ancestry-8302-before.json.
+Scratch owner/purpose: core-retry, saved-page measurements and disposable fixtures,
+`/home/ts/.cache/agent-scratch/core-native-ancestry-8302`.
+
+## Required answers and source
+
+- Parent/entry identity belongs to `NativeEntryCoordinates`, including opaque
+  entries through `source_coordinates`; display fields cannot redefine it.
+- A user boundary belongs to the declared NativeEntry/PiMessage behavior. Stop
+  at the actual parent-linked input, never a physically nearby unrelated user.
+- Original native input/stage/publication belongs to NativeRuntimeInput's exact
+  file + session + user-entry relation. Copies/inherited files cannot borrow it.
+- `NativeTranscript.reading` owns one original descriptor across a page's header,
+  records and ancestry. Replacement cannot splice ancestors from another inode.
+- Full message bodies belong to their original decoded NativeRecord. Reuse the
+  contiguous fragment's originals; older ancestry needs coordinates, not tool
+  payload decoding. Decode an actual matching user through the existing codec.
+
+Existing refactor-audit parser:607 modules, zero omissions,895 family sites.
+This is syntax/name evidence, not binding or behavioral proof. SQL/callback and
+subclass dispatch are checked semantically. Relevant patterns: BOUND-1/2 and
+IMPL-12; share boundary/resource behavior rather than another cache/index/codec.
+NativeTranscript.inputs_for is also used by strict publication_input; both
+must preserve parent chains, roots and untracked user boundaries.
+
+## Required finish line
+
+A bounded page must not depend on lifetime-history length. Coordinate-only
+backward traversal is an intermediate checkpoint, not completion. The existing
+native EntryStore owns seekable parent/offset selectors. At the initial
+checkpoint, DiskEntryStore's SQLite was per-open and unlinked; rebuilding it on
+every page would still be linear. The latest-tool checkpoint below repairs that
+lifetime and read-only acquisition. Still derive each entry's input ancestor
+from its validated parent during index/append, and consume that same selector
+from Core's page reader. Untracked user entries
+are boundaries too. No second Core index/cache and no nearest-user heuristic.
+
+Toad-close-lifecycle confirmed it owns only certified-bus context-manifest
+paging, not NativeTranscript, EntryStore, native indexes or acquisition. These
+native changes remain with core-retry; codex retains bus-lock/observation work.
+
+## Change and acceptance
+
+Keep source traversal in NativeTranscript and its acquired-resource subtype;
+project ancestry through NativeEntryCoordinates and declaration-owned native
+message behavior. Delete the full-body ancestor walk and path reopenings inside
+an acquired page. Keep actual source branches and inherited-session identities.
+No second metadata index, retained ancestry cache, raw role switch or format fallback.
+
+Codex's real saved page:4 events,486 NativeRecord decodes,139ms in inputs_for
+of234ms profiled read. Preserve the exact returned page/provenance; compare
+that actual saved-source path after the coherent implementation. Then confirm
+branches, off-page intermediates, opaque entries, incomplete tails, replacement,
+forward/reverse consumption, publication and absence of SQL custody during walks.
+
+PR872 is an unfinished alternate checkpoint; core-route-counts confirmed no
+active overlap. It detached unresolved off-page chains and did not complete
+ancestry/live acceptance. It is not adopted as proof or implementation.
+Two old observer fixtures in test_viewer_snapshot_index still reference the
+removed ObserveSidebar.apply API; core-retry retains their migration, separately
+from production observer orchestration owned by codex. Codex explicitly deferred
+sidebar rechecks in favor of this native source work.
+
+## Intermediate checked checkpoint (not ready)
+
+NativeEntryCoordinates owns parent identity including opaque extension entries.
+Original fragment records are reused; older ancestors project through that
+existing schema and native-message declarations, not a second codec.
+PiPayload.wire_type owns shared object/variant validation. Acquired native
+readers inherit traversal against one descriptor, including header/ancestry;
+forward cursors remain stable during nested reverse reads.
+
+ReadTranscript on the real configured saved toad-close-lifecycle source:
+34 events under a retained native/wire bound, identical complete-page SHA256
+before/after. Three profiled baseline reads:393.9/271.3/274.8ms; intermediate:
+208.4/128.6/120.1ms. Full-body read calls726→34, but667 coordinate decodes and
+three ancestry walks remain. This does not meet lifetime independence or50ms;
+it is not installed/physical acceptance and does not attribute the5.623s gap.
+Exact bound/identities/results: core-native-ancestry-8302/{request,before,after}.json.
+
+Python family census:607 modules, zero parse omissions,895→915 syntax/name
+sites, with the same pinned Toad3ad856b71 and metaclass-registry roots. Dynamic
+factory/alias resolution remains manual; these are not binding or timing proofs.
+Native JavaScript/index lifecycle is a separate required source pass before its
+implementation. The intermediate Python debt ratchet reports two additional
+foreign-absence syntax probes in native_transcript.py, not zero; no GodClass or
+boolean-chain increase. The probes include typed presence and nullable parent
+consumption in the still-to-be-deleted traversal. Ruff E/F/I and diff checks pass.
+A new opaque native entry needs no ancestry roster edit: its declared original
+coordinates suffice. A new declared Pi input-message role supplies its own user
+capability; MessageEntry consumes that declaration, not another role-name list.
+
+60 focused checks passed across the native boundary/context batch. Six stale
+terminal fixtures use removed output/failure APIs; three stale cursor/proof
+fixtures use removed assignment fields/old error wording. The isolated native
+publication fixture reached a catalog EOF before its test turn; the reused
+immutable package verifies, and the source-only runtime link was retired after
+checking no native process used it. Retain its log/fixture for diagnosis, not
+as an accepted native turn. A prior broader outbound batch also exposed five
+notification/identity/read failures; their exact names/log are retained and they
+have not been dispositioned by a baseline run. No production fallback was added. The strict corrupt-native test now distinguishes complete
+corruption (raises) from an incomplete tail (no decoded entry).
+
+The old verification UI on:215 was closed normally at codex's request:
+st411658/toad411665/observer411741 gone. No native worker was signalled; original
+sessions/auth/UNKNOWN remain untouched. Receipt:old-ui-retired.json in the
+owned scratch root. Xvfb106063 is retained for the isolated acceptance display.
+
+## Exact latest-tool checkpoint (source only, not completion of #908)
+
+The original EntryStore now retains its SQLite selectors beside the original
+JSONL (`.entry-index.v2.sqlite3`). NativeSessionFiles includes that database and
+its journal/WAL/SHM in its existing membership, borrower and retirement behavior.
+The old per-open/unlinked index and alternate global index-directory option are
+removed, including their repository callers. Original JSONL remains authority;
+no message bodies or tool arguments are stored in the index.
+
+DiskEntryStore prepares missing/stale selectors only for the existing native
+SessionManager loading/writing path. Its ReadOnlyEntryStore capability cannot
+create, rebuild or append: a fleet query with no matching indexed cut fails
+unavailable without reading lifetime history. A partial sequence index selects
+one original entry with toolCallCount > 0, in physical persisted order across all
+branches. The predicate is declared once in DiskEntryStore and used by both DDL
+and selection. EntryMetadata owns the count and only projects native message
+fields from actual message entries; opaque extensions cannot impersonate calls,
+tracked inputs or model selection merely by containing a `message` property.
+
+Preparation decodes JSONL outside shared SQL transactions. Unpublished staging
+rows become visible with their exact source cut in one publication transaction.
+Normal native append commits its selectors and source revision together. Dead
+preparer tables can be retired; live/reused/inaccessible process owners are not
+stolen. Query readers are read-only and do not wait on a writer. Each successful
+query checks both original descriptor and pathname revisions, plus the stored
+source revision. Missing/incomplete/changed evidence never proves absence.
+
+NativeTranscript.latest_tool() returns #973's existing ToolActivity declarations.
+The packaged helper returns original coordinates and exact integer filesystem
+revisions, not a JavaScript-decoded message body. Python reads the original entry
+through its held descriptor and existing NativeEntry codec, preserving large
+integer arguments. NativeIndexObservation owns selection projection; the final
+original tool block wins, not the maximum timestamp. Recorded zero and unrecorded
+None stay distinct. There is no alternate Core index, scheduler or retained cache.
+
+Bounded source confirmation reuses the installed SDK with a resolve hook for
+only the owned EntryStore module. The real native saved-session loader, native
+append, fresh-process production helper, exact source-position protocol and
+query plan are exercised on 1,000 private synthetic entries. Warm saved-session
+startup and selection read zero original JSONL bytes; missing/stale query indexes
+also read zero and create no index. A query answers while an actual SQLite writer
+is held; native writers are configured to wait for short selector commits rather
+than immediately fail an already-persisted append on transient contention.
+An older persisted call survives 996 subsequent
+non-tool entries and an opaque extension's fake call. No-tool proof, partial
+source refusal, native writer reopen, private index mode and dead/live preparer
+custody pass. Existing native store checks: 2 passed. Python projection/shared
+ToolActivity checks: 23 passed. This is not installed native-pin acceptance or a
+physical-paint/latency result. No original saved session or uncertain input ran.
+
+Evidence owner: core-retry. Small disposable source fixtures and receipts live
+under `/home/ts/.cache/agent-scratch/core-native-ancestry-8302/latest-*`; accepted
+source run is `latest-source-h`, with `latest-store-tests-c.log` and
+`latest-pytest-closed.log`. Earlier generated fixture runs are superseded, not
+borrower-verified for retirement. No large saved-session rebuild, dependency
+clone, parallel agent or provider operation was started under critical headroom.
+
+Still unfinished: NativeTranscript.inputs_for still uses the old coordinate
+walk. Its complete migration to the same persistent EntryStore ancestry/offset
+selectors remains core-retry-owned; no bounded-page completion is claimed.
+Native package pins/build/default installation are unchanged. Paired native/Core
+packaging and the real saved/off-page application journey remain with the existing
+integration owner, codex, and implementation/verification stays with core-retry.
+#950's independent three-root carry/install hold and all BLOCKED/UNKNOWN work
+remain intact. Do not install this source over an unrelated native pin or replay
+retained input to obtain acceptance.
+
+### Latest owner/consumer evidence
+
+Existing refactor-audit parser, explicit Core revisions 5cb6913d to 18a52d59:
+616 to 618 modules, 847 to 882 family sites, zero parse omissions, covering Core,
+metaclass-registry and the paired Toad root. Native installed-jiti Babel evidence:
+485 files screened, 23 to 24 family modules parsed, 466 to 509 sites, zero parse
+omissions; the new helper is explicitly absent at the base revision. The SDK
+root is native-current-6468a1979d983e9d. Installed SDK modules are unchanged;
+only the bounded source journey redirects the EntryStore import. SQL, callbacks,
+module aliases and virtual open/preparation dispatch were read semantically;
+the census does not resolve arbitrary dynamic names or prove behavior.
+
+Before: each SessionManager opening rebuilt an unlinked selector store; Core
+could only reverse-walk JSONL. After: SessionManager owns preparation and atomic
+append; ReadOnlyEntryStore owns admitted, existing-cut reads; EntryMetadata owns
+message/tool presence; NativeIndexObservation owns projection; NativeRecord owns
+message identity; NativeSessionFiles owns all native sidecar membership. The
+old global/per-open directory branch and every repository option/env consumer
+are removed. Index filename spelling is the native/Python sidecar protocol:
+DiskEntryStore.indexFile produces it and NativeSessionFiles.entry_index consumes
+it. This is not a claim that a cross-language protocol has one textual spelling.
+
+The current Python debt ratchet against 5cb6913d completes but fails on one new
+ForeignAbsenceProbe in native_index.py (the observation's own optional selected
+position). No type/string switch, GodClass, long-boolean, Any or codec-subclass
+increase is reported. No clean-ratchet claim or waiver. Exact native census files,
+explicit-revision Python receipts and latest-ratchet-closed.json stay in the owned
+scratch roots; all behavioral results remain source-only until native pin and
+installed application acceptance.

@@ -11,11 +11,11 @@ from .errors import RelationViolationError
 
 @dataclass(frozen=True, slots=True)
 class NativeSessionFiles:
-    """One saved session: the transcript, its input-proof journal and writer lock.
+    """One saved session, its native SQLite journals and its writer lock.
 
-    The input proof is a SQLite journal written by the native process; its
-    rollback/WAL companions belong to it. Any other file sharing the session's
-    name is unexpected and refuses deletion.
+    The input proof and derived entry index are written by the native process;
+    their rollback/WAL companions belong to this resource. Any other file sharing
+    the session's name is unexpected and refuses deletion.
     """
 
     session: Path
@@ -29,16 +29,20 @@ class NativeSessionFiles:
         return Path(f"{self.session}.input-proof")
 
     @property
+    def entry_index(self) -> Path:
+        return Path(f"{self.session}.entry-index.v2.sqlite3")
+
+    @property
     def writer_lock(self) -> Path:
         return self.session.with_name(f".{self.session.name}.agent-comms-writer.lock")
 
     @property
     def members(self) -> tuple[Path, ...]:
-        proof = self.input_proof
         return (
             self.session,
-            proof,
-            *(proof.with_name(proof.name + suffix) for suffix in ("-journal", "-wal", "-shm")),
+            *(Path(f"{journal}{suffix}")
+              for journal in (self.input_proof, self.entry_index)
+              for suffix in ("", "-journal", "-wal", "-shm")),
             self.writer_lock,
         )
 

@@ -13,7 +13,6 @@ const pkg=process.env.PI_COMPACTION_TEST_PACKAGE;
 assert.ok(pkg,'Prepared native package required');
 const artifacts=resolve('.artifacts');mkdirSync(artifacts,{recursive:true,mode:0o700});
 const root=mkdtempSync(join(artifacts,'pi-compaction-'));
-process.env.AGENT_COMMS_SESSION_INDEX_DIR=join(root,'indexes');
 process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
 process.env.PI_TASK='TASK_BRIEF_FIXTURE';
 const requests=[];

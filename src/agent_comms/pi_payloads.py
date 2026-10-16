@@ -16,8 +16,8 @@ from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origi
 from . import agent_backend as pivot
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, TextRepresentation
-from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
+from .native_session_reopen import NativeSessionIdentity
 from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
 from .transcript_events import SentTranscript
 
@@ -66,13 +66,17 @@ class PiPayload:
     strict_fields: ClassVar[bool] = False
 
     @classmethod
-    def normalize_wire(cls, value):
+    def wire_type(cls, value):
+        """The boundary owns object validation and declared variant selection."""
         if not isinstance(value, dict):
             raise ValueError(f"Expected {cls.__name__} object")
-        member = cls
+        return cls.wire_member(value) if issubclass(cls, DeclaredFamily) else cls
+
+    @classmethod
+    def normalize_wire(cls, value):
+        member = cls.wire_type(value)
         data = {}
         if issubclass(cls, DeclaredFamily):
-            member = cls.wire_member(value)
             if member.opaque:
                 return {"kind": member.declared_name, "payload": value}
             data["kind"] = member.declared_name
@@ -722,7 +726,8 @@ class UserMessage(PiMessage):
             )
         for part in parts:
             events.extend(part.user_transcript())
-        return [replace(event, routing=routing).with_native_input(self.input_id) for event in events]
+        return [replace(event, routing=routing).with_native_input(self.input_id)
+                for event in events]
 
 
 class ToolDetailsPayload(PiPayload):
@@ -1319,6 +1324,7 @@ class McpLiveReceipt:
         attestation or permission, even when the current input identity matches.
         """
         import json
+
         from .pi_rpc import unique_fields
 
         if text is None or len(text) > 8192:
