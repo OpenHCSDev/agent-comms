@@ -163,9 +163,7 @@ class Order:
         snapshot = goals.registry.snapshot()
         thread = snapshot.require(unit)
         reference = GoalRef(thread.incarnation.require_recorded(), goal_id)
-        goal = reference.current(snapshot)
-        if goal is None:
-            raise OrderRecordError(f"{unit} does not hold order {goal_id}.")
+        goal = thread.require_goal(goal_id)
         commander = snapshot.require(judge).incarnation.require_recorded()
         goal.author.require_commander(commander, snapshot)
         return cls(goals, thread, reference, goal, commander)
@@ -222,11 +220,9 @@ class Struck:
     def counted(cls, goals: Goals, row: VerdictRow | StrikeRow, strikes: int) -> Struck:
         struck = cls(row, strikes)
         if struck.fired:
-            # The limit takes the unit's open order away; #934 allows one per unit.
-            thread = goals.registry.require(row.counted_against)
-            goal = thread.goal
-            if goal is not None and not goal.state.terminal:
-                goal.author.release(goals, GoalRef(thread.incarnation.require_recorded(), goal.id))
+            # The limit takes every open order of the struck thread away at once.
+            for order in goals.registry.require(row.counted_against).open_orders:
+                order.require_current(goals.registry).author.release(goals, order)
         return struck
 
     @projected(view="wire")

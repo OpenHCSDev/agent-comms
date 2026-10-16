@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -213,16 +214,12 @@ class ToolStartTranscript(ToolTranscript):
         return (self,)
 
     def quotes(self, text: str) -> bool:
-        """Whether one string the caller sent contains this exact text."""
-        pending = [self.raw_input]
-        for value in pending:
-            if isinstance(value, str) and text in value:
-                return True
-            if isinstance(value, dict):
-                pending.extend(value.values())
-            elif isinstance(value, (list, tuple)):
-                pending.extend(value)
-        return False
+        """Whether one string the caller sent contains this exact text.
+
+        JSON escapes each character alone, so an escaped substring cannot span
+        two strings or a key and its value.
+        """
+        return json.dumps(text)[1:-1] in json.dumps(self.raw_input)
 
     @property
     def selection_order(self) -> tuple[bool, float]:
