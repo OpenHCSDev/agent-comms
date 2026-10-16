@@ -1359,7 +1359,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
-    pi_bin: str = option("--pi-bin", default_factory=NativeArguments.owner_launcher)
+    pi_bin: str = option("--pi-bin", default=NativeArguments.default_binary)
     project: str = option("--project", parser_default_factory=os.getcwd)
     model: str = option("--model", parser_default=NativeThreadDefaults.model)
     thinking_level: type[ThinkingLevel] = option(
