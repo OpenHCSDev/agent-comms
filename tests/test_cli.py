@@ -153,7 +153,8 @@ class TestCliFailClosed:
 
     def test_every_error_is_single_json_object(self, cli, tmp_path):
         code, out = cli(tmp_path, "thread", "--name", "ghost")
-        assert isinstance(out, dict) and set(out) == {"error"}
+        assert isinstance(out, dict) and set(out) == {"error", "type"}
+        assert out["type"] == "failed"
 
 
 class TestCliSubprocess:
