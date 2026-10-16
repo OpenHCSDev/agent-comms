@@ -314,6 +314,6 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
     agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True)
     # The 2026-09-29 startup failure: a private wire without a pinned launch.
     with pytest.raises(PublicationActivationBlocked):
-        await agent.sessions.start_owner(str(tmp_path), "worker")
+        await agent.sessions.start_owner(str(tmp_path), agent._comms.registry.require("worker").incarnation)
     await agent.shutdown()
     assert comms.registry.status("worker").stopped

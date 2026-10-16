@@ -653,12 +653,3 @@ class ThreadManagement:
             except OSError:
                 self.registry.remove(spec.name)
                 raise
-
-    def adopt_current(self, incarnation: RecordedThreadIncarnation) -> Thread:
-        """Attach this process to its explicitly selected existing declaration."""
-        with _store_lock(self._wire_lock_path):
-            snapshot = self.registry.snapshot()
-            if not incarnation.current(snapshot):
-                raise RelationViolationError("The selected thread incarnation is no longer current")
-            thread = snapshot.threads[snapshot.canonical_name(incarnation.name)]
-            return self.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
