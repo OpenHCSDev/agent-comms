@@ -95,7 +95,7 @@ class CoordinationStore:
         db.execute("BEGIN")
         # BEGIN is lazy. Acquire the snapshot before schema decoders can
         # reclassify BUSY as unsupported data or absent rows.
-        db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+        _TableName.read(db.execute("SELECT name FROM sqlite_master LIMIT 1"))
 
     @staticmethod
     def _configure_reader(db: sqlite3.Connection) -> sqlite3.Connection:

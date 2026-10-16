@@ -29,8 +29,6 @@ from .envelope_claim_transitions import (
     FileClaimPath,
     WakeAdmission,
     _release_resource,
-    apply_transition,
-    project_verified_transitions,
 )
 from .errors import (
     ClaimEnvelopeUnknownError,
@@ -244,7 +242,7 @@ class Publisher:
             or not isinstance(releases, Sequence)
         ):
             raise RelationViolationError("Claim and release sets must be finite sequences.")
-        if len(claims) + len(releases) > 32:
+        if len(claims) + len(releases) > ClaimTransition.max_resources:
             raise RelationViolationError("Claim envelope exceeds the bounded resource set.")
         if _admission is not None and (
             not claims or releases or _bus_lock is None or _locked_registry_snapshot is None
@@ -261,46 +259,37 @@ class Publisher:
             )
             snapshot.require_unambiguous_ownership()
             sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
-            transitions, verified_sequence = bus_lock.claim_transitions(self.log, metadata)
-            projection = project_verified_transitions(transitions)
-            # The verified bus high-water also covers rows left by an earlier
-            # uncertain append. Reserve and sync the next sequence before use.
-            last_sequence = max(metadata.last_seq, verified_sequence)
-            if last_sequence >= MAX_WIRE_SEQ:
-                raise RelationViolationError("Claim bus sequence is exhausted.")
-            stored = self._prepare_message_unlocked(
-                message,
-                sender=sender,
-                target=target,
-                sequence=last_sequence + 1,
-                snapshot=snapshot,
-            )
-            owner_incarnation = str(incarnation)
-            requested = tuple(sorted(path.normalized(worktree) for path in claims))
-            release_records: list[ClaimRelease] = []
-            for release in releases:
-                if isinstance(release, ClaimRelease):
-                    # A recorded claim names its own path and generation; the owner
-                    # may have changed project since. apply_transition fences it.
-                    release_records.append(release)
-                else:
-                    resource = _release_resource(worktree, release)
-                    current = projection.get(resource)
-                    if current is None:
-                        raise RelationViolationError("Cannot release an unclaimed resource.")
-                    release_records.append(ClaimRelease(resource, current.generation))
-            release_records.sort(key=lambda release: release.resource)
-            transition = ClaimTransition(
-                stored.sender,
-                owner_incarnation,
-                stored.seq,
-                stored.message_id,
-                requested,
-                tuple(release_records),
-                uuid.uuid4().hex if requested else None,
-                _admission,
-            )
-            apply_transition(projection, transition)  # pre-append conflict is synchronous
+            with bus_lock.current_source(self.log, metadata) as source:
+                # The checkpoint high-water also covers a prior visible append;
+                # no historical message or claim replay participates in admission.
+                last_sequence = max(metadata.last_seq, source.committed_sequence())
+                if last_sequence >= MAX_WIRE_SEQ:
+                    raise RelationViolationError("Claim bus sequence is exhausted.")
+                stored = self._prepare_message_unlocked(
+                    message, sender=sender, target=target,
+                    sequence=last_sequence + 1, snapshot=snapshot,
+                )
+                owner_incarnation = str(incarnation)
+                requested = tuple(sorted(path.normalized(worktree) for path in claims))
+                release_records: list[ClaimRelease] = []
+                for release in releases:
+                    if isinstance(release, ClaimRelease):
+                        # Recorded incarnation/generation, not current project,
+                        # determines whether this exact resource may be released.
+                        release_records.append(release)
+                    else:
+                        resource = _release_resource(worktree, release)
+                        current = source.claim(resource)
+                        if current is None:
+                            raise RelationViolationError("Cannot release an unclaimed resource.")
+                        release_records.append(ClaimRelease(resource, current.generation))
+                release_records.sort(key=lambda release: release.resource)
+                transition = ClaimTransition(
+                    stored.sender, owner_incarnation, stored.seq, stored.message_id,
+                    requested, tuple(release_records),
+                    uuid.uuid4().hex if requested else None, _admission,
+                )
+                source.prepare_claim(transition)  # pre-append conflict is synchronous
             stored = replace(stored, claim_transition=transition)
             try:
                 self.log._append_private_unlocked(metadata, stored.to_wire())

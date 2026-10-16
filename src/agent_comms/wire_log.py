@@ -28,7 +28,6 @@ from .bus_source_page import AddressedPage
 from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
-    project_verified_transitions,
 )
 from .errors import (
     RelationViolationError,
@@ -127,7 +126,7 @@ class OpenedWireSnapshot:
         records = []
         while self.stream.tell() < self.boundary:
             raw = self.stream.readline(
-                min(scan.max_row_bytes + 1, self.boundary - self.stream.tell())
+                min(WireRecord.max_row_bytes + 1, self.boundary - self.stream.tell())
             )
             if not raw:
                 break
@@ -449,18 +448,9 @@ class WireLog:
             path = path.parent
 
     def claim_projection(self) -> ClaimProjection:
-        """Derive ownership exclusively from guarded, verified bus envelopes."""
-        with self._opened_wire_snapshot(need_sequence=False) as opened:
-            if not opened.metadata.claims:
-                raise RelationViolationError("Claim read barrier is unavailable.")
-            return project_verified_transitions(
-                transition
-                for record in self._snapshot_records(
-                    opened.metadata, opened.stream, opened.boundary
-                )
-                for message in record.messages()
-                for transition in message.claim_transitions
-            )
+        """Read current ownership from the canonical certified checkpoint."""
+        with self.certified_read() as source:
+            return source.claim_projection()
 
     def _private_marker_unlocked(self) -> WireMetadata:
         self._assert_private_directory()
@@ -498,7 +488,7 @@ class WireLog:
         with self.path.open("rb") as stream:
             while True:
                 offset = stream.tell()
-                line = stream.readline(scan.max_row_bytes + 1)
+                line = stream.readline(WireRecord.max_row_bytes + 1)
                 if not line:
                     break
                 record = scan.read(line)
@@ -514,8 +504,7 @@ class WireLog:
         StoreLock.current_release().require_active()
         metadata.access.require_append()
         encoded = json.dumps(row, allow_nan=False).encode("utf-8") + b"\n"
-        if len(encoded) > 8 * 1024 * 1024:
-            raise RelationViolationError("Private bus row exceeds the byte limit.")
+        WireRecord.require_row_size(encoded, message="Private bus row exceeds the byte limit.")
         record = WireRecord.from_wire(row, metadata.root_id)
         metadata.last_seq = record.sequence_after(metadata.last_seq)
         self.write_metadata_unlocked(metadata)
@@ -659,7 +648,7 @@ class WireLog:
     def _snapshot_records(metadata, stream, boundary):
         scan = WireScan(metadata)
         while stream is not None and stream.tell() < boundary:
-            raw = stream.readline(min(scan.max_row_bytes + 1, boundary - stream.tell()))
+            raw = stream.readline(min(WireRecord.max_row_bytes + 1, boundary - stream.tell()))
             if not raw:
                 break
             yield scan.read(raw)
@@ -772,9 +761,9 @@ class WireLog:
             or stat.S_IMODE(marker_info.st_mode) != 0o600
         ):
             raise RelationViolationError("Claim bus read barrier is not durable and private.")
-        from .private_bus_checkpoint import opened_claim_source_unlocked
+        from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
-        with opened_claim_source_unlocked(self, private_marker, shared=shared) as source:
+        with opened_private_checkpoint_unlocked(self, private_marker, shared=shared) as source:
             yield source
 
     @property

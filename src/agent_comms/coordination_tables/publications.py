@@ -126,10 +126,10 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "publication_intent_envelope_authority": (
-                f"""CREATE TRIGGER publication_intent_envelope_authority BEFORE INSERT ON
+                f""" BEFORE INSERT ON
 publication_intents
 WHEN coordination_validate_publication_intent(
   {", ".join("NEW." + field.name for field in fields(cls) if field.init)}) != 1
@@ -137,7 +137,7 @@ BEGIN SELECT RAISE(ABORT, 'publication intent envelope is invalid' );
 END"""
             ),
             "publication_intent_requires_obligation": (
-                """CREATE TRIGGER publication_intent_requires_obligation
+                """
 BEFORE INSERT ON publication_intents
 WHEN NOT EXISTS (
     SELECT 1 FROM obligations WHERE execution_id = NEW.execution_id
@@ -148,14 +148,14 @@ BEGIN
 END"""
             ),
             "publication_intent_update_frozen": (
-                """CREATE TRIGGER publication_intent_update_frozen
+                """
 BEFORE UPDATE ON publication_intents
 BEGIN
     SELECT RAISE(ABORT, 'publication intent is frozen');
 END"""
             ),
             "publication_intent_delete_frozen": (
-                """CREATE TRIGGER publication_intent_delete_frozen
+                """
 BEFORE DELETE ON publication_intents
 BEGIN
     SELECT RAISE(ABORT, 'publication intent is frozen');
@@ -230,10 +230,10 @@ class PublicationReceipts(CoordinatorTable, TypedTable):
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "publication_receipt_matches_authorities": (
-                """CREATE TRIGGER publication_receipt_matches_authorities
+                """
 BEFORE INSERT ON publication_receipts
 BEGIN
     SELECT RAISE(ABORT, 'failed execution cannot accept publication receipt')
@@ -252,14 +252,14 @@ BEGIN
 END"""
             ),
             "publication_receipt_is_frozen": (
-                """CREATE TRIGGER publication_receipt_is_frozen
+                """
 BEFORE UPDATE ON publication_receipts
 BEGIN
     SELECT RAISE(ABORT, 'publication receipt is frozen');
 END"""
             ),
             "publication_receipt_delete_frozen": (
-                """CREATE TRIGGER publication_receipt_delete_frozen
+                """
 BEFORE DELETE ON publication_receipts
 BEGIN
     SELECT RAISE(ABORT, 'publication receipt is frozen');

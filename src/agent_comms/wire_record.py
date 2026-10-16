@@ -11,7 +11,7 @@ import json
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec
@@ -27,6 +27,16 @@ if TYPE_CHECKING:
 class WireRecord(ABC):
     __slots__ = ()
     receipt: KeyedResponseReceipt | None = None
+    max_row_bytes: ClassVar[int] = 8 * 1024 * 1024
+
+    @classmethod
+    def require_row_size(
+        cls, row: bytes, *, error_type: type[Exception] = RelationViolationError,
+        message: str = "Oversized private bus row.",
+    ) -> None:
+        """Bound the encoded physical row, including its terminating newline."""
+        if len(row) > cls.max_row_bytes:
+            raise error_type(message)
 
     @classmethod
     def from_wire(cls, value: Mapping, root_id: str) -> WireRecord:
@@ -105,10 +115,7 @@ class MessageWireRecord(WireRecord):
         return self.message.seq
 
     def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
-        from .private_bus_checkpoint import PublicMessages
-
-        yield PublicMessages(self.message.seq, previous_sequence,
-                             self.message.sender, self.message.message_id)
+        return self.message.checkpoint_rows(previous_sequence)
 
 
 class WireObservation(DeclaredFamily, affix="WireObservation"):
@@ -215,13 +222,11 @@ class WireScan:
     metadata: WireMetadata
     previous_sequence: int = 0
     seen_keys: set[str] = field(default_factory=set)
-    max_row_bytes = 8 * 1024 * 1024
 
     def read(self, line: bytes) -> WireRecord:
         from .bus_publication import unique_wire_object
 
-        if len(line) > self.max_row_bytes:
-            raise RelationViolationError("Oversized private bus row.")
+        WireRecord.require_row_size(line)
         if not line.endswith(b"\n"):
             raise RelationViolationError("Incomplete bus row blocks keyed publication.")
         try:

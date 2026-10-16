@@ -15,6 +15,7 @@ from agent_comms.comms import wire
 from agent_comms.drain_failures import drain_failures
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.threads import Thread
+from agent_comms.thread_presentation import AttentionThreadPresentationStatus
 from agent_comms.turn_phase import (
     CompactionPhase,
     ModelWaitPhase,
@@ -114,5 +115,6 @@ async def test_repeated_turn_preparation_displays_real_native_drain_failure(tmp_
     recorded = datetime.fromtimestamp(failure.recorded_at).astimezone().strftime("%H:%M")
     assert view.presentation.summary == f"Failed {recorded}"
     assert "native request never opened" in failure.summary
-    assert view.presentation.status.attention and view.presentation.status.busy
+    assert isinstance(view.presentation.status, AttentionThreadPresentationStatus)
+    assert view.presentation.status.busy
     comms.agents.finish_turn(repeated.turn_lease)

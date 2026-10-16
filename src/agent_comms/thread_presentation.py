@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
@@ -19,11 +20,24 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
 
     @property
     def busy(self) -> bool:
-        return False
+        return bool(self.working_members(self))
 
-    @property
-    def attention(self) -> bool:
-        return False
+    def working_members[T](self, member: T) -> tuple[T, ...]:
+        """Select a participant only while this status carries work."""
+        return ()
+
+    def when_idle(self, ordinary: ThreadPresentation,
+                  present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
+        """Compose idle-only explanations without replacing genuine work."""
+        return present(ordinary)
+
+    def activity_presentation(self, title: str, activity: str, detail: str) -> ThreadPresentation:
+        return ThreadPresentation(title, "✓", "Ready", status=self)
+
+    def require_activity_detail(self, detail: str) -> None:
+        if detail:
+            from .errors import RelationViolationError
+            raise RelationViolationError("Idle activity cannot carry a detail.")
 
     def with_attention(self) -> ThreadPresentationStatus:
         return AttentionThreadPresentationStatus(self)
@@ -44,28 +58,56 @@ class IdleThreadPresentationStatus(ThreadPresentationStatus):
 
 @dataclass(frozen=True, slots=True)
 class WorkingThreadPresentationStatus(ThreadPresentationStatus):
-    @property
-    def busy(self) -> bool:
-        return True
+    def working_members[T](self, member: T) -> tuple[T, ...]:
+        return (member,)
+
+    def when_idle(self, ordinary: ThreadPresentation,
+                  present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
+        return ordinary
+
+    def activity_presentation(self, title: str, activity: str, detail: str) -> ThreadPresentation:
+        summary = activity.title()
+        if detail := " ".join(detail.split()):
+            summary += f" · {detail}"
+        return ThreadPresentation(title, "⌛", summary, status=self)
+
+    def require_activity_detail(self, detail: str) -> None:
+        pass
 
 
 @dataclass(frozen=True, slots=True)
 class AttentionThreadPresentationStatus(ThreadPresentationStatus):
     activity: ThreadPresentationStatus
 
-    @property
-    def busy(self) -> bool:
-        return self.activity.busy
+    def working_members[T](self, member: T) -> tuple[T, ...]:
+        return self.activity.working_members(member)
 
-    @property
-    def attention(self) -> bool:
-        return True
+    def when_idle(self, ordinary: ThreadPresentation,
+                  present: Callable[[ThreadPresentation], ThreadPresentation]) -> ThreadPresentation:
+        projected = self.activity.when_idle(ordinary, present)
+        return replace(projected, status=projected.status.with_attention())
 
     def with_attention(self) -> ThreadPresentationStatus:
         return self
 
     def without_work(self) -> ThreadPresentationStatus:
         return replace(self, activity=self.activity.without_work())
+
+
+@dataclass(frozen=True, slots=True)
+class StatusPending(ThreadPresentationStatus):
+    """The view opened before its first thread observation."""
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        return ThreadPresentation(title, "…", "Waiting for agent status", status=self)
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadRetired(ThreadPresentationStatus):
+    """An observation explicitly reports that the thread is gone."""
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        return ThreadPresentation(title, "○", "Thread is no longer available", status=self)
 
 
 class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
