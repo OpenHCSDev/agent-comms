@@ -73,6 +73,11 @@ class RuntimePublication:
         try:
             temporary.symlink_to(target)
             os.replace(temporary, link)
+            directory = os.open(link.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
         finally:
             temporary.unlink(missing_ok=True)
 
