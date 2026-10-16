@@ -41,7 +41,7 @@ from .turn_digests import TurnDigestRead
 from .relationships import RelationshipEdit
 from .thread_status import ThreadStatus
 from .work_branches import WorkBranches
-from .order_records import CaughtStage, Order, StrikeCause
+from .order_records import CaughtStage, HeldOrder, JudgedOrder, OrderRecords, StrikeCause
 from .plain_text import PlainText
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
@@ -731,14 +731,55 @@ class CommsWorkBranchesTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class _HeldOrderTool(ToolRequest):
+    unit: str = tool_field("Thread holding or having held the order")
+    goal_id: str = tool_field("The order's Goal ID")
+
+    def order(self, comms: Comms) -> HeldOrder:
+        return HeldOrder.held(comms.goals, self.unit, self.goal_id)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderWorkTool(_HeldOrderTool):
+    label = "Order work"
+    description = (
+        "The unit's tool calls since the order was issued, newest first, each with its "
+        "verdict or unjudged. Judge them with comms_accept or comms_send_back."
+    )
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+        return {"calls": FieldCodec.encode(self.order(comms).work(
+            comms.transcripts.turns(self.unit, last=HeldOrder.judged_turns)))}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderStoryTool(_HeldOrderTool):
+    label = "Order story"
+    description = "One order's Goal transitions (issue, send-backs, reports), verdicts and strikes."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+        return self.order(comms).story().to_wire()
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsFleetStoryTool(ToolRequest):
+    label = "Fleet story"
+    description = "The fleet's public record: every strike and send-back, newest first, in plain words."
+    limit: int = tool_field("Number of newest records", default=50)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+        return {"strikes": FieldCodec.encode(OrderRecords(comms.root).recent_strikes(self.limit))}
+
+
+@dataclass(frozen=True, kw_only=True)
 class _OrderJudgementTool(ThreadToolRequest):
     """The order's own commander judges the unit holding it."""
 
     unit: str = tool_field("Thread holding the order")
     goal_id: str = tool_field("The order's Goal ID")
 
-    def order(self, comms: Comms, caller: ThreadCaller) -> Order:
-        return Order.judged_by(comms.goals, self.unit, self.goal_id, caller.name)
+    def order(self, comms: Comms, caller: ThreadCaller) -> JudgedOrder:
+        return JudgedOrder.judged_by(comms.goals, self.unit, self.goal_id, caller.name)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -748,7 +789,7 @@ class _ToolCallVerdictTool(_OrderJudgementTool):
     reason: Annotated[str, PlainText] = tool_field("What the call did and why, in plain words (10+)")
 
     def turns(self, comms: Comms):
-        return comms.transcripts.turns(self.unit, last=Order.judged_turns)
+        return comms.transcripts.turns(self.unit, last=JudgedOrder.judged_turns)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -213,6 +213,10 @@ class ToolStartTranscript(ToolTranscript):
     def tool_calls(self):
         return (self,)
 
+    def made_before(self, at: float) -> bool:
+        """Only a recorded selection time proves the call is older than ``at``."""
+        return self.timestamp is not None and self.timestamp < at
+
     def quotes(self, text: str) -> bool:
         """Whether one string the caller sent contains this exact text.
 

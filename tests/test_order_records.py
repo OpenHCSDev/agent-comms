@@ -93,3 +93,14 @@ def test_commander_accepts_sends_back_and_strikes_until_the_order_is_taken_away(
     assert status == 0 and (struck['strikes'], struck['fired']) == (2, True)
     assert TodoStore(comms.root).get('P1').assignment == UnassignedTodoAssignment()
     assert comms.registry.require('unit').goal is None
+
+    order = dict(unit='unit', goal_id='order-1')
+    status, work = invoke(comms, 'other', 'comms_order_work', **order)
+    assert status == 0 and [(c['call']['tool_call_id'], c['verdict']['outcome'])
+                            for c in work['calls']] == [('edit-2', 'sent_back'), ('edit-1', 'accepted')]
+    status, story = invoke(comms, 'other', 'comms_order_story', **order)
+    assert status == 0 and len(story['verdicts']) == 2 and len(story['strikes']) == 1
+    assert story['history'][-1]['after'] is None  # the second strike cleared the order
+    status, fleet = invoke(comms, 'other', 'comms_fleet_story', limit=5)
+    assert status == 0 and [line['line'].split(':')[0] for line in fleet['strikes']] == ['unit', 'unit']
+    assert 'false_done, caught at live by lead' in fleet['strikes'][0]['line']
