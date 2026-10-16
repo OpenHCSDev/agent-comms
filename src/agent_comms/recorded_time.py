@@ -1,13 +1,29 @@
 """Original recorded times, including explicitly unrecorded facts."""
 
+from __future__ import annotations
+
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import isfinite
+from typing import TYPE_CHECKING, TypeVar
 
 from .declared_family import DeclaredFamily
 
+if TYPE_CHECKING:
+    from .transcript_events import TranscriptEvent
+
+Event = TypeVar("Event", bound="TranscriptEvent")
+
 
 class EventTime(DeclaredFamily, affix="EventTime"):
+    @classmethod
+    def capture(cls, timestamp: float | None) -> EventTime:
+        """Decode an existing optional Unix-seconds fact, never the read time."""
+        return UnrecordedEventTime() if timestamp is None else RecordedEventTime(timestamp)
+
+    @abstractmethod
+    def stamp(self, event: Event) -> Event: ...
+
     @property
     @abstractmethod
     def timestamps(self) -> tuple[float, ...]: ...
@@ -30,6 +46,9 @@ class EventTime(DeclaredFamily, affix="EventTime"):
 
 @dataclass(frozen=True)
 class UnrecordedEventTime(EventTime):
+    def stamp(self, event: Event) -> Event:
+        return event
+
     @property
     def timestamps(self):
         return ()
@@ -57,6 +76,9 @@ class RecordedEventTime(EventTime):
     def __post_init__(self):
         if type(self.at) not in (int, float) or not isfinite(self.at):
             raise ValueError("A recorded event time must be a finite Unix timestamp.")
+
+    def stamp(self, event: Event) -> Event:
+        return replace(event, timestamp=self.at)
 
     @property
     def timestamps(self):
