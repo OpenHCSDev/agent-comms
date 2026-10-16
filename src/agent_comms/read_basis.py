@@ -186,7 +186,11 @@ class DMDisplayBasis:
         )
         older_unread = False
         if page.has_older and page.messages:
-            seen = bus.reads.membership(viewer_name, snapshot)
+            from .read_ledger import PresentReadSource
+            from .private_path import FileIdentity
+            if bus_identity is None:
+                raise ValueError('A populated DM page has no captured bus identity')
+            seen = bus.reads.membership(viewer_name, snapshot, PresentReadSource(FileIdentity(*bus_identity)))
             with bus.log._record_snapshot(need_sequence=False) as (_, records):
                 older_unread = any(
                     scope.unread_before(message, page.messages[0].seq, seen)

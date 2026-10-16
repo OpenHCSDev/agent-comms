@@ -19,7 +19,7 @@ from .historical_views import HistorySource
 from .thread_provenance import ThreadProvenance
 from .message_bus import MessageBus
 from .message_reference import MessageReference
-from .read_ledger import ReadLedger
+from .read_ledger import ReadLedger, ReadRevision, ReadSource
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .external_transcript import ExternalDraftRow, ExternalTranscript
@@ -154,7 +154,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         metadata={"content_exclude": True}
     )
     reply_revision: PublishedReplyRevision
-    read_revision: tuple[FileRevision | None, ...] = field(metadata={"content_exclude": True})
+    read_revision: ReadRevision = field(metadata={"content_exclude": True})
     receipt_frontier: AssignedSourceCursor | None
     before: TranscriptCursor | None
     after: TranscriptCursor | None
@@ -385,6 +385,7 @@ class TranscriptSourceWindow:
     read: TranscriptRead
     sources: tuple[CommittedDelivery, ...]
     sent_sources: tuple[CommittedDelivery, ...]
+    read_source: ReadSource
 
 
 class Transcripts:
@@ -459,7 +460,7 @@ class Transcripts:
             page, name, captured.cursor, before=before, after=after, through=through,
         )
         return TranscriptSourceWindow(
-            TranscriptRead(self, identity, page), captured.sources, captured.sent_sources
+            TranscriptRead(self, identity, page), captured.sources, captured.sent_sources, captured.read_source
         )
 
     def recapture_page_identity(

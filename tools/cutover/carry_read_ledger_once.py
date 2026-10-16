@@ -13,7 +13,7 @@ from pathlib import Path
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.field_codec import FieldCodec
 from agent_comms.read_basis import Conversation
-from agent_comms.read_ledger import ConversationKey, ReadDocument, ReadLedger, ReadProgress, TranscriptKey
+from agent_comms.read_ledger import ConversationKey, ReadDocument, ReadLedger, ReadProgress, TranscriptKey, PrefixUnavailable
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.thread_identity import ThreadIncarnation
 
@@ -48,7 +48,7 @@ def carry(source, destination, registry, index_root):
             key = ConversationKey(ThreadIncarnation(name, created), conversation).resolved(snapshot)
             state = messages.get(key, ReadProgress()).mark(sequences, lambda state:
                 index.read_prefix(key.conversation, state, snapshot, old.bus_identity)
-                if key.viewer.current(snapshot) and key.conversation.current(snapshot) else None)
+                if key.viewer.current(snapshot) and key.conversation.current(snapshot) else PrefixUnavailable())
             messages[key] = state
     transcripts = {}
     for raw, through in old.transcripts.items():

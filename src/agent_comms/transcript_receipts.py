@@ -22,6 +22,7 @@ from .thread_identity import ThreadIncarnation
 from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, UserTranscript
 
 from .wire_log import ConversationSourceWindowRequest
+from .read_ledger import ReadSource
 
 if TYPE_CHECKING:
     from .wire_log import WireLog
@@ -72,6 +73,7 @@ class AssignedSourceWindow:
     cursor: AssignedSourceCursor | None
     sources: tuple[CommittedDelivery, ...]
     sent_sources: tuple[CommittedDelivery, ...]
+    read_source: ReadSource
 
 
 class TranscriptTraversal(ABC):
@@ -240,7 +242,8 @@ class TranscriptSource:
         return None
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
-        return AssignedSourceWindow(None, (), ())
+        from .read_ledger import AbsentReadSource
+        return AssignedSourceWindow(None, (), (), AbsentReadSource())
 
     def require_cursor(self, cursor):
         cursor.require_native()
@@ -354,14 +357,15 @@ class AssignedTranscriptSource(TranscriptSource):
         sent_request = ConversationSourceWindowRequest(
             "w.sender_lookup=?", (lookup,), sent_limit, False
         )
-        conversation, sent = conversation_request.capture_many(
+        captured = conversation_request.capture_many(
             self.log, lookup, (conversation_request, sent_request)
         )
+        conversation, sent = captured.windows
         rows = tuple(conversation)
         cursor = AssignedSourceCursor(
             str(self.root), self.recipient, rows[0].message.seq if rows else 0
         )
-        return AssignedSourceWindow(cursor, rows, tuple(sent))
+        return AssignedSourceWindow(cursor, rows, tuple(sent), captured.read_source)
 
     def page_rows(self, traversal, sequence, through, *, limit):
         predicate, parameters = traversal.predicate(sequence, through)

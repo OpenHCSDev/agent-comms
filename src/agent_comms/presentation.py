@@ -24,7 +24,8 @@ from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
-from .read_ledger import ReadLedger, ReadMask
+from .read_ledger import (ReadLedger, ReadMask, ReadSource, AbsentReadSource,
+                          ReadRevision, AllViewers, OneViewer)
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
@@ -126,15 +127,7 @@ class MessageNotification:
             raise ValueError("Notification reads require a bounded visible message window")
         references = tuple(reference for message in messages
                            for reference in message.notification_references())
-        sources = log.deliveries_for_references(references)
-        if not sources:
-            return {(message.seq, message.message_id): () for message in messages}
-        from .notification_assignment import NotificationAssignment
-
-        projected = cls.delivery_window(
-            root, registry, sources, NotificationAssignment.read(root, sources),
-            snapshot=registry.snapshot(),
-        )
+        projected = cls.references(root, registry, log, references)
         return {(message.seq,message.message_id):projected.get((message.seq,message.message_id), ())
                 for message in messages}
 
@@ -152,31 +145,31 @@ class MessageNotification:
         return cls.read_references(
             log,
             references,
-            lambda sources: cls.delivery_window(
+            lambda sources, identity: cls.delivery_window(
                 root, registry, sources, NotificationAssignment.read(root, sources),
-                snapshot=snapshot,
+                snapshot=snapshot, identity=identity,
             ),
         )
 
     @classmethod
     def read_references(
         cls, log: WireLog, references: Sequence[MessageReference],
-        project: Callable[[Sequence[CommittedDelivery]], dict[tuple[int, str], tuple[MessageNotification, ...]]],
+        project: Callable[[Sequence[CommittedDelivery], ReadSource], dict[tuple[int, str], tuple[MessageNotification, ...]]],
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Share bounded original delivery acquisition across live/recorded cuts."""
         result = {}
         for start in range(0, len(references), cls.window_limit):
-            sources = log.deliveries_for_references(
-                references[start : start + cls.window_limit]
-            )
-            result.update(project(sources))
+            with log.certified_read() as captured:
+                sources = tuple(captured.references(references[start:start + cls.window_limit]))
+                identity = ReadSource.from_revision(captured.witness.revision)
+            result.update(project(sources, identity))
         return result
 
     @classmethod
     def delivery_window(
         cls, root: Path, registry: Registration, sources: Sequence[CommittedDelivery],
         assignment_read: NotificationAssignmentRead, *, snapshot: RegistrySnapshot,
-        owner_lookup: str | None = None,
+        identity: ReadSource, owner_lookup: str | None = None,
     ):
         """Project this window using the caller's one acquired namespace."""
         from .agent_activity import AgentActivity
@@ -190,7 +183,7 @@ class MessageNotification:
         )
         return cls.project_delivery_window(
             root, snapshot, sources, observations,
-            owner_lookup=owner_lookup, assignment_read=assignment_read,
+            owner_lookup=owner_lookup, assignment_read=assignment_read, identity=identity,
         )
 
     @staticmethod
@@ -202,7 +195,7 @@ class MessageNotification:
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
-                                 sources: Sequence[CommittedDelivery]):
+                                 sources: Sequence[CommittedDelivery], identity: ReadSource):
         from .agent_activity import RecordedRecipientActivity
         from .notification_assignment import NotificationAssignment
 
@@ -212,14 +205,14 @@ class MessageNotification:
         }
         return cls.project_delivery_window(
             root, namespace, sources, observations,
-            assignment_read=NotificationAssignment.read(root, sources),
+            assignment_read=NotificationAssignment.read(root, sources), identity=identity,
         )
 
     @classmethod
     def project_delivery_window(
         cls, root: Path, snapshot: RegistryProvenance,
         sources: Sequence[CommittedDelivery], observations: Mapping[str, RecipientActivity],
-        *, assignment_read: NotificationAssignmentRead,
+        *, assignment_read: NotificationAssignmentRead, identity: ReadSource,
         owner_lookup: str | None = None,
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Original assignment and read authorities own both display projections."""
@@ -233,7 +226,7 @@ class MessageNotification:
             return {}
         rows = assignment_read.resolve(root)
         reads = ReadLedger(root)
-        document = reads.observations_for(snapshot, sources)
+        document = reads.observations_for(snapshot, sources, identity)
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
@@ -308,11 +301,12 @@ class MessageNotification:
         owner = registry.require(name)
         from .transcript_receipts import AssignedTranscriptSource
 
-        sources = tuple(AssignedTranscriptSource.for_thread(root, owner, log).rows(limit=limit))
+        captured = AssignedTranscriptSource.for_thread(root, owner, log).window(limit=limit)
+        sources = captured.sources
         from .notification_assignment import NotificationAssignment
 
         return cls.for_sources(
-            root, registry, owner, sources,
+            root, registry, owner, sources, identity=captured.read_source,
             assignment_read=NotificationAssignment.read(root, sources),
         )
 
@@ -329,12 +323,12 @@ class MessageNotification:
         captured = AssignedTranscriptSource.for_thread(root, owner, log).window(
             limit=0, sent_limit=limit
         )
-        return owner, captured.sent_sources
+        return owner, captured
 
     @classmethod
     def for_sources(
         cls, root: Path, registry: Registration, owner: Thread,
-        sources: Sequence[CommittedDelivery], *,
+        sources: Sequence[CommittedDelivery], *, identity: ReadSource,
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Project outcomes from the caller's original certified source window."""
@@ -346,7 +340,7 @@ class MessageNotification:
             root, registry, sources,
             owner_lookup=stable_thread_lookup(owner.created_at),
             assignment_read=assignment_read,
-            snapshot=registry.snapshot(),
+            snapshot=registry.snapshot(), identity=identity,
         )
         return tuple(
             replace(notification, message=source.message)
@@ -362,26 +356,26 @@ class DisplaySelection:
     registry: RegistrySnapshot
     catalog: CatalogDocument
     viewer: str | None
-    seen: ReadMask
+    readers: dict[str, ReadMask]
     document: ReadDocument
+
+    @property
+    def seen(self) -> ReadMask:
+        return self.readers.get(self.viewer, ReadMask())
 
     @classmethod
     def capture(
         cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-        reads: ReadLedger, document: ReadDocument, viewer: str | None,
+        document: ReadDocument, viewer: str | None, source: ReadSource,
     ) -> DisplaySelection:
         canonical = snapshot.canonical_name(viewer) if viewer is not None else None
-        seen = (
-            reads.membership(viewer, snapshot, document=document)
-            if viewer is not None else ReadMask()
-        )
-        return cls(snapshot, catalog, canonical, seen, document)
+        return cls(snapshot, catalog, canonical, source.memberships(document, snapshot), document)
 
     @classmethod
     @contextmanager
     def reading(
         cls, registry: Registration, catalog: ChannelCatalog,
-        reads: ReadLedger, viewer: str | None,
+        reads: ReadLedger, viewer: str | None, source: ReadSource,
     ) -> Iterator[DisplaySelection]:
         """Borrow the original identity resources and read the ledger once.
 
@@ -390,9 +384,9 @@ class DisplaySelection:
         """
         with registry.store.reading() as document, catalog.reading() as channels:
             snapshot = document.snapshot()
-            identity = snapshot.participant(viewer).incarnation if viewer is not None else None
-            with reads.reading(identity) as read_document:
-                selected = cls.capture(snapshot, channels, reads, read_document, viewer)
+            viewers = OneViewer(snapshot.participant(viewer).incarnation) if viewer is not None else AllViewers()
+            with reads.reading(viewers) as read_document:
+                selected = cls.capture(snapshot, channels, read_document, viewer, source)
             yield selected
 
     @property
@@ -458,7 +452,7 @@ class BusPresentation:
     ) -> CoordinationSnapshot:
         """Current sidebar rows without advancing whole-bus derived indexes."""
         with DisplaySelection.reading(
-            self.registry, self.catalog, self.bus.reads, viewer
+            self.registry, self.catalog, self.bus.reads, viewer, AbsentReadSource()
         ) as basis:
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
@@ -493,7 +487,7 @@ class BusPresentation:
                     self.bus.log.page_snapshot()
                 )
                 with DisplaySelection.reading(
-                    self.registry, self.catalog, self.bus.reads, viewer
+                    self.registry, self.catalog, self.bus.reads, viewer, ReadSource.from_revision(source)
                 ) as basis:
                     scope = basis.scope(target)
             # Identity capture does not grant custody over page preparation. Both
@@ -519,13 +513,15 @@ class BusPresentation:
         expected_scope: ChannelDisplayScope | None = None,
     ) -> None:
         with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
+            read_source = AbsentReadSource()
             if through is None:
                 # Open the bus cut before the registry, as sending a message does.
                 marker, _, source, stream, records = stack.enter_context(
                     self.bus.log.page_snapshot()
                 )
+                read_source = ReadSource.from_revision(source)
             with DisplaySelection.reading(
-                self.registry, self.catalog, self.bus.reads, viewer
+                self.registry, self.catalog, self.bus.reads, viewer, read_source
             ) as basis:
                 current = basis.scope(target)
                 if through is not None:
@@ -840,7 +836,7 @@ class WireRevision:
     history: FileRevision | None
     activity: FileRevision | None
     runtime_info: FileRevision | None
-    reads: tuple[FileRevision | None, ...]
+    reads: ReadRevision
     native_unread: FileRevision | None
     goal_waits: FileRevision | None
     relationships: FileRevision | None

@@ -228,7 +228,7 @@ class JsonStorage(SqlStorage):
 
     @classmethod
     def to_sql(cls, value: object) -> str:
-        return json.dumps(FieldCodec.encode(value), separators=(",", ":"), allow_nan=False)
+        return json.dumps(value, separators=(",", ":"), allow_nan=False)
 
     @classmethod
     def from_sql(cls, value: object) -> object:

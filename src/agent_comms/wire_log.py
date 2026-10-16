@@ -35,6 +35,7 @@ from .errors import (
 )
 from .field_codec import FieldCodec
 from .messages import Message
+from .read_ledger import ReadSource
 from .private_path import FileRevision
 from .store_files import (
     StoreLock,
@@ -232,6 +233,12 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
 
 
 @dataclass(frozen=True, slots=True)
+class CapturedConversationWindows:
+    windows: tuple[Iterator[CommittedDelivery], ...]
+    read_source: ReadSource
+
+
+@dataclass(frozen=True, slots=True)
 class ConversationSourceWindowRequest:
     """One bounded indexed conversation selection from a certified wire cut."""
 
@@ -268,12 +275,14 @@ class ConversationSourceWindowRequest:
         log: WireLog,
         lookup: str,
         requests: tuple[ConversationSourceWindowRequest, ...],
-    ) -> tuple[Iterator[CommittedDelivery], ...]:
-        """Copy each selection from one source; consumers decode after release."""
+    ) -> CapturedConversationWindows:
+        """Detach selections and their original read identity before releasing custody."""
+        from .read_ledger import ReadSource, AbsentReadSource
         if not log.path.exists() and not log.metadata_path.exists():
-            return tuple(iter(()) for request in requests)
+            return CapturedConversationWindows(tuple(iter(()) for request in requests), AbsentReadSource())
         with log.certified_read() as source:
-            return tuple(request.capture(source, lookup) for request in requests)
+            return CapturedConversationWindows(tuple(request.capture(source, lookup) for request in requests),
+                                               ReadSource.from_revision(source.witness.revision))
 
 
 class WireLog:
@@ -354,7 +363,7 @@ class WireLog:
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
         """Copy a bounded window under the lock; decode after releasing it."""
         request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending)
-        return request.capture_many(self, lookup, (request,))[0]
+        return request.capture_many(self, lookup, (request,)).windows[0]
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.

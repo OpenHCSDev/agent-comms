@@ -132,6 +132,10 @@ class JsonShapeFamily(WireValue):
             raise TypeError("A JSON shape factory must return its own family")
         return result
 
+    @classmethod
+    def encode(cls, value):
+        return FieldCodec.encode(value.value, cls._value_annotation(type(value)))
+
     def to_wire(self):
         return self.value
 
@@ -313,7 +317,7 @@ class FieldCodec(Sealed):
                 )
             )
             result.update(
-                (member.wire_name, cls.encode(getattr(value, name)))
+                (member.wire_name, cls.encode(getattr(value, name), get_type_hints(member.fget).get('return')))
                 for name, member in cls._projections(type(value), "wire").items()
             )
             return result
@@ -322,14 +326,17 @@ class FieldCodec(Sealed):
         if isinstance(value, Enum):
             return cls.encode(value.value)
         if isinstance(value, frozenset):
-            return [cls.encode(item) for item in sorted(value)]
+            args = get_args(annotation)
+            return [cls.encode(item, args[0] if args else None) for item in sorted(value)]
         if isinstance(value, (list, tuple)):
-            return [cls.encode(item) for item in value]
+            args = get_args(annotation)
+            return [cls.encode(item, (args[0] if args and (get_origin(annotation) is list or len(args) == 2 and args[1] is Ellipsis)
+                                      else args[index] if index < len(args) else None))
+                    for index, item in enumerate(value)]
         if isinstance(value, dict):
-            key_type, value_type = (
-                get_args(annotation) if get_origin(annotation) is dict
-                else (str if all(type(key) is str for key in value) else Any, None)
-            )
+            if get_origin(annotation) is not dict or len(get_args(annotation)) != 2:
+                raise TypeError('Dictionary encoding requires a declared dict[K, V] annotation')
+            key_type, value_type = get_args(annotation)
             return _DictDecoder.for_key(key_type).encode(value, key_type, value_type)
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 

@@ -153,7 +153,7 @@ class ThreadPresentation:
         projected = MessageNotification.delivery_window(
             transcripts.root, transcripts.registry, sources,
             NotificationAssignment.read(transcripts.root, sources),
-            snapshot=snapshot,
+            snapshot=snapshot, identity=window.read_source,
             owner_lookup=stable_thread_lookup(window.read.identity.thread.created_at),
         )
         incoming, sent = (

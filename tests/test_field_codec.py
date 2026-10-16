@@ -126,7 +126,7 @@ def test_golden_nested_family_record_round_trip():
         "type": "object", "additionalProperties": {"type": "array", "items": {"type": "integer"}},
     }
     assert FieldCodec.value_schema(dict[int, str])['type'] == 'array'
-    assert FieldCodec.decode(dict[int, str], FieldCodec.encode({1: 'x'})) == {1: 'x'}
+    assert FieldCodec.decode(dict[int, str], FieldCodec.encode({1: 'x'}, dict[int, str])) == {1: 'x'}
     del golden["externalLabel"]
     assert FieldCodec.decode(Record, golden) == record
 

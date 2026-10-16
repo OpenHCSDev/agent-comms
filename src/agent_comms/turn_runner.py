@@ -301,9 +301,11 @@ class TurnRunner:
                 return True
         if sent_seq:
             snapshot = self.comms.registry.snapshot()
-            readers = self.comms.bus.reads.observations(snapshot)
+            from .read_ledger import ReadSource
             with self.comms.bus.log.certified_read() as source:
                 message = source.delivery(sent_seq).message
+                identity = ReadSource.from_revision(source.witness.revision)
+            readers = self.comms.bus.reads.observations(snapshot, identity)
             return any(name != thread_name and mask.contains(message)
                        for name, mask in readers.items())
         return False

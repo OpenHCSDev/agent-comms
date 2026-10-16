@@ -22,7 +22,7 @@ from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import projected
+from .field_codec import FieldCodec, projected
 from .private_path import FileIdentity, FileRevision
 from .routing import DeliveryMessage, DeliveryScope
 from .store_files import _store_lock
@@ -166,7 +166,7 @@ class RouteTimeRow(RouteTable, TypedTable):
         # SQLite owns the fresh row identity; JsonStorage is the existing codec.
         cursor = db.execute(
             f'INSERT INTO "{cls.declared_name}" (node) VALUES (?)',
-            (JsonStorage.to_sql(node),),
+            (JsonStorage.to_sql(FieldCodec.encode(node)),),
         )
         return cls(cursor.lastrowid, node)
 
@@ -330,8 +330,10 @@ class BusRouteCounts:
 
     def read_prefix(self, conversation, progress, snapshot, bus_identity):
         """Compact only a proven indexed conversation prefix, never numeric adjacency."""
+        from .read_ledger import ReadPrefix, PrefixUnavailable
+
         if not progress.sparse:
-            return progress.read_through
+            return ReadPrefix(progress.read_through)
         recorded = RouteSourceRow.one(self.connection, id=1)
         maximum = max(progress.sparse)
         if (recorded is None or recorded.revision is None
@@ -340,7 +342,7 @@ class BusRouteCounts:
                     f'SELECT 1 FROM "{RouteEntryRow.declared_name}" WHERE seq=?',
                     (maximum,),
                 ).fetchone()):
-            return None
+            return PrefixUnavailable()
         self.connection.create_function('in_read_conversation', 2,
                                         conversation.route_matcher(snapshot), deterministic=True)
         try:
@@ -357,7 +359,7 @@ class BusRouteCounts:
                 }).fetchone()
         except sqlite3.OperationalError as error:
             CoordinationReadUnavailable.raise_from(error)
-        return first[0] - 1 if first is not None else maximum
+        return ReadPrefix(first[0] - 1 if first is not None else maximum)
 
     def changed_reads(self, previous, current):
         self.connection.create_function('previously_read', 3, previous.contains_route, deterministic=True)

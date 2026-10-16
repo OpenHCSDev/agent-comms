@@ -100,6 +100,7 @@ class MessageBus:
         of reconstructing it from independently sampled path revisions.
         """
         from .presentation import DisplaySelection
+        from .read_ledger import ReadSource
 
         prepared = self.log.prepare_append_indexes()
         with ExitStack() as stack:
@@ -108,7 +109,7 @@ class MessageBus:
                     prepared_indexes=prepared,
                 ))
                 with DisplaySelection.reading(
-                    self._registry, self._channels, self.reads, viewer
+                    self._registry, self._channels, self.reads, viewer, ReadSource.from_revision(source.revision)
                 ) as basis:
                     pass
             yield basis, source
@@ -127,8 +128,9 @@ class MessageBus:
         catalog = self._channels.read()
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
-        seen = self.reads.membership(delivery.actor, snapshot)
+        from .read_ledger import ReadSource
         with self.log._opened_wire_snapshot() as source:
+            seen = self.reads.membership(delivery.actor, snapshot, ReadSource.from_revision(source.revision))
             with OpenedRouteCounts(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
             ) as index:
@@ -204,7 +206,7 @@ class MessageBus:
             for actor in set(actors.values())
         }
         from .read_ledger import ReadMask
-        readers = basis.document.memberships(basis.registry, source.revision.identity if source.revision else None)
+        readers = basis.readers
         seen = {actor: readers.get(actor, ReadMask()) for actor in deliveries}
         with OpenedRouteCounts(self.log.path, source, basis.registry, deliveries) as index:
             counts = index.unseen_counts(seen)

@@ -478,12 +478,15 @@ class HistoryViews:
 
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
+        paths = self.revision_paths()
+        read_paths = paths.pop('reads')
         parts = {
             name: (tuple(map(FileRevision.capture, path)) if isinstance(path, tuple)
                    else FileRevision.capture(path))
-            for name, path in self.revision_paths().items()
+            for name, path in paths.items()
         }
-        return WireRevision(**parts, expiry_tick=int(time.time()))
+        from .read_ledger import ReadRevision
+        return WireRevision(**parts, reads=ReadRevision.capture(read_paths), expiry_tick=int(time.time()))
 
     def who(self) -> Sequence[Mapping]:
         """Presence: who is in the chat, with status and unread counts."""

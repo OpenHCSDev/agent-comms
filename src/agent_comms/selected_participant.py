@@ -28,7 +28,8 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
-from .presentation import MessageNotification, SentMessageOutcome
+from .presentation import MessageNotification
+from .read_ledger import ReadSource, SentMessageOutcome
 from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
@@ -168,11 +169,11 @@ class SelectedParticipant(MroDispatch):
     @staticmethod
     def capture_sent_outcomes(
         comms: Comms, owner: Thread, sources: Sequence[CommittedDelivery],
-        assignment_read: NotificationAssignmentRead,
+        assignment_read: NotificationAssignmentRead, identity: ReadSource,
     ) -> tuple[SentMessageOutcome, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""
         notifications = MessageNotification.for_sources(
-            comms.root, comms.registry, owner, sources, assignment_read=assignment_read,
+            comms.root, comms.registry, owner, sources, assignment_read=assignment_read, identity=identity,
         )
         return tuple(
             outcome
@@ -202,10 +203,11 @@ class SelectedParticipant(MroDispatch):
         owner = RegistryOwner(thread=thread, admission_generation=generation)
         owner.require_registry(comms.registry)
         lookup = stable_thread_lookup(thread.created_at)
-        sent_owner, sent_sources = MessageNotification.sent_sources(
+        sent_owner, sent_window = MessageNotification.sent_sources(
             comms.root, comms.registry, comms.bus.log, name,
             limit=MessageNotification.window_limit,
         )
+        sent_sources = sent_window.sent_sources
         LiveResponseOwner(
             thread=thread, admission_generation=generation
         ).resolve_retained(store, bus)
@@ -225,7 +227,7 @@ class SelectedParticipant(MroDispatch):
         if pending:
             participant.pointer.require_idle()
         sent_outcomes = SelectedParticipant.capture_sent_outcomes(
-            comms, sent_owner, sent_sources, sent_read
+            comms, sent_owner, sent_sources, sent_read, sent_window.read_source
         )
         return owner, participant, pending, sent_outcomes
 

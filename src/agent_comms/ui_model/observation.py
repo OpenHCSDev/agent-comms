@@ -773,12 +773,30 @@ class ObserverDied(CoordinationError):
         super().__init__(f"The comms observer (pid {pid}) {how}" + (f":\n{error}" if error else ""))
 
 
+class HumanViewerBinding:
+    def bind(self, comms: Comms, worktree: str) -> BoundHumanViewer:
+        raise NotImplementedError
+
+
+class UnboundHumanViewer(HumanViewerBinding):
+    def bind(self, comms: Comms, worktree: str) -> BoundHumanViewer:
+        return BoundHumanViewer(comms.messaging.user_identity(worktree))
+
+
+@dataclass(frozen=True, slots=True)
+class BoundHumanViewer(HumanViewerBinding):
+    viewer: Thread
+
+    def bind(self, comms: Comms, worktree: str) -> BoundHumanViewer:
+        return self
+
+
 class ObservationService:
     """The child process side: one Comms service, the UI's interest, and what was sent."""
 
     def __init__(self, comms, connection: Connection):
         self.comms = comms
-        self.viewer: Thread | None = None
+        self.viewer_binding: HumanViewerBinding = UnboundHumanViewer()
         self.connection = connection
         self.observations: dict[type[Observation], Observation] = {}
         self.changed = asyncio.Event()
@@ -792,9 +810,8 @@ class ObservationService:
 
     def bind_viewer(self, worktree: str) -> Thread:
         """The first sidebar binds its real project; later interests keep that human."""
-        if self.viewer is None:
-            self.viewer = self.comms.messaging.user_identity(worktree)
-        return self.viewer
+        self.viewer_binding = self.viewer_binding.bind(self.comms, worktree)
+        return self.viewer_binding.viewer
 
     def receive(self) -> None:
         while self.connection.poll():

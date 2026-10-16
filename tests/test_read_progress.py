@@ -5,7 +5,9 @@ from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
 from agent_comms.read_basis import Conversation
-from agent_comms.read_ledger import ConversationKey, ReadMask, ReadProgress
+from agent_comms.read_ledger import (ConversationKey, ReadMask, ReadProgress,
+    ReadPrefix, PrefixUnavailable, AllViewers, OneViewer, ReadRevision,
+    PresentReadRevision, AbsentReadRevision)
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
 
@@ -32,7 +34,7 @@ def test_interleaved_global_sequences_do_not_grant_a_conversation_gap(tmp_path):
 def test_typed_conversation_keys_decode_once_and_reject_duplicates():
     key = ConversationKey(ThreadIncarnation('viewer', 1.0), Conversation(target='#team'))
     states = {key: ReadProgress(4, frozenset({8}))}
-    encoded = FieldCodec.encode(states)
+    encoded = FieldCodec.encode(states, dict[ConversationKey, ReadProgress])
     assert FieldCodec.decode(dict[ConversationKey, ReadProgress], encoded) == states
     with pytest.raises(ValueError, match='Duplicate'):
         FieldCodec.decode(dict[ConversationKey, ReadProgress], [encoded[0], encoded[0]])
@@ -53,3 +55,33 @@ def test_message_membership_is_one_conversation_lookup_without_iteration():
     message = replace(Message('sender', '#team', 'painted', InfoKind), seq=5)
     assert mask.contains(message)
     assert calls == [conversation]
+
+
+def test_prefix_family_never_grants_unproven_sparse_paint():
+    state = ReadProgress(1, frozenset((4,)))
+    assert state.mark((6,), lambda _: PrefixUnavailable()) == ReadProgress(1, frozenset((4, 6)))
+    assert state.mark((6,), lambda _: ReadPrefix(4)) == ReadProgress(4, frozenset((6,)))
+
+
+def test_undeclared_dictionary_is_not_guessed_from_its_values():
+    for value in ({}, {'a': 1}, {1: 2}):
+        with pytest.raises(TypeError, match='declared dict'):
+            FieldCodec.encode(value)
+    assert FieldCodec.encode([{'a': 1}, {'b': 2}], list[dict[str, int]]) == [{'a': 1}, {'b': 2}]
+
+
+def test_missing_incarnation_is_not_a_deleted_identity():
+    with pytest.raises(KeyError):
+        ReadMask().incarnation('not-in-this-mask')
+    assert not ReadMask().contains(replace(Message('a', 'b', 'unseen', InfoKind), seq=1))
+
+
+def test_revision_family_roundtrip_and_explicit_viewer_scope(tmp_path):
+    assert isinstance(ReadRevision.capture((tmp_path / 'absent',)), AbsentReadRevision)
+    path = tmp_path / 'present'
+    path.write_text('owned')
+    revision = ReadRevision.capture((path,))
+    assert isinstance(revision, PresentReadRevision)
+    assert FieldCodec.decode(ReadRevision, FieldCodec.encode(revision)) == revision
+    assert isinstance(AllViewers(), AllViewers)
+    assert OneViewer(ThreadIncarnation('viewer', 1.0)).incarnation.name == 'viewer'
