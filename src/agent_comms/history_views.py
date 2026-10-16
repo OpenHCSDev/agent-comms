@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import ExitStack
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -313,7 +313,14 @@ class HistoryViews:
             channels,
             catalog.pinned_members(),
             catalog.list_order,
-            self.agents.all_activity(snapshot=snapshot),
+            self.agents.all_activity(
+                (thread for thread in snapshot.threads.values()
+                 if ThreadView.visible(
+                     thread, snapshot, show_stopped=show_stopped,
+                     show_archived=show_archived,
+                 )),
+                snapshot=snapshot,
+            ),
             self.last_sent_timestamps(),
             ChannelActivity.for_views(channels, self.bus.channel_activity()),
             show_stopped=show_stopped,
@@ -538,7 +545,10 @@ class HistoryViews:
             for name, thread in snapshot.threads.items()
             if not active_only or snapshot.statuses[name].active
         }
-        activities = self.agents.all_activity(snapshot=snapshot)
+        activities = self.agents.all_activity(
+            (thread for name, thread in threads.items() if snapshot.statuses[name].active),
+            snapshot=snapshot,
+        )
         pending = self.bus.pending_counts_all(tuple(threads))
         waits = GoalWaits(self.root / GoalWaits.filename).read()
         return [
@@ -548,9 +558,8 @@ class HistoryViews:
                 "is_fork": t.is_fork,
                 "pending": pending[name],
                 "goal_execution": (
-                    asdict(execution)
-                    if (execution := GoalWaits.execution(t.goal, waits, snapshot))
-                    else None
+                    GoalWaits.for_goal(t.goal, waits).project(t.goal, snapshot).to_wire()
+                    if t.goal is not None else None
                 ),
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",
@@ -566,7 +575,7 @@ class HistoryViews:
             "is_fork": t.is_fork,
         }
         execution = self.goals.goal_execution(name)
-        detail["goal_execution"] = asdict(execution) if execution else None
+        detail["goal_execution"] = execution.to_wire() if execution else None
         if include_pending:
             detail["pending"] = self.bus.pending_count(name)
         return detail

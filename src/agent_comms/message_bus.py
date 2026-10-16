@@ -276,7 +276,6 @@ class MessageBus:
         Input preparation may omit this optional supplement on contention;
         inspection waits in its existing resource worker for the actual read.
         """
-        from .bus_publication import stable_thread_lookup
         from .errors import RelationViolationError
         from .private_bus_checkpoint import addressed_source_pointers_unlocked
         from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
@@ -285,7 +284,7 @@ class MessageBus:
             with self.log.certified_read(blocking=blocking) as source:
                 marker = source.marker
                 rows = addressed_source_pointers_unlocked(
-                    self.log, marker, stable_thread_lookup(owner.created_at)
+                    self.log, marker, owner.incarnation.lookup
                 )
         except (BlockingIOError, RelationViolationError):
             # Contention or a checkpoint/source change during the read; any
@@ -293,8 +292,14 @@ class MessageBus:
             return (UnavailableAwarenessSegment.capture(),)
         if not rows:
             return ()
-        selected = {stable_thread_lookup(relation.peer.created_at) for relation in relations}
+        selected = {relation.peer.incarnation.lookup for relation in relations}
         rows = tuple(row for row in rows if row.sender_lookup in selected)
+        first = {
+            relation.peer.incarnation.lookup
+            for relation in relations
+            if relation.relevance.grants(Prioritized)
+        }
+        rows = tuple(sorted(rows, key=lambda row: row.sender_lookup not in first))
         return (AwarenessSegment.capture(self.log.path, marker.root_id, rows),) if rows else ()
 
     def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:

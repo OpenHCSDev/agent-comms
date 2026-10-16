@@ -25,6 +25,8 @@ from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
 from test_backend_native_lifecycle import native_backend as native_backend
 from stored_inputs import stored_inputs
+from agent_comms.goal_waits import NoGoalWait
+from agent_comms.goal_waits import RecordedGoalWait
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
@@ -223,7 +225,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     await progress.consume(ae.StreamSettled())
     assert execution.finish_event.is_set()
     assert comms.registry.require(execution.thread_name).turn_lease == execution.turn_lease
-    assert comms.goals.goal_wait("waiting") is not None
+    assert isinstance(comms.goals.goal_wait("waiting"), RecordedGoalWait)
     diagnostic = {"elapsed_ms": 3} if not value.successful else None
     await progress.consume(
         ae.Done(
@@ -243,7 +245,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
         )
         is None
     )
-    assert comms.goals.goal_wait("waiting") is not None
+    assert isinstance(comms.goals.goal_wait("waiting"), RecordedGoalWait)
     if not value.successful:
         with pytest.raises(RequestError, match="Internal error"):
             await progress.publish_result()
@@ -255,7 +257,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
         execution.session_id,
         execution.turn_lease,
     )
-    assert comms.goals.goal_wait("waiting") is None
+    assert isinstance(comms.goals.goal_wait("waiting"), NoGoalWait)
     assert comms.registry.require("waiting").goal.state.active
     assert observed.index(ae.StreamSettled) < observed.index(ae.Done)
     if issubclass(case, SettingsCase):
@@ -321,7 +323,7 @@ async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeyp
             execution.turn_lease,
         )
     monkeypatch.setattr(runner.effects, "_emit_event", original)
-    assert comms.goals.goal_wait("waiting") is None
+    assert isinstance(comms.goals.goal_wait("waiting"), NoGoalWait)
     goal = comms.registry.require("waiting").goal
     assert len(released) == 1 and release_waits(released[0]) == ()
     assert comms.registry.require("waiting").goal == goal
@@ -455,7 +457,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
                 StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(name,)),
             )
         if isinstance(event, ae.CompactionEnd) and event.reason is ManualCompactionReason:
-            assert comms.goals.goal_wait("waiting") is not None
+            assert isinstance(comms.goals.goal_wait("waiting"), RecordedGoalWait)
 
     monkeypatch.setattr(owner, "_emit_event", observe)
     try:
@@ -466,7 +468,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
         rows = [json.loads(line) for line in native.session.read_text().splitlines()]
         assert len([row for row in rows if row.get("type") == "compaction"]) == 1
         assert comms.registry.require(name).active_turn is None
-        assert comms.goals.goal_wait("waiting") is None
+        assert isinstance(comms.goals.goal_wait("waiting"), NoGoalWait)
         assert comms.registry.require("waiting").goal.state.active
         terminal = next(i for i, event in enumerate(observed)
             if isinstance(event, TurnTranscriptUpdate) and not event.state.busy)
@@ -541,7 +543,7 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
                 StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=(name,)),
             )
         if isinstance(event, TurnTranscriptUpdate) and not event.state.busy:
-            assert comms.goals.goal_wait("waiting") is not None
+            assert isinstance(comms.goals.goal_wait("waiting"), RecordedGoalWait)
             assert comms.registry.require(name).active_turn is None
 
     monkeypatch.setattr(owner, "_emit_event", observed)
@@ -550,7 +552,7 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
             await owner.turns.prompt_owned(
                 session.session_id, [TextContentBlock(type="text", text="!relay #comms relay body")]
             )
-        assert comms.goals.goal_wait("waiting") is None
+        assert isinstance(comms.goals.goal_wait("waiting"), NoGoalWait)
         assert comms.registry.require("waiting").goal.state.active
         assert sum(isinstance(event, TurnTranscriptUpdate) and not event.state.busy
             for event in events) == 1

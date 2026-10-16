@@ -17,9 +17,9 @@ from native_proof_cases import read_proof_rows, write_proof_rows
 
 import pytest
 
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -308,7 +308,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
             comms.bus,
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
         ).read()
         assert current.covered_seq == coverage.covered_seq
         assert coverage.covered_seq >= initial.message.seq
@@ -316,7 +316,7 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
             source_seq=initial.message.seq,
         )
         assert len(evidence) == 1 and isinstance(evidence[0].execution, TriageNativeExecution)
@@ -342,7 +342,7 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     second = comms.messaging.send_initial_cohort("sender", "#team", "Second source.")
-    lookup = stable_thread_lookup(people[1].created_at)
+    lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
     bus = comms.bus
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
@@ -399,7 +399,7 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
             comms.bus,
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
         ).read()
         assert coverage.covered_seq == 0
         assert coverage.injected_source_seqs == ()
@@ -413,7 +413,7 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
                 comms.bus,
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=stable_thread_lookup(people[1].created_at),
+                recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
             ).read(limit=1)
 
 
@@ -430,7 +430,7 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
     comms.registry.declare(beta)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
-            stable_thread_lookup(beta.created_at), "beta", "beta", committed=True
+            RecordedThreadIncarnation("fixture", beta.created_at).lookup, "beta", "beta", committed=True
         )
     second = comms.messaging.send_initial_cohort("sender", "#team", "@beta please review.")
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -446,7 +446,7 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
             comms.bus,
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
         ).read()
         assert coverage.covered_seq >= second.seq
         assert coverage.covered_seq == coverage.source_witness.latest_source_seq
@@ -476,7 +476,7 @@ async def test_source_coverage_stops_at_triage_without_required_full(tmp_path, m
             comms.bus,
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
         ).read()
         assert coverage.covered_seq == 0
         assert coverage.injected_source_seqs == ()
@@ -521,7 +521,7 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
     owner = comms.registry.require("alpha")
     admission_generation = comms.registry.snapshot().admission_generations["alpha"]
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = stable_thread_lookup(people[1].created_at)
+        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         generation = store.participants.get(lookup).participant_generation
         assert (
             NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
@@ -586,7 +586,7 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert old_turn is not None and old_turn.cursor_status == "proven"
-    lookup = stable_thread_lookup(people[1].created_at)
+    lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
     comms.registry.rename("alpha", "alpha-new")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, "alpha-new", expected_generation=1)
@@ -630,7 +630,7 @@ async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, 
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
             source_seq=initial.message.seq,
         )
         assert [type(row.execution) for row in evidence] == [TriageNativeExecution, FullNativeExecution]
@@ -661,7 +661,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
             source_seq=initial.message.seq,
         )
         assert evidence == ()
@@ -705,7 +705,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
             source_seq=initial.message.seq,
         )
         assert [type(row.execution) for row in evidence] == [TriageNativeExecution]
@@ -773,7 +773,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
             source_seq=initial.message.seq,
         )
         assert [type(row.execution) for row in evidence] == ([] if stage == "triage" else [TriageNativeExecution])
@@ -810,7 +810,7 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
         # committed but before the binding write.
         with Coordination(str(root / "coordination.sqlite3")) as store:
             store.participants.advance_generation(
-                stable_thread_lookup(people[1].created_at),
+                RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
                 "alpha",
                 expected_generation=1,
             )
@@ -852,14 +852,14 @@ async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
             source_seq=initial.message.seq,
         )
         assert evidence == ()
         # The claim stays deferred (no auto-retry) and unproven.
         from agent_comms.coordination_cohort import sealed_cohort_assignments
 
-        claims = sealed_cohort_assignments(store, stable_thread_lookup(people[1].created_at))
+        claims = sealed_cohort_assignments(store, RecordedThreadIncarnation("fixture", people[1].created_at).lookup)
         assert [assignment.lifecycle.declared_name for assignment in claims] == ["deferred"]
         assert read_expected_prompt_binding(store, "0" * 32) is None
     # The sidecar binding row exists and stays immutable, but no equality is

@@ -13,18 +13,20 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalWaitTarget
-from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.goal_waits import GoalWaits
 from agent_comms.locked_store import LockedStore
 from agent_comms.store_files import _store_lock
+from agent_comms.goal_waits import RecordedGoalWait
 
 
 def wait(goal_id="goal"):
-    return GoalWait(
+    return RecordedGoalWait(
         goal_id,
         "wait",
         2,
         7,
-        (GoalWaitTarget("worker", 123.0),),
+        (GoalWaitTarget(RecordedThreadIncarnation("worker", 123.0)),),
         122.0,
         (3,),
         "turn",

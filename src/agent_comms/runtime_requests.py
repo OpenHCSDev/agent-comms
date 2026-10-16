@@ -15,7 +15,7 @@ import os
 from abc import abstractmethod
 from functools import partial
 from .coordinator import Coordination
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Self
 
 from .command import Command
@@ -281,7 +281,7 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
         ))
         return {
             "goal": goal.to_wire() if goal is not None else None,
-            "goalExecution": asdict(execution) if execution is not None else None,
+            "goalExecution": execution.to_wire() if execution is not None else None,
             "_meta": encode_updates(TurnChangedUpdate(await Coordination.run_worker(partial(
                 ctx.server.agent.turns.turn_state, ctx.session_id,
             )))),

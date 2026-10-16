@@ -17,7 +17,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_views import HistorySource
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.store_files import _atomic_write_text
-from agent_comms.thread_provenance import ThreadProvenance
+from agent_comms.thread_identity import ThreadProvenance
 
 
 def carry(manifest: Path):

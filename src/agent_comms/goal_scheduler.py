@@ -88,7 +88,7 @@ class GoalScheduler:
             return
         goal = thread.active_goal
         if goal is not None:
-            if self.comms.goals.goal_wait(thread.name) is not None:
+            if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
                 return
             if self.pending_goal_origins.get(thread.name) == goal.id:
                 return

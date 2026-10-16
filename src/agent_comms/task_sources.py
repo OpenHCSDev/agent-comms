@@ -11,7 +11,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .goals import GoalRevision
 from .message_reference import MessageReference
-from .thread_identity import ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
 from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
@@ -503,13 +503,11 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         self.change.require_publication(self, registry, original_source)
 
     def require_wording_publication(self, registry, original_source):
-        from .bus_publication import stable_thread_lookup
-
         delivery, = original_source.references((self.subject,))
         delivery.message.sender_role.require_user()
-        if delivery.audience.sender_lookup != stable_thread_lookup(self.source_user.created_at):
+        if delivery.audience.sender_lookup != self.source_user.lookup:
             raise RelationViolationError("USER pin differs from its original human author")
-        if not delivery.audience.includes_lookup(stable_thread_lookup(self.recipient.created_at)):
+        if not delivery.audience.includes_lookup(self.recipient.lookup):
             raise RelationViolationError("USER pin recipient did not receive its original message")
 
     def user_task_facts(self, message):
@@ -554,7 +552,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
         origin = row.origin.require_human()
         if origin.root_id != original_source.witness.root_id:
             raise RelationViolationError("USER input pin belongs to another wire root")
-        original_author = ThreadIncarnation(origin.author.sender, origin.author.created_at)
+        original_author = RecordedThreadIncarnation(origin.author.sender, origin.author.created_at)
         if original_author.resolved(registry) != self.source_user.resolved(registry):
             raise RelationViolationError("USER input pin differs from its original human author")
         if origin.admission.incarnation.resolved(registry) != self.recipient.resolved(registry):

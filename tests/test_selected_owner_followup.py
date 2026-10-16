@@ -110,7 +110,9 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert comms.registry.require("beta").goal == before_goal
         # The completed selected reply consumes its certified dependency wait;
         # a queued owner input keeps its admission/goal authority across that change.
-        assert comms.goals.goal_wait("beta") == (None if goal_mode == "standby" else before_wait)
+        from agent_comms.goal_waits import NoGoalWait
+
+        assert comms.goals.goal_wait("beta") == (NoGoalWait() if goal_mode == "standby" else before_wait)
         assert not (comms.root / "goal-private").exists()
     finally:
         release.set()

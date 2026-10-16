@@ -224,7 +224,6 @@ class RecoveryMonitorCapability:
     @classmethod
     def recover_owner(cls, root: Path, owner) -> None:
         """Resolve an exited predecessor once, before this worker begins draining."""
-        from .bus_publication import stable_thread_lookup
         from .coordination_tables.executions import CurrentExecutions
 
         path = root / "coordination.sqlite3"
@@ -232,7 +231,7 @@ class RecoveryMonitorCapability:
             return
         with Coordination(str(path)) as store:
             pointer = CurrentExecutions.one(
-                store.session._connection, owner_lookup=stable_thread_lookup(owner.created_at)
+                store.session._connection, owner_lookup=owner.incarnation.lookup
             )
             if pointer is not None and pointer.unresolved:
                 cls.recover_released_native_attempt(store, pointer.execution_id)

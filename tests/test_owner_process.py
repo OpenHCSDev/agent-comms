@@ -155,7 +155,7 @@ def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> Non
         )
         comms.registry.declare(owner)
         comms.registry.declare(peer)
-        targets = (GoalWaitTarget(peer.name, peer.created_at),)
+        targets = (GoalWaitTarget(peer.incarnation.require_recorded()),)
         assert GoalWaits.closed_wait_group(owner.name, targets, {}, comms.registry.snapshot()) == ()
         stale = replace(
             peer, process_identity=replace(child.identity, start_time=child.identity.start_time + 1)

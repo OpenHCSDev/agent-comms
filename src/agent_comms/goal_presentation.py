@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireValue
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
@@ -18,6 +18,7 @@ from .goal_states import (
     UnrecordedBlockGoal,
 )
 from .goals import Goal
+from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
@@ -83,15 +84,31 @@ class GoalExecutionState(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaitTarget:
-    name: str
-    created_at: float
+class GoalWaitTarget(WireValue):
+    incarnation: RecordedThreadIncarnation
+
+    @property
+    def name(self) -> str:
+        return self.incarnation.name
+
+    @property
+    def created_at(self) -> float:
+        return self.incarnation.created_at
 
     def sent(self, original: CommittedDelivery) -> bool:
         """Only this declared incarnation can supply a dependency reply."""
-        from .bus_publication import stable_thread_lookup
+        return original.audience.sender_lookup == self.incarnation.lookup
 
-        return original.audience.sender_lookup == stable_thread_lookup(self.created_at)
+    def to_wire(self) -> dict[str, str | float]:
+        return self.incarnation.to_wire()
+
+    @classmethod
+    def from_wire(cls, data: Mapping) -> GoalWaitTarget:
+        return cls(RecordedThreadIncarnation.from_wire(data))
+
+    @classmethod
+    def schema(cls) -> dict:
+        return RecordedThreadIncarnation.schema()
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,15 +123,13 @@ class GoalExecution:
         glyph, summary = self.state.view.render(self)
         return ThreadPresentation(title, glyph, summary)
 
+    def to_wire(self) -> dict:
+        """Use the one field codec; target births keep their original wire keys."""
+        return FieldCodec.encode(self)
+
     @classmethod
     def from_wire(cls, data: Mapping) -> GoalExecution:
-        return cls(
-            GoalExecutionState(data["state"]),
-            str(data["goal_id"]),
-            tuple(GoalWaitTarget(**target) for target in data.get("wait_for", ())),
-            tuple(GoalWaitTarget(**target) for target in data.get("inactive_wait_for", ())),
-            data.get("block_reason"),
-        )
+        return FieldCodec.decode(cls, data)
 
 
 @dataclass(frozen=True)

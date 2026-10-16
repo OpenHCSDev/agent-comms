@@ -15,8 +15,7 @@ from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
-from .bus_publication import stable_thread_lookup
-from .goal_waits import GoalInputReview, GoalWait, GoalWaits
+from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait
 from .registration import Registration
 
 if TYPE_CHECKING:
@@ -132,7 +131,7 @@ class Goals:
         if any(target.created_at == thread.created_at for target in resolved):
             raise ValueError("A goal cannot wait for its own thread.")
         targets = tuple(
-            dict.fromkeys(GoalWaitTarget(target.name, target.created_at) for target in resolved)
+            dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
         )
         owners = self.registry.aliases_for(thread.name)
         dispositions = InputDispositions(self.root)
@@ -141,7 +140,7 @@ class Goals:
         snapshot = self.registry.snapshot()
         from .input_attempt import ReservedInput
 
-        lookup = stable_thread_lookup(thread.created_at)
+        lookup = thread.incarnation.lookup
         # Original certification supplies both sides of the reply. Display ACKs
         # and today's sender aliases cannot admit a different incarnation.
         replies = {
@@ -181,9 +180,9 @@ class Goals:
         with _store_lock(self._wire_lock_path, shared=True):
             return self.registry.goal_history(name, goal_id=goal_id)
 
-    def goal_wait(self, name: str) -> GoalWait | None:
-        waits = self.waits
-        return waits.for_goal(self.registry.require(name).goal, waits.read())
+    def goal_wait(self, name: str) -> GoalWait:
+        goal = self.registry.require(name).goal
+        return self.waits.for_goal(goal, self.waits.read()) if goal is not None else NoGoalWait()
 
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
         """Release one stranded standby without replaying a dependency input.
@@ -214,7 +213,7 @@ class Goals:
                 return ()
             # An unreadable bus raises to the drain loop, which records it as
             # the owner's visible drain diagnostic; it never proves silence.
-            if wait.has_reply(self.bus.log):
+            if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
                 return ()
             names = ", ".join(f"@{member}" for member in closed)
             note = (
@@ -280,7 +279,7 @@ class Goals:
                 ):
                     continue
                 try:
-                    reply = wait.has_reply(self.bus.log)
+                    reply = wait.has_reply(self.bus.log, owner.incarnation.require_recorded())
                 except (OSError, ValueError, sqlite3.DatabaseError):
                     # The terminal turn has already committed. An unavailable
                     # optional reply read cannot prove silence or release this
@@ -332,11 +331,11 @@ class Goals:
         snapshot = self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
         goal = snapshot.threads[canonical].goal
-        return goal, GoalWaits.execution(
-            goal,
-            self.waits.read(),
-            snapshot,
+        execution = (
+            GoalWaits.for_goal(goal, self.waits.read()).project(goal, snapshot)
+            if goal is not None else None
         )
+        return goal, execution
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
         """Called under the send-boundary wire lock after reserving an attempt."""
@@ -358,15 +357,15 @@ class Goals:
             if goal is None:
                 return False
             wait = self.waits.for_goal(goal, self.waits.read())
-            if wait is None or wait.owner_created_at != current.created_at:
+            if not wait.owner_matches(current.created_at):
                 return False
             with self.bus.log.certified_read() as source:
                 original = source.delivery(reference.seq)
                 if original.message.reference != reference:
                     raise ValueError("Dependency reply source reference changed.")
-                if not wait.matches(original):
+                if not wait.matches(original, current.incarnation.require_recorded()):
                     return False
-            return self.waits.clear(goal.id, wait_id=wait.wait_id)
+            return wait.consume_reply(self.waits, goal.id)
 
     def update_goal(
         self,

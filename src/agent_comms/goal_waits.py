@@ -3,27 +3,62 @@
 from __future__ import annotations
 
 import math
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .bus_publication import CommittedDelivery, stable_thread_lookup
-
+from .bus_publication import CommittedDelivery
 from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
 from .goals import Goal
 from .input_attempt import InputAttempt
 from .locked_store import LockedStore
 from .registry_document import RegistrySnapshot
+from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .threads import Thread
 
 
+class GoalWait(ABC):
+    """A resolved dependency state; only RecordedGoalWait is persisted."""
+
+    @abstractmethod
+    def allows_routed_input(self) -> bool: ...
+
+    def matches_id(self, wait_id: str) -> bool:
+        return False
+
+    def owner_matches(self, created_at: float) -> bool:
+        return False
+
+    def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
+        return False
+
+    def consume_dependency(self, comms, canonical: str) -> bool:
+        return True
+
+    def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
+        return False
+
+    def project(self, goal: Goal, snapshot: RegistrySnapshot) -> GoalExecution:
+        return GoalExecution(
+            GoalExecutionState.for_domain_state(goal.state),
+            goal.id,
+            block_reason=goal.state.reason,
+        )
+
+
 @dataclass(frozen=True, slots=True)
-class GoalWait:
+class NoGoalWait(GoalWait):
+    def allows_routed_input(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedGoalWait(GoalWait):
     goal_id: str
     wait_id: str
     revision: int
@@ -58,6 +93,32 @@ class GoalWait:
         ):
             raise ValueError("A reporting turn requires both its ID and generation.")
 
+    def allows_routed_input(self) -> bool:
+        return False
+
+    def matches_id(self, wait_id: str) -> bool:
+        return self.wait_id == wait_id
+
+    def owner_matches(self, created_at: float) -> bool:
+        return self.owner_created_at == created_at
+
+    def consume_dependency(self, comms, canonical: str) -> bool:
+        return comms.goals.consume_goal_wait(canonical, self.wait_id)
+
+    def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
+        return waits.clear(goal_id, wait_id=self.wait_id)
+
+    def project(self, goal: Goal, snapshot: RegistrySnapshot) -> GoalExecution:
+        targets = tuple(
+            GoalWaitTarget(target.incarnation.renamed(snapshot.canonical_name(target.name)))
+            for target in self.targets
+        )
+        inactive = tuple(
+            target for target in targets
+            if not GoalWaits.target_has_active_turn(target, snapshot)
+        )
+        return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
+
     def current_for(self, goal: Goal, owner_created_at: float) -> bool:
         """A retained wait can survive edits, but not replacement of its owner.
 
@@ -69,20 +130,21 @@ class GoalWait:
             self.goal_id, self.revision
         )
 
-    def matches(self, original: CommittedDelivery) -> bool:
-        """Join original sender and addressed owner through the certified source."""
+    def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
+        """Join original sender and the actual addressed owner through its source."""
         return (
-            original.message.seq > self.after_seq
-            and original.direct_for(stable_thread_lookup(self.owner_created_at))
+            owner.created_at == self.owner_created_at
+            and original.message.seq > self.after_seq
+            and original.direct_for(owner.lookup)
             and any(target.sent(original) for target in self.targets)
         )
 
-    def has_reply(self, bus: WireLog) -> bool:
+    def has_reply(self, bus: WireLog, owner: RecordedThreadIncarnation) -> bool:
+        if owner.created_at != self.owner_created_at:
+            return False
         return any(
-            self.matches(original)
-            for original in bus.addressed_sources(
-                stable_thread_lookup(self.owner_created_at), self.after_seq
-            )
+            self.matches(original, owner)
+            for original in bus.addressed_sources(owner.lookup, self.after_seq)
         )
 
 
@@ -126,17 +188,17 @@ class GoalInputReview:
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaits(ThreadOwnedState, LockedStore[dict[str, GoalWait]]):
+class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
     filename: ClassVar[str] = "goal_waits.json"
 
     @property
-    def record_type(self) -> type[dict[str, GoalWait]]:
-        return dict[str, GoalWait]
+    def record_type(self) -> type[dict[str, RecordedGoalWait]]:
+        return dict[str, RecordedGoalWait]
 
-    def empty(self) -> dict[str, GoalWait]:
+    def empty(self) -> dict[str, RecordedGoalWait]:
         return {}
 
-    def record(self, wait: GoalWait) -> None:
+    def record(self, wait: RecordedGoalWait) -> None:
         self.update(lambda rows: {**rows, wait.goal_id: wait})
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
@@ -153,7 +215,7 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, GoalWait]]):
     def clear(self, goal_id: str, *, wait_id: str | None = None) -> bool:
         removed = False
 
-        def change(rows: dict[str, GoalWait]) -> dict[str, GoalWait]:
+        def change(rows: dict[str, RecordedGoalWait]) -> dict[str, RecordedGoalWait]:
             nonlocal removed
             current = rows.get(goal_id)
             if current is None or (wait_id is not None and current.wait_id != wait_id):
@@ -165,10 +227,10 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, GoalWait]]):
         return removed
 
     @staticmethod
-    def for_goal(goal: Goal | None, rows: dict[str, GoalWait]) -> GoalWait | None:
-        if goal is None or not goal.state.active:
-            return None
-        return rows.get(goal.id)
+    def for_goal(goal: Goal, rows: dict[str, RecordedGoalWait]) -> GoalWait:
+        if not goal.state.active:
+            return NoGoalWait()
+        return rows.get(goal.id, NoGoalWait())
 
     @staticmethod
     def target_has_active_turn(target: GoalWaitTarget, snapshot: RegistrySnapshot) -> bool:
@@ -187,7 +249,7 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, GoalWait]]):
     def closed_wait_group(
         owner: str,
         targets: tuple[GoalWaitTarget, ...],
-        rows: dict[str, GoalWait],
+        rows: dict[str, RecordedGoalWait],
         snapshot: RegistrySnapshot,
     ) -> tuple[str, ...]:
         """Find waits with no path to a live active turn outside the wait graph.
@@ -247,26 +309,3 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, GoalWait]]):
                 if peer_wait is not None:
                     pending.append(canonical)
         return tuple(sorted(seen))
-
-    @staticmethod
-    def execution(
-        goal: Goal | None, rows: dict[str, GoalWait], snapshot: RegistrySnapshot
-    ) -> GoalExecution | None:
-        if goal is None:
-            return None
-        if wait := GoalWaits.for_goal(goal, rows):
-            targets = tuple(
-                replace(target, name=snapshot.canonical_name(target.name))
-                for target in wait.targets
-            )
-            inactive = tuple(
-                target
-                for target in targets
-                if not GoalWaits.target_has_active_turn(target, snapshot)
-            )
-            return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
-        return GoalExecution(
-            GoalExecutionState.for_domain_state(goal.state),
-            goal.id,
-            block_reason=goal.state.reason,
-        )

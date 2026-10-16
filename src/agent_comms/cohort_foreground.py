@@ -32,7 +32,6 @@ from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
 
-from .bus_publication import stable_thread_lookup
 from .child_process import ProcessIdentity
 from .cohort_schema import CohortDeliveryReceipts, assert_cohort_schema
 from .comms import Comms
@@ -199,7 +198,7 @@ async def run_foreground_once(
             comms.registry.register(thread)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             store.install_private_runtime()
-            lookup = stable_thread_lookup(comms.registry.require(name).created_at)
+            lookup = comms.registry.require(name).incarnation.lookup
             store.participants.register(lookup, name, name, committed=True)
         return thread, lookup, action
 
