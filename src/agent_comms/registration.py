@@ -56,13 +56,18 @@ class Registration:
             bound = replace(thread, process_identity=process)
             self._commit_registration(edit, edit.document.prepare_registration(
                 bound, RunningThreadStatus(), new_owner=True))
+            owner = edit.document.snapshot().owner_identity(bound.name)
         try:
-            yield bound.incarnation
+            yield owner.incarnation
         finally:
             with self.store.editing() as edit:
-                current = edit.document.threads.get(edit.document.canonical_name(name))
-                if (current is not None and current.created_at == bound.created_at
-                        and current.process_identity == process):
+                snapshot = edit.document.snapshot()
+                try:
+                    snapshot.require_owner_process(owner, process)
+                except RelationViolationError:
+                    pass  # A later owner or explicit stop must remain untouched.
+                else:
+                    current = snapshot.require(owner.incarnation.name)
                     self._commit_registration(edit, edit.document.prepare_registration(
                         replace(current, process_identity=None), StoppedThreadStatus(),
                         new_owner=False))
