@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex
-from .coordination_errors import StaleRevision
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
@@ -40,12 +39,10 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
 
     def snapshot(self, opened: OpenedWireSnapshot,
                  parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivitySnapshot:
+        boundary = opened.complete_boundary
         source, stream = opened.revision, opened.stream
         if source is None:
             return {}, {}
-        if not source.opened_by(stream):
-            raise StaleRevision("Activity source changed before its captured read")
-        boundary = opened.boundary
         checkpoint = opened.append_checkpoint(self)
         if checkpoint is None:
             channels, sent, offset = {}, {}, 0

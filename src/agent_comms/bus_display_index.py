@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex
-from .coordination_errors import StaleRevision
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope
@@ -125,12 +124,10 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
 
     def snapshot(self, opened: OpenedWireSnapshot,
                  semantics: DisplayMetricScope) -> DisplayCheckpoint | EmptyDisplaySnapshot:
+        boundary = opened.complete_boundary
         source, stream = opened.revision, opened.stream
         if source is None:
             return EmptyDisplaySnapshot(semantics)
-        if not source.opened_by(stream):
-            raise StaleRevision("Display source changed before its captured read")
-        boundary = opened.boundary
         checkpoint = opened.append_checkpoint(self)
         if checkpoint is not None and checkpoint.current_for(source, semantics):
             return checkpoint
@@ -138,7 +135,7 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
             metrics, offset = semantics.empty_metrics, 0
         else:
             metrics, offset = checkpoint.rebase(opened, semantics), checkpoint.offset
-        for message, _ in opened.public_records(offset):
+        for message, _ in opened.public_records(offset, before_offset=boundary):
             semantics.observe(message, metrics)
         projected = DisplayCheckpoint(source, boundary,
                      AppendCheckpoint.fingerprint(stream, boundary),

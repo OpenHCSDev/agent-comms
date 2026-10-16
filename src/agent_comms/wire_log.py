@@ -69,15 +69,13 @@ class OpenedWireSnapshot:
     through: int
     stream: BinaryIO | None
     revision: FileRevision | None
-    boundary: int = field(init=False)
     _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | None] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "boundary", self._complete_boundary())
-
-    def _complete_boundary(self) -> int:
+    @property
+    def complete_boundary(self) -> int:
+        """Last complete line inside this fixed physical cut, without reading history."""
         stream, revision = self.stream, self.revision
         if stream is None:
             if revision is not None:
@@ -122,6 +120,10 @@ class OpenedWireSnapshot:
             raise ValueError("Computed append checkpoint belongs to another source cut")
         index.hold(record)
         self._append_checkpoints[index] = record
+
+    @property
+    def boundary(self) -> int:
+        return self.revision.size if self.revision is not None else 0
 
     def tail_bytes(self, max_bytes: int) -> tuple[bytes, int]:
         """Read trailing bytes from this fixed cut's retained descriptor."""
@@ -656,7 +658,7 @@ class WireLog:
                             or boundary != source.witness.offset):
                         raise RelationViolationError("Opened read differs from its certified source cut")
                     snapshot_type = CertifiedOpenedWireSnapshot
-            opened = snapshot_type(metadata, through, stream, revision)
+                opened = snapshot_type(metadata, through, stream, revision)
             # Transfer candidate records without reading files or hashing here.
             # Consumers validate after the caller's outer locks are released.
             opened.capture_append_indexes(prepared_indexes)
