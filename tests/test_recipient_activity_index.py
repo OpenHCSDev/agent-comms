@@ -12,7 +12,13 @@ from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.goal_presentation import GoalWaitTarget
+from agent_comms.thread_identity import (
+    DeletedThreadIncarnation,
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+    UnrecordedThreadIncarnation,
+)
 from agent_comms.threads import Thread
 
 
@@ -26,7 +32,7 @@ def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
     lookup = wanted.incarnation.lookup
     assert snapshot.by_lookup[lookup] is wanted
     assert snapshot.by_lookup.get("not-a-recipient") is None
-    with patch.object(ThreadIncarnation, "lookup", property(
+    with patch.object(RecordedThreadIncarnation, "lookup", property(
         lambda self: (_ for _ in ()).throw(AssertionError("rehashing unrelated registry"))
     )):
         observations = comms.agents.observe_recipients(
@@ -50,10 +56,16 @@ def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path):
     renamed = replace(thread, name="renamed")
     assert renamed.incarnation.lookup == first
     assert FieldCodec.encode(incarnation) == {"name": "worker", "created_at": 1_700_000_000.0}
+    deleted = ThreadIncarnation.deleted("worker")
+    historical = ThreadIncarnation("historical", 0.0)
+    assert isinstance(incarnation, RecordedThreadIncarnation)
+    assert isinstance(deleted, DeletedThreadIncarnation)
+    assert isinstance(historical, UnrecordedThreadIncarnation)
+    assert not hasattr(deleted, "lookup") and not hasattr(historical, "lookup")
     with pytest.raises(ValueError, match="positive recorded birth"):
-        assert ThreadIncarnation.deleted("worker").lookup
+        deleted.require_recorded()
     with pytest.raises(ValueError, match="positive recorded birth"):
-        assert ThreadIncarnation("historical", 0.0).lookup
+        GoalWaitTarget("historical", 0.0)
 
 
 def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_owner(tmp_path):
@@ -73,6 +85,15 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     assert archived.thread_for_recipient("wrong-lookup", "old") is None
     with pytest.raises(RelationViolationError, match="creation identities collide"):
         archived.require_unambiguous_ownership()
+    unrecorded = replace(source, threads={
+        **source.threads,
+        "second": replace(source.threads["second"], created_at=0.0),
+    })
+    assert isinstance(unrecorded.threads["second"].incarnation, UnrecordedThreadIncarnation)
+    assert not hasattr(unrecorded.threads["second"].incarnation, "lookup")
+    assert lookup in unrecorded.by_lookup
+    with pytest.raises(RelationViolationError, match="creation identities are unrecorded"):
+        unrecorded.require_unambiguous_ownership()
 
 
 def test_activity_log_projects_only_requested_threads(tmp_path):

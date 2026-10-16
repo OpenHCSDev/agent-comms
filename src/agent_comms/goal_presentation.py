@@ -18,7 +18,7 @@ from .goal_states import (
     UnrecordedBlockGoal,
 )
 from .goals import Goal
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
@@ -87,10 +87,12 @@ class GoalExecutionState(StrEnum):
 class GoalWaitTarget:
     name: str
     created_at: float
-    _incarnation: ThreadIncarnation = field(init=False, repr=False, compare=False)
+    _incarnation: RecordedThreadIncarnation = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "_incarnation", ThreadIncarnation(self.name, self.created_at))
+        object.__setattr__(
+            self, "_incarnation", ThreadIncarnation(self.name, self.created_at).require_recorded()
+        )
 
     def sent(self, original: CommittedDelivery) -> bool:
         """Only this declared incarnation can supply a dependency reply."""

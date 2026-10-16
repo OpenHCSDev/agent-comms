@@ -13,7 +13,7 @@ from .goals import Goal
 from .input_attempt import InputAttempt
 from .locked_store import LockedStore
 from .registry_document import RegistrySnapshot
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .wire_log import WireLog
 
@@ -49,7 +49,9 @@ class GoalWait:
         ):
             raise ValueError("A wait requires its owner incarnation and aligned target turns.")
         object.__setattr__(
-            self, "_owner_lookup", ThreadIncarnation._lookup_for_birth(self.owner_created_at)
+            self,
+            "_owner_lookup",
+            RecordedThreadIncarnation._lookup_for_birth(self.owner_created_at),
         )
         if (self.report_turn_id is None) != (self.report_turn_generation is None) or (
             self.report_turn_id is not None

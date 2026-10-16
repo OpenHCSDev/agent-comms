@@ -546,7 +546,10 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         indexed: dict[str, Thread] = {}
         ambiguous: set[str] = set()
         for thread in self.threads.values():
-            lookup = thread.incarnation.lookup
+            incarnation = thread.incarnation
+            if not incarnation.has_recorded_birth:
+                continue
+            lookup = incarnation.require_recorded().lookup
             if lookup in indexed:
                 del indexed[lookup]
                 ambiguous.add(lookup)
@@ -559,6 +562,8 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         """Archived collisions stay readable; publication requires unique owners."""
         if self._ambiguous_lookups:
             raise RelationViolationError("Registry creation identities collide.")
+        if len(self.by_lookup) != len(self.threads):
+            raise RelationViolationError("Registry creation identities are unrecorded.")
 
     def thread_for_recipient(self, lookup: str, name: str) -> Thread | None:
         """Resolve a frozen recipient, including same-birth historical aliases."""
@@ -566,7 +571,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         thread = self.by_lookup.get(lookup)
         if thread is None and lookup in self._ambiguous_lookups:
             thread = self.threads.get(canonical)
-            if thread is not None and thread.incarnation.lookup != lookup:
+            if thread is not None and thread.incarnation.require_recorded().lookup != lookup:
                 return None
         return thread if thread is not None and thread.name == canonical else None
 

@@ -10,6 +10,7 @@ import hashlib
 import math
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
+from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar
 
 from .errors import RelationViolationError
@@ -22,19 +23,28 @@ if TYPE_CHECKING:
 class ThreadIncarnation:
     name: str
     created_at: float
-    _lookup: str | None = field(default=None, init=False, repr=False, compare=False)
+
+    def __new__(cls, name: str, created_at: float) -> ThreadIncarnation:
+        if cls is ThreadIncarnation and type(created_at) in (int, float):
+            if created_at > 0:
+                return object.__new__(RecordedThreadIncarnation)
+            if created_at == cls.DELETED_BIRTH:
+                return object.__new__(DeletedThreadIncarnation)
+            if created_at == 0:
+                return object.__new__(UnrecordedThreadIncarnation)
+        return object.__new__(cls)
 
     # The persisted birth of a deleted participant: its declaration and real
     # birth are gone, its name stays on the bus. See DeletedThread.
     DELETED_BIRTH: ClassVar[float] = -1.0
 
     @classmethod
-    def deleted(cls, name: str) -> ThreadIncarnation:
-        return cls(name, cls.DELETED_BIRTH)
+    def deleted(cls, name: str) -> DeletedThreadIncarnation:
+        return DeletedThreadIncarnation(name, cls.DELETED_BIRTH)
 
     @property
     def names_deleted_thread(self) -> bool:
-        return self.created_at == self.DELETED_BIRTH
+        return isinstance(self, DeletedThreadIncarnation)
 
     def __post_init__(self) -> None:
         from .field_codec import FieldCodec
@@ -43,40 +53,17 @@ class ThreadIncarnation:
             raise ValueError("Thread incarnation requires a recorded name")
         if not math.isfinite(FieldCodec.decode(float, self.created_at)):
             raise ValueError("Thread incarnation requires a finite birth")
-
-    @property
-    def lookup(self) -> str:
-        """The creation lookup of a recorded birth, computed once per incarnation."""
-        if (cached := self._lookup) is not None:
-            return cached
-        lookup = self._lookup_for_birth(self.created_at)
-        object.__setattr__(self, "_lookup", lookup)
-        return lookup
-
-    @staticmethod
-    def _require_recorded_birth(created_at: float) -> float:
-        if (
-            isinstance(created_at, bool)
-            or not isinstance(created_at, (int, float))
-            or not math.isfinite(created_at)
-            or created_at <= 0
-        ):
-            raise ValueError("Thread incarnation requires a positive recorded birth")
-        return float(created_at)
-
-    @staticmethod
-    def _lookup_for_birth(created_at: float) -> str:
-        """The retained birth-only GoalWait format uses this same identity rule."""
-        birth = ThreadIncarnation._require_recorded_birth(created_at)
-        identity = f"agent-comms:thread-creation:v1\0{birth!r}".encode()
-        return hashlib.sha256(identity).hexdigest()[:32]
+        if type(self) is ThreadIncarnation:
+            raise ValueError("Thread incarnation requires a declared birth state")
 
     @property
     def has_recorded_birth(self) -> bool:
-        return self.created_at > 0
+        return isinstance(self, RecordedThreadIncarnation)
 
-    def require_recorded(self) -> None:
-        self._require_recorded_birth(self.created_at)
+    def require_recorded(self) -> RecordedThreadIncarnation:
+        if not isinstance(self, RecordedThreadIncarnation):
+            raise ValueError("Thread incarnation requires a positive recorded birth")
+        return self
 
     def resolved(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
@@ -107,6 +94,58 @@ class ThreadIncarnation:
         return (canonical, *(type(self)(alias, canonical.created_at)
                              for alias, name in snapshot.aliases.items()
                              if name == canonical.name))
+
+
+@dataclass(frozen=True)
+class RecordedThreadIncarnation(ThreadIncarnation):
+    """Only a positive recorded birth can select a durable lookup."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self._require_recorded_birth(self.created_at)
+
+    @staticmethod
+    def _require_recorded_birth(created_at: float) -> float:
+        if (
+            isinstance(created_at, bool)
+            or not isinstance(created_at, (int, float))
+            or not math.isfinite(created_at)
+            or created_at <= 0
+        ):
+            raise ValueError("Thread incarnation requires a positive recorded birth")
+        return float(created_at)
+
+    @staticmethod
+    def _lookup_for_birth(created_at: float) -> str:
+        """The retained birth-only GoalWait format uses this same identity rule."""
+        birth = RecordedThreadIncarnation._require_recorded_birth(created_at)
+        identity = f"agent-comms:thread-creation:v1\0{birth!r}".encode()
+        return hashlib.sha256(identity).hexdigest()[:32]
+
+    @cached_property
+    def lookup(self) -> str:
+        """The creation lookup, computed once for this recorded incarnation."""
+        return self._lookup_for_birth(self.created_at)
+
+
+@dataclass(frozen=True)
+class DeletedThreadIncarnation(ThreadIncarnation):
+    """A deleted participant retains only its name, never a lookup capability."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.created_at != self.DELETED_BIRTH:
+            raise ValueError("Deleted incarnation requires its deleted birth sentinel")
+
+
+@dataclass(frozen=True)
+class UnrecordedThreadIncarnation(ThreadIncarnation):
+    """Historical zero-birth evidence cannot select a live recipient."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.created_at != 0:
+            raise ValueError("Unrecorded incarnation requires its zero-birth sentinel")
 
 
 @dataclass(frozen=True, slots=True)
