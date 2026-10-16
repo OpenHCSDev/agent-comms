@@ -7,6 +7,29 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, PathText, TimestampText, TextRepresentation, WireValue
 
 
+def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
+    from pydantic import JsonValue
+
+    payload = {'postimage': [None, True, 0, 0.0, 'text', {'nested': [9007199254740993]}]}
+    for annotation in (JsonValue, Annotated[JsonValue, 'documented postimage']):
+        assert FieldCodec.encode(payload, annotation) == payload
+        assert FieldCodec.decode(annotation, payload) == payload
+        assert FieldCodec.project(payload, 'report', annotation) == payload
+        assert FieldCodec.value_schema(annotation) == {}
+        for invalid in ({1: 'non-text key'}, {'nested': float('nan')}, {'nested': object()}):
+            for operation in (
+                lambda: FieldCodec.encode(invalid, annotation),
+                lambda: FieldCodec.decode(annotation, invalid),
+                lambda: FieldCodec.project(invalid, 'report', annotation),
+            ):
+                with pytest.raises(TypeError, match='JSON value'):
+                    operation()
+    assert FieldCodec.decode(dict[str, JsonValue], payload) == payload
+    assert FieldCodec.value_schema(dict[str, JsonValue]) == {
+        'type': 'object', 'additionalProperties': {},
+    }
+
+
 @dataclass(frozen=True)
 class OwnedWireText(WireValue):
     value: str
