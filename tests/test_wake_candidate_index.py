@@ -118,6 +118,22 @@ def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) ->
     assert count == distinct_count
 
 
+def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path):
+    comms, root_id, lookup = _private(tmp_path)
+    message = comms.messaging.send_initial_cohort('sender', 'Alice', 'fixture')
+    index = WakeCandidateIndex(comms.bus.log)
+    assert index.maintain(bootstrap_new=True)
+    with sqlite3.connect(index.path) as db:
+        db.execute("UPDATE candidate_checkpoint SET root_id=?", (b'not-text',))
+    with pytest.raises(ProjectionRebuildRequiredError):
+        index.page(root_id=root_id, recipient_lookup=lookup['Alice'], after_seq=0,
+                   required_through_seq=message.seq)
+    hint = index.notify_committed_append(root_id=root_id,
+                                        through_bytes=comms.bus.log.path.stat().st_size)
+    with pytest.raises(ProjectionRebuildRequiredError):
+        index.catch_up_committed_append(hint)
+
+
 def test_existing_candidate_schema_reopens_in_wal_through_the_store_owner(tmp_path):
     comms, _root_id, _lookup = _private(tmp_path)
     index = WakeCandidateIndex(comms.bus.log)
