@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import argparse
+from typing import ClassVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NoReturn
 
 from .launch_runtime import CallingThreadUnavailable
+from .cli_options import JsonFlagRecord
 from .declared_family import DeclaredFamily
 from .pi_vocabulary import ServiceTier
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -37,6 +40,19 @@ class ThreadCallerRecord(CallerRecord):
 
 class ToolCaller(ABC):
     @classmethod
+    def from_arguments(cls, parser: argparse.ArgumentParser, arguments: list[str],
+                       namespace: argparse.Namespace) -> ToolCaller:
+        """Decode the caller once with the command parser; retain only unparsed argv."""
+        ThreadCaller.add_cli_arguments(parser, required=False, dest="caller")
+        parser.set_defaults(caller=NoThreadCaller())
+        selected, remaining = parser.parse_known_args(arguments, namespace=namespace)
+        arguments[:] = remaining
+        return selected.caller
+
+    @property
+    @abstractmethod
+    def cli_arguments(self) -> tuple[str, ...]: ...
+    @classmethod
     def from_actor(cls, comms: Comms, actor: str | None) -> ToolCaller:
         """Resolve an external context-action actor through its registry once."""
         return ThreadCaller(comms.registry.require(actor).incarnation) if actor else NoThreadCaller()
@@ -65,6 +81,10 @@ class ToolCaller(ABC):
 
 @dataclass(frozen=True)
 class NoThreadCaller(ToolCaller):
+    @property
+    def cli_arguments(self) -> tuple[str, ...]:
+        return ()
+
     def native_metadata(self, comms: Comms) -> OperatorCallerRecord:
         return OperatorCallerRecord()
 
@@ -90,15 +110,23 @@ class NoThreadCaller(ToolCaller):
 
 
 @dataclass(frozen=True)
-class ThreadCaller(ToolCaller):
+class ThreadCaller(JsonFlagRecord, ToolCaller):
     incarnation: RecordedThreadIncarnation
+    value_flag: ClassVar[str] = ThreadIncarnation.value_flag
+
+    @classmethod
+    def from_json(cls, payload: str) -> ThreadCaller:
+        return cls(ThreadIncarnation.from_json(payload).require_recorded())
 
     def __post_init__(self) -> None:
         self.incarnation.require_recorded()
 
-    @classmethod
-    def from_json(cls, payload: str) -> ThreadCaller:
-        return cls(ThreadIncarnation.from_json(payload))
+    def to_json(self) -> str:
+        return self.incarnation.to_json()
+
+    @property
+    def cli_arguments(self) -> tuple[str, ...]:
+        return self.incarnation.cli_arguments
 
     @property
     def name(self) -> str:

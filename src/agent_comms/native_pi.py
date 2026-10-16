@@ -95,12 +95,7 @@ def main() -> int:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
     cli = launch.validate()
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument(
-        ThreadIncarnation.value_flag,
-        type=ThreadIncarnation.from_json,
-        dest="thread_incarnation",
-        required=True,
-    )
+    ThreadIncarnation.add_cli_arguments(parser, required=True, dest="thread_incarnation")
     selection, arguments = parser.parse_known_args(sys.argv[1:])
     incarnation = selection.thread_incarnation
     incarnation.require_recorded()

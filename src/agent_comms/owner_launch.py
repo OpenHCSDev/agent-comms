@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-import argparse
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -46,18 +45,12 @@ class RetainedOwnerLaunch:
         values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
         platform.require(process)
-        parser = argparse.ArgumentParser(add_help=False)
-        parser.add_argument(ThreadIncarnation.value_flag, type=ThreadIncarnation.from_json,
-                            dest="incarnation", required=True)
-        try:
-            selected, _ = parser.parse_known_args(command[1:])
-        except SystemExit as error:
-            raise RelationViolationError("Owner launch has no valid recorded caller") from error
+        incarnation = ThreadIncarnation.from_arguments(command[1:]).require_recorded()
         if not environment.get(NativeArguments.binary_key):
             raise RelationViolationError("Owner launch configuration cannot be verified")
         # A worker's launch name may have been renamed since exec. The original
         # snapshot owns that relation; a PID or spelling match cannot grant it.
-        if not selected.incarnation.current(snapshot) or selected.incarnation.resolved(snapshot) != thread.incarnation:
+        if not incarnation.current(snapshot) or incarnation.resolved(snapshot) != thread.incarnation:
             raise RelationViolationError("Owner launch names another registry incarnation")
         snapshot.require_owner_process(snapshot.owner_identity(thread.name), process)
         result = cls(process, observed_interpreter, environment)

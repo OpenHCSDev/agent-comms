@@ -16,8 +16,7 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from .cli_commands import CliCommand
-from .tool_caller import ThreadCaller, NoThreadCaller
-from .thread_identity import ThreadIncarnation
+from .tool_caller import ToolCaller
 from .active_route import resolve_comms_route
 from .cli_protocol import CoreError
 from .comms import wire
@@ -44,8 +43,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Comms root directory (default $AGENT_COMMS_ROOT, active route, or ~/.agent-comms)",
     )
-    parser.add_argument(ThreadIncarnation.value_flag, type=ThreadCaller.from_json,
-                        dest="caller", default=NoThreadCaller())
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
         declaration.add_parser(subparsers)
@@ -55,12 +52,17 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         with ExitStack() as route_guard:
-            args = build_parser().parse_args(argv)
+            parser = build_parser()
+            args = argparse.Namespace()
+            remaining = list(sys.argv[1:] if argv is None else argv)
+            caller = ToolCaller.from_arguments(parser, remaining, args)
+            if remaining:
+                parser.error(f"unrecognized arguments: {' '.join(remaining)}")
             command = CliCommand.from_namespace(args)
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.admit_client())
             comms = wire(route)
-            return command.run(comms, sys.stdout, caller=args.caller)
+            return command.run(comms, sys.stdout, caller=caller)
     except KeyboardInterrupt:
         return 130
     except StoppedOwnerFailure as exc:
