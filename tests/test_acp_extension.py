@@ -6,6 +6,7 @@ import pytest
 from agent_comms.acp_extension import (
     AgentCommsUpdate,
     AvailableQueueProjection,
+    BusyCursorObservation,
     CompactionChangedUpdate,
     CompactionCommittedUpdate,
     CoordinationChangedUpdate,
@@ -21,6 +22,7 @@ from agent_comms.acp_extension import (
     QueueChangedUpdate,
     QueueItem,
     QueueScope,
+    ReplacedOwnerCursorObservation,
     RequestFailedUpdate,
     PromptCancelledUpdate,
     SelectedWriteAcceptedUpdate,
@@ -106,6 +108,25 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     ):
         with pytest.raises(ValueError):
             decode_updates(invalid)
+
+
+@pytest.mark.parametrize(
+    "observation, status, needs_refresh",
+    [(BusyCursorObservation(), "busy", True),
+     (ReplacedOwnerCursorObservation(), "replaced", False)],
+)
+def test_cursor_observation_roundtrip(observation, status, needs_refresh):
+    owner = AdmissionIdentity(ThreadIncarnation("pilot", 1.0), 1)
+    update = CursorAdvancedUpdate(
+        CursorEnvelope(
+            CursorScope("pilot", "a" * 32, owner, 123),
+            1,
+            observation,
+        )
+    )
+    assert decode_updates(encode_updates(update)) == (update,)
+    assert update.envelope.observation.needs_refresh is needs_refresh
+    assert update.envelope.status == status
 
 
 def test_request_family_strict_boundary():
