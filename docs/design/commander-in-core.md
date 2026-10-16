@@ -56,9 +56,16 @@ head f969806a6, the same commit as `feat/commanded-todos-integration`) and the t
 6. **The code ratchet's word list is a different fact.** `BannedVocabulary` on #1022 bans four
    words in code identifiers and comments. `PlainText` refuses sixteen words in prose written about
    a unit. Same idea, different requirement and scope; they stay separate declarations.
-7. **Todo storage accepts declared tables only.** `TodoStore.__init__` refuses any table other
-   than `todos`, so verdict and strike tables need that check to read a declared tuple of tables,
-   not a second store file.
+7. **Verdicts and strikes need no change to Todo storage.** `TypedStore` already owns "one
+   SQLite file whose schema its rows declare", so `OrderRecords(TypedStore)` keeps them in
+   `order_records.sqlite3`. A send-back revises the Goal in the registry, a different file, so a
+   shared Todo file would not make the two writes one transaction anyway; they share the Goal
+   write lock instead.
+8. **A send-back verdict is the strike.** The draft wrote a `SentBackVerdict` and a
+   `SentBackStrike` for the same event. The strike count reads sent-back verdicts and strike
+   rows; nothing is written twice.
+9. **No `comms_fire`.** Recording the strike that reaches the limit releases the struck thread's
+   open orders (`Thread.open_orders`) in the same call. Nobody has to remember to fire.
 
 ## Lessons from running the scripts (claude-code, 2026-10-16)
 
@@ -118,33 +125,38 @@ a branch with neither. Core derives the violations on read, never stores them:
 - With #934: the order Goal's `GoalReport` delivery already names the commit; completion refuses
   when that commit is on an unlinked branch and not on main.
 
-### Verdict (record on the order)
+### Verdict (record on the order) — `order_records.py`
 
 ```
-Verdict(goal: GoalRef, tool_call: str, judge: RecordedThreadIncarnation,
-        outcome: type[VerdictOutcome], quoted: str, reason: PlainText, at: float)
+VerdictRow(goal: GoalRef, tool_call: str, outcome: type[VerdictOutcome],
+           judge: RecordedThreadIncarnation, quoted: str, reason: PlainText, at: float)
 ```
 
-- `AcceptedVerdict`: `quoted` must appear in that tool call's input, and `reason` must quote at
-  least four words of the order text (judge.py `ok --serves`).
-- `SentBackVerdict`: revises the order Goal with the send-back text and records a `SentBackStrike`
-  in the same write. A send-back is a strike, with no warnings first.
+- One verdict per `(goal, tool_call)`; a second is refused by name.
+- Only the order's commander judges: `GoalAuthor.require_commander` (self-directed goals refuse).
+- `quoted` must be in that tool call's input, found in the unit's last 20 turns through
+  `ThreadTurns.tool_call` (native and CLI-bridge transcripts alike).
+- `comms_accept`: `serves` must be four or more exact words of the order text.
+- `comms_send_back`: replaces the order Goal's text through `SendBackGoalAction`, which calls
+  `CommandedGoalAuthor.revised` (revision count + 1, `issued_at` now), and records the verdict
+  under the same Goal write lock. The verdict counts as a strike (`VerdictOutcome.strikes`).
 
 ### Strike (record on the order)
 
 ```
-Strike(goal: GoalRef, unit: RecordedThreadIncarnation, cause: type[StrikeCause],
-       what_happened: PlainText, caught: CaughtAt, at: float)
+StrikeRow(goal: GoalRef, struck: RecordedThreadIncarnation, cause: type[StrikeCause],
+          what_happened: PlainText, caught: type[CaughtStage], judge, at: float)
 ```
 
-- Causes: `SentBack`, `MissedDeadline`, `FalseDone`, `MissingEvidence`. `caught` is the stage
-  family (`review`, `install`, `live`, `tristan`) plus who caught it, as `order.py strike --caught`.
-- `MissedDeadline` is recorded when an order is delivered with `Goal.late`; `FalseDone` when
-  `AcceptanceCheck` refuses a reported completion.
-- `StrikeLimit` (two) is declared on `CommandedGoalAuthor`: at the limit, one `comms_fire`
-  operation transfers or releases every open order of that unit with one stated reason; there is
-  no scattered `>= 2`.
-- The commander is not exempt: a strike on the commander is the same record.
+- Causes: `missed_deadline`, `false_done`, `missing_evidence`. Stages: `review`, `install`,
+  `live`, `tristan`; who caught it is the judge.
+- `struck` may be the commander: the commander is not exempt.
+- `OrderRecords.strike_limit` (two): the write that reaches it releases every open order of the
+  struck thread through `GoalAuthor.release` (the Todo is released and the Goal cleared). The
+  answer carries `strikes` and `fired`.
+- Still to do after #934 merges: record `missed_deadline` when an order is delivered with
+  `Goal.late`, and `false_done` when `AcceptanceCheck` refuses a reported completion, inside
+  `CommandedGoalAuthor.require_completion`.
 
 ### Plain words
 
@@ -173,8 +185,9 @@ strike and send-back, newest first. `fleet-narrative.md` and `fleet-board.md` be
 | `comms_fleet` | anyone | existing; overdue, silent, spinning, idle | `overdue` |
 | `comms_work_branches` | anyone | new; branches ahead of main and their links | `branches-*.txt` |
 | `comms_order_work` | anyone | new; assignee's tool calls during the order, newest first | `tool_watch.py`, `judge.py show` |
-| `comms_verdict` | order's creator | new; send-back revises the order and strikes | `judge.py ok/back` |
-| `comms_strike` | order's creator | new; misses that are not a verdict | `order.py strike` |
+| `comms_accept` | order's commander | new; accept one tool call | `judge.py ok` |
+| `comms_send_back` | order's commander | new; revises the order, strikes, releases at the limit | `judge.py back` |
+| `comms_strike` | order's commander | new; misses that are not a verdict; releases at the limit | `order.py strike` |
 | `comms_order_story` | anyone | new; one order's story | — |
 | `comms_fleet_story` | anyone | new; public record | `fleet-narrative.md` |
 
@@ -192,7 +205,7 @@ transcripts if needed. After it runs, the rts scripts and stores are deleted.
 |---|---|---|---|
 | A | `invoke --from`; `comms_work_branches`; this design | main | none |
 | B | Delete #934's duplicate Todo/Fleet CLI classes | #934 | #934 |
-| C | `PlainText`, `Verdict`, `Strike`, `StrikeLimit`, send-back revision, late and false-done strikes | #934 | B |
+| C | `PlainText`, verdicts, strikes, strike limit, send-back revision (late and false-done strikes follow #934) | #934 | #934 |
 | D | `comms_order_work` from transcripts (folds `feat/turn-digest`) | C | C |
 | E | `comms_order_story`, `comms_fleet_story` | D | D |
 | F | One-shot move of the rts records; delete rts scripts | main | E installed |
