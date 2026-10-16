@@ -1,6 +1,6 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
-from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
 from pathlib import Path
 
@@ -177,7 +177,7 @@ def native_rpc_fixture(monkeypatch):
                 Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
             ),
             Path(worktree),
-            configuration=RestartEnvironment.inherit(env),
+            runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
         )
 
     def retained(

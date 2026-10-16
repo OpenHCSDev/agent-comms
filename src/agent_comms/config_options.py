@@ -27,7 +27,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_errors import NativePiUnavailable
-from .owner_launch import RestartEnvironment
+from .launch_runtime import RestartEnvironment
 from .runtime import RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread

@@ -14,10 +14,31 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channel_targets import is_channel_target
+from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
+
+class WatchAcknowledgment(DeclaredFamily, affix="WatchAcknowledgment"):
+    """Who confirms that a streamed message reached its receiver."""
+
+    @classmethod
+    @abstractmethod
+    def taken(cls, reads, displayed: DisplayBasis) -> None: ...
+
+
+class OnReadWatchAcknowledgment(WatchAcknowledgment):
+    @classmethod
+    def taken(cls, reads, displayed: DisplayBasis) -> None:
+        reads.mark_displayed(displayed.viewer, displayed)
+
+
+class ExplicitWatchAcknowledgment(WatchAcknowledgment):
+    @classmethod
+    def taken(cls, reads, displayed: DisplayBasis) -> None:
+        """The receiver confirms exact references through the existing read owner."""
+
 
 if TYPE_CHECKING:
     from .channels import Channel

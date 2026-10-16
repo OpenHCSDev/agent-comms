@@ -79,7 +79,7 @@ def following(kind):
 def test_delivered_notice_preserves_original_but_real_steering_can_revise(text):
     notice = following(DeliveredFollowingInput)
     steering = following(AcceptedFollowingInput)
-    assert notice.when_busy is WhenBusy.FOLLOW_UP
+    assert notice.when_busy is WhenBusy.STEER
     assert steering.when_busy is WhenBusy.STEER
     response = notice.continue_response(CompletedTrackedTerminal("Requested answer"), ["Requested answer"])
     response = response.tool_round().append(text)
@@ -93,7 +93,6 @@ def test_delivered_notice_preserves_original_but_real_steering_can_revise(text):
 @pytest.mark.parametrize("response,parts", [
     (CompletedTrackedTerminal(""), []),
     (CompletedTrackedTerminal("Unmatched original"), ["Different streamed text"]),
-    (PendingTrackedTerminal(), []),
 ])
 @pytest.mark.parametrize("text", ["", '{"decision":"IGNORE"}', "Background answer"])
 def test_notice_cannot_supply_an_unproved_original_answer(response, parts, text):
@@ -104,6 +103,18 @@ def test_notice_cannot_supply_an_unproved_original_answer(response, parts, text)
     response = following(AcceptedFollowingInput).continue_response(response, [text])
     response = response.append("Real user requested this answer")
     assert response.require_response(["Real user requested this answer"]) == "Real user requested this answer"
+
+
+def test_midtool_delivered_message_does_not_erase_pending_selected_answer():
+    # Pi starts the steered DM after the bash result and before the only final.
+    # The original selected message and the DM share this completed response;
+    # the response publisher already links a started same-route DM once.
+    pending = PendingTrackedTerminal().tool_round()
+    pending = following(DeliveredFollowingInput).continue_response(pending, [])
+    with pytest.raises(NativePiUnavailable, match="no unique authoritative completed response"):
+        pending.require_response([])
+    completed = pending.append("Shared final answer")
+    assert completed.require_response(["Shared final answer"]) == "Shared final answer"
 
 
 async def test_successful_provider_recovery_does_not_discard_retained_requested_answer():

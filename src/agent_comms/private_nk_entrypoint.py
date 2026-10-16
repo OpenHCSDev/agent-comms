@@ -15,13 +15,11 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import PublicationActivationBlocked
 
+from . import launch_runtime
 from .wire_metadata import WireRootIdText
 
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
-
-ROOT_ID_ENV = "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"
-PACKAGE_ENV = "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE"
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,8 +37,8 @@ class PrivateNkLaunch:
         Actual worker/ACP entrypoints and process handoffs call validate before
         admission; retaining this selection cannot grant that authority.
         """
-        root_id = environment.get(ROOT_ID_ENV)
-        package = environment.get(PACKAGE_ENV)
+        root_id = environment.get(launch_runtime.ROOT_ID_ENV)
+        package = environment.get(launch_runtime.PACKAGE_ENV)
         if root_id is None and package is None:
             return None
         from .active_route import AbsoluteRoutePathText
@@ -71,8 +69,8 @@ class PrivateNkLaunch:
             active_route = read_active_route()
             if active_route is not None:
                 environment["AGENT_COMMS_ROOT"] = str(active_route.root)
-                environment.setdefault(ROOT_ID_ENV, active_route.wire_root_id)
-                environment.setdefault(PACKAGE_ENV, str(active_route.native_package))
+                environment.setdefault(launch_runtime.ROOT_ID_ENV, active_route.wire_root_id)
+                environment.setdefault(launch_runtime.PACKAGE_ENV, str(active_route.native_package))
         root = Path(environment.get("AGENT_COMMS_ROOT", "~/.agent-comms")).expanduser().absolute()
         return cls.from_environment(root, environment)
 
@@ -86,8 +84,8 @@ class PrivateNkLaunch:
         """Derive the child handoff solely from this retained launch authority."""
         environment.update({
             "AGENT_COMMS_ROOT": str(self.validated_root),
-            ROOT_ID_ENV: self.wire_root_id,
-            PACKAGE_ENV: str(self.native_package),
+            launch_runtime.ROOT_ID_ENV: self.wire_root_id,
+            launch_runtime.PACKAGE_ENV: str(self.native_package),
         })
 
 

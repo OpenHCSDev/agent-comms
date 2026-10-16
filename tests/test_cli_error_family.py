@@ -16,10 +16,11 @@ from agent_comms.cli_bridges.shared import (
     Binding,
     DeliveryJournal,
     DeliveryRow,
+    MonitorAttemptRow,
     Inbox,
-    LineMonitorBridge,
+    CliBridge,
     Options,
-    Outcome,
+    UnconfirmedOutcome, DeliveredOutcome,
 )
 from agent_comms.cli_protocol import CORE_ERROR, FailedCoreError, UnavailableCoreError
 from agent_comms.coordination_database import CoordinationStore
@@ -126,7 +127,7 @@ print('opened', flush=True)
     journal = DeliveryJournal(tmp_path)
     try:
         assert journal.bind(binding) == binding
-        assert journal.begin(message, 'original payload', Outcome.UNCONFIRMED)
+        assert journal.begin(message, 'original payload', UnconfirmedOutcome)
     finally:
         journal.close()
     await open_together()
@@ -134,7 +135,7 @@ print('opened', flush=True)
     try:
         assert journal.bind(None) == binding
         assert DeliveryRow.select(journal.db) == [
-            DeliveryRow(message.message_id, 'original payload', Outcome.UNCONFIRMED)]
+            DeliveryRow(message.message_id, 'original payload', UnconfirmedOutcome)]
     finally:
         journal.close()
 
@@ -149,7 +150,7 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
                       body='retained delivery', timestamp=1.0, seq=1)
     journal = DeliveryJournal(tmp_path)
     try:
-        assert journal.begin(message, 'original payload', Outcome.UNCONFIRMED)
+        assert journal.begin(message, 'original payload', UnconfirmedOutcome)
     finally:
         journal.close()
     results = concurrent_bindings(tmp_path, (first, other if conflicting else first))
@@ -165,9 +166,9 @@ def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(
         loser = other if winner == first else first
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
             journal.bind(loser)
-        assert not journal.begin(message, 'must not replace', Outcome.DELIVERED)
+        assert not journal.begin(message, 'must not replace', DeliveredOutcome)
         assert DeliveryRow.select(journal.db) == [
-            DeliveryRow(message.message_id, 'original payload', Outcome.UNCONFIRMED)]
+            DeliveryRow(message.message_id, 'original payload', UnconfirmedOutcome)]
         assert Binding.select(journal.db) == [winner]
     finally:
         journal.close()
@@ -191,7 +192,7 @@ def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
 
 def test_legacy_journal_reopen_preserves_schema_binding_and_delivery(tmp_path):
     binding = Binding(str(tmp_path), 'viewer', 'external-session')
-    pending = DeliveryRow('pending-id', 'original payload', Outcome.UNCONFIRMED)
+    pending = DeliveryRow('pending-id', 'original payload', UnconfirmedOutcome)
     with closing(CoordinationStore.writer(tmp_path / 'delivery.sqlite3')) as db:
         db.execute('CREATE TABLE binding (root TEXT, bus TEXT, thread TEXT)')
         db.execute('CREATE TABLE delivery (id TEXT PRIMARY KEY, payload TEXT NOT NULL, outcome TEXT NOT NULL)')
@@ -203,7 +204,9 @@ def test_legacy_journal_reopen_preserves_schema_binding_and_delivery(tmp_path):
     try:
         assert journal.bind(binding) == journal.bind(None) == binding
         assert DeliveryRow.select(journal.db) == [pending]
-        assert journal.db.execute('SELECT name, sql FROM sqlite_master ORDER BY name').fetchall() == schema
+        current = dict(journal.db.execute('SELECT name, sql FROM sqlite_master ORDER BY name').fetchall())
+        assert {name: current[name] for name, _ in schema} == dict(schema)
+        assert MonitorAttemptRow.select(journal.db) == []
     finally:
         journal.close()
 
@@ -219,11 +222,26 @@ def test_journal_initialization_failure_closes_owned_connection(tmp_path, monkey
         connection.execute('SELECT 1')
 
 
+class AcceptedBridge(CliBridge):
+    """Controlled API acknowledgment; these checks concern Core read recovery."""
+
+    async def deliver(self, message):
+        for part in self.incoming_frame(message).parts:
+            print(part)
+        return DeliveredOutcome
+
+    async def show_sent(self, result, target, body):
+        pass
+
+    async def report_failure(self, text):
+        pass
+
+
 @pytest.mark.asyncio
 async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys):
     journal = DeliveryJournal(tmp_path)
     binding = Binding(str(tmp_path), 'viewer', 'external-session')
-    bridge = LineMonitorBridge(Options(Inbox(), None, None, None, tmp_path), binding, journal)
+    bridge = AcceptedBridge(Options(Inbox(), None, None, None, tmp_path), binding, journal)
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='one delivery', timestamp=1.0, seq=1)
     delivered = asyncio.get_running_loop().create_future()
@@ -232,6 +250,9 @@ async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys
     waiting = asyncio.Event()
 
     class ReadStream:
+        async def acknowledge(self, message):
+            assert message.body == 'one delivery'
+
         async def watch(self, state):
             subscriptions.append(state)
             try:
@@ -250,7 +271,7 @@ async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys
     try:
         await asyncio.wait_for(delivered, 3)
         assert len(subscriptions) == 2
-        assert journal.db.execute('SELECT outcome FROM delivery').fetchone()[0] == Outcome.EMITTED.value
+        assert journal.db.execute('SELECT outcome FROM delivery').fetchone()[0] == DeliveredOutcome.declared_name
     finally:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -263,7 +284,7 @@ async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys
 @pytest.mark.asyncio
 async def test_watch_failed_error_raises_without_resubscribing(tmp_path):
     journal = DeliveryJournal(tmp_path)
-    bridge = LineMonitorBridge(Options(Inbox(), None, None, None, tmp_path),
+    bridge = AcceptedBridge(Options(Inbox(), None, None, None, tmp_path),
                               Binding(str(tmp_path), 'viewer', 'external-session'), journal)
     subscriptions = []
 

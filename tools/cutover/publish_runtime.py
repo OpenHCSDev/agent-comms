@@ -22,6 +22,7 @@ from agent_comms.active_route import read_active_route
 from agent_comms.cli_bridges import opencode
 from agent_comms.comms import wire
 from agent_comms.owner_restart import OwnerRestartRequest
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.restart_queue import enqueue
 
 
@@ -32,7 +33,7 @@ class RuntimePublication:
 
     @property
     def current(self) -> Path:
-        return Path.home() / '.local/share/agent-comms/current'
+        return LaunchRuntime.current_pointer()
 
     @classmethod
     def installed(cls) -> RuntimePublication:

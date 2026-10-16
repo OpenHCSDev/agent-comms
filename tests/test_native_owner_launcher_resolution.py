@@ -6,6 +6,7 @@ from agent_comms import native_pi, private_nk_entrypoint
 from agent_comms.native_package import NativePackageError
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_errors import NativePiUnavailable
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
@@ -29,10 +30,10 @@ def test_installed_owner_and_alias_use_route_and_full_package_verification(tmp_p
     executable = launcher(tmp_path, monkeypatch, PrivateNkLaunch(tmp_path, "f" * 32, package, None))
     verified = []
     monkeypatch.setattr(native_pi, "_trusted_package", verified.append)
-    assert NativePiRpcLaunch.package_for_command("pi-comms-native") == package
+    assert NativePiRpcLaunch.package_for_command("pi-comms-native", LaunchRuntime.running()) == package
     alias = tmp_path / "alias"
     alias.symlink_to(executable)
-    assert NativePiRpcLaunch.package_for_command(str(alias)) == package
+    assert NativePiRpcLaunch.package_for_command(str(alias), LaunchRuntime.running()) == package
     assert verified == [package, package]
 
 
@@ -58,19 +59,19 @@ def test_running_owner_keeps_its_start_launcher_after_runtime_relink(tmp_path, m
     monkeypatch.setattr(native_pi.sys, "executable", str(new.with_name("python")))
     from agent_comms.native_arguments import NativeArguments
     monkeypatch.setattr(
-        NativeArguments, "owner_launcher", classmethod(lambda cls: str(old))
+        NativeArguments, "owner_launcher", classmethod(lambda cls, runtime: str(old))
     )
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
 
     current.unlink()
     current.symlink_to(new)
-    assert NativePiRpcLaunch.package_for_command(str(old)) == package
+    assert NativePiRpcLaunch.package_for_command(str(old), LaunchRuntime.running()) == package
 
 
 def test_unconfigured_owner_launcher_cannot_fall_back_to_legacy_pi(tmp_path, monkeypatch):
     launcher(tmp_path, monkeypatch, None)
     with pytest.raises(NativePiUnavailable, match="configured pinned package"):
-        NativePiRpcLaunch.package_for_command("pi-comms-native")
+        NativePiRpcLaunch.package_for_command("pi-comms-native", LaunchRuntime.running())
 
 
 def test_route_does_not_override_native_package_commitment(tmp_path, monkeypatch):
@@ -81,7 +82,7 @@ def test_route_does_not_override_native_package_commitment(tmp_path, monkeypatch
 
     monkeypatch.setattr(native_pi, "_trusted_package", fail)
     with pytest.raises(NativePackageError, match="tree differs"):
-        NativePiRpcLaunch.package_for_command("pi-comms-native")
+        NativePiRpcLaunch.package_for_command("pi-comms-native", LaunchRuntime.running())
 
 
 def test_direct_pinned_cli_uses_same_package_authority(tmp_path, monkeypatch):
@@ -94,5 +95,5 @@ def test_direct_pinned_cli_uses_same_package_authority(tmp_path, monkeypatch):
     monkeypatch.setattr(cohort_foreground, "_preflight", lambda root, root_id, selected, enabled: native_pi._trusted_package(selected))
     verified = []
     monkeypatch.setattr(native_pi, "_trusted_package", verified.append)
-    assert NativePiRpcLaunch.package_for_command(str(cli)) == package
+    assert NativePiRpcLaunch.package_for_command(str(cli), LaunchRuntime.running()) == package
     assert verified == [package]

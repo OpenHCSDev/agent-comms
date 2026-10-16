@@ -17,9 +17,9 @@ Event = TypeVar("Event", bound="TranscriptEvent")
 
 class EventTime(DeclaredFamily, affix="EventTime"):
     @classmethod
-    def capture(cls, timestamp: float | None) -> EventTime:
-        """Decode an existing optional Unix-seconds fact, never the read time."""
-        return UnrecordedEventTime() if timestamp is None else RecordedEventTime(timestamp)
+    def capture(cls, timestamp: float) -> EventTime:
+        """Capture a recorded Unix-seconds fact, never the read time."""
+        return RecordedEventTime(timestamp)
 
     @abstractmethod
     def stamp(self, event: Event) -> Event: ...
