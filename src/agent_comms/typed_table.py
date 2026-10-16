@@ -603,22 +603,41 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return where, parameters
 
     @classmethod
-    def _query(
-        cls, db: sqlite3.Connection, where: str, parameters: tuple,
-        order_by: tuple[str, ...], descending: bool, limit: int | None, key: dict[str, object]
-    ) -> sqlite3.Cursor:
+    def select_statement(
+        cls, columns: tuple[str, ...], *, where: str = "1", parameters: tuple = (),
+        order_by: tuple[str, ...] = (), descending: bool = False,
+        limit: int | None = None, **key: object,
+    ) -> tuple[str, tuple]:
+        """Compile a declared projection for execution or bounded subselection."""
         where, parameters = cls._condition(where, parameters, key)
         cls._fields_named(order_by)
         direction = " DESC" if descending else ""
         if limit is not None:
             parameters = (*parameters, limit)
-        return db.execute(
-            f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
+        return (
+            f"SELECT {cls._column_list(columns)} FROM {_identifier(cls.declared_name)} "
             f"WHERE {where}"
             + (" ORDER BY " + ", ".join(_identifier(name) + direction for name in order_by)
                if order_by else "")
             + (" LIMIT ?" if limit is not None else ""),
             parameters,
+        )
+
+    @classmethod
+    def select_union(
+        cls, db: sqlite3.Connection, *, column: str,
+        queries: tuple[tuple[str, tuple], ...], order_by: tuple[str, ...] = (),
+        descending: bool = False, limit: int | None = None,
+    ) -> list[Self]:
+        """Select unique rows matching bounded indexed projections of one key."""
+        if not queries:
+            raise ValueError("A union selection requires source queries")
+        selected = cls._column_list((column,))
+        union = " UNION ".join(f"SELECT * FROM ({statement})" for statement, _ in queries)
+        return cls.select(
+            db, where=f"{selected} IN ({union})",
+            parameters=tuple(value for _, parameters in queries for value in parameters),
+            order_by=order_by, descending=descending, limit=limit,
         )
 
     @classmethod
@@ -633,7 +652,11 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         limit: int | None = None,
         **key: object,
     ) -> list[Self]:
-        return cls.read(cls._query(db, where, parameters, order_by, descending, limit, key))
+        statement = cls.select_statement(
+            cls.columns(), where=where, parameters=parameters, order_by=order_by,
+            descending=descending, limit=limit, **key,
+        )
+        return cls.read(db.execute(*statement))
 
     @classmethod
     def stream(
@@ -648,7 +671,11 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         **key: object,
     ) -> Generator[Self, None, None]:
         """Rows decoded as the caller consumes them; close it to release the query."""
-        return cls.iterate(cls._query(db, where, parameters, order_by, descending, limit, key))
+        statement = cls.select_statement(
+            cls.columns(), where=where, parameters=parameters, order_by=order_by,
+            descending=descending, limit=limit, **key,
+        )
+        return cls.iterate(db.execute(*statement))
 
     @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
