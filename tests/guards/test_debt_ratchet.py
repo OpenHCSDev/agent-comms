@@ -179,9 +179,9 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(tm
     assert status == 1
     assert report["delta"][f"FamilyFlattened:{repo.root}/first.py"] == -2
     assert report["delta"][f"FamilyFlattened:{repo.root}/second.py"] == 1
-    assert FamilyFlattened.occurrences(ast.parse(original).body[0].body[0]) == (
-        AuditFamilyFlattened.count(ast.parse(original).body[0].body[0])
-    )
+    assert FamilyFlattened.occurrences(ast.parse(original)) == (
+        AuditFamilyFlattened.count(ast.parse(original))
+    ) == 2
     original_modules = tuple(module for module in FamilyFlattened.mechanism_modules
                              if module.parent == Path(repo.root))
     facades = {f"{directory}/{module.parent.name}/{module.name}"
@@ -210,23 +210,25 @@ def test_small_owner_growth_and_exact_threshold_pass(repo: Repository) -> None:
     assert not any(report["delta"].values())
 
 
-def test_class_growth_cannot_be_cancelled_by_another_class(repo: Repository) -> None:
+def test_class_growth_and_shrinkage_remain_independent_observations(repo: Repository) -> None:
     base = repo.commit({"classes.py": owner("Growing", 501) + owner("Shrinking", 600)})
     head = repo.commit({"classes.py": owner("Growing", 502) + owner("Shrinking", 500)})
     status, report = repo.compare(base, head)
-    assert status == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/classes.py::Growing"] == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/classes.py::Shrinking"] == -100
+    assert status == 0
+    assert report["regressions"] == {}
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/classes.py::Growing"] == 1
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/classes.py::Shrinking"] == -100
 
 
 @pytest.mark.parametrize("before", [0, 500])
-def test_new_or_crossing_god_class_is_refused(repo: Repository, before: int) -> None:
+def test_new_or_crossing_class_span_is_not_an_ownership_verdict(repo: Repository, before: int) -> None:
     base = repo.commit({"owners.py": owner("New", before)} if before else {})
     head = repo.commit({"owners.py": owner("New", 501)})
     status, report = repo.compare(base, head)
-    assert status == 1
-    assert report["base"][f"GodClassExcess:{repo.root}/owners.py::New"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::New"] == 1
+    assert status == 0
+    assert report["regressions"] == {}
+    assert report["base"][f"ClassSpanExcess:{repo.root}/owners.py::New"] == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/owners.py::New"] == 1
 
 
 def test_class_move_keeps_baseline_and_new_small_owner_is_allowed(repo: Repository) -> None:
@@ -234,19 +236,19 @@ def test_class_move_keeps_baseline_and_new_small_owner_is_allowed(repo: Reposito
     moved = repo.commit({"old.py": None, "new.py": owner("Existing", 501) + owner("NewOwner", 25)})
     status, report = repo.compare(base, moved)
     assert status == 0
-    assert report["base"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/new.py::NewOwner"] == 0
+    assert report["base"][f"ClassSpanExcess:{repo.root}/new.py::Existing"] == 1
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/new.py::Existing"] == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/new.py::NewOwner"] == 0
     grown = repo.commit({"new.py": owner("Existing", 502) + owner("NewOwner", 26)})
-    assert repo.compare(moved, grown)[0] == 1
+    assert repo.compare(moved, grown)[0] == 0
 
 
-def test_moved_class_growth_is_rejected(repo: Repository) -> None:
+def test_moved_class_growth_is_still_reported(repo: Repository) -> None:
     base = repo.commit({"old.py": owner("Existing", 500)})
     head = repo.commit({"old.py": None, "new.py": owner("Existing", 501)})
     status, report = repo.compare(base, head)
-    assert status == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
+    assert status == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/new.py::Existing"] == 1
 
 
 def test_nested_and_duplicate_named_classes_keep_separate_baselines(repo: Repository) -> None:
@@ -254,18 +256,34 @@ def test_nested_and_duplicate_named_classes_keep_separate_baselines(repo: Reposi
     base = repo.commit({"one.py": nested, "two.py": owner("Inner", 500)})
     head = repo.commit({"one.py": nested, "two.py": owner("Inner", 501)})
     status, report = repo.compare(base, head)
-    assert status == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/one.py::Outer.Inner"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/two.py::Inner"] == 1
+    assert status == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/one.py::Outer.Inner"] == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/two.py::Inner"] == 1
 
 
-def test_chain_terms_catch_growth_hidden_by_unchanged_chain_count(repo: Repository) -> None:
+def test_owner_local_action_hook_does_not_fail_on_physical_span(repo: Repository) -> None:
+    original = owner("Button", 501)
+    base = repo.commit({"button.py": original})
+    head = repo.commit({"button.py": original + "\n    def on_click(self):\n        self.action_press()\n"})
+    status, report = repo.compare(base, head)
+    assert status == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/button.py::Button"] == 3
+    assert report["regressions"] == {}
+    assert "measurements" not in report
+
+
+def test_chain_terms_track_growth_without_claiming_competing_behavior(repo: Repository) -> None:
     base = repo.commit({"rules.py": "valid = a and b and c and d\n"})
     head = repo.commit({"rules.py": "valid = a and b and c and d and e\n"})
     status, report = repo.compare(base, head)
-    assert status == 1
+    assert status == 0
+    assert report["regressions"] == {}
     assert report["delta"]["LongBooleanChain"] == 0
     assert report["delta"][f"BooleanChainTerms:{repo.root}/rules.py"] == 1
+    checked = repo.commit({"rules.py": "valid = a and b and c and d and e\nexact = type(value) is int\n"})
+    status, report = repo.compare(head, checked)
+    assert status == 1
+    assert report["regressions"] == {"TypeIdentity": 1}
 
 
 @pytest.mark.parametrize(("measure", "decision"), [
@@ -312,13 +330,15 @@ async def second(value):
     if value == "three": return 3
 '''} )
     status, report = repo.compare(before, head)
-    assert status == 0
+    # No three-arm dispatch group; the separate identity-use measure still
+    # reports the individual string choices instead of silently losing them.
+    assert status == 1
+    assert report["head"][f"FamilyFlattened:{repo.root}/scope.py"] > 0
     assert report["head"][f"StringDispatch:{repo.root}/scope.py"] == 0
     assert report["head"][f"StringDispatchArms:{repo.root}/scope.py"] == 0
 
 
 @pytest.mark.parametrize(("measure", "source"), [
-    ("BooleanChainTerms", "valid = a and b and c and d\n"),
     ("ForeignAbsenceProbe", "absent = other.value is None\n"),
     ("CodecSubclass", "class Local(FieldCodec):\n    pass\n"),
     ("StringDispatch", 'def decide(x):\n    return x in ("a", "b", "c")\n'),
@@ -352,8 +372,111 @@ class OwnedCodec:
 """})
     status, report = repo.compare(base, head)
     assert status == 1
-    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/boundary.py"] == 3
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/boundary.py"] == 2
+    assert report["head"][f"ForeignNegation:{repo.root}/boundary.py"] == 1
     assert report["head"][f"CodecSubclass:{repo.root}/boundary.py"] == 1
+
+
+def test_nominal_queries_and_same_owner_arguments_are_not_foreign(repo: Repository) -> None:
+    base = repo.commit({
+        "__init__.py": "",
+        "fields.py": "class DeclaredField:\n    @property\n    def has_default(self) -> bool:\n        return True\n",
+        "view.py": "from .fields import DeclaredField\nclass FieldView(UnknownWidget):\n    def __init__(self, field: DeclaredField):\n        self.field = field\nclass ValueView(FieldView):\n    def query(this):\n        return True\n",
+        "entry.py": "from __future__ import annotations\nclass RelationshipEntry:\n    def revalidates(self, earlier: RelationshipEntry):\n        return True\n",
+    })
+    head = repo.commit({
+        "view.py": "from .fields import DeclaredField\nclass FieldView(UnknownWidget):\n    def __init__(self, field: DeclaredField):\n        self.field = field\nclass ValueView(FieldView):\n    def query(this):\n        return not this.field.has_default\n",
+        "entry.py": "from __future__ import annotations\nclass RelationshipEntry:\n    def revalidates(self, earlier: RelationshipEntry):\n        return earlier.person is None\n",
+    })
+    status, report = repo.compare(base, head)
+    assert status == 0
+    assert report["delta"][f"ForeignAbsenceProbe:{repo.root}/view.py"] == 0
+    assert report["delta"][f"ForeignAbsenceProbe:{repo.root}/entry.py"] == 0
+    assert f"ForeignAbsenceProbe:{repo.root}/fields.py" not in report["head"]
+
+
+def test_nominal_queries_preserve_raw_private_nested_and_unresolved_probes(repo: Repository) -> None:
+    base = repo.commit({})
+    head = repo.commit({"raw.py": """
+class Other:
+    value: bool
+    _value: bool
+class Owner:
+    def inspect(self, other: Other, unknown):
+        raw = other.value is None
+        raw_truth = not other.value
+        private = not other._value
+        nested = self.other.value is None
+        unresolved = not unknown.has_default
+        return raw, raw_truth, private, nested, unresolved
+"""})
+    status, report = repo.compare(base, head)
+    assert status == 1
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/raw.py"] == 2
+    assert report["head"][f"ForeignNegation:{repo.root}/raw.py"] == 3
+    assert report["regressions"] == {f"ForeignAbsenceProbe:{repo.root}/raw.py": 2}
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_comms.debt_ratchet", "--root", repo.root,
+         "--base", base, "--head", head], cwd=repo.path, capture_output=True, text=True,
+        timeout=10, check=False)
+    assert result.returncode == 1
+    assert "unresolved nominal binding; kept ForeignNegation" in result.stderr
+
+
+@pytest.mark.parametrize("annotation", ["EditingMode", "Reactive[EditingMode]"])
+def test_canonical_boolean_and_unresolved_negation_are_not_absence(repo: Repository, annotation: str) -> None:
+    base = repo.commit({"editing.py": f"""
+class EditingMode:
+    accepts_text = True
+class Editor:
+    editing_mode: {annotation}
+"""})
+    head = repo.commit({"editing.py": f"""
+class EditingMode:
+    accepts_text = True
+class Editor:
+    editing_mode: {annotation}
+def read(editor: Editor, unknown):
+    return not editor.editing_mode.accepts_text, not unknown.flag
+"""})
+    status, report = repo.compare(base, head)
+    assert status == 0
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/editing.py"] == 0
+    assert report["head"][f"ForeignNegation:{repo.root}/editing.py"] == 2
+    assert report["regressions"] == {}
+
+
+def test_declared_boolean_class_parameter_uses_immutable_external_declarations(repo: Repository) -> None:
+    dependency_path = repo.path.with_name(repo.path.name + "-declarations")
+    dependency_path.mkdir()
+    dependency = Repository(dependency_path, "src/ui_theme")
+    declared = dependency.commit({
+        "__init__.py": "raise RuntimeError('Inspected source must not execute')\n",
+        "scheme.py": "from typing import ClassVar\nclass ThemeColour(metaclass=UnknownRegistry):\n    background: ClassVar[bool] = False\n",
+    })
+    dependency.commit({"scheme.py": "class ThemeColour:\n    background = None\n"})
+    base = repo.commit({"__init__.py": ""})
+    head = repo.commit({"colours.py": """
+from ui_theme.scheme import ThemeColour
+class Frame:
+    stops: tuple[type[ThemeColour], ...]
+class Colours:
+    def changed(self):
+        def read(member: type[ThemeColour]):
+            return not member.background
+        return read
+    def paint(self, frame: Frame):
+        return {role: not role.background for role in dict.fromkeys(frame.stops)}
+"""})
+    result = subprocess.run(
+        [sys.executable, "-m", "agent_comms.debt_ratchet", "--root", repo.root,
+         "--base", base, "--head", head, "--declarations", str(dependency.path),
+         declared, dependency.root], cwd=repo.path, capture_output=True, text=True,
+        timeout=10, check=False)
+    assert result.returncode == 0, result.stderr
+    report = json.loads(result.stdout)
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/colours.py"] == 0
+    assert not any("scheme.py" in key for key in report["head"])
 
 
 def test_type_expression_boundary_keeps_runtime_dictionary_access(repo: Repository) -> None:

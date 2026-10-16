@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Compare AST debt in every changed production Python path at two Git revisions."""
+"""Compare AST debt in every changed production Python path at two Git revisions.
+
+NRA is development tooling from the [dev] extra, not a coordination-runtime
+requirement. --declarations REPO REVISION ROOT supplies immutable external
+binding context without measuring dependency files or executing their code.
+"""
 
 from __future__ import annotations
 
@@ -7,23 +12,52 @@ import argparse
 import ast
 import json
 import subprocess
+import sys
 import typing
+from importlib.util import decode_source
+from nominal_refactor_advisor.ast_tools import (
+    ParsedModule, PythonModulePathIdentity, SourceModule, module_syntax_index,
+)
+from nominal_refactor_advisor.product_flow_authority import SourceProductFlowRepository
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
-from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
+from refactor_audit.measures import (
+    FamilyFlattened as AuditFamilyFlattened, ForeignAbsenceSyntax, ForeignNegationSyntax,
+)
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, projected
 from .mro_dispatch import MroDispatch, handles
 
 
+@dataclass(frozen=True)
 class Measure(DeclaredFamily, affix="Measure"):
+    base: dict[str, int]
+    head: dict[str, int]
+
+    @property
+    def delta(self) -> dict[str, int]:
+        return {name: value - self.base[name] for name, value in self.head.items()}
+
+    @property
+    def regressions(self) -> dict[str, int]:
+        return {name: value for name, value in self.delta.items() if value > 0}
+
     @classmethod
     @abstractmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str,
+                declarations: tuple[ParsedModule, ...] = ()):
         """Return independent before/after measurements for this declaration."""
+
+class ObservationalMeasure(Measure):
+    """Shape evidence is visible, but does not establish a competing decision."""
+
+    @property
+    def regressions(self) -> dict[str, int]:
+        return {}
+
 
 class GitMeasure(Measure):
     """Shared Git collection and alignment for declaration-owned snapshots."""
@@ -34,19 +68,22 @@ class GitMeasure(Measure):
 
     @classmethod
     @abstractmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
-        """Measure the selected source declarations."""
+    def snapshot(cls, sources: list[tuple[str, bytes]], *, root: str, targets: set[str],
+                 declarations: tuple[ParsedModule, ...] = ()) -> dict[str, int]:
+        """Measure targets using the source context selected by this measure."""
 
     @classmethod
     def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
         return base, head
 
     @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str,
+                declarations: tuple[ParsedModule, ...] = ()):
         def snapshot(ref: str) -> dict[str, int]:
             selected = cls.scope(changed, python_paths(repo, ref, root))
-            return cls.snapshot([(path, git(repo, "show", f"{ref}:{path}")) for path in sorted(selected)])
-        return cls.align(snapshot(base), snapshot(head))
+            return cls.snapshot([(path, git(repo, "show", f"{ref}:{path}")) for path in sorted(selected)],
+                                root=root, targets=changed, declarations=declarations)
+        return cls(*cls.align(snapshot(base), snapshot(head)))
 
 
 class CountedSource(GitMeasure):
@@ -71,7 +108,8 @@ class OccurrenceMeasure(CountedSource):
         return sum(cls.occurrences(node) for node in ast.walk(ast.parse(source, filename)))
 
     @classmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+    def snapshot(cls, sources: list[tuple[str, bytes]], *, root: str, targets: set[str],
+                 declarations: tuple[ParsedModule, ...] = ()) -> dict[str, int]:
         return {cls.__name__: sum(cls.count(source, path) for path, source in sources)}
 
 
@@ -79,7 +117,8 @@ class PerFileMeasure(CountedSource):
     """An improvement in one file cannot hide a regression in another."""
 
     @classmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+    def snapshot(cls, sources: list[tuple[str, bytes]], *, root: str, targets: set[str],
+                 declarations: tuple[ParsedModule, ...] = ()) -> dict[str, int]:
         return {f"{cls.__name__}:{path}": cls.count(source, path) for path, source in sources}
 
     @classmethod
@@ -258,8 +297,8 @@ class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileOccurrenceMeas
         return super().count(source, filename) if cls.admits(filename) else 0
 
 
-class GodClassExcess(GitMeasure):
-    """Independent class lines beyond 500, including newly introduced classes."""
+class ClassSpanExcess(ObservationalMeasure, GitMeasure):
+    """Class lines beyond 500: a reading lead, not evidence of split ownership."""
 
     threshold = 500
 
@@ -270,7 +309,8 @@ class GodClassExcess(GitMeasure):
         return present
 
     @classmethod
-    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+    def snapshot(cls, sources: list[tuple[str, bytes]], *, root: str, targets: set[str],
+                 declarations: tuple[ParsedModule, ...] = ()) -> dict[str, int]:
         values = {}
         def visit(node: ast.AST, path: str, scope: tuple[str, ...]) -> None:
             match node:
@@ -307,7 +347,7 @@ class GodClassExcess(GitMeasure):
                 matched[identity] = base[previous[0]]
                 consumed.add(previous[0])
             else:
-                # A new declaration must not introduce any god-class excess.
+                # A new declaration has no earlier span to compare.
                 matched[identity] = 0
         current = dict(head)
         for identity in base.keys() - consumed:
@@ -338,7 +378,8 @@ class TypeIdentity(OccurrenceMeasure):
         )
 
 
-class LongBooleanChain(OccurrenceMeasure):
+class LongBooleanChain(ObservationalMeasure, OccurrenceMeasure):
+    """Condition length does not establish a decision outside its owner."""
     minimum_terms = 4
 
     @staticmethod
@@ -349,7 +390,7 @@ class LongBooleanChain(OccurrenceMeasure):
         return 0
 
 
-class BooleanChainTerms(PerFileOccurrenceMeasure):
+class BooleanChainTerms(ObservationalMeasure, PerFileOccurrenceMeasure):
     @staticmethod
     def occurrences(node: ast.AST) -> int:
         match node:
@@ -358,22 +399,65 @@ class BooleanChainTerms(PerFileOccurrenceMeasure):
         return 0
 
 
-class ForeignAbsenceProbe(PerFileOccurrenceMeasure):
-    @staticmethod
-    def foreign(owner: ast.AST) -> int:
-        match owner:
-            case ast.Name(id="self"):
-                return 0
-        return 1
+class ForeignAttributeProbe(PerFileMeasure):
+    """Share source capture and nominal ownership, not a judgment about syntax."""
+
+    @classmethod
+    def scope(cls, changed: set[str], present: set[str]) -> set[str]:
+        # Unchanged declarations can own a changed consumer's field/property.
+        return present if changed else set()
 
     @staticmethod
-    def occurrences(node: ast.AST) -> int:
-        match node:
-            case ast.Compare(left=ast.Attribute(value=owner), ops=[ast.Is() | ast.IsNot()], comparators=[ast.Constant(value=None)]):
-                return ForeignAbsenceProbe.foreign(owner)
-            case ast.UnaryOp(op=ast.Not(), operand=ast.Attribute(value=owner)):
-                return ForeignAbsenceProbe.foreign(owner)
-        return 0
+    @abstractmethod
+    def attribute(node: ast.AST) -> ast.Attribute | None:
+        """Select the syntax measured by this declaration."""
+
+    @classmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]], *, root: str, targets: set[str],
+                 declarations: tuple[ParsedModule, ...] = ()) -> dict[str, int]:
+        modules = source_modules(sources, root)
+        repository = SourceProductFlowRepository.from_modules((*modules, *declarations))
+        counts = {}
+        for module in modules:
+            path = str(module.path)
+            if path not in targets:
+                continue
+            count = 0
+            syntax = module_syntax_index(module.module)
+            for index, node in enumerate(syntax.depth_first_nodes):
+                attribute = cls.attribute(node)
+                if attribute is None:
+                    continue
+                owner = attribute.value
+                scope = syntax.scopes[syntax.scope_ids[index]]
+                function_index = scope.executable_function_index
+                enclosing_class = syntax.parent_node(function_index) if function_index >= 0 else None
+                function_symbol = f"{module.module_name}.{'.'.join(scope.names)}"
+                owner_symbol = f"{module.module_name}.{'.'.join(scope.names[:-1])}"
+                receiver_type = None
+                if isinstance(owner, ast.Name):
+                    receiver_type = repository.function_parameter_type_name(function_symbol, owner)
+                    if isinstance(enclosing_class, ast.ClassDef) and receiver_type == owner_symbol:
+                        continue
+                unresolved = isinstance(owner, ast.Name) and receiver_type is None
+                count += 1
+                if unresolved:
+                    print(f"{path}:{node.lineno}: unresolved nominal binding; kept {cls.__name__}", file=sys.stderr)
+            counts[f"{cls.__name__}:{path}"] = count
+        return counts
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        return cls.snapshot([(filename, source)], root=str(Path(filename).parent),
+                            targets={filename})[f"{cls.__name__}:{filename}"]
+
+
+class ForeignAbsenceProbe(ForeignAbsenceSyntax, ForeignAttributeProbe):
+    """Explicit foreign None comparisons, not ordinary truth-value negation."""
+
+
+class ForeignNegation(ForeignNegationSyntax, ObservationalMeasure, ForeignAttributeProbe):
+    """Unproved truth-value queries stay visible without inventing absence."""
 
 
 class CodecSubclass(PerFileOccurrenceMeasure):
@@ -702,19 +786,41 @@ class Comparison:
     base_revision: str
     head_revision: str
     paths: tuple[str, ...]
-    base: dict[str, int]
-    head: dict[str, int]
+    measurements: tuple[Measure, ...] = field(metadata={"report_exclude": True})
+
+    @projected(view="report")
+    def base(self) -> dict[str, int]:
+        return {name: value for measure in self.measurements for name, value in measure.base.items()}
+
+    @projected(view="report")
+    def head(self) -> dict[str, int]:
+        return {name: value for measure in self.measurements for name, value in measure.head.items()}
 
     @projected(view="report")
     def delta(self) -> dict[str, int]:
-        return {name: value - self.base[name] for name, value in self.head.items()}
+        return {name: value for measure in self.measurements for name, value in measure.delta.items()}
+
+    @projected(view="report")
+    def regressions(self) -> dict[str, int]:
+        return {name: value for measure in self.measurements for name, value in measure.regressions.items()}
 
     @property
     def increased(self) -> bool:
-        return any(value > 0 for value in self.delta.values())
+        return bool(self.regressions)
 
 
-def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
+def source_modules(sources: list[tuple[str, bytes]], root: str) -> tuple[ParsedModule, ...]:
+    """Decode captured Git bytes once; NRA owns module identities and syntax."""
+    import_root = Path(root)
+    if any(Path(path) == import_root / "__init__.py" for path, _ in sources):
+        import_root = import_root.parent
+    return tuple(SourceModule.from_path_identity(
+        PythonModulePathIdentity.from_import_root(Path(path), import_root),
+        decode_source(source)).parse() for path, source in sources)
+
+
+def compare(repo: Path, base: str, head: str, root: str,
+            declarations: tuple[ParsedModule, ...] = ()) -> Comparison:
     source_root = Path(root)
     if source_root.is_absolute() or ".." in source_root.parts or not source_root.parts:
         raise ValueError("--root must be a repository-relative source directory")
@@ -728,12 +834,9 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
     }
     paths = touched & (python_paths(repo, base, root) | python_paths(repo, head, root))
 
-    before, after = {}, {}
-    for measure in Measure.members_with(Measure):
-        measured_base, measured_head = measure.compare(repo, base, head, paths, root)
-        before.update(measured_base)
-        after.update(measured_head)
-    return Comparison(root, base, head, tuple(sorted(paths)), before, after)
+    measurements = tuple(measure.compare(repo, base, head, paths, root, declarations)
+                         for measure in Measure.members_with(Measure))
+    return Comparison(root, base, head, tuple(sorted(paths)), measurements)
 
 
 def main() -> int:
@@ -741,8 +844,18 @@ def main() -> int:
     parser.add_argument("--root", required=True, help="Repository-relative production source directory")
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
+    parser.add_argument("--declarations", nargs=3, action="append", default=[],
+                        metavar=("REPO", "REVISION", "ROOT"),
+                        help="Read immutable dependency declarations without measuring them")
     args = parser.parse_args()
-    result = compare(Path.cwd(), args.base, args.head, args.root)
+    declarations = []
+    for repo_path, ref, root in args.declarations:
+        repo = Path(repo_path)
+        ref = revision(repo, ref)
+        declarations.extend(source_modules([
+            (path, git(repo, "show", f"{ref}:{path}"))
+            for path in sorted(python_paths(repo, ref, root))], root))
+    result = compare(Path.cwd(), args.base, args.head, args.root, tuple(declarations))
     print(json.dumps(FieldCodec.project(result, "report"), indent=2))
     return int(result.increased)
 
