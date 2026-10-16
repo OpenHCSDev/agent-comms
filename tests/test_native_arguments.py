@@ -13,6 +13,8 @@ from native_proof_cases import read_proof_rows
 import pytest
 
 from agent_comms import worker
+from agent_comms.cli import build_parser
+from agent_comms.cli_commands import CliCommand
 from agent_comms.native_arguments import (
     NamedOption,
     NativeArguments,
@@ -32,7 +34,7 @@ import dataclasses
 from agent_comms.launch_runtime import LaunchRuntime
 
 
-def test_unconfigured_launch_has_no_provider_or_model_policy():
+def test_launch_arguments_remain_distinct_from_creation_defaults():
     defaults = NativeThreadDefaults()
     arguments = defaults.arguments
     assert arguments.argv == ()
@@ -42,24 +44,47 @@ def test_unconfigured_launch_has_no_provider_or_model_policy():
          arguments=NativeArguments.parse(("--provider", "user", "--model", "selected")),
     )
     assert selected.arguments.model == "user/selected"
-    assert selected.model == "user/selected"
+    assert selected.model == defaults.model
+    assert selected.startup_arguments().model == "user/selected"
 
 
-def test_settings_resolve_explicit_selection_once_at_the_record_boundary():
-    selected = NativeThreadDefaults(arguments=NativeArguments.parse((
+def test_settings_derive_explicit_selection_without_mirroring_it():
+    defaults = NativeThreadDefaults()
+    selected = dataclasses.replace(defaults, arguments=NativeArguments.parse((
         "--model", "override/selected", "--thinking", "low", "--thinking=off",
     )))
-    assert selected.model == "override/selected"
-    assert selected.thinking_level is OffThinkingLevel
+    assert selected.model == defaults.model
+    assert selected.thinking_level is defaults.thinking_level
+    startup = selected.startup_arguments()
+    assert startup.model == "override/selected" and startup.thinking == "off"
     assert NativeThreadDefaults.from_arguments(selected.cli_arguments) == selected
+    assert defaults.startup_arguments().model == defaults.model
+    assert defaults.startup_arguments().thinking == defaults.thinking_level.declared_name
+
+
+@pytest.mark.parametrize("verb,extra", [("new", ()), ("fork", ("--parent", "parent"))])
+def test_creation_cli_resolves_omitted_settings_after_the_record(verb, extra):
     defaults = NativeThreadDefaults()
-    assert defaults.model and defaults.thinking_level is not None
+    selected = NativeThreadDefaults(arguments=NativeArguments.parse((
+        "--model", "selection/example", "--thinking", "off",
+    )))
+    parser = build_parser(defaults)
+    plain = CliCommand.from_namespace(parser.parse_args((verb, "--name", "child", *extra)))
+    override = CliCommand.from_namespace(parser.parse_args((
+        *selected.cli_arguments, verb, "--name", "child", *extra,
+    )))
+    explicit = CliCommand.from_namespace(parser.parse_args((
+        verb, "--name", "child", *extra, "--model", "direct/example", "--thinking-level", "off",
+    )))
+    assert plain.model == defaults.model and plain.thinking_level is defaults.thinking_level
+    assert override.model == "selection/example" and override.thinking_level is OffThinkingLevel
+    assert explicit.model == "direct/example" and explicit.thinking_level is OffThinkingLevel
 
 
 def test_offline_record_owns_the_shared_isolation_arguments():
     selected = NativeThreadDefaults.offline(arguments=NativeArguments.parse(("--no-tools",)))
-    assert selected.arguments == ("--offline", *NativeThreadDefaults.isolation_arguments.argv, "--no-tools")
-    assert "--no-context-files" in selected.arguments
+    assert selected.arguments.argv == ("--offline", *NativeThreadDefaults.isolation_arguments.argv, "--no-tools")
+    assert "--no-context-files" in selected.arguments.argv
     assert NativeThreadDefaults.from_arguments(selected.cli_arguments) == selected
 
 

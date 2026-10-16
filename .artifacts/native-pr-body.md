@@ -1,10 +1,31 @@
-## Work in progress: P18, P40, P41
+## P18 / P40 / P41 / P62 — unfinished native runtime integration
 
-Continues the full published settings work from #984. The older #984 head did not contain the complete runtime work. This branch includes current main's shared JSON flag record, newer thread identities, and the explicit caller/project changes from #977.
+Comms owns the selected runtime, package and typed native defaults. The selected
+child installation runs its fork helper. FULL entry has one tool decision, and
+required Core extensions are explicit even with discovery disabled.
 
-- Full work, whether direct or after TRIAGE, now enters SelectedExecution.full; only that method selects its action/tools. SelectedExecution owns the attempt limit.
-- Next in this same change: Comms-owned runtime/settings, target-runtime fork copying, and deletion of executable choices from NativeThreadDefaults and native launch callers.
+P62 working source now stores NativeArguments, not reparsed argv or a synchronized
+model/thinking mirror. One startup_arguments method derives explicit options over
+creation defaults; creation, CLI and native consumers use that owner. The earlier
+mirror commit is replaced, not accepted.
 
-Not ready to merge. No installed fork or TRIAGE→FULL result claimed. Previous failed runs and uncertain inputs have not been repeated.
+Latest bounded selection checks: 14 passed, with the saved-session case deselected.
+The public CLI parser checks cover default, native-settings override and explicit
+options for both new and fork (six combinations). Production parsed-argument
+readers are zero; frozen mutation calls in the settings/argument owners are zero.
+Whole-Core still has 33 existing frozen mutation sites, retained in the evidence.
+These checks are **not registry rows,
+fork acceptance or configured-provider verification**.
 
-Before source inventory: 1068 Python modules across Core, tests/tools, paired Toad and the metaclass dependency; no parse omissions. Dynamic callbacks and class loading still require the real runtime checks. Final owner/consumer searches, new-case edit counts, focused test results and installed checks will be recorded here before review.
+Remaining before completion:
+- finish catalog/package/selected-startup fixture migrations;
+- integrate the separate shared-family checkpoints (#1026 and #1068 with Toad#726);
+- rebuild the small private Core wheel, reusing the reviewed frozen native SDK;
+- capture actual default and explicit-model/off fork registry rows and first reply;
+- verify actual TRIAGE-to-FULL tools and nonempty answer;
+- repair the separately reported steering terminal error at its existing owner.
+
+No reviewed installable pair is offered. Private installed Core remains older
+than the typed-arguments source. No default pointer or live owner was changed.
+Original sessions and uncertain attempts remain protected. Historical #984 and
+896ae3e2a remain retained for final native-family disposition, not reimplementation.
