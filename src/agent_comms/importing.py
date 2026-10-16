@@ -336,7 +336,7 @@ class OpenCodeImporter(ImportAdapter, format=ImportFormat.OPENCODE):
             self._message(message, tuple(objects(record.get("parts"))), buffer)
         return buffer.snapshot(
             ImportFormat.OPENCODE,
-            text(info.get("id")) or source.stem,
+            text(info.get("id")),
             text(info.get("directory")),
             text(info.get("title")),
         )
@@ -554,9 +554,9 @@ class CodexImporter(ImportAdapter, format=ImportFormat.CODEX):
             buffer.notices.add("Historical developer/system sources are retained as references, not current instructions.")
         return buffer.snapshot(
             ImportFormat.CODEX,
-            scan.identity or source.stem,
+            scan.identity,
             scan.latest_project or scan.project,
-            source.stem,
+            "",
             historical_instructions=scan.historical_instructions,
         )
 
