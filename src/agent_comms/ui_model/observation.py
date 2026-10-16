@@ -380,7 +380,7 @@ class ObserveSidebar(InterestRequest):
     show_archived: bool
 
     def observation(self, service: ObservationService) -> SidebarReading:
-        return SidebarReading(self, service.viewer)
+        return SidebarReading(self, service.bind_viewer(self.worktree))
 
     def _answer(
         self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str | Thread
@@ -778,7 +778,7 @@ class ObservationService:
 
     def __init__(self, comms, connection: Connection):
         self.comms = comms
-        self.viewer = comms.messaging.user_identity(str(comms.root))
+        self.viewer: Thread | None = None
         self.connection = connection
         self.observations: dict[type[Observation], Observation] = {}
         self.changed = asyncio.Event()
@@ -789,6 +789,12 @@ class ObservationService:
         # Owner reads being asked, until answered or cancelled.
         self.owner_reads: dict[int, asyncio.Future] = {}
         self.closed = False
+
+    def bind_viewer(self, worktree: str) -> Thread:
+        """The first sidebar binds its real project; later interests keep that human."""
+        if self.viewer is None:
+            self.viewer = self.comms.messaging.user_identity(worktree)
+        return self.viewer
 
     def receive(self) -> None:
         while self.connection.poll():

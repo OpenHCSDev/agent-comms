@@ -45,6 +45,11 @@ class Conversation:
         participants = {incarnation(name) for name in (sender, target)}
         return cls(participants=tuple(sorted(participants, key=lambda p: (p.name, p.created_at))))
 
+    @classmethod
+    def from_message(cls, message: Message, snapshot: RegistryProvenance) -> Conversation:
+        return cls.from_names(message.sender, message.target,
+                              lambda name: snapshot.participant(name).incarnation)
+
     def resolved(self, snapshot):
         return replace(self, participants=tuple(sorted(
             {p.resolved(snapshot) for p in self.participants}, key=lambda p: (p.name, p.created_at))))

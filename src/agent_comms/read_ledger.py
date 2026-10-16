@@ -181,7 +181,7 @@ class ReadMessageRow(ReadTable, TypedTable):
         births, conversations = set(), set()
         for source in sources:
             message = source.message
-            conversations.add(ReadLedger.conversation(message, snapshot).resolved(snapshot))
+            conversations.add(Conversation.from_message(message, snapshot).resolved(snapshot))
             names = {recipient.canonical_thread for recipient in source.audience.recipients}
             names.add(message.target)
             for name in names:
@@ -284,16 +284,11 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
             return None
         return info.st_dev, info.st_ino
 
-    @staticmethod
-    def conversation(message, snapshot):
-        return Conversation.from_names(message.sender, message.target,
-                                       lambda name: snapshot.participant(name).incarnation)
-
     def capture(self, viewer, messages: Iterable[Message], snapshot, bus_path, *, conversation_snapshot=None):
         viewer = snapshot.canonical_name(viewer)
         grouped = {}
         for message in messages:
-            conversation = self.conversation(message, conversation_snapshot or snapshot)
+            conversation = Conversation.from_message(message, conversation_snapshot or snapshot)
             grouped.setdefault(conversation, []).append(message.seq)
         return DisplayBasis(viewer, snapshot.threads[viewer].created_at,
                             tuple(DisplayedConversation(c, tuple(sorted(set(ns)))) for c, ns in grouped.items()),
@@ -305,6 +300,8 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
             raise ValueError('Display bus changed; refresh the displayed page.')
         if viewer != displayed.viewer:
             raise ValueError('Display belongs to a different viewer.')
+        if not displayed.conversations:
+            return
         from .bus_route_counts import BusRouteCounts, OpenedRouteCounts
         from .coordination_errors import CoordinationReadUnavailable
         from .wire_log import WireLog
@@ -345,6 +342,8 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
             advance(lambda conversation, state: None)
 
     def take_notice(self, shown):
+        if shown is None:
+            return None
         taken = None
         def take(document):
             nonlocal taken
@@ -364,7 +363,7 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
 
     def observations_for(self, snapshot, sources):
         """Read only visible conversation rows; never materialize the whole ledger."""
-        if not self.path.exists():
+        if not sources or not self.path.exists():
             return {}
         revision = FileRevision.capture(self.root / 'bus.jsonl')
         identity = revision.identity if revision else None
@@ -404,6 +403,8 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
         return ()
 
     def remove_threads(self, threads: Sequence[Thread]):
+        if not threads:
+            return
         viewers = {thread.incarnation for thread in threads}
         names = {thread.name for thread in threads}
         sources = {str(Path(thread.session_file).resolve()) for thread in threads if thread.session_file}
