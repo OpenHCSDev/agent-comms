@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import replace
 from pathlib import Path
 
 from .catalog_store import ChannelCatalog
+from .child_process import ProcessIdentity
+from .errors import RelationViolationError
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
@@ -16,7 +19,7 @@ from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .store_files import _store_lock
 from .thread_identity import GenerationCounter, TurnId
-from .thread_status import RunningThreadStatus, ThreadStatus
+from .thread_status import RunningThreadStatus, StoppedThreadStatus, ThreadStatus
 from .threads import Thread
 from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
@@ -41,6 +44,33 @@ class Registration:
         with self.store.editing() as edit:
             change = edit.document.prepare_registration(thread, status, new_owner=new_owner)
             self._commit_registration(edit, change)
+
+    @contextmanager
+    def external_process(self, name: str, process: ProcessIdentity):
+        """The CLI bridge owns its registered endpoint until that same process leaves."""
+        with self.store.editing() as edit:
+            thread = edit.document.require(name)
+            thread.execution.require_external()
+            if thread.process_alive and thread.process_identity != process:
+                raise RelationViolationError("Another live process owns this CLI endpoint.")
+            bound = replace(thread, process_identity=process)
+            self._commit_registration(edit, edit.document.prepare_registration(
+                bound, RunningThreadStatus(), new_owner=True))
+            owner = edit.document.snapshot().owner_identity(bound.name)
+        try:
+            yield owner.incarnation
+        finally:
+            with self.store.editing() as edit:
+                snapshot = edit.document.snapshot()
+                try:
+                    snapshot.require_owner_process(owner, process)
+                except RelationViolationError:
+                    pass  # A later owner or explicit stop must remain untouched.
+                else:
+                    current = snapshot.require(owner.incarnation.name)
+                    self._commit_registration(edit, edit.document.prepare_registration(
+                        replace(current, process_identity=None), StoppedThreadStatus(),
+                        new_owner=False))
 
     def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
         """Publish an observed native source under its original executable lease.
