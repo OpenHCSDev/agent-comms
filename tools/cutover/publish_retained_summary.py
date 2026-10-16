@@ -795,7 +795,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_
             opened.flush()
             os.fsync(opened.fileno())
         fsync_directory(receipt.parent)
-        runtime = RestartEnvironment(path=str(cohort.target / 'bin')+':'+os.environ['PATH'],
+        runtime = RestartEnvironment(path=RestartEnvironment.inherit(os.environ).path_for(cohort.target / 'bin/python'),
                                      virtual_env=str(cohort.target))
         return service.owners.restart_owners(runtime=runtime, cutover=operation)
     finally:

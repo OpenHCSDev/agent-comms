@@ -116,6 +116,13 @@ class RestartEnvironment:
         """Change only the acquired writable resource, retaining original discovery."""
         return replace(self, agent_directory=directory)
 
+    def path_for(self, interpreter: Path) -> str:
+        """Put this process's runtime first, exactly once; preserve other search paths."""
+        directory = str(interpreter.parent)
+        inherited = os.defpath if self.path is None else self.path
+        return os.pathsep.join((directory, *(entry for entry in inherited.split(os.pathsep)
+                                            if entry != directory)))
+
     def encode_native(self) -> dict[str, str]:
         encoded = self.encode()
         return {f.metadata["wire_name"]: encoded[f.metadata["wire_name"]]

@@ -410,9 +410,7 @@ class NativePiRpcLaunch:
             env.pop(name, None)
         env["NODE_DISABLE_COMPILE_CACHE"] = "1"
         env["PI_WORKTREE"] = str(cwd)
-        env["PATH"] = os.pathsep.join(
-            (str(Path(sys.executable).parent), env.get("PATH", os.defpath))
-        )
+        env["PATH"] = configuration.path_for(Path(sys.executable))
         env.update(configuration.encode_native())
         argv = (
             "node", "--no-global-search-paths",

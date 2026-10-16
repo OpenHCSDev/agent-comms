@@ -258,6 +258,7 @@ class OwnerLifecycle:
     def restart_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
         """Project the retained launch authority into the target runtime policy."""
         result = dict(environment)
+        result["PATH"] = RestartEnvironment.inherit(environment).path_for(Path(sys.executable))
         if self._private_nk_launch is not None:
             self._private_nk_launch.validate()
             self._private_nk_launch.apply_environment(result)
@@ -358,6 +359,7 @@ class OwnerLifecycle:
         # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()
         env = dict(os.environ if environment is None else environment)
+        env["PATH"] = RestartEnvironment.inherit(env).path_for(Path(sys.executable))
         for key in (
             "PI_PROMPT",
             "PI_PARENT_ID",

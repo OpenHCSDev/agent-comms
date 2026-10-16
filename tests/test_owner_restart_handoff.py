@@ -4,6 +4,8 @@ No root, writer, child, native package or process launch is acquired here.
 """
 
 from dataclasses import replace
+import os
+from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
@@ -15,6 +17,23 @@ from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
+
+
+@pytest.mark.parametrize(('inherited', 'expected'), [
+    (None, '/runtime/bin' + os.pathsep + os.defpath),
+    ('', '/runtime/bin:'),
+    ('/usr/bin', '/runtime/bin:/usr/bin'),
+    ('/runtime/bin:/usr/bin:/runtime/bin', '/runtime/bin:/usr/bin'),
+])
+def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, expected):
+    interpreter = Path('/runtime/bin/python')
+    original = RestartEnvironment(path=inherited)
+    path = original.path_for(interpreter)
+    entries = path.split(os.pathsep)
+    assert entries[0] == '/runtime/bin'
+    assert entries.count('/runtime/bin') == 1
+    assert path == expected
+    assert replace(original, path=path).path_for(interpreter) == path
 
 
 def stopped():
