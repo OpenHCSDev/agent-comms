@@ -25,7 +25,6 @@ from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
     ClaimOwner,
-    FreeClaim,
     ExistingFileClaim,
     FileClaimPath,
     WakeAdmission,
@@ -187,37 +186,24 @@ def publish_selected_resource_claim(
     ):
         resource = resource_path.normalized(Path(owner.worktree))
         with bus_lock.current_source(bus.log, metadata) as source:
-            existing = source.claim(resource).for_admission(owner.incarnation, admission)
-            match existing:
-                case ClaimOwner():
-                    return existing
-                case FreeClaim():
-                    pass
-            if source.claim_operation_used(admission.operation_id):
-                raise IdentityConflict("Wake claim operation was already consumed")
-        target = initial.message.sender
-        if target == owner.name:
-            target = BuiltinChannel.ALL.value
-        committed = bus.publisher.publish_claim_envelope(
-            Message(owner.name, target, "Resource claim admitted", ClaimNoticeKind, notice=True),
-            worktree=Path(owner.worktree),
-            incarnation=str(owner.created_at),
-            claims=[resource_path],
-            _locked_registry_snapshot=registry,
-            _bus_lock=bus_lock,
-            _admission=admission,
-        )
-        transition = committed.claim_transition
-        assert transition is not None and transition.generation is not None
-        return ClaimOwner(
-            resource,
-            transition.owner,
-            transition.incarnation,
-            transition.generation,
-            committed.seq,
-            committed.message_id,
-            admission,
-        )
+            existing = source.claim(resource)
+
+        def acquire() -> ClaimOwner:
+            target = initial.message.sender
+            if target == owner.name:
+                target = BuiltinChannel.ALL.value
+            committed = bus.publisher.publish_claim_envelope(
+                Message(owner.name, target, "Resource claim admitted", ClaimNoticeKind, notice=True),
+                worktree=Path(owner.worktree),
+                incarnation=str(owner.created_at),
+                claims=[resource_path],
+                _locked_registry_snapshot=registry,
+                _bus_lock=bus_lock,
+                _admission=admission,
+            )
+            return committed.require_claim_transition().claimed(resource)
+
+        return existing.admit(owner.incarnation, admission, acquire)
 
 
 @contextmanager

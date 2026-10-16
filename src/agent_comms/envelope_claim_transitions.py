@@ -318,7 +318,8 @@ class Claim(ABC):
     def validate_release(self, incarnation: str, release: ClaimRelease) -> None: ...
 
     @abstractmethod
-    def for_admission(self, owner: ThreadIncarnation, admission: WakeAdmission) -> Claim: ...
+    def admit(self, owner: ThreadIncarnation, admission: WakeAdmission,
+              acquire: Callable[[], ClaimOwner]) -> ClaimOwner: ...
 
     @abstractmethod
     def matches(self, owner: ClaimOwner) -> bool: ...
@@ -335,8 +336,9 @@ class FreeClaim(Claim):
     def validate_release(self, incarnation: str, release: ClaimRelease) -> None:
         raise ClaimTransitionError('Cannot release a resource without a live claim.')
 
-    def for_admission(self, owner: ThreadIncarnation, admission: WakeAdmission) -> Claim:
-        return self
+    def admit(self, owner: ThreadIncarnation, admission: WakeAdmission,
+              acquire: Callable[[], ClaimOwner]) -> ClaimOwner:
+        return acquire()
 
     def matches(self, owner: ClaimOwner) -> bool:
         return False
@@ -374,7 +376,8 @@ class ClaimOwner(Claim):
         if (self.incarnation, self.generation) != (incarnation, release.generation):
             raise ClaimTransitionError('Only the exact owner incarnation/generation may release.')
 
-    def for_admission(self, owner: ThreadIncarnation, admission: WakeAdmission) -> Claim:
+    def admit(self, owner: ThreadIncarnation, admission: WakeAdmission,
+              acquire: Callable[[], ClaimOwner]) -> ClaimOwner:
         if (self.admission == admission and self.incarnation == str(owner.created_at)
                 and self.owner == owner.name):
             return self
