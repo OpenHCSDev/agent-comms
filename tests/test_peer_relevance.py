@@ -19,6 +19,7 @@ from agent_comms.peer_relevance import (
     Visible,
 )
 from agent_comms.relationships import RelationshipEdit
+from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnContext
 
@@ -114,6 +115,21 @@ def _coordination_text(comms, name):
 def _partner_activity(comms, name):
     context = TurnContext.for_inspection(comms, comms.registry.require(name))
     return tuple(s for s in context.segments if isinstance(s, PartnerActivitySegment))
+
+
+def test_stopped_channelmates_do_not_fill_peer_slots_but_contacts_remain(tmp_path):
+    comms = _wire(
+        tmp_path, ('owner', {'team'}), ('partner', ()), ('contact', ()),
+        ('live-mate', {'team'}), ('stopped-mate', {'team'}),
+    )
+    comms.relationships.edit('owner', RelationshipEdit.decode('add'), 'partner', 'Shared review')
+    comms.goals.update_goal('owner', SetGoalAction(text='Work with @contact.'))
+    for name in ('partner', 'contact', 'stopped-mate'):
+        comms.owners.stop(name)
+    peers = _peers(comms, 'owner')
+    assert [peer.name for peer in peers] == ['partner', 'contact', 'live-mate']
+    assert peers[0].status is peers[1].status is StoppedThreadStatus
+    assert peers[2].status.active
 
 
 def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without_a_wake(tmp_path):

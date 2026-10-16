@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from .errors import RelationViolationError
 from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
 from .restart_refusals import OwnerBusyRefusal, OwnerSelectionChangedRefusal
+from .store_files import store_lock_path
 from .owner_lifecycle import OwnerRestartSelection
 from .thread_identity import AdmissionIdentity, OwnerIdentity
 
@@ -151,7 +152,7 @@ class StoppedOwnerBatch:
         if type(descriptor) is not int or descriptor < 0:
             raise RelationViolationError('Retained wire requires an integer descriptor')
         opened = os.fstat(descriptor)
-        named = (lifecycle.root / '.wire.lock').stat()
+        named = store_lock_path(lifecycle.root / 'wire').stat()
         if not stat.S_ISREG(opened.st_mode) or opened.st_uid != os.geteuid():
             raise RelationViolationError('Retained wire descriptor is not owned storage')
         if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
@@ -272,7 +273,7 @@ class AdmittedOwnerBatch:
     def restart(cls, lifecycle: OwnerLifecycle, request: OwnerRestartRequest,
                 cutover: OwnerCutover) -> tuple[OwnerRestartResult, ...]:
         with lifecycle.restart_wire():
-            lifecycle.maintenance.assert_open_unlocked()
+            cutover.require_restart_phase(lifecycle)
             snapshot = lifecycle.registry.snapshot()
             threads = request.threads(snapshot)
             request.require_selection(snapshot, threads)

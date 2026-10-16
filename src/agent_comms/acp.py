@@ -450,6 +450,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         if not await Coordination.run_read_async(store_path, select):
             await self.cursors.publish(session_id, thread_name, advance=True)
             return 0
+        # The accepted channel row stays in its durable assignment ledger.
+        # During cutover, leave it unselected; the maintenance witness wakes
+        # observation again on READY, without replaying this bus input.
+        if (await Coordination.run_worker(self._comms.owners.maintenance.read)).turn_pending:
+            return 0
         SelectedWakeCheck(
             session_id=session_id, inputs=self.inputs, execution=execution,
             thread=thread_name, owner=snapshot.owner_identity(thread_name),
