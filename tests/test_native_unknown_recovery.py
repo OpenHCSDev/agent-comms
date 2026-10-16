@@ -160,6 +160,26 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
         )
 
 
+def test_stop_of_previously_released_dead_owner_settles_without_replay(released_unknown):
+    process, exit_allowed, root, _root_id, execution_id, input_id = released_unknown
+    leave(process, exit_allowed)
+    comms = Comms(root)
+    before_bus = (root / "bus.jsonl").read_bytes()
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        before_input = input_evidence(store)
+        assert store.snapshots.get(execution_id).is_current
+    comms.owners.stop("beta")
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        snapshot = store.snapshots.get(execution_id)
+        assert not snapshot.is_current
+        assert type(snapshot.execution.lifecycle) is FailedExecution
+        assert snapshot.replay.facts & ReplayFact.UNKNOWN_EFFECTS
+        assert not snapshot.replay.replay_safe
+        assert input_evidence(store) == before_input
+    assert (root / "bus.jsonl").read_bytes() == before_bus
+    assert input_id in str(before_input)
+
+
 def test_abandon_refuses_released_but_live_owner(released_unknown):
     _process, _exit_allowed, root, _root_id, execution_id, _input_id = released_unknown
     with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -243,6 +263,13 @@ async def test_real_local_rpc_failure_reaps_child_and_releases_slot(tmp_path, mo
 
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
     (root / "runtime").mkdir(mode=0o700)
+    # This test substitutes a local RPC child, not the native package. Install
+    # the declarations' extension paths so launch can reach its RPC preflight.
+    from agent_comms.native_tools import NativeExecutableTool
+    for tool in NativeExecutableTool.members_with(NativeExecutableTool):
+        extension = tool.native_extension(tmp_path)
+        extension.parent.mkdir(parents=True, exist_ok=True)
+        extension.touch()
     processes = []
     from agent_comms.child_process import AttachedChild
 

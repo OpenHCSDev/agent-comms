@@ -9,6 +9,7 @@ fsync before any reader observes it. Parsed rows alone are NOT durable proof.
 
 from __future__ import annotations
 
+import os
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
@@ -115,12 +116,7 @@ def _generation(value: object) -> str:
 
 def _resource(value: object) -> str:
     path = _text(value, "Resource")
-    requested = Path(path)
-    if (
-        str(requested) != path
-        or not requested.is_absolute()
-        or requested.resolve(strict=False) != requested
-    ):
+    if not Path(path).is_absolute() or os.path.normpath(path) != path:
         raise ClaimTransitionError("Resource must already be a canonical absolute path.")
     return path
 

@@ -144,10 +144,10 @@ class ClaudeHeader(WireHeader):
         # Local slash commands (/login, /cost) are written as user records
         # without a prompt; they never reach the model. Decode that shape here.
         if value.get('type') == 'user':
-            if 'promptId' not in value:
-                return {'type': LocalCommandOutput.wire_tag}
             if value.get('origin', {}).get('kind') == TaskNotification.wire_tag:
                 return {'type': TaskUserRecord.wire_tag}
+            if 'promptId' not in value:
+                return {'type': LocalCommandOutput.wire_tag}
         return value
 
 
@@ -337,27 +337,27 @@ class TaskEnvelope(WireModel, ABC):
         return MonitorTaskNotification(frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
 
     @abstractmethod
-    def updates(self, record: UserRecord) -> tuple[TranscriptUpdate, ...]: ...
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
 
 
 class ForeignTaskNotification(TaskEnvelope):
     text: str
 
-    def updates(self, record: UserRecord) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
         return ()
 
 
 class MonitorTaskNotification(TaskEnvelope):
     frames: tuple[MonitorFrame, ...]
 
-    def updates(self, record: UserRecord) -> tuple[TranscriptUpdate, ...]:
-        return tuple(MonitorObservation(frame, record.sessionId,
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return tuple(MonitorObservation(frame,
                                         ObservedMonitor(record.uuid, record.timestamp))
                      for frame in self.frames)
 
 
-class TaskText(WireModel):
-    type: Literal['text'] = 'text'
+class TaskContent(WireModel):
+    """Both external task-record shapes share envelope decoding and observations."""
     text: TaskEnvelope
 
     @field_validator('text', mode='before')
@@ -365,12 +365,19 @@ class TaskText(WireModel):
     def envelope(cls, value: str) -> TaskEnvelope:
         return TaskEnvelope.from_text(value)
 
-    def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
         return self.text.updates(record)
+
+
+class TaskText(TaskContent):
+    type: Literal['text'] = 'text'
 
 
 class TaskMessage(ContentBlocks):
     content: list[TaskText]
+
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return tuple(update for block in self.content for update in block.updates(record))
 
 
 class ToolResult(UserBlock, ContentBlocks):
@@ -395,7 +402,6 @@ class UserMessage(ContentBlocks):
 class UserRecord(ClaudeRecord, TimedRecord):
     wire_tag = 'user'
     promptId: str
-    sessionId: str
     message: UserMessage
     origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
     isMeta: bool = False
@@ -407,10 +413,13 @@ class UserRecord(ClaudeRecord, TimedRecord):
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
 
-class TaskUserRecord(UserRecord):
+class TaskUserRecord(ClaudeRecord, TimedRecord):
     wire_tag = 'task-user'
     origin: TaskNotification
     message: TaskMessage
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return self.message.updates(self)
 
 
 class SubtypeHeader(WireHeader):
@@ -483,8 +492,44 @@ class MetadataRecord(ClaudeRecord, ABC):
     pass
 
 
-class Attachment(MetadataRecord):
+class AttachmentHeader(WireHeader):
+    @model_validator(mode='before')
+    @classmethod
+    def task_notification(cls, value: dict) -> dict:
+        if (value.get('type') == QueuedTaskNotification.wire_tag
+                and value.get('origin', {}).get('kind') == TaskNotification.wire_tag):
+            return value
+        return {'type': ForeignAttachment.wire_tag}
+
+
+class AttachmentPayload(TaggedWire, ABC):
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+    header = AttachmentHeader
+
+    @abstractmethod
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
+
+
+class QueuedTaskNotification(TaskContent, AttachmentPayload):
+    wire_tag = 'queued_command'
+    text: TaskEnvelope = Field(alias='prompt')
+    origin: TaskNotification
+
+
+class ForeignAttachment(AttachmentPayload):
+    wire_tag = 'foreign'
+
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return ()
+
+
+class Attachment(ClaudeRecord, TimedRecord):
     wire_tag = 'attachment'
+    attachment: AttachmentPayload.declared_union()
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return self.attachment.updates(self)
 
 
 class QueueOperation(MetadataRecord):

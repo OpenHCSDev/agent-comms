@@ -8,6 +8,7 @@ from .bus_publication import CommittedDelivery
 from .channel_targets import is_channel_target
 from .coordination_errors import IdentityConflict
 from .messages import Message
+from .message_reference import MessageReference
 from .coordination_tables.responses import ResponseObligation
 
 
@@ -18,21 +19,34 @@ class ResponseConversation:
     sources: tuple[CommittedDelivery, ...]
 
     @classmethod
-    def capture(cls, bus, snapshot, obligation: ResponseObligation):
+    def source_references(cls, snapshot, obligation: ResponseObligation) -> tuple[MessageReference, ...]:
+        """The selected original messages belonging to this exact reply route."""
         if obligation.execution_id != snapshot.execution.execution_id:
             raise IdentityConflict("Response obligation belongs to another execution")
-        marker = bus.log._private_marker_unlocked()
-        assignments = tuple(
-            assignment for assignment in snapshot.assignments
+        originals = tuple(
+            assignment.source for assignment in snapshot.assignments
             if assignment.lifecycle.exact_target == obligation.exact_target
         )
+        if not originals:
+            raise IdentityConflict("Response obligation has no original conversation")
+        return originals
+
+    @classmethod
+    def answer_references(
+        cls, snapshot, obligation: ResponseObligation, following: tuple[MessageReference, ...]
+    ) -> tuple[MessageReference, ...]:
+        return tuple(dict.fromkeys((*cls.source_references(snapshot, obligation), *following)))
+
+    @classmethod
+    def capture(cls, bus, snapshot, obligation: ResponseObligation):
+        originals = cls.source_references(snapshot, obligation)
+        marker = bus.log._private_marker_unlocked()
         sources = bus.log.delivery_cohorts_unlocked(
-            marker.root_id, tuple(assignment.wire_seq for assignment in assignments)
+            marker.root_id, tuple(reference.seq for reference in originals)
         )
-        if not sources or len(sources) != len(assignments):
+        if len(sources) != len(originals):
             raise IdentityConflict("Response obligation has no complete original conversation")
-        originals = {assignment.source for assignment in assignments}
-        if {source.message.reference for source in sources} != originals:
+        if {source.message.reference for source in sources} != set(originals):
             raise IdentityConflict("Response conversation lost an original source")
         if any(source.message.exact_reply_target != obligation.exact_target for source in sources):
             raise IdentityConflict("Response obligation differs from its original routes")

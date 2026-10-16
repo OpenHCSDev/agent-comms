@@ -150,25 +150,12 @@ from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
 
 class OwnerLifecycle:
     def require_restart_idle(self, thread: Thread) -> None:
-        """Both the process and its durable execution must have finished."""
-        from .coordination_errors import StaleFence
-        from .coordination_session import ReadNativeCoordinationSession
-        from .coordination_tables.executions import CurrentExecutions
-        from .coordinator import Coordination
+        """Do not interrupt a live turn; an old attempt settles after owner release."""
         from .restart_refusals import OwnerBusyRefusal
 
         try:
             thread.require_idle()
-            path = self.root / "coordination.sqlite3"
-            if path.exists():
-                with Coordination(str(path), session_type=ReadNativeCoordinationSession) as store:
-                    pointer = CurrentExecutions.one(
-                        store.session._connection,
-                        owner_lookup=thread.incarnation.lookup,
-                    )
-                    if pointer is not None:
-                        pointer.require_idle()
-        except (RelationViolationError, StaleFence) as error:
+        except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
 
     def __init__(self, root: Path, registry: Registration, bus: MessageBus):
@@ -328,19 +315,21 @@ class OwnerLifecycle:
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
-            if not snapshot.statuses[thread.name].active:
+            if not snapshot.statuses[thread.name].active and (
+                thread.process_identity is None or thread.pid == os.getpid()
+            ):
                 return
-            if thread.pid == os.getpid():
+            if snapshot.statuses[thread.name].active and thread.pid == os.getpid():
                 if caller.owns_thread(thread, snapshot):
                     self._release_current_owner_unlocked(thread.name)
                 else:
                     self.registry.unregister(thread.name)
                 return
-            if not thread.process_alive:
-                self.registry.unregister(thread.name)
-                return
             generation = snapshot.admission_generations[thread.name]
-        self._stop_process(thread, generation)
+        # The process may already be dead. It still needs the exact release
+        # receipt before the execution owner can settle its attempted input.
+        if thread.process_alive:
+            self._stop_process(thread, generation)
         self._finish_stopped_owner(thread, generation)
         # Stop is explicit abandonment of this exited local owner, not replay
         # permission. The existing recovery owner checks its exact release and
