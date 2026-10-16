@@ -26,7 +26,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
     comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid())))
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
+    agent = CommsAgent(comms,  auto_wake=False)
     turn = OwnedTurn(agent.turns, "owner-session", "owner", "new original input")
     async with AsyncExitStack() as resources:
         async with AsyncExitStack() as permits:

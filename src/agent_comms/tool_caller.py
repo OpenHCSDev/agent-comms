@@ -46,8 +46,7 @@ class ToolCaller(ABC):
     def from_arguments(cls, parser: argparse.ArgumentParser, arguments: list[str],
                        namespace: argparse.Namespace) -> ToolCaller:
         """Decode the caller once with the command parser; retain only unparsed argv."""
-        ThreadCaller.add_cli_arguments(parser, required=False, dest="caller")
-        parser.set_defaults(caller=NoThreadCaller())
+        namespace.caller = NoThreadCaller()
         selected, remaining = parser.parse_known_args(arguments, namespace=namespace)
         arguments[:] = remaining
         return selected.caller

@@ -88,7 +88,7 @@ async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
 async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path):
     comms, session = saved_history(tmp_path)
     original = session.read_bytes()
-    agent = CommsAgent(comms, native=comms.owners.native_defaults)
+    agent = CommsAgent(comms)
     updates = []
 
     class Client:

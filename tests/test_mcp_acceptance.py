@@ -457,7 +457,8 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
             retirement = AsyncExitStack()
             try:
                 selected_comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-                owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary=binary, arguments=tuple(args)), runtime_enabled=True, auto_wake=False)
+                selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(args))
+                owner = canonical_agent(selected_comms,  runtime_enabled=True, auto_wake=False)
                 retirement.push_async_callback(owner.shutdown)
 
                 env.update(
@@ -511,7 +512,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
                 owner.on_connect(Audit())  # Passive evidence sink, never a permission controller.
                 session = await owner.new_session(cwd=str(project), mcp_servers=[])
                 session_id = session.session_id
-                attached = canonical_agent(owner._comms, native=owner._comms.owners.native_defaults, auto_wake=False)
+                attached = canonical_agent(owner._comms,  auto_wake=False)
                 retirement.push_async_callback(attached.shutdown)
                 attached.on_connect(Attachment())
                 proxy = RuntimeProxy(attached, session_id, owner._runtime.path)

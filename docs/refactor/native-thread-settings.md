@@ -17,11 +17,11 @@ Shepherd owns the separately published caller/acquisition/shutdown changes.
 | Required integration | NativeRequestTools and NativeProject declarations | NativePiRpcLaunch loads their immutable entries even with discovery disabled. Tool restriction remains the selected mode's existing native arguments. |
 | Extension identity | Native import-fence declarations | Source aliases and packaged entries resolve to one entry. The SDK loader uses its existing loaded-extension collection to avoid initializing one extension twice. No second startup catalog subprocess or new cache. |
 
-A worker identifies the installation already selected by its parent using
-`LaunchRuntime.running()`. It must not follow a changed current pointer. Parent
-exec gates/watchers identify their own installation for a different reason;
-those identities are not merged with the selected native child's identity.
-`running()` identifies `sys.prefix`, not `sys.executable`.
+CLI/ACP/native entrypoints and workers identify their already selected
+installation using LaunchRuntime.running (sys.prefix, not sys.executable).
+They do not reselect a changed current pointer. Library callers supply their
+target through Comms.runtime. Parent gates/watchers identify their own runtime;
+that identity is not merged with the selected native child's identity.
 
 Settings JSON belongs to the existing JsonFlagRecord/FieldCodec implementation.
 The CLI constructs Comms with its settings at the boundary; Start does not
@@ -47,13 +47,34 @@ switch, binary override or nullable native constructor argument replaces it.
   declared by NativeRequestTools and NativeProject respectively.
 
 Adding a declared executable tool still changes its declaration, not another
-FULL/TRIAGE tool roster. A new native binding supplies its own behavior through
-the existing NativeProject family. Python and Node helper transports share the
+FULL/TRIAGE tool roster. A new native binding supplies its behavior through NativeProject.
+NativeArguments supplies each required extension once, before optional entries.
+Tracked factories preserve Comms's arguments; the turn mode replaces startup
+tool choices. Login's existing adapter is a declared immutable native entry,
+not a mutable TypeScript path. Native direct-module copying is derived from
+the existing manifest. Python and Node helper transports share the
 existing bounded exchange and result decoder rather than copying it.
+
+## Current verification checkpoint
+
+P55's Core/ACP split and the final native login pin are integrated normally.
+The frozen SDK is `/home/ts/wt/core-envelope-895/.native-login-acceptance/node_modules/@earendil-works/pi-coding-agent`.
+Shepherd verified installed saved ACP history, required Core entries once under
+`--no-extensions`, a real read and project IPC, two localhost replies, no paid
+calls, and retired child/socket resources. Receipt:
+`/home/ts/.cache/agent-scratch/codex-shepherd-envelope-895/project-sync-installed-h/result.json`.
+This does not accept fork, TRIAGE→FULL or login.
+
+The bounded source batch reached 67 passed, 11 skipped and 3 deselected. One
+login fixture still lacked its private protocol marker; the fixture now creates
+that marker through Messaging before pinning its route, and awaits recheck.
+The 22 tracked-launch API cases now pass with explicit runtime, arguments,
+provider and model. Fsync and unsafe-source controls remain intact. Additional
+native factory/bootstrap/fixture consumers remain unfinished.
 
 ## Remaining acceptance
 
-1. Integrate published caller/acquisition/shutdown and P55 checkpoints normally.
+1. Integrate P55's final plain-choice and paired Toad checkpoints normally.
 2. Migrate the affected fixtures without discarding fsync, failed-launch,
    unsafe-source or explicit offline restrictions; batch focused checks/ratchet.
 3. Rebuild the native artifact for alias identity, then verify the exact wheel.
@@ -63,9 +84,12 @@ existing bounded exchange and result decoder rather than copying it.
    restart and ACP startup. Capture actual process identity/liveness before
    retained-owner capture. A socket file is not readiness.
 
-The failed 693f root remains immutable and had zero submitted inputs. Its
-original worker exit cause is not proved; the transcript observer fix is a
-separate repair. Parent core-goal-retry owns that diagnosis. UNKNOWN provider,
-wire and file attempts are not replayed. The old FD success does not accept the
+The failed 693f root remains immutable and had zero submitted inputs. Parent
+core-goal-retry established the startup failure from its terminal traceback:
+transcript replay raised ObserverDied because publication_revision treated a
+RecordedThreadIncarnation as a Thread. Fix 940999d84 addresses that cause.
+Shutdown released the exact owner; the old driver mistook a stale socket for
+readiness. Parent owns the fresh capture/restart acceptance; do not duplicate
+that run. UNKNOWN provider, wire and file attempts are not replayed. The old FD success does not accept the
 JSON replacement. No default installation or successful provider journey is
 claimed by these source edits.

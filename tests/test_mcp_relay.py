@@ -333,7 +333,7 @@ async def test_private_subscriber_token_routes_only_active_prompt_permission(sav
                 return {"outcome": {"outcome": "selected", "optionId": "allow-once"}}
 
             instance = SimpleNamespace(session_update=update, request_permission=answer)
-            attachment = canonical_agent(owner._comms, native=owner._comms.owners.native_defaults, auto_wake=False)
+            attachment = canonical_agent(owner._comms,  auto_wake=False)
             attachment.on_connect(instance)
             proxy = RuntimeProxy(attachment, session_id, owner._runtime.path)
             await proxy.subscribe()

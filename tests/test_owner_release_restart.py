@@ -1,5 +1,8 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
 
+from agent_comms.tool_caller import NoThreadCaller
+from stored_inputs import stored_inputs
+
 from agent_comms.runtime_socket import RuntimeSocket
 
 import os
@@ -104,7 +107,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
             current = comms.registry.require(name)
             from agent_comms.runtime import socket_path
             await asyncio.to_thread(wait_for, socket_path(native.root, current.pid))
-            agent = canonical_agent(comms, native=comms.owners.native_defaults, auto_wake=False)
+            agent = canonical_agent(comms,  auto_wake=False)
             try:
                 async with asyncio.timeout(20):
                     await agent.load_session(str(native.project), name)
@@ -186,7 +189,7 @@ while True: time.sleep(0.01)
     }
     from agent_comms.native_settings import NativeThreadDefaults
 
-    native = NativeThreadDefaults(binary=sys.executable, arguments=(str(script),))
+    native = NativeThreadDefaults( arguments=(str(script),))
     child = ParentedProcess.launch((sys.executable, str(script), *native.cli_arguments), env=env)
     comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     try:
@@ -210,7 +213,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     comms = Comms(tmp_path / "wire")
     declared = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     generation = comms.registry.snapshot().admission_generations[declared.name]
-    comms.owners.stop(declared.name)
+    comms.owners.stop(declared.name, caller=NoThreadCaller())
     snapshot = comms.registry.snapshot()
     assert snapshot.statuses[declared.name].stopped
     assert snapshot.threads[declared.name].process_identity is None
@@ -232,7 +235,7 @@ def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
     child.force()
     child.reap()
     assert not original.process_alive
-    comms.owners.stop("worker")
+    comms.owners.stop("worker", caller=NoThreadCaller())
     snapshot = comms.registry.snapshot()
     receipt = comms.owners.releases.read()["worker"]
     assert receipt.current(snapshot, original, receipt.before)
@@ -248,7 +251,7 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
         snapshot = comms.registry.snapshot()
         arguments["expected"] = OwnerRestartSelection.capture(snapshot, "worker")
     if mode == "stop":
-        comms.owners.stop("worker")
+        comms.owners.stop("worker", caller=NoThreadCaller())
     else:
         (result,) = comms.owners.restart_owners(
             ["worker"], agent_bin=sys.executable, agent_args=["-c", "print('local')"], **arguments
@@ -331,9 +334,9 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
                                   process_identity=ProcessIdentity.capture(os.getpid())))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     assert comms.registry.status("worker").running
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True)
+    agent = CommsAgent(comms,  runtime_enabled=True)
     # The 2026-09-29 startup failure: a private wire without a pinned launch.
     with pytest.raises(PublicationActivationBlocked):
-        await agent.sessions.start_owner(str(tmp_path), "worker")
+        await agent.sessions.start_owner(str(tmp_path), agent._comms.registry.require("worker").incarnation)
     await agent.shutdown()
     assert comms.registry.status("worker").stopped

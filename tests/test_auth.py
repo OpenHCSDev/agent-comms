@@ -11,13 +11,15 @@ from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import Comms
-from agent_comms.active_route import resolve_comms_route
+from agent_comms.active_route import LocalRoute, PinnedRoute, resolve_comms_route
+from agent_comms.thread_identity import ThreadIncarnation
 import dataclasses
 
 
 async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
     selected_comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
-    agent = CommsAgent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi"))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings)
+    agent = CommsAgent(selected_comms)
     assert not (await agent.initialize(1, {})).auth_methods
     methods = (await agent.initialize(1, {"auth": {"terminal": True}})).auth_methods
     method, = methods
@@ -53,26 +55,30 @@ async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_m
     assert selected.model == "saved/model"
 
 
-def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "must-not-be-adopted")
-    monkeypatch.setenv("AGENT_COMMS_MANAGED", "1")
-    native = NativeThreadDefaults(binary="pi-custom")
+def test_login_uses_pi_native_ui_without_managed_thread_identity(tmp_path, monkeypatch):
+    package = tmp_path / "native"
+    wire = tmp_path / "wire"
+    runtime = LaunchRuntime.running()
+    root_id = Comms(LocalRoute(wire), runtime=runtime).messaging.initialize_private_initial_protocol()
+    comms = Comms(PinnedRoute(wire, root_id, package), runtime=runtime)
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package",
+                        lambda selected: selected / "dist/cli.js")
     captured = {}
 
-    def call(args, env):
-        captured.update(args=args, env=env)
+    def call(args, cwd, env):
+        captured.update(args=args, cwd=cwd, env=env)
         return 0
 
     monkeypatch.setattr("agent_comms.login.subprocess.call", call)
-    assert run_login("openai-codex", settings=native) == 0
-    assert captured["args"][0] == "pi-custom"
+    assert run_login("openai-codex", comms=comms) == 0
+    assert captured["args"][0] == "node"
+    assert str(package / "dist/pi_login_control.mjs") in captured["args"]
     assert "--no-session" in captured["args"] and "--no-tools" in captured["args"]
     assert "--mode" not in captured["args"] and "--print" not in captured["args"]
+    assert ThreadIncarnation.value_flag not in captured["args"]
     assert captured["env"]["AGENT_COMMS_LOGIN_PROVIDER"] == "openai-codex"
-    assert "AGENT_COMMS_THREAD" not in captured["env"]
-    assert "AGENT_COMMS_MANAGED" not in captured["env"]
     with pytest.raises(ValueError):
-        run_login("invalid\ncommand", settings=NativeThreadDefaults.from_runtime(LaunchRuntime.current()))
+        run_login("invalid\ncommand", comms=comms)
 
 
 async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
@@ -89,8 +95,9 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)
     selected_comms_2 = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
-    agent = canonical_agent(selected_comms_2, native=dataclasses.replace(selected_comms_2.owners.native_defaults,
-        binary=LaunchRuntime.running().native_entrypoint, arguments=("--model", "test/base")))
+    selected_comms_2.settings = dataclasses.replace(selected_comms_2.settings,
+         arguments=("--model", "test/base"))
+    agent = canonical_agent(selected_comms_2)
     # Exercise the explicit refresh path without the background drain racing it.
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session_id: None)
     updates = []

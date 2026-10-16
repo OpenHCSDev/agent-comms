@@ -1,5 +1,7 @@
 """Actual native Pi receipts for queued and steered channel requests."""
 
+from agent_comms.tool_caller import NoThreadCaller
+
 from agent_comms.queued_input import InitialInput
 import asyncio
 import json
@@ -97,7 +99,8 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             monkeypatch.setenv(key, value)
         args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-        agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
+        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(args))
+        agent = CommsAgent(comms,  runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         project = root / "worker"
@@ -136,13 +139,14 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             if case == "goal":
                 comms.goals.update_goal("worker", SetGoalAction(text="Changed goal"))
             elif case == "stop":
-                comms.owners.stop("worker")
+                comms.owners.stop("worker", caller=NoThreadCaller())
                 await agent.sessions.sync_identity("worker")
                 assert warmup_proc is not None and warmup_proc.returncode is not None
             elif case == "reopen":
                 await agent.shutdown()
                 selected_comms = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
-                agent = CommsAgent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
+                selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(args))
+                agent = CommsAgent(selected_comms,  runtime_enabled=True)
                 monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "worker")
                 await agent.inputs.drain_inbox("worker")

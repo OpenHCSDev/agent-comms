@@ -41,7 +41,7 @@ class LaunchRuntime:
 
     @classmethod
     def running(cls) -> LaunchRuntime:
-        """Identify the decoder already running, for watcher checks and restoration."""
+        """Identify the installation already selected when this process was launched."""
         return cls(Path(sys.prefix) / "bin/python")
 
     def command(self, *arguments: str) -> tuple[str, ...]:

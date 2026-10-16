@@ -110,7 +110,7 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
     comms.transcripts.routes.record_input_display("a" * 32, None)
     comms.transcripts.routes.record_input_display("b" * 32, "test2")
     selected_comms = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
-    agent = CommsAgent(selected_comms, native=selected_comms.owners.native_defaults)
+    agent = CommsAgent(selected_comms)
     updates = []
 
     class Client:

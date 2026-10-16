@@ -29,7 +29,7 @@ from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
-from .tool_caller import ToolCaller
+from .tool_caller import ToolCaller, ThreadCaller
 from .native_project import NativeProject, UnmanagedNativeProject
 from .tools import invoke_tool, tool_catalog
 from .field_codec import FieldCodec
@@ -615,6 +615,7 @@ class ToolsCliCommand(CliCommand):
         project: NativeProject = UnmanagedNativeProject()
         if self.native_arguments:
             parser = argparse.ArgumentParser(add_help=False, exit_on_error=False)
+            ThreadCaller.add_cli_arguments(parser, required=False, dest="caller")
             remaining = list(self.native_arguments)
             caller = ToolCaller.from_arguments(parser, remaining, argparse.Namespace())
             project = caller.native_project(remaining, ctx)

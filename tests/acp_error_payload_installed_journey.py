@@ -122,7 +122,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
         "compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
     }))
-    native = NativeThreadDefaults(binary=LaunchRuntime.current().native_entrypoint, arguments=('--offline', *NativeThreadDefaults.isolation_arguments, '--no-tools'))
+    native = NativeThreadDefaults( arguments=('--offline', *NativeThreadDefaults.isolation_arguments, '--no-tools'))
     comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(root, root_id, package)

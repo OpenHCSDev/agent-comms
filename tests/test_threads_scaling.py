@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.tool_caller import NoThreadCaller
+
 import json
 import os
 import threading
@@ -13,7 +15,6 @@ from agent_comms.bus_projection import AppendCheckpoint
 from agent_comms.private_path import FileRevision
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.messages import Message
 from agent_comms.comms import Comms
@@ -45,7 +46,7 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     messages = wired.bus.inbox("PR111")
     wired.messaging.acknowledge("PR111", tuple(message.reference for message in messages))
     assert _listed(wired) == _expected(wired)
-    wired.owners.stop("third")
+    wired.owners.stop("third", caller=NoThreadCaller())
     assert _listed(wired, active_only=True) == _expected(wired, active_only=True)
 
     # A fresh CLI process uses the durable projection without parsing history.

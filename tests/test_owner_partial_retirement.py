@@ -89,7 +89,7 @@ class AuthoredRetirement(OwnerLifecycle):
         from agent_comms.native_settings import NativeThreadDefaults
 
         launches = tuple(RetainedOwnerLaunch(
-            t.require_process(), '/authored/python', {}, NativeThreadDefaults(binary='/authored/pi'),
+            t.require_process(), '/authored/python', {}, NativeThreadDefaults(),
         ) for t in self.originals)
         return FencedOwnerBatch(
             self, tuple((t, 5) for t in self.originals), launches,

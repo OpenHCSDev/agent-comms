@@ -26,7 +26,7 @@ def test_tick_revision_paths_watch_final_bus_publication(tmp_path, monkeypatch):
     config.mkdir()
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
     selected_comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
-    agent = CommsAgent(selected_comms, native=selected_comms.owners.native_defaults, runtime_enabled=False)
+    agent = CommsAgent(selected_comms,  runtime_enabled=False)
     paths = agent.inputs._tick_paths()
     declared = {
         *paths.registry,
@@ -170,7 +170,7 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
         )
     )
     comms.messaging.initialize_private_initial_protocol()
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=False)
+    agent = CommsAgent(comms,  runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     calls = 0
 
@@ -235,7 +235,7 @@ async def test_recoverable_drain_failure_retries_without_another_file_change(
         "owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=False)
+    agent = CommsAgent(comms,  runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     attempts = 0
     retried = asyncio.Event()
@@ -271,7 +271,7 @@ async def test_failed_cursor_publish_retries_without_a_wake_task(tmp_path, monke
         "owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=False)
+    agent = CommsAgent(comms,  runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     attempts = 0
     retried = asyncio.Event()
@@ -306,7 +306,7 @@ async def test_failed_cursor_publish_retries_without_a_wake_task(tmp_path, monke
 @pytest.mark.asyncio
 async def test_wake_completion_notifies_its_observer_once(tmp_path, monkeypatch):
     selected_comms_2 = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
-    agent = CommsAgent(selected_comms_2, native=selected_comms_2.owners.native_defaults, runtime_enabled=False)
+    agent = CommsAgent(selected_comms_2,  runtime_enabled=False)
     notifications = []
     monkeypatch.setattr(agent.inputs, "wake_observer", notifications.append)
     task = asyncio.create_task(asyncio.sleep(0))
@@ -351,7 +351,7 @@ async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=False)
+    agent = CommsAgent(comms,  runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     entered = asyncio.Event()
 

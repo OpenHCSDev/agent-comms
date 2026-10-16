@@ -54,7 +54,8 @@ async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
-    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False, private_nk_native_package=tmp_path, private_nk_wire_root_id=root_id)
+    comms.settings = dataclasses.replace(comms.settings)
+    owner = CommsAgent(comms,  auto_wake=False, private_nk_native_package=tmp_path, private_nk_wire_root_id=root_id)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path))).session_id
     comms.registry.declare(

@@ -101,8 +101,10 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
                             "marker": text if "LATENCY_" in text else ""})
 
     comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
-    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(['--offline', *NativeThreadDefaults.isolation_arguments, '--extension', str(extension), '--no-prompt-templates', '--tools', 'read'])), runtime_enabled=True, auto_wake=False)
-    attachment = CommsClient(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"])
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(['--offline', *NativeThreadDefaults.isolation_arguments, '--extension', str(extension), '--no-prompt-templates', '--tools', 'read']))
+    owner = canonical_agent(comms,  runtime_enabled=True, auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings)
+    attachment = CommsClient(comms,  auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"])
     attachment.on_connect(Observer())
     report = {"complete": False, "spans": spans, "updates": updates,
               "python": os.sys.executable, "core_module": native_package.__file__,

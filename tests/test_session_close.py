@@ -45,9 +45,9 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
     # This declared model catalogue avoids SDK/model discovery; no model runs.
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one")
     comms = Comms(resolve_comms_route(tmp_path / "w"), runtime=LaunchRuntime.current())
-    owner = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, auto_wake=False)
-    client = CommsClient(comms, native=comms.owners.native_defaults, auto_wake=False, use_unstable_protocol=True)
-    other = CommsClient(comms, native=comms.owners.native_defaults, auto_wake=False, use_unstable_protocol=True)
+    owner = CommsAgent(comms,  runtime_enabled=True, auto_wake=False)
+    client = CommsClient(comms,  auto_wake=False, use_unstable_protocol=True)
+    other = CommsClient(comms,  auto_wake=False, use_unstable_protocol=True)
     callbacks = AttachmentClient()
     client.on_connect(callbacks)
     permissions = []
@@ -108,7 +108,7 @@ async def test_close_joins_unsent_request_and_capability_requires_admission(tmp_
     comms = Comms(resolve_comms_route(tmp_path / "w"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("cold", frozenset(), str(tmp_path),
                                  process_identity=ProcessIdentity.capture(os.getpid())))
-    client = CommsClient(comms, native=comms.owners.native_defaults, auto_wake=False, use_unstable_protocol=True)
+    client = CommsClient(comms,  auto_wake=False, use_unstable_protocol=True)
     proxy = RuntimeProxy(client, "cold", socket_path(comms.root, os.getpid()))
     client.sessions.proxies["cold"] = proxy
     request = asyncio.create_task(proxy.request("clear_queue"))

@@ -26,7 +26,7 @@ async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=True, runtime_enabled=True)
+    agent = CommsAgent(comms,  auto_wake=True, runtime_enabled=True)
     agent.sessions.bindings["owner"] = "owner"
     inputs = agent.inputs
     controller = object()

@@ -27,7 +27,8 @@ from agent_comms.launch_runtime import LaunchRuntime
 async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([])), runtime_enabled=True)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    owner = canonical_agent(comms,  runtime_enabled=True)
     # Keep this non-provider test's goal paused. Edits must preserve that state.
     response = await owner.new_session(str(tmp_path / "project"))
     session = response.session_id
@@ -39,7 +40,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
         async def session_update(self, session_id, update):
             updates.append(update)
 
-    observer = canonical_agent(comms, native=comms.owners.native_defaults)
+    observer = canonical_agent(comms)
     observer.on_connect(Client())
     proxy = RuntimeProxy(observer, session, RuntimeSocket.path_for(comms.root, os.getpid()))
     try:

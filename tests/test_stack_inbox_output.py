@@ -187,7 +187,8 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
 
         monkeypatch.setattr(backend, "stream_agent_events", collect_events)
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-        agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
+        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(args))
+        agent = CommsAgent(comms,  runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
             project = root / "parent"

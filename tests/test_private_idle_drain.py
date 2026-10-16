@@ -1,5 +1,7 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
+from agent_comms.tool_caller import NoThreadCaller
+
 import asyncio
 import os
 import threading
@@ -8,7 +10,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import acp, cohort_foreground, coordinated_runtime, native_pi
+from agent_comms import acp, cohort_foreground, native_pi
 from agent_comms import agent_events as events
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinator import Coordination
@@ -356,7 +358,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         other = comms.registry.require("sender")
         await changed_elsewhere(
             lambda: comms.registry.register(replace(other, task="other owner changed")))
-        await changed_elsewhere(lambda: comms.owners.stop("unrelated"))
+        await changed_elsewhere(lambda: comms.owners.stop("unrelated", caller=NoThreadCaller()))
 
         def registered_elsewhere():
             with Coordination(comms.root / "coordination.sqlite3") as store:

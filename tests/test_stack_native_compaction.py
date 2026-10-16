@@ -304,7 +304,8 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
-    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native_bin, arguments=tuple(native_args)), runtime_enabled=True, auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(native_args))
+    owner = CommsAgent(comms,  runtime_enabled=True, auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     updates = []
     resumed_activity = []
 

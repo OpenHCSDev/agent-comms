@@ -127,7 +127,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             from .native_pi import NativePiRpcLaunch
 
             self._verified_native_launcher = NativePiRpcLaunch.verified_launcher(
-                private_nk_native_package, private_nk_verified_cli, comms.runtime
+                private_nk_native_package, private_nk_verified_cli, comms.runtime, comms.settings.arguments
             )
         self._private_nk_wire_root_id = private_nk_wire_root_id
         self._comms = comms
@@ -361,7 +361,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         if self._verified_native_launcher is None:
             self._verified_native_launcher = NativePiRpcLaunch.acquire_tracked(
-                self._private_nk_native_package, self._comms.runtime
+                self._private_nk_native_package, self._comms.runtime, self._comms.settings.arguments
             )
         return self._verified_native_launcher
 
@@ -522,7 +522,7 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    runtime = LaunchRuntime.current()
+    runtime = LaunchRuntime.running()
     native = NativeThreadDefaults.from_arguments(sys.argv[1:], NativeThreadDefaults())
     with resolve_comms_route().admit_client():
         debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")

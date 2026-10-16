@@ -183,7 +183,8 @@ async def catalog_owner(native_backend, monkeypatch):
 
     monkeypatch.setattr(AttachedChild, "start", observe)
     selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "response-local/fixture", "--offline"])), auto_wake=False)
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(["--model", "response-local/fixture", "--offline"]))
+    owner = canonical_agent(selected_comms,  auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     before = native.session.read_bytes()
     try:

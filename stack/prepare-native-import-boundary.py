@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -206,10 +207,13 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         ("native-import-manifest.json", "agent-comms-imports.json"),
     ):
         shutil.copyfile(stack / source, package / "dist" / target)
-    for name in (
-        "owner_tool_socket.mjs", "selected_claimed_write.mjs", "channel_coding_tools.mjs"
-    ):
-        shutil.copyfile(stack.parent / "src/agent_comms" / name, package / "dist" / name)
+    source = stack.parent / "src/agent_comms"
+    manifest = json.loads((stack / "native-import-manifest.json").read_text())
+    for declaration in manifest["extensionEntries"]:
+        entry = Path(declaration["entry"])
+        if entry.parent == Path("dist"):
+            shutil.copyfile(source / entry.name, package / entry)
+    shutil.copyfile(source / "owner_tool_socket.mjs", package / "dist/owner_tool_socket.mjs")
     subprocess.run(
         ["node", str(stack / "prepare-native-global-extensions.mjs"), str(package)],
         env=environment, check=True, timeout=60,

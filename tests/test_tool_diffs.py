@@ -136,7 +136,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
         async def session_update(self, **kwargs):
             self.updates.append(kwargs["update"].model_dump(by_alias=True, exclude_none=True))
 
-    agent = CommsAgent(comms, native=comms.owners.native_defaults)
+    agent = CommsAgent(comms)
     client = Client()
     await agent._emit_event("worker", live, client)
     live_content = client.updates[-1]["content"]

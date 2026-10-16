@@ -87,10 +87,10 @@ def test_owner_configuration_requires_nominal_intent_and_private_binding(
     wire.mkdir(mode=0o700)
     comms = Comms(LocalRoute(wire), runtime=LaunchRuntime.current())
     with pytest.raises(ValueError, match="exact N/K root"):
-        CommsAgent(comms, native=comms.owners.native_defaults, private_selected_tool_intent=intent_type())
+        CommsAgent(comms,  private_selected_tool_intent=intent_type())
     with pytest.raises(TypeError, match="nominal owner intent"):
-        CommsAgent(comms, native=comms.owners.native_defaults, private_nk_native_package=private_root, private_nk_wire_root_id="private-id", private_selected_tool_intent=object())
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, private_nk_native_package=private_root, private_nk_wire_root_id="private-id", private_selected_tool_intent=intent_type())
+        CommsAgent(comms,  private_nk_native_package=private_root, private_nk_wire_root_id="private-id", private_selected_tool_intent=object())
+    agent = CommsAgent(comms,  private_nk_native_package=private_root, private_nk_wire_root_id="private-id", private_selected_tool_intent=intent_type())
     assert type(agent._private_selected_tool_intent) is intent_type
 
 

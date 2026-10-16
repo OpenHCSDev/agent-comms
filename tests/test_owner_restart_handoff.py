@@ -102,7 +102,7 @@ def stopped():
 def test_retired_witness_cannot_borrow_live_or_replaced_admission():
     thread, snapshot = stopped()
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", {},
-                                 NativeThreadDefaults(binary="/authored/pi"))
+                                 NativeThreadDefaults())
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     assert owner.require_current(snapshot) is thread
     selection = OwnerRestartSelection(owner.owner, launch.process, owner.admission.admission_generation)
@@ -130,7 +130,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
         "AUTHORED_CREDENTIAL": "in-memory-only",
     }
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", environment,
-                                 NativeThreadDefaults(binary="/authored/pi",
+                                 NativeThreadDefaults(
                                                       arguments=("--no-tools", "authored value")))
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     runtime = RestartEnvironment.inherit(environment)
@@ -151,7 +151,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
 def test_retirement_capture_refuses_changed_original_incarnation():
     thread, snapshot = stopped()
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", {},
-                                 NativeThreadDefaults(binary="/authored/pi"))
+                                 NativeThreadDefaults())
     with pytest.raises(RelationViolationError):
         RetiredOwnerLaunch.capture_retired(snapshot, replace(thread, created_at=2.0), launch)
 
@@ -162,7 +162,7 @@ def test_handoff_restore_requires_each_authentic_interpreter_before_read_or_laun
 
     thread, snapshot = stopped()
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/other-python", {},
-                                 NativeThreadDefaults(binary="/authored/pi"))
+                                 NativeThreadDefaults())
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     handoff = OwnerRestartHandoff("/authored", (owner,), RestartEnvironment.inherit({}), None, None, LaunchRuntime(Path("/target/bin/python")))
     lifecycle = SimpleNamespace(root=Path("/authored"))

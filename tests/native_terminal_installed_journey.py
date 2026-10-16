@@ -40,7 +40,8 @@ async def main(output, package, launcher, provider, model, thinking):
         'AGENT_COMMS_ROOT': str(comms.root), ROOT_ID_ENV: root_id,
         PACKAGE_ENV: str(package),
     })
-    agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=str(launcher), arguments=tuple(['--provider', provider, '--model', model, '--thinking', thinking, *NativeThreadDefaults.isolation_arguments, '--tools', 'bash'])), runtime_enabled=True, auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(['--provider', provider, '--model', model, '--thinking', thinking, *NativeThreadDefaults.isolation_arguments, '--tools', 'bash']))
+    agent = CommsAgent(comms,  runtime_enabled=True, auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     client = Client()
     agent.on_connect(client)
     effect = project / 'one-effect.txt'

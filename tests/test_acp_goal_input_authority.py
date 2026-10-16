@@ -36,7 +36,8 @@ from agent_comms.launch_runtime import LaunchRuntime
 async def owner(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), runtime_enabled=True)
+    comms.settings = dataclasses.replace(comms.settings)
+    agent = canonical_agent(comms,  runtime_enabled=True)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
     updates = []

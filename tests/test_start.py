@@ -28,10 +28,10 @@ def test_attachment_does_not_implicitly_start_a_stopped_or_archived_thread(tmp_p
         lambda *_args: (_ for _ in ()).throw(AssertionError("unwanted launch")),
     )
     with pytest.raises(ValueError, match="Explicit start"):
-        comms.owners.ensure_owner("worker", native=comms.owners.native_defaults)
+        comms.owners.ensure_owner("worker", native=comms.settings)
     comms.registry.archive("worker")
     with pytest.raises(ValueError, match="Explicit start"):
-        comms.owners.ensure_owner("worker", native=comms.owners.native_defaults)
+        comms.owners.ensure_owner("worker", native=comms.settings)
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner fixture")

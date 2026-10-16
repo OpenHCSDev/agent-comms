@@ -43,7 +43,8 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
     native = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'])), runtime_enabled=True, auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']))
+    agent = canonical_agent(comms,  runtime_enabled=True, auto_wake=False)
     try:
         child = (await agent.new_session(str(native.project))).session_id
         drain = agent.inputs.drain_tasks.pop(child)
@@ -467,7 +468,8 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     comms = canonical_goal_wire(tmp_path / "wire")
     with comms.bus.log.certified_read() as source:
         root_id = source.marker.root_id
-    agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), runtime_enabled=True, auto_wake=False, private_nk_native_package=tmp_path, private_nk_wire_root_id=root_id)
+    comms.settings = dataclasses.replace(comms.settings)
+    agent = CommsAgent(comms,  runtime_enabled=True, auto_wake=False, private_nk_native_package=tmp_path, private_nk_wire_root_id=root_id)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     activate_empty_source(agent)
     owner = (await agent.new_session(str(tmp_path / "owner"))).session_id

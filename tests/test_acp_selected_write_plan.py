@@ -104,7 +104,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                     name,
                     committed=True,
                 )
-        agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, private_nk_wire_root_id=root_id, private_nk_native_package=package)
+        agent = CommsAgent(comms,  runtime_enabled=True, private_nk_wire_root_id=root_id, private_nk_native_package=package)
         agent.sessions.bindings["beta"] = "beta"
         agent.sessions.titles["beta"] = "beta"
         agent.sessions.worktrees["beta"] = str(work)
@@ -352,7 +352,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                 raise AssertionError(f"worker did not report {expected}")
 
             assert event("ready")["pid"] == process.pid
-            attached = CommsAgent(comms, native=comms.owners.native_defaults, private_nk_wire_root_id=root_id, private_nk_native_package=package)
+            attached = CommsAgent(comms,  private_nk_wire_root_id=root_id, private_nk_native_package=package)
             await attached.load_session(str(work), "beta")
             message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
             bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)

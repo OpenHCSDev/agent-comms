@@ -52,7 +52,8 @@ async def read_original_context(
     before = fixture.session.read_bytes()
     original_inputs = fixture.saved_inputs()
     selected_comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
-    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "response-local/fixture", "--offline"])), auto_wake=False, runtime_enabled=True)
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(["--model", "response-local/fixture", "--offline"]))
+    owner = canonical_agent(selected_comms,  auto_wake=False, runtime_enabled=True)
     # This fixture owns the root; the existing owner launch and RPC reader remain real.
     try:
         await owner._runtime.start()

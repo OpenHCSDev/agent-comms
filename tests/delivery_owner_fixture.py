@@ -23,7 +23,7 @@ async def canonical_delivery_owner(root, *, direct=False):
     from test_coordinated_runtime import _root
 
     _path, root_id, comms, initial, people = _root(root, direct=direct)
-    owner = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, private_nk_native_package=root, private_nk_wire_root_id=root_id)
+    owner = CommsAgent(comms,  runtime_enabled=True, private_nk_native_package=root, private_nk_wire_root_id=root_id)
     for person in people[1:]:
         owner.sessions.bindings[person.name] = person.name
         owner.sessions.titles[person.name] = person.name
@@ -35,7 +35,7 @@ async def canonical_delivery_owner(root, *, direct=False):
         await owner.shutdown()
 
 
-def canonical_agent(comms, native: NativeThreadDefaults, **options):
+def canonical_agent(comms, **options):
     """Configure the existing owner against its real canonical root marker."""
     with comms.bus.log.locked():
         metadata = comms.bus.log.read_metadata_unlocked()
@@ -45,7 +45,7 @@ def canonical_agent(comms, native: NativeThreadDefaults, **options):
     )
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     return CommsAgent(
-        comms, native=native, private_nk_native_package=package,
+        comms, private_nk_native_package=package,
         private_nk_wire_root_id=root_id, **options,
     )
 

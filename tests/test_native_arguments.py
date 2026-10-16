@@ -33,28 +33,26 @@ from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_unconfigured_launch_has_no_provider_or_model_policy():
-    defaults = NativeThreadDefaults.from_runtime(LaunchRuntime.current())
+    defaults = NativeThreadDefaults()
     arguments = NativeArguments.parse(defaults.arguments)
     assert arguments.argv == ()
     assert arguments.model is None
     assert arguments.thinking is None
     selected = NativeThreadDefaults(
-        binary=defaults.binary, arguments=("--provider", "user", "--model", "selected"),
+         arguments=("--provider", "user", "--model", "selected"),
     )
     assert NativeArguments.parse(selected.arguments).model == "user/selected"
 
 
 def test_offline_record_owns_the_shared_isolation_arguments():
-    runtime = LaunchRuntime.current()
-    selected = NativeThreadDefaults.offline(runtime, arguments=("--no-tools",))
-    assert selected.binary == runtime.native_entrypoint
+    selected = NativeThreadDefaults.offline(arguments=("--no-tools",))
     assert selected.arguments == ("--offline", *NativeThreadDefaults.isolation_arguments, "--no-tools")
     assert "--no-context-files" in selected.arguments
     assert NativeThreadDefaults.from_arguments(selected.cli_arguments) == selected
 
 
 def test_native_settings_cli_and_original_command_share_the_declared_codec():
-    selected = NativeThreadDefaults(binary="/fixture pi", arguments=("--label", "two words"))
+    selected = NativeThreadDefaults( arguments=("--label", "two words"))
     assert NativeThreadDefaults.from_arguments(selected.cli_arguments, selected) == selected
     assert NativeThreadDefaults.from_arguments(("python", "-m", "agent_comms.worker",
                                                *selected.cli_arguments)) == selected
@@ -64,11 +62,11 @@ def test_native_settings_cli_and_original_command_share_the_declared_codec():
     with pytest.raises(ValueError):
         NativeThreadDefaults.from_json('{"binary":42}')
     with pytest.raises(ValueError):
-        NativeThreadDefaults.from_json('{"binary":"/fixture/pi","arguments":[42]}')
+        NativeThreadDefaults.from_json('{"arguments":[42]}')
 
 
 @pytest.mark.parametrize("record_type,record", [
-    (NativeThreadDefaults, NativeThreadDefaults(binary="/fixture pi", arguments=("two words",))),
+    (NativeThreadDefaults, NativeThreadDefaults( arguments=("two words",))),
     (ThreadIncarnation, RecordedThreadIncarnation("fixture-owner", 1.0)),
 ])
 def test_record_flags_share_required_default_and_strict_json_boundary(record_type, record):
@@ -94,7 +92,7 @@ def test_worker_refuses_nonrecorded_identity_before_runtime_or_route(incarnation
     decoded = ThreadIncarnation.from_arguments(incarnation.cli_arguments)
     assert decoded == incarnation
     with pytest.raises(ValueError, match="recorded"):
-        asyncio.run(worker.run(NativeThreadDefaults(binary="/fixture/pi"), decoded, None))
+        asyncio.run(worker.run(NativeThreadDefaults(), decoded, None))
 
 
 def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments():
@@ -117,7 +115,7 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
     assert selected.model == "response-local/fixture" and selected.thinking == "off"
     assert selected.rpc() == (
         "--offline",
-        "-e",
+        "--extension",
         "extension.mjs",
         "--provider",
         "response-local",
@@ -131,6 +129,20 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
     assert selected.with_thinking(None).thinking is None
     assert arguments.model == "original/old/model"
     assert NativeArguments.parse(("--model", "local/fixture")).model == "local/fixture"
+
+
+def test_owned_turn_replaces_tool_policy_without_enabling_discovery():
+    arguments = NativeArguments.parse((
+        "--offline", "--no-extensions", "--tools", "read,bash",
+        "--exclude-tools", "edit", "--no-tools", "--no-builtin-tools",
+        "-e", "user.mjs", "--extension", "core.mjs",
+    ))
+    selected = arguments.for_owned_turn().with_extensions(Path("core.mjs"), Path("project.mjs"))
+    assert selected.argv == (
+        "--offline", "--no-extensions", "--extension", "core.mjs",
+        "--extension", "project.mjs", "--extension", "user.mjs",
+    )
+    assert arguments.argv != selected.argv
 
 
 def test_option_declaration_extends_consumption_rendering_and_mode_validation():
@@ -190,7 +202,8 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
     proof = read_proof_rows(native.session)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=low', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'])), auto_wake=False)
+    selected_comms.settings = dataclasses.replace(selected_comms.settings, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=low', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']))
+    owner = canonical_agent(selected_comms,  auto_wake=False)
     router = build_agent_router(owner)
     try:
         async with asyncio.timeout(25):

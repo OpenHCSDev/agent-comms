@@ -70,7 +70,7 @@ async def main(package, evidence):
             stage.mkdir(mode=0o700)
             project = stage / 'project'
             project.mkdir(mode=0o700)
-            native = NativeThreadDefaults(binary=LaunchRuntime.current().native_entrypoint, arguments=('--offline', *NativeThreadDefaults.isolation_arguments, '--no-tools'))
+            native = NativeThreadDefaults( arguments=('--offline', *NativeThreadDefaults.isolation_arguments, '--no-tools'))
             comms = Comms(LocalRoute(stage / 'wire'), runtime=LaunchRuntime.current())
             root_id = comms.messaging.initialize_private_initial_protocol()
             comms.registry.declare(Thread('recipient', frozenset({'team'}), str(project),

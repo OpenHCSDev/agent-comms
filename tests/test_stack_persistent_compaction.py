@@ -209,14 +209,15 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         session = root / "saved.jsonl"
         _history(session, project)
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-        owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple([
+        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([
                 "--provider",
                 "openrouter",
                 "--model",
                 "z-ai/glm-5.3-flash",
                 "--thinking",
                 "off",
-            ])), runtime_enabled=True, auto_wake=False)
+            ]))
+        owner = canonical_agent(comms,  runtime_enabled=True, auto_wake=False)
         monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", owner._private_nk_wire_root_id)
         monkeypatch.setenv(
             "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(owner._private_nk_native_package)
@@ -228,7 +229,8 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
 
         owner.on_connect(Client())
-        attachment = CommsClient(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native), auto_wake=False, private_nk_native_package=owner._private_nk_native_package, private_nk_wire_root_id=owner._private_nk_wire_root_id)
+        comms.settings = dataclasses.replace(comms.settings)
+        attachment = CommsClient(comms,  auto_wake=False, private_nk_native_package=owner._private_nk_native_package, private_nk_wire_root_id=owner._private_nk_wire_root_id)
         attached_facts = []
 
         class AttachedClient:

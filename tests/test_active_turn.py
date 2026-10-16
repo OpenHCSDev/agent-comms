@@ -1,3 +1,5 @@
+
+from agent_comms.tool_caller import NoThreadCaller
 import os
 import time
 from datetime import datetime
@@ -74,7 +76,7 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     comms.agents.begin_turn("worker", "second")
     comms.agents.finish_turn(first)
     assert comms.registry.require("worker").active_turn.id == "second"
-    comms.owners.stop("worker")
+    comms.owners.stop("worker", caller=NoThreadCaller())
     assert not comms.registry.require("worker").executing
 
 

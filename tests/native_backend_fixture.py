@@ -28,24 +28,29 @@ from agent_comms.queued_input import InitialInput
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
-from agent_comms.active_route import LocalRoute
+from agent_comms.active_route import LocalRoute, PinnedRoute
 import dataclasses
 from agent_comms.launch_runtime import LaunchRuntime
 
 
 def native_run_command(native: NativeThreadDefaults) -> str:
     """One real ACP command declaration for explicit native fixture settings."""
-    return shlex.join((sys.executable, "-m", "agent_comms.acp", *native.cli_arguments))
+    return shlex.join(LaunchRuntime.running().command("-m", "agent_comms.acp", *native.cli_arguments))
 
 
 class NativeBackendFixture:
-    def __init__(self, root, project, session, provider, config):
-        self.root, self.project, self.session, self.provider = root, project, session, provider
+    def __init__(self, comms, project, session, provider, config):
+        self.comms = comms
+        self.project, self.session, self.provider = project, session, provider
         self.config = config
         self.persistent = PersistentPiSession()
         self.starts = []
         self.children = []
         self.observed = []
+
+    @property
+    def root(self):
+        return self.comms.root
 
     async def author_history(self):
         """The SDK authors saved rows; no provider or receipt is invented."""
@@ -100,8 +105,9 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
     async def open_owner(self, *, runtime_enabled=False, auto_wake=False,
                          native_options=("--no-tools",), client=None):
         """Acquire the real saved ACP owner and attested idle native child."""
-        selected_comms = Comms(LocalRoute(self.root), runtime=LaunchRuntime.current())
-        agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(self.native_arguments(native_options))), auto_wake=auto_wake, runtime_enabled=runtime_enabled)
+        selected_comms = Comms(self.comms.route, runtime=self.comms.runtime,
+            settings=dataclasses.replace(self.comms.settings, arguments=self.native_arguments(native_options)))
+        agent = canonical_agent(selected_comms, auto_wake=auto_wake, runtime_enabled=runtime_enabled)
         agent.on_connect(client)
         try:
             await agent._runtime.start()
@@ -153,7 +159,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         result = []
         async with asyncio.timeout(25):
             async for event in backend.stream_agent_events(
-                "pi",
+                self.comms,
                 self.native_arguments(),
                 text,
                 str(self.project),
@@ -163,7 +169,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 native_start=self.started,
                 **options,
                 session_context=(DoctrineSegment.capture(),),
-             project=UnmanagedNativeProject()):
+                project=UnmanagedNativeProject()):
                 result.append(event)
                 self.observed.append(event)
                 if followup is not None and isinstance(event, events.InputStarted):
@@ -244,7 +250,8 @@ async def native_backend_fixture(tmp_path):
             }
         )
     )
-    root_id = Comms(LocalRoute(root), runtime=LaunchRuntime.current()).messaging.initialize_private_initial_protocol()
+    runtime = LaunchRuntime.running()
+    root_id = Comms(LocalRoute(root), runtime=runtime).messaging.initialize_private_initial_protocol()
     environment = {
         "AGENT_COMMS_ROOT": str(root),
         "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID": root_id,
@@ -252,7 +259,9 @@ async def native_backend_fixture(tmp_path):
         "AGENT_COMMS_NATIVE_CONFIG_DIR": str(config),
         "PI_CODING_AGENT_DIR": str(config),
     }
-    owner = NativeBackendFixture(root, project, session, provider, config)
+    comms = Comms(PinnedRoute(root, root_id, package), runtime=runtime,
+                  settings=NativeThreadDefaults(arguments=NativeBackendFixture.native_arguments()))
+    owner = NativeBackendFixture(comms, project, session, provider, config)
     with patch.dict(os.environ, environment):
         try:
             yield owner

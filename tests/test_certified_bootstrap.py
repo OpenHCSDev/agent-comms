@@ -99,7 +99,7 @@ def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monk
 
 async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    agent = CommsAgent(comms, native=comms.owners.native_defaults)
+    agent = CommsAgent(comms)
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root and package"):
         await agent.new_session(cwd=str(tmp_path))
     assert not comms.registry.snapshot().threads
@@ -113,7 +113,7 @@ async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tm
     comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     package = Path(os.environ["AC_NATIVE_COPIED_PACKAGE"])
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False, private_nk_wire_root_id=root_id, private_nk_native_package=package)
+    agent = CommsAgent(comms,  auto_wake=False, private_nk_wire_root_id=root_id, private_nk_native_package=package)
     try:
         fresh = await agent.new_session(cwd=str(tmp_path))
         assert fresh.session_id in comms.registry

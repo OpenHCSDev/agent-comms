@@ -95,7 +95,8 @@ def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
 async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), runtime_enabled=True, auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings)
+    owner = CommsAgent(comms,  runtime_enabled=True, auto_wake=False)
     from goal_owner_fixture import activate_empty_source
 
     activate_empty_source(owner)

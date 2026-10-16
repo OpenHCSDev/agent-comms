@@ -1,4 +1,6 @@
 """Original sealed messaging survives silent context rows through every projection."""
+
+from agent_comms.tool_caller import NoThreadCaller
 import time
 from dataclasses import replace
 import hashlib
@@ -150,7 +152,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
     comms, root_id = _root(tmp_path)
     comms.agents.observe_runtime_info('Bob', AgentInfo(model=observed_owner.model))
     original_message = comms.messaging.send_initial_cohort('sender', '#team', '@Bob recording fixture')
-    owner = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
+    owner = CommsAgent(comms,  auto_wake=False)
     turn = OwnedTurn(owner.turns, 'Alice', 'Alice', '')
     turn.registry_owner = comms.agents.begin_turn('Alice', 'owned-context-recording515')
     lease, thread = turn.turn_lease, turn.thread
@@ -327,7 +329,7 @@ def test_recorded_context_history_retains_rename_and_original_predecessor(tmp_pa
     latest = ContextCliCommand(thread='Renamed-Alice', diff=True)
     assert latest.encode_result(latest.apply(reopened))['previous_turn'] == FieldCodec.encode(same_turn.turn)
     with pytest.raises(ValueError, match='No preceding recorded turn'):
-        ContextCliCommand(thread='Alice', turn=1, diff=True).apply(reopened)
+        ContextCliCommand(thread='Alice', turn=1, diff=True).apply(reopened, caller=NoThreadCaller())
     with pytest.raises(ValueError, match='outside the original history'):
         replace(future, counter='unrecorded').changed_from_history(history)
     comms.registry.unregister('Renamed-Alice')

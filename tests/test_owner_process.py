@@ -4,20 +4,26 @@ from __future__ import annotations
 
 from agent_comms.runtime_socket import RuntimeSocket
 
+import asyncio
+from agent_comms.tool_caller import NoThreadCaller
 import os
 import json
+import shlex
 import sys
 import time
+from contextlib import AsyncExitStack
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from agent_comms.acp import CommsAgent
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.child_process import ObservedProcess, ParentedProcess
 from agent_comms.comms import Comms
+from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.errors import RelationViolationError
-
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import ActiveTurn
 from agent_comms.active_route import LocalRoute
@@ -83,7 +89,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         assert not replacement.process_alive
         replacement = comms.registry.require("worker")
         assert replacement.process_alive and replacement.pid == installed.pid
-        comms.owners.stop("worker")
+        comms.owners.stop("worker", caller=NoThreadCaller())
         assert not replacement.process_alive
         assert comms.registry.status("worker").stopped
         assert comms.registry.require("worker").created_at == declared.created_at
@@ -109,7 +115,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
         with pytest.raises(RelationViolationError, match="another live owner"):
             comms.owners.restart_owners(["stale"])
         assert child.alive()
-        comms.owners.stop("stale")
+        comms.owners.stop("stale", caller=NoThreadCaller())
         assert child.alive()
         assert comms.registry.status("stale").stopped
     finally:
@@ -209,14 +215,25 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     from agent_comms.owner_cutover import StoppedOwnerInstallation
     from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openai-codex/gpt-6.1-sol")
+    model = "openai-codex/gpt-6.1-sol"
     comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
+
+    async def thinking_options():
+        async with AsyncExitStack() as lifetime:
+            # Query the fixture workers' pinned SDK, not the caller's launcher.
+            client = CommsAgent(comms, agent_bin=str(package / 'dist' / 'cli.js'), auto_wake=False)
+            lifetime.push_async_callback(client.shutdown)
+            catalog = client.sessions.config.catalog_for(ThinkingLevelConfigOption)
+            return await catalog.choices(Thread('catalog', frozenset(), str(tmp_path), model=model))
+
+    declared_options = asyncio.run(thinking_options())
+    thinking = declared_options[0].value
     originals = []
     settings = (
-        ("batch-a", ("--offline", "--no-tools", "--thinking", "off"), "credential-a"),
+        ("batch-a", ("--offline", "--no-tools", "--thinking", thinking), "credential-a"),
         ("batch-b", (), "credential-b"),
     )
 
@@ -257,36 +274,14 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     cutover = RebuildFixtureCheckpoint()
 
     def ready(owner):
-        deadline = time.monotonic() + 10
-        while not RuntimeSocket.path_for(tmp_path, owner.pid).exists():
-            assert owner.process_alive, "Actual batch worker exited before runtime attach"
-            assert time.monotonic() < deadline, "Actual batch worker failed to attach"
-            time.sleep(.02)
-        # Socket creation precedes the owner's saved-history replay. Wait for
-        # the existing protocol's complete attachment, so rename cannot race
-        # the original startup read and silently turn the batch into one owner.
-        import asyncio
-        import json
-        from agent_comms.runtime_requests import SubscribeRuntimeRequest
-
         async def attach():
-            async with asyncio.timeout(10):
-                reader, writer = await asyncio.open_unix_connection(
-                    RuntimeSocket.path_for(tmp_path, owner.pid), limit=8 * 1024 * 1024
-                )
-                try:
-                    writer.write((json.dumps(SubscribeRuntimeRequest(
-                        thread=owner.name).to_wire()) + "\n").encode())
-                    await writer.drain()
-                    while line := await reader.readline():
-                        response = json.loads(line)
-                        assert "error" not in response, response
-                        if "ready" in response:
-                            return
-                    raise AssertionError("Actual worker closed before complete attachment")
-                finally:
-                    writer.close()
-                    await writer.wait_closed()
+            # The old helper allowed 10 s for opening plus 10 s for ready.
+            async with asyncio.timeout(20), AsyncExitStack() as lifetime:
+                client = CommsAgent(comms, auto_wake=False)
+                lifetime.push_async_callback(client.shutdown)
+                proxy = RuntimeProxy(client, owner.name, RuntimeSocket.path_for(tmp_path, owner.pid))
+                lifetime.push_async_callback(proxy.close)
+                await proxy.subscribe()
 
         asyncio.run(attach())
 
@@ -295,7 +290,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             goal = Goal("Protected failed original", name + "-goal", state=BlockedGoal("No replay"))
             comms.registry.declare(Thread(
                 name, frozenset({name}), str(tmp_path),
-                model="openai-codex/gpt-6.1-sol", thinking_level="off",
+                model=model, thinking_level=thinking,
                 goal=goal, task="retained task " + name,
             ))
             with monkeypatch.context() as patch:
@@ -327,13 +322,12 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             if path.is_file() and path.suffix == ".jsonl"
         }
         # The operator's model/arguments/credential must never overwrite a source owner.
-        from agent_comms.native_settings import NativeThreadDefaults
-
-        comms.owners.native_defaults = NativeThreadDefaults(binary=comms.owners.native_defaults.binary,
-                                                           arguments=("--thinking", "high"))
+        comms.settings = NativeThreadDefaults(arguments=("--thinking", declared_options[-1].value))
         monkeypatch.setenv("BATCH_OWNER_CREDENTIAL", "operator-only")
+        target_runtime = LaunchRuntime.current()
+        prefix = target_runtime.interpreter.parent.parent
         target_binary = tmp_path / "target-pi-comms-native"
-        target_binary.symlink_to(LaunchRuntime.current().native_entrypoint)
+        target_binary.symlink_to(target_runtime.native_entrypoint)
         receipts = comms.owners.restart_owners(
             selected, agent_bin=str(target_binary), cutover=cutover
         )
@@ -458,6 +452,9 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         home = tmp_path / 'publication-home'
         home.mkdir(mode=0o700)
         monkeypatch.setenv('HOME', str(home))
+        current = LaunchRuntime.current_pointer()
+        current.parent.mkdir(parents=True)
+        current.symlink_to(prefix)
         route = ActiveRoute(tmp_path, root_id, package)
         route_file = active_route_path()
         route_file.parent.mkdir(parents=True, mode=0o700)
@@ -465,7 +462,6 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         route_file.chmod(0o600)
         links = home / '.local/bin'
         links.mkdir(parents=True)
-        prefix = Path(sys.prefix)
         for command in publisher.COMMANDS:
             (links / command).symlink_to(prefix / 'bin' / command)
         monkeypatch.setattr(publisher, 'ROOT', tmp_path)
@@ -540,13 +536,9 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         finally:
             os.close(route_descriptor)
     finally:
-        for name in ("batch-a", "batch-renamed", "batch-b"):
-            try:
-                owner = comms.registry.require(name)
-            except KeyError:
-                continue
-            if owner.process_alive:
-                comms.owners.stop(owner.name)
+        for owner in comms.registry.snapshot().threads.values():
+            if owner.role.executable and owner.process_alive:
+                comms.owners.stop(owner.name, caller=NoThreadCaller())
         assert all(not owner.process_alive for owner in originals)
 
 

@@ -16,13 +16,18 @@ from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool, tool_catalog
 from agent_comms.tool_caller import ThreadCaller
-from functools import partial
 from agent_comms.active_route import LocalRoute
-from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.launch_runtime import LaunchRuntime
 
 # These source declarations belong to alpha unless a case explicitly supplies beta.
 
+
+
+@pytest.fixture
+def comms(comms):
+    """Task declarations use one fresh private protocol for the whole case."""
+    comms.messaging.initialize_private_initial_protocol()
+    return comms
 
 
 def saved_source(path):
@@ -55,7 +60,6 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
         TurnTaskScope, UserTaskDrop, UserTaskSupersession,
     )
 
-    comms.messaging.initialize_private_initial_protocol()
     owner = comms.registry.declare(Thread("recipient", frozenset({"team"}), str(comms.root)))
     comms.registry.declare(Thread("unaddressed", frozenset(), str(comms.root)))
     exact = "Never replay UNKNOWN.\nUse original λ /artifacts/source; no substitute."
@@ -118,7 +122,6 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
 def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
     from agent_comms.task_sources import CorrectionTaskChange, GoalTaskScope
 
-    comms.messaging.initialize_private_initial_protocol()
     owner = comms.registry.declare(Thread("recipient", frozenset(), str(comms.root),
                                          goal=Goal("Original goal", "goal-one")))
     subject = comms.messaging.send_user_message(owner.name, "Use the original coordinates.",
@@ -154,7 +157,6 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     from agent_comms.retained_task_facts import CurrentConstraintTaskFact, RetainedTaskFacts
     from agent_comms.task_sources import Constraint, CorrectionTaskChange, UserTaskSupersession
 
-    comms.messaging.initialize_private_initial_protocol()
     owner = admit(comms, "alpha")
     admit(comms, "beta")
     comms.registry.register(replace(owner, goal=Goal("Bounded source task", "original-goal")))
@@ -402,7 +404,6 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     )
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskSupersession
 
-    comms.messaging.initialize_private_initial_protocol()
     for name in ("alpha", "beta", "gamma"):
         owner = admit(comms, name)
         saved = comms.root / f"{name}-source.jsonl"
