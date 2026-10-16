@@ -8,14 +8,15 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
+from .field_codec import FieldCodec, WireValue, projected
 from .bus_publication import CommittedDelivery
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -65,6 +66,158 @@ class AssignedSourceCursor:
         return replace(self, sequence=sequence)
 
 
+@dataclass(frozen=True, slots=True)
+class TranscriptCursor(WireValue, ABC):
+    """Native bytes and an optional external wire position decode to distinct types."""
+
+    session_file: str
+    offset: int
+    wire_position_key: ClassVar[str] = "receipts"
+
+    def to_wire(self):
+        return FieldCodec.encode_record(self)
+
+    @classmethod
+    def from_wire(cls, data):
+        if not isinstance(data, dict):
+            raise ValueError("Expected a record object.")
+        member = NativeCursor if data.get(cls.wire_position_key) is None else WireCursor
+        if not issubclass(member, cls):
+            raise ValueError(f"Saved position does not describe {cls.__name__}")
+        return FieldCodec.decode_record(member, data)
+
+    @classmethod
+    def schema(cls):
+        return {"anyOf": [NativeCursor.schema(), WireCursor.schema()]}
+
+    @staticmethod
+    def from_source(session_file: str, offset: int,
+                    source: AssignedSourceCursor | None) -> TranscriptCursor:
+        """Select the state once when a captured source supplies its frontier."""
+        if source is None:
+            return NativeCursor(session_file, offset)
+        return WireCursor(session_file, offset, source)
+
+    @property
+    @abstractmethod
+    def source_identity(self) -> AssignedSourceIdentity | None: ...
+
+    @property
+    @abstractmethod
+    def wire_seq(self) -> int: ...
+
+    def at_offset(self, offset: int) -> TranscriptCursor:
+        return replace(self, offset=offset)
+
+    def at_native_prefix(self, prefix: TranscriptCursor) -> TranscriptCursor:
+        return replace(self, session_file=prefix.session_file, offset=prefix.offset)
+
+    @abstractmethod
+    def at_sequence(self, sequence: int) -> TranscriptCursor: ...
+
+    def contains(self, other: TranscriptCursor) -> bool:
+        return other.native_within(self) and other.assigned_within(self)
+
+    def native_within(self, parent: TranscriptCursor) -> bool:
+        return self.session_file == parent.session_file and self.offset <= parent.offset
+
+    @abstractmethod
+    def assigned_within(self, parent: TranscriptCursor) -> bool: ...
+
+    @abstractmethod
+    def includes_assigned_source(self, source: AssignedSourceCursor) -> bool: ...
+
+    @abstractmethod
+    def require_source(self, identity: AssignedSourceIdentity) -> None: ...
+
+    @abstractmethod
+    def require_native(self) -> None: ...
+
+    @abstractmethod
+    def covers_incoming(self, sequence: int) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NativeCursor(TranscriptCursor):
+    """A saved native record position carries no assigned-wire coordinate."""
+
+    @classmethod
+    def schema(cls):
+        result = FieldCodec.record_schema(cls)
+        result["properties"][cls.wire_position_key] = {"type": "null"}
+        return result
+
+    @projected(view="wire", name=TranscriptCursor.wire_position_key)
+    def saved_wire_position(self) -> None:
+        return None
+
+    @property
+    def source_identity(self) -> None:
+        return None
+
+    @property
+    def wire_seq(self) -> int:
+        return 0
+
+    def at_sequence(self, sequence: int) -> NativeCursor:
+        if sequence == 0:
+            return self
+        raise ValueError("Native-only cursor cannot advance an assigned wire source")
+
+    def assigned_within(self, parent: TranscriptCursor) -> bool:
+        return True
+
+    def includes_assigned_source(self, source: AssignedSourceCursor) -> bool:
+        return False
+
+    def require_source(self, identity: AssignedSourceIdentity) -> None:
+        pass
+
+    def require_native(self) -> None:
+        pass
+
+    def covers_incoming(self, sequence: int) -> bool:
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class WireCursor(TranscriptCursor):
+    """A captured assignment source owns the wire position and source checks."""
+
+    assigned_source: AssignedSourceCursor = field(
+        metadata={"wire_name": TranscriptCursor.wire_position_key})
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.record_schema(cls)
+
+    @property
+    def source_identity(self) -> AssignedSourceIdentity:
+        return self.assigned_source.identity
+
+    @property
+    def wire_seq(self) -> int:
+        return self.assigned_source.sequence
+
+    def at_sequence(self, sequence: int) -> WireCursor:
+        return replace(self, assigned_source=self.assigned_source.at(sequence))
+
+    def assigned_within(self, parent: TranscriptCursor) -> bool:
+        return parent.includes_assigned_source(self.assigned_source)
+
+    def includes_assigned_source(self, source: AssignedSourceCursor) -> bool:
+        return self.assigned_source.contains(source)
+
+    def require_source(self, identity: AssignedSourceIdentity) -> None:
+        self.assigned_source.require_source(identity)
+
+    def require_native(self) -> None:
+        raise ValueError("Recorded items cannot acquire an assigned wire cursor")
+
+    def covers_incoming(self, sequence: int) -> bool:
+        return self.assigned_source.covers(sequence)
+
+
 @dataclass(frozen=True)
 class AssignedSourceWindow:
     """Conversation and sent sources captured with one receipt frontier."""
@@ -82,13 +235,13 @@ class TranscriptTraversal(ABC):
     def predicate(self, sequence, through): ...
 
     @abstractmethod
-    def chooses_native(self, native_time, receipt_time): ...
+    def chooses_native(self, native_time, wire_time): ...
 
     @abstractmethod
     def native_position(self, record): ...
 
     @abstractmethod
-    def receipt_position(self, message): ...
+    def wire_position(self, message): ...
 
     @abstractmethod
     def finish(self, records): ...
@@ -111,7 +264,7 @@ class TranscriptTraversal(ABC):
             {event.tool_call_id for event in batch if isinstance(event, closing)},
         )
 
-    def read_records(self, reader, project, receipts, initial, frontier,
+    def read_records(self, reader, project, sources, initial, frontier,
                      *, max_messages, max_bytes):
         """Consume each original source coordinate only when its record is read."""
         consumed, records, used = initial, [], 0
@@ -125,7 +278,7 @@ class TranscriptTraversal(ABC):
         try:
             record, events = next(projected, (None, ()))
             source_rows = iter(
-                receipts.page_rows(
+                sources.page_rows(
                     self, consumed.wire_seq, frontier, limit=max_messages + 1
                 )
             )
@@ -143,7 +296,7 @@ class TranscriptTraversal(ABC):
                     message is None
                     or self.chooses_native(native_time, message.message.timestamp)
                 )
-                batch = events if choose_native else receipts.events(message)
+                batch = events if choose_native else sources.events(message)
                 cost = record.size if choose_native else sum(event.text_size for event in batch)
                 if records and (len(records) >= max_messages or used + cost > max_bytes):
                     if not open_rounds or round_grace >= self.round_grace_limit:
@@ -158,7 +311,7 @@ class TranscriptTraversal(ABC):
                     consumed = consumed.at_offset(self.native_position(record))
                     record, events = next(projected, (None, ()))
                 else:
-                    consumed = consumed.at_sequence(self.receipt_position(message.message))
+                    consumed = consumed.at_sequence(self.wire_position(message.message))
                     message = next(source_rows, None)
             if record is None:
                 consumed = consumed.at_offset(frontier.offset if self.ascending else 0)
@@ -182,13 +335,13 @@ class EarlierTranscript(TranscriptTraversal):
     def predicate(self, sequence, through):
         return "w.seq<=?", (sequence,)
 
-    def chooses_native(self, native_time, receipt_time):
-        return native_time is None or native_time >= receipt_time
+    def chooses_native(self, native_time, wire_time):
+        return native_time is None or native_time >= wire_time
 
     def native_position(self, record):
         return record.start
 
-    def receipt_position(self, message):
+    def wire_position(self, message):
         return message.seq - 1
 
     def finish(self, records):
@@ -208,13 +361,13 @@ class LaterTranscript(TranscriptTraversal):
     def predicate(self, sequence, through):
         return "w.seq>? AND w.seq<=?", (sequence, through.wire_seq)
 
-    def chooses_native(self, native_time, receipt_time):
-        return native_time is None or native_time <= receipt_time
+    def chooses_native(self, native_time, wire_time):
+        return native_time is None or native_time <= wire_time
 
     def native_position(self, record):
         return record.end
 
-    def receipt_position(self, message):
+    def wire_position(self, message):
         return message.seq
 
     def finish(self, records):

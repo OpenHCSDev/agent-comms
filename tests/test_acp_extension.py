@@ -39,7 +39,8 @@ from agent_comms.agent_events import CompactionStart
 from agent_comms.pi_payloads import McpLiveReceipt
 from agent_comms.thread_identity import AdmissionIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.transcripts import TranscriptCursor, TranscriptPage
+from agent_comms.transcript_sources import TranscriptCursor, NativeCursor
+from agent_comms.transcripts import TranscriptPage
 from agent_comms.turn_lease import ActiveTurn, TurnState
 from agent_comms.turn_context import ContextManifest, NextContextTurn
 
@@ -92,7 +93,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         TurnChangedUpdate(TurnState(ActiveTurn("turn", 123, started_at=1.0))),
         TurnChangedUpdate(TurnState(finished_turn_id="turn")),
         TextRouteUpdate(None),
-        TranscriptChangedUpdate(TranscriptCursor("session.jsonl", 42)),
+        TranscriptChangedUpdate(NativeCursor("session.jsonl", 42)),
         InputFailedUpdate("prompt", BackendDeliveryFailure("provider refused")),
     )
     assert {type(item) for item in samples} == set(AgentCommsUpdate.members_with(AgentCommsUpdate))

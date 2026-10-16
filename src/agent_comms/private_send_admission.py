@@ -225,7 +225,7 @@ class PrivateSendAdmission:
                 with self._measurements.operation("maintenance_ingress"):
                     authority.enter_context(MaintenanceBarrier(
                         self.bus._registry.store.path
-                    ).admit_ingress(blocking=False))
+                    ).ingress_scope(blocking=False))
                 with self._measurements.operation("registry_exclusion"):
                     document = authority.enter_context(
                         self.bus._registry.store.reading(blocking=False)

@@ -6,7 +6,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
-from agent_comms.transcripts import TranscriptCursor
+from agent_comms.transcript_sources import TranscriptCursor, NativeCursor
 
 
 def transcript(path, count):
@@ -72,7 +72,7 @@ def test_oversized_message_and_file_identity(tmp_path):
     with pytest.raises(ValueError):
         comms.transcripts.thread_transcript_page("worker", max_messages=0)
     with pytest.raises(TranscriptChanged):
-        comms.transcripts.thread_transcript_page("worker", before=TranscriptCursor(str(path), -1))
+        comms.transcripts.thread_transcript_page("worker", before=NativeCursor(str(path), -1))
 
 
 def test_empty_transcript_and_non_message_records(tmp_path):
@@ -143,5 +143,5 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     transcript(unrelated, 1)
     with pytest.raises(TranscriptChanged):
         comms.transcripts.thread_transcript_page(
-            "child", through=TranscriptCursor(str(unrelated), unrelated.stat().st_size)
+            "child", through=NativeCursor(str(unrelated), unrelated.stat().st_size)
         )

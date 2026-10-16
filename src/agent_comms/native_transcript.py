@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 from .declared_family import DeclaredFamily
 from .native_entries import NativeEntry, SessionEntry
 from .private_path import FileRevision
-from .transcript_receipts import TranscriptSource
+from .transcript_sources import TranscriptSource
 
 
 def _reverse_records(

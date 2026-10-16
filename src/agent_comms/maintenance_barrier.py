@@ -283,7 +283,7 @@ class MaintenanceBarrier:
             )
 
     @contextmanager
-    def admit_ingress(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:
+    def ingress_scope(self, *, blocking: bool = True) -> Iterator[MaintenanceStatus]:
         """Share open-root custody through one synchronous ingress operation.
 
         Do not await while inside this context. A child still needs to perform
@@ -296,7 +296,7 @@ class MaintenanceBarrier:
             yield self.assert_open_unlocked()
 
     @asynccontextmanager
-    async def admit_ingress_async(self):
+    async def ingress_scope_async(self):
         """Acquire the same ingress gate without blocking a native event loop.
 
         The borrower writes synchronously, then releases before waiting for

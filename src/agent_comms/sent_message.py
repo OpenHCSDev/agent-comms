@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 from .message_reference import MessageReference
 from .transcript_events import SentTranscript
-from .transcript_receipts import AssignedSourceIdentity
+from .transcript_sources import AssignedSourceIdentity
 
 
 @dataclass(frozen=True, eq=False)

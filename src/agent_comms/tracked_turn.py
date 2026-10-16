@@ -406,7 +406,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             try:
                 async with MaintenanceBarrier(
                     self.maintenance_root / "registry.json"
-                ).admit_ingress_async():
+                ).ingress_scope_async():
                     self.write(command, payload)
             except RelationViolationError as error:
                 raise NativePiUnavailable(

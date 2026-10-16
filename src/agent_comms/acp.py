@@ -524,7 +524,7 @@ class CommsClient(CommsAgent):
 def main() -> int:
     from .active_route import resolve_comms_route
 
-    with resolve_comms_route().admit_client():
+    with resolve_comms_route().client_scope():
         if "--login" in sys.argv[1:]:
             from .login import run_login
 

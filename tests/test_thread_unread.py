@@ -11,7 +11,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
-from agent_comms.transcripts import TranscriptCursor
+from agent_comms.transcript_sources import TranscriptCursor, NativeCursor
 from agent_comms.view_unread import ReplyIndex, TranscriptReadState, TranscriptReply
 from native_unread_fixture import completed_counts, completed_snapshot
 
@@ -300,7 +300,7 @@ def test_old_or_invalid_checkpoint_does_not_acknowledge_new_source(tmp_path):
     with pytest.raises(ValueError, match="Transcript changed"):
         comms.views.mark_thread_view_read(
             "worker", worktree=str(tmp_path),
-            through=TranscriptCursor(str(other), other.stat().st_size + 1),
+            through=NativeCursor(str(other), other.stat().st_size + 1),
         )
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 1
 

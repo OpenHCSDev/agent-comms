@@ -52,7 +52,8 @@ from .read_basis import ChannelDisplayScope, DMDisplayBasis
 from .store_files import _store_lock
 from .thread_presentation import ThreadPresentation
 from .threads import current_thread
-from .transcripts import TranscriptCursor, Transcripts
+from .transcript_sources import TranscriptCursor
+from .transcripts import Transcripts
 
 _LOG = logging.getLogger(__name__)
 

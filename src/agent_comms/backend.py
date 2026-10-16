@@ -101,7 +101,7 @@ async def _maintenance_send_boundary(
     The original delegate checks and stdin.write consume this same custody
     synchronously. Release it before pipe drain, native ACK or any other await.
     """
-    async with MaintenanceBarrier(root / "registry.json").admit_ingress_async():
+    async with MaintenanceBarrier(root / "registry.json").ingress_scope_async():
         with delegate(public_id, native_id, text) if delegate else nullcontext(True) as allowed:
             yield allowed
 

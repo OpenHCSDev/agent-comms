@@ -8,11 +8,13 @@ from agent_comms.assignment_states import IgnoredAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
 from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
 from agent_comms.wire_log import WireLog
 from agent_comms.threads import Thread
-from agent_comms.transcripts import TranscriptCursor, TranscriptRead
+from agent_comms.transcript_sources import AssignedTranscriptSource, TranscriptCursor
+from agent_comms.transcripts import TranscriptRead
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 import pytest
@@ -63,7 +65,6 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
     from agent_comms.coordination_database import CoordinationStore
     from agent_comms.recovery_gateway import _snapshot
     from agent_comms.recovery_projection import RecoverySelection
-    from agent_comms.field_codec import FieldCodec
 
     root, _root_id, comms, _initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
@@ -227,9 +228,7 @@ def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp
 
 def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
     from dataclasses import replace
-    from agent_comms.field_codec import FieldCodec
     from agent_comms.routing import MessageRoute, TurnRouting
-    from agent_comms.transcript_receipts import AssignedTranscriptSource
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     reply = comms.messaging.send_message("beta", "sender", "First original reply")
@@ -268,7 +267,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     )
     message = comms.bus.log.message_by_id(receipt["id"])
     after = comms.transcripts.capture_page_read("beta")
-    assert after.identity.receipt_frontier.sequence == message.seq
+    assert after.identity.assigned_frontier.sequence == message.seq
     assert not before.current()
     with pytest.raises(StaleRevision):
         before.read()
@@ -330,7 +329,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     assert not before.current()
     assert before.content_current()
     assert before.read() == sender_page
-    assert after.identity.receipt_frontier == before.identity.receipt_frontier
+    assert after.identity.assigned_frontier == before.identity.assigned_frontier
     assert after.read() == sender_page
     assert comms.bus.log.path.read_bytes() == wire_before
     sender = comms.views.thread_presentation("sender")
@@ -365,7 +364,7 @@ def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa
     comms.messaging.send_message("sender", "alpha", "Unrelated original")
     after = comms.transcripts.capture_page_read("beta")
     assert before.identity.bus_revision != after.identity.bus_revision
-    assert before.identity.receipt_frontier == after.identity.receipt_frontier
+    assert before.identity.assigned_frontier == after.identity.assigned_frontier
     assert not before.current()
     assert before.content_current()
     assert before.read() == page
@@ -398,7 +397,7 @@ def test_open_thread_shares_original_notification_and_frontier_read(tmp_path, mo
     monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
     view = comms.views.thread_presentation("beta")
     assert len(barriers) == 1
-    assert view.read_identity.receipt_frontier.sequence == initial.message.seq
+    assert view.read_identity.assigned_frontier.sequence == initial.message.seq
     assert view.notifications[0].message.reference == initial.message.reference
     assert view.notifications[0].recipient_identity.recipient_lookup == RecordedThreadIncarnation("fixture", view.read_identity.thread.created_at).lookup
 
@@ -414,7 +413,7 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
     with pytest.raises(StaleRevision, match="page window"):
         comms.transcripts.bind_page_read(
             "beta", identity,
-            before=TranscriptCursor(identity.session_file, 0, identity.receipt_frontier),
+            before=TranscriptCursor.from_source(identity.session_file, 0, identity.assigned_frontier),
         )
     comms.registry.rename("beta", "renamed")
     assert comms.transcripts.bind_page_read("renamed", identity).identity is identity
@@ -441,7 +440,10 @@ def test_original_page_reuses_captured_frontier_between_admission_fences(tmp_pat
     # One bounded page query and one final freshness check. The retained source
     # removes the former pre-read identity reconstruction.
     assert len(barriers) == 2
-    assert page.after.receipts == read.identity.receipt_frontier
+    assert page.after.assigned_source == read.identity.assigned_frontier
+    payload = FieldCodec.encode(read.identity)
+    assert "receipt_frontier" in payload and "assigned_frontier" not in payload
+    assert FieldCodec.encode(FieldCodec.decode(type(read.identity), payload)) == payload
     assert tuple(event.source for event in page.events) == (initial.message.reference,)
 
 

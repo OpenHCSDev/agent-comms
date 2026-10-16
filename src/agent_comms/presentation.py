@@ -26,6 +26,7 @@ from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import ReadLedger
+from .transcript_sources import AssignedTranscriptSource
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
@@ -316,8 +317,6 @@ class MessageNotification:
         if not 1 <= limit <= 20:
             raise ValueError("Recent notification limit must be between 1 and 20")
         owner = registry.require(name)
-        from .transcript_receipts import AssignedTranscriptSource
-
         sources = tuple(AssignedTranscriptSource.for_thread(root, owner, log).rows(limit=limit))
         from .notification_assignment import NotificationAssignment
 
@@ -334,8 +333,6 @@ class MessageNotification:
         if not 1 <= limit <= cls.window_limit:
             raise ValueError("Sent notification limit must fit one bounded window")
         owner = registry.require(name)
-        from .transcript_receipts import AssignedTranscriptSource
-
         captured = AssignedTranscriptSource.for_thread(root, owner, log).window(
             limit=0, sent_limit=limit
         )

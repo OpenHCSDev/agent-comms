@@ -52,7 +52,8 @@ if TYPE_CHECKING:
     from agent_comms.runtime import RuntimeConnection
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
-    from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
+    from agent_comms.transcript_sources import TranscriptCursor
+    from agent_comms.transcripts import TranscriptRead, TranscriptReadIdentity
     from agent_comms.ui_model.delivery import InputDelivery
     from agent_comms.ui_model.goal import OwnerGoalSnapshot
     from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel
@@ -920,7 +921,7 @@ def serve(route: CommsRoute, connection: Connection) -> None:
     from agent_comms.comms import wire
 
     try:
-        with route.admit_client():
+        with route.client_scope():
             asyncio.run(ObservationService(wire(route), connection).run())
     except BaseException:
         try:

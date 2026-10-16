@@ -38,7 +38,7 @@ class CommsRoute(ABC):
         return self.root.resolve()
 
     @contextmanager
-    def admit_client(self) -> Iterator[None]:
+    def client_scope(self) -> Iterator[None]:
         """Borrow the published route until this client's work has retired.
 
         An explicit selection of the published root is still its borrower.

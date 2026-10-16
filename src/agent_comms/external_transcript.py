@@ -21,7 +21,7 @@ from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent
-from .transcript_receipts import TranscriptSource
+from .transcript_sources import TranscriptSource
 from .typed_table import Column, TypedRow, TypedStore, TypedTable
 
 

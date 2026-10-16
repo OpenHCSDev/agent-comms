@@ -49,25 +49,25 @@ class AcpIngress:
             roots.add(attached if attached.is_absolute() else self.cwd / attached)
         return sorted({root.resolve() / "registry.json" for root in roots})
 
-    def _admit(self, custody: ExitStack) -> None:
+    def _hold_root_scopes(self, scopes: ExitStack) -> None:
         """Share open-root wire custody; maintenance takes it exclusively."""
         for registry in self._registries():
-            custody.enter_context(MaintenanceBarrier(registry).admit_ingress())
+            scopes.enter_context(MaintenanceBarrier(registry).ingress_scope())
 
-    def _admit_prompt(self, custody: ExitStack) -> None:
-        custody.enter_context(
+    def _hold_prompt_scopes(self, scopes: ExitStack) -> None:
+        scopes.enter_context(
             selected_write(self.selection.root, implicit=self.selection.implicit)
         )
-        self._admit(custody)
+        self._hold_root_scopes(scopes)
 
     @staticmethod
-    async def _acquire(admit) -> ExitStack:
+    async def _acquire(acquire_scope) -> ExitStack:
         """Acquire custody in a worker; a cancelled waiter never leaks it."""
 
         def acquire() -> ExitStack:
-            with ExitStack() as custody:
-                admit(custody)
-                return custody.pop_all()
+            with ExitStack() as scopes:
+                acquire_scope(scopes)
+                return scopes.pop_all()
 
         task = asyncio.ensure_future(asyncio.to_thread(acquire))
         try:
@@ -78,7 +78,7 @@ class AcpIngress:
 
     async def preflight(self) -> None:
         """Early denial only: the later spawn or prompt holds the actual gate."""
-        (await self._acquire(self._admit)).close()
+        (await self._acquire(self._hold_root_scopes)).close()
 
     @asynccontextmanager
     async def prompt(self) -> AsyncIterator[None]:
@@ -86,7 +86,7 @@ class AcpIngress:
 
         Do not await inside: release before pipe drain or any native response.
         """
-        with await self._acquire(self._admit_prompt):
+        with await self._acquire(self._hold_prompt_scopes):
             yield
 
     def _project_launch(self, child_env: dict[str, str]) -> None:
@@ -151,8 +151,8 @@ class AcpIngress:
                     raise ValueError("ACP child environment conflicts with its selected route")
                 # Route SH precedes the wire gate, matching the publisher's
                 # route EX -> private-root preflight order.
-                with self.selection.route.admit_client(), ExitStack() as admission:
-                    self._admit(admission)
+                with self.selection.route.client_scope(), ExitStack() as scopes:
+                    self._hold_root_scopes(scopes)
                     self._project_launch(child_env)
                     process = asyncio.run_coroutine_threadsafe(
                         AttachedChild.start(

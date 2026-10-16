@@ -10,7 +10,8 @@ from agent_comms.comms import Comms, wire
 from agent_comms.goals import Goal
 from agent_comms.routing import MessageRoute
 from agent_comms.threads import Thread
-from agent_comms.transcripts import TranscriptCursor, TranscriptPage
+from agent_comms.transcript_sources import TranscriptCursor
+from agent_comms.transcripts import TranscriptPage
 
 
 @pytest.mark.asyncio
