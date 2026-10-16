@@ -69,18 +69,20 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
         return {"action": FieldCodec.encode(cls), "thread": thread,
                 **FieldCodec.encode(parameters)}
 
-    def require_owner(self, snapshot):
-        owner = snapshot.require(self.thread)
-        if owner.pid != os.getpid() or not snapshot.status(owner.name).running:
+    def require_owner(self, entry):
+        owner = entry.thread
+        if owner.pid != os.getpid() or not entry.status.running:
             raise RuntimeError("This process no longer owns the thread.")
         return owner
 
     async def bind(
         self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient
     ) -> RuntimeRequestContext:
-        snapshot = await Coordination.run_worker(server.agent._comms.registry.snapshot)
-        owner = self.require_owner(snapshot)
-        session_id = server.agent.sessions.require_owned_session(owner, snapshot)
+        entry = (await Coordination.run_worker(partial(
+            server.agent._comms.registry.entry, self.thread,
+        ))).entry
+        owner = self.require_owner(entry)
+        session_id = server.agent.sessions.require_owned_session(entry)
         return RuntimeRequestContext(server, reader, client, session_id, owner.name)
 
 
@@ -116,19 +118,20 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
             "AGENT_COMMS_PROJECT_REQUEST": json.dumps(self.to_wire()),
         }
 
-    def require_original(self, snapshot):
-        if not self.binding.owner.incarnation.matches_recorded_name(self.thread, snapshot):
+    def require_original(self, entry):
+        if not entry.matches_name(self.thread):
             raise ValueError("Project request names another original thread")
-        snapshot.require_owner_process(self.binding.owner, self.binding.process)
-        return snapshot.require_active(self.binding.owner.incarnation.name)
+        return entry.require_owner_process(self.binding.owner, self.binding.process)
 
-    def require_owner(self, snapshot):
-        self.require_original(snapshot)
-        return super().require_owner(snapshot)
+    def require_owner(self, entry):
+        self.require_original(entry)
+        return super().require_owner(entry)
 
     async def result(self, ctx):
-        snapshot = await Coordination.run_worker(ctx.server.agent._comms.registry.snapshot)
-        current = self.require_original(snapshot)
+        entry = (await Coordination.run_worker(partial(
+            ctx.server.agent._comms.registry.entry, ctx.name,
+        ))).entry
+        current = self.require_original(entry)
         return {"worktree": current.worktree}
 
 

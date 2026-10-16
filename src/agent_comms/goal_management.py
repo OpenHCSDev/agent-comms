@@ -72,10 +72,9 @@ class Goals:
         from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path, shared=True):
-            self.registry.require(name)
             rows = (
                 InputDispositions(self.root)
-                .unresolved(aliases := self.registry.aliases_for(name))
+                .unresolved(aliases := self.registry.entry(name).entry.names)
                 .unknown(aliases)
             )
             return [row.public() for row in rows]
@@ -91,8 +90,7 @@ class Goals:
         from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path, shared=True):
-            self.registry.require(name)
-            aliases = self.registry.aliases_for(name)
+            aliases = self.registry.entry(name).entry.names
             return (
                 InputDispositions(self.root)
                 .unresolved(aliases)
@@ -108,8 +106,7 @@ class Goals:
         from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path):
-            self.registry.require(name)
-            aliases = self.registry.aliases_for(name)
+            aliases = self.registry.entry(name).entry.names
             return InputDispositions(self.root).dismiss_historical(
                 aliases, awaiting_keys=awaiting_keys
             )

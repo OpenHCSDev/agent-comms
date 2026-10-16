@@ -160,9 +160,9 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
 
     comms = Comms(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
-    def require_owned_session(owner, snapshot):
-        assert owner.name == "owner"
-        assert snapshot.require(owner.name) == owner
+    def require_owned_session(entry):
+        assert entry.thread.name == "owner"
+        assert entry.matches_name("owner")
         return "session"
 
     agent = SimpleNamespace(
