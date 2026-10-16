@@ -949,13 +949,14 @@ class ChildStdio(DeclaredFamily, affix="ChildStdio"):
 class StreamingChildStdio(ChildStdio):
     input_enabled: bool = True
     limit: int = 65536
+    stderr: int | io.IOBase = subprocess.PIPE
 
     @property
     def options(self) -> dict:
         return {
             "stdin": subprocess.PIPE if self.input_enabled else subprocess.DEVNULL,
             "stdout": subprocess.PIPE,
-            "stderr": subprocess.PIPE,
+            "stderr": self.stderr,
             "limit": self.limit,
         }
 
