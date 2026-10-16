@@ -251,6 +251,14 @@ class Column:
     storage: type[SqlStorage] | None = None
     nullable: bool = False  # SQLite NULL may decode to a mandatory nominal value.
 
+    @property
+    def writable(self) -> bool:
+        return self.generated is None
+
+    @property
+    def generated_sql(self) -> str:
+        return "" if self.writable else f" GENERATED ALWAYS AS ({self.generated}) STORED"
+
 
 @dataclass(frozen=True)
 class Index:
@@ -511,8 +519,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             sql = f"{_identifier(item.name)} {item.storage.sql_type}"
             if column.auto_increment:
                 sql += " PRIMARY KEY AUTOINCREMENT"
-            if column.generated is not None:
-                sql += f" GENERATED ALWAYS AS ({column.generated}) STORED"
+            sql += column.generated_sql
             if not item.nullable or column.primary_key:
                 sql += " NOT NULL"
             if column.unique:
@@ -643,28 +650,29 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             parameters))
 
     @classmethod
-    def _insertion_fields(cls, columns: tuple[str, ...] = ()) -> tuple[_Field, ...]:
-        writable = cls._fields_named(columns) if columns else tuple(
-            item for item in cls._fields() if item.column.generated is None)
-        if any(item.column.generated is not None for item in writable):
-            raise ValueError("Generated columns cannot be inserted")
-        return writable
+    def _writable_fields(cls, columns: tuple[str, ...] | None = None) -> tuple[_Field, ...]:
+        if columns is None:
+            return tuple(item for item in cls._fields() if item.column.writable)
+        selected = cls._fields_named(columns)
+        if any(not item.column.writable for item in selected):
+            raise ValueError("Generated columns cannot be written")
+        return selected
 
     @classmethod
     def insertion_statement(cls, columns: tuple[str, ...] = ()) -> str:
-        writable = cls._insertion_fields(columns)
+        writable = cls._writable_fields(columns or None)
         return (f"INSERT INTO {_identifier(cls.declared_name)} "
                 f"({cls._column_list(tuple(item.name for item in writable))}) "
                 f"VALUES ({', '.join('?' for _ in writable)})")
 
     @classmethod
     def insert_values(cls, db: sqlite3.Connection, **values: object) -> sqlite3.Cursor:
-        writable = cls._insertion_fields(tuple(values))
+        writable = cls._writable_fields(tuple(values) or None)
         return db.execute(cls.insertion_statement(tuple(item.name for item in writable)),
                           tuple(item.encode(values[item.name]) for item in writable))
 
     def _insertion(self) -> tuple[str, tuple]:
-        writable = self._insertion_fields()
+        writable = self._writable_fields()
         return (self.insertion_statement(),
                 tuple(item.encode(getattr(self, item.name)) for item in writable))
 
@@ -681,8 +689,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         keys = tuple(item.name for item in self._fields() if item.column.primary_key)
         updates = tuple(
             item.name
-            for item in self._fields()
-            if not item.column.primary_key and item.column.generated is None
+            for item in self._writable_fields()
+            if not item.column.primary_key
         )
         statement += f" ON CONFLICT ({self._column_list(keys)}) DO "
         statement += (
@@ -702,11 +710,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (),
         **changes: object,
     ) -> sqlite3.Cursor:
-        selected = cls._fields_named(tuple(changes))
+        selected = cls._writable_fields(tuple(changes))
         if not selected:
             raise ValueError(f"Update requires fields for {cls.declared_name}")
-        if any(item.column.generated is not None for item in selected):
-            raise ValueError("Generated columns cannot be updated")
         return db.execute(
             f"UPDATE {_identifier(cls.declared_name)} SET "
             + ", ".join(f"{_identifier(item.name)}=?" for item in selected)
