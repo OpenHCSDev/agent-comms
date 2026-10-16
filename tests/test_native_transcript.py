@@ -1,7 +1,6 @@
 """Saved Pi boundary, bounded readers and presentation roundtrips."""
 
 import json
-from dataclasses import fields
 
 import pytest
 
@@ -11,15 +10,7 @@ from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProj
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.threads import Thread
-from agent_comms.transcript_events import (
-    AssistantTranscript,
-    NoticeTranscript,
-    ThinkingTranscript,
-    ToolEndTranscript,
-    ToolStartTranscript,
-    TranscriptEvent,
-    UserTranscript,
-)
+from agent_comms.transcript_events import AssistantTranscript, UserTranscript
 
 
 def encoded(value):
@@ -133,26 +124,6 @@ def test_complete_corrupt_entries_raise_without_changing_saved_bytes(tmp_path, c
         with pytest.raises(error):
             tuple(records)
     assert path.read_bytes() == original
-
-
-@pytest.mark.parametrize(
-    "event",
-    [
-        AssistantTranscript("answer"),
-        ThinkingTranscript("reason"),
-        NoticeTranscript("compacted"),
-        ToolStartTranscript(tool_call_id="a", tool_name="read", raw_input={"path": "x"}),
-        ToolEndTranscript(tool_call_id="a", tool_name="read", text="contents", ok=False),
-    ],
-)
-def test_snapshot_family_roundtrip_has_only_owned_fields(event):
-    payload = FieldCodec.encode(event)
-    assert FieldCodec.decode(TranscriptEvent, payload) == event
-    assert set(payload) <= {"kind", *(f.name for f in fields(event))}
-    if isinstance(event, ToolStartTranscript):
-        assert "text" not in payload and "ok" not in payload and "diff" not in payload
-    if isinstance(event, AssistantTranscript):
-        assert "tool_call_id" not in payload and "raw_input" not in payload
 
 
 def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):

@@ -118,6 +118,13 @@ def comms(root: Path) -> Comms:
 
 
 @pytest.fixture
+def private_comms(comms: Comms) -> Comms:
+    """A fresh protocol-issued root for tools which append private records."""
+    comms.messaging.initialize_private_initial_protocol()
+    return comms
+
+
+@pytest.fixture
 def wired(comms: Comms) -> Comms:
     """A wire with PR111 (parent) and fixer (child) registered."""
     comms.registry.declare(Thread(name="PR111", tags=frozenset({"base"}), worktree="/tmp/wt1"))

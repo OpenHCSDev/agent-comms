@@ -44,10 +44,10 @@ def seed_unknown(comms, count, text):
 
 
 @pytest.fixture
-def inbox_comms(comms):
+def inbox_comms(private_comms):
     for name in ("a", "b"):
-        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree="/wt"))
-    return comms
+        private_comms.registry.declare(Thread(name=name, tags=frozenset(), worktree="/wt"))
+    return private_comms
 
 
 @pytest.mark.parametrize("count,text", [(930, "historical input " * 65), (1, "🧪漢" * 40_000)])
