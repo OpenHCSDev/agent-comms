@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import sys
 
+import agent_comms
 from agent_comms.cli_bridges.shared import Binding, CoreConnection, DeliveryJournal, DeliveryRow, Outcome
 
 
@@ -80,8 +81,8 @@ async def main():
         journal.close()
     print(json.dumps({'results': results, 'binding': vars(binding), 'conflict_rejected': True,
                       'pending_unchanged': True, 'emitted_deliveries': 2,
-                      'runtime_launcher': str(runtime), 'source_overlay': str(Path.cwd() / 'src'),
-                      'provider_inputs': 0}, indent=2), flush=True)
+                      'runtime_launcher': str(runtime), 'core_package': agent_comms.__file__,
+                      'interpreter': sys.executable, 'provider_inputs': 0}, indent=2), flush=True)
 
 
 if __name__ == '__main__':
