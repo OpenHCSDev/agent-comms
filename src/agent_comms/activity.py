@@ -27,7 +27,7 @@ from .store_files import (
 )
 from .thread_identity import OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
-from .thread_presentation import ThreadPresentation
+from .thread_presentation import ThreadPresentation, WorkingThreadPresentationStatus
 
 if TYPE_CHECKING:
     from .activity_checkpoint import ActivityCheckpoint
@@ -56,7 +56,7 @@ class ActivityState(Enum):
         summary = self.value.title()
         if detail := " ".join(detail.split()):
             summary += f" · {detail}"
-        return ThreadPresentation(title, "⌛", summary, busy=True)
+        return ThreadPresentation(title, "⌛", summary, status=WorkingThreadPresentationStatus())
 
 
 @dataclass(frozen=True)
@@ -131,7 +131,7 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def source_diagnostic(self) -> DrainDiagnostic | None: ...
 
     @abstractmethod
-    def presentation(self, ordinary: ThreadPresentation, *, busy: bool) -> ThreadPresentation: ...
+    def presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation: ...
 
     def require_available(self) -> None:
         pass
@@ -146,7 +146,7 @@ class ReadyDrainReadiness(DrainReadiness):
     def source_diagnostic(self):
         return None
 
-    def presentation(self, ordinary, *, busy):
+    def presentation(self, ordinary):
         return ordinary
 
 
@@ -159,16 +159,16 @@ class DiagnosticDrainReadiness(DrainReadiness):
     def source_diagnostic(self):
         return self.diagnostic
 
-    def presentation(self, ordinary, *, busy):
-        return ThreadPresentation(ordinary.title, "!", self.diagnostic.summary,
-                                  busy=busy, attention=True)
+    def presentation(self, ordinary):
+        return replace(ordinary, marker="!", summary=self.diagnostic.summary,
+                       status=ordinary.status.with_attention())
 
 
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
     """Retain the failed request warning; new messages keep ordinary availability."""
 
-    def presentation(self, ordinary, *, busy):
-        return ordinary if busy or ordinary.busy else super().presentation(ordinary, busy=busy)
+    def presentation(self, ordinary):
+        return ordinary if ordinary.status.busy else super().presentation(ordinary)
 
     def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return replace(activity, readiness=FailedPreparingDrainReadiness(self.diagnostic))
@@ -178,14 +178,13 @@ class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
 class FailedPreparingDrainReadiness(NativeInputDrainReadiness):
     """A retained native failure while the next turn has not reached its request."""
 
-    def presentation(self, ordinary, *, busy):
+    def presentation(self, ordinary):
         when = datetime.fromtimestamp(self.diagnostic.recorded_at).astimezone().strftime("%H:%M")
         return replace(
             ordinary,
             marker="!",
             summary=f"Failed {when}",
-            busy=busy,
-            attention=True,
+            status=ordinary.status.with_attention(),
         )
 
 
@@ -266,9 +265,6 @@ class ObservedActivity(ActivityData):
         """Write through the original event boundary; never persist a second state."""
         return Activity(self.thread, self.state, self.detail, self.timestamp,
                         self.readiness.source_diagnostic())
-
-    def presentation(self, title):
-        return self.readiness.presentation(super().presentation(title), busy=self.state.busy)
 
 
 @dataclass(frozen=True, slots=True)

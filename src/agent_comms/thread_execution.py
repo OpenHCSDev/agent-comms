@@ -118,7 +118,7 @@ class ExternalThreadExecution(ThreadExecution):
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         # The CLI reports its own activity; between turns it is a participant.
-        if not status.active or ordinary.busy:
+        if not status.active or ordinary.status.busy:
             return ordinary
         # Only a registered CLI process can be known to have exited.
         if thread.has_process and not thread.process_alive:
