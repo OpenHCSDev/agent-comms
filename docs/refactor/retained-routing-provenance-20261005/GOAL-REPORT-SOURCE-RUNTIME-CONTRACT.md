@@ -1,7 +1,6 @@
-# Current read protocol; old records have one carry
+# Current read protocol; unused field migration removed
 
-Claude12686 supersedes the shared old-producer projection in #971. Both ends of
-normal acquisition use current declarations. CurrentTypedCapture has no source-
+Both ends of normal acquisition use current declarations. CurrentTypedCapture has no source-
 shape selector or generic old-producer base. CurrentThreadProjection acquires the
 selection and RegistryDocument together; OriginalOwnerRead carries only those
 current facts. The stdio boundary encodes the record once through FieldCodec.
@@ -19,21 +18,24 @@ there are no copied thread/alias grammars. Only codec-produced provenance is a
 JSON value. JsonValue handling belongs to FieldCodec's existing JSON owner,
 integrated from main #979; these tools add no workaround or second validator.
 
-## Durable old records
+## No live field migration needed
 
-The actual one-shot entrypoint is tools/cutover/restart_thread_format.py. Its
-original-process kernel is restart_original_thread_format.py; the existing
-ThreadRetirementCutover in thread_retirement_cutover.py validates complete
-registry/release/history carriers, retains originals and uses OwnerCutover's
-stopped-batch lifetime. GoalReportMemberRetirement belongs only to that tool,
-not the current read protocol. This carry has not been executed or physically
-qualified here. Codex owns reviewed execution/disposition and deletion of the
-one-shot family afterwards. No conversion or install is authorized by this file.
+The live root's two Thread files already use the current format: 220 registry
+records and 145 release records, with no last_goal_report_turn member. The
+installed reader accepts them, and the old tool refuses the current Thread
+declaration before reading or writing a root. Stopping the fleet for that field
+migration would do nothing useful.
 
-A bounded shared-lock read of the live root's two authoritative Thread carriers
-found zero last_goal_report_turn rows: 220 registry Threads plus 145 release
-receipt Threads. This is a point-in-time read-only count of 365 carriers, not a
-claim about frozen fixtures, external roots or historical wire. No wire/database
-was opened. Receipt: .artifacts/current-only-capture/live-carrier-count.json.
-Source originals, saved sessions, UNKNOWN inputs and completed effects remain
-untouched. #958 and the separate route-identity/claim carries are not this work.
+The eight unused migration tools, their old-only fixture and their specific
+tests are deleted. The current fixture now owns the same worker-ready helper
+used by the current attachment/replacement journeys. Current and recorded reads
+remain intact for #950. Earlier proposals and source/control bytes remain
+historical evidence in Git and the owned evidence directories, not executable
+migration instructions.
+
+The count is point-in-time evidence about these 365 live records, not proof
+about frozen fixtures, external roots or historical wire. Source originals,
+saved sessions, UNKNOWN inputs and completed effects remain untouched. No
+conversion, installation or process stop was performed. #958, the separate
+route-identity/claim work and #978's old-worker launch change are not this field
+migration.

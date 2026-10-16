@@ -1,8 +1,4 @@
-"""Current readers reject old shapes; only the one-shot tool can carry them.
-
-The old source/control bytes remain in Git for the unexecuted carry, not as a
-normal source compatibility path.
-"""
+"""Current typed reads preserve authored reports and reject invalid read modes."""
 import os
 from pathlib import Path
 import subprocess
@@ -15,16 +11,13 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import ClearGoalAction, EditGoalAction, SetGoalAction
 from agent_comms.goal_history import GoalHistoryStore
 from agent_comms.owner_lifecycle import OwnerReleaseReceipt
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.threads import Thread
-from original_owner_capture import CurrentTypedCapture
 from owner_read_projection import CurrentThreadProjection
-from thread_format_retirement import GoalReportMemberRetirement
 from seed_original_owner_capture import author_model_report
 
 TURN = 'c7cc88d777b947d99b6f28f9e0b6ef97'
@@ -36,7 +29,7 @@ def files(root):
 
 
 @pytest.mark.parametrize('disposition', ['reported', 'clear', 'replace', 'edit', 'older_release'])
-def test_current_projection_preserves_reports_without_retirement(tmp_path, disposition):
+def test_current_projection_preserves_authored_reports(tmp_path, disposition):
     service = Comms(tmp_path / 'current')
     service.registry.register(Thread('author', frozenset(), str(service.root),
                                     process_identity=ProcessIdentity.capture(os.getpid())),
@@ -63,27 +56,12 @@ def test_current_projection_preserves_reports_without_retirement(tmp_path, dispo
     assert before == files(service.root)
 
 
-def test_current_declaration_cannot_acquire_an_old_member_retirement(tmp_path):
-    # Reject the selected operation before its journal acquisition or carrier access.
-    with pytest.raises(RelationViolationError, match='retained amended720 Thread declaration'):
-        GoalReportMemberRetirement.acquire(tmp_path / 'absent.json', RegistryDocument(), {})
-    assert not tuple(tmp_path.iterdir())
-
-
-def test_current_capture_cannot_select_a_legacy_projection(tmp_path):
-    with pytest.raises(TypeError):
-        CurrentTypedCapture(tmp_path, Path(sys.executable), 'retired_goal_report')
-
-
 @pytest.mark.parametrize('entry,arguments,refusal', [
-    ('read_original_owner.py', ('ROOT', 'unused', 'retired_goal_report'), 'retired_goal_report'),
-    ('restart_original_thread_format.py', ('0',), 'retained amended720 Thread declaration'),
+    ('read_original_owner.py', ('ROOT', 'unused', 'not_a_projection'), 'not_a_projection'),
     ('seed_original_owner_capture.py', ('ROOT',), 'Select the current-runtime owner fixture'),
-    ('seed_thread_retirement_fixture.py', ('ROOT', 'ROUTE'),
-     'retained amended720 Thread declaration'),
     ('original_owner_capture_installed_pilot.py', (), 'Select a current-runtime attachment'),
 ])
-def test_removed_read_modes_and_unexecuted_carry_refuse_before_root_access(
+def test_invalid_read_modes_refuse_before_root_access(
     tmp_path, entry, arguments, refusal,
 ):
     root, route = tmp_path / 'must-not-be-created', tmp_path / 'route'
