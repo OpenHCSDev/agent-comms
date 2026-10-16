@@ -226,21 +226,16 @@ def test_original_typed_acquisition_attaches_without_destination_registry_decode
     from agent_comms.errors import RelationViolationError
     from agent_comms.field_codec import FieldCodec
     from agent_comms.historical_views import HistorySource
-    from agent_comms.private_path import FileRevision
     from agent_comms.registration import Registration
     from agent_comms.registry_provenance import RegistryProvenance
+    from tools.cutover.owner_read_projection import RecordedRegistryProjection
 
-    old, live = setup(tmp_path / 'old', 0), setup(tmp_path / 'live', 0)
-    original = old.registry.store.path.read_bytes()
+    old, live = setup(tmp_path / "old", 0), setup(tmp_path / "live", 0)
+    original = (old.root / "registry.json").read_bytes()
     provenance = RegistryProvenance.capture(old.registry.snapshot())
-    info = old.bus.log.path.stat()
-    acquired = HistorySource(
-        str(old.root), str(old.root), old.bus.log.read_metadata_unlocked(required=True).root_id,
-        (info.st_dev, info.st_ino), info.st_size,
-        FileRevision.capture(old.bus.log.path), FileRevision.capture(old.registry.store.path),
-        provenance,
-    )
-    packet = FieldCodec.encode(acquired)
+    packet = json.loads(json.dumps(RecordedRegistryProjection.read(
+        old.registry, old.root, "", FieldCodec.record_schema(RegistryProvenance)
+    )))
     observed = FieldCodec.decode(HistorySource, packet)
     observed.require_original(old.root)
     snapshot = Registration.snapshot

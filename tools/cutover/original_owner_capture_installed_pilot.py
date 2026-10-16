@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 
 from original_owner_capture import OriginalTypedCapture
+from owner_read_projection import RetiredGoalReportProjection
 from agent_comms.goal_history import GoalHistoryStore
 
 
@@ -225,7 +226,7 @@ def main():
         original_registry = digest(root / 'registry.json')
         original_releases = digest(root / 'owner_release_receipts.json')
         original_history = digest(root / 'goal_history.sqlite3')
-        reader = OriginalTypedCapture(root, original_python)
+        reader = OriginalTypedCapture(root, original_python, RetiredGoalReportProjection)
         captured = reader.read('captured-original')
         assert captured.retained.process.pid == process.pid
         assert captured.retained.arguments == ('--fixture-private', 'original settings')

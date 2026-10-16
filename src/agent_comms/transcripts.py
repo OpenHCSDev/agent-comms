@@ -282,7 +282,7 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
     def resolve_source(cls, owner, name, source_file, historical_source):
         from .wire_log import WireLog
 
-        source = HistorySource.require(owner.bus.history, historical_source)
+        source = HistorySource.require(owner.bus.history.sources(), historical_source)
         thread = source.provenance.require(name)
         session_file = thread.session_file or ""
         if source_file is not None and source_file != session_file:
@@ -297,7 +297,7 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
                           AssignedTranscriptSource.for_recorded(root, thread, log, records))
 
     def namespace(self, owner):
-        current = HistorySource.require(owner.bus.history, self.source.key)
+        current = HistorySource.require(owner.bus.history.sources(), self.source.key)
         if current != self.source:
             raise StaleRevision("Transcript witness belongs to another recorded source")
         return current.provenance

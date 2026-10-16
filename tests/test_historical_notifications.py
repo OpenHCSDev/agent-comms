@@ -52,7 +52,8 @@ def test_recorded_notifications_do_not_decode_registry_or_acquire_activity(archi
 
     monkeypatch.setattr("agent_comms.registration.Registration.snapshot", forbidden)
     monkeypatch.setattr("agent_comms.agent_activity.AgentActivity.observe_recipients", forbidden)
-    results = source.notification_references(live.bus.history, tuple(message.reference for message in messages))
+    with live.bus.history.read_sources() as sources:
+        results = source.notification_references(sources, tuple(message.reference for message in messages))
     notification, = results[messages[0].seq, messages[0].message_id]
     assert notification.recipient == "agent"
     assert notification.state == "Sent" and not notification.busy
@@ -61,8 +62,8 @@ def test_recorded_notifications_do_not_decode_registry_or_acquire_activity(archi
     assert not (Path(source.root) / "coordination.sqlite3").exists()
     assert all(path.read_bytes() == original for path, original in preserved.items())
     live.bus.history.path.write_text("[]")
-    with pytest.raises(ValueError, match="detached"):
-        source.notification_references(live.bus.history, (messages[0].reference,))
+    with pytest.raises(ValueError, match="detached"), live.bus.history.read_sources() as sources:
+        source.notification_references(sources, (messages[0].reference,))
 
 
 def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification):
@@ -72,7 +73,8 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
         conversation_snapshot=source.provenance,
     )
     HistoricalDisplay(source, basis.select((messages[1].seq,))).acknowledge(live.bus.history, live.registry)
-    results = source.notification_references(live.bus.history, tuple(message.reference for message in messages[1:]))
+    with live.bus.history.read_sources() as sources:
+        results = source.notification_references(sources, tuple(message.reference for message in messages[1:]))
     painted, = results[messages[1].seq, messages[1].message_id]
     unpainted, = results[messages[2].seq, messages[2].message_id]
     assert painted.displayed_to == (source.provenance.require("reader").incarnation,)
@@ -132,8 +134,8 @@ def test_recorded_assignment_schema_refusal_is_read_only(archived_notification):
         connection.execute(f"PRAGMA user_version = {COORDINATION_SCHEMA_VERSION - 1}")
     database.chmod(0o600)
     original = database.read_bytes()
-    with pytest.raises(ValueError, match="unsupported schema"):
-        source.notification_references(live.bus.history, (messages[0].reference,))
+    with pytest.raises(ValueError, match="unsupported schema"), live.bus.history.read_sources() as sources:
+        source.notification_references(sources, (messages[0].reference,))
     assert database.read_bytes() == original
 
 
@@ -389,8 +391,9 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
         messages[0].seq, messages[0].message_id
     ]
     assert current.state == "Acknowledged" and not current.displayed_to
-    archived, = source.notification_references(live.bus.history, (messages[0].reference,))[
-        messages[0].seq, messages[0].message_id
-    ]
+    with live.bus.history.read_sources() as sources:
+        archived, = source.notification_references(sources, (messages[0].reference,))[
+            messages[0].seq, messages[0].message_id
+        ]
     assert archived.state == "Sent" and not archived.displayed_to
     assert FieldCodec.decode(RecipientActivity, FieldCodec.encode(RecordedRecipientActivity())) == RecordedRecipientActivity()
