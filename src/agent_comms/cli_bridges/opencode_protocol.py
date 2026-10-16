@@ -10,7 +10,7 @@ from pydantic import JsonValue, TypeAdapter
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
 
 from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
-from .shared import TranscriptUpdate, TurnEnded, TurnStarted
+from .shared import AllTurnsEnded, AppendDraftItem, TranscriptUpdate, TurnEnded, TurnStarted
 
 if TYPE_CHECKING:
     from .opencode import OpenCodeConnection
@@ -82,10 +82,8 @@ class IdleStatus(SessionStatus):
 
     def receive(self, stream: OpenCodeStream) -> tuple[TranscriptUpdate, ...]:
         # All preceding parts have passed through this ordered subscription.
-        stream.parts.clear()
         stream.messages.clear()
-        stream.finished.clear()
-        return super().receive(stream)
+        return (AllTurnsEnded(),)
 
 
 class BusyStatus(SessionStatus):
@@ -172,14 +170,7 @@ class PartChanged(OpenCodeEvent):
         delta = self.properties
         if delta.sessionID != stream.connection.session:
             return ()
-        # An already-running part can predate this subscription. Its final whole
-        # part is authoritative; a suffix alone cannot reconstruct its prefix.
-        if delta.partID not in stream.parts or delta.partID in stream.finished:
-            return ()
-        part = stream.parts[delta.partID]
-        if part.messageID != delta.messageID:
-            raise ValueError('OpenCode delta changed its containing message')
-        return stream.messages[part.messageID].append_text(part, delta.delta)
+        return (AppendDraftItem(delta.messageID, delta.partID, delta.delta),)
 
 
 class MessageUpdated(OpenCodeEvent):
@@ -219,34 +210,23 @@ class Failed(OpenCodeEvent):
 
 
 class OpenCodeStream:
-    """One subscription assembles live parts; complete native parts own history."""
+    """Decode message/part metadata; the shared output assembles live text."""
 
     def __init__(self, connection: OpenCodeConnection) -> None:
         self.connection = connection
         self.messages: dict[str, MessageInfo] = {}
-        self.parts: dict[str, Part] = {}
-        self.finished: set[str] = set()
 
     def snapshot(self, saved: SavedMessage) -> tuple[TranscriptUpdate, ...]:
         self.messages[saved.info.id] = saved.info
         updates: list[TranscriptUpdate] = []
         for part in saved.parts:
             if part.finished(saved.info):
-                self.finished.add(part.id)
-                self.parts.pop(part.id, None)
                 updates.extend(saved.info.present(part))
         return tuple(updates)
 
     async def part(self, part: Part) -> tuple[TranscriptUpdate, ...]:
-        if part.id in self.finished:
-            return ()
         if part.messageID not in self.messages:
             saved = await self.connection.message(part.messageID)
             self.messages[saved.info.id] = saved.info
         info = self.messages[part.messageID]
-        if part.finished(info):
-            self.finished.add(part.id)
-            self.parts.pop(part.id, None)
-        else:
-            self.parts[part.id] = part
         return info.present(part)
