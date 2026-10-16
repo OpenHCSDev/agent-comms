@@ -2,18 +2,24 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+<<<<<<< HEAD
 import argparse
 from collections.abc import Sequence
 from typing import ClassVar
+=======
+>>>>>>> origin/main
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NoReturn
 
 from .launch_runtime import CallingThreadUnavailable
+<<<<<<< HEAD
 from .cli_options import JsonFlagRecord
 from .native_project import NativeProject, UnmanagedNativeProject
 from .declared_family import DeclaredFamily
 from .pi_vocabulary import ServiceTier
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+=======
+>>>>>>> origin/main
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -43,6 +49,7 @@ class ThreadCallerRecord(CallerRecord):
 
 class ToolCaller(ABC):
     @classmethod
+<<<<<<< HEAD
     def from_arguments(cls, parser: argparse.ArgumentParser, arguments: list[str],
                        namespace: argparse.Namespace) -> ToolCaller:
         """Decode the caller once with the command parser; retain only unparsed argv."""
@@ -70,6 +77,11 @@ class ToolCaller(ABC):
 
     @abstractmethod
     def owns_thread(self, thread: Thread, snapshot: RegistrySnapshot) -> bool: ...
+=======
+    def from_actor(cls, actor: str | None) -> ToolCaller:
+        """Each entry boundary (CLI --from, context action) names its actor explicitly."""
+        return ThreadCaller(actor) if actor else NoThreadCaller()
+>>>>>>> origin/main
 
     @abstractmethod
     def invoke(self, request: ToolRequest, comms: Comms) -> object: ...

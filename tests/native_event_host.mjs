@@ -93,7 +93,7 @@ const invoke = (args) => JSON.parse(execFileSync(process.env.S1_PYTHON,
 const customTools = process.env.S1_COMMS_TOOLS ? invoke(['tools']).tools.map(declaration => ({
   ...declaration,
   async execute(_id, params) {
-    const result = invoke(['invoke', '--tool', declaration.name, '--arguments', JSON.stringify(params)]);
+    const result = invoke(['invoke', ...(process.env.AGENT_COMMS_THREAD ? ['--from', process.env.AGENT_COMMS_THREAD] : []), '--tool', declaration.name, '--arguments', JSON.stringify(params)]);
     return {content: [{type: 'text', text: JSON.stringify(result, null, 2)}], details: result};
   },
 })) : [];

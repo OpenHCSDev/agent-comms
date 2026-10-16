@@ -229,7 +229,6 @@ class TestThreadOps:
         answer = wired.configuration.answer("fixer")
         assert answer.model == "configured/model"
         assert answer.context_usage.used == 25
-        assert wired.configuration.answer("PR111").context_usage is None
 
     def test_presence_omits_expensive_viewer_pending_counts(self, wired):
         rows = {row["name"]: row for row in wired.views.presence()}
@@ -281,8 +280,35 @@ class TestThreadOps:
         assert attached.session_file == str(session_file.resolve())
         assert wired.registry.status("fixer").declared_name == "running"
 
+<<<<<<< HEAD
     def test_release_only_allows_the_original_calling_thread(self, wired):
         caller = wired.registry.require("fixer").incarnation
+=======
+    def test_attached_session_model_is_registered_once_not_rescanned_for_answers(
+        self, wired, tmp_path, monkeypatch
+    ):
+        from agent_comms.native_transcript import NativeTranscript
+
+        session_file = tmp_path / "session.jsonl"
+        session_file.write_text(
+            json.dumps({"type": "model_change", "provider": "test", "modelId": "saved"}) + "\n"
+        )
+        attached = wired.threads.attach_session(wired.registry.require("fixer"), str(session_file))
+        assert attached.model == "test/saved"
+        assert wired.registry.require("fixer").model == "test/saved"
+
+        def no_tail(*_args, **_kwargs):
+            raise AssertionError("A configuration answer must not scan saved history")
+
+        monkeypatch.setattr(NativeTranscript, "tail", no_tail)
+        wired.agents.observe_runtime_info("fixer", AgentInfo(model="runtime/model"))
+        assert wired.configuration.answer("fixer").model == "test/saved"
+        assert wired.threads.resolve_thread_model("PR111", "default/model") == "default/model"
+
+    def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+
+>>>>>>> origin/main
         with pytest.raises(RelationViolationError, match="cannot release"):
             wired.owners.release("PR111", caller=caller)
 
@@ -461,10 +487,6 @@ class TestThreadOps:
 
 
 class TestFork:
-    def test_spec_allows_an_empty_task_and_uses_an_explicit_prompt(self):
-        assert ForkSpec(name="x", parent="p", project="/project", model="test/model", thinking_level="high").initial_prompt == ""
-        assert ForkSpec(name="x", parent="p", project="/project", model="test/model", thinking_level="high", prompt="first input").initial_prompt == "first input"
-
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(RelationViolationError, match="session file"):
             wired.threads.create(ForkSpec(name="child", parent="PR111", project="/project", model="test/model", thinking_level="high", task="t"))

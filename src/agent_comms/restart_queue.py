@@ -107,7 +107,22 @@ class QueuedRestart:
     source_interpreter: str
     launch_runtime: LaunchRuntime
     runtime: RestartEnvironment
+<<<<<<< HEAD
     state: RestartState
+=======
+    agent_bin: str
+
+    @classmethod
+    def capture(cls, comms: Comms, source: Mapping[str, str], selected: LaunchRuntime):
+        runtime = RestartEnvironment.inherit(
+            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), selected)
+        )
+        return cls(
+            str(selected.interpreter),
+            runtime,
+            comms.owners.restart_entrypoint(source[NativeArguments.binary_key], selected),
+        )
+>>>>>>> origin/main
 
     @property
     def name(self) -> str:
@@ -221,7 +236,7 @@ class RestartQueue:
             yield self.read(path)
 
 
-def enqueue(comms: Comms, name: str) -> QueuedRestart:
+def enqueue(comms: Comms, name: str, *, launch_runtime: LaunchRuntime) -> QueuedRestart:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
     queue = RestartQueue(comms.root / DIRECTORY)
@@ -232,12 +247,17 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         owner.require_restart_owner(status)
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
+<<<<<<< HEAD
         selected = comms.runtime
         selected.require_available()
         runtime = RestartEnvironment.inherit(comms.owners.restart_environment(
             RestartEnvironment.inherit(os.environ).encode(), selected))
         candidate = QueuedRestart(uuid.uuid4().hex, RestartTarget(selection, launch.native),
                                   launch.interpreter, selected, runtime, PendingRestart())
+=======
+        target = RestartTarget.capture(comms, launch.environment, launch_runtime)
+        target.require_available(comms)
+>>>>>>> origin/main
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with queue.locked():
             for previous in queue.active_for(owner.incarnation.require_recorded()):

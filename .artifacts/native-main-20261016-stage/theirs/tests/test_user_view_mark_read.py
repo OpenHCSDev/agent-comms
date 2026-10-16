@@ -1,0 +1,97 @@
+"""Explicit human Mark read never acknowledges a persistent agent's inbox."""
+
+import json
+
+import pytest
+
+from agent_comms.comms import wire
+from agent_comms.threads import Thread
+from native_unread_fixture import completed_snapshot
+
+
+def answer(path, text):
+    with path.open("a") as output:
+        output.write(
+            json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}})
+            + "\n"
+        )
+
+
+def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp_path):
+    comms = wire(tmp_path)
+    source = tmp_path / "sender.jsonl"
+    source.touch()
+    answer(source, "Saved reply")
+    comms.registry.declare(Thread("sender", frozenset({"ci"}), str(tmp_path), session_file=str(source)))
+    comms.registry.declare(Thread("receiver", frozenset({"ci"}), str(tmp_path)))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    comms.messaging.send("sender", "receiver", "Agent inbox remains unread")
+    comms.messaging.send("sender", viewer, "Human DM")
+    comms.messaging.send("sender", "#ci", "Channel message")
+
+    before = completed_snapshot(comms, str(tmp_path))
+    assert before.thread_unread["sender"] == before.unread["sender"] == 1
+    assert before.channel_unread["#ci"] == 1
+    assert comms.bus.pending_count("receiver", "sender") == 1
+    assert comms.bus.pending_count("receiver", "#ci") == 1
+
+    comms.views.mark_user_view_read("sender", worktree=str(tmp_path))
+    after_dm = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    assert after_dm.thread_unread["sender"] == after_dm.unread.get("sender", 0) == 0
+    assert after_dm.channel_unread["#ci"] == 1
+    assert comms.bus.pending_count("receiver", "sender") == 1
+
+    comms.views.mark_user_view_read("#ci", worktree=str(tmp_path))
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
+    assert comms.bus.pending_count("receiver", "#ci") == 1
+
+    comms.messaging.send("sender", "#ci", "One more channel message")
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] > 0
+    comms.views.mark_user_view_read("#any", worktree=str(tmp_path))
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
+    assert comms.bus.pending_count("receiver", "#ci") == 2
+
+    comms.messaging.send("receiver", viewer, "Human DM from a peer with no transcript")
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread["receiver"] == 1
+    comms.views.mark_user_view_read("receiver", worktree=str(tmp_path))
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread.get("receiver", 0) == 0
+
+    answer(source, "New reply after manual read")
+    assert completed_snapshot(comms, str(tmp_path)).thread_unread["sender"] == 1
+    with pytest.raises(ValueError, match="registered"):
+        comms.views.mark_user_view_read("missing", worktree=str(tmp_path))
+
+
+def bytes_read() -> int:
+    """Bytes this process has asked the kernel to read so far."""
+    with open("/proc/self/io") as counters:
+        return int(next(line for line in counters if line.startswith("rchar:")).split()[1])
+
+
+def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread("sender", frozenset({"ci"}), str(tmp_path)))
+    comms.registry.declare(Thread("archivist", frozenset({"bulk"}), str(tmp_path)))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    for _ in range(20):
+        comms.messaging.send("archivist", "#bulk", "x" * 200_000)
+    comms.messaging.send("sender", viewer, "Human DM")
+    comms.messaging.send("sender", "#ci", "Channel message")
+    # An open UI has already counted unread messages and shown a page.
+    comms.views.viewer_snapshot(str(tmp_path))
+    comms.views.presentation.channel_page("#ci", viewer=viewer)
+    comms.messaging.send("sender", viewer, "Later human DM")
+    comms.messaging.send("sender", "#ci", "Later channel message")
+    log_size = comms.bus.log.path.stat().st_size
+    assert log_size > 4_000_000
+
+    for target in ("sender", "#ci"):
+        before = bytes_read()
+        comms.views.mark_user_view_read(target, worktree=str(tmp_path))
+        assert bytes_read() - before < log_size // 4, target
+
+    after = comms.views.viewer_snapshot(str(tmp_path))
+    assert after.unread.get("sender", 0) == 0
+    assert after.channel_unread["#ci"] == 0
+    assert after.channel_unread["#bulk"] == 20

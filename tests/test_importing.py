@@ -9,19 +9,50 @@ import pytest
 
 from agent_comms import ImportFormat, ImportLimits
 from agent_comms.cli import main
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.field_codec import FieldCodec
 from agent_comms.importing import ImportReceipt, ImportedSessionMetadata
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.turn_context import CodexRolloutProvenance
+<<<<<<< HEAD
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.launch_runtime import LaunchRuntime
+=======
+from agent_comms.thread_identity import ThreadProvenance
+from agent_comms.threads import Thread
+>>>>>>> origin/main
 
 
-def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path, capsys):
+@pytest.fixture
+def comms(comms):
+    comms.messaging.initialize_private_initial_protocol()
+    return comms
+
+
+@pytest.mark.parametrize("title,display,renamed_display", [
+    (None, "original", "renamed"),
+    ("Authored title", "Authored title", "Authored title"),
+])
+def test_thread_display_title_is_inherited_without_copying_the_name(
+    tmp_path, title, display, renamed_display
+):
+    thread = Thread("original", frozenset(), str(tmp_path), title=title)
+    captured = ThreadProvenance.capture(thread)
+    assert thread.title == captured.title == title
+    assert thread.display_title == captured.display_title == display
+    renamed = replace(thread, name="renamed")
+    assert renamed.title == title
+    assert renamed.display_title == renamed_display
+    assert "display_title" not in thread.to_wire()
+
+
+def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path, capsys, comms):
     source = tmp_path / "historical.jsonl"
     instructions = [
         {"type": "message", "role": "system", "content": "Historical base π.\n"},
@@ -38,7 +69,10 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
                    "type": "message", "role": "assistant", "content": "Original answer"}}]
     source.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
     original = source.read_bytes()
+<<<<<<< HEAD
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+=======
+>>>>>>> origin/main
     receipt = comms.threads.import_thread(source, ImportFormat.CODEX, name="historical")
     assert source.read_bytes() == original
     refs = receipt.historical_instructions
@@ -156,16 +190,20 @@ def opencode_export(path, project):
     )
 
 
-def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path):
+def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, comms):
     source = tmp_path / "export.json"
     opencode_export(source, tmp_path)
     before = source.read_bytes()
+<<<<<<< HEAD
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+=======
+>>>>>>> origin/main
     directory = comms.root / "imported_sessions"
     receipt = comms.threads.import_thread(source, ImportFormat.OPENCODE, name="imported")
     thread = comms.registry.require("imported")
     assert thread.pid == 0 and comms.registry.status(thread.name) == StoppedThreadStatus()
     assert receipt.source_id == "ses_test" and receipt.imported_messages == 4
+    assert thread.title == "Current task"
     assert source.read_bytes() == before
     if os.name == "posix":
         assert stat.S_IMODE(directory.stat().st_mode) == 0o700
@@ -184,10 +222,13 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path):
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX ownership and symlinks")
-def test_import_refuses_redirected_session_directory(tmp_path):
+def test_import_refuses_redirected_session_directory(tmp_path, comms):
     source = tmp_path / "export.json"
     opencode_export(source, tmp_path)
+<<<<<<< HEAD
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+=======
+>>>>>>> origin/main
     outside = tmp_path / "outside"
     outside.mkdir(mode=0o755)
     (comms.root / "imported_sessions").symlink_to(outside, target_is_directory=True)
@@ -197,6 +238,29 @@ def test_import_refuses_redirected_session_directory(tmp_path):
     assert stat.S_IMODE(outside.stat().st_mode) == 0o755
     assert not list(outside.iterdir())
     assert not comms.registry.name_reserved("imported")
+
+
+def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path, comms):
+    source = tmp_path / "rollout-2026-10-16T15-00-00-codex-id.jsonl"
+    records = [
+        {"type": "session_meta", "payload": {"id": "codex-id", "cwd": str(tmp_path)}},
+        {"type": "response_item", "payload": {
+            "type": "message", "role": "user",
+            "content": [{"type": "input_text", "text": "Continue editing the paper"}],
+        }},
+    ]
+    source.write_text("".join(json.dumps(record) + "\n" for record in records))
+    original = source.read_bytes()
+    receipt = comms.threads.import_thread(
+        source, ImportFormat.CODEX, name="paper4_jair", tags=frozenset({"papers"})
+    )
+    thread = comms.registry.require("paper4_jair")
+    assert thread.name == thread.display_title == "paper4_jair"
+    assert thread.title is None
+    assert thread.tags == frozenset({"papers"})
+    assert comms.registry.status(thread.name) == StoppedThreadStatus()
+    assert receipt.source_id == "codex-id"
+    assert source.read_bytes() == original
 
 
 def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(tmp_path):
@@ -610,14 +674,14 @@ def test_opencode_database_uses_readonly_snapshot(tmp_path):
         ImportFormat.OPENCODE.read(source, ImportLimits(), None)
 
 
-def test_import_cli_and_invalid_sources(tmp_path, capsys):
+def test_import_cli_and_invalid_sources(tmp_path, capsys, comms):
     source = tmp_path / "export.json"
     opencode_export(source, tmp_path)
     assert (
         main(
             [
                 "--root",
-                str(tmp_path / "wire"),
+                str(comms.root),
                 "import-thread",
                 "--format",
                 "opencode",

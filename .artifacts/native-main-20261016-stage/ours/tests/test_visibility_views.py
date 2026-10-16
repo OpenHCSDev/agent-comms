@@ -1,0 +1,46 @@
+"""Viewer-only presence flags reveal archived threads without reviving owners."""
+
+from agent_comms.tool_caller import NoThreadCaller
+
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
+from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
+
+
+def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
+    comms.messaging.initialize_private_initial_protocol()
+    for name in ("active", "stopped", "archived"):
+        comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
+    comms.owners.stop("stopped", caller=NoThreadCaller())
+    comms.owners.stop("archived", caller=NoThreadCaller())
+    comms.threads.archive("archived")
+    comms.registry.declare(Thread("human", frozenset({"team"}), str(tmp_path), role=ThreadRole.USER))
+
+    def names(snapshot):
+        return {view.thread.name for view in snapshot.threads}
+
+    def members(snapshot):
+        return next(view.members for view in snapshot.channels if view.channel.name == "#team")
+
+    default = comms.views.viewer_snapshot(str(tmp_path))
+    assert names(default) == {"active", "stopped"}
+    assert set(members(default)) == {"active", "stopped"}
+    assert default.show_stopped and not default.show_archived
+    running = comms.views.viewer_snapshot(str(tmp_path), show_stopped=False)
+    assert names(running) == set(members(running)) == {"active"}
+    both = comms.views.viewer_snapshot(str(tmp_path), show_archived=True)
+    assert names(both) == set(members(both)) == {"active", "stopped", "archived"}
+    archived_only = comms.views.viewer_snapshot(str(tmp_path), show_stopped=False, show_archived=True)
+    assert names(archived_only) == set(members(archived_only)) == {"active", "archived"}
+    archived = next(view for view in archived_only.threads if view.thread.name == "archived")
+    assert archived.status == ArchivedThreadStatus()
+    assert comms.registry.status("stopped") == StoppedThreadStatus()
+    assert comms.registry.status("archived") == ArchivedThreadStatus()
+    assert {view.thread.name for view in comms.views.thread_views()} == {"active", "stopped"}
+    channel = next(view for view in comms.views.channel_views() if view.channel.name == "#team")
+    assert set(channel.members) == {"active", "stopped"}

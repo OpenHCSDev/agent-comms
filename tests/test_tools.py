@@ -7,11 +7,17 @@ from agent_comms.tool_caller import ThreadCaller, NoThreadCaller, ToolCaller
 from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
 
+<<<<<<< HEAD
 def test_tool_entry_decodes_caller_states_once(comms):
     owner = comms.registry.declare(Thread(name="owner", tags=frozenset(), worktree="/wt"))
     assert ToolCaller.from_actor(comms, None) == NoThreadCaller()
     assert ToolCaller.from_actor(comms, "owner") == ThreadCaller(owner.incarnation)
     assert ThreadCaller.from_json(owner.incarnation.cli_arguments[1]) == ThreadCaller(owner.incarnation)
+=======
+def test_tool_entry_decodes_caller_states_once():
+    assert ToolCaller.from_actor(None) == NoThreadCaller()
+    assert ToolCaller.from_actor("owner") == ThreadCaller("owner")
+>>>>>>> origin/main
 
 
 class TestToolCatalog:

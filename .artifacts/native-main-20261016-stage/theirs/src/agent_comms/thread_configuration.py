@@ -1,0 +1,35 @@
+"""One thread's configuration answer: sessions and the Toad footer read the same object."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+
+from .acp_extension import CoordinationChangedUpdate
+from .pi_vocabulary import ThinkingLevel
+from .registration import Registration
+from .thread_identity import RecordedThreadIncarnation
+from .thread_management import ThreadManagement
+from .agent_activity import AgentActivity
+
+
+class ThreadConfiguration:
+    """Joins a declared thread, its resolved model and its observed context usage."""
+
+    def __init__(self, root: Path, registry: Registration, threads: ThreadManagement,
+                 agents: AgentActivity) -> None:
+        self.root, self.registry, self.threads, self.agents = root, registry, threads, agents
+
+    def answer(self, name: str) -> CoordinationChangedUpdate:
+        thread = self.registry.require(name)
+        info = self.agents.agent_info_of(thread.name)
+        return CoordinationChangedUpdate(
+            RecordedThreadIncarnation(thread.name, thread.created_at),
+            str(self.root.resolve()),
+            os.getpid(),
+            thread.worktree,
+            self.threads.resolve_thread_model(thread.name),
+            ThinkingLevel.optional_name(thread.thinking_level),
+            thread.display_title,
+            info.context_reading(),
+        )

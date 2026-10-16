@@ -202,6 +202,7 @@ export default function (pi: ExtensionAPI) {
 				}
 				const result = run([
 					"invoke",
+					...(currentThread ? ["--from", currentThread] : []),
 					"--tool",
 					declaration.name,
 					"--arguments",

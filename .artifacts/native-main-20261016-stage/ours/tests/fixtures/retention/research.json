@@ -1,0 +1,214 @@
+{
+  "identity": "research-held-out-v1",
+  "rounds": [
+    {
+      "identity": "r1",
+      "history": [
+        "User event research-u1: Work on goal research-alpha. Analyze the predeclared cohort; export to /data/étude A.",
+        "Source receipt research-s1: Cohort frozen-cohort-A has manifest revision coh@r1 in manifests/étude A.json.",
+        "Constraint event research-c1: Do not inspect the held-out cohort before pipeline freeze. Answer permission questions with no.",
+        "Decision event research-d1: Choose stratified-control. Valid rejected alternative is paired-control; it remains valid, not prohibited.",
+        "Action event research-a1: Current approved next action is validate-manifest.",
+        "Tool call research-t1: inspect the manifest. Tool result research-t1: declared cohort receipt located; held-out data unopened.",
+        "Assistant observation research-o1: The manifest inspection subtask ended; analysis and pipeline freeze remain unfinished."
+      ],
+      "questions": [
+        {
+          "identity": "cohort",
+          "prompt": "What is the current exact cohort identity?",
+          "expected": "frozen-cohort-A",
+          "evidence_ref": "research-s1",
+          "obsolete": [],
+          "measurement": "recall"
+        },
+        {
+          "identity": "path",
+          "prompt": "What is its exact current manifest path?",
+          "expected": "manifests/étude A.json",
+          "evidence_ref": "research-s1",
+          "obsolete": [],
+          "measurement": "recall"
+        },
+        {
+          "identity": "revision",
+          "prompt": "What is the current manifest revision?",
+          "expected": "coh@r1",
+          "evidence_ref": "research-s1",
+          "obsolete": [],
+          "measurement": "recall"
+        },
+        {
+          "identity": "held-out",
+          "prompt": "May you inspect held-out data before pipeline freeze? Answer yes or no.",
+          "expected": "no",
+          "evidence_ref": "research-c1",
+          "obsolete": [],
+          "measurement": "prohibition"
+        },
+        {
+          "identity": "alternative",
+          "prompt": "Name the exact currently valid rejected control.",
+          "expected": "paired-control",
+          "evidence_ref": "research-d1",
+          "obsolete": [],
+          "measurement": "alternative"
+        },
+        {
+          "identity": "action",
+          "prompt": "What is the exact approved next action?",
+          "expected": "validate-manifest",
+          "evidence_ref": "research-a1",
+          "obsolete": [],
+          "measurement": "action"
+        }
+      ]
+    },
+    {
+      "identity": "r2",
+      "history": [
+        "User event research-u1: Work on goal research-alpha. Analyze the predeclared cohort; export to /data/étude A.",
+        "Source receipt research-s1: Cohort frozen-cohort-A has manifest revision coh@r1 in manifests/étude A.json.",
+        "Constraint event research-c1: Do not inspect the held-out cohort before pipeline freeze. Answer permission questions with no.",
+        "Decision event research-d1: Choose stratified-control. Valid rejected alternative is paired-control; it remains valid, not prohibited.",
+        "Action event research-a1: Current approved next action is validate-manifest.",
+        "Tool call research-t1: inspect the manifest. Tool result research-t1: declared cohort receipt located; held-out data unopened.",
+        "Assistant observation research-o1: The manifest inspection subtask ended; analysis and pipeline freeze remain unfinished.",
+        "User correction research-u2 explicitly supersedes research-s1: Rename cohort to frozen-cohort-B and its manifest to manifests/étude B.json; revision coh@r2.",
+        "Tool call research-t2 starts split turn: validate current manifest. Tool result research-t2: new manifest receipt complete.",
+        "Assistant observation research-o2: Split turn continues. research-c1 still prohibits held-out inspection; paired-control remains a valid rejected alternative."
+      ],
+      "questions": [
+        {
+          "identity": "cohort",
+          "prompt": "What is the current exact cohort identity?",
+          "expected": "frozen-cohort-B",
+          "evidence_ref": "research-u2",
+          "obsolete": [
+            "frozen-cohort-A"
+          ],
+          "measurement": "recall"
+        },
+        {
+          "identity": "path",
+          "prompt": "What is its exact current manifest path?",
+          "expected": "manifests/étude B.json",
+          "evidence_ref": "research-u2",
+          "obsolete": [
+            "manifests/étude A.json"
+          ],
+          "measurement": "recall"
+        },
+        {
+          "identity": "revision",
+          "prompt": "What is the current manifest revision?",
+          "expected": "coh@r2",
+          "evidence_ref": "research-u2",
+          "obsolete": [
+            "coh@r1"
+          ],
+          "measurement": "recall"
+        },
+        {
+          "identity": "held-out",
+          "prompt": "May you inspect held-out data before pipeline freeze? Answer yes or no.",
+          "expected": "no",
+          "evidence_ref": "research-c1",
+          "obsolete": [],
+          "measurement": "prohibition"
+        },
+        {
+          "identity": "alternative",
+          "prompt": "Name the exact currently valid rejected control.",
+          "expected": "paired-control",
+          "evidence_ref": "research-d1",
+          "obsolete": [],
+          "measurement": "alternative"
+        },
+        {
+          "identity": "action",
+          "prompt": "What is the exact approved next action?",
+          "expected": "validate-manifest",
+          "evidence_ref": "research-a1",
+          "obsolete": [],
+          "measurement": "action"
+        }
+      ]
+    },
+    {
+      "identity": "r3",
+      "history": [
+        "User event research-u1: Work on goal research-alpha. Analyze the predeclared cohort; export to /data/étude A.",
+        "Source receipt research-s1: Cohort frozen-cohort-A has manifest revision coh@r1 in manifests/étude A.json.",
+        "Constraint event research-c1: Do not inspect the held-out cohort before pipeline freeze. Answer permission questions with no.",
+        "Decision event research-d1: Choose stratified-control. Valid rejected alternative is paired-control; it remains valid, not prohibited.",
+        "Action event research-a1: Current approved next action is validate-manifest.",
+        "Tool call research-t1: inspect the manifest. Tool result research-t1: declared cohort receipt located; held-out data unopened.",
+        "Assistant observation research-o1: The manifest inspection subtask ended; analysis and pipeline freeze remain unfinished.",
+        "User correction research-u2 explicitly supersedes research-s1: Rename cohort to frozen-cohort-B and its manifest to manifests/étude B.json; revision coh@r2.",
+        "Tool call research-t2 starts split turn: validate current manifest. Tool result research-t2: new manifest receipt complete.",
+        "Assistant observation research-o2: Split turn continues. research-c1 still prohibits held-out inspection; paired-control remains a valid rejected alternative.",
+        "User goal event research-u3: Replace research-alpha with research-beta. Revisit the previously valid paired-control. Pipeline freeze is still unfinished.",
+        "Decision event research-d2 explicitly supersedes research-d1: Choose paired-control; stratified-control is the valid rejected alternative.",
+        "Action event research-a3: New approved next action is compare-paired-control. Do not inspect held-out data."
+      ],
+      "questions": [
+        {
+          "identity": "cohort",
+          "prompt": "What is the current exact cohort identity?",
+          "expected": "frozen-cohort-B",
+          "evidence_ref": "research-u2",
+          "obsolete": [
+            "frozen-cohort-A"
+          ],
+          "measurement": "recall"
+        },
+        {
+          "identity": "path",
+          "prompt": "What is its exact current manifest path?",
+          "expected": "manifests/étude B.json",
+          "evidence_ref": "research-u2",
+          "obsolete": [
+            "manifests/étude A.json"
+          ],
+          "measurement": "recall"
+        },
+        {
+          "identity": "revision",
+          "prompt": "What is the current manifest revision?",
+          "expected": "coh@r2",
+          "evidence_ref": "research-u2",
+          "obsolete": [
+            "coh@r1"
+          ],
+          "measurement": "recall"
+        },
+        {
+          "identity": "held-out",
+          "prompt": "May you inspect held-out data before pipeline freeze? Answer yes or no.",
+          "expected": "no",
+          "evidence_ref": "research-c1",
+          "obsolete": [],
+          "measurement": "prohibition"
+        },
+        {
+          "identity": "alternative",
+          "prompt": "Name the exact currently valid rejected control.",
+          "expected": "stratified-control",
+          "evidence_ref": "research-d2",
+          "obsolete": [],
+          "measurement": "alternative"
+        },
+        {
+          "identity": "action",
+          "prompt": "What is the exact approved next action?",
+          "expected": "compare-paired-control",
+          "evidence_ref": "research-a3",
+          "obsolete": [
+            "validate-manifest"
+          ],
+          "measurement": "action"
+        }
+      ]
+    }
+  ]
+}

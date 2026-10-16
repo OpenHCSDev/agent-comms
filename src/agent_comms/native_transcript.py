@@ -7,7 +7,7 @@ from .native_session_files import NativeSessionFiles
 from collections import defaultdict
 from abc import abstractmethod
 from collections.abc import Generator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -16,7 +16,9 @@ if TYPE_CHECKING:
     from .thread_identity import RecordedThreadIncarnation
 
 from .declared_family import DeclaredFamily
-from .native_entries import NativeEntry, SessionEntry
+from .coordination_errors import StaleRevision
+from .native_entries import NativeEntry, SessionEntry, TranscriptProjection
+from .transcript_events import TurnDigest
 from .private_path import FileRevision
 from .transcript_receipts import TranscriptSource
 
@@ -304,6 +306,31 @@ class NativeTranscript(TranscriptSource):
             self.require_publication_context(user)
             return record, user
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
+
+    def turns(self, last: int):
+        """Read newest input-bounded turns through the existing record decoder."""
+        cut = self.cut()
+        if cut.offset == 0:
+            return ()
+        turns, pending = [], []
+        with closing(self.reverse(cut.offset)) as records:
+            for record in records:
+                entry = record.entry
+                if entry is None:
+                    continue
+                pending.append(record)
+                if entry.input_boundary:
+                    turns.append(TurnDigest(entry.require_entry_id(), tuple(
+                        event
+                        for original in reversed(pending)
+                        for event in original.project(
+                            lambda source: source.entry.events(TranscriptProjection())))))
+                    pending.clear()
+                    if len(turns) >= last:
+                        break
+        if not cut.holds(self.cut(), cut.offset):
+            raise StaleRevision("Native turn source changed during its read")
+        return tuple(turns)
 
     def tail(self, *, max_bytes: int | None = None):
         end = self.path.stat().st_size

@@ -1,0 +1,124 @@
+"""Persistent owner for a forked thread; idle turns consume no model process."""
+
+import asyncio
+import argparse
+import os
+import signal
+from functools import partial
+from .coordinator import Coordination
+from contextlib import suppress
+
+from .acp import CommsAgent
+from .comms import wire
+from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
+from .native_arguments import NativeArguments
+from .launch_runtime import LaunchRuntime, RestartEnvironment
+
+
+async def run() -> None:
+    # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
+    lower_priority()
+    private_nk = PrivateNkLaunch.current()
+    # Fail before wire creation/attach; the check verifies the native package once.
+    verified_cli = private_nk.validate() if private_nk is not None else None
+    comms = wire(private_nk.validated_root) if private_nk is not None else wire()
+    if private_nk is not None:
+        comms.owners.pin_private_nk_launch(
+            private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
+        )
+    name = RestartEnvironment.calling_thread()
+    thread = await Coordination.run_worker(partial(comms.registry.require, name))
+    agent = CommsAgent(
+        comms,
+        runtime_enabled=True,
+        private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
+        private_nk_native_package=private_nk.native_package if private_nk else None,
+        private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
+        private_nk_verified_cli=verified_cli,
+        agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
+    )
+    stopped = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stopped.set)
+    initial: asyncio.Task | None = None
+    try:
+        await agent.sessions.start_owner(thread.worktree, name)
+        if key := os.environ.pop("AGENT_COMMS_STARTUP_INPUT_KEY", None):
+            initial = asyncio.create_task(run_startup_input(agent, name, key))
+        await stopped.wait()
+    finally:
+        if initial is not None:
+            initial.cancel()
+            await asyncio.gather(initial, return_exceptions=True)
+        await agent.shutdown()
+
+
+async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
+    """Consume this launch's explicitly admitted input, never scan for retries."""
+    from .store_files import _store_lock
+
+    async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
+        def capture():
+            with _store_lock(agent._comms._wire_lock_path, shared=True):
+                snapshot = agent._comms.registry.snapshot()
+                owner = snapshot.threads[name]
+                row = agent.inputs.dispositions.lookup(key)
+                if not row.queued_for(
+                    owner.incarnation, snapshot.admission_generations[name], row.source_text
+                ):
+                    raise ValueError("Startup input no longer belongs to this owner admission")
+            return row
+        row = await Coordination.run_worker(capture)
+        await agent.inputs.emit_input_disposition(name, row)
+        await agent.turns.run_agent_turn(
+            name,
+            name,
+            row.source_text,
+            original_keys=(key,),
+            original_owner_input=True,
+        )
+
+
+# An owner is background work: under CPU contention it yields to interactive
+# clients (Toad's UI thread) and it still uses all idle CPU. The native Pi
+# processes it launches inherit this priority.
+OWNER_NICENESS = 10
+
+
+def lower_priority() -> None:
+    """Run this owner at background priority; never raise a lower one it inherited."""
+    current = os.getpriority(os.PRIO_PROCESS, 0)
+    os.setpriority(os.PRIO_PROCESS, 0, max(current, OWNER_NICENESS))
+
+
+def main() -> int:
+    """Run the explicitly selected, already declared persistent owner.
+
+    Catalog and tool commands belong to agent-comms, not this launcher. Parse
+    before consulting a route or wire so discovery cannot admit an owner.
+    Registration belongs to the original thread management operation.
+    """
+    argparse.ArgumentParser(
+        prog="agent-comms-agent", description=__doc__,
+        epilog=(
+            f"Select an existing owner with {RestartEnvironment.owner_key}. "
+            "Use agent-comms for commands."
+        ),
+    ).parse_args()
+    name = RestartEnvironment.calling_thread()
+
+    launch = private_nk_from_environment()
+    if launch is None:
+        raise ValueError("Headless execution requires a configured native route")
+    comms = wire(launch.validated_root)
+    thread = comms.registry.require(name)
+    if thread.process_identity is not None and thread.process_identity.alive():
+        raise ValueError(f"Thread {thread.name!r} already has a live owner")
+    with suppress(KeyboardInterrupt):
+        asyncio.run(run())
+    return 0
+
+
+if __name__ == "__main__":
+    asyncio.run(run())

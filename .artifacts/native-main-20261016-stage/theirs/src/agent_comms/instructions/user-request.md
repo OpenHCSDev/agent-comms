@@ -1,0 +1,2 @@
+Message from the user, typed directly to you in this thread's own view. It is addressed to you, not a channel or bus message, and it needs your answer. Write the answer as your reply text, which the user reads in the same view; do not send it with comms_send.
+{content}

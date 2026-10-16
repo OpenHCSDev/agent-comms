@@ -1,0 +1,11 @@
+# agent-comms wire export v1 (non-importable text view)
+# metadata: {"record":"header","schema":"agent-comms/wire-export","version":1,"source":"agent-comms-wire","format":"text","importable":false,"scope":{"kind":"everything"},"limit":{"kind":"recent","value":2.0},"boundary":{"through_seq":4,"export_started_at":4.0}}
+[1970-01-01T00:00:02.000000Z] [seq=2 id=2930dbe24f7e type=info role=agent] <alice -> #team>
+  | hello
+  | café
+[1970-01-01T00:00:03.000000Z] [seq=3 id=d5e16edf38b2 type=info role=agent] <alice -> #team>
+  | hello
+  | café
+[1970-01-01T00:00:04.000000Z] [seq=4 id=25bbd89c2d68 type=info role=agent] <alice -> #team>
+  | hello
+  | café

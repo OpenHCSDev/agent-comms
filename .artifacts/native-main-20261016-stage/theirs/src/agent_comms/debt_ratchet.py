@@ -1,0 +1,928 @@
+#!/usr/bin/env python3
+"""Compare AST debt in every changed production Python path at two Git revisions."""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import io
+import json
+import subprocess
+import tokenize
+import typing
+from abc import abstractmethod
+from dataclasses import dataclass
+from functools import cached_property
+from pathlib import Path
+from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
+from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
+from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
+
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, projected
+from .mro_dispatch import MroDispatch, handles
+
+
+class Measure(DeclaredFamily, affix="Measure"):
+    @classmethod
+    @abstractmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        """Return independent before/after measurements for this declaration."""
+
+class GitMeasure(Measure):
+    """Shared Git collection and alignment for declaration-owned snapshots."""
+
+    @classmethod
+    def scope(cls, changed: set[str], present: set[str]) -> set[str]:
+        return changed & present
+
+    @classmethod
+    @abstractmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+        """Measure the selected source declarations."""
+
+    @classmethod
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
+        return base, head
+
+    @classmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        def snapshot(ref: str) -> dict[str, int]:
+            selected = cls.scope(changed, python_paths(repo, ref, root))
+            return cls.snapshot([(path, git(repo, "show", f"{ref}:{path}")) for path in sorted(selected)])
+        return cls.align(snapshot(base), snapshot(head))
+
+
+class CountedSource(GitMeasure):
+    """A measure that is one number per source file."""
+
+    @classmethod
+    @abstractmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        """Return this file's count."""
+
+
+class OccurrenceMeasure(CountedSource):
+    """Shared additive counting for syntactic occurrence measures."""
+
+    @staticmethod
+    @abstractmethod
+    def occurrences(node: ast.AST) -> int:
+        """Return this node's contribution, excluding its descendants."""
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        return sum(cls.occurrences(node) for node in ast.walk(ast.parse(source, filename)))
+
+    @classmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+        return {cls.__name__: sum(cls.count(source, path) for path, source in sources)}
+
+
+class PerFileMeasure(CountedSource):
+    """An improvement in one file cannot hide a regression in another."""
+
+    @classmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+        return {f"{cls.__name__}:{path}": cls.count(source, path) for path, source in sources}
+
+    @classmethod
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
+        identities = sorted(base.keys() | head.keys())
+        return ({key: base.get(key, 0) for key in identities},
+                {key: head.get(key, 0) for key in identities})
+
+
+class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
+    """A per-node count, kept separately for each file."""
+
+
+@dataclass(frozen=True)
+class ChangedSource:
+    """One head module and the new-side lines changed by its Git patch."""
+
+    path: str
+    source: bytes
+    lines: frozenset[int]
+
+    @cached_property
+    def tree(self) -> ast.Module:
+        return ast.parse(self.source, self.path)
+
+    @classmethod
+    def read(cls, repo: Path, base: str, head: str, path: str) -> ChangedSource:
+        patch = git(repo, "diff", "--no-renames", "--no-ext-diff", "--no-textconv",
+                    "--no-color", "--unified=0", "--inter-hunk-context=0", base, head, "--", path)
+        lines: set[int] = set()
+        for header in patch.decode().splitlines():
+            if header.startswith("@@ "):
+                # Git owns this hunk header, not the inspected Python source.
+                span = header.split()[2].removeprefix("+").split(",")
+                start = int(span[0])
+                count = int(span[1]) if len(span) == 2 else 1
+                lines.update(range(start, start + count))
+        return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines))
+
+
+class CleanChangedLines:
+    """No occurrence may be written, even when another occurrence is deleted."""
+
+    @staticmethod
+    def site_lines(node: ast.AST) -> range:
+        return range(node.lineno, node.end_lineno + 1)
+
+    @classmethod
+    def count_changed(cls, source: ChangedSource) -> int:
+        return sum(count for node in ast.walk(source.tree)
+                   if (count := cls.occurrences(node))
+                   and not source.lines.isdisjoint(cls.site_lines(node)))
+
+
+class FrozenFieldWrite(CleanChangedLines, PerFileOccurrenceMeasure):
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.Call(func=ast.Attribute(value=ast.Name(id="object"), attr="__setattr__")):
+                return 1
+        return 0
+
+
+class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
+    words: typing.ClassVar[tuple[str, ...]] = ("admission", "admit", "custody", "receipt")
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        match node:
+            case (ast.Name(id=name) | ast.Attribute(attr=name)
+                  | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name)
+                  | ast.ClassDef(name=name) | ast.arg(arg=name)
+                  | ast.keyword(arg=str(name))):
+                return int(any(word in name.casefold() for word in cls.words))
+        return 0
+
+    @staticmethod
+    def site_lines(node: ast.AST) -> range:
+        line = node.end_lineno if isinstance(node, ast.Attribute) else node.lineno
+        return range(line, line + 1)
+
+    @classmethod
+    def prose_lines(cls, source: bytes, tree: ast.Module) -> frozenset[int]:
+        docstrings: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                match node.body:
+                    case [ast.Expr(value=ast.Constant(value=str()) as value), *_]:
+                        docstrings.update(range(value.lineno, value.end_lineno + 1))
+        found: set[int] = set()
+        for token in tokenize.tokenize(io.BytesIO(source).readline):
+            if token.type == tokenize.COMMENT or (
+                token.type == tokenize.STRING and token.start[0] in docstrings
+            ):
+                for line, text in enumerate(token.string.splitlines(), token.start[0]):
+                    if any(word in text.casefold() for word in cls.words):
+                        found.add(line)
+        return frozenset(found)
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        tree = ast.parse(source, filename)
+        return sum(cls.occurrences(node) for node in ast.walk(tree)) + len(cls.prose_lines(source, tree))
+
+    @classmethod
+    def count_changed(cls, source: ChangedSource) -> int:
+        return super().count_changed(source) + len(cls.prose_lines(source.source, source.tree) & source.lines)
+
+
+class FunctionLocalImport(PerFileMeasure):
+    """Imports executed inside a function, including nested local classes."""
+
+    class Collector(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.depth = 0
+            self.found = 0
+
+        def generic_visit(self, node: ast.AST) -> None:
+            nested = isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            self.depth += nested
+            if self.depth and isinstance(node, (ast.Import, ast.ImportFrom)):
+                self.found += 1
+            super().generic_visit(node)
+            self.depth -= nested
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        collector = cls.Collector()
+        collector.visit(ast.parse(source, filename))
+        return collector.found
+
+
+class LiteralGetattr(PerFileOccurrenceMeasure):
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.Call(func=ast.Name(id="getattr"), args=[_, ast.Constant(value=str()), *_]):
+                return 1
+        return 0
+
+
+class ForeignFieldSpellings(PerFileOccurrenceMeasure):
+    """Literal identifier-spelling rosters used as loop inputs."""
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case (ast.For(iter=ast.Tuple(elts=items))
+                  | ast.AsyncFor(iter=ast.Tuple(elts=items))
+                  | ast.comprehension(iter=ast.Tuple(elts=items))):
+                return int(len(items) > 1 and all(
+                    isinstance(item, ast.Constant) and isinstance(item.value, str)
+                    and item.value.isidentifier() for item in items
+                ))
+        return 0
+
+
+class BroadExceptDefault(PerFileOccurrenceMeasure):
+    @staticmethod
+    def broad(node: ast.AST | None) -> bool:
+        match node:
+            case None | ast.Name(id="Exception" | "BaseException"):
+                return True
+            case ast.Tuple(elts=items):
+                return any(BroadExceptDefault.broad(item) for item in items)
+        return False
+
+    @staticmethod
+    def default(node: ast.AST | None) -> bool:
+        match node:
+            case None | ast.Constant(value=None | False | 0 | ""):
+                return True
+            case ast.List(elts=[]) | ast.Tuple(elts=[]) | ast.Set(elts=[]) | ast.Dict(keys=[]):
+                return True
+        return False
+
+    @classmethod
+    def returns_default(cls, node: ast.AST) -> bool:
+        match node:
+            case ast.Return(value=value):
+                return cls.default(value)
+            case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.ClassDef() | ast.Lambda():
+                return False
+        return any(cls.returns_default(child) for child in ast.iter_child_nodes(node))
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        return int(isinstance(node, ast.ExceptHandler) and cls.broad(node.type)
+                   and any(cls.returns_default(statement) for statement in node.body))
+
+
+class FamilyFlattened(PerFileOccurrenceMeasure):
+    """The original audit collector, enforced independently for each file."""
+
+    # GitMeasure supplies complete repository-relative paths. Only those exact
+    # original modules own codec/schema behavior; nested package tails do not.
+    mechanism_modules = frozenset(Path("src", package, module) for package, module in {
+        ("agent_comms", "field_codec.py"), ("agent_comms", "typed_table.py"),
+        ("agent_comms", "coordination_schema.py"),
+        ("agent_comms", "coordinated_runtime_schema.py"),
+        ("toad", "agent_schema.py"), ("toad", "db.py"),
+    })
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        return AuditFamilyFlattened.count(node)
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        if Path(filename) in cls.mechanism_modules:
+            return 0
+        return super().count(source, filename)
+
+
+class DispatchCases(MroDispatch):
+    """Collect cases of one external Python AST without executing its source."""
+
+    minimum_arms = 3
+
+    def __init__(self) -> None:
+        self.cases: dict[str, set[str]] = {}
+
+    def add(self, subject: ast.AST, case: str) -> None:
+        self.cases.setdefault(ast.dump(subject), set()).add(case)
+
+    def groups(self) -> tuple[frozenset[str], ...]:
+        return tuple(frozenset(cases) for cases in self.cases.values()
+                     if len(cases) >= self.minimum_arms)
+
+    def read_function(self, function: ast.AST) -> None:
+        pending = list(ast.iter_child_nodes(function))
+        while pending:
+            node = pending.pop()
+            # A nested scope's comparisons cannot combine with its parent's.
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                continue
+            self.dispatch_sync(node)
+            pending.extend(ast.iter_child_nodes(node))
+
+
+class LiteralDispatchCases(DispatchCases):
+    @staticmethod
+    def literal(node: ast.AST) -> bool:
+        return (isinstance(node, ast.Constant)
+                and isinstance(node.value, (str, int, float))
+                and not isinstance(node.value, bool))
+
+    @handles(ast.Compare)
+    def comparison(self, node: ast.Compare) -> None:
+        left = node.left
+        for operator, right in zip(node.ops, node.comparators, strict=True):
+            match operator, right:
+                case (ast.Eq() | ast.NotEq(), literal) if self.literal(literal):
+                    self.add(left, repr(literal.value))
+                case (ast.In() | ast.NotIn(), ast.Set(elts=items) | ast.Tuple(elts=items) | ast.List(elts=items)):
+                    for item in items:
+                        if self.literal(item):
+                            self.add(left, repr(item.value))
+            left = right
+
+    @handles(ast.Match)
+    def match_cases(self, node: ast.Match) -> None:
+        for case in node.cases:
+            if isinstance(case.pattern, ast.MatchValue) and self.literal(case.pattern.value):
+                self.add(node.subject, repr(case.pattern.value.value))
+
+
+class TypeDispatchCases(DispatchCases):
+    @handles(ast.Call)
+    def instance_check(self, node: ast.Call) -> None:
+        match node:
+            case ast.Call(func=ast.Name(id="isinstance"), args=[subject, kind], keywords=[]):
+                self.add(subject, ast.dump(kind))
+
+    @handles(ast.Compare)
+    def exact_type(self, node: ast.Compare) -> None:
+        match node:
+            case ast.Compare(left=ast.Call(func=ast.Name(id="type"), args=[subject]), comparators=[kind]):
+                self.add(subject, ast.dump(kind))
+
+    @handles(ast.Match)
+    def match_cases(self, node: ast.Match) -> None:
+        for case in node.cases:
+            if isinstance(case.pattern, ast.MatchClass):
+                self.add(node.subject, ast.dump(case.pattern.cls))
+
+
+class DispatchMeasure(PerFileOccurrenceMeasure):
+    """Screen three-arm subjects per function, with per-file growth isolation.
+
+    These are candidates, not a proof that an external taxonomy is ours. Review
+    ownership at each reported site; no exception roster or second registry.
+    """
+
+    @classmethod
+    @abstractmethod
+    def collector(cls) -> DispatchCases: ...
+
+    @classmethod
+    def groups(cls, node: ast.AST) -> tuple[frozenset[str], ...]:
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return ()
+        collector = cls.collector()
+        collector.read_function(node)
+        return collector.groups()
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        return len(cls.groups(node))
+
+
+class StringDispatch(DispatchMeasure):
+    @classmethod
+    def collector(cls) -> DispatchCases:
+        return LiteralDispatchCases()
+
+
+class TypeSwitch(DispatchMeasure):
+    @classmethod
+    def collector(cls) -> DispatchCases:
+        return TypeDispatchCases()
+
+
+class DispatchArms:
+    """Count growth inside an existing candidate through the same collector."""
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        return sum(len(group) for group in cls.groups(node))
+
+
+class StringDispatchArms(DispatchArms, StringDispatch):
+    pass
+
+
+class TypeSwitchArms(DispatchArms, TypeSwitch):
+    pass
+
+
+class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileOccurrenceMeasure):
+    """Admit the canonical audit collector through the original packaged ratchet.
+
+    Per-file identities keep moving primitive cases into another method/file
+    from cancelling growth. Parsing is the existing Git/source boundary; the
+    shared collector owns primitive arms and codec admission.
+    """
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        return cls.count_module(node) if isinstance(node, ast.Module) else 0
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        return super().count(source, filename) if cls.admits(filename) else 0
+
+
+class GodClassExcess(GitMeasure):
+    """Independent class lines beyond 500, including newly introduced classes."""
+
+    threshold = 500
+
+    @classmethod
+    def scope(cls, changed: set[str], present: set[str]) -> set[str]:
+        # Complete inventories distinguish a moved declaration from another
+        # same-named class in an unchanged module.
+        return present
+
+    @classmethod
+    def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
+        values = {}
+        def visit(node: ast.AST, path: str, scope: tuple[str, ...]) -> None:
+            match node:
+                case ast.ClassDef(name=name, lineno=start, end_lineno=end, decorator_list=decorators):
+                    scope = (*scope, name)
+                    start = min([start, *(decorator.lineno for decorator in decorators)])
+                    values[f"{cls.__name__}:{path}::{'.'.join(scope)}"] = max(0, end - start + 1 - cls.threshold)
+                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name):
+                    scope = (*scope, name)
+            for child in ast.iter_child_nodes(node):
+                visit(child, path, scope)
+        for path, source in sources:
+            visit(ast.parse(source, path), path, ())
+        return values
+
+    @classmethod
+    def align(cls, base: dict[str, int], head: dict[str, int]) -> tuple[dict[str, int], dict[str, int]]:
+        def names(values):
+            result = {}
+            for identity in values:
+                result.setdefault(identity.rsplit("::", 1)[1], []).append(identity)
+            return result
+        before, after = names(base), names(head)
+        matched = {}
+        consumed = set()
+        for identity in head:
+            if identity in base:
+                matched[identity] = base[identity]
+                consumed.add(identity)
+                continue
+            name = identity.rsplit("::", 1)[1]
+            previous = before.get(name, ())
+            if len(previous) == 1 and len(after[name]) == 1:
+                matched[identity] = base[previous[0]]
+                consumed.add(previous[0])
+            else:
+                # A new declaration must not introduce any god-class excess.
+                matched[identity] = 0
+        current = dict(head)
+        for identity in base.keys() - consumed:
+            matched[identity] = base[identity]
+            current[identity] = 0
+        return matched, current
+
+
+class TypeIdentity(OccurrenceMeasure):
+    @staticmethod
+    def is_type_call(node: ast.AST) -> bool:
+        match node:
+            case ast.Call(func=ast.Name(id="type"), args=[_], keywords=[]):
+                return True
+            case _:
+                return False
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        if not isinstance(node, ast.Compare):
+            return 0
+        return sum(
+            isinstance(operator, (ast.Is, ast.IsNot))
+            and (TypeIdentity.is_type_call(left) or TypeIdentity.is_type_call(right))
+            for left, operator, right in zip(
+                [node.left, *node.comparators[:-1]], node.ops, node.comparators, strict=True
+            )
+        )
+
+
+class LongBooleanChain(OccurrenceMeasure):
+    minimum_terms = 4
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.BoolOp(values=values):
+                return int(len(values) >= LongBooleanChain.minimum_terms)
+        return 0
+
+
+class BooleanChainTerms(PerFileOccurrenceMeasure):
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.BoolOp(values=values) if len(values) >= LongBooleanChain.minimum_terms:
+                return len(values)
+        return 0
+
+
+class ForeignAbsenceProbe(PerFileOccurrenceMeasure):
+    """Use the audit owner's explicit absence checks, not arbitrary truthiness."""
+
+    occurrences = AuditForeignAbsenceProbe.count
+
+
+class CodecSubclass(PerFileOccurrenceMeasure):
+    """TIME-9 census measure; the sealed FieldCodec guard also resolves aliases."""
+
+    @staticmethod
+    def codec_base(node: ast.AST) -> bool:
+        match node:
+            case ast.Name(id=name) | ast.Attribute(attr=name):
+                return name.endswith("Codec")
+        return False
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.ClassDef(bases=bases):
+                return int(any(CodecSubclass.codec_base(base) for base in bases))
+        return 0
+
+
+class TypingImports(MroDispatch):
+    """Resolve unshadowed module imports from the actual stdlib declarations.
+
+    This bounded syntactic measure never executes inspected source. Nested
+    bindings conservatively disqualify a name rather than inferring its flow.
+    """
+
+    def __init__(self, declarations: set[ast.AST]) -> None:
+        self.declarations = declarations
+        self.values: dict[str, object] = {}
+        self.shadowed: set[str] = set()
+
+    def bind(self, node: ast.AST, name: str, value: object) -> None:
+        if node not in self.declarations or name in self.values:
+            self.shadowed.add(name)
+        self.values[name] = value
+
+    @handles(ast.Import)
+    def modules(self, node: ast.Import) -> None:
+        for item in node.names:
+            self.bind(node, item.asname or item.name.split(".")[0],
+                      typing if item.name == typing.__name__ else None)
+
+    @handles(ast.ImportFrom)
+    def members(self, node: ast.ImportFrom) -> None:
+        for item in node.names:
+            declaration = None
+            if node.level == 0 and node.module == typing.__name__:
+                declaration = vars(typing).get(item.name)
+            self.bind(node, item.asname or item.name, declaration)
+
+    @handles(ast.Name)
+    def assignment(self, node: ast.Name) -> None:
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            self.shadowed.add(node.id)
+
+    @handles(ast.Attribute)
+    def mutation(self, node: ast.Attribute) -> None:
+        if isinstance(node.ctx, (ast.Store, ast.Del)):
+            for descendant in ast.walk(node.value):
+                if isinstance(descendant, ast.Name):
+                    self.shadowed.add(descendant.id)
+
+    @handles(ast.arg)
+    def parameter(self, node: ast.arg) -> None:
+        self.shadowed.add(node.arg)
+
+    @handles(ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+    def named_binding(self, node) -> None:
+        self.shadowed.add(node.name)
+
+    @handles(ast.ExceptHandler)
+    def exception_binding(self, node: ast.ExceptHandler) -> None:
+        name = node.name
+        if name is not None:
+            self.shadowed.add(name)
+
+    # Honor the package's Python 3.11 contract without inventing parser nodes.
+    if hasattr(ast, "type_param"):
+        @handles(ast.type_param)
+        def type_parameter(self, node) -> None:
+            self.shadowed.add(node.name)
+
+    @classmethod
+    def of(cls, tree: ast.Module) -> dict[str, object]:
+        imports = cls(set(tree.body))
+        for node in ast.walk(tree):
+            imports.dispatch_sync(node)
+        if "*" in imports.values:
+            return {}  # A star import can replace any otherwise known binding.
+        return {name: value for name, value in imports.values.items()
+                if name not in imports.shadowed}
+
+    @classmethod
+    def at_any_depth(cls, tree: ast.Module) -> dict[str, object]:
+        """Every name an import binds to ``typing``, wherever the import is written.
+
+        For a measure that counts uses of a typing name: skipping an import inside
+        ``if TYPE_CHECKING:`` or a function body would hide the uses it enables.
+        """
+        imports = cls(set(ast.walk(tree)))
+        for node in ast.walk(tree):
+            imports.dispatch_sync(node)
+        return {name: value for name, value in imports.values.items() if value is not None}
+
+
+class TypingReference(MroDispatch):
+    """One AST expression's resolved imported declaration, never evaluated code."""
+
+    def __init__(self, imports: dict[str, object]) -> None:
+        self.imports = imports
+        self.value: object = None
+
+    @handles(ast.Name)
+    def name(self, node: ast.Name) -> None:
+        self.value = self.imports.get(node.id)
+
+    @handles(ast.Attribute)
+    def member(self, node: ast.Attribute) -> None:
+        parent = TypingReference(self.imports)
+        parent.dispatch_sync(node.value)
+        if parent.value is typing:
+            self.value = vars(typing).get(node.attr)
+
+    def raw_access_count(self) -> int:
+        """Typing declarations contribute no raw-record operation; unknowns do."""
+        return int(getattr(self.value, "__module__", None) != typing.__name__)
+
+
+class StringSubscript(OccurrenceMeasure):
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        tree = ast.parse(source, filename)
+        imports = TypingImports.of(tree)
+        count = 0
+        for node in ast.walk(tree):
+            if cls.occurrences(node):
+                reference = TypingReference(imports)
+                reference.dispatch_sync(node.value)
+                count += reference.raw_access_count()
+        return count
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        return int(
+            isinstance(node, ast.Subscript)
+            and isinstance(node.slice, ast.Constant)
+            and isinstance(node.slice.value, str)
+        )
+
+
+class AnyInTypeExpression(MroDispatch):
+    """Count ``typing.Any`` in one type expression without evaluating it.
+
+    Only type-forming syntax is followed: a subscript, a union, a member list
+    and, in an annotation, a quoted forward reference. A call or a comparison
+    is a runtime value, so ``annotation is Any`` in introspection code is not a use.
+    """
+
+    def __init__(self, imports: dict[str, object], quoted: bool) -> None:
+        self.imports = imports
+        self.quoted = quoted
+        self.found = 0
+
+    def resolved(self, node: ast.AST) -> object:
+        reference = TypingReference(self.imports)
+        reference.dispatch_sync(node)
+        return reference.value
+
+    @handles(ast.Name, ast.Attribute)
+    def reference(self, node: ast.expr) -> None:
+        self.found += int(self.resolved(node) is typing.Any)
+
+    @handles(ast.Subscript)
+    def parameterised(self, node: ast.Subscript) -> None:
+        origin = self.resolved(node.value)
+        members = [node.slice]
+        if origin is typing.Literal:
+            members = []  # Literal members are values, not types.
+        if origin is typing.Annotated:
+            members = getattr(node.slice, "elts", members)[:1]  # The rest is metadata.
+        for member in members:
+            self.dispatch_sync(member)
+
+    @handles(ast.Tuple, ast.List)
+    def members(self, node: ast.Tuple | ast.List) -> None:
+        for member in node.elts:
+            self.dispatch_sync(member)
+
+    @handles(ast.BinOp)
+    def union(self, node: ast.BinOp) -> None:
+        self.dispatch_sync(node.left)
+        self.dispatch_sync(node.right)
+
+    @handles(ast.Constant)
+    def forward_reference(self, node: ast.Constant) -> None:
+        if not self.quoted or not isinstance(node.value, str):
+            return
+        try:
+            quoted = ast.parse(node.value.strip(), mode="eval")
+        except (SyntaxError, ValueError):
+            return
+        self.dispatch_sync(quoted.body)
+
+
+@dataclass(frozen=True)
+class AnyUse:
+    """One written ``typing.Any`` where a file declares a type."""
+
+    line: int
+    site: str
+    owner: str
+
+
+class DeclaredTypeSites(MroDispatch):
+    """Every place a file declares a type; each handler names one kind of place."""
+
+    def __init__(self, imports: dict[str, object]) -> None:
+        self.imports = imports
+        self.uses: list[AnyUse] = []
+
+    def read(self, tree: ast.Module) -> None:
+        pending: list[tuple[ast.AST, tuple[ast.AST, ...]]] = [(tree, ())]
+        while pending:
+            node, scope = pending.pop()
+            self.dispatch_sync(node, scope)
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                scope = (*scope, node)
+            pending.extend((child, scope) for child in ast.iter_child_nodes(node))
+
+    def declare(self, site: str, expression: ast.AST | None, scope: tuple[ast.AST, ...],
+                quoted: bool = True) -> None:
+        if expression is None:
+            return
+        counted = AnyInTypeExpression(self.imports, quoted)
+        counted.dispatch_sync(expression)
+        owner = ".".join(enclosing.name for enclosing in scope)
+        self.uses.extend([AnyUse(expression.lineno, site, owner)] * counted.found)
+
+    @staticmethod
+    def record_class(scope: tuple[ast.AST, ...]) -> bool:
+        """Whether the innermost scope is a class whose annotations are its fields."""
+        def last_name(expression: ast.AST) -> str:
+            return ast.unparse(getattr(expression, "func", expression)).rpartition(".")[2]
+        decorators = {last_name(decorator) for decorator in scope[-1].decorator_list}
+        bases = {last_name(base) for base in scope[-1].bases}
+        return "dataclass" in decorators or bool(bases & {"NamedTuple", "TypedDict"})
+
+    def assignment_site(self, scope: tuple[ast.AST, ...]) -> str:
+        if not scope or not isinstance(scope[-1], ast.ClassDef):
+            return "variable"
+        return "dataclass field" if self.record_class(scope) else "class attribute"
+
+    @handles(ast.arg)
+    def parameter(self, node: ast.arg, scope: tuple[ast.AST, ...]) -> None:
+        self.declare("parameter", node.annotation, scope)
+
+    @handles(ast.FunctionDef, ast.AsyncFunctionDef)
+    def result(self, node, scope: tuple[ast.AST, ...]) -> None:
+        self.declare("return", node.returns, (*scope, node))
+
+    @handles(ast.AnnAssign)
+    def annotated(self, node: ast.AnnAssign, scope: tuple[ast.AST, ...]) -> None:
+        self.declare(self.assignment_site(scope), node.annotation, scope)
+        alias = AnyInTypeExpression(self.imports, quoted=True).resolved(node.annotation)
+        if alias is typing.TypeAlias:
+            self.declare("alias", node.value, scope)
+
+    @handles(ast.Assign)
+    def alias(self, node: ast.Assign, scope: tuple[ast.AST, ...]) -> None:
+        # ``Payload = dict[str, Any]`` names a type. A bare member list such as
+        # ``(Any, object)`` is a runtime collection, and runtime strings are not
+        # forward references.
+        if not isinstance(node.value, (ast.Tuple, ast.List)):
+            self.declare("alias", node.value, scope, quoted=False)
+
+    # Honor the package's Python 3.11 contract without inventing parser nodes.
+    if hasattr(ast, "TypeAlias"):
+        @handles(ast.TypeAlias)
+        def alias_statement(self, node, scope: tuple[ast.AST, ...]) -> None:
+            self.declare("alias", node.value, scope)
+
+
+class AnyAnnotation(PerFileMeasure):
+    """``typing.Any`` written where a type is declared.
+
+    A declared type is what a consumer turns into a form control, a parameter
+    description or an array conversion; ``Any`` is the answer that is missing.
+    Counted: parameters, returns, annotated assignments and type aliases,
+    including nested (``dict[str, Any]``) and quoted uses.
+    """
+
+    @classmethod
+    def uses(cls, source: bytes, filename: str) -> tuple[AnyUse, ...]:
+        tree = ast.parse(source, filename)
+        sites = DeclaredTypeSites(TypingImports.at_any_depth(tree))
+        sites.read(tree)
+        return tuple(sorted(sites.uses, key=lambda use: (use.line, use.site, use.owner)))
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        return len(cls.uses(source, filename))
+
+
+def git(repo: Path, *args: str) -> bytes:
+    return subprocess.check_output(["git", "-C", str(repo), *args], timeout=20)
+
+
+def revision(repo: Path, ref: str) -> str:
+    return (
+        git(repo, "rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}").decode().strip()
+    )
+
+
+def python_paths(repo: Path, ref: str, root: str) -> set[str]:
+    return {
+        path.decode()
+        for path in git(repo, "ls-tree", "-rz", "--name-only", ref, "--", root).split(b"\0")
+        if path.endswith(b".py")
+    }
+
+
+@dataclass(frozen=True)
+class Comparison:
+    root: str
+    base_revision: str
+    head_revision: str
+    paths: tuple[str, ...]
+    base: dict[str, int]
+    head: dict[str, int]
+    introduced: dict[str, int]
+
+    @projected(view="report")
+    def delta(self) -> dict[str, int]:
+        return {name: value - self.base[name] for name, value in self.head.items()}
+
+    @property
+    def failed(self) -> bool:
+        return any(value > 0 for value in self.delta.values()) or any(self.introduced.values())
+
+
+def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
+    source_root = Path(root)
+    if source_root.is_absolute() or ".." in source_root.parts or not source_root.parts:
+        raise ValueError("--root must be a repository-relative source directory")
+    root = source_root.as_posix().rstrip("/") + "/"
+    base, head = revision(repo, base), revision(repo, head)
+    # Disable rename detection: both sides of a move enter the union, including
+    # moves into/out of the declared production source boundary.
+    touched = {
+        path.decode()
+        for path in git(repo, "diff", "--no-renames", "--name-only", "-z", base, head, "--").split(b"\0")
+    }
+    paths = touched & (python_paths(repo, base, root) | python_paths(repo, head, root))
+
+    before, after = {}, {}
+    for measure in Measure.members_with(Measure):
+        measured_base, measured_head = measure.compare(repo, base, head, paths, root)
+        before.update(measured_base)
+        after.update(measured_head)
+    introduced = {}
+    strict_measures = Measure.members_with(CleanChangedLines)
+    for path in sorted(paths & python_paths(repo, head, root)):
+        source = ChangedSource.read(repo, base, head, path)
+        for measure in strict_measures:
+            introduced[f"{measure.__name__}:{path}"] = measure.count_changed(source)
+    return Comparison(root, base, head, tuple(sorted(paths)), before, after, introduced)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", required=True, help="Repository-relative production source directory")
+    parser.add_argument("--base", required=True)
+    parser.add_argument("--head", required=True)
+    args = parser.parse_args()
+    result = compare(Path.cwd(), args.base, args.head, args.root)
+    print(json.dumps(FieldCodec.project(result, "report"), indent=2))
+    return int(result.failed)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

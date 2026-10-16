@@ -1,0 +1,1181 @@
+diff --cc src/agent_comms/cli_commands.py
+index 4589bed9a,62cdd2f41..000000000
+--- a/src/agent_comms/cli_commands.py
++++ b/src/agent_comms/cli_commands.py
+@@@ -6,21 -6,19 +6,22 @@@ command catalog. Existing CLI spelling
+  
+  from __future__ import annotations
+  
+ +from .runtime_socket import RuntimeSocket
+ +
+  import argparse
+ +import asyncio
+  import json
++ import asyncio
+  import os
+  import re
+  import shlex
+  import time
+  import types
+ -from collections.abc import AsyncIterator, Callable
+ -from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
+ +from collections.abc import AsyncIterator
+ +from dataclasses import MISSING, Field, asdict, dataclass, fields, replace
+  from enum import Enum
+  from pathlib import Path
+- from typing import Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
++ from typing import Any, ClassVar, Literal, Self, TextIO, Type, TYPE_CHECKING, get_args, get_origin, get_type_hints
+  
+  from .activity import ActivityState
+  from .channels import Channel
+@@@ -35,7 -30,7 +36,11 @@@ from .tools import invoke_tool, tool_ca
+  from .field_codec import FieldCodec
+  from .comms import Comms
+  from .config_options import (
+++<<<<<<< HEAD
+ +    CatalogConfigOption, CatalogSelection, ConfigChoice, ConfigOptions,
+++=======
++     CatalogConfigOption, CatalogSelection, ConfigOptions,
+++>>>>>>> origin/main
+      ModelConfigOption, ThinkingLevelConfigOption,
+  )
+  from .declared_family import DeclaredFamily
+@@@ -112,6 -106,40 +120,43 @@@ def _message_reference(value: str) -> d
+      return {"seq": int(sequence), "message_id": message_id}
+  
+  
+++<<<<<<< HEAD
+++=======
++ def option(
++     *flags: str,
++     default: Any = MISSING,
++     default_factory: Any = MISSING,
++     group: str | None = None,
++     normalize: Callable[..., Any] | None = None,
++     wire_name: str | None = None,
++     parser_default: Any = MISSING,
++     parser_default_factory: Any = MISSING,
++     multiline: bool = False,
++     target_bound: bool = False,
++     editor_format: Callable[[Any], str] | None = None,
++     catalog: type[CatalogConfigOption] | None = None,
++     **parser_options: Any,
++ ) -> Any:
++     """One field owns both its CLI projection and JSON boundary conversion."""
++     metadata = {
++         "multiline": multiline,
++         "target_bound": target_bound,
++         "editor_format": editor_format,
++         "flags": flags,
++         "parser_options": parser_options,
++         "group": group,
++         "normalize": normalize,
++         "parser_default": parser_default,
++         "parser_default_factory": parser_default_factory,
++     }
++     if wire_name is not None:
++         metadata["wire_name"] = wire_name
++     if catalog is not None:
++         metadata[CatalogConfigOption] = catalog
++     return field(default=default, default_factory=default_factory, metadata=metadata)
++ 
++ 
+++>>>>>>> origin/main
+  @dataclass(frozen=True)
+  class TargetField:
+      """The original command field owns parsing, editor hints and requiredness."""
+@@@ -178,7 -206,7 +223,11 @@@
+  @dataclass(frozen=True)
+  class CatalogTargetField(TargetField):
+      """A form projects the choices supplied by its declared configuration owner."""
+++<<<<<<< HEAD
+ +    options: tuple[ConfigChoice, ...]
+++=======
++     options: tuple[SessionConfigSelectOption, ...]
+++>>>>>>> origin/main
+  
+      @property
+      def choices(self) -> tuple[tuple[str, str], ...]:
+@@@ -200,8 -228,8 +249,13 @@@ class TargetAction
+      def editable_fields(self) -> tuple[TargetField, ...]:
+          return self.bound[0].editable_fields
+  
+++<<<<<<< HEAD
+ +    async def prepare_fields(self, comms: Comms) -> tuple[TargetField, ...]:
+ +        return await self.bound[0].prepare_fields(comms)
+++=======
++     async def prepare_fields(self) -> tuple[TargetField, ...]:
++         return await self.bound[0].prepare_fields()
+++>>>>>>> origin/main
+  
+      @property
+      def label(self) -> str:
+@@@ -437,11 -465,11 +491,19 @@@ class CliCommand(DeclaredFamily, Comman
+          return tuple(TargetField(item, hints[item.name], getattr(self, item.name))
+                       for item in fields(self) if not item.metadata['target_bound'])
+  
+++<<<<<<< HEAD
+ +    async def prepare_fields(self, comms: Comms) -> tuple[TargetField, ...]:
+ +        declared = self.editable_fields
+ +        if not any(item.catalog is not None for item in declared):
+ +            return declared
+ +        catalogs = ConfigOptions(comms)
+++=======
++     async def prepare_fields(self) -> tuple[TargetField, ...]:
++         declared = self.editable_fields
++         if not any(item.catalog is not None for item in declared):
++             return declared
++         catalogs = ConfigOptions.configured()
+++>>>>>>> origin/main
+          return tuple([await item.prepare(catalogs, self) for item in declared])
+  
+      def describe(self, comms: Comms, target: CommandTarget | str, project: str) -> TargetAction:
+@@@ -677,8 -736,12 +742,17 @@@ class InvokeCliCommand(CliCommand)
+          normalize=_json_object,
+      )
+  
+++<<<<<<< HEAD
+ +    def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
+ +        return invoke_tool(ctx, self.tool, self.arguments, caller=caller)
+++=======
++     def apply(self, ctx: Comms) -> Any:
++         from .tools import invoke_tool
++ 
++         from .tool_caller import ToolCaller
++ 
++         return invoke_tool(ctx, self.tool, self.arguments, caller=ToolCaller.from_actor(self.caller))
+++>>>>>>> origin/main
+  
+  
+  @dataclass(frozen=True, kw_only=True)
+@@@ -726,7 -789,10 +800,14 @@@ class ConfigureCliCommand(CliCommand, d
+      thinking: str | None = option("--thinking", default=None)
+      service_tier: ServiceTier | None = option("--service-tier", default=None)
+  
+++<<<<<<< HEAD
+ +    def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
+++=======
++     def apply(self, ctx: Comms) -> Any:
++         from .pi_vocabulary import ThinkingLevel
++         from .errors import RelationViolationError
++ 
+++>>>>>>> origin/main
+          thread = ctx.registry.require(self.name)
+          if ctx.registry.status(thread.name).active:
+              raise RelationViolationError(
+@@@ -737,8 -803,7 +818,12 @@@
+              thinking_level=level,
+              service_tier=self.service_tier,
+          )
+++<<<<<<< HEAD
+ +        catalogs = ConfigOptions(ctx)
+ +        asyncio.run(catalogs.validate(candidate))
+++=======
++         asyncio.run(ConfigOptions.configured().validate(candidate))
+++>>>>>>> origin/main
+          updated = ctx.threads.set_thread_configuration(
+              thread,
+              model=candidate.model,
+@@@ -897,11 -962,10 +982,15 @@@ class WatchCliCommand(CliCommand, decla
+      thread: str = option("--thread")
+      acknowledgment: type[WatchAcknowledgment] = option("--acknowledgment", default=OnReadWatchAcknowledgment)
+  
+ -    def apply(self, ctx: Comms) -> AsyncIterator[Message]:
+ +    def apply(self, ctx: Comms, *, caller: ToolCaller) -> AsyncIterator[Message]:
+          return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
+  
+++<<<<<<< HEAD
+ +    def run(self, ctx: Comms, output: TextIO, *, caller: ToolCaller) -> int:
+ +        import asyncio
+++=======
++     def run(self, ctx: Comms, output: TextIO) -> int:
+++>>>>>>> origin/main
+          from contextlib import aclosing
+  
+          async def stream() -> None:
+@@@ -1319,11 -1384,15 +1408,21 @@@ class DeleteCliCommand(CliCommand, decl
+  @dataclass(frozen=True, kw_only=True)
+  class RenameSelfCliCommand(CliCommand, declared_name="rename-self"):
+      help = "Rename your own running thread"
++     caller: str = option("--from")
+      new_name: str = option("--to")
+  
+++<<<<<<< HEAD
+ +    def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
+ +        return invoke_tool(ctx, "comms_rename_self", {"new_name": self.new_name},
+ +                           caller=caller)
+++=======
++     def apply(self, ctx: Comms) -> Any:
++         from .tools import CommsRenameSelfTool
++         from .tool_caller import ThreadCaller
++ 
++         return CommsRenameSelfTool.invoke(ctx, {"new_name": self.new_name},
++                                          caller=ThreadCaller(self.caller))
+++>>>>>>> origin/main
+  
+  
+  @dataclass(frozen=True, kw_only=True)
+@@@ -1336,11 -1405,11 +1435,19 @@@ class NewThreadCliCommand(CliCommand, d
+          "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
+      )
+      project: str = option("--project", parser_default_factory=os.getcwd)
+++<<<<<<< HEAD
+ +    model: str = option("--model", setting=lambda settings: settings.startup_arguments().model,
+ +                        field_metadata={CatalogConfigOption: ModelConfigOption})
+ +    thinking_level: type[ThinkingLevel] = option(
+ +        "--thinking-level", setting=lambda settings: ThinkingLevel.decode(settings.startup_arguments().thinking),
+ +        field_metadata={CatalogConfigOption: ThinkingLevelConfigOption})
+++=======
++     model: str = option("--model", parser_default=NativeThreadDefaults.model,
++                         catalog=ModelConfigOption)
++     thinking_level: type[ThinkingLevel] = option(
++         "--thinking-level", parser_default=NativeThreadDefaults.thinking_level,
++         catalog=ThinkingLevelConfigOption)
+++>>>>>>> origin/main
+  
+      @classmethod
+      def project_bindings(cls, comms, project):
+@@@ -1352,10 -1421,10 +1459,14 @@@
+      def open_targets(cls, result: ThreadCreatedResult) -> tuple[str, ...]:
+          return (result.created,)
+  
+ -    def apply(self, ctx: Comms) -> ThreadCreatedResult:
+ +    def apply(self, ctx: Comms, *, caller: ToolCaller) -> ThreadCreatedResult:
+          spec = self.spec_type(**{item.name: getattr(self, item.name)
+                                   for item in fields(self.spec_type)})
+++<<<<<<< HEAD
+ +        asyncio.run(ConfigOptions(ctx).validate(self))
+++=======
++         asyncio.run(ConfigOptions.configured().validate(self))
+++>>>>>>> origin/main
+          child = ctx.threads.create(spec)
+          return ThreadCreatedResult(child.name, child.pid)
+  
+@@@ -1442,10 -1511,9 +1553,9 @@@ class ContextCliCommand(CliCommand)
+                  raise ValueError("No preceding recorded turn exists for comparison")
+              return {"manifests": tuple(reversed(selected)),
+                      "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
+-         import asyncio
+          from .field_codec import FieldCodec
+          from .native_turn_context import NativeContextData
+ -        from .runtime import RuntimeConnection, socket_path
+ +        from .runtime import RuntimeConnection
+          from .turn_context import NextContextTurn, TurnContext
+          from acp.exceptions import RequestError
+  
+diff --cc src/agent_comms/config_options.py
+index c3fb25d94,639ddd66a..000000000
+--- a/src/agent_comms/config_options.py
++++ b/src/agent_comms/config_options.py
+@@@ -5,33 -5,37 +5,55 @@@ from __future__ import annotation
+  import asyncio
+  import os
+  from abc import abstractmethod
+ -from collections.abc import AsyncIterator
+ -from contextlib import asynccontextmanager
+ +from dataclasses import dataclass
+  from functools import partial
+  from pathlib import Path
+++<<<<<<< HEAD
+ +from typing import ClassVar, Protocol
+ +
+++=======
++ from typing import TYPE_CHECKING, ClassVar, Protocol
++ 
++ from .pi_vocabulary import ThinkingLevel
+++>>>>>>> origin/main
+  from .comms import Comms
+ -from .agent_backend import UseSettings
+  from .coordinator import Coordination
+  from .declared_family import DeclaredFamily
+ -from .field_codec import FieldCodec
+ -from .native_arguments import NativeArguments
+ -from .native_pi import NativePiUnavailable
+  from .launch_runtime import RestartEnvironment
+++<<<<<<< HEAD
+ +from .native_errors import NativePiUnavailable
+ +from .pi_commands import (
+ +    GetAvailableModels,
+ +    GetAvailableThinkingLevels,
+ +    SetModel,
+ +    SetThinkingLevel,
+ +    SettingCommand,
+ +)
+ +from .pi_vocabulary import ThinkingLevel
+ +from .threads import Thread
+ +
+++=======
++ from .threads import Thread
++ 
++ if TYPE_CHECKING:
++     from acp.schema import ConfigOptionUpdate, SessionConfigOptionSelect, SessionConfigSelectOption, SetSessionConfigOptionResponse
++     from .runtime import RuntimeServer
++     from .session_effects import SessionEffects
++     from .pi_commands import SettingCommand
++     from .session_lifecycle import SessionLifecycle
++ 
+++>>>>>>> origin/main
+  
+  class InvalidConfigChoice(ValueError):
+      """A configured value is not a member of its discovered catalog."""
+  
+  
+  class CatalogSelection(Protocol):
+++<<<<<<< HEAD
+ +    """The model and thinking selection read by draft and running catalogs."""
+++=======
++     """The model and thinking selection read by both draft and running catalogs."""
+++>>>>>>> origin/main
+  
+      @property
+      def model(self) -> str | None: ...
+@@@ -40,20 -44,6 +62,23 @@@
+      def thinking_level(self) -> type[ThinkingLevel] | None: ...
+  
+  
+++<<<<<<< HEAD
+ +@dataclass(frozen=True)
+ +class ConfigChoice:
+ +    value: str
+ +    name: str
+ +    description: str | None = None
+ +
+ +
+ +@dataclass(frozen=True)
+ +class CatalogDescription:
+ +    declaration: type[CatalogConfigOption]
+ +    current_value: str | None
+ +    choices: tuple[ConfigChoice, ...]
+ +
+ +
+++=======
+++>>>>>>> origin/main
+  class ConfigOption(DeclaredFamily, affix="ConfigOption"):
+      title: ClassVar[str]
+      description: ClassVar[str]
+@@@ -63,13 -53,15 +88,20 @@@
+      def current_value(self, thread: CatalogSelection) -> str | None: ...
+  
+      @abstractmethod
+++<<<<<<< HEAD
+ +    async def discover(self, thread: CatalogSelection) -> list[ConfigChoice]: ...
+ +
+ +    @abstractmethod
+ +    async def describe(self, thread: CatalogSelection) -> CatalogDescription: ...
+++=======
++     async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]: ...
++ 
++     @abstractmethod
++     async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect: ...
+++>>>>>>> origin/main
+  
+      @abstractmethod
+ -    async def change(
+ -        self, owner: SessionConfigOptions, thread: Thread, value: str
+ -    ) -> None: ...
+ +    async def change(self, owner: ConfigOptions, thread: Thread, value: str) -> None: ...
+  
+  
+  class CatalogConfigOption(ConfigOption):
+@@@ -89,7 -81,7 +121,11 @@@
+      def cache_key(self, thread: CatalogSelection) -> str | None:
+          return thread.model
+  
+++<<<<<<< HEAD
+ +    async def choices(self, thread: CatalogSelection) -> list[ConfigChoice]:
+++=======
++     async def choices(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
+++>>>>>>> origin/main
+          async with self.lock:
+              if not self.current_auth:
+                  self.catalogs.clear()
+@@@ -99,21 -91,51 +135,39 @@@
+                  self.catalogs[key] = await self.discover(thread)
+              return self.catalogs[key]
+  
+++<<<<<<< HEAD
+ +    async def describe(self, thread: CatalogSelection) -> CatalogDescription:
+++=======
++     async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect:
++         from acp.schema import SessionConfigOptionSelect, SessionConfigSelectOption
++ 
+++>>>>>>> origin/main
+          choices = await self.choices(thread)
+          configured = self.current_value(thread)
+ -        selected = configured if configured is not None else ""
+ -        if configured is None:
+ -            choices = [SessionConfigSelectOption(
+ -                value=selected, name="Not configured"
+ -            ), *choices]
+ -        else:
+ -            try:
+ -                self.require_value(selected, choices)
+ -            except InvalidConfigChoice as error:
+ -                raise NativePiUnavailable(str(error)) from error
+ -        return SessionConfigOptionSelect(
+ -            id=FieldCodec.encode(type(self)),
+ -            name=self.title,
+ -            description=self.description,
+ -            category=self.category,
+ -            type="select",
+ -            current_value=selected,
+ -            options=choices,
+ -        )
+ +        if configured is not None:
+ +            self.require_value(configured, choices)
+ +        return CatalogDescription(type(self), configured, tuple(choices))
+  
+      @abstractmethod
+ -    async def apply(
+ -        self, owner: SessionConfigOptions, thread: Thread, value: str
+ -    ) -> None: ...
+ +    async def apply(self, owner: ConfigOptions, thread: Thread, value: str) -> None: ...
+  
+++<<<<<<< HEAD
+ +    async def change(self, owner: ConfigOptions, thread: Thread, value: str) -> None:
+ +        await self.validate(thread, value)
+++=======
++     async def change(
++         self, owner: SessionConfigOptions, thread: Thread, value: str
++     ) -> None:
++         from acp import RequestError
++ 
++         try:
++             await self.validate(thread, value)
++         except InvalidConfigChoice as error:
++             raise RequestError.invalid_params({"reason": str(error)}) from error
+++>>>>>>> origin/main
+          await self.apply(owner, thread, value)
+  
+ -    def require_value(self, value: str, choices: list[SessionConfigSelectOption]) -> None:
+ +    def require_value(self, value: str, choices: list[ConfigChoice]) -> None:
+          if value not in {choice.value for choice in choices}:
+              valid = ", ".join(choice.value for choice in choices)
+              raise InvalidConfigChoice(
+@@@ -135,16 -157,32 +189,44 @@@ class ModelConfigOption(CatalogConfigOp
+      def cache_key(self, thread: CatalogSelection) -> None:
+          return None
+  
+++<<<<<<< HEAD
+ +    async def discover(self, thread: CatalogSelection) -> list[ConfigChoice]:
+ +        data = await GetAvailableModels().discover(
+ +            self.comms, self.comms.settings.arguments,
+++=======
++     async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
++         from acp.schema import SessionConfigSelectOption
++ 
++         values = [
++             value.strip()
++             for value in os.environ.get("AGENT_COMMS_AGENT_MODELS", "").split(",")
++             if value.strip()
++         ]
++         if not values:
++             from .pi_commands import GetAvailableModels
++ 
++             data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
++             values = [model.display_name for model in data.models if model.provider and model.id]
++         return [
++             SessionConfigSelectOption(value=value, name=value) for value in dict.fromkeys(values)
++         ]
++ 
++     async def apply(
++         self, owner: SessionConfigOptions, thread: Thread, value: str
++     ) -> None:
++         from .pi_commands import SetModel
++ 
++         provider, model = value.split("/", 1)
++         await owner.configure_thread(
++             thread, SetModel(provider=provider, model_id=model),
+++>>>>>>> origin/main
+          )
+ +        values = [model.display_name for model in data.models if model.provider and model.id]
+ +        return [ConfigChoice(value=value, name=value) for value in dict.fromkeys(values)]
+ +
+ +    async def apply(self, owner: ConfigOptions, thread: Thread, value: str) -> None:
+ +        provider, model = value.split("/", 1)
+ +        await owner.configure_thread(thread, SetModel(provider=provider, model_id=model))
+  
+  
+  class ThinkingLevelConfigOption(CatalogConfigOption):
+@@@ -155,44 -193,149 +237,156 @@@
+      def current_value(self, thread: CatalogSelection) -> str | None:
+          return ThinkingLevel.optional_name(thread.thinking_level)
+  
+++<<<<<<< HEAD
+ +    async def discover(self, thread: CatalogSelection) -> list[ConfigChoice]:
+++=======
++     async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
++         from acp.schema import SessionConfigSelectOption
++         from .pi_commands import GetAvailableThinkingLevels
++ 
+++>>>>>>> origin/main
+          data = await GetAvailableThinkingLevels().discover(
+ -            self.agent_bin, self.agent_args.with_model(thread.model).argv
+ +            self.comms, self.comms.settings.arguments.with_model(thread.model)
+          )
+ -        levels = [member.declared_name for member in data.levels]
+ -        return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
+ -
+ -    async def apply(
+ -        self, owner: SessionConfigOptions, thread: Thread, value: str
+ -    ) -> None:
+ -        from .pi_commands import SetThinkingLevel
+ +        return [ConfigChoice(value=member.declared_name, name=member.declared_name.title())
+ +                for member in data.levels]
+  
+ -        await owner.configure_thread(
+ -            thread, SetThinkingLevel(level=value),
+ -        )
+ +    async def apply(self, owner: ConfigOptions, thread: Thread, value: str) -> None:
+ +        await owner.configure_thread(thread, SetThinkingLevel(level=value))
+  
+  
+  class ConfigOptions:
+ -    """Own one launch's declared model and thinking catalogs."""
+ +    """Own one launch's declared model/thinking catalogs and native changes."""
+  
+ -    def __init__(
+ -        self,
+ -        agent_bin: str,
+ -        agent_args: NativeArguments,
+ -        configuration: RestartEnvironment,
+ -    ):
+ -        self.agent_bin, self.agent_args = agent_bin, agent_args
+ -        self.configuration = configuration
+ +    def __init__(self, comms: Comms):
+ +        self.comms = comms
+ +        self.configuration = RestartEnvironment.inherit(os.environ)
+          self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
+  
++     @classmethod
++     def configured(cls) -> ConfigOptions:
++         """Catalogs of the native binary, arguments and environment this process is configured with."""
++         return cls(NativeArguments.configured_binary(), NativeArguments.configured(),
++                    RestartEnvironment.inherit(os.environ))
++ 
+      def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
+          if member not in self.catalogs:
+ -            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration)
+ +            self.catalogs[member] = member(self.comms, self.configuration)
+          return self.catalogs[member]
+  
+++<<<<<<< HEAD
+ +    async def descriptions(self, thread: CatalogSelection) -> list[CatalogDescription]:
+ +        return [await self.catalog_for(member).describe(thread)
+ +                for member in ConfigOption.members_with(CatalogConfigOption)]
+ +
+ +    async def validate(self, thread: CatalogSelection) -> None:
+++=======
++     async def options(self, thread: CatalogSelection) -> list[SessionConfigOptionSelect]:
++         """Describe declared choices and settings from one captured thread."""
++         return [
++             await self.catalog_for(member).describe(thread)
++             for member in ConfigOption.members_with(CatalogConfigOption)
++         ]
++ 
++     async def validate(self, thread: CatalogSelection) -> None:
++         """Require every configured value through its owning catalog."""
+++>>>>>>> origin/main
+          for member in ConfigOption.members_with(CatalogConfigOption):
+              option = self.catalog_for(member)
+              value = option.current_value(thread)
+              if value is not None:
+                  await option.validate(thread, value)
+  
+++<<<<<<< HEAD
+ +    async def configure_thread(self, thread: Thread, command: SettingCommand) -> None:
+ +        """Store the model and thinking level Pi reports for this change."""
+ +        arguments = self.comms.settings.arguments.with_model(thread.model).with_thinking(
+++=======
++ 
++ class SessionConfigOptions(ConfigOptions):
++     """Add ACP publication and persistence to the shared catalog owner."""
++ 
++     def __init__(
++         self,
++         comms: Comms,
++         agent_bin: str,
++         agent_args: NativeArguments,
++         runtime: RuntimeServer,
++         sessions: SessionLifecycle,
++         effects: SessionEffects,
++     ):
++         super().__init__(agent_bin, agent_args, RestartEnvironment.inherit(os.environ))
++         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
++         self.catalog_publish_lock = asyncio.Lock()
++         self.publications: dict[str, ConfigOptionUpdate] = {}
++         # The stored settings each session's owner last saw, to notice a change.
++         # The model and thinking level each running turn currently uses.
++         self.settings_in_use: dict[str, UseSettings] = {}
++ 
++     @asynccontextmanager
++     async def session_options(
++         self, thread_name: str
++     ) -> AsyncIterator[list[SessionConfigOptionSelect]]:
++         """Hold the configuration observation until its consumer supplies it.
++ 
++         A private new/load/Ready reply does not publish to other subscribers.
++         Its snapshot must not follow a newer broadcast on the same transport.
++         """
++         async with self.catalog_publish_lock:
++             thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
++             yield await self.options(thread)
++ 
++     async def _publish(self, session_id: str, options: list[SessionConfigOptionSelect]) -> None:
++         """Publish within the original session_options acquisition lifetime."""
++         from acp.schema import ConfigOptionUpdate
++ 
++         update = ConfigOptionUpdate(
++             session_update="config_option_update", config_options=options
++         )
++         if self.publications.get(session_id) == update:
++             return
++         if await self.runtime.session_update(session_id=session_id, update=update):
++             # Retain exactly what this send supplied, not a later catalog
++             # generation or settings observation acquired during its await.
++             self.publications[session_id] = update
++ 
++     async def set_option(
++         self, config_id: str, session_id: str, value: str | bool
++     ) -> SetSessionConfigOptionResponse:
++         from acp import RequestError
++         from acp.schema import SetSessionConfigOptionResponse
++ 
++         try:
++             member = CatalogConfigOption.decode(config_id)
++             if not isinstance(value, str):
++                 raise ValueError("Expected string setting")
++         except ValueError:
++             raise RequestError.invalid_params(
++                 {"reason": f"Unknown session configuration option: {config_id!r}"}
++             ) from None
++         if session_id in self.sessions.proxies:
++             result = await self.sessions.proxies[session_id].request(
++                 "set_config_option", config_id=config_id, value=value
++             )
++             return SetSessionConfigOptionResponse.model_validate(result)
++         name = await self.sessions.sync_identity(session_id)
++         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
++         try:
++             await self.catalog_for(member).change(self, thread, value)
++         except (NativePiUnavailable, InvalidConfigChoice) as error:
++             raise RequestError.invalid_params({"reason": str(error)}) from error
++         await self.effects.turns.close_idle_backend(session_id, thread)
++         await self.use_stored_settings(session_id, name)
++         async with self.session_options(name) as options:
++             await self._publish(session_id, options)
++             return SetSessionConfigOptionResponse(config_options=options)
++ 
++     async def configure_thread(
++         self, thread: Thread, command: SettingCommand,
++     ) -> None:
++         """Store the model and thinking level Pi itself reports for this change."""
++         arguments = self.agent_args.with_model(thread.model).with_thinking(
+++>>>>>>> origin/main
+              ThinkingLevel.optional_name(thread.thinking_level)
+          )
+          state = await command.configure(
+diff --cc src/agent_comms/restart_queue.py
+index b9e637035,473133fda..000000000
+--- a/src/agent_comms/restart_queue.py
++++ b/src/agent_comms/restart_queue.py
+@@@ -101,17 -102,32 +101,32 @@@ class RestartedRestart(RestartState)
+  
+  
+  @dataclass(frozen=True)
+ -class RestartTarget:
+ -    interpreter: str
+ +class QueuedRestart:
+ +    id: str
+ +    target: RestartTarget
+ +    source_interpreter: str
+ +    launch_runtime: LaunchRuntime
+      runtime: RestartEnvironment
+++<<<<<<< HEAD
+ +    state: RestartState
+++=======
++     agent_bin: str
++ 
++     @classmethod
++     def capture(cls, comms: Comms, source: Mapping[str, str], selected: LaunchRuntime):
++         runtime = RestartEnvironment.inherit(
++             comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), selected)
++         )
++         return cls(
++             str(selected.interpreter),
++             runtime,
++             comms.owners.restart_entrypoint(source[NativeArguments.binary_key], selected),
++         )
+++>>>>>>> origin/main
+  
+      @property
+ -    def launch_runtime(self) -> LaunchRuntime:
+ -        return LaunchRuntime(Path(self.interpreter))
+ -
+ -    def require_available(self, comms: Comms) -> None:
+ -        self.launch_runtime.require_available()
+ -        if self.agent_bin != comms.owners.restart_entrypoint(self.agent_bin, self.launch_runtime):
+ -            raise ValueError("Target agent entrypoint differs from reviewed launch authority")
+ -        if Path(self.agent_bin).is_absolute() and not os.access(self.agent_bin, os.X_OK):
+ -            raise ValueError("Target agent entrypoint is unavailable")
+ +    def name(self) -> str:
+ +        return self.target.selection.name
+  
+      @property
+      def is_current_watcher(self) -> bool:
+@@@ -232,12 -262,8 +247,17 @@@ def enqueue(comms: Comms, name: str, *
+          owner.require_restart_owner(status)
+          selection = OwnerRestartSelection.capture(snapshot, owner.name)
+          launch = RetainedOwnerLaunch.capture(owner, snapshot)
+++<<<<<<< HEAD
+ +        selected = comms.runtime
+ +        selected.require_available()
+ +        runtime = RestartEnvironment.inherit(comms.owners.restart_environment(
+ +            RestartEnvironment.inherit(os.environ).encode(), selected))
+ +        candidate = QueuedRestart(uuid.uuid4().hex, RestartTarget(selection, launch.native),
+ +                                  launch.interpreter, selected, runtime, PendingRestart())
+++=======
++         target = RestartTarget.capture(comms, launch.environment, launch_runtime)
++         target.require_available(comms)
+++>>>>>>> origin/main
+          # Queueing itself never signals or interrupts the owner, even if it is busy.
+          with queue.locked():
+              for previous in queue.active_for(owner.incarnation.require_recorded()):
+diff --cc src/agent_comms/thread_management.py
+index daa79da37,1491b7405..000000000
+--- a/src/agent_comms/thread_management.py
++++ b/src/agent_comms/thread_management.py
+@@@ -624,10 -631,10 +627,17 @@@ class ThreadManagement
+  
+  
+      def create(self, spec: NewThreadSpec) -> Thread:
+++<<<<<<< HEAD
+ +        """The selected Comms runtime prepares the copy and starts the child."""
+ +        runtime = self.comms.runtime
+ +        runtime.require_available()
+ +        with spec.prepared(self) as child:
+++=======
++         """Prepare the session, then register and launch the thread with its task as first input."""
++         resolved_bin = NativeArguments.configured_binary()
++         runtime = LaunchRuntime.current()
++         with spec.prepared(self, resolved_bin, runtime) as child:
+++>>>>>>> origin/main
+              # A new incarnation's inbox already starts at its creation time
+              # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
+              child = self.registry._declare_unlocked(child)
+@@@ -635,8 -642,7 +645,12 @@@
+              key = f"acp:{uuid4().hex}" if spec.task else None
+              try:
+                  owned = self.owners._launch_owner_unlocked(
+++<<<<<<< HEAD
+ +                    replace(child, model=self.resolve_thread_model(child.name)),
+ +                    self.comms.settings, startup_input_key=key, launch_runtime=runtime,
+++=======
++                     child, resolved_bin, startup_input_key=key, launch_runtime=runtime,
+++>>>>>>> origin/main
+                  )
+                  if key is not None:
+                      InputDispositions(self.root).record(
+diff --cc src/agent_comms/tool_caller.py
+index 0eac8e43a,5eea4faac..000000000
+--- a/src/agent_comms/tool_caller.py
++++ b/src/agent_comms/tool_caller.py
+@@@ -2,18 -2,10 +2,24 @@@
+  from __future__ import annotations
+  
+  from abc import ABC, abstractmethod
+++<<<<<<< HEAD
+ +import argparse
+ +from collections.abc import Sequence
+ +from typing import ClassVar
+++=======
+++>>>>>>> origin/main
+  from dataclasses import dataclass
+  from typing import TYPE_CHECKING, NoReturn
+  
+  from .launch_runtime import CallingThreadUnavailable
+++<<<<<<< HEAD
+ +from .cli_options import JsonFlagRecord
+ +from .native_project import NativeProject, UnmanagedNativeProject
+ +from .declared_family import DeclaredFamily
+ +from .pi_vocabulary import ServiceTier
+ +from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+++=======
+++>>>>>>> origin/main
+  
+  if TYPE_CHECKING:
+      from .comms import Comms
+@@@ -43,33 -14,9 +49,39 @@@ class ThreadCallerRecord(CallerRecord)
+  
+  class ToolCaller(ABC):
+      @classmethod
+++<<<<<<< HEAD
+ +    def from_arguments(cls, parser: argparse.ArgumentParser, arguments: list[str],
+ +                       namespace: argparse.Namespace) -> ToolCaller:
+ +        """Decode the caller once with the command parser; retain only unparsed argv."""
+ +        namespace.caller = NoThreadCaller()
+ +        selected, remaining = parser.parse_known_args(arguments, namespace=namespace)
+ +        arguments[:] = remaining
+ +        return selected.caller
+ +
+ +    @abstractmethod
+ +    def native_project(self, arguments: Sequence[str], comms: Comms) -> NativeProject: ...
+ +
+ +    @property
+ +    @abstractmethod
+ +    def cli_arguments(self) -> tuple[str, ...]: ...
+ +    @classmethod
+ +    def from_actor(cls, comms: Comms, actor: str | None) -> ToolCaller:
+ +        """Resolve an external context-action actor through its registry once."""
+ +        return ThreadCaller(comms.registry.require(actor).incarnation) if actor else NoThreadCaller()
+ +
+ +    @abstractmethod
+ +    def native_metadata(self, comms: Comms) -> CallerRecord: ...
+ +
+ +    @abstractmethod
+ +    def require_thread(self) -> RecordedThreadIncarnation: ...
+ +
+ +    @abstractmethod
+ +    def owns_thread(self, thread: Thread, snapshot: RegistrySnapshot) -> bool: ...
+++=======
++     def from_actor(cls, actor: str | None) -> ToolCaller:
++         """Each entry boundary (CLI --from, context action) names its actor explicitly."""
++         return ThreadCaller(actor) if actor else NoThreadCaller()
+++>>>>>>> origin/main
+  
+      @abstractmethod
+      def invoke(self, request: ToolRequest, comms: Comms) -> object: ...
+diff --cc src/agent_comms/tools.py
+index 135b31583,d910f39a1..000000000
+--- a/src/agent_comms/tools.py
++++ b/src/agent_comms/tools.py
+@@@ -4,8 -4,9 +4,9 @@@ from __future__ import annotation
+  
+  from abc import abstractmethod
+  from collections.abc import Mapping
++ from pathlib import Path
+  from dataclasses import MISSING, asdict, dataclass, field, fields, replace
+ -from typing import TYPE_CHECKING, ClassVar, Literal, Type
+ +from typing import TYPE_CHECKING, ClassVar, Type
+  
+  from .pi_vocabulary import ServiceTier, ThinkingLevel
+  from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
+@@@ -31,8 -33,11 +33,14 @@@ from .task_sources import 
+      CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
+      TaskScopeSelection, OriginalTaskChange,
+  )
+++<<<<<<< HEAD
+++=======
++ from .thread_identity import TurnId
++ from .turn_digests import TurnDigestRead
+++>>>>>>> origin/main
+  from .relationships import RelationshipEdit
+  from .thread_status import ThreadStatus
++ from .work_branches import WorkBranches
+  from .tool_output import (
+      MAX_INLINE_OUTPUT_BYTES,
+      materialize_oversized_output,
+@@@ -593,9 -609,26 +612,26 @@@ class CommsThreadsTool(ToolRequest)
+      def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+          from .cli_commands import ThreadsCliCommand
+  
+ -        return caller.listing(comms, ThreadsCliCommand(active_only=self.active_only).apply(comms))
+ +        return caller.listing(comms, ThreadsCliCommand(active_only=self.active_only).apply(comms, caller=caller))
+  
+  
++ @dataclass(frozen=True, kw_only=True)
++ class CommsWorkBranchesTool(ToolRequest):
++     label = "Work branches"
++     description = (
++         "Branches with commits not on main, newest first, each with its open PR or linked "
++         "open issue and the threads that have it checked out. Work on a problem must be on "
++         "main or on a linked branch; unlinked_only lists the branches breaking that rule."
++     )
++     checkout: str = tool_field("Path of a checkout of the repository (its worktrees name owners)")
++     unlinked_only: bool = tool_field("List only branches with no open PR or issue", default=True)
++ 
++     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
++         branches = WorkBranches(Path(self.checkout)).read(comms.registry.snapshot())
++         return {"branches": FieldCodec.encode(tuple(
++             branch for branch in branches if not (self.unlinked_only and branch.linked)))}
++ 
++ 
+  @dataclass(frozen=True, kw_only=True)
+  class CommsCollaborationTool(ThreadToolRequest):
+      label = "Manage mutual collaboration"
+@@@ -848,7 -881,7 +884,11 @@@ class CommsForkTool(NativeOwnerCommand
+          return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
+                                project=parent.worktree, model=parent.model,
+                                thinking_level=parent.thinking_level,
+++<<<<<<< HEAD
+ +                              tags=_tag_set(self.tags) if self.tags is not None else None).apply(comms, caller=caller)
+++=======
++                               tags=_tag_set(self.tags) if self.tags is not None else None).apply(comms)
+++>>>>>>> origin/main
+  
+  
+  class OwnerLifecycleControl:
+diff --cc tests/fixtures/cli-parser-contract.json
+index bf88b589a,a3944cc15..000000000
+--- a/tests/fixtures/cli-parser-contract.json
++++ b/tests/fixtures/cli-parser-contract.json
+@@@ -1,9 -1,9 +1,9 @@@
+  {
+ -  "help": "usage: agent-comms [-h] [--root ROOT]\n                   {tools,import-thread,invoke,send,user-send,configure,pin-constraint,pin-input-constraint,approve-annotations,correct-annotation,annotations,supersede-constraint,drop-constraint,export-retained,inbox,watch,ack,who,status,history,export-wire,channels,threads,thread,register,heartbeat,attach-session,schema-report,checkpoint,activity,stop,restart,release,archive,delete,rename-self,fork,ledger,poll,context,target-actions,target-action,start,thread-tags,rename-tag,delete-tag,archive-channel,restore-channel,delete-view,pin-channel,channel-activity,target-edit,read-target,pin-thread} ...\n\nOpenHCS agent communications \u2014 JSON CLI. Commands print one JSON result,\nexcept watch, which streams messages as JSON lines. They exit 0 on success or\n1 with ``{\"error\": ...}`` on failure. This is the adapter surface for the pi\nextension and other process-based clients: they shell out and parse JSON, they\ndo not own orchestration semantics.\n\npositional arguments:\n  {tools,import-thread,invoke,send,user-send,configure,pin-constraint,pin-input-constraint,approve-annotations,correct-annotation,annotations,supersede-constraint,drop-constraint,export-retained,inbox,watch,ack,who,status,history,export-wire,channels,threads,thread,register,heartbeat,attach-session,schema-report,checkpoint,activity,stop,restart,release,archive,delete,rename-self,fork,ledger,poll,context,target-actions,target-action,start,thread-tags,rename-tag,delete-tag,archive-channel,restore-channel,delete-view,pin-channel,channel-activity,target-edit,read-target,pin-thread}\n    tools               Emit the shared adapter tool catalog\n    import-thread       Import an OpenCode/Codex context snapshot\n    invoke              Invoke one declared adapter tool\n    send                Send to a thread (DM), #channel, or #all\n    user-send           Send as the human user to a thread (DM), #channel, or\n                        #all\n    configure           Set a stopped thread's model, thinking level, or\n                        service tier for its next start\n    pin-constraint      Pin a certified original human message for its\n                        recipient\n    pin-input-constraint\n                        Pin an original human input for its recipient\n    approve-annotations\n                        Approve a pinned external classifier using original\n                        human wording and an hourly request budget\n    correct-annotation  Correct one original stored model answer through the\n                        human identity owner\n    annotations         Report human-reviewed accuracy and probability\n                        frequencies for exact annotation versions\n    supersede-constraint\n                        Publish a human's exact replacement for an authored\n                        constraint\n    drop-constraint     Retire a constraint by original reference, preserving\n                        its evidence\n    export-retained     Export current authored context from original\n                        certified sources\n    inbox               Undelivered messages for a thread\n    watch               Stream unread and arriving messages as JSON lines\n    ack                 Mark inbox delivered\n    who                 Presence: who is in the chat\n    status              Live activity: what each thread is doing right now\n    history             Full history of a DM, channel, or everything\n    export-wire         Export durable IRC/wire message history\n    channels            Derived channel list\n    threads             List threads\n    thread              Detail for one thread\n    register            Register a thread\n    heartbeat           Mark thread running\n    attach-session      Attach a live Pi session to a registered thread\n    schema-report       Report declared DDL differences in existing SQLite\n                        stores (including retained copies)\n    checkpoint          Commit and push a thread's uncommitted worktree\n                        changes as a checkpoint branch\n    activity            Publish current thread activity\n    stop                Stop process\n    restart             Restart process\n    release             Voluntarily mark the calling thread stopped\n    archive             Archive a stopped thread\n    delete              Permanently delete a stopped or archived thread; its\n                        bus history stays\n    rename-self         Rename your own running thread\n    fork                Fork a child pi thread\n    ledger              Read or merge ledger state\n    poll                Status snapshot: thread, inbox, ledger, peers\n    context             Inspect original context contributors without sending\n                        an input\n    target-actions      List applicable operations and their declared\n                        parameters\n    target-action       Execute a declared operation against its current\n                        target\n    start               Start thread\n    thread-tags         Edit thread tags\n    rename-tag          Rename channel tag\n    delete-tag          Remove tag, archive tagged threads, or delete tagged\n                        threads\n    archive-channel     Archive channel\n    restore-channel     Restore archived channel\n    delete-view         Delete saved view\n    pin-channel         Set channel pin\n    channel-activity    Toggle member activity\n    target-edit         Execute a declared operation using its original CLI\n                        field parsers\n    read-target         Mark view read\n    pin-thread          Toggle thread pin in channel\n\noptions:\n  -h, --help            show this help message and exit\n  --root ROOT           Comms root directory (default $AGENT_COMMS_ROOT,\n                        active route, or ~/.agent-comms)\n",
+ +  "help": "usage: agent-comms [-h] [--thread-incarnation JSON] [--root ROOT]\n                   {tools,import-thread,invoke,send,user-send,configure,pin-constraint,pin-input-constraint,approve-annotations,correct-annotation,annotations,supersede-constraint,drop-constraint,export-retained,inbox,watch,ack,who,status,history,export-wire,channels,threads,thread,register,heartbeat,attach-session,schema-report,checkpoint,activity,stop,restart,release,archive,delete,rename-self,new,fork,ledger,poll,context,target-actions,target-action,start,thread-tags,rename-tag,delete-tag,archive-channel,restore-channel,delete-view,pin-channel,channel-activity,target-edit,read-target,pin-thread} ...\n\nOpenHCS agent communications \u2014 JSON CLI. Commands print one JSON result,\nexcept watch, which streams messages as JSON lines. Errors are one JSON line\ncarrying a declared type and error text. They exit 0 on success or 1 on\nfailure. This is the adapter surface for the pi extension and other process-\nbased clients: they shell out and parse JSON, they do not own orchestration\nsemantics.\n\npositional arguments:\n  {tools,import-thread,invoke,send,user-send,configure,pin-constraint,pin-input-constraint,approve-annotations,correct-annotation,annotations,supersede-constraint,drop-constraint,export-retained,inbox,watch,ack,who,status,history,export-wire,channels,threads,thread,register,heartbeat,attach-session,schema-report,checkpoint,activity,stop,restart,release,archive,delete,rename-self,new,fork,ledger,poll,context,target-actions,target-action,start,thread-tags,rename-tag,delete-tag,archive-channel,restore-channel,delete-view,pin-channel,channel-activity,target-edit,read-target,pin-thread}\n    tools               Emit the shared adapter tool catalog\n    import-thread       Import an OpenCode/Codex context snapshot\n    invoke              Invoke one declared adapter tool\n    send                Send to a thread (DM), #channel, or #all\n    user-send           Send as the human user to a thread (DM), #channel, or\n                        #all\n    configure           Set a stopped thread's model, thinking level, or\n                        service tier for its next start\n    pin-constraint      Pin a certified original human message for its\n                        recipient\n    pin-input-constraint\n                        Pin an original human input for its recipient\n    approve-annotations\n                        Approve a pinned external classifier using original\n                        human wording and an hourly request budget\n    correct-annotation  Correct one original stored model answer through the\n                        human identity owner\n    annotations         Report human-reviewed accuracy and probability\n                        frequencies for exact annotation versions\n    supersede-constraint\n                        Publish a human's exact replacement for an authored\n                        constraint\n    drop-constraint     Retire a constraint by original reference, preserving\n                        its evidence\n    export-retained     Export current authored context from original\n                        certified sources\n    inbox               Undelivered messages for a thread\n    watch               Stream unread and arriving messages as JSON lines\n    ack                 Mark inbox delivered\n    who                 Presence: who is in the chat\n    status              Live activity: what each thread is doing right now\n    history             Full history of a DM, channel, or everything\n    export-wire         Export durable IRC/wire message history\n    channels            Derived channel list\n    threads             List threads\n    thread              Detail for one thread\n    register            Register a thread\n    heartbeat           Mark thread running\n    attach-session      Attach a live Pi session to a registered thread\n    schema-report       Report declared DDL differences in existing SQLite\n                        stores (including retained copies)\n    checkpoint          Commit and push a thread's uncommitted worktree\n                        changes as a checkpoint branch\n    activity            Publish current thread activity\n    stop                Stop process\n    restart             Restart process\n    release             Voluntarily mark the calling thread stopped\n    archive             Archive a stopped thread\n    delete              Permanently delete a stopped or archived thread; its\n                        bus history stays\n    rename-self         Rename your own running thread\n    new                 Create a new pi thread\n    fork                Fork a child pi thread\n    ledger              Read or merge ledger state\n    poll                Status snapshot: thread, inbox, ledger, peers\n    context             Inspect original context contributors without sending\n                        an input\n    target-actions      List applicable operations and their declared\n                        parameters\n    target-action       Execute a declared operation against its current\n                        target\n    start               Start thread\n    thread-tags         Edit thread tags\n    rename-tag          Rename channel tag\n    delete-tag          Remove tag, archive tagged threads, or delete tagged\n                        threads\n    archive-channel     Archive channel\n    restore-channel     Restore archived channel\n    delete-view         Delete saved view\n    pin-channel         Set channel pin\n    channel-activity    Toggle member activity\n    target-edit         Execute a declared operation using its original CLI\n                        field parsers\n    read-target         Mark view read\n    pin-thread          Toggle thread pin in channel\n\noptions:\n  -h, --help            show this help message and exit\n  --thread-incarnation JSON\n  --root ROOT           Comms root directory (default $AGENT_COMMS_ROOT,\n                        active route, or ~/.agent-comms)\n",
+    "commands": {
+ -    "tools": "usage: agent-comms tools [-h]\n\noptions:\n  -h, --help  show this help message and exit\n",
+ +    "tools": "usage: agent-comms tools [-h] [--native-arguments NATIVE_ARGUMENTS]\n\noptions:\n  -h, --help            show this help message and exit\n  --native-arguments NATIVE_ARGUMENTS\n",
+      "import-thread": "usage: agent-comms import-thread [-h] --format {opencode,codex}\n                                 --source SOURCE [--session-id SESSION_ID]\n                                 --name NAME [--worktree WORKTREE]\n                                 [--model MODEL] [--tags TAGS]\n                                 [--max-messages MAX_MESSAGES]\n                                 [--max-characters MAX_CHARACTERS]\n                                 [--max-message-characters MAX_MESSAGE_CHARACTERS]\n\noptions:\n  -h, --help            show this help message and exit\n  --format {opencode,codex}\n  --source SOURCE       OpenCode export JSON/database or Codex rollout JSONL\n  --session-id SESSION_ID\n                        Required for OpenCode database imports\n  --name NAME           New agent-comms thread name\n  --worktree WORKTREE   Override the source project directory\n  --model MODEL         Target Pi provider/model; not inferred from foreign\n                        model IDs\n  --tags TAGS\n  --max-messages MAX_MESSAGES\n  --max-characters MAX_CHARACTERS\n  --max-message-characters MAX_MESSAGE_CHARACTERS\n",
+-     "invoke": "usage: agent-comms invoke [-h] --tool TOOL [--arguments ARGUMENTS]\n\noptions:\n  -h, --help            show this help message and exit\n  --tool TOOL\n  --arguments ARGUMENTS\n                        Tool arguments as a JSON object\n",
++     "invoke": "usage: agent-comms invoke [-h] [--from CALLER] --tool TOOL\n                          [--arguments ARGUMENTS]\n\noptions:\n  -h, --help            show this help message and exit\n  --from CALLER         Calling thread; omit for tools that need no thread\n  --tool TOOL\n  --arguments ARGUMENTS\n                        Tool arguments as a JSON object\n",
+      "send": "usage: agent-comms send [-h] --from SENDER --to TARGET --body BODY\n                        [--type {info,question,ack,handoff,alert,change-report}]\n                        [--report REPORT]\n\noptions:\n  -h, --help            show this help message and exit\n  --from SENDER\n  --to TARGET\n  --body BODY\n  --type {info,question,ack,handoff,alert,change-report}\n  --report REPORT       Change report fields as a JSON object\n",
+      "user-send": "usage: agent-comms user-send [-h] --to TARGET --body BODY\n                             [--worktree WORKTREE]\n\noptions:\n  -h, --help           show this help message and exit\n  --to TARGET\n  --body BODY\n  --worktree WORKTREE\n",
+      "configure": "usage: agent-comms configure [-h] --name NAME [--model MODEL]\n                             [--thinking THINKING]\n                             [--service-tier {standard,priority}]\n\noptions:\n  -h, --help            show this help message and exit\n  --name NAME\n  --model MODEL\n  --thinking THINKING\n  --service-tier {standard,priority}\n",
+@@@ -36,9 -36,8 +36,14 @@@
+      "release": "usage: agent-comms release [-h] --name NAME\n\noptions:\n  -h, --help   show this help message and exit\n  --name NAME\n",
+      "archive": "usage: agent-comms archive [-h] --name NAME\n\noptions:\n  -h, --help   show this help message and exit\n  --name NAME\n",
+      "delete": "usage: agent-comms delete [-h] --name NAME\n\noptions:\n  -h, --help   show this help message and exit\n  --name NAME\n",
+++<<<<<<< HEAD
+ +    "rename-self": "usage: agent-comms rename-self [-h] --to NEW_NAME\n\noptions:\n  -h, --help     show this help message and exit\n  --to NEW_NAME\n",
+ +    "new": "usage: agent-comms new [-h] --name NAME [--task TASK] [--tags TAGS]\n                       [--prompt PROMPT] [--pi-bin PI_BIN] [--project PROJECT]\n                       [--model MODEL]\n                       [--thinking-level {off,minimal,low,medium,high,xhigh,max}]\n\noptions:\n  -h, --help            show this help message and exit\n  --name NAME\n  --task TASK\n  --tags TAGS\n  --prompt PROMPT\n  --pi-bin PI_BIN\n  --project PROJECT\n  --model MODEL\n  --thinking-level {off,minimal,low,medium,high,xhigh,max}\n",
+ +    "fork": "usage: agent-comms fork [-h] --name NAME [--task TASK] [--tags TAGS]\n                        [--prompt PROMPT] [--pi-bin PI_BIN]\n                        [--project PROJECT] [--model MODEL]\n                        [--thinking-level {off,minimal,low,medium,high,xhigh,max}]\n                        --parent PARENT\n\noptions:\n  -h, --help            show this help message and exit\n  --name NAME\n  --task TASK\n  --tags TAGS\n  --prompt PROMPT\n  --pi-bin PI_BIN\n  --project PROJECT\n  --model MODEL\n  --thinking-level {off,minimal,low,medium,high,xhigh,max}\n  --parent PARENT\n",
+++=======
++     "rename-self": "usage: agent-comms rename-self [-h] --from CALLER --to NEW_NAME\n\noptions:\n  -h, --help     show this help message and exit\n  --from CALLER\n  --to NEW_NAME\n",
++     "fork": "usage: agent-comms fork [-h] --name NAME [--task TASK] [--tags TAGS]\n                        [--project PROJECT] [--model MODEL]\n                        [--thinking-level {off,minimal,low,medium,high,xhigh,max}]\n                        --parent PARENT\n\noptions:\n  -h, --help            show this help message and exit\n  --name NAME\n  --task TASK\n  --tags TAGS\n  --project PROJECT\n  --model MODEL\n  --thinking-level {off,minimal,low,medium,high,xhigh,max}\n  --parent PARENT\n",
+++>>>>>>> origin/main
+      "ledger": "usage: agent-comms ledger [-h] [--merge-from MERGE_FROM] [--author AUTHOR]\n\noptions:\n  -h, --help            show this help message and exit\n  --merge-from MERGE_FROM\n  --author AUTHOR\n",
+      "poll": "usage: agent-comms poll [-h] [--thread THREAD]\n\noptions:\n  -h, --help       show this help message and exit\n  --thread THREAD\n",
+      "context": "usage: agent-comms context [-h] [--turn TURN] [--diff] [--imported] thread\n\npositional arguments:\n  thread\n\noptions:\n  -h, --help   show this help message and exit\n  --turn TURN  Original admitted turn generation\n  --diff\n  --imported   Original imported instruction references, not current context\n",
+@@@ -53,8 -52,9 +58,9 @@@
+      "delete-view": "usage: agent-comms delete-view [-h] --name NAME\n\noptions:\n  -h, --help   show this help message and exit\n  --name NAME\n",
+      "pin-channel": "usage: agent-comms pin-channel [-h] --name NAME [--pinned]\n\noptions:\n  -h, --help   show this help message and exit\n  --name NAME\n  --pinned\n",
+      "channel-activity": "usage: agent-comms channel-activity [-h] --name NAME [--enabled]\n\noptions:\n  -h, --help   show this help message and exit\n  --name NAME\n  --enabled\n",
+ -    "target-edit": "usage: agent-comms target-edit [-h] [--channel CHANNEL]\n                               --target TARGET [TARGET ...]\n                               --operation OPERATION [--arguments ARGUMENTS]\n                               [--confirmed]\n\noptions:\n  -h, --help            show this help message and exit\n  --channel CHANNEL\n  --target, --targets TARGET [TARGET ...]\n  --operation OPERATION\n  --arguments ARGUMENTS\n  --confirmed\n",
+ +    "target-edit": "usage: agent-comms target-edit [-h] [--channel CHANNEL] [--project PROJECT]\n                               [--target TARGET [TARGET ...]]\n                               --operation OPERATION [--arguments ARGUMENTS]\n                               [--confirmed]\n\noptions:\n  -h, --help            show this help message and exit\n  --channel CHANNEL\n  --project PROJECT\n  --target, --targets TARGET [TARGET ...]\n  --operation OPERATION\n  --arguments ARGUMENTS\n  --confirmed\n",
+      "read-target": "usage: agent-comms read-target [-h] --target TARGET [--worktree WORKTREE]\n\noptions:\n  -h, --help           show this help message and exit\n  --target TARGET\n  --worktree WORKTREE\n",
+-     "pin-thread": "usage: agent-comms pin-thread [-h] --name NAME --channel CHANNEL [--pinned]\n\noptions:\n  -h, --help         show this help message and exit\n  --name NAME\n  --channel CHANNEL\n  --pinned\n"
++     "pin-thread": "usage: agent-comms pin-thread [-h] --name NAME --channel CHANNEL [--pinned]\n\noptions:\n  -h, --help         show this help message and exit\n  --name NAME\n  --channel CHANNEL\n  --pinned\n",
++     "new": "usage: agent-comms new [-h] --name NAME [--task TASK] [--tags TAGS]\n                       [--project PROJECT] [--model MODEL]\n                       [--thinking-level {off,minimal,low,medium,high,xhigh,max}]\n\noptions:\n  -h, --help            show this help message and exit\n  --name NAME\n  --task TASK\n  --tags TAGS\n  --project PROJECT\n  --model MODEL\n  --thinking-level {off,minimal,low,medium,high,xhigh,max}\n"
+    }
+  }
+diff --cc tests/test_channels.py
+index 9eae96e8b,273fcecb4..000000000
+--- a/tests/test_channels.py
++++ b/tests/test_channels.py
+@@@ -489,7 -482,6 +488,10 @@@ def test_thread_presentation_owns_lifec
+  
+  
+  def test_none_membership_and_independent_channel_order(tmp_path):
+++<<<<<<< HEAD
+ +
+++=======
+++>>>>>>> origin/main
+      comms = setup_wire(tmp_path)
+      comms.messaging.send("a", "#none", "for untagged agents")
+      assert [message.body for message in comms.bus.inbox("other")] == ["for untagged agents"]
+diff --cc tests/test_envelope_bus_integration.py
+index ff275590e,1b1c41563..000000000
+--- a/tests/test_envelope_bus_integration.py
++++ b/tests/test_envelope_bus_integration.py
+@@@ -429,8 -430,8 +433,13 @@@ def test_saved_colliding_creation_id_bl
+          threads = edit.document.threads
+          threads["bob"] = replace(threads["bob"], created_at=threads["alice"].created_at)
+          edit.commit()
+++<<<<<<< HEAD
+ +    comms = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
+ +    with pytest.raises(RelationViolationError, match="creation identities collide"):
+++=======
++     comms = Comms(comms.root)
++     with pytest.raises(RelationViolationError, match="Snapshot lookup index differs from its threads"):
+++>>>>>>> origin/main
+          comms.messaging.send_message(
+              "bob", "alice", "Cannot release under duplicate ID", releases=["a.py"]
+          )
+diff --cc tests/test_importing.py
+index 0af5e635c,c4eeffa5c..000000000
+--- a/tests/test_importing.py
++++ b/tests/test_importing.py
+@@@ -9,19 -9,39 +9,50 @@@ import pytes
+  
+  from agent_comms import ImportFormat, ImportLimits
+  from agent_comms.cli import main
+++<<<<<<< HEAD
+ +
+++=======
+++>>>>>>> origin/main
+  from agent_comms.thread_status import StoppedThreadStatus
+  from agent_comms.field_codec import FieldCodec
+  from agent_comms.importing import ImportReceipt, ImportedSessionMetadata
+  from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
+  from agent_comms.turn_context import CodexRolloutProvenance
+++<<<<<<< HEAD
+ +from agent_comms.comms import Comms
+ +from agent_comms.native_settings import NativeThreadDefaults
+ +from agent_comms.active_route import resolve_comms_route
+ +from agent_comms.launch_runtime import LaunchRuntime
+- 
+- 
+- def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path, capsys):
+++=======
++ from agent_comms.thread_identity import ThreadProvenance
++ from agent_comms.threads import Thread
+++>>>>>>> origin/main
++ 
++ 
++ @pytest.fixture
++ def comms(comms):
++     comms.messaging.initialize_private_initial_protocol()
++     return comms
++ 
++ 
++ @pytest.mark.parametrize("title,display,renamed_display", [
++     (None, "original", "renamed"),
++     ("Authored title", "Authored title", "Authored title"),
++ ])
++ def test_thread_display_title_is_inherited_without_copying_the_name(
++     tmp_path, title, display, renamed_display
++ ):
++     thread = Thread("original", frozenset(), str(tmp_path), title=title)
++     captured = ThreadProvenance.capture(thread)
++     assert thread.title == captured.title == title
++     assert thread.display_title == captured.display_title == display
++     renamed = replace(thread, name="renamed")
++     assert renamed.title == title
++     assert renamed.display_title == renamed_display
++     assert "display_title" not in thread.to_wire()
++ 
++ 
++ def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path, capsys, comms):
+      source = tmp_path / "historical.jsonl"
+      instructions = [
+          {"type": "message", "role": "system", "content": "Historical base π.\n"},
+@@@ -38,7 -58,6 +69,10 @@@
+                     "type": "message", "role": "assistant", "content": "Original answer"}}]
+      source.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
+      original = source.read_bytes()
+++<<<<<<< HEAD
+ +    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+++=======
+++>>>>>>> origin/main
+      receipt = comms.threads.import_thread(source, ImportFormat.CODEX, name="historical")
+      assert source.read_bytes() == original
+      refs = receipt.historical_instructions
+@@@ -160,7 -179,6 +194,10 @@@ def test_opencode_snapshot_is_stopped_r
+      source = tmp_path / "export.json"
+      opencode_export(source, tmp_path)
+      before = source.read_bytes()
+++<<<<<<< HEAD
+ +    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+++=======
+++>>>>>>> origin/main
+      directory = comms.root / "imported_sessions"
+      receipt = comms.threads.import_thread(source, ImportFormat.OPENCODE, name="imported")
+      thread = comms.registry.require("imported")
+@@@ -184,10 -203,9 +222,13 @@@
+  
+  
+  @pytest.mark.skipif(os.name != "posix", reason="POSIX ownership and symlinks")
+- def test_import_refuses_redirected_session_directory(tmp_path):
++ def test_import_refuses_redirected_session_directory(tmp_path, comms):
+      source = tmp_path / "export.json"
+      opencode_export(source, tmp_path)
+++<<<<<<< HEAD
+ +    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+++=======
+++>>>>>>> origin/main
+      outside = tmp_path / "outside"
+      outside.mkdir(mode=0o755)
+      (comms.root / "imported_sessions").symlink_to(outside, target_is_directory=True)
+diff --cc tests/test_operations.py
+index e0fb8ae86,980318c8c..000000000
+--- a/tests/test_operations.py
++++ b/tests/test_operations.py
+@@@ -281,12 -275,34 +280,39 @@@ class TestThreadOps
+          assert attached.session_file == str(session_file.resolve())
+          assert wired.registry.status("fixer").declared_name == "running"
+  
+++<<<<<<< HEAD
+ +    def test_release_only_allows_the_original_calling_thread(self, wired):
+ +        caller = wired.registry.require("fixer").incarnation
+++=======
++     def test_attached_session_model_is_registered_once_not_rescanned_for_answers(
++         self, wired, tmp_path, monkeypatch
++     ):
++         from agent_comms.native_transcript import NativeTranscript
++ 
++         session_file = tmp_path / "session.jsonl"
++         session_file.write_text(
++             json.dumps({"type": "model_change", "provider": "test", "modelId": "saved"}) + "\n"
++         )
++         attached = wired.threads.attach_session(wired.registry.require("fixer"), str(session_file))
++         assert attached.model == "test/saved"
++         assert wired.registry.require("fixer").model == "test/saved"
++ 
++         def no_tail(*_args, **_kwargs):
++             raise AssertionError("A configuration answer must not scan saved history")
++ 
++         monkeypatch.setattr(NativeTranscript, "tail", no_tail)
++         wired.agents.observe_runtime_info("fixer", AgentInfo(model="runtime/model"))
++         assert wired.configuration.answer("fixer").model == "test/saved"
++         assert wired.threads.resolve_thread_model("PR111", "default/model") == "default/model"
++ 
++     def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
++         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
++ 
+++>>>>>>> origin/main
+          with pytest.raises(RelationViolationError, match="cannot release"):
+ -            wired.owners.release("PR111")
+ +            wired.owners.release("PR111", caller=caller)
+  
+ -        wired.owners.release("fixer")
+ +        wired.owners.release("fixer", caller=caller)
+          assert wired.registry.status("fixer").declared_name == "stopped"
+  
+      def test_stop_current_calling_thread_uses_voluntary_release(self, wired, monkeypatch):
+diff --cc tests/test_registration_process_identity.py
+index 4dcafbbb7,e174052f4..000000000
+--- a/tests/test_registration_process_identity.py
++++ b/tests/test_registration_process_identity.py
+@@@ -25,12 -21,12 +25,17 @@@ def test_claim_attach_and_reload_preser
+      assert owner.process_identity == identity
+      session = tmp_path / "session.jsonl"
+      session.write_text('{"type":"session","id":"fixture"}\n')
+-     attached = comms.threads.attach_session(owner.name, str(session))
++     attached = comms.threads.attach_session(owner, str(session))
+      assert attached.process_identity == identity
+++<<<<<<< HEAD
+ +    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).registry.require(owner.name) == attached
+ +    unbound = comms.threads.attach_session(owner.name, str(session), pid=0)
+++=======
++     assert wire(tmp_path).registry.require(owner.name) == attached
++     unbound = comms.threads.attach_session(attached, str(session), pid=0)
+++>>>>>>> origin/main
+      assert unbound.process_identity is None and unbound.pid == 0
+-     rebound = comms.threads.attach_session(owner.name, str(session), pid=os.getpid())
++     rebound = comms.threads.attach_session(unbound, str(session), pid=os.getpid())
+      assert rebound.process_identity == identity
+      restored = RegistryDocument()
+      restored.restore_stopped(comms.registry.snapshot(), (owner.name,))
+diff --cc tests/test_tools.py
+index 8e212231f,dd96215c2..000000000
+--- a/tests/test_tools.py
++++ b/tests/test_tools.py
+@@@ -7,11 -7,9 +7,17 @@@ from agent_comms.tool_caller import Thr
+  from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
+  
+  
+++<<<<<<< HEAD
+ +def test_tool_entry_decodes_caller_states_once(comms):
+ +    owner = comms.registry.declare(Thread(name="owner", tags=frozenset(), worktree="/wt"))
+ +    assert ToolCaller.from_actor(comms, None) == NoThreadCaller()
+ +    assert ToolCaller.from_actor(comms, "owner") == ThreadCaller(owner.incarnation)
+ +    assert ThreadCaller.from_json(owner.incarnation.cli_arguments[1]) == ThreadCaller(owner.incarnation)
+++=======
++ def test_tool_entry_decodes_caller_states_once():
++     assert ToolCaller.from_actor(None) == NoThreadCaller()
++     assert ToolCaller.from_actor("owner") == ThreadCaller("owner")
+++>>>>>>> origin/main
+  
+  
+  class TestToolCatalog:

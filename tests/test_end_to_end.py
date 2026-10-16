@@ -110,8 +110,6 @@ class TestEndToEndLifecycle:
             "PR111",
             "--task",
             "review the diff",
-            "--pi-bin",
-            str(stub),
         )
         assert out["created"] == "kid"
         # The child was launched in the parent's worktree and registered.

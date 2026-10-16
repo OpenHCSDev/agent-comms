@@ -1,0 +1,250 @@
+"""Normal coding policies use existing claims; no provider or user work is touched."""
+
+import json
+import secrets
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import pytest
+
+from agent_comms.channel_coding_tools import CodingCall, CodingToolSocket
+from agent_comms.comms import Comms
+from agent_comms.envelope_claim_transitions import (
+    ClaimConflict,
+    ClaimTransitionError,
+    ExistingFileClaim,
+    WritableFileClaim,
+)
+from agent_comms.native_tools import CodingTool
+from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
+from agent_comms.pi_payloads import ToolCallContent
+from agent_comms.threads import Thread
+
+
+def test_create_claim_competes_before_file_exists_and_releases_without_creation():
+    with TemporaryDirectory(prefix="comms-create-claim-", dir="/var/tmp") as directory:
+        root = Path(directory) / "wire"
+        root.mkdir(mode=0o700)
+        work = Path(directory) / "work"
+        work.mkdir()
+        c = Comms(root)
+        for name, created in [("a", 21.0), ("b", 22.0)]:
+            c.registry.declare(Thread(name, frozenset({"team"}), str(work), created_at=created))
+        c.messaging.initialize_private_initial_protocol()
+        resource = WritableFileClaim(Path("new/nested/file.py"))
+        committed = c.messaging.send_message("a", "#team", "Claim before create", claims=[resource])
+        assert not (work / "new").exists()
+        projection = Comms(root).bus.log.claim_projection()
+        assert projection[str(work / "new/nested/file.py")].seq == committed.seq
+        with pytest.raises(ClaimConflict):
+            c.messaging.send_message("b", "#team", "Competing create", claims=[resource])
+        c.messaging.send_message(
+            "a", "#team", "Release unused creation", releases=["new/nested/file.py"]
+        )
+        c.messaging.send_message("b", "#team", "New owner", claims=[resource])
+        assert c.bus.log.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
+
+
+def test_create_claim_preserves_physical_paths_without_aliases(tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    root = tmp_path / "work"
+    root.mkdir()
+    (root / "link").symlink_to(outside, target_is_directory=True)
+    for path in ("../outside/x", "link/missing.py", ".", outside):
+        with pytest.raises(ClaimTransitionError):
+            WritableFileClaim(Path(path)).normalized(root)
+    assert WritableFileClaim(outside / "x").normalized(root) == str(outside / "x")
+    with pytest.raises(ClaimTransitionError):
+        ExistingFileClaim(Path("new.py")).normalized(root)
+    (root / "existing").write_text("a")
+    (root / "alias").hardlink_to(root / "existing")
+    with pytest.raises(ClaimTransitionError):
+        WritableFileClaim(Path("existing")).normalized(root)
+
+
+def test_coding_names_and_argument_types_come_from_declarations():
+    assert set(CodingTool.names()) == {"read", "bash", "edit", "write"}
+    call = CodingCall.decode("call", "write", {"path": "x", "content": "value"})
+    assert isinstance(call.tool.claim, WritableFileClaim)
+    with pytest.raises((TypeError, ValueError)):
+        CodingCall.decode("call", "write", {"path": True, "content": "v"})
+    # Pi's full tool schema stays authoritative, including its current edits[]
+    # representation; only the mutation path is decoded by the claim policy.
+    args = {"path": "x", "edits": [{"oldText": "a", "newText": "b"}]}
+    assert CodingCall.decode("edit", "edit", args).tool.arguments == args
+    with pytest.raises(ValueError):
+        CodingCall.decode("call", "forged", {})
+
+
+@pytest.mark.parametrize("name,arguments", [
+    ("read", {"file_path": "x"}),
+    ("read", {"path": "x", "file_path": "x"}),
+    ("read", {"path": "x", "offset": None}),
+    ("read", {"path": "x", "limit": True}),
+    ("bash", {}),
+    ("bash", {"command": True}),
+    ("bash", {"command": "pwd", "timeout": "1"}),
+    ("edit", {"path": "x", "oldText": "old", "newText": "new"}),
+    ("edit", {"path": "x", "edits": []}),
+    ("edit", {"path": "x", "edits": [{"oldText": False, "newText": "new"}]}),
+    ("write", {"path": "x", "content": 3}),
+])
+def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
+    from agent_comms.native_tool_call import SelectedToolDenied
+
+    with pytest.raises(SelectedToolDenied):
+        CodingCall.decode("bad-argument-shape", name, arguments)
+
+
+@pytest.mark.parametrize("name,arguments", [
+    ("read", {"path": "x", "offset": 2, "limit": 3}),
+    ("bash", {"command": "pwd", "timeout": 2}),
+    ("edit", {"path": "x", "edits": [{"oldText": "old", "newText": "new"}]}),
+    ("write", {"path": "x", "content": "value"}),
+])
+def test_pi_argument_fields_own_roundtrip_and_display(name, arguments):
+    from dataclasses import fields
+    from agent_comms.tool_declaration import ToolDeclaration
+
+    call = CodingCall.decode("typed-argument-shape", name, arguments)
+    assert "arguments" not in {item.name for item in fields(call.tool)}
+    assert call.tool.arguments == arguments
+    assert call.tool.detail in ToolDeclaration.start("typed", name, arguments, detail=call.tool.detail).title
+
+
+@pytest.mark.asyncio
+async def test_multicall_native_transport_matches_events_and_refuses_duplicate(tmp_path):
+    class Owner:
+        input_id = secrets.token_hex(16)
+        calls = []
+
+        async def admit(self, round_number, call):
+            self.calls.append(call)
+
+    owner = Owner()
+    tmp_path.chmod(0o700)
+    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
+    # Actual owner admission/storage is covered separately. This exercises the
+    # strict native-event/socket correlation and multiple normal tool calls.
+    calls = [
+        ("call_one|provider-part", "read", {"path": "a"}),
+        ("two", "write", {"path": "b", "content": "c"}),
+    ]
+    socket.announce([ToolCallContent(id=id, name=name, arguments=args) for id, name, args in calls])
+    for id, name, args in calls:
+        socket.tool_started(ToolExecutionStart(tool_call_id=id, tool_name=name, args=args))
+        raw = (
+            json.dumps({"token": socket.token, "call_id": id, "name": name, "arguments": args})
+            + "\n"
+        ).encode()
+        assert await socket.handle_request(raw) == {"ok": True}
+        with pytest.raises(ValueError, match="already consumed"):
+            await socket.handle_request(raw)
+        # Terminal ledger needs the consumed slot an actual owner writes.
+        from agent_comms.selected_tool_broker import consume_selected_slot
+
+        call = socket.calls.require(0, id)
+        slot = call.slot(owner.input_id, 0)
+        consume_selected_slot(tmp_path, slot, slot)
+        socket.tool_finished(
+            ToolExecutionEnd(tool_call_id=id, tool_name=name, is_error=False), owner.input_id
+        )
+    socket.assert_complete()
+    assert len(owner.calls) == 2
+
+
+def _request(socket, id, name, args):
+    return (
+        json.dumps({"token": socket.token, "call_id": id, "name": name, "arguments": args}) + "\n"
+    ).encode()
+
+
+@pytest.mark.asyncio
+async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_path):
+    import asyncio
+
+    checking, release = asyncio.Event(), asyncio.Event()
+
+    class Owner:
+        input_id = secrets.token_hex(16)
+
+        async def admit(self, round_number, call):
+            checking.set()
+            await release.wait()
+
+    owner = Owner()
+    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
+    socket.announce((ToolCallContent(id="late", name="read", arguments={"path": "a"}),))
+    socket.tool_started(ToolExecutionStart(tool_call_id="late", tool_name="read", args={"path": "a"}))
+    pending = asyncio.create_task(socket.handle_request(_request(socket, "late", "read", {"path": "a"})))
+    await checking.wait()
+    socket.tool_finished(ToolExecutionEnd(tool_call_id="late", tool_name="read", is_error=True), owner.input_id)
+    release.set()
+    with pytest.raises(ValueError, match="not executing"):
+        await pending
+    socket.assert_complete()
+
+
+@pytest.mark.asyncio
+async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog):
+    """The live owner logged two tracebacks when Pi gave up on a slow tool check."""
+    import asyncio
+    import os
+
+    answered = asyncio.Event()
+
+    class Owner:
+        input_id = secrets.token_hex(16)
+
+        async def admit(self, round_number, call):
+            answered.set()
+
+    tmp_path.chmod(0o700)
+    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())
+    socket.expected_pid = os.getpid()
+    unhandled = []
+    asyncio.get_running_loop().set_exception_handler(lambda _loop, context: unhandled.append(context))
+    await socket.start()
+    try:
+        call = ("slow", "read", {"path": "a"})
+        socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])
+        reader, writer = await asyncio.open_unix_connection(str(socket.address))
+        writer.write(_request(socket, *call))
+        await writer.drain()
+        # Pi's side: stop waiting and reset the connection before the owner
+        # has seen the tool start, which is what its answer waits for.
+        writer.transport.abort()
+        await asyncio.sleep(0.1)
+        socket.tool_started(ToolExecutionStart(tool_call_id=call[0], tool_name=call[1], args=call[2]))
+        async with asyncio.timeout(5):
+            await answered.wait()
+            while socket._handlers:
+                await asyncio.sleep(0.01)
+    finally:
+        await socket.close()
+    assert not unhandled
+    assert "stopped waiting for a tool check before its answer (allowed)" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_tool_call_pi_never_started_is_refused_with_its_reason(tmp_path):
+    class Owner:
+        input_id = secrets.token_hex(16)
+
+        async def admit(self, round_number, call):
+            raise AssertionError("an unstarted call was checked")
+
+    tmp_path.chmod(0o700)
+    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())
+    call = ("never", "read", {"path": "a"})
+    socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])
+    with pytest.raises(ValueError, match="did not report this tool call as started within 10 s") as refused:
+        await socket.handle_request(_request(socket, *call))
+    # The child shows the model this text; it used to be empty.
+    assert socket.failure_response(refused.value)["error"].endswith(
+        "The tool was not started; call it again."
+    )
+    # The call stays refused if Pi asks again; a new call is checked afresh.
+    with pytest.raises(ValueError, match="not executing"):
+        await socket.handle_request(_request(socket, *call))

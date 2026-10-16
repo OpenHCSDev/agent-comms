@@ -33,6 +33,7 @@ from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
 from .native_session_files import NativeSessionFiles
 from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import OwnerLifecycle
@@ -48,11 +49,10 @@ _LOG = logging.getLogger(__name__)
 
 
 def _session_model(session_file: Path) -> tuple[str, str] | None:
-    """Read the last model choice from a pi session file.
+    """Read the last model choice once while attaching an existing Pi session.
 
-    Non-interactive pi requires an explicit provider/model, so forks replay the
-    parent's final ``model_change`` entry. Returns ``(provider, model_id)`` or
-    ``None`` when the session carries no model record.
+    Returns ``(provider, model_id)`` or ``None`` when no choice was recorded.
+    New threads and forks already carry their selected model in NewThreadSpec.
     """
     from .native_transcript import NativeTranscript
 
@@ -205,7 +205,7 @@ class ThreadManagement:
             tags,
             str(project),
             session_file=str(session_path),
-            title=snapshot.title or name,
+            title=snapshot.title,
             model=model,
         )
         with _store_lock(self._wire_lock_path):
@@ -529,24 +529,27 @@ class ThreadManagement:
                 self.registry.register(updated, self.registry.status(thread.name))
             return updated
 
-    def resolve_thread_model(self, name: str, default: str | None = None) -> str | None:
-        """Prefer a saved selection, then the resumed session's last model."""
+    def resolve_thread_model(self, name: str, default: str = NativeThreadDefaults.model) -> str:
+        """Prefer the registered choice, then runtime observation, then default."""
         thread = self.registry.require(name)
-        if thread.model is not None:
+        if not thread.needs_model_observation():
             return thread.model
-        if thread.session_file and (model := _session_model(Path(thread.session_file))):
-            return "/".join(model)
         info = self.agents.agent_info_of(thread.name)
-        return (info.model if info else None) or default
+        return info.model_or(default)
 
     def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
-        """Attach authoritative Pi runtime state to an existing thread."""
+        """Attach Pi state and retain its model once, outside the wire lock."""
+        path = Path(session_file).expanduser().resolve()
+        saved_model = None
+        if original.needs_model_observation() and path.is_file():
+            choice = _session_model(path)
+            saved_model = "/".join(choice) if choice is not None else None
         with _store_lock(self._wire_lock_path):
             current = self.registry.require(original.name)
             if current != original:
                 raise RelationViolationError("Original thread changed before native source publication")
             attached = replace(
-                current,
+                current.initialized_native_configuration(model=saved_model, thinking_level=None),
                 process_identity=(
                     current.process_identity
                     if pid is None
@@ -554,7 +557,7 @@ class ThreadManagement:
                     if pid > 0
                     else None
                 ),
-                session_file=str(Path(session_file).expanduser().resolve()),
+                session_file=str(path),
             )
             self.registry.register(attached)
             return attached
@@ -624,10 +627,17 @@ class ThreadManagement:
 
 
     def create(self, spec: NewThreadSpec) -> Thread:
+<<<<<<< HEAD
         """The selected Comms runtime prepares the copy and starts the child."""
         runtime = self.comms.runtime
         runtime.require_available()
         with spec.prepared(self) as child:
+=======
+        """Prepare the session, then register and launch the thread with its task as first input."""
+        resolved_bin = NativeArguments.configured_binary()
+        runtime = LaunchRuntime.current()
+        with spec.prepared(self, resolved_bin, runtime) as child:
+>>>>>>> origin/main
             # A new incarnation's inbox already starts at its creation time
             # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
             child = self.registry._declare_unlocked(child)
@@ -635,8 +645,12 @@ class ThreadManagement:
             key = f"acp:{uuid4().hex}" if spec.task else None
             try:
                 owned = self.owners._launch_owner_unlocked(
+<<<<<<< HEAD
                     replace(child, model=self.resolve_thread_model(child.name)),
                     self.comms.settings, startup_input_key=key, launch_runtime=runtime,
+=======
+                    child, resolved_bin, startup_input_key=key, launch_runtime=runtime,
+>>>>>>> origin/main
                 )
                 if key is not None:
                     InputDispositions(self.root).record(
