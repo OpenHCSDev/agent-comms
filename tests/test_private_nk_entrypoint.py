@@ -21,13 +21,13 @@ from agent_comms import (
     worker,
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.owner_launch import LaunchRuntime
+from agent_comms.launch_runtime import LaunchRuntime, PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
-from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture

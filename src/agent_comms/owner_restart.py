@@ -13,7 +13,8 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
-from .owner_launch import LaunchRuntime, RestartEnvironment, RestoredRuntime, RetainedOwnerLaunch
+from .owner_launch import RetainedOwnerLaunch
+from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path

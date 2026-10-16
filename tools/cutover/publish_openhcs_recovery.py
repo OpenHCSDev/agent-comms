@@ -26,7 +26,8 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import verify_native_package
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.owner_restart import OwnerRestartRequest
-from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from agent_comms.owner_launch import RetainedOwnerLaunch
+from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.private_path import FileRevision, PrivateFileRole
 from agent_comms.store_files import _atomic_write_text

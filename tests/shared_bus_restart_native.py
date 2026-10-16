@@ -53,6 +53,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     if not continue_existing:
         stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.native_pi import NativePiRpcLaunch
 
     project = stage/'project'
@@ -62,7 +63,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     # The original owner owns auth/settings/extension selection. Bootstrap is
     # its existing OS-environment decoder, not a second fixture configuration.
     _, environment = NativePiRpcLaunch.bootstrap(
-        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment, retained.configuration)
+        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment, retained.configuration, LaunchRuntime(Path(retained.interpreter)))
     source_profile = retained.configuration.native_config
     source_hashes = {}
     for filename in ('auth.json', 'models.json', 'settings.json'):
