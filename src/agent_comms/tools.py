@@ -585,7 +585,8 @@ class CommsThreadsTool(ToolRequest):
         from .cli_commands import ThreadsCliCommand
 
         result = ThreadsCliCommand(active_only=self.active_only).apply(comms)
-        presentation = comms.views.thread_presentation(_executing_thread())
+        caller = RestartEnvironment.find_calling_thread()
+        presentation = comms.views.thread_presentation(caller) if caller is not None else None
         sent_notifications = (
             list(presentation.sent_notifications) if presentation is not None else []
         )

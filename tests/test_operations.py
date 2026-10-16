@@ -18,6 +18,9 @@ from agent_comms.threads import Thread
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
+    assert RestartEnvironment.find_calling_thread({}) is None
+    assert RestartEnvironment.find_calling_thread({"AGENT_COMMS_THREAD": ""}) is None
+    assert RestartEnvironment.find_calling_thread({"AGENT_COMMS_THREAD": "owner"}) == "owner"
     assert RestartEnvironment.calling_thread(
         {"AGENT_COMMS_THREAD": "owner"}
     ) == "owner"

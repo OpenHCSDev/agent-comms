@@ -102,6 +102,17 @@ class TestToolCatalog:
         with pytest.raises(ValueError, match="Expected.*bool"):
             invoke_tool(comms, "comms_threads", {"active_only": "yes"})
 
+    def test_threads_query_without_caller_does_not_weaken_actions(self, comms, monkeypatch):
+        from agent_comms.owner_launch import CallingThreadUnavailable
+
+        monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
+        comms.registry.declare(Thread(name="listed", tags=frozenset(), worktree="/wt"))
+        result = invoke_tool(comms, "comms_threads", {"active_only": True})
+        assert [thread["name"] for thread in result["threads"]] == ["listed"]
+        assert result["sent_notifications"] == []
+        with pytest.raises(CallingThreadUnavailable):
+            invoke_tool(comms, "comms_set_goal", {"text": "not authorized"})
+
     def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "sender")
         comms.registry.declare(Thread(name="sender", tags=frozenset(), worktree="/wt"))
