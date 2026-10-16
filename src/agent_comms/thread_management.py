@@ -70,7 +70,6 @@ class NewThreadSpec:
     thinking_level: type[ThinkingLevel]
     task: str = ""
     tags: frozenset[str] | None = None
-    prompt: str | None = None
 
     def __post_init__(self) -> None:
         if not self.model:
@@ -79,10 +78,6 @@ class NewThreadSpec:
         if not separator or not provider or not model:
             raise ValueError("Choose a provider-qualified model for the new thread")
         object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
-
-    @property
-    def initial_prompt(self) -> str:
-        return self.task if self.prompt is None else self.prompt
 
     @contextmanager
     def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
