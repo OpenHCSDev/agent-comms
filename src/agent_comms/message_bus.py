@@ -12,7 +12,7 @@ from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
-from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
+from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest, UnreadBeforeRequest
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
@@ -20,6 +20,7 @@ from .read_basis import (
     DMDisplayScope,
     ListedDeliveries,
     MessageDisplayScope,
+    WatchAcknowledgment,
 )
 from .routing import DeliveryScope
 from .store_files import _store_lock
@@ -146,7 +147,7 @@ class MessageBus:
             )
             return list(page.messages)
 
-    async def watch(self, name: str) -> AsyncIterator[Message]:
+    async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment]) -> AsyncIterator[Message]:
         """Yield unread messages, recording only messages the caller takes.
 
         Notifications and inbox reads use the same owners as native delivery.
@@ -166,7 +167,7 @@ class MessageBus:
                 for message in self.inbox(name, snapshot=snapshot):
                     displayed = self.reads.capture(name, (message,), snapshot, self.log.path)
                     yield message
-                    self.reads.mark_displayed(displayed.viewer, displayed)
+                    acknowledgment.taken(self.reads, displayed)
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
@@ -375,6 +376,12 @@ class MessageBus:
         return ConversationMessagePageRequest.capture(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         ).read(self.log)
+
+    def conversation_older_unread(
+        self, scope: DMDisplayScope, *, before: int, seen: frozenset[int]
+    ) -> bool:
+        """Ask the scoped offset reader, newest first, stopping at the first unread."""
+        return UnreadBeforeRequest(scope, before, seen).read(self.log)
 
     def last_sent_timestamps(self, *, source: OpenedWireSnapshot | None = None) -> Mapping[str, float]:
         """Reuse the same verified activity source; no second projection or body cache."""

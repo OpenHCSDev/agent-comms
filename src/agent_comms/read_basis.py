@@ -14,12 +14,34 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channel_targets import is_channel_target
+from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
 from .store_files import _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadIncarnationRecord
 
+class WatchAcknowledgment(DeclaredFamily, affix="WatchAcknowledgment"):
+    """Who confirms that a streamed message reached its receiver."""
+
+    @classmethod
+    @abstractmethod
+    def taken(cls, reads, displayed: DisplayBasis) -> None: ...
+
+
+class OnReadWatchAcknowledgment(WatchAcknowledgment):
+    @classmethod
+    def taken(cls, reads, displayed: DisplayBasis) -> None:
+        reads.mark_displayed(displayed.viewer, displayed)
+
+
+class ExplicitWatchAcknowledgment(WatchAcknowledgment):
+    @classmethod
+    def taken(cls, reads, displayed: DisplayBasis) -> None:
+        """The receiver confirms exact references through the existing read owner."""
+
+
 if TYPE_CHECKING:
+    from .bus_page_index import BusPageRow
     from .channels import Channel
     from .message_bus import MessageBus
     from .message_page import MessagePage
@@ -169,19 +191,17 @@ class DMDisplayBasis:
             peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
             bus_identity = bus.reads.bus_identity(bus.log.path)
-        # Native admission uses this same wire lock. Page preparation and the
-        # older-unread scan use opened source boundaries, outside admission.
+        # Native admission uses this same wire lock. Scoped page/read queries
+        # use opened source boundaries outside admission.
         page = bus.conversation_page(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         )
         older_unread = False
         if page.has_older and page.messages:
             seen = bus.reads.seen_sequences(viewer_name, snapshot)
-            with bus.log._record_snapshot(need_sequence=False) as (_, records):
-                older_unread = any(
-                    scope.unread_before(message, page.messages[0].seq, seen)
-                    for message, _ in records
-                )
+            older_unread = bus.conversation_older_unread(
+                scope, before=page.messages[0].seq, seen=seen
+            )
         with _store_lock(root / "wire", shared=True), registry.store.reading() as document:
             # Read progress is not page identity. It only adds seen messages
             # while these incarnations live; an older-unread result can become
@@ -308,6 +328,10 @@ class DMDisplayBasis:
 class MessageDisplayScope(ABC):
     """Captured inclusion and its sound candidate reduction for the page index."""
 
+    def offsets(self, index, *, lower, upper, descending, before_offset):
+        return index.offsets(lower=lower, upper=upper, descending=descending,
+                             targets=self.index_targets, before_offset=before_offset)
+
     @property
     @abstractmethod
     def index_targets(self) -> frozenset[str] | None:
@@ -345,11 +369,17 @@ class DMDisplayScope(MessageDisplayScope):
             raise ValueError("DM display identity changed; refresh the page.")
         return cls.capture(first.name, second.name, snapshot)
 
-    def inbound(self, message: Message) -> bool:
+    def inbound(self, message: Message | BusPageRow) -> bool:
         return message.sender in self.second_names and message.target in self.first_names
 
-    def unread_before(self, message: Message, before: int, seen: frozenset[int]) -> bool:
+    def unread_before(self, message: Message | BusPageRow, before: int, seen: frozenset[int]) -> bool:
         return message.seq < before and message.seq not in seen and self.inbound(message)
+
+    def offsets(self, index, *, lower, upper, descending, before_offset):
+        return index.conversation_offsets(
+            self.first_names, self.second_names, lower=lower, upper=upper,
+            descending=descending, before_offset=before_offset,
+        )
 
     @property
     def index_targets(self) -> frozenset[str]:

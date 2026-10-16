@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from .declared_family import DeclaredFamily
+from .launch_runtime import LaunchRuntime
 from .field_codec import FieldCodec
 from .sealed import Sealed
 
@@ -685,8 +686,9 @@ class PosixLaunch(ChildLaunch):
 
     @property
     def argv(self) -> tuple[str, ...]:
+        # The exec gate runs this decoder's code before exec of the selected command.
         return (
-            sys.executable,
+            str(LaunchRuntime.running().interpreter),
             "-c",
             _EXEC_GATE,
             str(self.read_fd),
@@ -1375,8 +1377,9 @@ class ChildCommand(DeclaredFamily, affix="Command"):
     """Internal child entrypoints decode once through their declaration owner."""
 
     def argv(self) -> tuple[str, ...]:
+        # Decode this process's private command with the same declarations that encoded it.
         return (
-            sys.executable,
+            str(LaunchRuntime.running().interpreter),
             "-c",
             "from agent_comms.child_process import ChildCommand; ChildCommand.main()",
             json.dumps(FieldCodec.encode(self)),

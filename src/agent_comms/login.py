@@ -6,7 +6,7 @@ import subprocess
 from pathlib import Path
 
 from .native_arguments import NativeArguments
-from .owner_launch import RestartEnvironment
+from .launch_runtime import RestartEnvironment
 
 
 def run_login(provider: str = "") -> int:

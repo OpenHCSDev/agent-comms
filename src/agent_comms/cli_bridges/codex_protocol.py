@@ -8,18 +8,19 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from difflib import unified_diff
-from typing import ClassVar, Generic, Literal, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, TypeVar
 
 from metaclass_registry import RegistryConfig
 from pydantic import (
     Field,
     JsonValue,
     TypeAdapter,
+    ValidateAs,
 )
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -724,8 +725,18 @@ class ItemsList(RequestParams):
 class ItemEntry(WireModel):
     turnId: str
     item: CodexItem
-    startedAtMs: int | None = None
     completedAtMs: int | None = None
+
+    @staticmethod
+    def _decode_start(milliseconds: int | None) -> EventTime:
+        return (
+            UnrecordedEventTime() if milliseconds is None
+            else EventTime.capture(milliseconds / 1000)
+        )
+
+    started_at: Annotated[EventTime, ValidateAs(int | None, _decode_start)] = Field(
+        alias='startedAtMs', default_factory=UnrecordedEventTime,
+    )
 
     @property
     def completed(self) -> bool:
@@ -734,8 +745,7 @@ class ItemEntry(WireModel):
     def publication(self) -> CompletedItem:
         if self.completedAtMs is None:
             raise ValueError(f'Item {self.item.id} has not finished')
-        started_at = EventTime.capture(None if self.startedAtMs is None else self.startedAtMs / 1000)
-        event_time = started_at.continued_from(self.completedAtMs / 1000)
+        event_time = self.started_at.continued_from(self.completedAtMs / 1000)
         return CompletedItem(self.turnId, self.item.id, tuple(
             event_time.stamp(event) for event in self.item.events()))
 
@@ -786,7 +796,7 @@ class Started(ItemNotification):
 
     def apply(self, stream: ItemStream) -> TranscriptUpdate:
         return StartedItem(self.turnId, self.item.id, self.item.activity, self.item.activity_detail,
-                           self.item.accumulator(RecordedEventTime(self.startedAtMs / 1000)))
+                           self.item.accumulator(EventTime.capture(self.startedAtMs / 1000)))
 
 
 class Completed(ItemNotification):

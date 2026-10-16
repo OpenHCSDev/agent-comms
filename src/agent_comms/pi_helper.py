@@ -70,7 +70,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
 
     @classmethod
     async def run(cls, request, *, cwd: Path, env: dict[str, str] | None = None):
-        from .owner_launch import RestartEnvironment
+        from .launch_runtime import RestartEnvironment
 
         node = shutil.which("node")
         if node is None:

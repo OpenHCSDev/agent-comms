@@ -6,7 +6,7 @@ from agent_comms.cli_bridges.shared import (
     ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, DraftAccumulator, FinishedItem,
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )
-from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
 from test_codex_items import _output
 
@@ -35,8 +35,11 @@ def test_batched_deltas_materialize_only_the_surviving_view(tmp_path):
 
 def test_prefix_required_and_completion_rejects_overlapping_start_and_suffix(tmp_path):
     output = _output(tmp_path)
+    activity = ActiveItem('t', 'a', ActivityState.WORKING, 'Replying')
+    assert activity.accumulate(output) == (activity,)
     output.publish_batch([AppendDraftItem('t', 'a', 'suffix')])
     assert output.transcript.current_draft() is None
+    assert not output.drafts
     output.publish_batch([start('t', 'a'), AppendDraftItem('t', 'a', 'Hello')])
     output.publish_batch([
         CompletedItem('t', 'a', (AssistantTranscript('Hello!', timestamp=9.0),)),
@@ -52,10 +55,13 @@ def test_prefix_required_and_completion_rejects_overlapping_start_and_suffix(tmp
 def test_saved_completion_survives_initial_idle_snapshot_until_ordered_end(tmp_path):
     output = _output(tmp_path)
     output.publish_batch([
-        CompletedItem('old', 'a', (AssistantTranscript('saved'),)), TurnEnded(),
+        CompletedItem('old', 'a', (AssistantTranscript('saved', timestamp=9.0),)), TurnEnded(),
         start('old', 'a', 'overlapping snapshot'), AppendDraftItem('old', 'a', 'late'),
     ])
     assert output.transcript.current_draft() is None
+    with output.transcript.reading() as snapshot:
+        row, = snapshot.forward(0, snapshot.cut().offset)
+        assert row.events == (AssistantTranscript('saved', timestamp=9.0),)
     output.publish_batch([AllTurnsEnded(), start('new', 'a', 'new identity')])
     assert output.transcript.current_draft().turn_id == 'new'
 
@@ -108,12 +114,35 @@ def test_time_family_preserves_real_zero_and_unrecorded_completion_fallback(tmp_
         assert row.events[0].timestamp == expected
 
 
-def test_optional_wire_start_preserves_recorded_epoch_zero():
+@pytest.mark.parametrize('wire, state, expected', [
+    ({}, UnrecordedEventTime, 2.0),
+    ({'startedAtMs': None}, UnrecordedEventTime, 2.0),
+    ({'startedAtMs': 0}, RecordedEventTime, 0.0),
+    ({'startedAtMs': 1500}, RecordedEventTime, 1.5),
+])
+def test_wire_start_decoder_selects_time_state(wire, state, expected):
     from agent_comms.cli_bridges.codex_protocol import ItemEntry
 
     entry = ItemEntry(turnId='t', item={'type': 'agentMessage', 'id': 'a', 'text': 'epoch'},
-                      startedAtMs=0, completedAtMs=2000)
-    assert entry.publication().events[0].timestamp == 0.0
+                      completedAtMs=2000, **wire)
+    assert isinstance(entry.started_at, state)
+    assert entry.publication().events[0].timestamp == expected
+
+
+@pytest.mark.parametrize('invalid', [None, True, '0', float('nan'), float('inf')])
+def test_capture_requires_a_real_recorded_timestamp(invalid):
+    with pytest.raises(ValueError, match='finite Unix timestamp'):
+        EventTime.capture(invalid)
+
+
+@pytest.mark.parametrize('invalid', [True, '0', 1.5])
+def test_wire_start_decoder_keeps_strict_integer_input(invalid):
+    from pydantic import ValidationError
+    from agent_comms.cli_bridges.codex_protocol import ItemEntry
+
+    with pytest.raises(ValidationError):
+        ItemEntry(turnId='t', item={'type': 'agentMessage', 'id': 'a', 'text': 'invalid'},
+                  startedAtMs=invalid, completedAtMs=2000)
 
 
 def test_completed_only_sources_do_not_retain_draft_state(tmp_path):

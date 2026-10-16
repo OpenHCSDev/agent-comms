@@ -13,7 +13,7 @@ from pathlib import Path
 
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
-from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
+from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.threads import Thread
 from agent_comms.wire_record import WireRecord
 

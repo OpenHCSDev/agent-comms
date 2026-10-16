@@ -2,12 +2,13 @@
 
 import asyncio
 from contextlib import aclosing
+from agent_comms.read_basis import OnReadWatchAcknowledgment
 
 
 async def test_watch_emits_startup_unread_then_arrival_and_leaves_untaken_unread(wired):
     first = wired.messaging.send_message("PR111", "fixer", "already unread")
 
-    async with aclosing(wired.bus.watch("fixer")) as watcher:
+    async with aclosing(wired.bus.watch("fixer", acknowledgment=OnReadWatchAcknowledgment)) as watcher:
         initial = await asyncio.wait_for(anext(watcher), timeout=3)
         assert initial.message_id == first.message_id
 
