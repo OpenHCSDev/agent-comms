@@ -81,6 +81,21 @@ class ThreadPresentations:
     sent_source_limit: int
     read_observations: ReadObservations
 
+    @classmethod
+    def capture(cls, snapshot, agents, transcripts, waits, names, sent_source_limit):
+        """Own the batch roster and its one namespace-resolved human read cut."""
+        views = ThreadView.roster(snapshot, agents, None, waits, names=names,
+                                  show_stopped=True, show_archived=False)
+        if views:
+            viewers = HumanViewers.capture(snapshot.threads.values())
+            with viewers.reading(transcripts.bus.reads, AbsentReadSource()) as document:
+                observations = document.observations(snapshot)
+        else:
+            # Empty consumers acquire no authority; missing authority still fails.
+            observations = ReadObservations(AbsentReadSource(), ReadMasks())
+        return cls(snapshot, {view.thread.name: view for view in views}, transcripts,
+                   sent_source_limit, observations)
+
     def read(self, name: str) -> ThreadPresentation | None:
         view = self.views.get(self.snapshot.canonical_name(name))
         if view is None:
@@ -360,30 +375,9 @@ class HistoryViews:
         self, names: Iterable[str], *, sent_source_limit: int = 5
     ) -> ThreadPresentations:
         """Acquire status documents once, with no document lock held while building rows."""
-        snapshot = self.registry.snapshot()
-        views = ThreadView.roster(
-            snapshot,
-            self.agents,
-            None,
-            GoalWaits(self.root / GoalWaits.filename),
-            names=names,
-            show_stopped=True,
-            show_archived=False,
-        )
-        reads = self.transcripts.bus.reads
-        if views:
-            viewers = HumanViewers.capture(snapshot.threads.values())
-            with viewers.reading(reads, AbsentReadSource()) as document:
-                read_observations = document.observations(snapshot)
-        else:
-            # No selected consumer needs a read cut. This is not an absent-store fallback.
-            read_observations = ReadObservations(AbsentReadSource(), ReadMasks())
-        return ThreadPresentations(
-            snapshot,
-            {view.thread.name: view for view in views},
-            self.transcripts,
-            sent_source_limit,
-            read_observations,
+        return ThreadPresentations.capture(
+            self.registry.snapshot(), self.agents, self.transcripts,
+            GoalWaits(self.root / GoalWaits.filename), names, sent_source_limit,
         )
 
     def require_thread_presentation(self, name: str) -> ThreadPresentation:

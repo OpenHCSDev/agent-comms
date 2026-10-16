@@ -188,11 +188,19 @@ class RouteSourceRow(RouteTable, TypedTable):
         source.seek(start)
         return sha256(source.read(offset - start)).hexdigest()
 
+    def matches_identity(self, identity: FileIdentity) -> bool:
+        return self.revision is not None and self.revision.identity == identity
+
+    @classmethod
+    def proves_sequence(cls, db, identity: FileIdentity, sequence: int) -> bool:
+        return (any(row.matches_identity(identity) for row in cls.select(db, id=1))
+                and bool(RouteEntryRow.select(db, seq=sequence)))
+
     def matches_file(self, source: BinaryIO) -> bool:
         if self.revision is None:
             return True  # The empty projection has no original bytes to retain.
         return (
-            self.revision.identity == FileIdentity.from_stat(os.fstat(source.fileno()))
+            self.matches_identity(FileIdentity.from_stat(os.fstat(source.fileno())))
             and self.tail(source, self.revision.size) == self.tail_digest
         )
 
@@ -349,32 +357,28 @@ class BusRouteCounts(ReadSnapshot):
 
         if not progress.sparse:
             return ReadPrefix(progress.read_through)
-        recorded = RouteSourceRow.one(self.connection, id=1)
         maximum = max(progress.sparse)
-        if (recorded is None or recorded.revision is None
-                or recorded.revision.identity != FileIdentity(*bus_identity)
-                or not self.connection.execute(
-                    f'SELECT 1 FROM "{RouteEntryRow.declared_name}" WHERE seq=?',
-                    (maximum,),
-                ).fetchone()):
+        if not RouteSourceRow.proves_sequence(self.connection, FileIdentity(*bus_identity), maximum):
             return PrefixUnavailable()
         self.connection.create_function('in_read_conversation', 2,
                                         conversation.route_matcher(snapshot), deterministic=True)
         try:
-            first = self.connection.execute(f'''
-                SELECT seq FROM "{RouteEntryRow.declared_name}"
-                WHERE target IN (SELECT value FROM json_each(:targets))
-                  AND seq>:through AND seq<=:maximum
-                  AND in_read_conversation(sender,target)
-                  AND seq NOT IN (SELECT value FROM json_each(:sparse))
-                ORDER BY seq LIMIT 1''', {
+            prefix = self.connection.execute(f'''
+                SELECT COALESCE((
+                    SELECT seq-1 FROM "{RouteEntryRow.declared_name}"
+                    WHERE target IN (SELECT value FROM json_each(:targets))
+                      AND seq>:through AND seq<=:maximum
+                      AND in_read_conversation(sender,target)
+                      AND seq NOT IN (SELECT value FROM json_each(:sparse))
+                    ORDER BY seq LIMIT 1
+                ), :maximum)''', {
                     'targets': json.dumps(sorted(conversation.route_targets(snapshot))),
                     'through': progress.read_through, 'maximum': maximum,
                     'sparse': json.dumps(sorted(progress.sparse)),
                 }).fetchone()
         except sqlite3.OperationalError as error:
             CoordinationReadUnavailable.raise_from(error)
-        return ReadPrefix(first[0] - 1 if first is not None else maximum)
+        return ReadPrefix(*prefix)
 
     def changed_reads(self, previous, current):
         self.connection.create_function('previously_read', 3, previous.contains_route, deterministic=True)

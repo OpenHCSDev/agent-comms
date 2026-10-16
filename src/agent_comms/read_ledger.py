@@ -322,6 +322,18 @@ class SelectedViewers(ReadViewers):
     def capture(cls, participants):
         return cls(tuple(p.incarnation for p in participants))
 
+    @classmethod
+    def named(cls, snapshot, names):
+        canonical = {snapshot.canonical_name(name) for name in names}
+        return cls.capture(snapshot.threads[name] for name in canonical & snapshot.threads.keys())
+
+    def displayed(self, message, recipient, readers: ReadMasks):
+        from .bus_publication import stable_thread_lookup
+
+        return tuple(viewer for viewer in self.incarnations
+                     if stable_thread_lookup(viewer.created_at) == recipient.recipient_lookup
+                     and readers[viewer.name].contains(message))
+
     @contextmanager
     def reading(self, ledger: ReadLedger, source: ReadSource):
         if self.incarnations:
@@ -520,24 +532,10 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
             return document.observations(snapshot).for_source(source)[participant.incarnation.name]
 
     def displayed_recipient(self, message, recipient, snapshot, *, readers):
-        name = snapshot.canonical_name(recipient.canonical_thread)
-        thread = snapshot.threads.get(name)
-        if thread is None or not self.human(thread.role):
-            return ()
-        return self._displayed_recipient(message, recipient, snapshot, readers)
+        return HumanViewers.named(snapshot, (recipient.canonical_thread,)).displayed(message, recipient, readers)
 
     def historical_displayed_recipient(self, message, recipient, snapshot, *, readers):
-        return self._displayed_recipient(message, recipient, snapshot, readers)
-
-    @staticmethod
-    def _displayed_recipient(message, recipient, snapshot, readers: ReadMasks):
-        from .bus_publication import stable_thread_lookup
-        name = snapshot.canonical_name(recipient.canonical_thread)
-        thread = snapshot.threads.get(name)
-        if (thread is not None and stable_thread_lookup(thread.created_at) == recipient.recipient_lookup
-                and readers[name].contains(message)):
-            return (thread.incarnation,)
-        return ()
+        return SelectedViewers.named(snapshot, (recipient.canonical_thread,)).displayed(message, recipient, readers)
 
     def remove_threads(self, threads: Sequence[Thread]):
         if not threads:

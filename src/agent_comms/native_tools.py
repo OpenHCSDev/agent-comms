@@ -5,7 +5,9 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import ClassVar
+
+from pydantic import JsonValue
 
 from .tool_declaration import ToolDeclaration
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
@@ -27,10 +29,10 @@ class NativeExecutableTool(ToolDeclaration):
     def native_extension(cls, package: Path) -> Path: ...
 
     @classmethod
-    def from_call(cls, name: str, arguments: dict[str, Any], *, call_id: str):
+    def from_call(cls, name: str, arguments: dict[str, JsonValue], *, call_id: str):
         cls._member_declarations()
-        FieldCodec.encode(arguments, dict[str, Any])
-        return cls.decode(name).create_call(call_id, arguments)
+        decoded = FieldCodec.decode(dict[str, JsonValue], arguments)
+        return cls.decode(name).create_call(call_id, decoded)
 
 
 class NativeRequestTools:
