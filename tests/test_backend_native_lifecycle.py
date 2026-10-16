@@ -160,7 +160,7 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
     owner.provider.status = 0
     turn = asyncio.create_task(owner.run("Uncertain input before interrupted owner stop"))
     entered, release = asyncio.Event(), asyncio.Event()
-    close = PiSessionChild.close
+    close = PiSessionChild._close
     stop = None
     try:
         async with asyncio.timeout(15):
@@ -173,9 +173,9 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
             if child is session.native:
                 entered.set()
                 await release.wait()
-            await close(child)
+            return await close(child)
 
-        monkeypatch.setattr(PiSessionChild, "close", held_close)
+        monkeypatch.setattr(PiSessionChild, "_close", held_close)
         stop = asyncio.create_task(backend.terminate_task_process(turn))
         await asyncio.wait_for(entered.wait(), 5)
         stop.cancel()
@@ -183,7 +183,7 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
             await stop
         assert backend.TurnSession.active[turn] is session
         assert isinstance(owner.persistent.custody, RetiringNative)
-        assert not owner.persistent.custody.task.done()
+        assert not owner.persistent.custody.child.retire().done()
         release.set()
         result = await asyncio.wait_for(turn, 10)
         assert not result[-1].ok

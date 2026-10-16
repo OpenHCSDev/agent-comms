@@ -29,7 +29,7 @@ class PiSessionChild:
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
     resources: ExitStack = field(default_factory=ExitStack, repr=False)
-    _resource_retirement: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
+    _close_job: asyncio.Task[BaseException | None] | None = field(default=None, init=False, repr=False)
 
     async def reply_ui(self, response) -> None:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
@@ -62,34 +62,61 @@ class PiSessionChild:
             tail = (tail + chunk)[-16000:]
         return tail.decode(errors="replace").strip()
 
+    def retire(self) -> asyncio.Task[BaseException | None]:
+        """Start the one complete shutdown, or return its original operation."""
+        if self._close_job is None:
+            self._close_job = asyncio.create_task(self._close())
+        return self._close_job
+
     @property
     def retired(self) -> bool:
-        """Receipt for the whole child lifecycle, not merely process death."""
-        task = self._resource_retirement
-        if task is None or not task.done():
+        job = self._close_job
+        if job is None or not job.done():
             return False
-        return self.proc.cleanup_complete and not task.cancelled() and task.exception() is None
+        return not job.cancelled() and job.exception() is None and job.result() is None
+
+    @staticmethod
+    def _deliver_close_result(error: BaseException | None) -> None:
+        if error is not None:
+            raise error
+
+    async def wait_closed(self) -> None:
+        """Cancel this wait without cancelling or forgetting the shutdown."""
+        job = self.retire()
+        await asyncio.wait((job,))
+        self._deliver_close_result(job.result())
 
     async def close(self) -> None:
+        """Join the same shutdown even when this cleanup caller is cancelled."""
+        job = self.retire()
         try:
-            await self.proc.stop()
-        except BaseException as error:
-            if self.proc.retired:
-                try:
-                    await self._join_resources()
-                except asyncio.CancelledError:
-                    raise  # New caller cancellation still outranks an earlier failure.
-                except BaseException as cleanup_error:
-                    raise error from cleanup_error
-            # Physical retirement permits resource cleanup, not a successful stop receipt.
+            error = await join_retirement(job)
+        except asyncio.CancelledError as cancellation:
+            if (error := job.result()) is not None:
+                raise cancellation from error
             raise
-        else:
-            await self._join_resources()
+        self._deliver_close_result(error)
 
-    async def _join_resources(self) -> None:
-        if self._resource_retirement is None:
-            self._resource_retirement = asyncio.create_task(self._release_resources())
-        await join_retirement(self._resource_retirement)
+    async def _close(self) -> BaseException | None:
+        # Record the original error as the job's result. Task cancellation would
+        # otherwise discard a typed CancelledError after its first observation.
+        try:
+            try:
+                await self.proc.stop()
+            except BaseException as error:
+                if self.proc.retired:
+                    try:
+                        await self._release_resources()
+                    except asyncio.CancelledError:
+                        raise
+                    except BaseException as cleanup_error:
+                        raise error from cleanup_error
+                raise
+            else:
+                await self._release_resources()
+        except BaseException as error:
+            return error
+        return None
 
     async def _release_resources(self) -> None:
         try:
@@ -156,11 +183,33 @@ class EmptyNative(NativeCustody):
 
 
 @dataclass
-class RetiringNative(NativeCustody):
-    available = False
-    task: asyncio.Task[None]
-    successor: NativeCustody
+class ChildNative(NativeCustody):
     child: PiSessionChild
+    available = True
+
+    @abstractmethod
+    def _shutdown_successor(self) -> NativeCustody: ...
+
+    def retire(self, successor=None):
+        following = self._shutdown_successor() if successor is None else successor
+        self.child.retire()
+        return RetiringNative(self.child, following)
+
+    async def closed(self) -> None:
+        await self.child.wait_closed()
+
+
+@dataclass
+class SuccessorNative(ChildNative):
+    successor: NativeCustody
+
+    def _shutdown_successor(self) -> NativeCustody:
+        return self.successor
+
+
+@dataclass
+class RetiringNative(SuccessorNative):
+    available = False
 
     def retire(self, successor=None):
         if successor is not None:
@@ -169,19 +218,11 @@ class RetiringNative(NativeCustody):
 
     @property
     def settled(self) -> NativeCustody:
-        return self.successor if self.task.done() and self.child.retired else self
+        return self.successor if self.child.retired else self
 
-    async def closed(self) -> None:
-        # Waiting does not cancel the retained task or replace its cancellation
-        # with shield's synthetic CancelledError. The original task owns the result.
-        await asyncio.wait((self.task,))
-        self.task.result()
 
 @dataclass
-class BorrowedNative(NativeCustody):
-    child: PiSessionChild
-    successor: NativeCustody
-    available = True
+class BorrowedNative(SuccessorNative):
 
     async def inspect(self, persistent, prepare, request):
         # The active TurnSession owns receive/correlation. Borrow its original
@@ -191,20 +232,11 @@ class BorrowedNative(NativeCustody):
         ) as response:
             return (await response).data.require_payload()
 
-    def retire(self, successor=None):
-        return RetiringNative(
-            asyncio.create_task(self.child.close()),
-            self.successor if successor is None else successor,
-            self.child,
-        )
-
 @dataclass
-class RetainedNative(NativeCustody):
+class RetainedNative(ChildNative):
     retained = True
-    child: PiSessionChild
     identity: NativeSessionIdentity
     revision: SessionRevision
-    available = True
 
     @property
     def current(self) -> bool:
@@ -257,10 +289,6 @@ class RetainedNative(NativeCustody):
         return super().managed_launch(command, arguments, worktree=worktree,
             environment=environment, session_file=session_file)
 
-    def retire(self, successor=None):
-        return RetiringNative(
-            asyncio.create_task(self.child.close()),
-            EmptyNative() if successor is None else successor,
-            self.child,
-        )
+    def _shutdown_successor(self) -> NativeCustody:
+        return EmptyNative()
 

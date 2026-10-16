@@ -870,14 +870,6 @@ class ChildProcess(Sealed, ABC):
         """Exact child and its owned group are gone, independent of pipe callbacks."""
         return not self.alive() and not self.platform.group_members(self.identity)
 
-    @property
-    def cleanup_complete(self) -> bool:
-        """The original retirement operation completed, including owned IO and reap."""
-        task = self._stop_task
-        if task is None or not task.done():
-            return False
-        return not task.cancelled() and task.exception() is None
-
     @abstractmethod
     async def wait(self) -> ChildOutcome: ...
 
