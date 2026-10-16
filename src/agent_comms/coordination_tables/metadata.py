@@ -45,15 +45,15 @@ class SchemaMeta(CoordinatorTable, TypedTable):
             raise SchemaVersionError("coordination schema metadata is inconsistent")
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "schema_meta_update_frozen": (
-                """CREATE TRIGGER schema_meta_update_frozen BEFORE UPDATE ON schema_meta BEGIN
+                """ BEFORE UPDATE ON schema_meta BEGIN
     SELECT RAISE(ABORT, 'schema metadata is immutable');
 END"""
             ),
             "schema_meta_delete_frozen": (
-                """CREATE TRIGGER schema_meta_delete_frozen BEFORE DELETE ON schema_meta BEGIN
+                """ BEFORE DELETE ON schema_meta BEGIN
     SELECT RAISE(ABORT, 'schema metadata cannot be deleted');
 END"""
             ),

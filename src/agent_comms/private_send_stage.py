@@ -37,6 +37,7 @@ from .reservation_rules import ReservationViolationError
 from .selected_triage import SelectedTriage
 from .text_digest import TextDigest
 from .turn_failure import TurnFailure
+from .typed_table import SqlValue
 
 
 @dataclass(frozen=True)
@@ -271,10 +272,10 @@ class TriageNativeSend(NativeSendStage):
             current = store.assignments.get(captured.assignment_id)
             if current != captured or not current.lifecycle.triage_pending:
                 raise IdentityConflict("triage claim changed before native batch reservation")
-            if db.execute(
+            if SqlValue.for_annotation(int).read(db.execute(
                 f"SELECT 1 FROM ({self.execution.source_membership_sql()}) members "
                 "WHERE members.assignment_id=? LIMIT 1", (captured.assignment_id,),
-            ).fetchone():
+            )):
                 raise IdentityConflict("triage source was previously reserved; no retry")
             # All original CASes and the one reserved input commit before Pi.
             update = WakeAssignment.update(

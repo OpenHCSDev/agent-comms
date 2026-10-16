@@ -28,7 +28,6 @@ from .bus_source_page import AddressedPage
 from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
-    project_verified_transitions,
 )
 from .errors import (
     RelationViolationError,
@@ -449,18 +448,9 @@ class WireLog:
             path = path.parent
 
     def claim_projection(self) -> ClaimProjection:
-        """Derive ownership exclusively from guarded, verified bus envelopes."""
-        with self._opened_wire_snapshot(need_sequence=False) as opened:
-            if not opened.metadata.claims:
-                raise RelationViolationError("Claim read barrier is unavailable.")
-            return project_verified_transitions(
-                transition
-                for record in self._snapshot_records(
-                    opened.metadata, opened.stream, opened.boundary
-                )
-                for message in record.messages()
-                for transition in message.claim_transitions
-            )
+        """Read current ownership from the canonical certified checkpoint."""
+        with self.certified_read() as source:
+            return source.claim_projection()
 
     def _private_marker_unlocked(self) -> WireMetadata:
         self._assert_private_directory()
@@ -772,9 +762,9 @@ class WireLog:
             or stat.S_IMODE(marker_info.st_mode) != 0o600
         ):
             raise RelationViolationError("Claim bus read barrier is not durable and private.")
-        from .private_bus_checkpoint import opened_claim_source_unlocked
+        from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
-        with opened_claim_source_unlocked(self, private_marker, shared=shared) as source:
+        with opened_private_checkpoint_unlocked(self, private_marker, shared=shared) as source:
             yield source
 
     @property

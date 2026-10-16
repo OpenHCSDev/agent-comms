@@ -178,19 +178,21 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             external = outside / "module.py"
             external.write_bytes(b"outside untouched\n")
             displaced = worktree / "displaced-pkg"
-            actual_projection = claim_admission.project_verified_transitions
+            from agent_comms.private_bus_checkpoint import CertifiedSourceRead
 
-            def swap_after_projection(transitions):
-                projection = actual_projection(transitions)
+            actual_claim = CertifiedSourceRead.claim
+
+            def swap_after_claim(source, resource):
+                current = actual_claim(source, resource)
                 parent.rename(displaced)
                 parent.symlink_to(outside, target_is_directory=True)
-                return projection
+                return current
 
-            # Swap *after* canonicalization and durable claim projection:
+            # Swap after canonicalization and the indexed current-claim read:
             # old absolute stat/open followed the parent symlink despite
             # final-component O_NOFOLLOW.
             with monkeypatch.context() as patch:
-                patch.setattr(claim_admission, "project_verified_transitions", swap_after_projection)
+                patch.setattr(CertifiedSourceRead, "claim", swap_after_claim)
                 with pytest.raises(IdentityConflict, match="directory or file changed"):
                     write_selected_claimed_file(
                         comms, store, admission, "Alice", selected_owner, b"escaped\n"
