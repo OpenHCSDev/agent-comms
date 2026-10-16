@@ -83,12 +83,8 @@ class MaintenanceOperator:
     value: str
 
     def __post_init__(self) -> None:
-        if type(self.value) is not str or not self.value or len(self.value) > 128:
+        if not self.value or len(self.value) > 128:
             raise ValueError('Maintenance operator must have bounded identity')
-
-    @classmethod
-    def from_text(cls, text: object) -> MaintenanceOperator:
-        return cls(FieldCodec.decode(str, text))
 
 
 class MaintenanceOperatorText(TextRepresentation):
@@ -99,6 +95,9 @@ class MaintenanceOperatorText(TextRepresentation):
     @classmethod
     def encode(cls, value: MaintenanceOperator) -> str:
         return value.value
+
+
+MaintenanceOperatorField = Annotated[MaintenanceOperator, MaintenanceOperatorText]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -114,7 +113,7 @@ class MaintenanceMarker:
 
 @dataclass(frozen=True, kw_only=True)
 class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
-    operator: Annotated[MaintenanceOperator, MaintenanceOperatorText]
+    operator: MaintenanceOperatorField
     nonce: str
     phase: type[MaintenancePhase]
 

@@ -14,10 +14,11 @@ from agent_comms.backend import _maintenance_send_boundary
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
 from agent_comms.maintenance_barrier import (
     InstallingPhase,
     MaintenanceBarrier,
-    MaintenanceOperator,
+    MaintenanceOperatorField,
     MaintenancePhase,
     PausedPhase,
     ReadyPhase,
@@ -41,7 +42,7 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     monkeypatch.setattr(cohort_foreground, '_trusted_package', lambda _: None)
     monkeypatch.setattr(native_pi, '_trusted_package', lambda _: None)
     control = comms.owners.maintenance
-    hold = control.begin(MaintenanceOperator.from_text('scratch-cutover'))
+    hold = control.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
     # Message publication remains live: only new turns are held. Use the actual
     # scratch bus, not a constructed message pretending to be a post.
     post = comms.messaging.send_message('sender', '#team', 'mid-drain channel post')
@@ -83,7 +84,7 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
         assert next_sealed_assignment(store, stable_thread_lookup(beta.created_at), beta.name).wire_seq == post.seq
     # Selection scheduled just before another drain must still refuse at the
     # effect boundary without consuming that durable assignment.
-    another_drain = control.begin(MaintenanceOperator.from_text('second-cutover'))
+    another_drain = control.begin(FieldCodec.decode(MaintenanceOperatorField, 'second-cutover'))
     assert await selected[0].run() == another_drain
     with Coordination(comms.root / 'coordination.sqlite3') as store:
         assert next_sealed_assignment(store, stable_thread_lookup(beta.created_at), beta.name).wire_seq == post.seq
@@ -109,7 +110,7 @@ async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monke
     monkeypatch.setattr(cohort_foreground, '_trusted_package', lambda _: None)
     monkeypatch.setattr(native_pi, '_trusted_package', lambda _: None)
     gate = comms.owners.maintenance
-    hold = gate.begin(MaintenanceOperator.from_text('scratch-cutover'))
+    hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
     post = comms.messaging.send_message('sender', '#team', 'while draining')
     assert await agent.inputs.drain_inbox('beta') == 0
     assert await agent.inputs.drain_inbox('beta') == 0
@@ -135,20 +136,20 @@ async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monke
 @pytest.mark.parametrize('text', [None, '', 'x' * 129, 42])
 def test_maintenance_operator_rejects_invalid_external_text(text: object) -> None:
     with pytest.raises((ValueError, TypeError)):
-        MaintenanceOperator.from_text(text)
+        FieldCodec.decode(MaintenanceOperatorField, text)
 
 
 def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
     gate = Comms(tmp_path / 'fresh').owners.maintenance
     assert gate.read().phase is ReadyPhase
-    hold = gate.begin(MaintenanceOperator.from_text('operator'))
+    hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'operator'))
     assert gate.read() == hold
     ready = gate.clear(hold)
     assert ready.phase is ReadyPhase and gate.read().phase is ReadyPhase
     with pytest.raises(RelationViolationError, match='generation/operator'):
         gate.clear(hold)
     assert gate.marker_path.is_file() and gate.state_path.is_file()
-    assert gate.read().operator == MaintenanceOperator.from_text('operator')
+    assert gate.read().operator == FieldCodec.decode(MaintenanceOperatorField, 'operator')
 
 
 def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> None:
@@ -163,7 +164,7 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
             raise AssertionError('No process should be stopped by a phase check')
 
     comms = Comms(tmp_path / 'wire')
-    hold = comms.owners.maintenance.begin(MaintenanceOperator.from_text('scratch-cutover'))
+    hold = comms.owners.maintenance.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
     with _store_lock(comms.root / 'wire'):
@@ -181,13 +182,13 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
 
 def test_clear_stopped_uses_acquired_wire_descriptor(tmp_path: Path) -> None:
     gate = MaintenanceBarrier(tmp_path / 'wire' / 'registry.json')
-    hold = gate.begin(MaintenanceOperator.from_text('stopped-cutover'))
+    hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'stopped-cutover'))
     with _store_lock(gate.wire_path) as lock:
         assert gate.clear_stopped(hold, lock.descriptor).phase is ReadyPhase
     assert gate.read().phase is ReadyPhase
     with _store_lock(tmp_path / 'unrelated') as other:
         with pytest.raises(RelationViolationError, match='wire lock changed'):
-            next_hold = gate.begin(MaintenanceOperator.from_text('new-cutover'))
+            next_hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'new-cutover'))
             gate.clear_stopped(next_hold, other.descriptor)
 
 
@@ -239,7 +240,7 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
     assert comms.agents.begin_turn("owner", "before")
     comms.agents.finish_turn(comms.registry.require("owner").turn_lease)
     control = gate
-    first = control.begin(MaintenanceOperator.from_text("operator-one"))
+    first = control.begin(FieldCodec.decode(MaintenanceOperatorField, "operator-one"))
     assert first.phase == MaintenancePhase.decode("draining") and first.generation == 1
     assert MaintenanceBarrier(comms.registry.store.path).read() == first
     with pytest.raises(RelationViolationError, match="Maintenance"):
@@ -271,7 +272,7 @@ def test_state_generation_requires_exact_matching_positive_int(
 ) -> None:
     gate = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
     assert gate.read().phase is ReadyPhase  # Fresh roots remain default OFF.
-    gate.begin(MaintenanceOperator.from_text("disposable-fixture"))
+    gate.begin(FieldCodec.decode(MaintenanceOperatorField, "disposable-fixture"))
     state = json.loads(gate.state_path.read_text())
     state["phase"] = "ready"  # Disposable READY detects a false-open parser result.
     state["generation"] = generation
@@ -296,7 +297,7 @@ def test_state_generation_requires_exact_matching_positive_int(
 )
 def test_enabled_witness_damage_never_restores_default_off(tmp_path: Path, fault: str) -> None:
     gate = MaintenanceBarrier(tmp_path / "wire" / "registry.json")
-    gate.begin(MaintenanceOperator.from_text("operator"))
+    gate.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
     if fault == "missing-state":
         gate.state_path.unlink()
     elif fault == "missing-marker":
@@ -330,7 +331,7 @@ async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp
             process_identity=ProcessIdentity.capture(proc.pid),
         )
     )
-    hold = comms.owners.maintenance.begin(MaintenanceOperator.from_text("operator"))
+    hold = comms.owners.maintenance.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
     ready.set()
     proc.join(10)
     assert proc.exitcode == 0
@@ -360,7 +361,7 @@ def test_unknown_parent_fsync_does_not_reopen_admission(
 
     monkeypatch.setattr(barrier_module, "_atomic_write_text", uncertain_write)
     with pytest.raises(OSError, match="injected"):
-        gate.begin(MaintenanceOperator.from_text("operator"))
+        gate.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
     with pytest.raises(RelationViolationError, match="Maintenance"):
         gate.assert_open_unlocked()
     if fault_at == "before-state":
@@ -383,7 +384,7 @@ def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path
     comms.registry.declare(owner)
     comms.registry.rename("owner", "renamed")
     comms.registry.unregister("renamed")
-    comms.owners.maintenance.begin(MaintenanceOperator.from_text("operator"))
+    comms.owners.maintenance.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
     with pytest.raises(RelationViolationError, match="Maintenance"):
         comms.owners.start("owner")
     with pytest.raises(RelationViolationError, match="Maintenance"):
@@ -408,7 +409,7 @@ def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> Non
         )
     )
     ready.set()
-    hold = comms.owners.maintenance.begin(MaintenanceOperator.from_text("operator"))
+    hold = comms.owners.maintenance.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
     child.join(10)
     assert child.exitcode == 0
     result, _ = q.get(timeout=2)
@@ -428,7 +429,7 @@ async def test_real_backend_fake_rpc_never_writes_prompt_after_pause(tmp_path: P
     import sys
 
     root = tmp_path / "wire"
-    MaintenanceBarrier(root / "registry.json").begin(MaintenanceOperator.from_text("operator"))
+    MaintenanceBarrier(root / "registry.json").begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
     marker = tmp_path / "sent"
     ready = tmp_path / "ready"
     stub = tmp_path / "pi-fake"
@@ -498,7 +499,7 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
             assert release.wait(5)
 
     def pause() -> None:
-        control.begin(MaintenanceOperator.from_text("operator"))
+        control.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
         changed.set()
 
     sender = threading.Thread(target=lambda: asyncio.run(fake_send()))
