@@ -106,10 +106,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
     )
     after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
     reopened = Comms(comms.root)
-    assert any(
-        entry.reports_turn("same-assistant-turn")
-        for entry in reopened.registry.goal_history("owner")
-    )
+    assert reopened.registry.goal_history("owner").reports_turn("same-assistant-turn")
     with pytest.raises(ValueError, match="already reported"):
         invoke_tool(
             reopened,

@@ -119,7 +119,8 @@ class GoalHistoryQuery:
                 f"SELECT {columns} FROM {table} WHERE sequence IN ({matches}) "
                 "ORDER BY sequence DESC LIMIT ?"
             )
-            parameters = (*(parameters + (self.goal_id, self.limit)) * 2, self.limit)
+            endpoint_parameters = (*parameters, self.goal_id, self.limit)
+            parameters = (*endpoint_parameters, *endpoint_parameters, self.limit)
         return tuple(GoalHistoryEntry.read(connection.execute(statement, parameters)))
 
 
@@ -146,13 +147,15 @@ class GoalHistoryRead:
             return False
         try:
             with closing(CoordinationStore.read_snapshot(self.path)) as connection:
-                return connection.execute(
-                    f"SELECT 1 FROM {_identifier(GoalHistoryEntry.declared_name)} "
-                    "WHERE owner_created_at=? AND state='committed' "
-                    f"AND {GoalHistoryEntry.REPORTED_TURN}=? AND sequence<=? LIMIT 1",
-                    (self.owner_created_at, turn_id, self.through_sequence),
-                ).fetchone() is not None
-        except (OSError, sqlite3.Error) as error:
+                with closing(GoalHistoryEntry.stream(
+                    connection,
+                    where=f"{GoalHistoryEntry.REPORTED_TURN}=? AND sequence<=?",
+                    parameters=(turn_id, self.through_sequence),
+                    owner_created_at=self.owner_created_at, state="committed",
+                    order_by=("sequence",), descending=True,
+                )) as rows:
+                    return next(rows, None) is not None
+        except (OSError, sqlite3.Error, ValueError, TypeError) as error:
             raise GoalHistoryError("Cannot read goal report history.") from error
 
 

@@ -19,6 +19,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_states import UnrecordedBlockGoal
+from agent_comms.goal_history import GoalHistoryQuery
 from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
@@ -38,7 +39,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
         "worker", ActiveGoalAction(progress="Verified 2 of 3 items")
     )
     assert progressed is not None
-    before_history = comms.goals.goal_history("worker", goal_id=original.id)
+    before_history = comms.goals.goal_history("worker", query=GoalHistoryQuery(goal_id=original.id))
     before_registry = (tmp_path / "registry.json").read_bytes()
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     tool = next(
@@ -57,7 +58,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
             )
         assert comms.registry.require("worker").goal == progressed
         assert (tmp_path / "registry.json").read_bytes() == before_registry
-        assert comms.goals.goal_history("worker", goal_id=original.id) == before_history
+        assert comms.goals.goal_history("worker", query=GoalHistoryQuery(goal_id=original.id)) == before_history
 
     with pytest.raises(ValueError, match="nonempty reason"):
         tool.invoke(
@@ -82,7 +83,7 @@ def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monk
     assert blocked.state.reason == reason
     assert FieldCodec.decode(Goal, result["goal"]).state.reason == reason
     assert result["goal_execution"]["block_reason"] == reason
-    assert comms.goals.goal_history("worker", goal_id=original.id)[-1].after == blocked
+    assert comms.goals.goal_history("worker", query=GoalHistoryQuery(goal_id=original.id))[0].after == blocked
 
     execution = comms.goals.goal_execution("worker")
     assert execution is not None and execution.block_reason == reason
@@ -175,4 +176,4 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
     execution = comms.goals.goal_execution("worker")
     assert execution is not None and execution.block_reason == refusal
     assert "Blocked · The interrupted goal attempt" in execution.presentation("worker").summary
-    assert comms.goals.goal_history("worker", goal_id=original.id)[-1].after == reloaded
+    assert comms.goals.goal_history("worker", query=GoalHistoryQuery(goal_id=original.id))[0].after == reloaded

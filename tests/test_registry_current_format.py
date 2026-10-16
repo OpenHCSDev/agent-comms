@@ -32,7 +32,7 @@ def test_goal_family_survives_registry_and_history_reopen(tmp_path):
         reopened = Registration(registry.store.path)
         assert reopened.require(name).goal == goal
         assert reopened.require(name).incarnation == owner.incarnation
-        assert reopened.goal_history(name)[-1].after == goal
+        assert reopened.goal_history(name).entries()[0].after == goal
     program = """
 import sys
 from pathlib import Path
@@ -42,7 +42,7 @@ registry = Registration(Path(sys.argv[1]))
 for name in GoalState.names():
     goal = registry.require(name).goal
     assert goal.state.declared_name == name
-    assert registry.goal_history(name)[-1].after == goal
+    assert registry.goal_history(name).entries()[0].after == goal
 """
     result = subprocess.run(
         [sys.executable, "-c", program, str(registry.store.path)],

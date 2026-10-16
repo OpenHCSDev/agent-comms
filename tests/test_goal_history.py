@@ -16,7 +16,7 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
+from agent_comms.goal_history import GoalHistoryError, GoalHistoryQuery, GoalHistoryStore
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
@@ -57,12 +57,15 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     reopened = Comms(comms.root)
     entries = reopened.goals.goal_history("worker")
     assert [entry.kind for entry in entries] == ["transition"] * 6
-    assert [entry.after for entry in entries] == [first, paused, resumed, completed, second, None]
-    assert entries[0].after.text == "Ask @reviewer about the release"
-    assert entries[4].before == completed
-    assert entries[5].before == second
-    assert reopened.goals.goal_history("reviewer", goal_id=first.id) == entries[:5]
-    assert reopened.goals.goal_history("reviewer", goal_id=second.id) == entries[4:]
+    assert [entry.after for entry in entries] == [None, second, completed, resumed, paused, first]
+    assert [entry.sequence for entry in entries] == sorted(
+        (entry.sequence for entry in entries), reverse=True,
+    )
+    assert entries[5].after.text == "Ask @reviewer about the release"
+    assert entries[1].before == completed
+    assert entries[0].before == second
+    assert reopened.goals.goal_history("reviewer", query=GoalHistoryQuery(goal_id=first.id)) == entries[1:]
+    assert reopened.goals.goal_history("reviewer", query=GoalHistoryQuery(goal_id=second.id)) == entries[:2]
 
     history_tool = next(
         tool
@@ -72,9 +75,9 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     result = history_tool.invoke(reopened, {"goal_id": first.id})
     assert [row["after"]["revision"] for row in result["history"] if row["after"]] == [
         1,
-        2,
-        3,
         4,
+        3,
+        2,
         1,
     ]
 
@@ -96,8 +99,8 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))
     )
     entries = Comms(comms.root).goals.goal_history("worker")
-    assert [entry.kind for entry in entries] == ["baseline", "transition"]
-    assert entries[-1].before == current and entries[-1].after == paused
+    assert [entry.kind for entry in entries] == ["transition", "baseline"]
+    assert entries[0].before == current and entries[0].after == paused
 
 
 def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, monkeypatch):
@@ -154,7 +157,7 @@ def test_crash_after_registry_write_reconciles_pending_history(tmp_path, monkeyp
     assert paused is not None and paused.state.declared_name == "paused"
     entries = reopened.goals.goal_history("worker")
     assert [entry.kind for entry in entries] == ["transition", "transition"]
-    assert entries[-1].before == current and entries[-1].after == paused
+    assert entries[0].before == current and entries[0].after == paused
 
 
 def test_unjournaled_current_registry_change_is_labeled_observed_gap(tmp_path):
@@ -168,7 +171,7 @@ def test_unjournaled_current_registry_change_is_labeled_observed_gap(tmp_path):
 
     reopened = Comms(comms.root)
     entries = reopened.goals.goal_history("worker")
-    assert [entry.kind for entry in entries] == ["transition", "observed_gap"]
-    assert entries[-1].before == current
-    assert entries[-1].after.text == "Unjournaled change"
+    assert [entry.kind for entry in entries] == ["observed_gap", "transition"]
+    assert entries[0].before == current
+    assert entries[0].after.text == "Unjournaled change"
     assert len(Comms(comms.root).goals.goal_history("worker")) == 2

@@ -52,8 +52,8 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
     )
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
     history = comms.goals.goal_history("owner")
-    assert history[-1].after == goal and history[-1].after.mention_source is None
-    assert history[-1].after.state.reason is None
+    assert history[0].after == goal and history[0].after.mention_source is None
+    assert history[0].after.state.reason is None
     assert (
         comms.goals.goal_execution("owner").presentation("owner").summary
         == "Blocked · reason unavailable"
