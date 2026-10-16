@@ -30,11 +30,12 @@ must preserve parent chains, roots and untracked user boundaries.
 
 A bounded page must not depend on lifetime-history length. Coordinate-only
 backward traversal is an intermediate checkpoint, not completion. The existing
-native EntryStore owns seekable parent/offset selectors, but DiskEntryStore's
-SQLite is per-open and unlinked. Core cannot acquire that index; reconstructing
-it on every page would still be linear. Extend that original source/index
-lifetime, derive each entry's input ancestor from its validated parent during
-index/append, and consume that same selector from Core. Untracked user entries
+native EntryStore owns seekable parent/offset selectors. At the initial
+checkpoint, DiskEntryStore's SQLite was per-open and unlinked; rebuilding it on
+every page would still be linear. The latest-tool checkpoint below repairs that
+lifetime and read-only acquisition. Still derive each entry's input ancestor
+from its validated parent during index/append, and consume that same selector
+from Core's page reader. Untracked user entries
 are boundaries too. No second Core index/cache and no nearest-user heuristic.
 
 Toad-close-lifecycle confirmed it owns only certified-bus context-manifest
@@ -47,7 +48,7 @@ Keep source traversal in NativeTranscript and its acquired-resource subtype;
 project ancestry through NativeEntryCoordinates and declaration-owned native
 message behavior. Delete the full-body ancestor walk and path reopenings inside
 an acquired page. Keep actual source branches and inherited-session identities.
-No metadata side index, retained ancestry cache, raw role switch or format fallback.
+No second metadata index, retained ancestry cache, raw role switch or format fallback.
 
 Codex's real saved page:4 events,486 NativeRecord decodes,139ms in inputs_for
 of234ms profiled read. Preserve the exact returned page/provenance; compare
@@ -161,7 +162,7 @@ physical-paint/latency result. No original saved session or uncertain input ran.
 Evidence owner: core-retry. Small disposable source fixtures and receipts live
 under `/home/ts/.cache/agent-scratch/core-native-ancestry-8302/latest-*`; accepted
 source run is `latest-source-h`, with `latest-store-tests-c.log` and
-`latest-pytest-final.log`. Earlier generated fixture runs are superseded, not
+`latest-pytest-closed.log`. Earlier generated fixture runs are superseded, not
 borrower-verified for retirement. No large saved-session rebuild, dependency
 clone, parallel agent or provider operation was started under critical headroom.
 
@@ -174,3 +175,33 @@ integration owner, codex, and implementation/verification stays with core-retry.
 #950's independent three-root carry/install hold and all BLOCKED/UNKNOWN work
 remain intact. Do not install this source over an unrelated native pin or replay
 retained input to obtain acceptance.
+
+### Latest owner/consumer evidence
+
+Existing refactor-audit parser, explicit Core revisions 5cb6913d to 18a52d59:
+616 to 618 modules, 847 to 882 family sites, zero parse omissions, covering Core,
+metaclass-registry and the paired Toad root. Native installed-jiti Babel evidence:
+485 files screened, 23 to 24 family modules parsed, 466 to 509 sites, zero parse
+omissions; the new helper is explicitly absent at the base revision. The SDK
+root is native-current-6468a1979d983e9d. Installed SDK modules are unchanged;
+only the bounded source journey redirects the EntryStore import. SQL, callbacks,
+module aliases and virtual open/preparation dispatch were read semantically;
+the census does not resolve arbitrary dynamic names or prove behavior.
+
+Before: each SessionManager opening rebuilt an unlinked selector store; Core
+could only reverse-walk JSONL. After: SessionManager owns preparation and atomic
+append; ReadOnlyEntryStore owns admitted, existing-cut reads; EntryMetadata owns
+message/tool presence; NativeIndexObservation owns projection; NativeRecord owns
+message identity; NativeSessionFiles owns all native sidecar membership. The
+old global/per-open directory branch and every repository option/env consumer
+are removed. Index filename spelling is the native/Python sidecar protocol:
+DiskEntryStore.indexFile produces it and NativeSessionFiles.entry_index consumes
+it. This is not a claim that a cross-language protocol has one textual spelling.
+
+The current Python debt ratchet against 5cb6913d completes but fails on one new
+ForeignAbsenceProbe in native_index.py (the observation's own optional selected
+position). No type/string switch, GodClass, long-boolean, Any or codec-subclass
+increase is reported. No clean-ratchet claim or waiver. Exact native census files,
+explicit-revision Python receipts and latest-ratchet-closed.json stay in the owned
+scratch roots; all behavioral results remain source-only until native pin and
+installed application acceptance.
