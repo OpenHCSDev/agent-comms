@@ -218,5 +218,3 @@ def test_journal_initialization_failure_closes_owned_connection(tmp_path, monkey
         DeliveryJournal(tmp_path)
     with pytest.raises(sqlite3.ProgrammingError, match='closed'):
         connection.execute('SELECT 1')
-
-
