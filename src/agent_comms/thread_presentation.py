@@ -27,10 +27,15 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
     def without_work(self) -> ThreadPresentationStatus:
         return IdleThreadPresentationStatus()
 
+    def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        """Work and warnings keep their own explanation while the CLI is alive."""
+        return ordinary
+
 
 @dataclass(frozen=True, slots=True)
 class IdleThreadPresentationStatus(ThreadPresentationStatus):
-    pass
+    def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        return replace(ordinary, marker="@", summary="CLI participant")
 
 
 @dataclass(frozen=True, slots=True)
