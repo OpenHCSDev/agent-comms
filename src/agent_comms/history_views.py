@@ -558,9 +558,8 @@ class HistoryViews:
                 "is_fork": t.is_fork,
                 "pending": pending[name],
                 "goal_execution": (
-                    asdict(execution)
-                    if (execution := GoalWaits.execution(t.goal, waits, snapshot))
-                    else None
+                    asdict(GoalWaits.for_goal(t.goal, waits).project(t.goal, snapshot))
+                    if t.goal is not None else None
                 ),
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",

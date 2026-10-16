@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 import time
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
@@ -19,7 +18,7 @@ from .registration_change import (
     RegistrationChange,
     UpdatedRegistration,
 )
-from .registry_provenance import RegistryNames, RegistryProvenance
+from .registry_provenance import RegisteredRecipient, RegistryNames, RegistryProvenance, RetiredRecipient
 from .restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
@@ -28,7 +27,6 @@ from .restart_refusals import (
 from .routing import TurnRouting
 from .thread_identity import AdmissionIdentity, GenerationCounter, OwnerIdentity
 from .thread_presentation import ThreadOwnerBinding
-from .thread_provenance import ThreadProvenance
 from .thread_status import (
     ArchivedThreadStatus,
     StoppedThreadStatus,
@@ -524,53 +522,6 @@ class RegistryEntry:
     @property
     def owner_identity(self) -> OwnerIdentity:
         return OwnerIdentity(self.thread.incarnation, self.owner_generation)
-
-
-class RecipientSelection(ABC):
-    """The registry owns the selected recipient's live or retired behavior."""
-
-    @abstractmethod
-    def activity(self, observations, snapshot): ...
-
-    @abstractmethod
-    def read_effect(self, reads, message, snapshot, *, document=None): ...
-
-
-@dataclass(frozen=True, slots=True)
-class KnownRecipient(RecipientSelection):
-    thread: ThreadProvenance
-
-    def read_effect(self, reads, message, snapshot, *, document=None):
-        return snapshot.displayed_recipient_effect(
-            reads, message, self.thread, document=document
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class RegisteredRecipient(KnownRecipient):
-    thread: Thread
-
-    def activity(self, observations, snapshot):
-        return self.thread.execution.observe_recipient(observations, snapshot, self.thread)
-
-
-@dataclass(frozen=True, slots=True)
-class ArchivedRecipient(KnownRecipient):
-    def activity(self, observations, snapshot):
-        raise RelationViolationError("Archived recipients have no live activity")
-
-
-@dataclass(frozen=True, slots=True)
-class RetiredRecipient(RecipientSelection):
-    lookup: str
-
-    def activity(self, observations, snapshot):
-        from .agent_activity import UnavailableRecipientActivity
-
-        return UnavailableRecipientActivity()
-
-    def read_effect(self, reads, message, snapshot, *, document=None):
-        return ()
 
 
 @dataclass(frozen=True, slots=True)

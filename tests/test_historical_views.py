@@ -317,7 +317,7 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     from dataclasses import fields
     from agent_comms.field_codec import FieldCodec
     from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.thread_provenance import ThreadProvenance
+    from agent_comms.thread_identity import ThreadProvenance
 
     old, _, live, source = migrated
     recorded = source.provenance.require("alice")
@@ -335,7 +335,7 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     with pytest.raises(ValueError, match="Missing required"):
         FieldCodec.decode(ThreadProvenance, raw)
     # Original finite historical timestamps are preserved, never synthesized.
-    from agent_comms.thread_provenance import UnrecordedThreadProvenance
+    from agent_comms.thread_identity import UnrecordedThreadProvenance
 
     zero = UnrecordedThreadProvenance(
         name=recorded.name, tags=recorded.tags, worktree=recorded.worktree,

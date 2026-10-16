@@ -28,7 +28,7 @@ class GoalWait(ABC):
     @abstractmethod
     def allows_routed_input(self) -> bool: ...
 
-    def matches_id(self, wait_id: str | None) -> bool:
+    def matches_id(self, wait_id: str) -> bool:
         return False
 
     def owner_matches(self, created_at: float) -> bool:
@@ -96,7 +96,7 @@ class RecordedGoalWait(GoalWait):
     def allows_routed_input(self) -> bool:
         return False
 
-    def matches_id(self, wait_id: str | None) -> bool:
+    def matches_id(self, wait_id: str) -> bool:
         return self.wait_id == wait_id
 
     def owner_matches(self, created_at: float) -> bool:
@@ -227,8 +227,8 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
         return removed
 
     @staticmethod
-    def for_goal(goal: Goal | None, rows: dict[str, RecordedGoalWait]) -> GoalWait:
-        if goal is None or not goal.state.active:
+    def for_goal(goal: Goal, rows: dict[str, RecordedGoalWait]) -> GoalWait:
+        if not goal.state.active:
             return NoGoalWait()
         return rows.get(goal.id, NoGoalWait())
 
@@ -309,11 +309,3 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
                 if peer_wait is not None:
                     pending.append(canonical)
         return tuple(sorted(seen))
-
-    @staticmethod
-    def execution(
-        goal: Goal | None, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot
-    ) -> GoalExecution | None:
-        if goal is None:
-            return None
-        return GoalWaits.for_goal(goal, rows).project(goal, snapshot)

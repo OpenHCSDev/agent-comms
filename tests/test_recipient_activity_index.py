@@ -17,7 +17,7 @@ from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import MessageNotification
 from agent_comms.read_ledger import ReadLedger
-from agent_comms.registry_document import RegisteredRecipient, RetiredRecipient
+from agent_comms.registry_provenance import RegisteredRecipient, RetiredRecipient
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.thread_identity import (
     DeletedThreadIncarnation,
@@ -130,7 +130,7 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
         ) == ()
     with pytest.raises(ValueError, match="positive recorded birth"):
         replace(source.threads["second"], created_at=0.0)
-    from agent_comms.thread_provenance import UnrecordedThreadProvenance
+    from agent_comms.thread_identity import UnrecordedThreadProvenance
 
     original = recorded.threads["second"]
     zero = UnrecordedThreadProvenance(

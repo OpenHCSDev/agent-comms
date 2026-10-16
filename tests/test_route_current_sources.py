@@ -60,7 +60,7 @@ def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
     original = c.messaging.send_message('sender', viewer, 'assigned source')
     with c.bus.snapshot(viewer=viewer) as (basis, source):
         from agent_comms.registry_provenance import RegistryProvenance
-        from agent_comms.thread_provenance import UnrecordedThreadProvenance
+        from agent_comms.thread_identity import UnrecordedThreadProvenance
 
         recorded = RegistryProvenance.capture(basis.registry)
         threads = dict(recorded.threads)

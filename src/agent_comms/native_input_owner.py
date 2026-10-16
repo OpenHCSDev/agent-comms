@@ -21,13 +21,13 @@ from .native_admission_rules import (
     RegistryIdentityCheck,
     RunningTurnRegistryCheck,
 )
-from .registry_document import RegistrySnapshot
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
 from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from .registration import Registration
+    from .registry_document import RegistrySnapshot
     from .turn_lease import TurnLeaseFence
 
 

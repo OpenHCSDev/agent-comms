@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Generic, TypeVar
 
+from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
-from .thread_identity import ThreadIncarnation
-from .thread_provenance import ThreadProvenance, ThreadProvenanceRecord
+from .thread_identity import ThreadIncarnation, ThreadProvenance, ThreadProvenanceRecord
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
-    from .registry_document import ArchivedRecipient, RetiredRecipient
+    from .threads import Thread
 
 Member = TypeVar("Member", bound=ThreadProvenance, covariant=True)
 
@@ -30,6 +31,51 @@ class DeletedThread:
     @property
     def incarnation(self) -> ThreadIncarnation:
         return ThreadIncarnation.deleted(self.name)
+
+
+class RecipientSelection(ABC):
+    """One registry selection owns live, archived and retired recipient behavior."""
+
+    @abstractmethod
+    def activity(self, observations, snapshot): ...
+
+    @abstractmethod
+    def read_effect(self, reads, message, snapshot, *, document=None): ...
+
+
+@dataclass(frozen=True, slots=True)
+class KnownRecipient(RecipientSelection):
+    thread: ThreadProvenance
+
+    def read_effect(self, reads, message, snapshot, *, document=None):
+        return snapshot.displayed_recipient_effect(
+            reads, message, self.thread, document=document
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RegisteredRecipient(KnownRecipient):
+    thread: Thread
+
+    def activity(self, observations, snapshot):
+        return self.thread.execution.observe_recipient(observations, snapshot, self.thread)
+
+
+@dataclass(frozen=True, slots=True)
+class ArchivedRecipient(KnownRecipient):
+    def activity(self, observations, snapshot):
+        raise RelationViolationError("Archived recipients have no live activity")
+
+
+@dataclass(frozen=True, slots=True)
+class RetiredRecipient(RecipientSelection):
+    lookup: str
+
+    def activity(self, observations, snapshot):
+        return UnavailableRecipientActivity()
+
+    def read_effect(self, reads, message, snapshot, *, document=None):
+        return ()
 
 
 class RegistryNames(Generic[Member]):
@@ -100,8 +146,6 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
 
     def historical_recipient(self, recipient: FrozenRecipient) -> ArchivedRecipient | RetiredRecipient:
         """Archives select by original name and birth; duplicate births stay distinct."""
-        from .registry_document import ArchivedRecipient, RetiredRecipient
-
         thread = self.threads.get(self.canonical_name(recipient.canonical_thread))
         if thread is not None and thread.incarnation.has_recorded_birth and (
             thread.incarnation.require_recorded().lookup == recipient.recipient_lookup

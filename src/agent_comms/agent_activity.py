@@ -9,11 +9,12 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .registration import Registration
 from .native_input_owner import RegistryOwner
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
+    from .registration import Registration
+    from .registry_document import RegistrySnapshot
     from .bus_publication import CommittedDelivery
     from .notification_assignment import AssignmentProgress
     from .presentation import MessageNotification
@@ -23,7 +24,6 @@ from .activity import (
 from .declared_family import DeclaredFamily
 from .audience_manifest import FrozenRecipient
 from .errors import RelationViolationError
-from .registry_document import RegistrySnapshot
 from .routing import TurnRouting
 from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock

@@ -25,6 +25,12 @@ def register(comms, name):
     return comms.registry.require(name)
 
 
+def test_thread_without_goal_has_no_wait(tmp_path):
+    comms = canonical_goal_wire(tmp_path / "wire")
+    register(comms, "owner")
+    assert isinstance(comms.goals.goal_wait("owner"), NoGoalWait)
+
+
 def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     owner = register(comms, "owner")

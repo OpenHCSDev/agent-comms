@@ -15,7 +15,7 @@ from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
-from .goal_waits import GoalInputReview, GoalWait, GoalWaits
+from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait
 from .registration import Registration
 
 if TYPE_CHECKING:
@@ -181,8 +181,8 @@ class Goals:
             return self.registry.goal_history(name, goal_id=goal_id)
 
     def goal_wait(self, name: str) -> GoalWait:
-        waits = self.waits
-        return waits.for_goal(self.registry.require(name).goal, waits.read())
+        goal = self.registry.require(name).goal
+        return self.waits.for_goal(goal, self.waits.read()) if goal is not None else NoGoalWait()
 
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
         """Release one stranded standby without replaying a dependency input.
@@ -331,11 +331,11 @@ class Goals:
         snapshot = self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
         goal = snapshot.threads[canonical].goal
-        return goal, GoalWaits.execution(
-            goal,
-            self.waits.read(),
-            snapshot,
+        execution = (
+            GoalWaits.for_goal(goal, self.waits.read()).project(goal, snapshot)
+            if goal is not None else None
         )
+        return goal, execution
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
         """Called under the send-boundary wire lock after reserving an attempt."""

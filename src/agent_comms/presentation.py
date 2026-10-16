@@ -679,7 +679,8 @@ class ThreadView:
             activity,
             runtime,
             snapshot.seen_at(thread.name),
-            GoalWaits.execution(thread.goal, waits, snapshot),
+            (GoalWaits.for_goal(thread.goal, waits).project(thread.goal, snapshot)
+             if thread.goal is not None else None),
             snapshot.owner_binding(thread.name),
         )
 

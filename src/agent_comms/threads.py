@@ -11,7 +11,6 @@ from .agent_backend import AgentBackend
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
-from .thread_provenance import ThreadProvenance
 from .thread_execution import ThreadExecution, NativeThreadExecution
 from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
 from .goals import (
@@ -19,6 +18,7 @@ from .goals import (
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
+    ThreadProvenance,
     ThreadRole,
     TurnId,
     TurnIdentity,
