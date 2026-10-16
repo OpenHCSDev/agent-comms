@@ -21,10 +21,6 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
     def busy(self) -> bool:
         return False
 
-    @property
-    def attention(self) -> bool:
-        return False
-
     def with_attention(self) -> ThreadPresentationStatus:
         return AttentionThreadPresentationStatus(self)
 
@@ -51,10 +47,6 @@ class AttentionThreadPresentationStatus(ThreadPresentationStatus):
     @property
     def busy(self) -> bool:
         return self.activity.busy
-
-    @property
-    def attention(self) -> bool:
-        return True
 
     def with_attention(self) -> ThreadPresentationStatus:
         return self

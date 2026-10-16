@@ -8,7 +8,7 @@ model flushes the rows that changed once per frame.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from agent_comms.thread_presentation import (
@@ -17,6 +17,7 @@ from agent_comms.thread_presentation import (
     ThreadPresentationStatus,
 )
 from agent_comms.ui_model.changes import KeyedModel
+from agent_comms.ui_model.delivery import InputDelivery
 
 if TYPE_CHECKING:
     from agent_comms.ui_model.observation import ThreadsObserved
@@ -31,14 +32,27 @@ class ThreadStatusModel:
     name: str
     shown: bool
     lines: tuple[str, ...]
-    status: ThreadPresentationStatus
+    presentation: ThreadPresentation
     summary: tuple[str, ...] = ()
     """Overview parts for a collapsed status: first summary line, latest inbound, recent count."""
 
+    @property
+    def status(self) -> ThreadPresentationStatus:
+        return self.presentation.status
+
+    def with_delivery(self, delivery: InputDelivery) -> ThreadStatusModel:
+        return replace(self, presentation=delivery.presentation(self.presentation))
+
     @classmethod
-    def known(cls, name: str, presentation: ThreadPresentation | None) -> ThreadStatusModel:
+    def require(cls, row: ThreadStatusModel | None) -> ThreadStatusModel:
+        if row is None:
+            raise ValueError("Thread status has not been acquired")
+        return row
+
+    @classmethod
+    def known(cls, name: str, presentation: ThreadPresentation) -> ThreadStatusModel:
         if presentation is None:
-            return cls(name, False, ("",), IdleThreadPresentationStatus())
+            raise ValueError(f"Thread {name!r} has no presentation")
         lines = [presentation.summary]
         excerpts = []
         for receipt in presentation.notifications:
@@ -57,13 +71,13 @@ class ThreadStatusModel:
             summary.append(f"Latest inbound {latest.message.target} from @{latest.message.sender}: {latest.state}")
         if len(presentation.notifications) > 1:
             summary.append(f"{len(presentation.notifications)} recent")
-        return cls(name, True, tuple(lines), presentation.status,
+        return cls(name, True, tuple(lines), presentation,
                    summary=tuple(summary))
 
     @classmethod
     def unavailable(cls, name: str, reason: str = "Agent status unavailable") -> ThreadStatusModel:
-        return cls(name, True, (reason,), IdleThreadPresentationStatus().with_attention(),
-                   summary=(reason.partition("\n")[0],))
+        return cls.known(name, ThreadPresentation(
+            name, "○", reason, status=IdleThreadPresentationStatus().with_attention()))
 
 
 class OpenThreadStatus:
@@ -71,6 +85,11 @@ class OpenThreadStatus:
 
     def __init__(self, schedule: Callable[[Callable[[], None]], None]):
         self.rows: KeyedModel[str, ThreadStatusModel] = KeyedModel(schedule)
+
+    def open(self, name: str) -> ThreadStatusModel:
+        """Admission has an explicit unavailable presentation until observation arrives."""
+        return self.rows.rows.get(name) or ThreadStatusModel.unavailable(
+            name, "Waiting for agent status")
 
     def observed(self, result: ThreadsObserved) -> None:
         """Publish one observation of the open threads.
