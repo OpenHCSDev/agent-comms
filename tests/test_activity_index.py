@@ -170,10 +170,12 @@ def test_reading_new_events_does_not_wait_for_checkpoint_writer(tmp_path):
     log.emit(Activity("a", ActivityState.THINKING))
     with path.open("a") as stream:
         stream.write(encoded("b") + "\n")
-    # This is the real UI failure: a warm observer must not publish its read
-    # and wait behind another process writing the disposable document.
+    # A cold observer must neither lock nor publish the disposable document.
+    from agent_comms.activity import ActivityReadState
+    from agent_comms.store_files import _store_lock
+    log._read = ActivityReadState()
     with ThreadPoolExecutor(max_workers=1) as readers:
-        with log.checkpoint.locked():
+        with _store_lock(log.checkpoint.path):
             assert set(readers.submit(log.all_current).result(2)) == {"a", "b"}
     assert set(log.checkpoint.read().latest) == {"a"}
 
