@@ -7,6 +7,7 @@ import time
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import ExitStack
 from dataclasses import asdict, dataclass, replace
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
     from .registry_document import RegistrySnapshot
     from .wire_log import OpenedWireSnapshot
+    from .view_unread import TranscriptReadState
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
@@ -79,7 +81,6 @@ class HistoryViews:
         ledger: CollaborationLedger,
     ):
         from .presentation import BusPresentation
-        from .view_unread import transcript_read_state
 
         self.root = root
         self.registry = registry
@@ -92,7 +93,13 @@ class HistoryViews:
         self.ledger = ledger
         self._wire_lock_path = root / "wire"
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
-        self.transcript_reads = transcript_read_state(bus.reads.path)
+
+    @cached_property
+    def transcript_reads(self) -> TranscriptReadState:
+        """Acquire native preparation resources only for an actual transcript reader."""
+        from .view_unread import transcript_read_state
+
+        return transcript_read_state(self.bus.reads.path)
 
     def message_notifications(self, messages: Sequence[Message]):
         return MessageNotification.window(self.root, self.registry, self.bus.log, messages)

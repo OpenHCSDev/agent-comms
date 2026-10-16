@@ -8,14 +8,14 @@ import os
 import sqlite3
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event
 from pathlib import Path
 from threading import RLock
 from time import monotonic
 from typing import TYPE_CHECKING, ClassVar
-from weakref import WeakValueDictionary
+from weakref import WeakValueDictionary, finalize
 
 from .coordination_database import CoordinationStore, StoreBusy
 from .coordination_errors import CoordinationReadUnavailable
@@ -277,18 +277,23 @@ class TranscriptReadState(ThreadOwnedState):
         self._next_source: str | None = None
         self._pool: ProcessPoolExecutor | None = None
         self._preparation: NativeReplyPreparation | None = None
+        # The cleanup owns resources, not this reader. It can release a dead
+        # weakly shared reader and closes retained readers before module teardown.
+        # Replacement databases have a shorter lifetime than the worker pool.
+        resources = ExitStack()
+        self._database_resources = resources.enter_context(ExitStack())
+        self._worker_resources = resources.enter_context(ExitStack())
+        resources.callback(self._cancelled.set)
+        self._release = finalize(self, resources.close)
 
     def close(self) -> None:
-        """Cancel and join the actual native preparation before closing SQLite."""
-        self._cancelled.set()
+        """Release the registered resources once, in cancellation/join/SQL order."""
         with self._lock:
-            if self._preparation is not None:
-                self._preparation.future.cancel()
-            if self._pool is not None:
-                self._pool.shutdown(wait=True, cancel_futures=True)
-                self._pool = None
+            self._release()
+            self._pool = None
             self._preparation = None
-            self._close_database()
+            self._connection = None
+            self._database_inode = None
 
     @property
     def preparation(self) -> Future[ReplyIndexBatch] | None:
@@ -296,21 +301,16 @@ class TranscriptReadState(ThreadOwnedState):
         return self._preparation.future if self._preparation is not None else None
 
     def _close_database(self) -> None:
-        if self._connection is not None:
-            self._connection.close()
-            self._connection = None
-            self._database_inode = None
-
-    def __del__(self) -> None:
-        self.close()
+        self._database_resources.close()
+        self._connection = None
+        self._database_inode = None
 
     def _database(self) -> sqlite3.Connection:
         revision = FileRevision.capture(self.index_path)
         if self._connection is not None and (
             revision is None or revision.identity.inode != self._database_inode
         ):
-            self._connection.close()
-            self._connection = None
+            self._close_database()
         if self._connection is None:
             self.index_path.parent.mkdir(parents=True, exist_ok=True)
             connection = CoordinationStore.writer(
@@ -339,6 +339,7 @@ class TranscriptReadState(ThreadOwnedState):
             except (sqlite3.DatabaseError, ValueError):
                 connection.close()
                 raise
+            self._database_resources.callback(connection.close)
             self._connection = connection
             self._database_inode = self.index_path.stat().st_ino
         return self._connection
@@ -402,6 +403,9 @@ class TranscriptReadState(ThreadOwnedState):
                 self._pool = ProcessPoolExecutor(
                     max_workers=1, mp_context=self._context,
                     initializer=IndexSlice.initialize_worker, initargs=(self._cancelled,),
+                )
+                self._worker_resources.callback(
+                    self._pool.shutdown, wait=True, cancel_futures=True
                 )
             self._preparation = NativeReplyPreparation(
                 needed, self._pool.submit(ReplyIndexBatch.prepare, ordered)
