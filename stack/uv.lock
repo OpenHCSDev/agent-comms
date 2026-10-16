@@ -6,6 +6,7 @@ requires-python = ">=3.14"
 overrides = [
     { name = "agent-comms", extras = ["acp"], git = "https://github.com/OpenHCSDev/agent-comms.git?rev=88f4e6ee115ba817118ffcc0b52e5579eb7763e5" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?rev=b69cc8e34eeb7d84f9b4d33afd3c18538ac74ae9" },
+    { name = "ui-theme", git = "https://github.com/OpenHCSDev/ui-theme.git?rev=93920bcf07c355482bdccbcb1067537f56481d06" },
 ]
 
 [[package]]
@@ -238,7 +239,7 @@ name = "cffi"
 version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser" },
+    { name = "pycparser", marker = "implementation_name != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9e/ef/008a1939e372c06329a3fce4279c02f328488f3526744906eeec3da7ad5f/cffi-2.1.1.tar.gz", hash = "sha256:dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be", size = 530807, upload-time = "2026-08-03T21:21:18.939Z" }
 wheels = [
@@ -1452,7 +1453,7 @@ wheels = [
 [[package]]
 name = "ui-theme"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/ui-theme.git?rev=bd02537160d1af48662d907300e4e60e9e72c27e#bd02537160d1af48662d907300e4e60e9e72c27e" }
+source = { git = "https://github.com/OpenHCSDev/ui-theme.git?rev=93920bcf07c355482bdccbcb1067537f56481d06#93920bcf07c355482bdccbcb1067537f56481d06" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "terminaltexteffects" },
