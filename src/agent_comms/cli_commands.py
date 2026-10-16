@@ -13,6 +13,7 @@ import re
 import shlex
 import time
 import types
+from abc import abstractmethod
 from collections.abc import AsyncIterator, Callable
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
@@ -39,7 +40,10 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
+from .historical_views import HistoryCursor
+from .history_views import HistoryViews
 from .importing import ImportFormat, ImportLimits
+from .message_page import MessagePage
 from .turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
@@ -53,6 +57,19 @@ from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
 from .owner_lifecycle import OwnerStartResult
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
+
+
+def _history_cursor(value: str) -> int | HistoryCursor:
+    if value.startswith('{'):
+        return FieldCodec.decode(HistoryCursor, json.loads(value))
+    return int(value)
+
+
+def _history_limit(value: str) -> int:
+    limit = int(value)
+    if not 1 <= limit <= 100:
+        raise argparse.ArgumentTypeError('history limit must be between 1 and 100')
+    return limit
 
 
 def _duration_seconds(value: str) -> float:
@@ -979,41 +996,85 @@ class StatusCliCommand(CliCommand):
         }
 
 
+class HistoryCliScope(DeclaredFamily, affix="HistoryCliScope"):
+    """The selected conversation owns its bounded read and result key."""
+
+    rows_key: ClassVar[str]
+
+    @abstractmethod
+    def page(self, views: HistoryViews, *, before: int | HistoryCursor | None,
+             limit: int) -> MessagePage: ...
+
+    def result(self, views: HistoryViews, *, before: int | HistoryCursor | None,
+               limit: int) -> dict[str, object]:
+        page = self.page(views, before=before, limit=limit)
+        return {
+            **self.header(),
+            self.rows_key: [{**m.to_wire(), **m.display_metadata} for m in reversed(page.messages)],
+            "before": FieldCodec.encode(page.oldest_cursor),
+            "has_older": page.has_older,
+            "has_newer": page.has_newer,
+        }
+
+    def header(self) -> dict[str, object]:
+        return {}
+
+
+@dataclass(frozen=True, slots=True)
+class DmHistoryCliScope(HistoryCliScope):
+    me: str
+    peer: str
+    rows_key: ClassVar[str] = "dm"
+
+    def __post_init__(self) -> None:
+        if not self.me:
+            raise ValueError("history --with requires --as (your thread)")
+
+    def page(self, views: HistoryViews, *, before: int | HistoryCursor | None,
+             limit: int) -> MessagePage:
+        return views.dm_history_page(self.me, self.peer, before=before, limit=limit)
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelHistoryCliScope(HistoryCliScope):
+    target: str
+    rows_key: ClassVar[str] = "messages"
+
+    def page(self, views: HistoryViews, *, before: int | HistoryCursor | None,
+             limit: int) -> MessagePage:
+        return views.channel_history_page(self.target, before=before, limit=limit)
+
+    def header(self) -> dict[str, object]:
+        return {"channel": self.target}
+
+
+@dataclass(frozen=True, slots=True)
+class EverythingHistoryCliScope(HistoryCliScope):
+    rows_key: ClassVar[str] = "everything"
+
+    def page(self, views: HistoryViews, *, before: int | HistoryCursor | None,
+             limit: int) -> MessagePage:
+        return views.full_history_page(before=before, limit=limit)
+
+
 @dataclass(frozen=True, kw_only=True)
 class HistoryCliCommand(CliCommand):
-    help = "Full history of a DM, channel, or everything"
-    with_thread: str | None = option("--with", help="DM with this thread", default=None)
-    channel: str | None = option("--channel", help="Channel (#all, #tag)", default=None)
-    everything: bool = option("--everything", help="Every message on the wire", default=False)
+    help = "Recent bounded history of a DM, channel, or everything"
+    with_thread: str | None = option("--with", help="DM with this thread", group="scope", default=None)
+    channel: str | None = option("--channel", help="Channel (#all, #tag)", group="scope", default=None)
+    everything: bool = option("--everything", help="Every message on the wire", group="scope", default=False)
     me: str | None = option("--as", help="Your thread (for --with)", default=None)
+    before: int | HistoryCursor | None = option("--before", type=_history_cursor, default=None)
+    limit: int = option("--limit", type=_history_limit, default=50)
 
     def apply(self, ctx: Comms) -> Any:
-        selected = sum(bool(x) for x in (self.with_thread, self.channel, self.everything))
-        if selected != 1:
-            raise ValueError("history takes exactly one of --with, --channel, --everything")
-        if self.with_thread:
-            if not self.me:
-                raise ValueError("history --with requires --as (your thread)")
-            return {
-                "dm": [
-                    {**m.to_wire(), **m.display_metadata}
-                    for m in ctx.views.dm_history(self.me, self.with_thread)
-                ]
-            }
-        elif self.channel:
-            return {
-                "channel": self.channel,
-                "messages": [
-                    {**m.to_wire(), **m.display_metadata}
-                    for m in ctx.views.channel_history(self.channel)
-                ],
-            }
+        if self.with_thread is not None:
+            scope = DmHistoryCliScope(self.me or "", self.with_thread)
+        elif self.channel is not None:
+            scope = ChannelHistoryCliScope(self.channel)
         else:
-            return {
-                "everything": [
-                    {**m.to_wire(), **m.display_metadata} for m in ctx.views.full_history()
-                ]
-            }
+            scope = EverythingHistoryCliScope()
+        return scope.result(ctx.views, before=self.before, limit=self.limit)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -223,8 +223,19 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     live_bus = (live.root / "bus.jsonl").read_bytes()
     monkeypatch.delenv(ROOT_ID_ENV, raising=False)
     monkeypatch.delenv(PACKAGE_ENV, raising=False)
-    assert main(["--root", str(live.root), *arguments]) == 0
-    rows = json.loads(capsys.readouterr().out)[key]
+    rows = []
+    cursor = None
+    for _ in range(4):
+        paged = [*arguments, "--limit", "2"]
+        if cursor is not None:
+            paged.extend(("--before", json.dumps(cursor) if isinstance(cursor, dict) else str(cursor)))
+        assert main(["--root", str(live.root), *paged]) == 0
+        page = json.loads(capsys.readouterr().out)
+        rows.extend(page[key])
+        if not page["has_older"]:
+            break
+        cursor = page["before"]
+        assert cursor is not None
     historical = [row for row in rows if "history" in row]
     current = [row for row in rows if "history" not in row]
     assert len(historical) == len(current) == (2 if key == "everything" else 1)
