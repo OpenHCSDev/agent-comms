@@ -12,9 +12,10 @@ from agent_comms.cli_bridges.claude_protocol import (
 )
 from agent_comms.cli_bridges.shared import (
     Binding, DeliveryJournal, DeliveryRow, MonitorAttemptRow, MonitorPartRow,
-    MonitorPart, ForeignMonitorFrame, Options, UnconfirmedOutcome, EmittedOutcome,
-    DeliveredOutcome, ObservedMonitor, MismatchedMonitor, NO_MONITOR_ATTEMPT, Watch,
+    MonitorPart, ForeignMonitorFrame, Options,
+    ObservedMonitor, MismatchedMonitor, NO_MONITOR_ATTEMPT, Watch,
 )
+from agent_comms.cli_protocol import UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 

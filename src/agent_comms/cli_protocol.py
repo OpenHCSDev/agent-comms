@@ -3,18 +3,21 @@ from __future__ import annotations
 
 import asyncio
 import builtins
+import json
 import sys
 from abc import ABC, abstractmethod
 from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING, Annotated, ClassVar, Never, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
-from pydantic import BaseModel, ConfigDict, Discriminator, Tag, TypeAdapter, computed_field
+from pydantic import BaseModel, ConfigDict, Discriminator, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field
 
 from .coordination_errors import CoordinationReadUnavailable
+from .declared_family import DeclaredFamily
+from .messages import Message
 
 if TYPE_CHECKING:
-    from .cli_bridges.shared import CliBridge
+    from .cli_bridges.shared import CliBridge, CoreConnection, LineMonitorBridge, ObservedMonitor
 
 
 class WireModel(BaseModel):
@@ -41,13 +44,18 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
         return self.wire_tag
 
     @classmethod
+    def members(cls) -> tuple[builtins.type[TaggedWire], ...]:
+        return tuple(member for member in cls.__registry_config__.registry_dict.values()
+                     if issubclass(member, cls))
+
+    @classmethod
     def declared_union(cls) -> object:
         def tag(value: object) -> str:
             if isinstance(value, cls):
                 return value.wire_tag
             return cls.header.model_validate(value).type
         by_tag: dict[str, list[builtins.type[TaggedWire]]] = {}
-        for member in cls.__registry_config__.registry_dict.values():
+        for member in cls.members():
             by_tag.setdefault(member.wire_tag, []).append(member)
         variants = []
         for wire_tag, members in by_tag.items():
@@ -68,18 +76,65 @@ class WatchItem(ABC):
     async def handle(self, bridge: CliBridge) -> None: ...
 
 
-class CoreError(TaggedWire, WatchItem):
-    """One-line Core failure; each member owns its source and watch behavior."""
+class Outcome(DeclaredFamily, affix='Outcome'):
+    """Stored spellings stay the same; their owners perform confirmation."""
+
+    @classmethod
+    async def acknowledge(cls, core: CoreConnection, message: Message) -> None:
+        """Pending transport outcomes cannot advance Core's read state."""
+
+    @classmethod
+    async def observe_monitor(cls, bridge: LineMonitorBridge, message: Message,
+                              record: ObservedMonitor) -> None:
+        await bridge.finish_delivery(message, DeliveredOutcome, record)
+
+
+class FilteredOutcome(Outcome):
+    @classmethod
+    async def acknowledge(cls, core: CoreConnection, message: Message) -> None:
+        await core.acknowledge(message)
+
+
+class UnconfirmedOutcome(Outcome):
+    pass
+
+
+class DeliveredOutcome(FilteredOutcome):
+    @classmethod
+    async def observe_monitor(cls, bridge: LineMonitorBridge, message: Message,
+                              record: ObservedMonitor) -> None:
+        """Reopened history preserves the first confirmation record and time."""
+
+
+class EmittedOutcome(UnconfirmedOutcome):
+    pass
+
+
+class WatchLine(TaggedWire, WatchItem):
+    """One declared Core watch line, including its continuation behavior."""
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
     )
+
+    @staticmethod
+    async def read(child: asyncio.subprocess.Process) -> WatchLine:
+        line = await child.stdout.readline()
+        if not line:
+            raise RuntimeError(f'Core watch ended, exit {await child.wait()}')
+        return WATCH_LINE.validate_json(line)
+
+    async def read_next(self, child: asyncio.subprocess.Process) -> WatchLine | None:
+        return await self.read(child)
+
+
+class CoreError(WatchLine):
+    """One-line Core failure; each member owns its source and watch behavior."""
     exception_type: ClassVar[builtins.type[BaseException]]
     error: str
 
     @classmethod
     def from_exception(cls, error: BaseException) -> CoreError:
-        members = {member.exception_type: member
-                   for member in cls.__registry_config__.registry_dict.values()}
+        members = {member.exception_type: member for member in cls.members()}
         message = str(error)
         cause = error.__cause__ or (None if error.__suppress_context__ else error.__context__)
         while cause is not None:
@@ -92,6 +147,10 @@ class CoreError(TaggedWire, WatchItem):
 
     def raise_failure(self, operation: str) -> Never:
         raise RuntimeError(f'Core {operation}: {self.error}')
+
+    async def read_next(self, child: asyncio.subprocess.Process) -> None:
+        """An error is the final record, never another message subscription."""
+        return None
 
     @abstractmethod
     def watch_delay(self) -> float:
@@ -121,4 +180,30 @@ class FailedCoreError(CoreError):
         self.raise_failure('watch')
 
 
+class ArrivedMessage(WatchLine):
+    """One decoded message; its journal retains canonical Message wire."""
+    wire_tag = 'message'
+    message: Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(Message.to_wire)]
+
+    @property
+    def payload(self) -> str:
+        return json.dumps(self.message.to_wire(), separators=(',', ':')) + '\n'
+
+    async def handle(self, bridge: CliBridge) -> None:
+        message = self.message
+        conversation = message.type.conversation_message
+        outcome = UnconfirmedOutcome if conversation else FilteredOutcome
+        if not bridge.journal.begin(message, self.payload, outcome):
+            await bridge.journal.outcome(message).acknowledge(bridge.core, message)
+            return
+        if not conversation:
+            await bridge.finish_delivery(message, outcome)
+            return
+        result = await bridge.deliver(message)
+        await bridge.settle(message, result)
+        print(f'{result.declared_name}: {message.message_id} from {message.sender}',
+              file=sys.stderr, flush=True)
+
+
 CORE_ERROR = TypeAdapter(CoreError.declared_union())
+WATCH_LINE = TypeAdapter(WatchLine.declared_union())

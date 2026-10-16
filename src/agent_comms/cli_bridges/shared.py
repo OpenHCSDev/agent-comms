@@ -24,7 +24,10 @@ from metaclass_registry import RegistryConfig
 from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_protocol import CORE_ERROR, TaggedWire, WatchItem, WireModel
+from agent_comms.cli_protocol import (
+    DeliveredOutcome, EmittedOutcome, Outcome, TaggedWire,
+    UnconfirmedOutcome, WatchItem, WatchLine, WireModel,
+)
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.comms import Comms
@@ -352,39 +355,6 @@ class Options:
     session: str | None
     state: Path
 
-class Outcome(DeclaredFamily, affix='Outcome'):
-    """Stored spellings stay the same; their owners perform confirmation."""
-
-    @classmethod
-    async def acknowledge(cls, core: CoreConnection, message: Message) -> None:
-        """Pending transport outcomes cannot advance Core's read state."""
-
-    @classmethod
-    async def observe_monitor(cls, bridge: LineMonitorBridge, message: Message,
-                              record: ObservedMonitor) -> None:
-        await bridge.finish_delivery(message, DeliveredOutcome, record)
-
-
-class FilteredOutcome(Outcome):
-    @classmethod
-    async def acknowledge(cls, core: CoreConnection, message: Message) -> None:
-        await core.acknowledge(message)
-
-
-class UnconfirmedOutcome(Outcome):
-    pass
-
-
-class DeliveredOutcome(FilteredOutcome):
-    @classmethod
-    async def observe_monitor(cls, bridge: LineMonitorBridge, message: Message,
-                              record: ObservedMonitor) -> None:
-        """Reopened history preserves the first confirmation record and time."""
-
-
-class EmittedOutcome(UnconfirmedOutcome):
-    pass
-
 @dataclass(frozen=True)
 class DeliveryRow(TypedTable):
     id: str = field(metadata={"sql": Column(primary_key=True)})
@@ -568,28 +538,6 @@ class DeliveryJournal:
     def close(self) -> None:
         self.db.close()
 
-@dataclass(frozen=True)
-class ArrivedMessage(WatchItem):
-    """An unread message, with the exact Core line the journal retains."""
-    message: Message
-    payload: str
-
-    async def handle(self, bridge: CliBridge) -> None:
-        message = self.message
-        conversation = message.type.conversation_message
-        outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        if not bridge.journal.begin(message, self.payload, outcome):
-            await bridge.journal.outcome(message).acknowledge(bridge.core, message)
-            return
-        if not conversation:
-            await bridge.finish_delivery(message, outcome)
-            return
-        result = await bridge.deliver(message)
-        await bridge.settle(message, result)
-        print(f'{result.declared_name}: {message.message_id} from {message.sender}',
-              file=sys.stderr, flush=True)
-
-
 class CoreConnection:
     """Core owns publication; its CLI owns the long-lived watch stream."""
 
@@ -613,13 +561,10 @@ class CoreConnection:
                 '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment),
                 stdout=asyncio.subprocess.PIPE, stderr=errors)
             try:
-                while line := await child.stdout.readline():
-                    wire = json.loads(line)
-                    if isinstance(wire, dict) and 'error' in wire:
-                        yield CORE_ERROR.validate_python(wire)
-                        return
-                    yield ArrivedMessage(Message.from_wire(wire), line.decode())
-                raise RuntimeError(f'Core watch ended, exit {await child.wait()}')
+                item = await WatchLine.read(child)
+                while item is not None:
+                    yield item
+                    item = await item.read_next(child)
             finally:
                 await self.join(child)
 
