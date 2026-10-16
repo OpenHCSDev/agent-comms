@@ -29,10 +29,9 @@ from goal_owner_fixture import canonical_goal_wire
 async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     tmp_path, monkeypatch, changed
 ):
-    from agent_comms.native_arguments import NativeArguments
+    from agent_comms.native_settings import NativeThreadDefaults
 
-    configured_model = NativeArguments.parse(NativeArguments.default).model
-    assert configured_model is not None
+    configured_model = NativeThreadDefaults.model
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = canonical_goal_wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi")

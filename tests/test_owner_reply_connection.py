@@ -34,7 +34,7 @@ class Writer:
 
 
 def owner_read(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms.for_runtime(tmp_path)
     thread = Thread(
         "worker", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),

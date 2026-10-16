@@ -34,7 +34,7 @@ def publish_one(
     if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
         raise PublicationActivationBlocked("cohort sender requires a private /var/tmp root")
     _private_session_dir(root)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms.for_runtime(root, private_initial_writes=True)
     with comms.bus.log.locked():
         marker = comms.bus.log._private_marker_unlocked()
     if marker.root_id != wire_root_id:

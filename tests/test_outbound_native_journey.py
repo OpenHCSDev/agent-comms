@@ -25,7 +25,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
     original_native = native.session.read_bytes()
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    comms = Comms(native.root)
+    comms = Comms.for_runtime(native.root)
     owner = canonical_agent(
         comms,
         auto_wake=False,
@@ -133,7 +133,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
             await client.load_session(cwd=str(native.project), session_id=sender, mcp_servers=[])
             replay = await snapshots.get()
             assert [event for event in replay.events if event.source == original.reference] == sent
-            assert Comms(native.root).transcripts.capture_page_read(sender).read() == page
+            assert Comms.for_runtime(native.root).transcripts.capture_page_read(sender).read() == page
             assert len(native.saved_inputs()) == 2
             assert native.provider.posts == 3
     finally:

@@ -175,7 +175,7 @@ async def catalog_owner(native_backend, monkeypatch):
 
     monkeypatch.setattr(AttachedChild, "start", observe)
     owner = canonical_agent(
-        Comms(native.root),
+        Comms.for_runtime(native.root),
         agent_bin="pi",
         agent_args=["--model", "response-local/fixture", "--offline"],
         auto_wake=False,

@@ -15,24 +15,24 @@ from agent_comms.tools import invoke_tool
 
 
 def add_peer(root, peer):
-    Comms(root).relationships.edit(
+    Comms.for_runtime(root).relationships.edit(
         "owner", RelationshipEdit.decode("add"), peer, f"Working with {peer}"
     )
 
 
 def add_shared_peer(root, owner):
     other = "peer" if owner == "owner" else "owner"
-    Comms(root).relationships.edit(owner, RelationshipEdit.decode("add"), other, f"From {owner}")
+    Comms.for_runtime(root).relationships.edit(owner, RelationshipEdit.decode("add"), other, f"From {owner}")
 
 
 def change_shared_peer(root, instruction):
     owner, action = instruction
     other = "peer" if owner == "owner" else "owner"
-    Comms(root).relationships.edit(owner, RelationshipEdit.decode(action), other, "Race")
+    Comms.for_runtime(root).relationships.edit(owner, RelationshipEdit.decode(action), other, "Race")
 
 
 def setup_wire(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     for name, parent in (("origin", None), ("owner", "origin"), ("peer", None), ("child", "owner")):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path), parent=parent))
     return comms
@@ -53,7 +53,7 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
     assert collaboration_rows(comms, "peer")[0].target == "owner"
     assert comms.views.full_history() == []
     assert comms.registry.snapshot() == before
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     original = reopened.relationships.collaborations("owner")[0]
     assert (
         reopened.relationships.edit("owner", RelationshipEdit.decode("add"), "peer", "ignored")
@@ -107,7 +107,7 @@ def test_alias_and_persisted_thread_sort(tmp_path):
         comms.relationships.collaborations("reviewer")[0].owner,
         comms.relationships.collaborations("reviewer")[0].peer,
     ) == ("reviewer", "renamed")
-    snapshot = Comms(comms.root).relationships.snapshot("renamed")
+    snapshot = Comms.for_runtime(comms.root).relationships.snapshot("renamed")
     children = snapshot.groups_by_type[ChildrenRelationshipGroup]
     assert children.order is LastActivityThreadSort
     assert collaboration_rows(comms, "reviewer")[0].target == "renamed"
@@ -199,7 +199,7 @@ def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
     comms.relationships.edit(
         "owner", RelationshipEdit.decode("update"), "child", "Updated other task"
     )
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     persisted = {edge.peer: edge for edge in reopened.relationships.collaborations("owner")}
     assert persisted["peer"] == original
     missing = next(row for row in collaboration_rows(reopened) if row.target == "peer")
@@ -382,7 +382,7 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
         comms.relationships.set_order("owner", SortedInboundRelationshipGroup, LastActivityThreadSort)
         encoded = json.loads(comms.relationships.store.path.read_text())
         assert encoded["orders"][0]["group"] == "sorted_inbound"
-        reopened = Comms(comms.root).relationships.snapshot("owner")
+        reopened = Comms.for_runtime(comms.root).relationships.snapshot("owner")
         assert FieldCodec.decode(type(reopened), FieldCodec.encode(reopened)) == reopened
     finally:
         RelationshipGroup.__registry__.pop(SortedInboundRelationshipGroup.declared_name)

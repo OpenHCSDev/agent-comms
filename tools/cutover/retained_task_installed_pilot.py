@@ -27,7 +27,7 @@ def main():
     (stage / 'seed.log').write_text(seeded.stdout + seeded.stderr)
     seeded.check_returncode()
     seed = json.loads(seeded.stdout)
-    service = Comms(root)
+    service = Comms.for_runtime(root)
     protected = {path.name: digest(path) for path in
                  (root / 'registry.json', root / 'protected-fixture-source.proof')}
     original_bus = (root / 'bus.jsonl').read_bytes()
@@ -79,7 +79,7 @@ def main():
     assert pin in retained.current_authored_sources(beta, service.registry.snapshot())
     assert retained.original_text_source(pin) == subject
     # Reopening both source and registry must derive the same original lineage.
-    reopened = Comms(root)
+    reopened = Comms.for_runtime(root)
     assert reopened.bus.log.full_history()[-1] == pin
     before = (root / 'bus.jsonl').read_bytes()
     try:

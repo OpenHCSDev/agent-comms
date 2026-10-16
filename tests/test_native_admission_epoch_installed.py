@@ -115,7 +115,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
         exit_allowed.set()
         await asyncio.to_thread(process.join, 5)
         assert process.exitcode == 0
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms.for_runtime(root, private_initial_writes=True)
         source = next(
             row
             for row in SelectedNativeJourney(root, root_id, comms, Path(package), True).records()

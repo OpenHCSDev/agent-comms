@@ -637,7 +637,10 @@ class ThreadManagement:
 
     def create(self, spec: NewThreadSpec, pi_bin: str | None = None) -> Thread:
         """Prepare the session, then register and launch the thread with its first input."""
-        resolved_bin = NativeArguments.configured_binary(pi_bin)
+        native = self.owners.native_defaults
+        if pi_bin is not None:
+            native = replace(native, binary=pi_bin)
+        resolved_bin = NativeArguments.configured_binary(native)
         with spec.prepared(self, resolved_bin) as child:
             return self._create_unlocked(spec, resolved_bin, child)
 
@@ -651,7 +654,7 @@ class ThreadManagement:
         try:
             owned = self.owners._launch_owner_unlocked(
                 replace(child, model=self.resolve_thread_model(child.name)),
-                pi_bin, startup_input_key=key,
+                replace(self.owners.native_defaults, binary=pi_bin), startup_input_key=key,
             )
             if key is not None:
                 InputDispositions(self.root).record(

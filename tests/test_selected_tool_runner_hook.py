@@ -82,7 +82,7 @@ def test_owner_configuration_requires_nominal_intent_and_private_binding(
     intent_type, _mode_type, _bound = nominal_broker_stub
     wire = private_root / "wire"
     wire.mkdir(mode=0o700)
-    comms = Comms(wire)
+    comms = Comms.for_runtime(wire)
     with pytest.raises(ValueError, match="exact N/K root"):
         CommsAgent(comms, private_selected_tool_intent=intent_type())
     with pytest.raises(TypeError, match="nominal owner intent"):

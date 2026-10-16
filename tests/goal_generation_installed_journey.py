@@ -47,7 +47,7 @@ async def run(stage: Path, extension: Path):
                     if number == 1:
                         native.provider.tool_call = ('comms_set_goal', {'text': 'Model-authored retry objective'})
                     elif number in (2, 4):
-                        goal = Comms(native.root).registry.require(session).require_goal()
+                        goal = Comms.for_runtime(native.root).registry.require(session).require_goal()
                         native.provider.tool_call = ('comms_goal', {
                             'goal_id': goal.id,
                             'status': 'blocked' if number == 2 else 'completed',

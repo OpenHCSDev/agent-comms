@@ -47,7 +47,7 @@ def test_conversation_pair_boundary_retains_strict_codec_validation(raw):
 
 
 def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms.for_runtime(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     notice = "Read positions were reset; reopen conversations to review them."
@@ -59,7 +59,7 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     assert first.read_marker_notice == notice
     assert comms.bus.reads.read().notice is None
 
-    second = Comms(tmp_path).views.presentation.roster(viewer)
+    second = Comms.for_runtime(tmp_path).views.presentation.roster(viewer)
     assert second.read_marker_notice is None
 
 

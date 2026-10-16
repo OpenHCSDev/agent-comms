@@ -19,7 +19,7 @@ from agent_comms.threads import Thread
 
 
 async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monkeypatch):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     owner = Thread(
         "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )
@@ -42,7 +42,7 @@ async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monke
 
 
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     owner = Thread(
         "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )

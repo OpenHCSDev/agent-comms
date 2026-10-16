@@ -68,7 +68,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
     models.write_text(json.dumps(document))
     original_source = fixture.session.read_bytes()
     owner = canonical_agent(
-        Comms(fixture.root), agent_bin="pi",
+        Comms.for_runtime(fixture.root), agent_bin="pi",
         agent_args=["--model", "response-local/fixture", "--thinking", "off", "--offline",
                     "--no-extensions", "--no-skills", "--no-prompt-templates",
                     "--no-builtin-tools", "--extension",

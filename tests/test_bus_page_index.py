@@ -20,7 +20,7 @@ from agent_comms.wire_metadata import ArchivedAccess
 
 
 def retained_source(root, count):
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     for name in ("a", "b", "c"):
         comms.registry.declare(Thread(name, frozenset(), str(root)))
     comms.messaging.initialize_private_initial_protocol()
@@ -75,7 +75,7 @@ def test_bad_cached_offset_uses_authoritative_current_source(tmp_path):
 
 
 def test_parallel_preparation_commits_each_message_once(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms.for_runtime(tmp_path)
     for name in ("a", "b"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     message = comms.messaging.send_message("a", "b", "once")

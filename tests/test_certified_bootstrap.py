@@ -48,7 +48,7 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path):
         ).prefix()
         assert selected.blocked_seq == sent.seq  # Selection cannot manufacture native proof.
         assert selected.covered_seq == 0 and selected.injected_source_seqs == ()
-        assert source_witness(Comms(comms.root).bus).through_seq == sent.seq
+        assert source_witness(Comms.for_runtime(comms.root).bus).through_seq == sent.seq
 
 
 def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path):
@@ -73,7 +73,7 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path):
 def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monkeypatch):
     from agent_comms import wire_log
 
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     write = wire_log._atomic_write_text
 
@@ -88,14 +88,14 @@ def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monk
             comms.messaging.initialize_private_initial_protocol()
     assert (comms.root / "private_bus_checkpoint.sqlite3").exists()
     with pytest.raises(RelationViolationError, match="pending"):
-        Comms(comms.root).registry.snapshot()
+        Comms.for_runtime(comms.root).registry.snapshot()
     with pytest.raises(RelationViolationError):
         source_witness(comms.bus)
     assert comms.bus.log.path.read_bytes() == b""
 
 
 async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     agent = CommsAgent(comms)
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root and package"):
         await agent.new_session(cwd=str(tmp_path))
@@ -107,7 +107,7 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     reason="Prepared native package required; no provider request",
 )
 async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     package = Path(os.environ["AC_NATIVE_COPIED_PACKAGE"])
     agent = CommsAgent(

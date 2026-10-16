@@ -17,7 +17,7 @@ async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_bac
     fixture = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     owner = canonical_agent(
-        Comms(fixture.root),
+        Comms.for_runtime(fixture.root),
         agent_bin="pi",
         agent_args=[
             "--provider",

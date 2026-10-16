@@ -96,7 +96,7 @@ def reserve_foreground_owner(
     _trusted_package(package)  # Reject before touching the recipient registry.
     worktree = root / "work"
     _private_session_dir(worktree)
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     with comms.bus.log.certified_read() as source:
         marker = source.marker
     if marker.root_id != wire_root_id:

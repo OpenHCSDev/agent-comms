@@ -13,6 +13,7 @@ import pytest
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.input_attempt import StartedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.thread_management import ForkSpec
@@ -44,13 +45,12 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
     marker = "RETAINED_FORK_LOOPBACK_" + uuid4().hex[:12]
     fixture.provider.text = marker
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    monkeypatch.setenv(
-        "AGENT_COMMS_AGENT_ARGS",
-        "--offline --no-extensions --no-skills --no-context-files --no-prompt-templates --no-tools",
-    )
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
-    comms = Comms(fixture.root)
+    comms = Comms(fixture.root, native=NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary(), arguments=(
+        "--offline", "--no-extensions", "--no-skills", "--no-context-files",
+        "--no-prompt-templates", "--no-tools",
+    )))
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
     comms.owners.pin_private_nk_launch(fixture.root, root_id, package)

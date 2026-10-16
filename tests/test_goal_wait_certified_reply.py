@@ -184,7 +184,7 @@ async def test_native(retained_native_acp_owner):
         assert native.provider.posts == 3
         from agent_comms.comms import Comms
 
-        reopened = Comms(comms.root, private_initial_writes=False, private_claim_writes=False)
+        reopened = Comms.for_runtime(comms.root, private_initial_writes=False, private_claim_writes=False)
         assert reopened.goals.goal_wait(sid) is None
         assert reopened.registry.require(sid).goal == parked_goal
         assert reopened.bus.log.message_by_id(original.message_id).reference == original.reference

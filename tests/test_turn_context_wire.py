@@ -132,7 +132,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
 
     installed = Path(agent_comms.__file__).resolve()
     assert 'site-packages' in installed.parts, 'This journey requires installed application source'
-    original = Comms(Path(os.environ['CONTEXT_MANIFEST_ORIGINAL_ROOT']))
+    original = Comms.for_runtime(Path(os.environ['CONTEXT_MANIFEST_ORIGINAL_ROOT']))
     source_files = (original.root / 'registry.json', original.root / 'bus.jsonl')
     source_hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in source_files}
     source_snapshot = original.registry.snapshot()
@@ -267,7 +267,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     second=comms.messaging.send_initial_cohort('sender','#team','@Alice next original message')
     assert second.seq==first.seq+1
     comms.bus.log.record_context(manifest(comms.registry.require('Alice'),2))
-    reopened=Comms(comms.root)
+    reopened=Comms.for_runtime(comms.root)
     assert reopened.bus.log.full_history()==[first,second]
     assert len(_page(reopened,lookup)[1])==2
     monkeypatch.setattr(type(reopened.relationships), "RECENT_MESSAGES", 2)
@@ -307,7 +307,7 @@ def test_recorded_context_history_retains_rename_and_original_predecessor(tmp_pa
     future = manifest(renamed, 3)
     comms.bus.log.record_context(future)
     raw = comms.bus.log.path.read_bytes()
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     history = reopened.bus.log.context_manifests('Alice', reopened.registry)
     assert history == (original, second, same_turn, future)
     assert reopened.bus.log.context_manifests('Renamed-Alice', reopened.registry) == history
@@ -363,7 +363,7 @@ def test_context_pointer_family_rebuilds_and_decodes_only_selected_originals(tmp
         with pytest.raises(RelationViolationError, match='outcome UNKNOWN'):
             comms.bus.log.record_context(replace(selected, counter='original-second-observation'))
     expected = (selected, replace(selected, counter='original-second-observation'))
-    assert Comms(comms.root).bus.log.context_manifests('Alice', comms.registry) == expected
+    assert Comms.for_runtime(comms.root).bus.log.context_manifests('Alice', comms.registry) == expected
     assert comms.bus.log.path.read_bytes().startswith(original)
     assert comms.bus.log.latest_sequence() == 12
     assert len(comms.bus.log.full_history()) == 12

@@ -39,7 +39,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
         for name, lookup in lookups.items():
             store.participants.register(lookup, name, name, committed=True)
         for _ in range(2):
-            reopened = Comms(comms.root)
+            reopened = Comms.for_runtime(comms.root)
             WakeCandidateIndex(reopened.bus.log).maintain(rebuild=True)
             assert (
                 await _accept_visible_deliveries(
@@ -90,9 +90,9 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     source, store, _root_id, _lookups = _root(tmp_path)
     store.close()
     sent = source.messaging.send("alice", "bob", "retained message")
-    reader = Comms(tmp_path / "reader")
+    reader = Comms.for_runtime(tmp_path / "reader")
     attached = reader.bus.history.attach(source.root)
-    snapshot = Comms(attached.root)
+    snapshot = Comms.for_runtime(attached.root)
     before = snapshot.bus.log.path.read_bytes()
     assert [message.message_id for message in snapshot.bus.log.full_history()] == [sent]
     with pytest.raises(RelationViolationError, match="read-only"):

@@ -19,7 +19,7 @@ def main():
         Path(packet['route_path']), int(route_descriptor), packet['original_route'],
         packet['target_route'], Path(packet['receipt']),
     )
-    service = Comms(Path(packet['original_route']['root']))
+    service = Comms.for_runtime(Path(packet['original_route']['root']))
     # Original guarded reader and the declared target boundary prevalidate both
     # carriers before any admission fence or process signal.
     with service.registry.store.reading() as registry, service.owners.releases.reading() as releases:

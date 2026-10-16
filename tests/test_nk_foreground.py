@@ -54,7 +54,7 @@ def _private_root(tmp_path: Path):
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
     (root / "work").mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms.for_runtime(root, private_initial_writes=True)
     comms.registry.declare(
         Thread(
             "sender",

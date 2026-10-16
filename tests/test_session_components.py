@@ -42,7 +42,7 @@ async def owner(tmp_path, monkeypatch):
     monkeypatch.setattr(ThinkingLevelConfigOption, "discover", levels)
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     agent = canonical_agent(
-        Comms(tmp_path / "wire"),
+        Comms.for_runtime(tmp_path / "wire"),
         agent_bin="pi",
         agent_args=["--model", "test/one"],
         auto_wake=False,
@@ -55,7 +55,7 @@ async def owner(tmp_path, monkeypatch):
 
 
 async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owner, tmp_path):
-    other = CommsClient(Comms(tmp_path / "other"), agent_bin="pi")
+    other = CommsClient(Comms.for_runtime(tmp_path / "other"), agent_bin="pi")
     assert type(owner.sessions) is SessionLifecycle
     assert type(other.sessions) is AttachedSessionLifecycle
     await owner.initialize(1, {})
@@ -180,7 +180,7 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
         False,
     )
     assert changed["configOptions"][-1]["currentValue"] == "high"
-    assert Comms(owner._comms.root).registry.require(response.session_id).task == "high"
+    assert Comms.for_runtime(owner._comms.root).registry.require(response.session_id).task == "high"
 
     # Polling must use the same declaration catalog as parser/set dispatch.
     # A newly declared option backed by another Thread field is not invisible.

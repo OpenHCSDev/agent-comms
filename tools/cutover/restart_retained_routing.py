@@ -22,7 +22,7 @@ def main():
                       **{ROOT_ID_ENV: arguments.root_id, PACKAGE_ENV: str(arguments.native_package)})
     operation = RetainedRoutingCutover(arguments.original_python, arguments.root_id,
                                        arguments.native_package, arguments.receipt)
-    results = Comms(arguments.root).owners.restart_owners(cutover=operation)
+    results = Comms.for_runtime(arguments.root).owners.restart_owners(cutover=operation)
     print(json.dumps(FieldCodec.encode(results)), flush=True)
 
 

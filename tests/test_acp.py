@@ -1406,13 +1406,11 @@ class TestWireProtocol:
             __import__("os").environ,
             AGENT_COMMS_ROOT=str(root),
             PYTHONPATH=str(Path(ae.__file__).parent.parent),
-            AGENT_COMMS_AGENT_BIN="pi",
             AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
             AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=os.environ["AC_NATIVE_COPIED_PACKAGE"],
             AGENT_COMMS_NO_REPLY_WINDOW="0.1",
             AGENT_COMMS_REPLY_WINDOW="0.1",
             AGENT_COMMS_REPLY_QUIET="0.05",
-            AGENT_COMMS_AGENT_ARGS="",
         )
         requests = [
             {
