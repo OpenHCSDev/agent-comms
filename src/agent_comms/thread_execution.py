@@ -138,7 +138,7 @@ class ExternalThreadExecution(ThreadExecution):
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        # The CLI reports its own activity; between turns it is a participant.
+        # Its inbox state is the bridge's registration: connected or no bridge.
         if not status.active:
             return ordinary
         # A stale busy report cannot keep a known-dead CLI working.
