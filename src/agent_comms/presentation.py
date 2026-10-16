@@ -737,18 +737,17 @@ class ThreadView:
                        binding=self.binding)
 
     def _display_presentation(self) -> ThreadPresentation:
-        if self.status.active and self.thread.executing and not self.activity.state.busy:
-            return ActivityState.WORKING.presentation(
-                self.thread.title or self.thread.name, "In a turn"
-            )
-        if (
-            self.status.active
-            and not self.activity.state.busy
-            and self.goal_execution is not None
-            and self.goal_execution.state.view.waiting
-        ):
-            return self.goal_execution.presentation(self.thread.title or self.thread.name)
-        return self.status.presentation(self.thread.title or self.thread.name, self.activity)
+        ordinary = self.status.presentation(self.thread.title or self.thread.name, self.activity)
+        if self.status.active:
+            return ordinary.status.when_idle(ordinary, self._idle_presentation)
+        return ordinary
+
+    def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        if self.thread.executing:
+            return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
+        if self.goal_execution is not None and self.goal_execution.state.view.waiting:
+            return self.goal_execution.presentation(ordinary.title)
+        return ordinary
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -815,8 +814,8 @@ class CoordinationSnapshot:
             return ()
         people = {
             person.thread.name: person
-            for person in self.threads
-            if person.status.active and person.presentation.status.busy
+            for view in self.threads if view.status.active
+            for person in view.presentation.status.working_members(view)
         }
         return tuple(people[name] for name in view.members if name in people)
 

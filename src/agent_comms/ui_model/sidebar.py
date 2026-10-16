@@ -78,7 +78,7 @@ class ChannelRowModel:
     order: type[ThreadSort]
 
     @classmethod
-    def of(cls, view, snapshot: CoordinationSnapshot, busy: frozenset[str]) -> ChannelRowModel:
+    def of(cls, view, snapshot: CoordinationSnapshot, working: frozenset[str]) -> ChannelRowModel:
         channel = view.channel
         return cls(
             channel.name,
@@ -86,7 +86,7 @@ class ChannelRowModel:
             f"{view.active_agents} running or idle / {view.registered_agents} registered agents"
             f" · tags: {', '.join(sorted(channel.tags)) or 'all'}",
             UnreadPresentation.for_channel(snapshot, channel.name),
-            any(name in busy for name in view.members),
+            any(name in working for name in view.members),
             tuple(name for name in view.members if name in {person.thread.name for person in snapshot.threads}),
             frozenset(view.pinned_members),
             channel.order,
@@ -178,8 +178,10 @@ class SidebarModel:
     @staticmethod
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
         threads = {person.thread.name: ThreadRowModel.of(person, snapshot) for person in snapshot.threads}
-        busy = frozenset(name for name, row in threads.items() if row.status.busy)
-        channels = {view.channel.name: ChannelRowModel.of(view, snapshot, busy) for view in snapshot.channels}
+        working = frozenset(member for name, row in threads.items()
+                            for member in row.status.working_members(name))
+        channels = {view.channel.name: ChannelRowModel.of(view, snapshot, working)
+                    for view in snapshot.channels}
         return channels, threads
 
     def clear(self, error: Exception) -> None:
