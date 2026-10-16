@@ -74,16 +74,16 @@ class ResponseObligation(CoordinatorTable, TypedTable, declared_name="obligation
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("obligation timestamps are inconsistent")
 
-    state: str = GeneratedColumn(expression="json_extract(lifecycle, '$.kind')", check="state IN ({response_names})").field(snapshot_exclude=True)
-    receipt_message_id: str | None = GeneratedColumn(expression="json_extract(lifecycle, '$.message_id')", check="\n"
+    state = GeneratedColumn(value_type=str, expression="json_extract(lifecycle, '$.kind')", check="state IN ({response_names})")
+    receipt_message_id = GeneratedColumn(value_type=str, nullable=True, expression="json_extract(lifecycle, '$.message_id')", check="\n"
                     "        receipt_message_id IS NULL OR length(receipt_message_id)"
                     " BETWEEN 1 AND 256\n"
-                    "    ").field(snapshot_exclude=True)
-    receipt_seq: int | None = GeneratedColumn(expression="json_extract(lifecycle, '$.seq')", check="receipt_seq IS NULL OR receipt_seq > 0").field(snapshot_exclude=True)
-    success_terminal: int | None = GeneratedColumn(expression="CASE WHEN state IN ({successful_response_names}) THEN 1 ELSE 0 END").field(snapshot_exclude=True)
-    retryable: int | None = GeneratedColumn(expression="CASE WHEN state IN ({retryable_response_names}) THEN 1 ELSE 0 END").field(snapshot_exclude=True)
-    intent_settled: int | None = GeneratedColumn(expression="CASE WHEN state IN ({intent_response_names}) THEN 1 ELSE 0 END").field(snapshot_exclude=True)
-    receipt_settled: int | None = GeneratedColumn(expression="CASE WHEN state = 'published' THEN 1 ELSE 0 END").field(snapshot_exclude=True)
+                    "    ")
+    receipt_seq = GeneratedColumn(value_type=int, nullable=True, expression="json_extract(lifecycle, '$.seq')", check="receipt_seq IS NULL OR receipt_seq > 0")
+    success_terminal = GeneratedColumn(value_type=int, nullable=True, expression="CASE WHEN state IN ({successful_response_names}) THEN 1 ELSE 0 END")
+    retryable = GeneratedColumn(value_type=int, nullable=True, expression="CASE WHEN state IN ({retryable_response_names}) THEN 1 ELSE 0 END")
+    intent_settled = GeneratedColumn(value_type=int, nullable=True, expression="CASE WHEN state IN ({intent_response_names}) THEN 1 ELSE 0 END")
+    receipt_settled = GeneratedColumn(value_type=int, nullable=True, expression="CASE WHEN state = 'published' THEN 1 ELSE 0 END")
     checks = (
         "(receipt_message_id IS NULL) = (receipt_seq IS NULL)",
         (

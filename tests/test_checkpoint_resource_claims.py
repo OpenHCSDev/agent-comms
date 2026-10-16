@@ -46,7 +46,8 @@ def test_multi_resource_admission_consumes_one_operation_even_after_release(tmp_
     claimed = admitted(comms, admission, paths[:2])
     with comms.bus.log.certified_read() as source:
         commits = ClaimCommits.select(source.connection)
-        assert len(commits) == 1 and commits[0].operation_id == admission.operation_id
+        assert len(commits) == 1 and commits[0].transition.admission == admission
+        assert ClaimCommits.column_values(source.connection, 'operation_id') == [admission.operation_id]
         assert source.claim_operation_used(admission.operation_id)
         for path in paths[:2]:
             held = source.claim(str(path))

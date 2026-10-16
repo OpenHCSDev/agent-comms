@@ -65,7 +65,7 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
         if self.pointer_revision < 0:
             raise ValueError("pointer_revision cannot be negative")
 
-    required_active: str | None = GeneratedColumn(expression="CASE WHEN execution_id IS NOT NULL THEN 'active' END").field()
+    required_active = GeneratedColumn(value_type=str, nullable=True, expression="CASE WHEN execution_id IS NOT NULL THEN 'active' END")
 
     checks = ("(execution_id IS NULL) = (attempt_ordinal IS NULL)",)
 
@@ -183,29 +183,29 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("execution timestamps are inconsistent")
 
-    status: str = GeneratedColumn(expression="json_extract(lifecycle, '$.kind')", check="status IN\n      ({execution_names})").field(snapshot_exclude=True)
-    current_attempt_ordinal: int | None = GeneratedColumn(expression="json_extract(lifecycle, '$.ordinal')", check="\n"
+    status = GeneratedColumn(value_type=str, expression="json_extract(lifecycle, '$.kind')", check="status IN\n      ({execution_names})")
+    current_attempt_ordinal = GeneratedColumn(value_type=int, nullable=True, expression="json_extract(lifecycle, '$.ordinal')", check="\n"
                     "        current_attempt_ordinal IS NULL OR current_attempt_ordin"
                     "al BETWEEN 1 AND max_attempts\n"
-                    "    ").field(snapshot_exclude=True)
-    required_attempt_kind: str | None = GeneratedColumn(expression="CASE\n"
+                    "    ")
+    required_attempt_kind = GeneratedColumn(value_type=str, nullable=True, expression="CASE\n"
                     "        WHEN status = 'active' THEN 'active'\n"
                     "        WHEN status = 'completed' THEN 'succeeded'\n"
-                    "    END").field(snapshot_exclude=True)
-    active_execution_id: str | None = GeneratedColumn(expression="CASE WHEN status = 'active' THEN execution_id END").field(snapshot_exclude=True)
-    active_attempt_ordinal: int | None = GeneratedColumn(expression="CASE WHEN status = 'active' THEN current_attempt_ordinal END").field(snapshot_exclude=True)
-    wire_execution_id: str | None = GeneratedColumn(expression="CASE WHEN origin = 'wire' THEN execution_id END").field(snapshot_exclude=True)
-    wire_claim_ordinal: int | None = GeneratedColumn(expression="CASE WHEN origin = 'wire' THEN 0 END").field(snapshot_exclude=True)
-    claim_status_kind: str | None = GeneratedColumn(expression="CASE\n"
+                    "    END")
+    active_execution_id = GeneratedColumn(value_type=str, nullable=True, expression="CASE WHEN status = 'active' THEN execution_id END")
+    active_attempt_ordinal = GeneratedColumn(value_type=int, nullable=True, expression="CASE WHEN status = 'active' THEN current_attempt_ordinal END")
+    wire_execution_id = GeneratedColumn(value_type=str, nullable=True, expression="CASE WHEN origin = 'wire' THEN execution_id END")
+    wire_claim_ordinal = GeneratedColumn(value_type=int, nullable=True, expression="CASE WHEN origin = 'wire' THEN 0 END")
+    claim_status_kind = GeneratedColumn(value_type=str, nullable=True, expression="CASE\n"
                     "        WHEN status IN ({engaged_execution_names}) THEN 'engaged"
                     "'\n"
-                    "        ELSE status END").field(snapshot_exclude=True)
-    deferred_replay_id: str | None = GeneratedColumn(expression="CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
+                    "        ELSE status END")
+    deferred_replay_id = GeneratedColumn(value_type=str, nullable=True, expression="CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
                     " NULL\n"
-                    "              THEN execution_id END").field(snapshot_exclude=True)
-    deferred_replay_required: int | None = GeneratedColumn(expression="CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
+                    "              THEN execution_id END")
+    deferred_replay_required = GeneratedColumn(value_type=int, nullable=True, expression="CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
                     " NULL\n"
-                    "              THEN 1 END").field(snapshot_exclude=True)
+                    "              THEN 1 END")
     checks = (
         (
             "(status IN ({unstarted_execution_names}) AND current_attempt_ord"

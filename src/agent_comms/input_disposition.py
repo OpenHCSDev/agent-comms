@@ -166,10 +166,10 @@ class InputDispositionRow(TypedTable):
 
     key: str = field(metadata={"sql": Column(primary_key=True)})
     attempt: StoredInput
-    owner: str = GeneratedColumn(expression="json_extract(attempt,'$.owner')").field()
-    turn_id: str | None = GeneratedColumn(expression="json_extract(attempt,'$.turn_id')").field()
-    sequence: int | None = GeneratedColumn(expression="json_extract(attempt,'$.sequence')").field()
-    unresolved: bool = GeneratedColumn(expression=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}").field()
+    owner = GeneratedColumn(value_type=str, expression="json_extract(attempt,'$.owner')")
+    turn_id = GeneratedColumn(value_type=str, nullable=True, expression="json_extract(attempt,'$.turn_id')")
+    sequence = GeneratedColumn(value_type=int, nullable=True, expression="json_extract(attempt,'$.sequence')")
+    unresolved = GeneratedColumn(value_type=bool, expression=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}")
     checks = ("key = json_extract(attempt,'$.key')",)
     indexes = (
         Index(("owner", "unresolved")),

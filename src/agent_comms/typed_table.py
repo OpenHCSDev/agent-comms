@@ -12,9 +12,10 @@ import os
 import sqlite3
 import types
 from abc import abstractmethod
+from collections import ChainMap
 from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import MISSING, Field, dataclass, field, fields
+from dataclasses import Field, dataclass, fields
 from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
 from pathlib import Path
@@ -255,7 +256,12 @@ class Column:
         return ''
 
     def compile(self, item: Field, annotation: object) -> _Field:
-        return _Field(name=item.name, init=item.init, annotation=annotation,
+        if not item.init:
+            raise TypeError('SQLite records require complete constructor fields')
+        return self._compile(item.name, annotation)
+
+    def _compile(self, name: str, annotation: object) -> _Field:
+        return _Field(name=name, annotation=annotation,
                       nullable=_base_type(annotation)[1] or self.nullable,
                       storage=self.storage or SqlStorage.for_type(annotation), column=self,
                       value=compile_decoder(annotation))
@@ -263,19 +269,27 @@ class Column:
 
 @dataclass(frozen=True, kw_only=True)
 class GeneratedColumn(Column):
+    """SQL index projection, never a second field on the Python record."""
+
+    value_type: object
     expression: str
     writable: ClassVar[bool] = False
 
-    def field(self, **metadata: object) -> Field:
-        return field(init=False, compare=False, repr=False, metadata={**metadata, 'sql': self})
+    def compile(self, item: Field, annotation: object) -> _Field:
+        raise TypeError('Declare SQL index projections outside dataclass fields')
+
+    def named(self, name: str) -> _Field:
+        # SQLite NULL is an external SQL value, not missing Python record state.
+        annotation = Union[self.value_type, type(None)] if self.nullable else self.value_type
+        return self._compile(name, annotation)
+
+    def __get__(self, instance: object, owner: type) -> GeneratedColumn:
+        if instance is not None:
+            raise AttributeError('SQL index projections are not Python record fields')
+        return self
 
     def definition(self) -> str:
         return f' GENERATED ALWAYS AS ({self.expression}) STORED'
-
-    def compile(self, item: Field, annotation: object) -> _Field:
-        if item.init or item.default is not MISSING or item.default_factory is not MISSING:
-            raise TypeError('A generated column has no constructor field or default')
-        return super().compile(item, annotation)
 
 
 @dataclass(frozen=True)
@@ -350,7 +364,6 @@ class SqlValue:
 @dataclass(frozen=True)
 class _Field(SqlValue):
     name: str
-    init: bool
     nullable: bool
     column: Column
 
@@ -397,8 +410,16 @@ class TypedRow:
         if not cls.__dataclass_params__.frozen:
             raise TypeError("SQLite row declarations must be frozen dataclasses")
         hints = get_type_hints(cls, include_extras=True)
-        return tuple(item.metadata.get('sql', Column()).compile(item, hints[item.name])
+        data = tuple(item.metadata.get('sql', Column()).compile(item, hints[item.name])
                      for item in fields(cls))
+        declarations = ChainMap(*(vars(base) for base in cls.__mro__))
+        generated = tuple(column.named(name) for name, column in declarations.items()
+                          if isinstance(column, GeneratedColumn))
+        return (*data, *generated)
+
+    @classmethod
+    def _record_fields(cls) -> tuple[_Field, ...]:
+        return tuple(item for item in cls._fields() if item.column.writable)
 
     @classmethod
     def columns(cls) -> tuple[str, ...]:
@@ -425,12 +446,8 @@ class TypedRow:
     def _decode_row(
         cls, row: sqlite3.Row | tuple[object, ...], positions: Mapping[str, int]
     ) -> Self:
-        values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
-        instance = cls(**{item.name: values[item.name] for item in cls._fields() if item.init})
-        for item in cls._fields():
-            if not item.init:
-                object.__setattr__(instance, item.name, values[item.name])
-        return instance
+        return cls(**{item.name: item.decode(row[positions[item.name]])
+                      for item in cls._record_fields()})
 
     @classmethod
     def iterate(cls, cursor: sqlite3.Cursor) -> Generator[Self, None, None]:
@@ -507,9 +524,10 @@ class SQLiteUserVersion(TypedRow):
 class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent_comms"):
     """The row declaration owns its table; no separate table/schema registry.
 
-    Fields may declare ``metadata={"sql": Column(...)}``. Composite keys derive
-    from primary-key fields in declaration order. Table-wide constraints and
-    indexes live on the same row declaration. SQL predicates contain trusted
+    Fields may declare ``metadata={"sql": Column(...)}``. GeneratedColumn class
+    attributes are SQL-only projections, not additional Python record state.
+    Composite keys derive from primary-key fields in declaration order.
+    Table-wide constraints and indexes live on the same row declaration. SQL predicates contain trusted
     source expressions; values always use bound parameters.
     """
 
@@ -692,10 +710,6 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             parameters))
 
     @classmethod
-    def _insertion_fields(cls) -> tuple[_Field, ...]:
-        return tuple(item for item in cls._fields() if item.column.writable)
-
-    @classmethod
     def _writable_fields(cls, columns: tuple[str, ...]) -> tuple[_Field, ...]:
         selected = cls._fields_named(columns)
         if not selected:
@@ -726,7 +740,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return db.execute(f"DELETE FROM {_identifier(cls.declared_name)} WHERE {where}", parameters)
 
     def _insertion(self) -> tuple[str, tuple]:
-        writable = self._insertion_fields()
+        writable = self._record_fields()
         return (self.insertion_statement(tuple(item.name for item in writable)),
                 tuple(item.encode(getattr(self, item.name)) for item in writable))
 
@@ -743,7 +757,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         keys = tuple(item.name for item in self._fields() if item.column.primary_key)
         updates = tuple(
             item.name
-            for item in self._insertion_fields()
+            for item in self._record_fields()
             if not item.column.primary_key
         )
         statement += f" ON CONFLICT ({self._column_list(keys)}) DO "

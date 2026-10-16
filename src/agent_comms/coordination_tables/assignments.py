@@ -187,12 +187,12 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     def durable_key(self) -> tuple[str, int]:
         return (self.recipient_lookup, self.wire_seq)
 
-    exact_target: str | None = GeneratedColumn(expression="json_extract(lifecycle, '$.decision.exact_target')", check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256").field(snapshot_exclude=True)
-    wake_mode: str = GeneratedColumn(expression="({assignment_mode})", check="wake_mode IN ({wake_names})").field(snapshot_exclude=True)
-    triage_verdict: str | None = GeneratedColumn(expression="({assignment_verdict})", check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')").field(snapshot_exclude=True)
-    disposition: str = GeneratedColumn(expression="json_extract(lifecycle, '$.kind')", check="disposition IN ({assignment_names})").field(snapshot_exclude=True)
-    execution_id: str | None = GeneratedColumn(expression="json_extract(lifecycle, '$.decision.execution_id')").field(snapshot_exclude=True)
-    claim_status_kind: str | None = GeneratedColumn(expression="CASE WHEN execution_id IS NOT NULL THEN disposition END").field(snapshot_exclude=True)
+    exact_target = GeneratedColumn(value_type=str, nullable=True, expression="json_extract(lifecycle, '$.decision.exact_target')", check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256")
+    wake_mode = GeneratedColumn(value_type=str, expression="({assignment_mode})", check="wake_mode IN ({wake_names})")
+    triage_verdict = GeneratedColumn(value_type=str, nullable=True, expression="({assignment_verdict})", check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')")
+    disposition = GeneratedColumn(value_type=str, expression="json_extract(lifecycle, '$.kind')", check="disposition IN ({assignment_names})")
+    execution_id = GeneratedColumn(value_type=str, nullable=True, expression="json_extract(lifecycle, '$.decision.execution_id')")
+    claim_status_kind = GeneratedColumn(value_type=str, nullable=True, expression="CASE WHEN execution_id IS NOT NULL THEN disposition END")
     checks = ("COALESCE(({assignment_binding}), 0)",)
     unique = (("recipient_lookup", "wire_seq"), ("assignment_id", "execution_id"))
     indexes = (Index(("execution_id",), unique=False, where=None),)

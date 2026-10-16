@@ -227,9 +227,9 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
     progress_witness: str | None
     resolution: str | None
 
-    attempt_id: str | None = GeneratedColumn(unique=True, expression="json_extract(reservation,'$.attempt_id')").field()
-    goal_id: str | None = GeneratedColumn(expression="json_extract(reservation,'$.goal_id')", references=(Generation, "goal_id")).field()
-    generation: int | None = GeneratedColumn(expression="json_extract(reservation,'$.generation')").field()
+    attempt_id = GeneratedColumn(value_type=str, nullable=True, unique=True, expression="json_extract(reservation,'$.attempt_id')")
+    goal_id = GeneratedColumn(value_type=str, nullable=True, expression="json_extract(reservation,'$.goal_id')", references=(Generation, "goal_id"))
+    generation = GeneratedColumn(value_type=int, nullable=True, expression="json_extract(reservation,'$.generation')")
     unique = (("goal_id", "generation"),)
     checks = (f"json_extract(phase,'$.kind') IN {GoalAttemptPhase.sql_choices()}",)
 

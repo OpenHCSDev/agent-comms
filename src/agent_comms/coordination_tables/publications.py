@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 
 from agent_comms.coordination_contracts import (
@@ -106,7 +106,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if self.message.message_id != self.expected_message_id:
             raise IntegrityViolationError("expected message id does not match Message authority")
 
-    obligation_intent_required: int | None = GeneratedColumn(expression="1").field()
+    obligation_intent_required = GeneratedColumn(value_type=int, nullable=True, expression="1")
 
     @classmethod
     def references(cls):
@@ -130,7 +130,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
                 f""" BEFORE INSERT ON
 publication_intents
 WHEN coordination_validate_publication_intent(
-  {", ".join("NEW." + field.name for field in fields(cls) if field.init)}) != 1
+  {", ".join("NEW." + item.name for item in cls._record_fields())}) != 1
 BEGIN SELECT RAISE(ABORT, 'publication intent envelope is invalid' );
 END"""
             ),
@@ -168,7 +168,7 @@ END"""
             cls(**{
                 item.name: item.decode(value)
                 for item, value in zip(
-                    (item for item in cls._fields() if item.init), values, strict=True
+                    cls._record_fields(), values, strict=True
                 )
             })
         except (TypeError, ValueError, CoordinationError):
@@ -209,7 +209,7 @@ class PublicationReceipts(CoordinatorTable, TypedTable):
         }
     )
     received_at_ms: int = dataclass_field(metadata={"sql": Column(check="received_at_ms >= 0")})
-    obligation_receipt_required: int | None = GeneratedColumn(expression="1").field()
+    obligation_receipt_required = GeneratedColumn(value_type=int, nullable=True, expression="1")
 
     @classmethod
     def references(cls):

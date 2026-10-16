@@ -8,7 +8,7 @@ import stat
 import tempfile
 from abc import ABC, abstractmethod
 from contextlib import closing, contextmanager, suppress
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
@@ -208,7 +208,7 @@ class CoordinationStore:
     def _configure_connection(self) -> None:
         self._connection.create_function(
             "coordination_validate_publication_intent",
-            sum(field.init for field in fields(PublicationIntents)),
+            len(PublicationIntents._record_fields()),
             PublicationIntents.validate_sql,
             deterministic=True,
         )

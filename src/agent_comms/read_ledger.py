@@ -282,8 +282,8 @@ class ReadHeaderRow(ReadTable, TypedTable):
 class ReadMessageRow(ReadTable, TypedTable):
     key: ConversationKey = field(metadata={'sql': Column(primary_key=True)})
     progress: ReadProgress
-    viewer_birth: float = GeneratedColumn(expression="json_extract(key,'$.viewer.created_at')", index=True).field()
-    identity: ReadIdentity = GeneratedColumn(expression="json_extract(key,'$.identity')", index=True).field()
+    viewer_birth = GeneratedColumn(value_type=float, expression="json_extract(key,'$.viewer.created_at')", index=True)
+    identity = GeneratedColumn(value_type=ReadIdentity, expression="json_extract(key,'$.identity')", index=True)
     without_rowid = True
 
     @classmethod
@@ -306,8 +306,8 @@ class ReadMessageRow(ReadTable, TypedTable):
 class ReadTranscriptRow(ReadTable, TypedTable):
     key: TranscriptKey = field(metadata={'sql': Column(primary_key=True)})
     through: int
-    viewer_name: str = GeneratedColumn(expression="json_extract(key,'$.viewer')", index=True).field()
-    source_name: str = GeneratedColumn(expression="json_extract(key,'$.source')", index=True).field()
+    viewer_name = GeneratedColumn(value_type=str, expression="json_extract(key,'$.viewer')", index=True)
+    source_name = GeneratedColumn(value_type=str, expression="json_extract(key,'$.source')", index=True)
     without_rowid = True
 
 

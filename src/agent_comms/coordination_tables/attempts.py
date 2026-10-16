@@ -156,14 +156,14 @@ class AttemptRecord(CoordinatorTable, TypedTable, declared_name="attempts"):
         ):
             raise ValueError("attempt progress time is inconsistent")
 
-    phase: str = GeneratedColumn(expression="json_extract(lifecycle, '$.kind')", check="phase IN ({attempt_names})").field(snapshot_exclude=True)
-    lease_expires_at_ms: int | None = GeneratedColumn(expression="json_extract(lifecycle, '$.lease_expires_at_ms')", check="lease_expires_at_ms >= 0").field(snapshot_exclude=True)
-    backend_done: bool = GeneratedColumn(expression="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.backend_done') END", check="backend_done IN (0,1)").field(snapshot_exclude=True)
-    process_dead: bool = GeneratedColumn(expression="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.process_dead') END", check="process_dead IN (0,1)").field(snapshot_exclude=True)
-    phase_kind: str | None = GeneratedColumn(expression="CASE\n"
+    phase = GeneratedColumn(value_type=str, expression="json_extract(lifecycle, '$.kind')", check="phase IN ({attempt_names})")
+    lease_expires_at_ms = GeneratedColumn(value_type=int, nullable=True, expression="json_extract(lifecycle, '$.lease_expires_at_ms')", check="lease_expires_at_ms >= 0")
+    backend_done = GeneratedColumn(value_type=bool, expression="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.backend_done') END", check="backend_done IN (0,1)")
+    process_dead = GeneratedColumn(value_type=bool, expression="CASE WHEN json_extract(lifecycle, '$.kind') IN ({terminal_attempt_names}) THEN 1 ELSE json_extract(lifecycle, '$.process_dead') END", check="process_dead IN (0,1)")
+    phase_kind = GeneratedColumn(value_type=str, nullable=True, expression="CASE\n"
                     "       WHEN phase IN ({terminal_attempt_names}) THEN phase ELSE "
-                    "'active' END").field(snapshot_exclude=True)
-    active_required_status: str | None = GeneratedColumn(expression="CASE WHEN phase_kind = 'active' THEN 'active' END").field(snapshot_exclude=True)
+                    "'active' END")
+    active_required_status = GeneratedColumn(value_type=str, nullable=True, expression="CASE WHEN phase_kind = 'active' THEN 'active' END")
     checks = (
         (
             "last_progress_at_ms IS NULL OR\n"
@@ -362,9 +362,9 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         if self.facts != ReplayFact.NONE and self.replay_safe:
             raise IntegrityViolationError("an execution with ambiguity facts cannot be replay-safe")
 
-    retry_authorized: int | None = GeneratedColumn(expression="CASE WHEN facts = 0 AND replay_safe = 1 AND side_effects_possibl"
+    retry_authorized = GeneratedColumn(value_type=int, nullable=True, expression="CASE WHEN facts = 0 AND replay_safe = 1 AND side_effects_possibl"
                     "e = 0\n"
-                    "              THEN 1 ELSE 0 END").field()
+                    "              THEN 1 ELSE 0 END")
 
     checks = ("facts = 0 OR replay_safe = 0",)
 

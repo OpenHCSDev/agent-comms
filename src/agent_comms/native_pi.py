@@ -232,7 +232,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 {"name": item.name, "wire": item.metadata.get("wire_name", item.name)}
                 for item in fields(cls)
             ],
-            "insert": cls.insertion_statement(tuple(item.name for item in cls._insertion_fields())),
+            "insert": cls.insertion_statement(tuple(item.name for item in cls._record_fields())),
             "head": f"SELECT COALESCE(MAX(request_generation),0) AS generation FROM {table}",
             "session": f"SELECT session_id AS id FROM {table} ORDER BY session_id LIMIT 1",
             "current": f"SELECT input_id,session_entry_id FROM {table} "

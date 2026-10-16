@@ -1,7 +1,7 @@
 """Declaration families round-trip through real SQLite without a schema roster."""
 
 import sqlite3
-from dataclasses import MISSING, dataclass, field, fields, replace
+from dataclasses import dataclass, field, fields, replace
 
 import pytest
 from typing import Type
@@ -157,7 +157,7 @@ def test_new_row_declaration_needs_no_other_edit():
             compare=False,
             metadata={"sql": Column(primary_key=True, auto_increment=True)},
         )
-        label_size: int | None = GeneratedColumn(expression="length(label)").field()
+        label_size = GeneratedColumn(value_type=int, nullable=True, expression="length(label)")
 
     @dataclass(frozen=True)
     class Projection(TypedRow):
@@ -170,7 +170,8 @@ def test_new_row_declaration_needs_no_other_edit():
         value.insert(db)
         assert AddedTableRow.select(db) == [value]
         stored = AddedTableRow.one(db, label="new")
-        assert stored.ordinal == 1 and stored.label_size == 3
+        assert stored.ordinal == 1
+        assert AddedTableRow.column_values(db, 'label_size') == [3]
         assert stored.representation is IntegerStorage and stored.event is InfoKind
         assert AddedTableRow.column_values(db, "exact") == [7]
         with pytest.raises(ValueError, match="Generated columns"):
@@ -256,19 +257,26 @@ def test_in_selection_and_delete_share_typed_condition_encoding():
         assert TableParentRow.select(db) == [TableParentRow('b', 2)]
 
 
-def test_generated_kind_has_no_constructor_input_or_default():
-    generated = GeneratedColumn(expression='length(label)')
-
-    @dataclass
-    class Declaration:
+def test_generated_projection_is_sql_only_not_missing_record_state():
+    @dataclass(frozen=True)
+    class ProjectionOnlyRow(TypedTable):
         label: str
-        length: int = generated.field()
+        length = GeneratedColumn(value_type=int, expression='length(label)')
+        absent = GeneratedColumn(value_type=str, nullable=True, expression='NULL')
 
-    item = fields(Declaration)[1]
-    assert not item.init and item.default is MISSING and item.default_factory is MISSING
-    assert not generated.compile(item, int).column.writable
+    value = ProjectionOnlyRow('label')
+    assert tuple(item.name for item in fields(value)) == ('label',)
+    assert all(item.init for item in fields(value))
     with pytest.raises(TypeError):
-        Declaration('label', length=5)
+        ProjectionOnlyRow('label', length=5)
+    with pytest.raises(AttributeError, match='not Python record fields'):
+        value.length
+    with sqlite3.connect(':memory:') as db:
+        ProjectionOnlyRow.create(db)
+        value.insert(db)
+        assert ProjectionOnlyRow.select(db) == [value]
+        assert ProjectionOnlyRow.column_values(db, 'length') == [5]
+        assert ProjectionOnlyRow.column_values(db, 'absent') == [None]
     for invalid in (field(), field(init=False, default=0), field(init=False, default_factory=int)):
-        with pytest.raises(TypeError, match='no constructor field or default'):
-            generated.compile(invalid, int)
+        with pytest.raises(TypeError, match='outside dataclass fields'):
+            ProjectionOnlyRow.length.compile(invalid, int)

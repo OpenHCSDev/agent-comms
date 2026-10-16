@@ -598,13 +598,14 @@ class ResponseKeys(CheckpointTable, TypedTable):
 class ClaimCommits(CheckpointTable, TypedTable):
     """Original claim facts, including operation IDs consumed before release.
 
-    Generated columns belong to the typed transition, not another authored
-    encoding. One admitted envelope may acquire several normalized resources.
+    Sequence and operation identity are already owned by the typed transition.
+    Their SQL projections index it; they are never late-filled Python fields.
+    One admitted envelope may acquire several normalized resources.
     """
 
     transition: ClaimTransition
-    seq: int | None = GeneratedColumn(unique=True, expression="json_extract(transition,'$.seq')").field()
-    operation_id: str | None = GeneratedColumn(unique=True, expression="json_extract(transition,'$.admission.operation_id')").field()
+    seq = GeneratedColumn(value_type=int, nullable=True, unique=True, expression="json_extract(transition,'$.seq')")
+    operation_id = GeneratedColumn(value_type=str, nullable=True, unique=True, expression="json_extract(transition,'$.admission.operation_id')")
 
     @classmethod
     def latest_sequence(cls, db: sqlite3.Connection) -> int:

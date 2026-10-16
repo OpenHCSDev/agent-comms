@@ -18,14 +18,14 @@ class SpanAnnotationsRow(CoordinatorTable, TypedTable):
     created_at_ms: int
     # SQLite NULL requests its original rowid allocation, not a lifecycle state.
     id: int | None = field(default=None, metadata={"sql": Column(primary_key=True, auto_increment=True)})
-    segment_digest: str = GeneratedColumn(expression="json_extract(label, '$.span.segment_sha256')").field()
-    offset: int = GeneratedColumn(expression="json_extract(label, '$.span.coordinates.offset')").field()
-    length: int = GeneratedColumn(expression="json_extract(label, '$.span.coordinates.length')").field()
-    question: type[SpanQuestion] = GeneratedColumn(expression="json_extract(label, '$.question.question')").field()
-    question_version: str = GeneratedColumn(expression="json_extract(label, '$.question.sha256')").field()
-    classifier: type[Classifier] = GeneratedColumn(expression="json_extract(label, '$.classifier.classifier')").field()
-    classifier_pin: str = GeneratedColumn(expression="json_extract(label, '$.classifier.pin')").field()
-    label_kind: type[SpanLabel] = GeneratedColumn(expression="json_extract(label, '$.kind')").field()
+    segment_digest = GeneratedColumn(value_type=str, expression="json_extract(label, '$.span.segment_sha256')")
+    offset = GeneratedColumn(value_type=int, expression="json_extract(label, '$.span.coordinates.offset')")
+    length = GeneratedColumn(value_type=int, expression="json_extract(label, '$.span.coordinates.length')")
+    question = GeneratedColumn(value_type=type[SpanQuestion], expression="json_extract(label, '$.question.question')")
+    question_version = GeneratedColumn(value_type=str, expression="json_extract(label, '$.question.sha256')")
+    classifier = GeneratedColumn(value_type=type[Classifier], expression="json_extract(label, '$.classifier.classifier')")
+    classifier_pin = GeneratedColumn(value_type=str, expression="json_extract(label, '$.classifier.pin')")
+    label_kind = GeneratedColumn(value_type=type[SpanLabel], expression="json_extract(label, '$.kind')")
 
     address: ClassVar[tuple[str, ...]] = (
         "segment_digest", "offset", "length", "question", "question_version", "classifier", "classifier_pin")
@@ -56,15 +56,15 @@ class AnnotationRequestsRow(CoordinatorTable, TypedTable):
     outcome: AnnotationOutcome
     created_at_ms: int
     id: int | None = field(default=None, metadata={"sql": Column(primary_key=True, auto_increment=True)})
-    segment_digest: str = GeneratedColumn(expression="json_extract(request, '$.span.segment_sha256')").field()
-    offset: int = GeneratedColumn(expression="json_extract(request, '$.span.coordinates.offset')").field()
-    length: int = GeneratedColumn(expression="json_extract(request, '$.span.coordinates.length')").field()
-    question: type[SpanQuestion] = GeneratedColumn(expression="json_extract(request, '$.question.question')").field()
-    question_version: str = GeneratedColumn(expression="json_extract(request, '$.question.sha256')").field()
-    classifier: type[Classifier] = GeneratedColumn(expression="json_extract(request, '$.classifier.classifier')").field()
-    classifier_pin: str = GeneratedColumn(expression="json_extract(request, '$.classifier.pin')").field()
+    segment_digest = GeneratedColumn(value_type=str, expression="json_extract(request, '$.span.segment_sha256')")
+    offset = GeneratedColumn(value_type=int, expression="json_extract(request, '$.span.coordinates.offset')")
+    length = GeneratedColumn(value_type=int, expression="json_extract(request, '$.span.coordinates.length')")
+    question = GeneratedColumn(value_type=type[SpanQuestion], expression="json_extract(request, '$.question.question')")
+    question_version = GeneratedColumn(value_type=str, expression="json_extract(request, '$.question.sha256')")
+    classifier = GeneratedColumn(value_type=type[Classifier], expression="json_extract(request, '$.classifier.classifier')")
+    classifier_pin = GeneratedColumn(value_type=str, expression="json_extract(request, '$.classifier.pin')")
 
-    grant_reference: MessageReference = GeneratedColumn(expression="json_extract(request, '$.grant')").field()
+    grant_reference = GeneratedColumn(value_type=MessageReference, expression="json_extract(request, '$.grant')")
 
     unique = (SpanAnnotationsRow.address,)
     indexes = (Index(("grant_reference", "created_at_ms")),)
