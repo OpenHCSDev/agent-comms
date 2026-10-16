@@ -871,6 +871,7 @@ class MonitorFrame(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     protocol: Literal['agent-comms-monitor'] = MONITOR_PROTOCOL
+    wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(MONITOR_PROTOCOL) + ','
 
     @abstractmethod
     async def confirm(self, bridge: TranscriptBridge, record: ObservedMonitor) -> None: ...

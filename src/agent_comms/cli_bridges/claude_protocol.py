@@ -78,8 +78,7 @@ class ClaudeMonitorFrame(IncomingFrame):
 
     @classmethod
     def decode_line(cls, line: str) -> MonitorFrame:
-        probe_prefix = '{"protocol":' + json.dumps(MonitorProbe.model_fields['protocol'].default) + ','
-        if line.startswith(probe_prefix):
+        if line.startswith(MonitorProbe.wire_prefix):
             return MONITOR_FRAME.validate_json(line)
         # Classify the external header before decoding its JSON string. Old or
         # unrelated monitor text, including truncated text, is a named foreign frame.
