@@ -65,7 +65,6 @@ def main(root: Path) -> None:
         "physical_limit": WireRecord.max_row_bytes, "row_bytes": len(before),
         "batch_bytes": 1, "complete_read": True, "candidate_page": True,
         "original_written_bytes_unchanged": True, "provider_called": False,
-        "installed_acceptance": False,
     }
     (root / "result.json").write_text(json.dumps(receipt, indent=2) + "\n")
     print(json.dumps(receipt))
