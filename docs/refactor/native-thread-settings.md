@@ -1,7 +1,8 @@
 # Native binary and argv: explicit typed settings
 
 Implementation owner: core-goal-retry. GoalDetails (#958/#689) stays paused.
-Draft #978 is not installed or accepted.
+The current-main branch supersedes draft #978 without rewriting its published
+checkpoint history. Neither branch is installed or accepted.
 
 ## Source and ownership
 
@@ -84,6 +85,12 @@ installed baseline already added `new` and changed fork/target command help.
 The snapshot now reflects those accepted declarations plus the new global flags;
 none of the candidate subcommand help differs from the installed baseline.
 
-Focused checks, receiving, private wheel installation, fresh native worker start
-and current-main integration remain unfinished. No merge, default installation,
+Current main through `fe731cd23` is integrated by rebasing this new branch; its
+claim-carry deletion and current report-producer fixes are preserved. The follow-up
+static constructor census has zero missing typed compositions. The exact requested
+`git diff origin/main -- src tools | rg '^\\+.*(\\| None|NativeThreadDefaults\\(\\))'`
+check has no output.
+
+Focused checks, receiving, private wheel installation and fresh native worker start
+remain unfinished. No merge, default installation,
 provider-answer or physical UI acceptance is claimed.
