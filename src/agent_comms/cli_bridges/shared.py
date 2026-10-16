@@ -652,7 +652,7 @@ class Send(Operation):
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--to', required=True)
         parser.add_argument('--body', required=True)
-        parser.add_argument('--type', default=InfoKind.declared_name, choices=MessageKind.sendable_names())
+        parser.add_argument('--type', default=FieldCodec.encode(InfoKind), choices=MessageKind.sendable_names())
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Send:
