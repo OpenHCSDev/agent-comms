@@ -21,6 +21,7 @@ from typing import Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_ori
 
 from .activity import ActivityState
 from .channels import Channel
+from .channel_targets import CommandTarget
 from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
@@ -260,7 +261,7 @@ class TargetBatchResult:
 class TargetEdit(Command):
     """Accepted editor values use the original declaration and fresh binding."""
     declaration: type[CliCommand]
-    target: str | tuple[str, ...] | None
+    target: CommandTarget | str | tuple[CommandTarget | str, ...]
     arguments: dict[str, str]
     confirmed: bool = False
     channel: str | dict[str, tuple[str, ...]] | None = None
@@ -327,11 +328,11 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return cls
 
     @staticmethod
-    def selected_targets(target: str | tuple[str, ...]) -> tuple[str, ...]:
-        selected = (target,) if isinstance(target, str) else target
-        if not selected or not all(isinstance(name, str) and name for name in selected):
-            raise ValueError('Select at least one named target')
-        return tuple(dict.fromkeys(selected))
+    def selected_targets(target: CommandTarget | str | tuple[CommandTarget | str, ...]) -> tuple[CommandTarget, ...]:
+        selected = target if isinstance(target, tuple) else (target,)
+        if not selected:
+            raise ValueError('Select at least one target')
+        return tuple(dict.fromkeys(CommandTarget.named(item) for item in selected))
 
     @classmethod
     def selection_channels(cls, channel: str | dict[str, tuple[str, ...]] | None,
@@ -364,30 +365,21 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                          comms, thread, snapshot.status(thread.name), channel.name))
 
     @classmethod
-    def bindings(cls, comms: Comms, target: str, channel: str | None = None,
+    def bindings(cls, comms: Comms, target: CommandTarget | str, channel: str | None = None,
                  *, snapshot: RegistrySnapshot | None = None,
                  catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
-        from .channel_targets import is_channel_target
-        if is_channel_target(target):
-            if catalog is None:
-                catalog = comms.channels.catalog.read()
-            return cls.channel_bindings(comms, catalog.resolve(target), snapshot=snapshot)
+        target = CommandTarget.named(target)
         if snapshot is None:
             snapshot = comms.registry.snapshot()
-        thread = snapshot.require(target)
-        return cls.thread_bindings(comms, thread, snapshot.status(thread.name), channel,
-                                   catalog=catalog)
+        if catalog is None and target.needs_catalog:
+            catalog = comms.channels.catalog.read()
+        return target.bindings(cls, comms, channel, snapshot, catalog)
 
     @classmethod
-    def target_catalog(cls, comms: Comms, target: str | tuple[str, ...] | None,
+    def target_catalog(cls, comms: Comms, target: CommandTarget | str | tuple[CommandTarget | str, ...],
                        channel: str | dict[str, tuple[str, ...]] | None = None,
                        *, project: str) -> tuple[TargetAction, ...]:
-        if target is None:
-            return tuple(TargetAction((command,), ())
-                         for member in cls.members_with(cls)
-                         for command in member.project_bindings(comms, project))
         selected = cls.selected_targets(target)
-        from .channel_targets import is_channel_target
         # A catalog is one observation. Declarations borrow its original store
         # resources; execution still acquires and rebinds current state.
         snapshot = comms.registry.snapshot()
@@ -395,17 +387,15 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         # thread. Discovery has no thread actions for absent members; execution
         # still requires its original current binding. Resolve aliases through
         # the acquired namespace rather than reserving a special actor spelling.
-        available_targets = tuple(name for name in selected
-                                  if is_channel_target(name)
-                                  or snapshot.canonical_name(name) in snapshot.threads)
+        available_targets = tuple(item for item in selected if item.available(snapshot))
         catalog = (comms.channels.catalog.read()
-                   if channel or any(is_channel_target(name) for name in selected) else None)
+                   if channel or any(item.needs_catalog for item in selected) else None)
         grouped: dict[type[CliCommand], list[CliCommand]] = {}
         for member in cls.members_with(cls):
             if len(selected) > 1 and not member.multiple_targets:
                 continue
             for name in available_targets:
-                for context in member.selection_channels(channel, name):
+                for context in name.contexts(member, channel):
                     try:
                         available = member.bindings(
                             comms, name, context, snapshot=snapshot, catalog=catalog)
@@ -416,12 +406,13 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                     for command in available:
                         declaration = member.catalog_declaration() if len(selected) > 1 else member
                         commands = grouped.setdefault(declaration, [])
-                        bound = command.for_editor(comms, name, project)
+                        bound = command.for_editor(comms, name.name, project)
                         if bound not in commands:
                             commands.append(bound)
-        return tuple(TargetAction(tuple(commands), selected) for commands in grouped.values())
+        names = tuple(name for item in selected for name in item.names)
+        return tuple(TargetAction(tuple(commands), names) for commands in grouped.values())
 
-    def for_editor(self, comms: Comms, target: str | None, project: str) -> Self:
+    def for_editor(self, comms: Comms, target: str, project: str) -> Self:
         return self
 
     @property
@@ -431,9 +422,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return tuple(TargetField(item, hints[item.name], getattr(self, item.name))
                      for item in fields(self) if not item.metadata['target_bound'])
 
-    def describe(self, comms: Comms, target: str | None, project: str) -> TargetAction:
-        bound = self.for_editor(comms, target, project)
-        return TargetAction((bound,), (target,) if target is not None else ())
+    def describe(self, comms: Comms, target: CommandTarget | str, project: str) -> TargetAction:
+        target = CommandTarget.named(target)
+        bound = self.for_editor(comms, target.name, project)
+        return TargetAction((bound,), target.names)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
@@ -501,28 +493,22 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                                        **FieldCodec.encode(captured), **arguments})
 
     @classmethod
-    def execute_target(cls, comms: Comms, target: str | tuple[str, ...] | None, arguments: dict[str, object],
+    def execute_target(cls, comms: Comms, target: CommandTarget | str | tuple[CommandTarget | str, ...], arguments: dict[str, object],
                        *, confirmed: bool = False,
                        channel: str | dict[str, tuple[str, ...]] | None = None,
                        project: str | None = None) -> object:
         project = os.getcwd() if project is None else project
-        if target is None:
-            bindings = cls.project_bindings(comms, project)
-            if len(bindings) != 1:
-                raise ValueError('This action is no longer available for the project')
-            return bindings[0].edited(arguments).with_confirmation(confirmed).apply(comms)
         selected = cls.selected_targets(target)
-        from .channel_targets import is_channel_target
         snapshot = comms.registry.snapshot()
         catalog = (comms.channels.catalog.read()
-                   if channel or any(is_channel_target(name) for name in selected) else None)
-        if isinstance(target, str) or (len(selected) == 1 and not cls.multiple_targets):
+                   if channel or any(item.needs_catalog for item in selected) else None)
+        if not isinstance(target, tuple) or (len(selected) == 1 and not cls.multiple_targets):
             name = selected[0]
-            bindings = tuple(command for context in cls.selection_channels(channel, name)
+            bindings = tuple(command for context in name.contexts(cls, channel)
                              for command in cls.bindings(comms, name, context,
                                                          snapshot=snapshot, catalog=catalog))
             if len(bindings) == 1:
-                return bindings[0].for_editor(comms, name, project).edited(arguments).with_confirmation(confirmed).apply(comms)
+                return bindings[0].for_editor(comms, name.name, project).edited(arguments).with_confirmation(confirmed).apply(comms)
             if not bindings:
                 raise ValueError('This action is no longer available for the target')
         if not cls.multiple_targets:
@@ -531,9 +517,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                               if member.catalog_declaration() is cls)
                         if cls.catalog_declaration() is cls else (cls,))
         outcomes: list[tuple[int, TargetCompleted | TargetFailed]] = []
-        planned: list[tuple[int, str, str | None, CliCommand]] = []
+        planned: list[tuple[int, CommandTarget, str | None, CliCommand]] = []
         for name in selected:
-            for context in cls.selection_channels(channel, name):
+            for context in name.contexts(cls, channel):
                 try:
                     bindings = tuple(command for member in declarations
                                      for command in member.bindings(comms, name, context,
@@ -543,22 +529,22 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                         raise ValueError(f'This action is no longer available for {name}{scope}')
                 except Exception as error:
                     outcomes.append((len(planned) + len(outcomes),
-                                     TargetFailed(name, type(error).__name__, str(error))))
+                                     TargetFailed(name.name, type(error).__name__, str(error))))
                     continue
                 for command in bindings:
                     if not any(command == previous for _, _, _, previous in planned):
                         planned.append((len(planned) + len(outcomes), name, context, command))
         # Parameters and every existing warning are admitted before any write.
-        edited = tuple(command.for_editor(comms, name, project).edited(arguments).with_confirmation(confirmed)
+        edited = tuple(command.for_editor(comms, name.name, project).edited(arguments).with_confirmation(confirmed)
                        for _, name, _, command in planned)
         for (position, name, context, original), command in zip(planned, edited, strict=True):
             try:
                 if original not in type(original).bindings(comms, name, context):
                     scope = f' in {context}' if context is not None else ''
                     raise ValueError(f'The original binding for {name}{scope} changed; refresh the selection')
-                result = TargetCompleted(name, command, command.apply(comms))
+                result = TargetCompleted(name.name, command, command.apply(comms))
             except Exception as error:
-                result = TargetFailed(name, type(error).__name__, str(error))
+                result = TargetFailed(name.name, type(error).__name__, str(error))
             outcomes.append((position, result))
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
@@ -1367,7 +1353,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
     pi_bin: str = option("--pi-bin", default_factory=NativeArguments.configured_binary)
-    project: str | None = option("--project", default=None)
+    project: str = option("--project", parser_default_factory=os.getcwd)
 
     @classmethod
     def project_bindings(cls, comms, project):
@@ -1520,11 +1506,12 @@ class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
     project: str = option('--project', default_factory=os.getcwd)
     channel: str | None = option('--channel', default=None)
     help = 'List applicable operations and their declared parameters'
-    target: str | tuple[str, ...] | None = option('--target', '--targets', nargs='+', default=None,
-        normalize=lambda names: names[0] if names is not None and len(names) == 1 else names)
+    target: tuple[str, ...] = option('--target', '--targets', nargs='+', default_factory=tuple,
+        normalize=list)
 
     def apply(self, ctx: Comms) -> tuple[TargetAction, ...]:
-        return CliCommand.target_catalog(ctx, self.target, self.channel, project=self.project)
+        return CliCommand.target_catalog(ctx, CommandTarget.arguments(self.target, self.project),
+                                        self.channel, project=self.project)
 
     def encode_result(self, result: tuple[TargetAction, ...]) -> object:
         return {'actions': [action.encode() for action in result]}
@@ -1534,8 +1521,9 @@ class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
 class TargetActionCliCommand(CliCommand, declared_name='target-action'):
     channel: str | None = option('--channel', default=None)
     help = 'Execute a declared operation against its current target'
-    target: str | tuple[str, ...] | None = option('--target', '--targets', nargs='+', default=None,
-        normalize=lambda names: names[0] if names is not None and len(names) == 1 else names)
+    project: str = option('--project', default_factory=os.getcwd)
+    target: tuple[str, ...] = option('--target', '--targets', nargs='+', default_factory=tuple,
+        normalize=list)
     operation: str = option('--operation')
     arguments: dict[str, Any] = option('--arguments', default_factory=dict,
                                      parser_default='{}', normalize=_json_object)
@@ -1543,7 +1531,8 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
 
     def apply(self, ctx: Comms) -> object:
         return CliCommand.decode(self.operation).execute_target(
-            ctx, self.target, self.arguments, confirmed=self.confirmed, channel=self.channel)
+            ctx, CommandTarget.arguments(self.target, self.project), self.arguments,
+            confirmed=self.confirmed, channel=self.channel, project=self.project)
 
     def result_exit_code(self, result: object) -> int:
         return int(isinstance(result, TargetBatchResult) and not result.successful)
@@ -1735,8 +1724,9 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
     help = 'Execute a declared operation using its original CLI field parsers'
 
     def apply(self, ctx: Comms) -> object:
-        return TargetEdit(CliCommand.decode(self.operation), self.target, self.arguments,
-                          self.confirmed, self.channel).apply(ctx)
+        return TargetEdit(CliCommand.decode(self.operation),
+                          CommandTarget.arguments(self.target, self.project), self.arguments,
+                          self.confirmed, self.channel, self.project).apply(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)

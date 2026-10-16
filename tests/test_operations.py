@@ -459,16 +459,16 @@ class TestThreadOps:
 
 class TestFork:
     def test_spec_allows_an_empty_task_and_uses_an_explicit_prompt(self):
-        assert ForkSpec(name="x", parent="p").initial_prompt == ""
-        assert ForkSpec(name="x", parent="p", prompt="first input").initial_prompt == "first input"
+        assert ForkSpec(name="x", parent="p", project="/project").initial_prompt == ""
+        assert ForkSpec(name="x", parent="p", project="/project", prompt="first input").initial_prompt == "first input"
 
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(RelationViolationError, match="session file"):
-            wired.threads.create(ForkSpec(name="child", parent="PR111", task="t"))
+            wired.threads.create(ForkSpec(name="child", parent="PR111", project="/project", task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.threads.create(ForkSpec(name="child", parent="ghost", task="t"))
+            wired.threads.create(ForkSpec(name="child", parent="ghost", project="/project", task="t"))
 
 
 class TestLedgerOps:

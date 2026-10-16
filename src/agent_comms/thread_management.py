@@ -62,13 +62,13 @@ def _session_model(session_file: Path) -> tuple[str, str] | None:
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
-    """One creation declaration; source preparation precedes locked admission."""
+    """Prepares the session outside the wire lock, then registers the thread under it."""
 
     name: str
+    project: str
     task: str = ""
     tags: frozenset[str] | None = None
     prompt: str | None = None
-    project: str | None = None
 
     @property
     def initial_prompt(self) -> str:
@@ -78,7 +78,7 @@ class NewThreadSpec:
     def prepared(self, threads: ThreadManagement, pi_bin: str) -> Iterator[Thread]:
         from .fresh_private_session import create_fresh_private_session
 
-        project = Path(self.project or os.getcwd()).expanduser().resolve(strict=True)
+        project = Path(self.project).expanduser().resolve(strict=True)
         if not project.is_dir():
             raise ValueError(f"Project path is not a directory: {project}")
         arguments = NativeArguments.configured()
@@ -102,7 +102,7 @@ class ForkSpec(NewThreadSpec):
         return Thread(
             name=self.name,
             tags=parent.tags if self.tags is None else self.tags,
-            worktree=str(Path(self.project).expanduser().resolve(strict=True)) if self.project else parent.worktree,
+            worktree=self.project,
             parent=parent.name,
             task=self.task,
             session_file=session_file,

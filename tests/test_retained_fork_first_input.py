@@ -92,7 +92,7 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
         child = await asyncio.to_thread(
             comms.threads.create,
             ForkSpec(
-                name="retained-child", parent="retained-parent", task="One new isolated fork diagnostic " + marker
+                name="retained-child", parent="retained-parent", project=str(fixture.project), task="One new isolated fork diagnostic " + marker
             ),
             launcher,
         )

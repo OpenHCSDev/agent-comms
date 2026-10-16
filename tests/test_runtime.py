@@ -526,5 +526,5 @@ def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
         )
     )
     with pytest.raises(RelationViolationError, match="already exists"):
-        comms.threads.create(ForkSpec(name="child", parent="parent", task="duplicate"))
+        comms.threads.create(ForkSpec(name="child", parent="parent", project=str(tmp_path), task="duplicate"))
     assert comms.registry.require("child").pid == os.getpid()

@@ -201,6 +201,7 @@ class TestDeclaredTargetActions:
         from types import SimpleNamespace
         from agent_comms.cli_commands import CliCommand, NewThreadCliCommand, ForkCliCommand
         from agent_comms.thread_management import NewThreadSpec, ForkSpec
+        from agent_comms.channel_targets import ProjectTarget
         from agent_comms.threads import Thread
         from agent_comms.comms import wire
 
@@ -210,7 +211,7 @@ class TestDeclaredTargetActions:
         assert all(inherited[name] is item for name, item in shared.items())
         assert ForkCliCommand.apply is NewThreadCliCommand.apply
         comms = wire(tmp_path)
-        actions = CliCommand.target_catalog(comms, None, project=str(tmp_path))
+        actions = CliCommand.target_catalog(comms, ProjectTarget(str(tmp_path)), project=str(tmp_path))
         assert [action.declaration for action in actions] == [NewThreadCliCommand]
         assert actions[0].targets == ()
         assert actions[0].bound[0].project == str(tmp_path)

@@ -844,6 +844,7 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
         from .cli_commands import ForkCliCommand
 
         return ForkCliCommand(name=self.name, parent=self.parent, task=self.task,
+                              project=comms.registry.require(self.parent).worktree,
                               tags=_tag_set(self.tags) if self.tags is not None else None,
                               prompt=self.prompt).apply(comms)
 

@@ -79,6 +79,7 @@ class ForkOwnerCase(OwnerAdmissionCase):
             comms.threads.create,
             ForkSpec(
                 name="physical-child",
+                project=comms.registry.require("physical-parent").worktree,
                 parent="physical-parent",
                 task="hey Boss",
             ),
