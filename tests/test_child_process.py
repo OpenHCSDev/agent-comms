@@ -18,6 +18,9 @@ from agent_comms.child_process import (
     AttachedChild,
     BoundedRun,
     ChildOutcome,
+    ChildRetirementCancelled,
+    ChildRetirementError,
+    ChildRetirementFailed,
     ExitedOutcome,
     IdentityMismatchError,
     ObservedProcess,
@@ -115,6 +118,71 @@ async def test_real_execution_and_external_returncode_family() -> None:
         assert result.outcome == ExitedOutcome(code)
         assert result.stdout == b"ok\n"
         assert result.outcome.successful == (code == 0)
+
+
+@pytest.mark.asyncio
+async def test_exchange_borrows_result_but_retains_cleanup_on_body_error(monkeypatch) -> None:
+    retired = []
+    original_stop = AttachedChild.stop
+
+    async def stop(child):
+        outcome = await original_stop(child)
+        retired.append(child)
+        return outcome
+
+    monkeypatch.setattr(AttachedChild, "stop", stop)
+    with pytest.raises(LookupError, match="consumer failed"):
+        async with BoundedRun.exchange(
+            (sys.executable, "-c", 'print("verified")'), timeout=5
+        ) as result:
+            assert result.outcome == ExitedOutcome(0)
+            assert result.stdout == b"verified\n"
+            assert retired == []
+            raise LookupError("consumer failed")
+    assert len(retired) == 1
+    assert retired[0].retired
+
+
+@pytest.mark.asyncio
+async def test_exchange_deadline_cancels_launch_verification_and_retires_child(delayed_launch) -> None:
+    command = (sys.executable, "-c", "import time; time.sleep(60)")
+    platform = Platform.current()
+    captured, verified = delayed_launch
+    # This outer bound must fail the test, not masquerade as the operation's expiry.
+    async with asyncio.timeout(5):
+        with pytest.raises(TimeoutError):
+            async with BoundedRun.exchange(command, timeout=1):
+                pytest.fail("expired launch admitted a result")
+    assert verified == [True]
+    assert len(captured) == 1
+    assert not platform.matches(captured[0])
+    assert not platform.group_members(captured[0])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fault", [RuntimeError, TimeoutError])
+@pytest.mark.parametrize("cancel", [False, True])
+async def test_retirement_owner_preserves_failure_and_cancellation(monkeypatch, fault, cancel):
+    child = await AttachedChild.start((sys.executable, "-c", "pass"))
+    original_stop = child._stop
+
+    async def failing_receipt():
+        await original_stop()  # Retire the real child; inject a lost attestation safely.
+        if cancel:
+            operation.cancel()
+        raise fault("retirement receipt failed")
+
+    monkeypatch.setattr(child, "_stop", failing_receipt)
+    operation = asyncio.create_task(child.stop())
+    with pytest.raises(ChildRetirementError) as caught:
+        await operation
+    assert isinstance(caught.value, ChildRetirementCancelled) == cancel
+    assert isinstance(caught.value, ChildRetirementFailed) != cancel
+    assert isinstance(caught.value, asyncio.CancelledError) == cancel
+    assert isinstance(caught.value, Exception) != cancel
+    assert operation.cancelled() == cancel
+    assert isinstance(caught.value.__cause__, fault)
+    assert child.retired
 
 
 @pytest.mark.asyncio
@@ -329,7 +397,7 @@ def test_reservation_failure_never_executes_and_reaps_child(tmp_path: Path) -> N
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("shape", ["run", "session"])
+@pytest.mark.parametrize("shape", ["run", "session", "exchange"])
 async def test_repeated_cancellation_joins_real_tree_before_return(
     tmp_path: Path, shape: str
 ) -> None:
@@ -340,7 +408,7 @@ async def test_repeated_cancellation_joins_real_tree_before_return(
         if shape == "run":
             await BoundedRun.run(command, timeout=20)
         else:
-            async with BoundedRun.session(command, timeout=20):
+            async with getattr(BoundedRun, shape)(command, timeout=20):
                 await asyncio.Event().wait()
 
     task = asyncio.create_task(operation())

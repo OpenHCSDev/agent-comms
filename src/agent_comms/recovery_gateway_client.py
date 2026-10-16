@@ -16,9 +16,10 @@ import struct
 import sys
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, cast
+from typing import cast
 
 from .field_codec import FieldCodec
+from .pi_rpc import unique_fields
 from .private_path import PrivateDirectoryRole, PrivateSocketRole, TrustedAncestorRole
 from .recovery_projection import AvailableRecoveryProjection, RecoveryProjection, RecoveryRequest, UnavailableRecoveryProjection
 
@@ -33,15 +34,6 @@ def _valid_projection(value: object, thread: str) -> bool:
     except (TypeError, ValueError):
         return False
     return not isinstance(projection, AvailableRecoveryProjection) or projection.owner == thread
-
-
-def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("gateway response repeated a JSON key")
-        result[key] = value
-    return result
 
 
 def _private_socket(path: Path) -> bool:
@@ -122,7 +114,7 @@ async def read_gateway_projection(path: Path, thread: str) -> dict[str, object]:
             return dict(_UNAVAILABLE)
         if await asyncio.wait_for(reader.read(1), remaining()):
             return dict(_UNAVAILABLE)
-        value = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=_unique)
+        value = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=unique_fields)
         if not _valid_projection(value, thread):
             return dict(_UNAVAILABLE)
         return cast("dict[str, object]", value)
