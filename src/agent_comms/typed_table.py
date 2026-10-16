@@ -796,7 +796,10 @@ class TypedStore:
                     for row in self.rows:
                         row.create(connection)
                 connection.execute("COMMIT")
-                connection.execute("PRAGMA journal_mode=WAL")
+            if SQLiteJournalMode.read(connection.execute("PRAGMA journal_mode=WAL")) != [
+                SQLiteJournalMode("wal")
+            ]:
+                raise RelationViolationError(f"{self.filename} requires WAL")
             return connection
         except BaseException:
             connection.close()
