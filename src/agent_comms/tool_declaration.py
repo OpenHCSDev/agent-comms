@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, ClassVar
+from typing import ClassVar
 
 from .agent_events import ToolStart
 from .declared_family import DeclaredFamily
@@ -29,14 +29,14 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def start(cls, call_id: str, name: str, arguments: dict[str, Any]) -> ToolStart:
+    def start(cls, call_id: str, name: str, arguments: dict[str, object]) -> ToolStart:
         declaration = cls.for_name(name)
         detail = declaration.detail(arguments)
         title = declaration.label + (" " + detail.strip() if detail else "")
         return ToolStart(call_id, name, title, arguments, declaration.acp_kind)
 
     @classmethod
-    def detail(cls, arguments: dict[str, Any]) -> str:
+    def detail(cls, arguments: dict[str, object]) -> str:
         return ""
 
     @classmethod
