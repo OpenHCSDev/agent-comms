@@ -55,9 +55,26 @@ not a mutable TypeScript path. Native direct-module copying is derived from
 the existing manifest. Python and Node helper transports share the
 existing bounded exchange and result decoder rather than copying it.
 
+## Current verification checkpoint
+
+P55's Core/ACP split and the final native login pin are integrated normally.
+The frozen SDK is `/home/ts/wt/core-envelope-895/.native-login-acceptance/node_modules/@earendil-works/pi-coding-agent`.
+Shepherd verified installed saved ACP history, required Core entries once under
+`--no-extensions`, a real read and project IPC, two localhost replies, no paid
+calls, and retired child/socket resources. Receipt:
+`/home/ts/.cache/agent-scratch/codex-shepherd-envelope-895/project-sync-installed-h/result.json`.
+This does not accept fork, TRIAGE→FULL or login.
+
+The bounded source batch reached 67 passed, 11 skipped and 3 deselected. One
+login fixture still lacked its private protocol marker; the fixture now creates
+that marker through Messaging before pinning its route, and awaits recheck.
+The 22 tracked-launch API cases now pass with explicit runtime, arguments,
+provider and model. Fsync and unsafe-source controls remain intact. Additional
+native factory/bootstrap/fixture consumers remain unfinished.
+
 ## Remaining acceptance
 
-1. Integrate published caller/acquisition/shutdown and P55 checkpoints normally.
+1. Integrate P55's final plain-choice and paired Toad checkpoints normally.
 2. Migrate the affected fixtures without discarding fsync, failed-launch,
    unsafe-source or explicit offline restrictions; batch focused checks/ratchet.
 3. Rebuild the native artifact for alias identity, then verify the exact wheel.

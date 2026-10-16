@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
@@ -199,7 +201,7 @@ async def test_unprivate_session_rejected_before_pi_process_starts(
     monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable):
         await TrackedTurnSession.execute(
-            tmp_path,
+            tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture",
             input_id=INPUT_ID,
             prompt="Never disclose input ID",
             worktree=tmp_path,
@@ -233,7 +235,7 @@ def test_any_prelaunch_fsync_failure_denies_launch(
     sessions = tmp_path / "sessions"
     with pytest.raises(NativePiUnavailable, match="could not be committed"):
         NativePiRpcLaunch.tracked(
-            tmp_path,
+            tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture",
             worktree=tmp_path,
             session=SelectedSession(sessions),
             session_context=(DoctrineSegment.capture(),),
@@ -268,13 +270,13 @@ def test_nested_session_directory_entries_are_synced_from_leaf_to_private_root(
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", record_fsync)
-    launch = NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+    launch = NativePiRpcLaunch.tracked(tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture", worktree=tmp_path, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert launch.session.directory == sessions
     assert stat.S_IMODE(nested.stat().st_mode) == 0o700
     assert stat.S_IMODE(sessions.stat().st_mode) == 0o700
     assert observed.index(root) < observed.index(nested) < observed.index(sessions)
     first_count = len(observed)
-    NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+    NativePiRpcLaunch.tracked(tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture", worktree=tmp_path, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert root in observed[first_count:] and nested in observed[first_count:]
     assert observed[first_count:].index(nested) < observed[first_count:].index(sessions)
 
@@ -316,13 +318,14 @@ async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_e
     monkeypatch.setattr(native.os, "fsync", fail_once)
     monkeypatch.setattr(AttachedChild, "start", launch)
     request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path,
+                   provider="fixture", model="fixture",
                    session=SelectedSession(sessions), pi_session=PersistentPiSession())
     with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
-        await TrackedTurnSession.execute(tmp_path, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+        await TrackedTurnSession.execute(tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert launches == 0
     assert rejected and (nested if failed_parent == "root" else sessions).is_dir()
     with pytest.raises(RuntimeError, match="re-synchronizing visible directories"):
-        await TrackedTurnSession.execute(tmp_path, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+        await TrackedTurnSession.execute(tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert launches == 1
     assert successful_target_syncs >= 1
 
@@ -332,7 +335,7 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
 
     sessions = tmp_path / "sessions"
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+    NativePiRpcLaunch.tracked(tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture", worktree=tmp_path, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     original_fsync = native.os.fsync
 
     def fail_parent(descriptor):
@@ -349,7 +352,7 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
     monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
         await TrackedTurnSession.execute(
-            tmp_path,
+            tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture",
             input_id=INPUT_ID,
             prompt="no provider",
             worktree=tmp_path,
@@ -374,7 +377,7 @@ async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: P
     monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable, match="unsafe ancestor"):
         await TrackedTurnSession.execute(
-            tmp_path,
+            tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture",
             input_id=INPUT_ID,
             prompt="no provider",
             worktree=tmp_path,
@@ -411,7 +414,7 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(
     monkeypatch.setattr(AttachedChild, "start", launch)
     task = asyncio.create_task(
         TrackedTurnSession.execute(
-            tmp_path,
+            tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture",
             input_id=INPUT_ID,
             prompt="no output",
             worktree=tmp_path,
@@ -491,7 +494,7 @@ send({'type':'agent_settled'})
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", launch)
     operation = TrackedTurnSession.execute(
-        tmp_path,
+        tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture",
         input_id=INPUT_ID,
         prompt="Decide IGNORE",
         worktree=tmp_path,
@@ -570,7 +573,7 @@ async def test_selected_header_marker_denies_path_only_legacy_reopen_before_spaw
     monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable, match="cannot reopen without exact first-start token"):
         await TrackedTurnSession.execute(
-            tmp_path,
+            tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture",
             input_id=INPUT_ID,
             prompt="do not send",
             worktree=tmp_path,
@@ -607,7 +610,7 @@ sys.stdin.read()
     monkeypatch.setattr(AttachedChild, "start", launch)
     with pytest.raises(NativePiUnavailable, match="capability preflight failed"):
         await TrackedTurnSession.execute(
-            tmp_path,
+            tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture",
             input_id=INPUT_ID,
             prompt="must not send",
             worktree=tmp_path,
@@ -632,7 +635,7 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_resources(
     sessions = tmp_path / "sessions"
     monkeypatch.setenv("AGENT_COMMS_THREAD", "must-not-leak")
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "wrong-global"))
-    launch = NativePiRpcLaunch.tracked(Path(selected), worktree=worktree, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+    launch = NativePiRpcLaunch.tracked(Path(selected), runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture", worktree=worktree, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert str(_trusted_package(Path(selected))) in launch.argv
     assert launch.argv[launch.argv.index("--mode") + 1] == "rpc"
     assert "--no-approve" in launch.argv
@@ -653,7 +656,7 @@ def test_missing_native_model_fails_before_any_session_side_effect(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: Path("/bin/true"))
     with pytest.raises(NativePiUnavailable, match="explicit provider and model"):
         NativePiRpcLaunch.tracked(
-            tmp_path,
+            tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments,
             worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
             provider=provider,
@@ -917,7 +920,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             model=model,
         )
         if outcome in {"cancel-large", "eof-large"}:
-            task = asyncio.create_task(TrackedTurnSession.execute(package, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject()))
+            task = asyncio.create_task(TrackedTurnSession.execute(package, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject()))
             if outcome == "cancel-large":
                 try:
                     await asyncio.wait_for(oversized.wait(), 10)
@@ -943,7 +946,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             from agent_comms.diagnostics import record_terminal_failure
 
             with pytest.raises(NativePiPromptRejected) as failed:
-                await TrackedTurnSession.execute(package, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+                await TrackedTurnSession.execute(package, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
             response = failed.value.rejected_response
             assert response.id == "native-prompt" and response.success is False
             assert "No API key" in response.error
@@ -965,7 +968,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             assert diagnostic.stat().st_mode & 0o777 == 0o600
             return
         if outcome in {"stop", "configured", "restarted", "large"}:
-            result = await TrackedTurnSession.execute(package, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+            result = await TrackedTurnSession.execute(package, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
             assert "prompt_accepted" in durable_phases
             assert "model_running" in durable_phases
             durable_attempt.finish()
@@ -984,7 +987,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
         else:
             failure = "429 rate limit" if outcome == "429" else "did not finish successfully"
             with pytest.raises(NativePiTerminalFailure, match=failure) as failed:
-                await TrackedTurnSession.execute(package, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+                await TrackedTurnSession.execute(package, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
             assert failed.value.context.input_id == INPUT_ID
             assert "agent_settled" in observed
         attempts = 4 if outcome == "429" else 1
@@ -1035,7 +1038,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
                     ),
                 ),
             )
-            reopened = await TrackedTurnSession.execute(package, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+            reopened = await TrackedTurnSession.execute(package, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
             assert reopened.text == "X"
             assert reopened.context.input_id == "b" * 32
             assert reopened.context.session_file == result.context.session_file
@@ -1078,7 +1081,7 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
     (stock / "unreviewed.js").write_text("not the pinned package")
     with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
         await TrackedTurnSession.execute(
-            stock,
+            stock, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, provider="fixture", model="fixture",
             input_id=INPUT_ID,
             prompt="do not send",
             worktree=tmp_path,
@@ -1095,9 +1098,16 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
     from agent_comms.registration import Registration
     from agent_comms.threads import Thread
     from agent_comms.turn_context import TurnContext
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.native_project import ManagedNativeProject
+    from agent_comms.native_tools import NativeRequestTools
+    from agent_comms.registry_store import RegistryStore
 
-    owner = Thread("owner", frozenset(), str(tmp_path), created_at=1.0)
+    owner = Thread("owner", frozenset(), str(tmp_path), created_at=1.0,
+                   process_identity=ProcessIdentity.capture(os.getpid()))
     Registration(tmp_path / "registry.json").register(owner)
+    entry = RegistryStore(tmp_path / "registry.json").read_entry(owner.name).entry
+    project = ManagedNativeProject.from_entry(tmp_path, entry)
     launch = private_nk_entrypoint.PrivateNkLaunch(tmp_path, "a" * 32, tmp_path / "pi", None)
     monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: launch))
     verified = []
@@ -1134,10 +1144,16 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
         "rpc",
         "--model",
         "owner/model",
+        "--extension",
+        str(NativeRequestTools.native_extension(launch.native_package)),
+        "--extension",
+        str(project.native_extension(launch.native_package)),
+        *owner.incarnation.cli_arguments,
         "--append-system-prompt",
         str(native_pi.OWNER_INSTRUCTIONS.resolve()),
         "--append-system-prompt",
         TurnContext.render_segments(TurnContext.session_segments(owner)).text,
+        *project.cli_arguments,
     ]
     assert environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] == str(tmp_path / "canonical")
     assert "NODE_OPTIONS" not in environment
@@ -1195,7 +1211,7 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
         "SECRET provider response including prompt data", context, "provider", "model",
         ModelRequestFailed("SECRET provider response including prompt data"),
     )
-    assert failed.public_message == "provider/model: provider request failed."
+    assert failed.public_message == "provider/model: request failed."
     assert "SECRET" not in failed.public_message
     usage = NativePiTerminalFailure(
         "Codex error: The usage limit has been reached", context, "openai-codex", "gpt-6-sol",

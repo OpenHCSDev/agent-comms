@@ -115,7 +115,7 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
     assert selected.model == "response-local/fixture" and selected.thinking == "off"
     assert selected.rpc() == (
         "--offline",
-        "-e",
+        "--extension",
         "extension.mjs",
         "--provider",
         "response-local",
@@ -129,6 +129,20 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
     assert selected.with_thinking(None).thinking is None
     assert arguments.model == "original/old/model"
     assert NativeArguments.parse(("--model", "local/fixture")).model == "local/fixture"
+
+
+def test_owned_turn_replaces_tool_policy_without_enabling_discovery():
+    arguments = NativeArguments.parse((
+        "--offline", "--no-extensions", "--tools", "read,bash",
+        "--exclude-tools", "edit", "--no-tools", "--no-builtin-tools",
+        "-e", "user.mjs", "--extension", "core.mjs",
+    ))
+    selected = arguments.for_owned_turn().with_extensions(Path("core.mjs"), Path("project.mjs"))
+    assert selected.argv == (
+        "--offline", "--no-extensions", "--extension", "core.mjs",
+        "--extension", "project.mjs", "--extension", "user.mjs",
+    )
+    assert arguments.argv != selected.argv
 
 
 def test_option_declaration_extends_consumption_rendering_and_mode_validation():
