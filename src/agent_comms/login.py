@@ -19,10 +19,7 @@ def run_login(provider: str = "", *, settings: NativeThreadDefaults) -> int:
         "PI_TASK",
         "PI_PROMPT",
         "PI_WORKTREE",
-        RestartEnvironment.owner_key,
         "AGENT_COMMS_MANAGED",
-        "AGENT_COMMS_PROJECT_SOCKET",
-        "AGENT_COMMS_PROJECT_REQUEST",
     ):
         env.pop(key, None)
     env["AGENT_COMMS_LOGIN_PROVIDER"] = provider

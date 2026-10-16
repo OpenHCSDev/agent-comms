@@ -1,5 +1,7 @@
 """Owner Retry is durable immediately and launches only after the current turn."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import os
 from contextlib import aclosing
@@ -22,8 +24,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import CompletedGeneration, ReadyGeneration
 from agent_comms.goals import Goal
-from agent_comms.runtime import RuntimeProxy, socket_path
-from test_backend_native_lifecycle import native_backend
+from agent_comms.runtime import RuntimeProxy
 from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -122,7 +123,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
         native.provider.status = 400
         native.provider.error_message = "insufficient_quota"
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-    proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
     await proxy.subscribe()
     turn = asyncio.create_task(
         proxy.request("prompt", prompt=[{"type": "text", "text": "Current user request"}])
@@ -223,7 +224,7 @@ async def test_busy_retry_keeps_unresolved_attempt_and_owner_fences(native_backe
                 ),
             )
             generation = store.snapshot(goal.id)
-            proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+            proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
             assert owner.turns.owns_turn(session, turn.turn_id)
             if fence == "owner":
                 # Loss is an original registry operation, not an invented PID.

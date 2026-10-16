@@ -1,5 +1,7 @@
 """Saved SDK owner input custody over actual native pipes and the owner socket."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -29,9 +31,9 @@ from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
 from test_backend_native_lifecycle import native_backend
@@ -108,7 +110,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
         attachment = canonical_agent(owner._comms, native=owner._comms.owners.native_defaults, auto_wake=False)
         updates = Updates()
         attachment.on_connect(updates)
-        proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
+        proxy = RuntimeProxy(attachment, session, RuntimeSocket.path_for(native.root, os.getpid()))
         try:
             await wait_for(lambda: native.provider.posts == 1)
             # Subscribe after the original input starts, before transferring
@@ -186,7 +188,7 @@ async def test_native_steer_keeps_original_input_and_turn_custody(native_backend
         turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
         attachment = canonical_agent(owner._comms, native=owner._comms.owners.native_defaults, auto_wake=False)
         attachment.on_connect(Updates())
-        proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
+        proxy = RuntimeProxy(attachment, session, RuntimeSocket.path_for(native.root, os.getpid()))
         try:
             await proxy.subscribe()
             await wait_for(lambda: native.provider.posts == 1)

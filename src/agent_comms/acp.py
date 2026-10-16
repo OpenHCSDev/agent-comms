@@ -17,6 +17,8 @@ An explicit ``!agent`` prefix selects the coding turn mode.
 
 from __future__ import annotations
 
+from .runtime_socket import RuntimeSocket
+
 import asyncio
 import dataclasses
 import json
@@ -67,12 +69,7 @@ from .schedule_rules import SelectedWakeCheck
 from .input_effects import InputEffects
 from .message_bus import MessageBus
 from .routing import MessageRoute
-from .runtime import (
-    UNBOUND_CONTROLLER,
-    RuntimeProxy,
-    RuntimeServer,
-    socket_path,
-)
+from .runtime import UNBOUND_CONTROLLER, RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread
@@ -159,7 +156,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self._selected_write_controllers: dict[tuple[str, int], tuple[str, object]] = {}
 
     def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy:
-        return RuntimeProxy(self, session_id, socket_path(self._comms.root, thread.pid))
+        return RuntimeProxy(self, session_id, RuntimeSocket.path_for(self._comms.root, thread.pid))
 
     # Private attachment ABI consumed by runtime/compaction. State exists only
     # on its component; in-process consumers use that owner directly.

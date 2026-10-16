@@ -13,7 +13,7 @@ from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.coordinator import Coordination
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows

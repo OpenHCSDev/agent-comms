@@ -151,7 +151,7 @@ def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
 
 
 def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repetition():
-    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.native_errors import NativePiUnavailable
     from agent_comms.tracked_turn import ObservedNativeCommit, PendingNativeCommit
 
     event = decode({"type": "input_committed", "inputId": "a" * 32, "sessionId": "session", "sessionEntryId": "entry"})
@@ -167,7 +167,8 @@ def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repeti
 
 def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
     from pathlib import Path
-    from agent_comms.native_pi import NativeContextProof, NativePiTerminalFailure, NativePiUnavailable
+    from agent_comms.native_pi import NativeContextProof, NativePiTerminalFailure
+    from agent_comms.native_errors import NativePiUnavailable
     from agent_comms.tracked_turn import AmbiguousTrackedTerminal, PendingTrackedTerminal
     from agent_comms.turn_output import TurnOutput
     from agent_comms.turn_failure import ModelRequestFailed, IdentityUncertain
@@ -309,7 +310,7 @@ def test_native_startup_metadata_uses_existing_entry_family():
     ],
 )
 def test_final_content_owns_native_text_admission(content, expected):
-    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.native_errors import NativePiUnavailable
 
     event = decode({"type": "message_end", "message": {
         "role": "assistant", "stopReason": "stop", "content": content,

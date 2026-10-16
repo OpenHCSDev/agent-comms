@@ -25,7 +25,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from .agent_backend import InputRequest, SendNow, TurnInboxItem
+from .agent_backend import TurnInboxItem
 from .child_process import ProcessIdentity
 from .request_progress import RequestProgress
 
@@ -41,7 +41,9 @@ from .turn_context import InputContributionCoordinates
 from .maintenance_barrier import MaintenanceBarrier
 from .native_attestation import AttestationError
 from .native_custody import PiSessionChild
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_project import NativeProject
+from .native_pi import NativePiRpcLaunch
+from .native_errors import NativePiUnavailable
 from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel
@@ -56,6 +58,7 @@ from .turn_watchdog import ProgressWatchdog, TurnWaitExpired
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
+    from .turn_context import ContextSegment
 
 
 def compaction_summary(value: Any) -> str:
@@ -128,6 +131,8 @@ async def stream_agent_events(
     native_start: Callable[[str | None, str, str], bool] | None = None,
     *,
     persistent_session: PersistentPiSession,
+    session_context: tuple[ContextSegment, ...],
+    project: NativeProject,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
     request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
@@ -151,6 +156,8 @@ async def stream_agent_events(
                     worktree=Path(cwd),
                     environment=env_extra,
                     session_file=session_file,
+                    session_context=session_context,
+                    project=project,
                 ))
             except (OSError, ValueError, NativePiUnavailable) as error:
                 yield events.Error(text=str(error), reason_code="native_launch_invalid")

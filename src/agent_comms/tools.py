@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Literal, Type
+from typing import TYPE_CHECKING, ClassVar, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
@@ -31,7 +31,6 @@ from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
-from .thread_identity import TurnId
 from .relationships import RelationshipEdit
 from .thread_status import ThreadStatus
 from .tool_output import (
@@ -140,7 +139,7 @@ class ThreadToolRequest(ToolRequest[ThreadCaller]):
     """Self-relative requests declare their required caller at the shared boundary."""
 
     def apply_without_thread(self, comms: Comms, caller: NoThreadCaller) -> JsonObject:
-        return caller.refuse_thread()
+        return caller.require_thread()
 
 
 def _tag_set(value: str) -> frozenset[str]:
@@ -219,7 +218,7 @@ class CommsPinChannelTool(ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import PinChannelCliCommand
 
-        return PinChannelCliCommand(name=self.name, pinned=self.pinned).apply(comms)
+        return PinChannelCliCommand(name=self.name, pinned=self.pinned).apply(comms, caller=caller)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -238,7 +237,7 @@ class CommsPinThreadTool(ToolRequest):
         from .cli_commands import PinThreadCliCommand
 
         channel = self.channel
-        PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
+        PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms, caller=caller)
         canonical = channel if channel.startswith("#") else f"#{channel}"
         return next(
             view.to_wire() for view in comms.views.channel_views() if view.channel.name == canonical
@@ -405,7 +404,7 @@ class CommsDeleteViewTool(ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import DeleteViewCliCommand
 
-        DeleteViewCliCommand(name=self.name).apply(comms)
+        DeleteViewCliCommand(name=self.name).apply(comms, caller=caller)
         return CommsChannelsTool().apply(comms, caller)
 
 
@@ -594,7 +593,7 @@ class CommsThreadsTool(ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import ThreadsCliCommand
 
-        return caller.listing(comms, ThreadsCliCommand(active_only=self.active_only).apply(comms))
+        return caller.listing(comms, ThreadsCliCommand(active_only=self.active_only).apply(comms, caller=caller))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -652,7 +651,7 @@ class CommsRenameSelfTool(ThreadToolRequest):
     new_name: str = tool_field("Your new thread name")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        return asdict(comms.threads.rename_self(self.new_name, caller=caller))
+        return asdict(comms.threads.rename_self(self.new_name, caller=caller.require_thread()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -851,7 +850,7 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
                               project=parent.worktree, model=parent.model,
                               thinking_level=parent.thinking_level,
                               tags=_tag_set(self.tags) if self.tags is not None else None,
-                              prompt=self.prompt).apply(comms)
+                              prompt=self.prompt).apply(comms, caller=caller)
 
 
 class OwnerLifecycleControl:
@@ -874,7 +873,7 @@ class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import StopCliCommand
 
-        return StopCliCommand(name=self.name).apply(comms)
+        return StopCliCommand(name=self.name).apply(comms, caller=caller)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -963,7 +962,7 @@ class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import ArchiveCliCommand
 
-        return ArchiveCliCommand(name=self.name).apply(comms)
+        return ArchiveCliCommand(name=self.name).apply(comms, caller=caller)
 
 
 def tool_catalog() -> list[JsonObject]:
@@ -997,4 +996,4 @@ def invoke_context_tool(
     bound.update(
         (key, binding.resolve(subject, actor)) for key, binding in tool.context_bindings().items()
     )
-    return tool.invoke(comms, bound, caller=ToolCaller.from_actor(actor))
+    return tool.invoke(comms, bound, caller=ToolCaller.from_actor(comms, actor))

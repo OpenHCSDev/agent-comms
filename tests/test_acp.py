@@ -4,6 +4,8 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 from unittest.mock import AsyncMock
 
 import asyncio
@@ -31,7 +33,6 @@ from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
     GoalChangedUpdate,
     InputDeliveryChangedUpdate,
-    InputFailedUpdate,
     InputStartedUpdate,
     RequestFailedUpdate,
     TranscriptChangedUpdate,
@@ -49,9 +50,8 @@ from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, 
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.manual_compaction_bridge import compact_context
-from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import PiUsage, ReportedModel, StateData
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.turn_phase import CompactionPhase
 from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend
@@ -588,9 +588,8 @@ class TestAgentTurn:
         async def events(*args, **kwargs):
             yield fake_input_started(args, kwargs)
             monkeypatch.setenv("AGENT_COMMS_THREAD", "proj")
-            from agent_comms.tool_caller import ThreadCaller
 
-            wired.threads.rename_self("renamed-proj", caller=ThreadCaller("proj"))
+            wired.threads.rename_self("renamed-proj", caller=wired.registry.require('proj').incarnation)
             yield ae.ToolEnd(id="rename", ok=True, output="renamed", name="tool")
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="renamed")
@@ -1161,7 +1160,7 @@ class TestAgentTurn:
                 wired.goals.update_goal(
                     "proj", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id))
                 )
-            proxy = RuntimeProxy(agent, "proj", socket_path(wired.root, os.getpid()))
+            proxy = RuntimeProxy(agent, "proj", RuntimeSocket.path_for(wired.root, os.getpid()))
             result = await proxy.request(
                 "retry_goal", goal_id=goal.id, expected_revision=blocked.revision
             )
@@ -1206,7 +1205,7 @@ class TestAgentTurn:
             user_decision_id="first-ui-retry-before-crash",
         )
         wired.goals.goal_store = GoalAttemptStore(wired.root / "goal-private")
-        proxy = RuntimeProxy(agent, "proj", socket_path(wired.root, os.getpid()))
+        proxy = RuntimeProxy(agent, "proj", RuntimeSocket.path_for(wired.root, os.getpid()))
         try:
             result = await proxy.request(
                 "retry_goal", goal_id=goal.id, expected_revision=blocked.revision
@@ -1697,7 +1696,7 @@ class TestFailureFeedback:
     async def test_agent_origin_failure_notifies_origin_without_waking(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, AlertKind, InfoKind
+        from agent_comms.messages import Message, InfoKind
         from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
@@ -1775,7 +1774,7 @@ class TestFailureFeedback:
     async def test_missing_terminal_discards_partial_reply_and_route(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, AlertKind, InfoKind
+        from agent_comms.messages import Message, InfoKind
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -1808,7 +1807,7 @@ class TestFailureFeedback:
     async def test_foreign_tool_use_before_input_start_never_notifies_channel(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, AlertKind, InfoKind
+        from agent_comms.messages import Message, InfoKind
         from agent_comms.threads import Thread
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -1838,7 +1837,7 @@ class TestFailureFeedback:
     async def test_failed_turn_notices_unique_reply_and_origin_targets(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, AlertKind, InfoKind
+        from agent_comms.messages import Message, InfoKind
         from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)

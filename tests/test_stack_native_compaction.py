@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 from agent_comms.queued_input import InitialInput
 import asyncio
 import json
@@ -214,7 +217,8 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                         env_extra=child_env, session_file=str(session),
                         require_input_id=True, native_start=lambda *_: True,
                         persistent_session=pi_session,
-                    ):
+                        session_context=(DoctrineSegment.capture(),),
+                     project=UnmanagedNativeProject()):
                         events.append(event)
             finally:
                 await pi_session.close()

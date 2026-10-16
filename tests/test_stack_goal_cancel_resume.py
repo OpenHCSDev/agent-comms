@@ -1,5 +1,7 @@
 """Real native Pi and owner socket: cancelled goals need an explicit fresh grant."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -16,7 +18,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, ReservedGeneration
 from agent_comms.goals import Goal
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.input_attempt import StartedInput
 from stored_inputs import stored_inputs
 from agent_comms.comms import Comms
@@ -133,7 +135,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
         owner.on_connect(Client())
         (root / "project").mkdir()
         session = (await owner.new_session(str(root / "project"))).session_id
-        proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+        proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
         created = await proxy.request("set_goal", text="Continue the owner objective")
         goal_id = created["goal"]["id"]
         store = comms.goals.open_goal_store()

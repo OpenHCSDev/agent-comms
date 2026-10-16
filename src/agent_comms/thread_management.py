@@ -12,7 +12,6 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
@@ -22,8 +21,6 @@ from .child_process import ProcessIdentity
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
 
-if TYPE_CHECKING:
-    from .tool_caller import ThreadCaller
 from .agent_activity import AgentActivity
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
@@ -40,7 +37,8 @@ from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_pr
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
-from .threads import Thread, current_thread
+from .threads import Thread
+from .thread_identity import RecordedThreadIncarnation
 
 _LOG = logging.getLogger(__name__)
 
@@ -305,9 +303,11 @@ class ThreadManagement:
             )
             return self.registry._claim_unlocked(thread)
 
-    def rename_self(self, new_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
+    def rename_self(self, new_name: str, *, caller: RecordedThreadIncarnation) -> RenameThreadResult:
         """Rename the bound caller's own thread, retaining its old aliases."""
         with _store_lock(self._wire_lock_path):
+            if not caller.current(self.registry.snapshot()):
+                raise RelationViolationError("The original caller is no longer current")
             if self.registry.require(caller.name).auto_title_pending and (
                 len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
             ):
@@ -658,7 +658,11 @@ class ThreadManagement:
                 self.registry.remove(spec.name)
                 raise
 
-    def adopt_current(self) -> Thread:
-        """Declare and register the current process's thread from env."""
-        thread = current_thread()
-        return self.registry.declare(thread)
+    def adopt_current(self, incarnation: RecordedThreadIncarnation) -> Thread:
+        """Attach this process to its explicitly selected existing declaration."""
+        with _store_lock(self._wire_lock_path):
+            snapshot = self.registry.snapshot()
+            if not incarnation.current(snapshot):
+                raise RelationViolationError("The selected thread incarnation is no longer current")
+            thread = snapshot.threads[snapshot.canonical_name(incarnation.name)]
+            return self.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))

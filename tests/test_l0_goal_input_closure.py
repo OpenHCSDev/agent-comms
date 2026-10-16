@@ -1,5 +1,7 @@
 """Current goal/input boundaries through durable stores and the real owner socket."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import os
 import sqlite3
 from contextlib import ExitStack
@@ -19,7 +21,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_attempts import GoalAttemptStore, GoalHumanDecision
+from agent_comms.goal_attempts import GoalHumanDecision
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
@@ -27,7 +29,7 @@ from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.queued_input import QueuedInput
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
@@ -192,7 +194,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
 
     activate_empty_source(owner)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
-    proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
     try:
         ledger = owner.inputs.dispositions
         admission = comms.registry.snapshot().admission_generations[session]

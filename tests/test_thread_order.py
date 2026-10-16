@@ -39,7 +39,7 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     assert people["beta"]["last_activity"] == 0
     assert comms.agents.activity_of("alpha").timestamp == 300
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
-    comms.threads.rename_self("renamed", caller=ThreadCaller("alpha"))
+    comms.threads.rename_self("renamed", caller=comms.registry.require('alpha').incarnation)
     assert comms.registry.require("renamed").created_at == 100
     assert comms.views.last_sent_timestamps() == {"renamed": 400, "beta": 500}
     assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).registry.require("alpha").created_at == 100

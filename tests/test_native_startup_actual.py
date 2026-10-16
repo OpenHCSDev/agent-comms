@@ -1,5 +1,8 @@
 """Saved native preflight with actual pipes; no provider or protocol stand-ins."""
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import asyncio
 import json
 import os
@@ -13,7 +16,8 @@ import pytest
 
 from agent_comms import backend
 from agent_comms.diagnostics import record_terminal_failure
-from agent_comms.native_pi import NativePiInputNotSent, NativePiUnavailable
+from agent_comms.native_pi import NativePiInputNotSent
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.native_startup import NativeStartupAdmission
 from agent_comms.pi_rpc import PiRpcChannel
@@ -136,7 +140,8 @@ async def test_actual_tracked_ready_pipe_survives_busy_owner(native_backend, mon
         model="fixture",
         thinking_level="off",
         maintenance_root=owner.root,
-    )
+        session_context=(DoctrineSegment.capture(),),
+     project=UnmanagedNativeProject())
     assert ready == [True]
     assert result.text == owner.provider.text
     assert owner.provider.posts == len(owner.saved_inputs()) == 1

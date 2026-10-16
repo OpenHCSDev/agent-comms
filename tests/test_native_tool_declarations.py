@@ -1,5 +1,8 @@
 """One tool declaration controls presentation without granting coding authority."""
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import asyncio
 import json
 
@@ -197,7 +200,8 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
                 session_file=str(native.session),
                 persistent_session=native.persistent,
                 native_start=native.started,
-            )
+                session_context=(DoctrineSegment.capture(),),
+             project=UnmanagedNativeProject())
         ]
     assert records[-1].ok, records[-1]
     starts = [event for event in records if isinstance(event, events.ToolStart)]

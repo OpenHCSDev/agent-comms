@@ -259,7 +259,7 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
 
     @property
     def final_text(self) -> str:
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
 
         raise NativePiUnavailable("Native Pi assistant returned non-text content")
 

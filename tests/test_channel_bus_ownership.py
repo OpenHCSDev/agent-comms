@@ -51,7 +51,8 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     comms.messaging.acknowledge("alpha", references)
     ledger = comms.bus.reads.path.read_bytes()
     source = comms.bus.log.path.read_bytes()
-    frame = "".join(segment.text() for segment in comms.bus.awareness_segments(observer, ()))
+    frame = "".join(segment.text() for segment in comms.bus.awareness_segments(
+        observer, comms.relationships.peer_relations(observer.name)))
     pointers = json.loads(frame.splitlines()[-1])["sources"]
     assert len(pointers) == 4
     assert pointers[-1]["seq"] == message.seq
@@ -94,6 +95,8 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
     package = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     if not package:
         pytest.skip("Prepared native package required; no model request")
+    from agent_comms.goal_actions import SetGoalAction
+
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False, private_nk_wire_root_id=root_id, private_nk_native_package=Path(package))
     turn = OwnedTurn(agent.turns, "alpha", "alpha", "Independently authorized task")

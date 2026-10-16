@@ -1,5 +1,7 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -18,7 +20,7 @@ from agent_comms.agent_backend import CompactionOutcome, PlacedCompaction
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.runtime import RuntimeProxy, present_session, socket_path
+from agent_comms.runtime import RuntimeProxy, present_session
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
@@ -90,7 +92,7 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
     client = canonical_agent(comms, native=comms.owners.native_defaults)
     response = await owner.new_session(str(tmp_path / "project"))
-    proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(client, response.session_id, RuntimeSocket.path_for(comms.root, os.getpid()))
     request = {
         "prompt": [{"type": "text", "text": "Do not launch"}],
         "meta": {"agentComms": {"request": {"kind": "invalid"}}},
@@ -147,7 +149,7 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
         yield ae.Done(ok=True, text="socket roundtrip")
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", native_events)
-    path = socket_path(comms.root, os.getpid())
+    path = RuntimeSocket.path_for(comms.root, os.getpid())
     assert path.exists()  # Actual bind and the exchanges below prove OS path admission.
     proxy = RuntimeProxy(client, response.session_id, path)
     try:
@@ -207,8 +209,8 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
             updates.append((session_id, update))
 
     client.on_connect(Client())
-    old_path = socket_path(comms.root, old_pid)
-    new_path = socket_path(comms.root, new_pid)
+    old_path = RuntimeSocket.path_for(comms.root, old_pid)
+    new_path = RuntimeSocket.path_for(comms.root, new_pid)
     old_path.parent.mkdir(parents=True, exist_ok=True)
     connections = []
     calls = []
@@ -326,8 +328,8 @@ async def test_request_only_proxy_never_replays_after_request_was_received(
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
-    old_path = socket_path(comms.root, old_pid)
-    new_path = socket_path(comms.root, new_pid)
+    old_path = RuntimeSocket.path_for(comms.root, old_pid)
+    new_path = RuntimeSocket.path_for(comms.root, new_pid)
     old_path.parent.mkdir(parents=True, exist_ok=True)
     received = []
 
@@ -388,7 +390,7 @@ async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
         await release.wait()
 
     owner.sessions.transcript.replay = delayed_replay
-    proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(client, response.session_id, RuntimeSocket.path_for(comms.root, os.getpid()))
     task = asyncio.create_task(proxy.subscribe())
     try:
         await asyncio.wait_for(entered.wait(), 2)
@@ -489,7 +491,7 @@ async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
         + "\n"
     )
     comms.threads.attach_session(response.session_id, str(transcript))
-    proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(client, response.session_id, RuntimeSocket.path_for(comms.root, os.getpid()))
     try:
         await proxy.subscribe()
         snapshots = [

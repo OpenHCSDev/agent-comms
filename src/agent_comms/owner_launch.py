@@ -12,7 +12,7 @@ from . import launch_runtime
 from .native_settings import NativeThreadDefaults
 from .registry_document import RegistrySnapshot
 from .threads import Thread
-from .thread_identity import OwnerIdentity
+from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .restart_refusals import OwnerGenerationChangedRefusal, OwnerSelectionChangedRefusal
 
 
@@ -48,12 +48,10 @@ class RetainedOwnerLaunch:
         environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
         native = NativeThreadDefaults.from_arguments(command)
         platform.require(process)
-        route = environment.get(launch_runtime.RestartEnvironment.owner_key)
-        if not route:
-            raise RelationViolationError("Owner launch configuration cannot be verified")
+        incarnation = ThreadIncarnation.from_arguments(command[1:]).require_recorded()
         # A worker's launch name may have been renamed since exec. The original
         # snapshot owns that relation; a PID or spelling match cannot grant it.
-        if snapshot.owner_identity(route) != snapshot.owner_identity(thread.name):
+        if not incarnation.current(snapshot) or incarnation.resolved(snapshot) != thread.incarnation:
             raise RelationViolationError("Owner launch names another registry incarnation")
         snapshot.require_owner_process(snapshot.owner_identity(thread.name), process)
         return cls(process, observed_interpreter, environment, native)

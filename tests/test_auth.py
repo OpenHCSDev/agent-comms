@@ -7,6 +7,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.config_options import InvalidConfigChoice, ModelConfigOption
 from agent_comms.login import run_login
 from agent_comms.native_arguments import NativeArguments
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.native_pi import NativePiUnavailable

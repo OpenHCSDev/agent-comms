@@ -18,6 +18,7 @@ from pathlib import Path
 from .active_route import resolve_comms_route
 from .native_settings import NativeThreadDefaults
 from .cli_commands import CliCommand
+from .tool_caller import ToolCaller
 from .cli_protocol import CoreError
 from .comms import Comms
 from .owner_restart import StoppedOwnerFailure
@@ -55,12 +56,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         with ExitStack() as route_guard:
             runtime = LaunchRuntime.current()
             settings = NativeThreadDefaults.from_runtime(runtime)
-            args = build_parser(settings).parse_args(argv)
+            parser = build_parser(settings)
+            args = argparse.Namespace()
+            remaining = list(sys.argv[1:] if argv is None else argv)
+            caller = ToolCaller.from_arguments(parser, remaining, args)
+            if remaining:
+                parser.error(f"unrecognized arguments: {' '.join(remaining)}")
             command = CliCommand.from_namespace(args)
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.admit_client())
             comms = Comms(route, runtime=runtime)
-            return command.run(comms, sys.stdout)
+            return command.run(comms, sys.stdout, caller=caller)
     except KeyboardInterrupt:
         return 130
     except StoppedOwnerFailure as exc:

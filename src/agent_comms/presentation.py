@@ -721,6 +721,12 @@ class ThreadView:
             for thread in threads
         )
 
+    def goal_dependencies(self) -> tuple[ThreadIncarnation, ...]:
+        """The current scheduler's declared dependencies, not goal-text guesses."""
+        if self.goal_execution is None:
+            return ()
+        return tuple(target.incarnation for target in self.goal_execution.wait_for)
+
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""

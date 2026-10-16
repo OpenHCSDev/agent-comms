@@ -24,6 +24,7 @@ from .diagnostics import PublicationMeasurements, record_acquisition_progress, r
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
+from .native_project import ManagedNativeProject
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptAdmissionBusy
@@ -33,6 +34,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
 from .following_inputs import FollowingInputs
 from .tracked_turn import TrackedTurnSession
+from .turn_context import TurnContext
 from .turn_context import RenderedInput
 
 if TYPE_CHECKING:
@@ -150,7 +152,11 @@ class PrivateSendAdmission:
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer retains the sole one-use send token after durable admission.
         """
-        registry = await Coordination.run_worker(self.bus.registry.snapshot)
+        project, session_context = await Coordination.run_worker(lambda: (
+            ManagedNativeProject.capture(self.bus.log.path.parent, self.bus.registry.snapshot(),
+                                         self.owner.thread),
+            TurnContext.session_segments(self.owner.thread),
+        ))
         try:
             result = await TrackedTurnSession.execute(
                 execution.native_package,
@@ -162,10 +168,9 @@ class PrivateSendAdmission:
                 provider=provider,
                 model=model,
                 thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level),
-                environment=self.owner.thread.native_environment(
-                    self.bus.log.path.parent, registry,
-                    self.owner.thread.worktree,
-                ),
+                session_context=session_context,
+                environment={"AGENT_COMMS_ROOT": str(self.bus.log.path.parent)},
+                project=project,
                 maintenance_root=self.bus.log.path.parent,
                 selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event,

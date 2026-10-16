@@ -1,5 +1,7 @@
 """Scoped attachment retirement through original stores, sockets and ACP routing."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import os
 

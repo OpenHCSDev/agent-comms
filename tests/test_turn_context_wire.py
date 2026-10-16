@@ -1,4 +1,5 @@
 """Original sealed messaging survives silent context rows through every projection."""
+import time
 from dataclasses import replace
 import hashlib
 import json
@@ -32,29 +33,32 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
     from threading import Event
     from agent_comms.context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
 
+    from agent_comms.goal_actions import SetGoalAction
+
     comms, _ = _root(tmp_path)
+    comms.goals.update_goal('Alice', SetGoalAction(text='Work with @sender.'))
     comms.messaging.send_initial_cohort('sender', '#team', '@Alice original question')
     owner = comms.registry.require('Alice')
-    original = comms.bus.awareness_segments(owner, ())
+    original = comms.bus.awareness_segments(owner, comms.relationships.peer_relations(owner.name))
     assert len(original) == 1 and isinstance(original[0], AwarenessSegment)
     before = comms.bus.log.path.read_bytes()
     entered = Event()
 
     def read():
         entered.set()
-        return comms.bus.awareness_segments(owner, (), blocking=True)
+        return comms.bus.awareness_segments(owner, comms.relationships.peer_relations(owner.name), blocking=True)
 
     with ThreadPoolExecutor(max_workers=1) as worker:
         with comms.bus.log.locked():
             # Ordinary input still omits optional awareness immediately.
-            omitted = comms.bus.awareness_segments(owner, ())
+            omitted = comms.bus.awareness_segments(owner, comms.relationships.peer_relations(owner.name))
             assert len(omitted) == 1 and isinstance(omitted[0], UnavailableAwarenessSegment)
             pending = worker.submit(read)
             assert entered.wait(1)
             with pytest.raises(TimeoutError):
                 pending.result(timeout=.05)
         assert pending.result(timeout=2) == original
-    inspection = TurnContext.for_inspection(comms, owner)
+    inspection = TurnContext.for_inspection(comms, owner, now=time.time())
     assert original[0] in inspection.segments
     assert comms.bus.log.path.read_bytes() == before
 
@@ -253,7 +257,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     raw=comms.bus.log.path.read_bytes()
     activity=comms.bus.channel_activity()
     pending=comms.bus.pending_counts_all(['Alice','Bob'])
-    awareness=comms.bus.awareness_segments(comms.registry.require('Alice'), ())
+    awareness=comms.bus.awareness_segments(comms.registry.require('Alice'), comms.relationships.peer_relations('Alice'))
     comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
     assert comms.bus.log.path.read_bytes().startswith(raw)
     assert b'PRIVATE INPUT' not in comms.bus.log.path.read_bytes()[len(raw):]
@@ -263,7 +267,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert _page(comms,lookup)[1:]==prior[1:]
     assert comms.bus.channel_activity()==activity
     assert comms.bus.pending_counts_all(['Alice','Bob'])==pending
-    assert comms.bus.awareness_segments(comms.registry.require('Alice'), ())==awareness
+    assert comms.bus.awareness_segments(comms.registry.require('Alice'), comms.relationships.peer_relations('Alice'))==awareness
     assert comms.bus.log.full_history()==[first]
     with comms.bus.log.full_history_snapshot() as (_, messages):
         assert list(messages)==[first]
@@ -382,7 +386,7 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
     images = (ImageInput('YQ==', 'image/png'),)
-    context = TurnContext.for_owner(owner, manifest(owner).turn, 'Original unicode task π 🙂', (), ())
+    context = TurnContext.for_owner(owner, manifest(owner).turn, 'Original unicode task π 🙂', (), (), now=time.time())
     rendered = context.render(images=images)
     expected = ''.join(segment.text() for segment in context.segments)
     assert rendered.text == expected
@@ -399,13 +403,13 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
 
 
 def test_current_relevance_resource_is_frozen_with_coordination_provenance(tmp_path, monkeypatch):
-    from agent_comms.turn_context import CoordinationSegment, InstructionFile
+    from agent_comms.turn_context import SessionCoordinationSegment, InstructionFile
     from agent_comms.wake_policy import WakePolicy
 
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
     original = WakePolicy.relevance_instruction()
-    captured = CoordinationSegment.capture(owner, (), ())
+    captured = SessionCoordinationSegment.capture(owner)
     assert original.source in captured.provenance
     assert hashlib.sha256(original.content.encode()).hexdigest() == original.source.sha256
 

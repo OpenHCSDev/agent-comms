@@ -51,7 +51,7 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     resumed = replace(paused, state=ActiveGoal(), revision=paused.revision + 1)
     comms.registry.register(replace(thread, goal=resumed), comms.registry.status("worker"))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    comms.threads.rename_self("reviewer", caller=ThreadCaller("worker"))
+    comms.threads.rename_self("reviewer", caller=comms.registry.require('worker').incarnation)
     completed = comms.goals.update_goal(
         "reviewer", CompletedGoalAction(expect=GoalPrecondition(goal_id=first.id))
     )
@@ -73,7 +73,7 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
         for tool in ToolRequest.members_with(ToolRequest)
         if tool.declared_name == "comms_goal_history"
     )
-    result = history_tool.invoke(reopened, {"goal_id": first.id}, caller=ThreadCaller("worker"))
+    result = history_tool.invoke(reopened, {"goal_id": first.id}, caller=ThreadCaller(reopened.registry.require('worker').incarnation))
     assert [row["after"]["revision"] for row in result["history"] if row["after"]] == [
         1,
         2,

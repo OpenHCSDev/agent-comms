@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import asyncio
 import errno
 import json
@@ -20,15 +23,8 @@ import pytest
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.child_process import AttachedChild, Platform
 from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.native_pi import (
-    CAPABILITY,
-    NativeContextProof,
-    NativePiPromptRejected,
-    NativePiRpcLaunch,
-    NativePiTerminalFailure,
-    NativePiUnavailable,
-    _trusted_package,
-)
+from agent_comms.native_pi import CAPABILITY, NativeContextProof, NativePiPromptRejected, NativePiRpcLaunch, NativePiTerminalFailure, _trusted_package
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.pi_native_backend import PersistentPiSession
@@ -210,7 +206,8 @@ async def test_unprivate_session_rejected_before_pi_process_starts(
             session=(SelectedSession(selected) if existing is None else SavedSelectedSession(
                 selected, identity=NativeSessionIdentity("sid", str(existing))
             )),
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
 
 
 
@@ -239,7 +236,8 @@ def test_any_prelaunch_fsync_failure_denies_launch(
             tmp_path,
             worktree=tmp_path,
             session=SelectedSession(sessions),
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
     assert calls == failed_fsync
     assert not list((sessions / ".native-pi-agent").glob(".settings-*.tmp"))
 
@@ -270,13 +268,13 @@ def test_nested_session_directory_entries_are_synced_from_leaf_to_private_root(
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", record_fsync)
-    launch = NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions))
+    launch = NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert launch.session.directory == sessions
     assert stat.S_IMODE(nested.stat().st_mode) == 0o700
     assert stat.S_IMODE(sessions.stat().st_mode) == 0o700
     assert observed.index(root) < observed.index(nested) < observed.index(sessions)
     first_count = len(observed)
-    NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions))
+    NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert root in observed[first_count:] and nested in observed[first_count:]
     assert observed[first_count:].index(nested) < observed[first_count:].index(sessions)
 
@@ -320,11 +318,11 @@ async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_e
     request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path,
                    session=SelectedSession(sessions), pi_session=PersistentPiSession())
     with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
-        await TrackedTurnSession.execute(tmp_path, **request)
+        await TrackedTurnSession.execute(tmp_path, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert launches == 0
     assert rejected and (nested if failed_parent == "root" else sessions).is_dir()
     with pytest.raises(RuntimeError, match="re-synchronizing visible directories"):
-        await TrackedTurnSession.execute(tmp_path, **request)
+        await TrackedTurnSession.execute(tmp_path, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert launches == 1
     assert successful_target_syncs >= 1
 
@@ -334,7 +332,7 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
 
     sessions = tmp_path / "sessions"
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions))
+    NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     original_fsync = native.os.fsync
 
     def fail_parent(descriptor):
@@ -356,7 +354,8 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
             prompt="no provider",
             worktree=tmp_path,
             session=SelectedSession(sessions),
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
 
 
 async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: Path, monkeypatch):
@@ -380,7 +379,8 @@ async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: P
             prompt="no provider",
             worktree=tmp_path,
             session=SelectedSession(sessions),
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
 
 
 @pytest.mark.parametrize("cancellations", [1, 2])
@@ -418,7 +418,8 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(
             session=SelectedSession(tmp_path / "sessions"),
             pi_session=PersistentPiSession(),
             model_wait_timeout=20,
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
     )
     for _ in range(100):
         if started:
@@ -497,7 +498,8 @@ send({'type':'agent_settled'})
         session=SelectedSession(tmp_path / "sessions"),
         pi_session=PersistentPiSession(),
         model_wait_timeout=3,
-    )
+        session_context=(DoctrineSegment.capture(),),
+     project=UnmanagedNativeProject())
     if stop_reason == "stop":
         result = await operation
         assert result.text == "IGNORE"
@@ -575,7 +577,8 @@ async def test_selected_header_marker_denies_path_only_legacy_reopen_before_spaw
             session=SavedSelectedSession(
                 file.parent, identity=NativeSessionIdentity(fresh.session_id, str(file))
             ),
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
     if alias in {"original", "copy"}:
         fresh.verify_prewrite()
     elif alias == "with_message":
@@ -610,7 +613,8 @@ sys.stdin.read()
             worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
             pi_session=PersistentPiSession(),
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
     from agent_comms.pi_commands import GetState, PiCommand
 
     preflight = PiCommand.from_wire(json.loads(received.read_text()))
@@ -628,7 +632,7 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_resources(
     sessions = tmp_path / "sessions"
     monkeypatch.setenv("AGENT_COMMS_THREAD", "must-not-leak")
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "wrong-global"))
-    launch = NativePiRpcLaunch.tracked(Path(selected), worktree=worktree, session=SelectedSession(sessions))
+    launch = NativePiRpcLaunch.tracked(Path(selected), worktree=worktree, session=SelectedSession(sessions), session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert str(_trusted_package(Path(selected))) in launch.argv
     assert launch.argv[launch.argv.index("--mode") + 1] == "rpc"
     assert "--no-approve" in launch.argv
@@ -654,7 +658,8 @@ def test_missing_native_model_fails_before_any_session_side_effect(
             session=SelectedSession(tmp_path / "sessions"),
             provider=provider,
             model=model,
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
     assert not (tmp_path / "sessions").exists()
 
 
@@ -912,7 +917,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             model=model,
         )
         if outcome in {"cancel-large", "eof-large"}:
-            task = asyncio.create_task(TrackedTurnSession.execute(package, **request))
+            task = asyncio.create_task(TrackedTurnSession.execute(package, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject()))
             if outcome == "cancel-large":
                 try:
                     await asyncio.wait_for(oversized.wait(), 10)
@@ -938,7 +943,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             from agent_comms.diagnostics import record_terminal_failure
 
             with pytest.raises(NativePiPromptRejected) as failed:
-                await TrackedTurnSession.execute(package, **request)
+                await TrackedTurnSession.execute(package, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
             response = failed.value.rejected_response
             assert response.id == "native-prompt" and response.success is False
             assert "No API key" in response.error
@@ -960,7 +965,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             assert diagnostic.stat().st_mode & 0o777 == 0o600
             return
         if outcome in {"stop", "configured", "restarted", "large"}:
-            result = await TrackedTurnSession.execute(package, **request)
+            result = await TrackedTurnSession.execute(package, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
             assert "prompt_accepted" in durable_phases
             assert "model_running" in durable_phases
             durable_attempt.finish()
@@ -979,7 +984,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
         else:
             failure = "429 rate limit" if outcome == "429" else "did not finish successfully"
             with pytest.raises(NativePiTerminalFailure, match=failure) as failed:
-                await TrackedTurnSession.execute(package, **request)
+                await TrackedTurnSession.execute(package, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
             assert failed.value.context.input_id == INPUT_ID
             assert "agent_settled" in observed
         attempts = 4 if outcome == "429" else 1
@@ -1030,7 +1035,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
                     ),
                 ),
             )
-            reopened = await TrackedTurnSession.execute(package, **request)
+            reopened = await TrackedTurnSession.execute(package, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
             assert reopened.text == "X"
             assert reopened.context.input_id == "b" * 32
             assert reopened.context.session_file == result.context.session_file
@@ -1078,7 +1083,8 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
             prompt="do not send",
             worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
     assert os.geteuid() == os.stat(tmp_path).st_uid
     with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
         _trusted_package(stock)
@@ -1086,7 +1092,12 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
 
 def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp_path, monkeypatch):
     from agent_comms import native_pi, private_nk_entrypoint
+    from agent_comms.registration import Registration
+    from agent_comms.threads import Thread
+    from agent_comms.turn_context import TurnContext
 
+    owner = Thread("owner", frozenset(), str(tmp_path), created_at=1.0)
+    Registration(tmp_path / "registry.json").register(owner)
     launch = private_nk_entrypoint.PrivateNkLaunch(tmp_path, "a" * 32, tmp_path / "pi", None)
     monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: launch))
     verified = []
@@ -1097,7 +1108,9 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
         return cli
 
     monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "validate", lambda self: trusted(self.native_package))
-    monkeypatch.setattr(sys, "argv", ["pi-comms-native", "--mode", "rpc", "--model", "owner/model"])
+    monkeypatch.setattr(sys, "argv", ["pi-comms-native", *owner.incarnation.cli_arguments,
+                                      "--mode", "rpc", "--model", "owner/model"])
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "wrong-environment-owner")
     executed = []
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "canonical"))
     monkeypatch.delenv("AGENT_COMMS_NATIVE_CONFIG_DIR", raising=False)
@@ -1123,6 +1136,8 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
         "owner/model",
         "--append-system-prompt",
         str(native_pi.OWNER_INSTRUCTIONS.resolve()),
+        "--append-system-prompt",
+        TurnContext.render_segments(TurnContext.session_segments(owner)).text,
     ]
     assert environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] == str(tmp_path / "canonical")
     assert "NODE_OPTIONS" not in environment

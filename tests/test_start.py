@@ -1,3 +1,5 @@
+
+from agent_comms.runtime_socket import RuntimeSocket
 import asyncio
 import sys
 import os
@@ -34,7 +36,7 @@ def test_attachment_does_not_implicitly_start_a_stopped_or_archived_thread(tmp_p
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner fixture")
 async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, monkeypatch):
-    from agent_comms.runtime import socket_path
+
 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     source = tmp_path / "saved.jsonl"
@@ -49,7 +51,7 @@ async def test_real_stopped_owner_starts_through_shared_agent_tool(tmp_path, mon
     try:
         result = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"})
         async with asyncio.timeout(10):
-            while not socket_path(comms.root, result["pid"]).exists():
+            while not RuntimeSocket.path_for(comms.root, result["pid"]).exists():
                 assert comms.registry.require("worker").process_alive
                 await asyncio.sleep(0.05)
         again = await asyncio.to_thread(invoke_tool, comms, "comms_start", {"name": "worker"})

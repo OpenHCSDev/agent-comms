@@ -1,9 +1,10 @@
-/** Hold subsequent tools until a managed project handoff finishes. */
+/** Hold subsequent tools until the original managed project handoff finishes. */
 import { once } from "node:events";
 import { createConnection } from "node:net";
 import { createInterface } from "node:readline";
 import { resolve } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { CallerRecord, NativeProject } from "../pi-agent-comms/index.js";
 
 async function project(socket: string, request: string) {
   const connection = createConnection({ path: socket });
@@ -30,14 +31,18 @@ async function project(socket: string, request: string) {
 }
 
 export default function (pi: ExtensionAPI) {
-  const thread = process.env.AGENT_COMMS_THREAD;
-  if (!thread || process.env.AGENT_COMMS_MANAGED !== "1") return;
-  const socket = process.env.AGENT_COMMS_PROJECT_SOCKET;
-  const request = process.env.AGENT_COMMS_PROJECT_REQUEST;
-  if (!socket || !request) throw new Error("Managed native launch lacks original project binding");
   pi.on("tool_call", async (event, ctx) => {
-    if (event.toolName === "comms_set_project") return;
-    if (resolve(await project(socket, request)) !== resolve(ctx.cwd)) {
+    let caller: CallerRecord | undefined;
+    let binding: NativeProject | undefined;
+    // The comms extension owns both records. Read them at use, never mirror them.
+    pi.events.emit("agent-comms:caller", (original: CallerRecord, project: NativeProject) => {
+      caller = original;
+      binding = project;
+    });
+    if (caller === undefined || binding === undefined) throw new Error("The comms caller provider is unavailable");
+    if (caller.kind !== "thread" || event.toolName === "comms_set_project") return;
+    if (binding.kind !== "managed") throw new Error("Managed native launch lacks its original project binding");
+    if (resolve(await project(binding.socket.path, JSON.stringify(binding.request))) !== resolve(ctx.cwd)) {
       return { block: true, reason: "Your project directory changed. End this turn now; the runtime will automatically continue in the new directory. Do not run more tools in the old project." };
     }
   });

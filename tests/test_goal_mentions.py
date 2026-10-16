@@ -88,7 +88,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
         ("unknown", UnknownMentionBinding),
     ]
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-    tool = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("owner"))
+    tool = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller(comms.registry.require('owner').incarnation))
     assert tool["collaborations"] == []
     assert tool["visible_collaborators"][0]["sources"] == ["goal_mention"]
     assert {item["token"] for item in tool["unresolved_goal_mentions"]} == {"owner", "unknown"}
@@ -246,7 +246,7 @@ def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
     original_relationships = comms.relationships.store.path.read_bytes()
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     assert comms.relationships.collaborations("owner") == (manual,)
-    result = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("owner"))
+    result = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller(comms.registry.require('owner').incarnation))
     assert result["collaborations"] == json.loads(json.dumps([asdict(manual)]))
     if goal_mention:
         assert result["visible_collaborators"][0]["sources"] == ["explicit", "goal_mention"]

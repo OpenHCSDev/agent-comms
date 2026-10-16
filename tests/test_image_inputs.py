@@ -1,5 +1,7 @@
 """Image prompts survive ACP decoding, fresh Pi input and queued steering."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import base64
 import json
@@ -23,7 +25,7 @@ from agent_comms.acp_extension import (
 )
 
 from agent_comms.image_inputs import MAX_IMAGE_BYTES, ImageInput, prompt_images
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
@@ -159,7 +161,7 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
         yield ae.Done(ok=True, text="")
 
     monkeypatch.setattr(backend, "stream_agent_events", stream)
-    proxy = RuntimeProxy(client, "project", socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(client, "project", RuntimeSocket.path_for(comms.root, os.getpid()))
     try:
         await proxy.subscribe()
         client.sessions.proxies["project"] = proxy

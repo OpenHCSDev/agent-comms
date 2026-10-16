@@ -1,5 +1,7 @@
 """Installed CLI root selection -> detached owner -> stdio ACP -> native reply."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import argparse
 import asyncio
 import json
@@ -14,7 +16,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.native_package import verify_native_package
 from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
-from agent_comms.runtime import socket_path
+
 from agent_comms.threads import Thread
 from compaction_loopback import LoopbackProvider
 from agent_comms.active_route import LocalRoute
@@ -112,7 +114,7 @@ async def main(package, evidence):
                 owner = comms.registry.require('recipient')
                 assert owner.pid == reply['pid'] and owner.pid != os.getpid()
                 async with asyncio.timeout(20):
-                    while not socket_path(comms.root, owner.pid).exists():
+                    while not RuntimeSocket.path_for(comms.root, owner.pid).exists():
                         assert owner.process_alive, 'CLI-launched owner died before ACP attachment'
                         await asyncio.sleep(.05)
                 # ACP is another actual installed subprocess, not an in-process stub.

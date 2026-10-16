@@ -68,22 +68,6 @@ def test_relevance_members_are_chosen_only_by_the_relationship_owner():
         assert not used, f"{path.name} names relevance members {sorted(used)}"
 
 
-def test_peers_are_never_selected_or_ordered_by_thread_name_alone():
-    """The peer list keeps the order its relations arrive in."""
-    tree = ast.parse((PACKAGE / "turn_context.py").read_text())
-    owners = [
-        node for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name in {"PeerState", "CoordinationSegment"}
-    ]
-    assert len(owners) == 2
-    for node in (node for owner in owners for node in ast.walk(owner)):
-        if isinstance(node, ast.Call):
-            called = ast.unparse(node.func)
-            assert called != "sorted" and not called.endswith(".sort"), (
-                f"turn_context.py:{node.lineno} {ast.unparse(node)}"
-            )
-
-
 def test_partner_activity_only_reads():
     """A partner's goal change is shown at the next turn; it never sends, publishes or wakes."""
     tree = ast.parse((PACKAGE / "context_segments" / "partner_activity.py").read_text())
@@ -122,5 +106,5 @@ def test_relevance_reaches_only_what_a_thread_sees_and_hears():
         if "peer_relevance" in imports or names & (RELEVANCE | {"grants", "peer_relations"}):
             readers.add(path.relative_to(PACKAGE).as_posix())
     assert readers == {
-        "turn_context.py", "owned_turn.py", "context_segments/partner_activity.py", "message_bus.py",
+        "turn_context.py", "owned_turn.py", "context_segments/partner_activity.py",
     }

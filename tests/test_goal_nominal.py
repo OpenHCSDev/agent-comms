@@ -87,7 +87,7 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
         previous = comms.goals.goal_snapshot("worker")
         tool.invoke(
             comms, {"status": "checkpoint", "goal_id": goal.id, "progress": "Evidence recorded"},
-            caller=ThreadCaller("worker")
+            caller=ThreadCaller(comms.registry.require('worker').incarnation)
         )
         event = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).goals.goal_changed("worker", previous)
         assert isinstance(event, GoalChanged)
@@ -172,7 +172,8 @@ def test_cas_rejects_aba_and_unknown_payload_without_effects(owner):
 
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
-    from agent_comms.runtime_requests import RuntimeRequest, UpdateGoalRuntimeRequest
+    from agent_comms.runtime_request import RuntimeRequest
+    from agent_comms.runtime_requests import UpdateGoalRuntimeRequest
 
     payload = UpdateGoalRuntimeRequest.proxy_payload("worker", None, {
         "status": PausedGoalAction, "goal_id": "original-goal", "expected_revision": 7,

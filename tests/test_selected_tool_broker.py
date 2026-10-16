@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from agent_comms.native_project import UnmanagedNativeProject
+
+from agent_comms.native_errors import NativePiUnavailable
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import asyncio
 import json
 import os
@@ -120,7 +125,7 @@ def test_default_off_and_packaged_extension_selection(
     tmp_path.chmod(0o700)
     sessions = tmp_path / "sessions"
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
-    default = native_pi.NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session_dir=sessions)
+    default = native_pi.NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session_dir=sessions, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert "--no-tools" in default.argv and "--no-builtin-tools" not in default.argv
     assert "-e" not in default.argv
     mode = broker.SelectedToolMode(lambda _: None)
@@ -128,8 +133,9 @@ def test_default_off_and_packaged_extension_selection(
     packaged = tmp_path / "dist/selected_claimed_write.mjs"
     packaged.write_bytes(Path(broker.__file__).with_name("selected_claimed_write.mjs").read_bytes())
     selected = native_pi.NativePiRpcLaunch.tracked(
-        tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode
-    )
+        tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode,
+        session_context=(DoctrineSegment.capture(),),
+     project=UnmanagedNativeProject())
     assert "--no-tools" not in selected.argv
     assert "--no-builtin-tools" in selected.argv
     assert selected.argv[selected.argv.index("--tools") + 1] == "selected_claimed_write"
@@ -139,15 +145,17 @@ def test_default_off_and_packaged_extension_selection(
     extension.write_text("evil changed extension", encoding="utf-8")
     with pytest.raises(SelectedToolDenied, match="reviewed"):
         native_pi.NativePiRpcLaunch.tracked(
-            tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode
-        )
-    with pytest.raises(native_pi.NativePiUnavailable, match="nominal"):
+            tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode,
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
+    with pytest.raises(NativePiUnavailable, match="nominal"):
         native_pi.NativePiRpcLaunch.tracked(
             tmp_path,
             worktree=tmp_path,
             session_dir=sessions,
             selected_tool_mode=object(),  # type: ignore[arg-type]
-        )
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")

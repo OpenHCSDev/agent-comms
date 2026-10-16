@@ -1,5 +1,7 @@
 """Current owner queues scope notices without altering durable input evidence."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import os
 from dataclasses import replace
 
@@ -8,7 +10,7 @@ import pytest
 from agent_comms.acp import CommsAgent
 
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 from agent_comms.comms import Comms
@@ -107,7 +109,7 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
             updates.append(kwargs["update"])
 
     owner.sessions.client = Client()
-    proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
     before = comms.goals.unresolved_inputs(session)
     try:
         await owner.inputs.replay_unknown_inputs(session, client=Client())

@@ -1,5 +1,8 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import asyncio
 import json
 from dataclasses import replace
@@ -10,7 +13,8 @@ from agent_comms import backend
 from agent_comms.child_process import AttachedChild, BoundedRun
 from agent_comms.comms import Comms
 from agent_comms.config_options import ModelConfigOption, ThinkingLevelConfigOption
-from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
+from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.pi_commands import SetModel, SetThinkingLevel
 from agent_comms.pi_events import Response
 from agent_comms.pi_native_backend import PersistentPiSession
@@ -103,14 +107,14 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     malformed.write_text("{}\n")
     wrong = SavedSelectedSession(malformed.parent,
         identity=NativeSessionIdentity(created.session_id, str(malformed)))
-    with pytest.raises((ValueError, native_pi.NativePiUnavailable)):
+    with pytest.raises((ValueError, NativePiUnavailable)):
         await Coordination.run_worker(partial(execution.tracked_launch,
             package, worktree=native.project, session=wrong,
             provider="response-local", model="fixture"))
     # Independent new acquisition still verifies the real artifact.
     await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
         package, worktree=native.project, session=session,
-        provider="response-local", model="fixture"))
+        provider="response-local", model="fixture", session_context=(DoctrineSegment.capture(),)))
     assert len(verifications) == 2 and native.provider.posts == 0
 
     # The same installed worker joins a borrowed, actual SDK-source descriptor.
@@ -294,7 +298,8 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
         "pi",
         ('--model', 'response-local/fixture', '--offline', '--no-session', *NativeThreadDefaults.isolation_arguments),
         worktree=native_backend.project,
-    )
+        session_context=(DoctrineSegment.capture(),),
+     project=UnmanagedNativeProject())
     # The command result owner needs a session; this probe never opens its child.
     session = backend.TurnSession(launch, "", native_session=PersistentPiSession())
     observed = []
@@ -364,6 +369,7 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
     launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
         command, ('--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'),
         worktree=native.project, session_file=created.session_file,
+        session_context=(DoctrineSegment.capture(),),
     ))
 
     def observed():

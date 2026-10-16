@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from agent_comms.native_session_files import NativeSessionFiles
+
 import json
 import os
 import pickle
@@ -9,7 +11,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.native_pi import NativePiUnavailable, _read_private_file, _trusted_package
+from agent_comms.native_pi import _trusted_package
+from agent_comms.native_errors import NativePiUnavailable
 
 
 def test_explicit_fresh_session_has_durable_prewrite_inode(tmp_path: Path) -> None:
@@ -22,7 +25,7 @@ def test_explicit_fresh_session_has_durable_prewrite_inode(tmp_path: Path) -> No
         1,
         0o600,
     )
-    assert list(_read_private_file(enrollment.path)) == [
+    assert list(NativeSessionFiles(enrollment.path).read_rows()) == [
         {
             "type": "session",
             "version": 3,
@@ -46,7 +49,7 @@ def test_explicit_selected_bootstrap_is_prewrite_durable_and_attested(tmp_path: 
     fresh = create_fresh_private_session(
         tmp_path / "native-sessions" / "a", worktree=tmp_path, selected_thinking_level="high"
     )
-    rows = list(_read_private_file(fresh.path))
+    rows = list(NativeSessionFiles(fresh.path).read_rows())
     assert len(rows) == 3
     assert rows[0]["id"] == fresh.session_id
     assert rows[0]["agentCommsSelectedFresh"] == {"schema": 1, "thinkingLevel": "high"}
@@ -236,7 +239,7 @@ def test_optional_reviewed_copied_pi_reads_selected_bootstrap_level(tmp_path: Pa
     assert new["context"]["thinkingLevel"] == "high"
     assert new["context"]["model"] == parsed["context"]["model"]
     assert len(new["context"]["messages"]) == 1
-    assert list(_read_private_file(fresh.path))[-1]["parentId"] == fresh.bootstrap_leaf_id
+    assert list(NativeSessionFiles(fresh.path).read_rows())[-1]["parentId"] == fresh.bootstrap_leaf_id
     fresh.verify_saved_identity()
     with pytest.raises(NativePiUnavailable, match="earlier input"):
         fresh.verify_prewrite()
@@ -296,16 +299,14 @@ def test_existing_file_and_hardlink_never_gain_fresh_authority(tmp_path: Path) -
 def test_uncertain_parent_fsync_does_not_return_enrollment(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, level: str | None
 ) -> None:
-    from agent_comms import fresh_private_session as module
-
-    actual_fsync = module._fsync_directory
+    actual_fsync = NativeSessionFiles.sync_directory
 
     def failed_session_fsync(path: Path) -> None:
         if path == tmp_path / "native-sessions" / "a":
             raise OSError("injected parent fsync uncertainty")
         actual_fsync(path)
 
-    monkeypatch.setattr(module, "_fsync_directory", failed_session_fsync)
+    monkeypatch.setattr(NativeSessionFiles, "sync_directory", staticmethod(failed_session_fsync))
     with pytest.raises(NativePiUnavailable, match="durability UNKNOWN"):
         create_fresh_private_session(
             tmp_path / "native-sessions" / "a",

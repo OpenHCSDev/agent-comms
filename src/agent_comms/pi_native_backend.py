@@ -18,6 +18,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
+from .native_project import ManagedNativeProject
 from .agent_backend import (
     AgentBackend,
     Compacts,
@@ -202,21 +203,25 @@ class PiNativeBackend(
         """Launch (or reuse) and attest the idle child for ``thread``'s saved session."""
         from .coordinator import Coordination
         from .native_session_prepare import NativeSessionPreparation
+        from .turn_context import TurnContext
 
         if thread.session_file is None:
             raise ValueError("Native preparation requires a saved session")
         if open_native is None:
             open_native = NativeSessionPreparation.open
-        environment = await Coordination.run_worker(lambda: thread.native_environment(
-            self.comms.root, self.comms.registry.snapshot(), thread.worktree,
+        project, session_context = await Coordination.run_worker(lambda: (
+            ManagedNativeProject.capture(self.comms.root, self.comms.registry.snapshot(), thread),
+            TurnContext.session_segments(thread),
         ))
         return await open_native(
             self,
             self.agent_bin,
             self.arguments(thread),
             worktree=thread.worktree,
-            environment=environment,
+            environment={"AGENT_COMMS_ROOT": str(self.comms.root)},
             session_file=thread.session_file,
+            project=project,
+            session_context=session_context,
             observe=partial(self.observe, thread),
         )
 
@@ -230,7 +235,13 @@ class PiNativeBackend(
         self, thread: Thread, content: InputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
         from . import backend
+        from .coordinator import Coordination
+        from .turn_context import TurnContext
 
+        project, session_context = await Coordination.run_worker(lambda: (
+            ManagedNativeProject.capture(self.comms.root, self.comms.registry.snapshot(), thread),
+            TurnContext.session_segments(thread),
+        ))
         images = {"images": content.images} if content.images else {}
         async for event in backend.stream_agent_events(
             self.agent_bin,
@@ -248,6 +259,8 @@ class PiNativeBackend(
             native_start=delivery.input_started,
             request_observer=delivery.request_progress,
             persistent_session=self,
+            session_context=session_context,
+            project=project,
             ui_request=delivery.ui_request,
         ):
             yield event
@@ -272,7 +285,7 @@ class PiNativeBackend(
 
     async def compact(self, thread: Thread, instructions: str | None) -> CompactionOutcome:
         """Ask Pi's own engine to compact through its ``compact`` RPC."""
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
         from .pi_commands import Compact
 
         try:
@@ -356,7 +369,7 @@ class PiNativeBackend(
         ))
 
     async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
         from .pi_commands import SetModel, SetThinkingLevel
         from .pi_vocabulary import ThinkingLevel
 

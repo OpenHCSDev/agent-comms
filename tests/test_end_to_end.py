@@ -6,6 +6,8 @@ two CLI-registered threads exchange messages, a child forks, the child reads
 its inbox and responds, and the parent acknowledges.
 """
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import json
 import subprocess
 import sys
@@ -120,7 +122,7 @@ class TestEndToEndLifecycle:
         # fork owner first; the runtime suite exercises its automatic delivery.
         cli(root, "stop", "--name", "kid")
         assert comms.registry.status("kid").declared_name == "stopped"
-        assert not socket_path(root, detail["process_identity"]["pid"]).exists()
+        assert not RuntimeSocket.path_for(root, detail["process_identity"]["pid"]).exists()
 
         # 3. Child registers itself the way a real pi process would.
         run_python(

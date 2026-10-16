@@ -1,5 +1,7 @@
 """Current subscription contract exercised across an actual owner Unix socket."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -12,7 +14,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
@@ -39,7 +41,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
     await owner.sessions.bind_owned(thread, thread.name)
     database = comms.root / "coordination.sqlite3"
     CoordinationStore(database).close()
-    proxy = RuntimeProxy(client, thread.name, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(client, thread.name, RuntimeSocket.path_for(comms.root, os.getpid()))
     holder = sqlite3.connect(database, isolation_level=None)
     try:
         with caplog.at_level(logging.ERROR, logger="agent_comms.runtime"):
@@ -95,7 +97,7 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, to
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    path = socket_path(comms.root, os.getpid())
+    path = RuntimeSocket.path_for(comms.root, os.getpid())
     path.parent.mkdir(parents=True, exist_ok=True)
     finished = asyncio.get_running_loop().create_future()
 

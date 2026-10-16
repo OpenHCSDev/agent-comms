@@ -1,5 +1,7 @@
 """Run the existing continuous context case without source/conftest substitutes."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import argparse
 import asyncio
 import json
@@ -82,7 +84,7 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
     import hashlib
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_pi import NativeContextProof
-    from agent_comms.runtime import RuntimeConnection, socket_path
+    from agent_comms.runtime import RuntimeConnection
     from agent_comms.turn_context import ContextSourceText, NativeProvenance
 
     service = owner._comms
@@ -107,7 +109,7 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
     assert group.sha256 != selected.sha256
     before = Path(thread.require_saved_session()).read_bytes()
     connection = RuntimeConnection(service, thread.name,
-        socket_path(service.root, thread.require_process().pid))
+        RuntimeSocket.path_for(service.root, thread.require_process().pid))
     try:
         params = dict(turn=FieldCodec.encode(manifest.turn), request_id=request_id, segment=position)
         root = FieldCodec.decode(ContextSourceText,
@@ -180,7 +182,6 @@ async def run_configured(options):
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.input_disposition import InputDispositions
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_entries import NativeEntry
     from agent_comms.native_package import verify_native_package
@@ -461,7 +462,7 @@ def complete_history_controls(root):
     for generation in (1, 2):
         turn = RecordedContextTurn(TurnId(f'original-history-{generation}'),
                                    TurnIdentity(owner.incarnation, generation))
-        context = TurnContext.for_owner(owner, turn, f'Original private source {generation} π', (), ())
+        context = TurnContext.for_owner(owner, turn, f'Original private source {generation} π', (), (), now=time.time())
         observation = ContextManifest(context.thread, context.turn,
             tuple(segment.manifest(0) for segment in context.segments), 'fixture-original-estimate')
         service.bus.log.record_context(observation)
@@ -475,7 +476,7 @@ def complete_history_controls(root):
     service.bus.log.record_context(continuation)
     future_context = TurnContext.for_owner(renamed,
         RecordedContextTurn(TurnId('original-history-3'), TurnIdentity(renamed.incarnation, 3)),
-        'Later original private source', (), ())
+        'Later original private source', (), (), now=time.time())
     future = ContextManifest(future_context.thread, future_context.turn,
         tuple(segment.manifest(0) for segment in future_context.segments), 'fixture-original-estimate')
     service.bus.log.record_context(future)

@@ -41,9 +41,9 @@ async def run(settings: NativeThreadDefaults, incarnation: ThreadIncarnation,
     agent = CommsAgent(
         comms, native=settings,
         runtime_enabled=True,
-        private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
-        private_nk_native_package=private_nk.native_package if private_nk else None,
-        private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
+        private_nk_wire_root_id=private_nk.wire_root_id,
+        private_nk_native_package=private_nk.native_package,
+        private_selected_tool_intent=private_nk.selected_tool_intent,
         private_nk_verified_cli=verified_cli,
     )
     stopped = asyncio.Event()

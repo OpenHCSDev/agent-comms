@@ -26,7 +26,7 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
-from .native_pi import NativePiUnavailable
+from .native_errors import NativePiUnavailable
 from .launch_runtime import RestartEnvironment
 from .runtime import RuntimeServer
 from .session_effects import SessionEffects

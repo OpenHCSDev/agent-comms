@@ -1,4 +1,6 @@
 """Real installed Toad/ACP/native waits with only the localhost provider controlled."""
+
+from agent_comms.runtime_socket import RuntimeSocket
 import argparse
 import asyncio
 from importlib.resources import files
@@ -14,14 +16,12 @@ from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.field_codec import FieldCodec
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_package import verify_native_package
-from agent_comms.runtime import socket_path
+
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
 from agent_comms.threads import Thread
 from toad.agent_schema import AgentDefinition
 from toad.app import ToadApp
-from toad.widgets.transcript_history import TranscriptHistory
 
 from l0a_native_installed_pilot import until, response_painted
 from runtime_fixture import stop_test_children, stop_test_owners
@@ -128,7 +128,7 @@ async def run(arguments):
 
     async def subscribe():
         owner = service.registry.require("wait-native")
-        reader, writer = await asyncio.open_unix_connection(socket_path(service.root, owner.pid), limit=8*1024*1024)
+        reader, writer = await asyncio.open_unix_connection(RuntimeSocket.path_for(service.root, owner.pid), limit=8*1024*1024)
         writer.write((json.dumps(SubscribeRuntimeRequest(thread="wait-native").to_wire()) + "\n").encode())
         await writer.drain()
         packets = []

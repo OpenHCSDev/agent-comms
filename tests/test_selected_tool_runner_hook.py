@@ -17,7 +17,7 @@ from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_input_record import FullNativeExecution
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.native_admission_epoch import UnrecordedNativeAdmission

@@ -1,5 +1,7 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import os
 import signal
 import shlex

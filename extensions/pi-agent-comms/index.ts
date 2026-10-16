@@ -15,6 +15,14 @@ const SERVICE_TIER_CAPABLE_APIS = new Set([
 	"openai-codex-responses",
 ]);
 
+export type CallerRecord =
+	| { kind: "operator"; label: string; arguments: string[] }
+	| { kind: "thread"; name: string; parent: string | null; task: string | null; service_tier: "standard" | "priority"; arguments: string[] };
+
+export type NativeProject =
+	| { kind: "unmanaged" }
+	| { kind: "managed"; socket: { path: string }; request: Record<string, unknown> };
+
 interface ToolDeclaration {
 	name: string;
 	label: string;
@@ -22,9 +30,9 @@ interface ToolDeclaration {
 	parameters: Record<string, unknown>;
 }
 
-function run(args: string[], timeout = 30_000): Record<string, unknown> {
+function runCli(args: string[], timeout = 30_000, callerArguments: string[] = []): Record<string, unknown> {
 	try {
-		const stdout = execFileSync(CLI, args, {
+		const stdout = execFileSync(CLI, [...callerArguments, ...args], {
 			encoding: "utf-8",
 			timeout,
 		});
@@ -51,11 +59,30 @@ function run(args: string[], timeout = 30_000): Record<string, unknown> {
 }
 
 export default function (pi: ExtensionAPI) {
-	const currentThread = process.env.AGENT_COMMS_THREAD;
-	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
-	const task = process.env.PI_TASK || "";
-	const managed = process.env.AGENT_COMMS_MANAGED === "1";
-	let serviceTier = process.env.AGENT_COMMS_SERVICE_TIER;
+	const catalog = runCli(["tools", "--native-arguments", JSON.stringify(process.argv)]);
+	const caller = catalog.caller as CallerRecord;
+	if (!Array.isArray(catalog.native_flags) || !catalog.native_flags.every((flag) => typeof flag === "string" && flag.startsWith("--"))) {
+		throw new Error("Core did not declare its native JSON flags");
+	}
+	for (const flag of catalog.native_flags as string[]) {
+		pi.registerFlag(flag.slice(2), { description: "Core native launch record", type: "string" });
+	}
+	let native: Extract<CallerRecord, { kind: "thread" }> | undefined;
+	switch (caller.kind) {
+		case "thread": native = caller; break;
+		case "operator": break;
+		default: throw new Error("Core returned an unknown caller record");
+	}
+	const run = (args: string[], timeout = 30_000) => runCli(args, timeout, caller.arguments);
+	const currentThread = native?.name;
+	const forkThread = native?.parent ? native.name : undefined;
+	const task = native?.task ?? "";
+	const managed = native !== undefined;
+	pi.events.on("agent-comms:caller", (consume: unknown) => {
+		if (typeof consume !== "function") throw new TypeError("Caller consumer must be a function");
+		consume(caller, catalog.project as NativeProject);
+	});
+	let serviceTier = native?.service_tier;
 	if (serviceTier !== undefined && serviceTier !== "standard" && serviceTier !== "priority") {
 		throw new Error(`Unsupported agent-comms service tier: ${serviceTier}`);
 	}
@@ -138,8 +165,7 @@ export default function (pi: ExtensionAPI) {
 		});
 	}
 
-	const catalog = run(["tools"]).tools as ToolDeclaration[];
-	for (const declaration of catalog) {
+	for (const declaration of catalog.tools as ToolDeclaration[]) {
 		pi.registerTool({
 			name: declaration.name,
 			label: declaration.label,

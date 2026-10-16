@@ -176,7 +176,7 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
     from agent_comms import invoke_tool
     from agent_comms.tool_caller import ThreadCaller
 
-    invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
+    invoke_tool = partial(invoke_tool, caller=ThreadCaller(comms.registry.require('owner').incarnation))
 
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))

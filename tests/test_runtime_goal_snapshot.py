@@ -1,5 +1,7 @@
 """Goal polling and owner actions use a real socket without launching a provider."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 from unittest.mock import AsyncMock
 
 import json
@@ -23,7 +25,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_generation import CancelledGeneration
 from agent_comms.goals import Goal
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import Comms
@@ -42,7 +44,7 @@ async def goal_owner(tmp_path, monkeypatch):
     owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
-    proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
     scheduled = []
     monkeypatch.setattr(owner.turns.goals, "schedule_goal", AsyncMock(side_effect=scheduled.append))
     try:

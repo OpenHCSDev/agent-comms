@@ -1,5 +1,7 @@
 """Original private prefix verification permits append, not changed evidence."""
 
+from agent_comms.native_session_files import PrivateEvidenceRead, VerifiedNativeEvidencePrefix
+
 import asyncio
 import hashlib
 import io
@@ -9,11 +11,8 @@ import os
 import pytest
 
 from agent_comms.native_entries import NativeEntry
-from agent_comms.native_pi import (
-    NativePiUnavailable,
-    PrivateEvidenceRead,
-    VerifiedNativeEvidencePrefix,
-)
+
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.private_path import FileRevision
 from test_native_pi import _evidence
 from test_backend_native_lifecycle import native_backend

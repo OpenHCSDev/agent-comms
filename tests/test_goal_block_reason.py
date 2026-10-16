@@ -67,7 +67,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
     with pytest.raises(ValueError, match="nonempty reason"):
         tool.invoke(
             comms,
-            {"goal_id": original.id, "status": "blocked", "progress": " \t "}, caller=ThreadCaller("worker"),
+            {"goal_id": original.id, "status": "blocked", "progress": " \t "}, caller=ThreadCaller(comms.registry.require('worker').incarnation),
         )
     assert (tmp_path / "registry.json").read_bytes() == before_registry
 
@@ -80,7 +80,7 @@ def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monk
     )
     reason = "Need the exact ACP error text from the user before diagnosing."
     result = tool.invoke(
-        comms, {"goal_id": original.id, "status": "blocked", "progress": f"  {reason}  "}, caller=ThreadCaller("worker")
+        comms, {"goal_id": original.id, "status": "blocked", "progress": f"  {reason}  "}, caller=ThreadCaller(comms.registry.require('worker').incarnation)
     )
     blocked = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).registry.require("worker").goal
     assert blocked is not None and blocked.state.declared_name == "blocked"

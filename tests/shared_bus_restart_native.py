@@ -3,6 +3,9 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 admission, native process, source proof and response publication remain real.
 """
+
+from agent_comms.runtime_socket import RuntimeSocket
+from agent_comms.context_segments.doctrine import DoctrineSegment
 import argparse
 import hashlib
 import shutil
@@ -24,7 +27,7 @@ from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import decode_updates
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_cutover import StoppedOwnerInstallation
-from agent_comms.runtime import socket_path
+
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import ThreadRole
@@ -67,7 +70,9 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     # The original owner owns auth/settings/extension selection. Bootstrap is
     # its existing OS-environment decoder, not a second fixture configuration.
     _, environment = NativePiRpcLaunch.bootstrap(
-        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment, retained.configuration, LaunchRuntime(Path(retained.interpreter)))
+        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment,
+        retained.configuration, LaunchRuntime(Path(retained.interpreter)),
+        session_context=(DoctrineSegment.capture(),))
     source_profile = retained.configuration.native_config
     source_hashes = {}
     for filename in ('auth.json', 'models.json', 'settings.json'):
@@ -460,7 +465,6 @@ async def configured_mixed_routes(arguments):
     """
 
     from agent_comms.native_input_record import FullNativeExecution
-    from agent_comms.native_package import verify_native_package
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_entries import NativeEntry
     from agent_comms.pi_payloads import ToolResultMessage
@@ -667,11 +671,11 @@ class PromptBindingContention(AdmissionContention, declared_name='binding'):
 async def attach(service, name):
     owner = service.registry.require(name)
     async with asyncio.timeout(30):
-        while not socket_path(service.root, owner.pid).exists():
+        while not RuntimeSocket.path_for(service.root, owner.pid).exists():
             assert owner.process_alive
             await asyncio.sleep(.03)
         reader, writer = await asyncio.open_unix_connection(
-            socket_path(service.root, owner.pid), limit=8 * 1024 * 1024)
+            RuntimeSocket.path_for(service.root, owner.pid), limit=8 * 1024 * 1024)
         try:
             writer.write((json.dumps(SubscribeRuntimeRequest(thread=name).to_wire())+'\n').encode())
             await writer.drain()
