@@ -332,22 +332,26 @@ class CertifiedSourceRead:
         self.require_current()
         return original
 
-    def addressed_sequences(self, bus: WireLog, lookup: str, after_seq: int) -> tuple[int, ...]:
-        """Every committed addressed sequence in this certificate, without bytes.
-
-        Callers that only need membership consult the index; they capture and
-        decode an original only for the sequences they actually consume.
-        """
+    def _addressed_after(self, bus: WireLog, lookup: str, after_seq: int) -> sqlite3.Cursor:
+        """Select one recipient's newer rows from this certified address index."""
         self.require_current()
         self.require_marker(bus._private_marker_unlocked())
         try:
-            rows = self.connection.execute(
+            return self.connection.execute(
                 f"SELECT a.seq FROM {Addressed.declared_name} a "
                 "WHERE a.lookup=? AND a.seq>? AND a.seq<=? ORDER BY a.seq",
                 (lookup, after_seq, self.witness.through_seq),
-            ).fetchall()
+            )
         except sqlite3.Error as error:
             raise RelationViolationError("Certified addressed index is unavailable.") from error
+
+    def addressed_sequences(self, bus: WireLog, lookup: str, after_seq: int) -> tuple[int, ...]:
+        """Every committed addressed sequence in this certificate, without bytes.
+
+        Callers that consume the selected rows consult the index, then capture
+        and decode only those originals.
+        """
+        rows = self._addressed_after(bus, lookup, after_seq).fetchall()
         self.require_current()
         return tuple(seq for seq, in rows)
 
@@ -875,6 +879,42 @@ class RecordedContextManifestSources(
 class Addressed(CheckpointTable, TypedTable):
     lookup: str = field(metadata={"sql": Column(primary_key=True)})
     seq: int = field(metadata={"sql": Column(True, references=(DeliverySources, "seq"))})
+
+    @classmethod
+    def observed_after(
+        cls, bus: WireLog, revision: FileRevision, source: FileRevision,
+        marker_revision: FileRevision, lookup: str, after_seq: int,
+    ) -> tuple[WireMetadata, bool]:
+        """Read one recipient's indexed aggregate only at the captured revision.
+
+        This observation grants no delivery authority. Concurrent publication
+        makes it stale instead of making an absent row authoritative.
+        """
+        path = _path(bus.path)
+
+        def require_captured_sources() -> None:
+            if (
+                FileRevision.capture(bus.path) != source
+                or FileRevision.capture(bus.metadata_path) != marker_revision
+                or FileRevision.capture(path) != revision
+            ):
+                raise RelationViolationError("Address observation changed during its read")
+
+        require_captured_sources()
+        marker = bus._private_marker_unlocked()
+        with closing(_connect(path, readonly=True)) as db:
+            witness = PrefixCertificate.read_witness(db)
+            witness.require_marker(marker)
+            if witness.revision != source:
+                raise RelationViolationError("Address index does not cover the observed wire")
+            marker.seal.check_final(witness, path)
+            row = db.execute(
+                f'SELECT 1 FROM "{cls.declared_name}" '
+                "WHERE lookup=? AND seq>? LIMIT 1",
+                (lookup, after_seq),
+            ).fetchone()
+        require_captured_sources()
+        return marker, row is not None
 
 
 @dataclass(frozen=True)

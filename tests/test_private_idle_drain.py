@@ -566,9 +566,9 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
 async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     tmp_path, monkeypatch
 ) -> None:
-    """A foreign append decodes only bytes after the owner's settled offset."""
+    """A foreign append consults the address owner without decoding bus rows."""
     from agent_comms import input_drain
-    from agent_comms.wire_log import OpenedWireSnapshot
+    from agent_comms.private_bus_checkpoint import Addressed
 
     comms, agent, _root_id = _session(tmp_path)
     comms.registry.declare(
@@ -598,15 +598,15 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     async def no_catalog(session_id):
         pass
 
-    tails = []
-    appended_records = OpenedWireSnapshot.appended_records
+    address_reads = []
+    observed_after = Addressed.observed_after.__func__
 
-    def measured_tail(self, previous, previous_sequence):
-        tails.append(self.boundary - previous.size)
-        return appended_records(self, previous, previous_sequence)
+    def measured_address(cls, bus, revision, source, marker_revision, lookup, after_seq):
+        address_reads.append((lookup, after_seq, revision))
+        return observed_after(cls, bus, revision, source, marker_revision, lookup, after_seq)
 
     monkeypatch.setattr(input_drain.WireWatch, "observations", staticmethod(observations))
-    monkeypatch.setattr(OpenedWireSnapshot, "appended_records", measured_tail)
+    monkeypatch.setattr(Addressed, "observed_after", classmethod(measured_address))
     monkeypatch.setattr(agent.inputs, "drain_inbox", counted)
     monkeypatch.setattr(agent.sessions.config, "sync_thread", no_catalog)
     observer = asyncio.create_task(agent.inputs.observe("beta"))
@@ -626,7 +626,7 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
         comms.messaging.send_message("sender", "gamma", "another for gamma")
         await tick()
         assert len(drains) == settled
-        assert tails and tails[-1] < comms.bus.log.path.stat().st_size
+        assert address_reads
         comms.messaging.send_message("sender", "beta", "for beta")
         await tick()  # the address record has an unadmitted row for beta: full tick
         assert len(drains) == settled + 1, "a delivered row for the owner did not wake it"

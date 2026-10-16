@@ -37,6 +37,7 @@ from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .errors import RelationViolationError
+from .private_bus_checkpoint import Addressed
 from .private_path import FileRevision
 from .registry_document import RegistryEntry
 from .registry_store import RegistryEntryRevision
@@ -48,7 +49,6 @@ from .store_files import _async_store_lock, _store_lock
 from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
-from .wire_log import OpenedWireSnapshot
 from .wire_metadata import WireMetadata
 from .wire_watch import WatchSource, WireWatch
 from .goal_presentation import GoalExecutionState
@@ -214,32 +214,19 @@ class InputObservation:
             return False
         return session_id not in self.backend_inboxes
 
-    def _appended_rows_for_owner(
+    def _indexed_changes_for_owner(
         self, settled: SettledTick, revision: TickRevision, lookup: str,
     ) -> tuple[WireMetadata, bool]:
-        """Read only bytes appended since this owner's settled observation."""
+        """Read this owner's address aggregate only from the captured index cut."""
         previous_info, current_info = settled.revision.bus[0], revision.bus[0]
-        if previous_info is None or current_info is None:
-            raise RelationViolationError("Wire tail has no stable file revision")
-        log = self.comms.bus.log
-        metadata = log._private_marker_unlocked()
-        if FileRevision.capture(log.metadata_path) != revision.bus[1]:
-            raise RelationViolationError("Wire marker changed after tick capture")
-        with log.path.open("rb") as stream:
-            current = FileRevision.from_stat(os.fstat(stream.fileno()))
-            if current != current_info:
-                raise RelationViolationError("Wire changed after tick capture")
-            if previous_info.identity != current_info.identity:
-                raise RelationViolationError("Wire tail does not extend the settled source")
-            opened = OpenedWireSnapshot(metadata, metadata.last_seq, stream, current)
-            records = opened.appended_records(previous_info, settled.through_seq)
-        addressed = any(
-            recipient.recipient_lookup == lookup
-            for record in records
-            for delivery in record.deliveries()
-            for recipient in delivery.audience.recipients
+        if previous_info is None or current_info is None or revision.checkpoint is None:
+            raise RelationViolationError("Wire address index has no stable file revision")
+        if previous_info.identity != current_info.identity:
+            raise RelationViolationError("Wire tail does not extend the settled source")
+        return Addressed.observed_after(
+            self.comms.bus.log, revision.checkpoint, current_info,
+            revision.bus[1], lookup, settled.through_seq,
         )
-        return metadata, addressed
 
 
     def ensure_live_drain(self, session_id: str) -> None:
@@ -412,17 +399,21 @@ class InputObservation:
         component. An unavailable answer keeps the full tick — unavailable
         never means 'not mine'.
         """
+        admission_after_seq, through_seq = settled.admission_after_seq, settled.through_seq
         try:
-            marker, addressed = await Coordination.run_worker(partial(
-                self._appended_rows_for_owner,
-                settled,
-                revision,
-                stable_thread_lookup(entry.thread.created_at),
-            ))
-            if marker.admission_after_seq != settled.admission_after_seq:
-                return None
-            if addressed:
-                return None
+            if (
+                revision.bus != settled.revision.bus
+                or revision.checkpoint != settled.revision.checkpoint
+            ):
+                marker, addressed = await Coordination.run_worker(partial(
+                    self._indexed_changes_for_owner,
+                    settled,
+                    revision,
+                    stable_thread_lookup(entry.thread.created_at),
+                ))
+                if marker.admission_after_seq != settled.admission_after_seq or addressed:
+                    return None
+                admission_after_seq, through_seq = marker.admission_after_seq, marker.last_seq
             if revision.coordination != settled.revision.coordination:
                 if not await self._own_coordination_unchanged(session_id, entry):
                     return None
@@ -435,9 +426,7 @@ class InputObservation:
             RelationViolationError,
         ):
             return None
-        return SettledTick(
-            revision, entry, marker.admission_after_seq, marker.last_seq,
-        )
+        return SettledTick(revision, entry, admission_after_seq, through_seq)
 
     def _private_observation_revision(
         self, session_id: str, root_id: str, wire: tuple, entry: RegistryEntry,
