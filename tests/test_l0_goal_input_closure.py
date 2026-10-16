@@ -113,7 +113,9 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
 
 
 def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path):
-    comms = wire(tmp_path)
+    from goal_owner_fixture import canonical_goal_wire
+
+    comms = canonical_goal_wire(tmp_path)
     register(comms, "owner")
     register(comms, "peer")
     comms.agents.begin_turn("peer", "peer-turn")
