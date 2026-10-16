@@ -416,19 +416,11 @@ class DisplaySelection:
         return self.readers[self.viewer]
 
     @classmethod
-    def capture(
-        cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-        document: ReadDocument, viewer: str | None, source: ReadSource,
-    ) -> DisplaySelection:
-        canonical = snapshot.canonical_name(viewer) if viewer is not None else None
-        return cls(snapshot, catalog, canonical, document.observations(snapshot).for_source(source), document)
-
-    @classmethod
     @contextmanager
     def reading(
         cls, registry: Registration, catalog: ChannelCatalog,
-        reads: ReadLedger, viewer: str | None, source: ReadSource,
-        *, reader_selection: type[SelectedViewers] = HumanViewers,
+        reads: ReadLedger, viewer: str | None,
+        source: ReadSource, *, reader_selection: type[SelectedViewers] = HumanViewers,
     ) -> Iterator[DisplaySelection]:
         """Borrow the original identity resources and read the ledger once.
 
@@ -440,7 +432,9 @@ class DisplaySelection:
             participants = ((snapshot.participant(viewer),) if viewer is not None
                             else snapshot.threads.values())
             with reader_selection.capture(participants).reading(reads, source) as read_document:
-                selected = cls.capture(snapshot, channels, read_document, viewer, source)
+                canonical = snapshot.canonical_name(viewer) if viewer is not None else None
+                selected = cls(snapshot, channels, canonical,
+                               read_document.observations(snapshot).for_source(source), read_document)
             yield selected
 
     @property
