@@ -23,7 +23,9 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
-from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
+from refactor_audit.measures import (
+    FamilyFlattened as AuditFamilyFlattened, ForeignAbsenceSyntax, ForeignNegationSyntax,
+)
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, projected
@@ -376,7 +378,8 @@ class TypeIdentity(OccurrenceMeasure):
         )
 
 
-class LongBooleanChain(OccurrenceMeasure):
+class LongBooleanChain(ObservationalMeasure, OccurrenceMeasure):
+    """Condition length does not establish a decision outside its owner."""
     minimum_terms = 4
 
     @staticmethod
@@ -387,7 +390,7 @@ class LongBooleanChain(OccurrenceMeasure):
         return 0
 
 
-class BooleanChainTerms(PerFileOccurrenceMeasure):
+class BooleanChainTerms(ObservationalMeasure, PerFileOccurrenceMeasure):
     @staticmethod
     def occurrences(node: ast.AST) -> int:
         match node:
@@ -437,11 +440,6 @@ class ForeignAttributeProbe(PerFileMeasure):
                     if isinstance(enclosing_class, ast.ClassDef) and receiver_type == owner_symbol:
                         continue
                 unresolved = isinstance(owner, ast.Name) and receiver_type is None
-                if isinstance(node, ast.UnaryOp):
-                    query = repository.declared_boolean_inversion(function_symbol, attribute)
-                    if query is True:
-                        continue
-                    unresolved = query is None
                 count += 1
                 if unresolved:
                     print(f"{path}:{node.lineno}: unresolved nominal binding; kept {cls.__name__}", file=sys.stderr)
@@ -454,26 +452,12 @@ class ForeignAttributeProbe(PerFileMeasure):
                             targets={filename})[f"{cls.__name__}:{filename}"]
 
 
-class ForeignAbsenceProbe(ForeignAttributeProbe):
+class ForeignAbsenceProbe(ForeignAbsenceSyntax, ForeignAttributeProbe):
     """Explicit foreign None comparisons, not ordinary truth-value negation."""
 
-    @staticmethod
-    def attribute(node: ast.AST) -> ast.Attribute | None:
-        match node:
-            case ast.Compare(left=ast.Attribute() as attribute, ops=[ast.Is() | ast.IsNot()], comparators=[ast.Constant(value=None)]):
-                return attribute
-        return None
 
-
-class ForeignNegation(ObservationalMeasure, ForeignAttributeProbe):
+class ForeignNegation(ForeignNegationSyntax, ObservationalMeasure, ForeignAttributeProbe):
     """Unproved truth-value queries stay visible without inventing absence."""
-
-    @staticmethod
-    def attribute(node: ast.AST) -> ast.Attribute | None:
-        match node:
-            case ast.UnaryOp(op=ast.Not(), operand=ast.Attribute() as attribute):
-                return attribute
-        return None
 
 
 class CodecSubclass(PerFileOccurrenceMeasure):

@@ -272,13 +272,18 @@ def test_owner_local_action_hook_does_not_fail_on_physical_span(repo: Repository
     assert "measurements" not in report
 
 
-def test_chain_terms_catch_growth_hidden_by_unchanged_chain_count(repo: Repository) -> None:
+def test_chain_terms_track_growth_without_claiming_competing_behavior(repo: Repository) -> None:
     base = repo.commit({"rules.py": "valid = a and b and c and d\n"})
     head = repo.commit({"rules.py": "valid = a and b and c and d and e\n"})
     status, report = repo.compare(base, head)
-    assert status == 1
+    assert status == 0
+    assert report["regressions"] == {}
     assert report["delta"]["LongBooleanChain"] == 0
     assert report["delta"][f"BooleanChainTerms:{repo.root}/rules.py"] == 1
+    checked = repo.commit({"rules.py": "valid = a and b and c and d and e\nexact = type(value) is int\n"})
+    status, report = repo.compare(head, checked)
+    assert status == 1
+    assert report["regressions"] == {"TypeIdentity": 1}
 
 
 @pytest.mark.parametrize(("measure", "decision"), [
@@ -331,7 +336,6 @@ async def second(value):
 
 
 @pytest.mark.parametrize(("measure", "source"), [
-    ("BooleanChainTerms", "valid = a and b and c and d\n"),
     ("ForeignAbsenceProbe", "absent = other.value is None\n"),
     ("CodecSubclass", "class Local(FieldCodec):\n    pass\n"),
     ("StringDispatch", 'def decide(x):\n    return x in ("a", "b", "c")\n'),
