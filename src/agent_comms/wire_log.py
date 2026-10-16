@@ -727,32 +727,20 @@ class WireLog:
             originals = source.references(references)
         return tuple(originals)
 
-    def total_messages(self) -> int:
-        with self.verified_snapshot() as records:
-            return sum(1 for record in records for _ in record.messages())
-
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""
         with _store_read_lock(self.path) as lock:
             return self._committed_sequence_unlocked(lock)
 
-    def _iter_log_unlocked(self) -> Iterator[Message]:
-        if self.path.exists():
-            marker = self._private_marker_unlocked()
-            for record in self.verified_records_unlocked(marker):
-                yield from record.messages()
-
     def _committed_sequence_unlocked(self, lock: StoreLock) -> int:
         """Read the committed cut from the resource acquired by this barrier.
 
         The certificate's global through_seq is not the addressed page's
-        latest_source_seq or a marker reservation. Claim streams without an
-        installed certificate still require their original strict traversal.
+        latest_source_seq or a marker reservation. The existing read barrier
+        refuses private claim streams without their required certificate.
         """
         if lock.source is not None:
             return lock.certified_read().committed_sequence()
-        if self.claim_gate_enabled():
-            return max((message.seq for message in self._iter_log_unlocked()), default=0)
         return self.read_metadata_unlocked().last_seq
 
     def claim_gate_enabled(self) -> bool:
