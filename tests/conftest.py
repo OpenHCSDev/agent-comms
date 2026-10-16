@@ -48,6 +48,35 @@ def _deferred_candidate_scheduler_is_explicit(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.fixture
+def delayed_launch(monkeypatch: pytest.MonkeyPatch):
+    """Hold the first real exec verification; later launches run unchanged."""
+    import asyncio
+    import sys
+
+    from agent_comms.child_process import Platform
+
+    with Platform.current().launch((sys.executable, "-c", "pass"), ()) as launch:
+        launch_type = type(launch)
+    original_verify = launch_type.verify_async
+    original_release = launch_type.release
+    captured, verified = [], []
+
+    def release(launch, identity):
+        captured.append(identity)
+        original_release(launch, identity)
+
+    async def verify(launch):
+        await original_verify(launch)
+        verified.append(True)
+        if len(verified) == 1:
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr(launch_type, "release", release)
+    monkeypatch.setattr(launch_type, "verify_async", verify)
+    return captured, verified
+
+
+@pytest.fixture
 def fake_native_catalog(monkeypatch: pytest.MonkeyPatch) -> None:
     """Declared native choices for tests whose child/provider edge is controlled."""
     from agent_comms.pi_payloads import ThinkingLevelsData

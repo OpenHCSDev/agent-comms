@@ -136,14 +136,11 @@ class PersistentPiSession:
         await self._finish_retirement(self.custody.retire())
 
     async def _finish_retirement(self, retiring: NativeCustody) -> None:
-        from .native_custody import NativeCleanupFailed
-
         self.custody = retiring
         try:
-            self.custody = await self.custody.closed()
-        except NativeCleanupFailed as error:
-            self.custody = error.successor
-            raise
+            await retiring.closed()
+        finally:
+            self.custody = retiring.settled
 
     async def close_idle(self) -> None:
         async with self.lock:

@@ -5,13 +5,12 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import ClassVar, Literal, Type
+from typing import TYPE_CHECKING, ClassVar, Literal, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
 from .command import Command
-from .comms import Comms
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
@@ -40,6 +39,9 @@ from .tool_output import (
     materialize_oversized_output,
     serialize_tool_output,
 )
+
+if TYPE_CHECKING:
+    from .comms import Comms
 
 JsonObject = dict[str, object]
 
