@@ -121,20 +121,58 @@ def test_aborted_tail_uses_indexed_last_committed_entry(tmp_path, monkeypatch):
 
     monkeypatch.setattr(GoalHistoryEntry, "_decode_row", classmethod(read))
     captured = registry.goal_history("owner")
-    assert decoded == [510, 10]
+    assert decoded == [10]
     assert captured.through_sequence == 10
 
 
-def test_journal_declares_only_one_pending_tail_per_incarnation(tmp_path):
+@pytest.mark.parametrize("pending_count", [3, 105])
+def test_every_pending_decision_is_reconciled_without_a_page_or_cardinality_cap(tmp_path, pending_count):
     registry = authored_history(tmp_path / "journal", 1)
     thread = registry.require("owner")
     journal = GoalHistoryStore(registry.store.path)
-    with pytest.raises(sqlite3.IntegrityError, match="UNIQUE"):
-        with sqlite3.connect(journal.path) as connection:
-            for _ in range(2):
-                GoalHistoryEntry(None, "transition", 1.0, thread.goal, None,
-                                 owner_created_at=thread.created_at, state="pending").insert(connection)
-    assert len(GoalHistoryStore.acquire_read_only(registry.store.path)) == 1
+    other = replace(thread.goal, text="Another endpoint")
+    distinct = replace(thread.goal, text="An unrelated endpoint")
+    cases = ((other, thread.goal, "committed"), (thread.goal, other, "aborted"),
+             (other, distinct, "uncertain"))
+    with journal._transaction() as connection:
+        for ordinal in range(pending_count):
+            before, after, _ = cases[ordinal % len(cases)]
+            GoalHistoryEntry(None, "transition", float(ordinal), before, after,
+                             owner_created_at=thread.created_at, state="pending").insert(connection)
+    original = GoalHistoryStore.acquire_read_only(registry.store.path)
+    registry.goal_history("owner")
+    reconciled = GoalHistoryStore.acquire_read_only(registry.store.path)
+    assert len(reconciled) == len(original) == pending_count + 1
+    assert [row.state for row in reconciled[1:]] == [
+        cases[ordinal % len(cases)][2] for ordinal in range(pending_count)
+    ]
+    assert all((old.sequence, old.kind, old.before, old.after) ==
+               (new.sequence, new.kind, new.before, new.after)
+               for old, new in zip(original, reconciled, strict=True))
+
+
+@pytest.mark.parametrize("committed_after_none", [False, True])
+def test_absent_committed_history_is_distinct_from_committed_after_none(tmp_path, committed_after_none):
+    root = tmp_path / "journal"
+    root.mkdir()
+    registry = Registration(root / "registry.json")
+    thread = Thread("owner", frozenset(), str(root))
+    registry.register(thread)
+    journal = GoalHistoryStore(registry.store.path)
+    with journal._transaction() as connection:
+        GoalHistoryEntry(None, "transition", 1.0, Goal("Prior", "prior"),
+                         None if committed_after_none else Goal("Other", "other"),
+                         owner_created_at=thread.created_at,
+                         state="committed" if committed_after_none else "pending").insert(connection)
+    captured = registry.goal_history("owner")
+    rows = GoalHistoryStore.acquire_read_only(registry.store.path)
+    assert len(rows) == 1
+    if committed_after_none:
+        assert captured.through_sequence == rows[0].sequence
+        assert captured.entries() == rows and rows[0].after is None
+    else:
+        assert captured.through_sequence is None and captured.entries() == ()
+        assert rows[0].state == "uncertain"
 
 
 def test_query_filters_both_replacement_endpoints_without_duplicates(tmp_path):
@@ -195,7 +233,7 @@ def test_index_installation_is_explicit_and_never_rewrites_journal_rows(tmp_path
             connection.execute(f'DROP INDEX "{name}"')
     before = path.read_bytes()
     plan = install_indexes(registry.store.path)
-    assert len(plan["indexes"]) == 5 and plan["journal_rows_changed"] == 0
+    assert len(plan["indexes"]) == 4 and plan["journal_rows_changed"] == 0
     assert path.read_bytes() == before
     assert GoalHistoryStore.acquire_read_only(registry.store.path) == original
     with pytest.raises(GoalHistoryError, match="one-shot index"):

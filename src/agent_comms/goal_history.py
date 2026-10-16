@@ -14,7 +14,7 @@ import stat
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import ClassVar, Literal
 
@@ -50,7 +50,6 @@ class GoalHistoryEntry(TypedTable):
         Index(("owner_created_at", "state", "sequence")),
         *(ExpressionIndex(("owner_created_at", "state", expression, "sequence"))
           for expression in (BEFORE_GOAL_ID, AFTER_GOAL_ID, REPORTED_TURN)),
-        Index(("owner_created_at",), unique=True, where="state='pending'"),
     )
 
     @classmethod
@@ -319,40 +318,42 @@ class GoalHistoryStore:
         except OSError as error:
             raise GoalHistoryError("Cannot sync visible goal authority.") from error
 
-    def _latest(self, owner_created_at: float, *, state: str | None = None) -> GoalHistoryEntry | None:
+    def _rows(
+        self, owner_created_at: float, *, state: str | None = None,
+        limit: int | None = None, descending: bool = False,
+    ) -> list[GoalHistoryEntry]:
+        """Read the requested rows; no implicit cap on original or pending history."""
         try:
             with closing(self._connect()) as connection:
                 where, parameters = "owner_created_at=?", (owner_created_at,)
                 if state is not None:
                     where += " AND state=?"
                     parameters += (state,)
-                rows = GoalHistoryEntry.select(
+                return GoalHistoryEntry.select(
                     connection, where=where, parameters=parameters,
-                    order_by=("sequence",), descending=True, limit=1,
+                    order_by=("sequence",), descending=descending, limit=limit,
                 )
-                return next(iter(rows), None)
         except (sqlite3.Error, ValueError, TypeError) as error:
-            raise GoalHistoryError("Cannot read goal history tail.") from error
+            raise GoalHistoryError("Cannot read goal history.") from error
 
     def observe(self, owner_created_at: float, current: Goal | None) -> GoalHistoryRead:
-        """Reconcile the sole unfinished tail and capture a committed read cursor.
+        """Reconcile every pending intent, then read only the latest committed row.
 
-        begin() settles the previous tail before appending another intent while
-        its caller holds the registry lock. No earlier entry can remain pending.
+        The state index makes retained settled history irrelevant to transition
+        work. Pending evidence is never clipped or rejected by a new cardinality
+        constraint, including when an original journal has several pending rows.
         """
-        last = self._latest(owner_created_at)
-        if last is not None and last.state == "pending":
-            if current == last.after:
+        for row in self._rows(owner_created_at, state="pending"):
+            if current == row.after:
                 self._sync_visible_registry()
-                state = "committed"
-            elif current == last.before:
-                state = "aborted"
+                self._set_state(row.sequence, "committed")
+            elif current == row.before:
+                self._set_state(row.sequence, "aborted")
             else:
-                state = "uncertain"
-            self._set_state(last.sequence, state)
-            last = replace(last, state=state)
-        if last is not None and last.state != "committed":
-            last = self._latest(owner_created_at, state="committed")
+                self._set_state(row.sequence, "uncertain")
+        last = next(iter(self._rows(
+            owner_created_at, state="committed", limit=1, descending=True,
+        )), None)
         sequence = last.sequence if last is not None else None
         if last is None:
             if current is not None:
