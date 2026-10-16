@@ -131,6 +131,7 @@ class AwaitingAdmission(CallAdmission):
         # No retry even when the callback is cancelled or its durable fsync fails.
         call.admission = UncertainAdmission()
         await action()
+        call.observation.require_executing()
         call.admission = AdmittedCall()
 
 
