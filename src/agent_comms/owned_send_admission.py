@@ -21,6 +21,7 @@ from .ordinary_admission_rules import (
 )
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
+from .input_attempt import InputAlreadyCleared
 from .thread_identity import TurnId
 from .turn_input_source import (
     OriginalTurnInput,
@@ -86,6 +87,8 @@ class OwnedSendAdmission:
             return
         accepted = self.inputs.queued_inputs.get(self.session_id, {}).get(source.accepted_id)
         if accepted is None:
+            for row in self.inputs.dispositions.read(source.keys).rows.values():
+                row.require_not_cleared()
             MissingAcceptedInputCheck().require_valid()
         AcceptedInputCheck(
             receipt=accepted,
@@ -115,10 +118,9 @@ class OwnedSendAdmission:
         )
         return None if defer else False
 
-    @contextmanager
-    def __call__(
+    def _prepare(
         self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
-    ) -> Iterator[bool | None]:
+    ) -> bool | None:
         # Backend ingress already owns shared custody through this check and write.
         snapshot = self.comms.registry.snapshot()
         canonical = snapshot.canonical_name(self.thread.name)
@@ -127,15 +129,13 @@ class OwnedSendAdmission:
         try:
             self._check_owner(current, snapshot, canonical, source, sent_text)
         except ReservationViolationError as error:
-            yield self._refusal(error.rule, False)
-            return
+            return self._refusal(error.rule, False)
         wait = self.comms.goals.goal_wait(canonical)
         defer = source.defers_for_goal(self.thread.goal, current.goal)
         try:
             self._require_context(source, current, wait)
         except ReservationViolationError as error:
-            yield self._refusal(error.rule, defer)
-            return
+            return self._refusal(error.rule, defer)
         # Binding failures may be uncertain. Exceptions here still propagate;
         # never reinterpret a failed durable operation as a retryable policy refusal.
         if not self.inputs.dispositions.bind_turn_input(
@@ -146,11 +146,9 @@ class OwnedSendAdmission:
             text=sent_text,
             already_bound=already_bound,
         ):
-            yield self._refusal(UnboundOrdinaryInputRule(), defer)
-            return
+            return self._refusal(UnboundOrdinaryInputRule(), defer)
         if not source.consume_wait(self.comms, canonical, wait):
-            yield self._refusal(UnconsumedDependencyRule(), defer)
-            return
+            return self._refusal(UnconsumedDependencyRule(), defer)
         self.comms.transcripts.routes.record_input_display(
             native_id,
             source.display(self.inputs.dispositions, sent_text),
@@ -159,7 +157,17 @@ class OwnedSendAdmission:
                 tuple(origin.reference for origin in source.origins), None
             ) if source.origins else None,
         )
-        yield True
+        return True
+
+    @contextmanager
+    def __call__(
+        self, public_id: str | None, native_id: str, sent_text: str, *, already_bound: bool = False
+    ) -> Iterator[bool | None]:
+        try:
+            decision = self._prepare(public_id, native_id, sent_text, already_bound=already_bound)
+        except InputAlreadyCleared:
+            decision = None
+        yield decision
 
     def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
         source = self.source(public_id)

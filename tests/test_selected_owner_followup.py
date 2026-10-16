@@ -9,7 +9,7 @@ from acp import RequestError
 from agent_comms import agent_events as events
 from agent_comms import cohort_foreground, coordinated_runtime
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
-from agent_comms.input_attempt import NotSentInput, ReservedInput
+from agent_comms.input_attempt import ClearedUnsentInput, NotSentInput, ReservedInput
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_acp_private_nk_delivery import _session
@@ -120,8 +120,13 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         await agent.shutdown()
 
 
-@pytest.mark.parametrize("change", ["clear", "missing_key", "foreign_key", "cancel"])
-async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatch, change):
+@pytest.mark.parametrize("change,expected_state", [
+    ("clear", ClearedUnsentInput),
+    ("missing_key", ReservedInput),
+    ("foreign_key", ReservedInput),
+    ("cancel", ReservedInput),
+])
+async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatch, change, expected_state):
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
@@ -174,7 +179,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
             await asyncio.wait_for(wake, 8)
         rows = stored_inputs(agent.inputs.dispositions.root).rows
         assert rows[old_key] == old_row
-        assert rows[f"acp:{input_id}"].accepts_reservation
+        assert isinstance(rows[f"acp:{input_id}"], expected_state)
         assert "beta" not in agent.inputs.backend_inboxes
         assert "beta" not in agent.turns.turn_tasks
     finally:

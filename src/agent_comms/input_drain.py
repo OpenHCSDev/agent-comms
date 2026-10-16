@@ -22,7 +22,7 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
-from .agent_backend import InputContent, InputId, SendNow, TurnInboxItem
+from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
 from .drain_failures import drain_failures
@@ -581,14 +581,22 @@ class InputDrain(InputObservation):
         reset. Callers may re-send the prompts they want to keep.
         """
         async with self.queue_lock:
+            retained = {}
+            cleared = []
+            for key, item in self.queued_inputs.get(session_id, {}).items():
+                remaining = item.after_clear()
+                if remaining is None:
+                    cleared.append(item)
+                else:
+                    retained[key] = remaining
+            if cleared:
+                await Coordination.run_worker(partial(
+                    self.dispositions.clear_unbound, tuple(item.key for item in cleared),
+                ))
+            self.queued_inputs[session_id] = retained
             inbox = self.backend_inboxes.get(session_id)
-            if inbox is not None:
-                inbox.put_nowait({"type": "clear_queue"})
-            self.queued_inputs[session_id] = {
-                key: retained
-                for key, item in self.queued_inputs.get(session_id, {}).items()
-                if (retained := item.after_clear()) is not None
-            }
+            if inbox is not None and cleared:
+                inbox.put_nowait(ClearQueue(tuple(InputId(item.input_id) for item in cleared)))
             self.restored_inputs.pop(session_id, None)
         await self.emit_queue_state(session_id)
 
@@ -845,6 +853,19 @@ class InputDrain(InputObservation):
         if item is not None:
             await item.not_started(self)
             await self.emit_queue_state(session_id)
+
+    async def input_cleared(
+        self, session_id: str, input_id: str, native_id: str, text: str,
+    ) -> None:
+        source = self.following_sources.get(session_id, {}).get(input_id)
+        if source is not None:
+            def record():
+                with _store_lock(self.comms._wire_lock_path):
+                    for key in source.keys:
+                        if not self.dispositions.clear_native(key, native_id, text):
+                            raise RelationViolationError("Native clear differs from its original input")
+            await Coordination.run_worker(record)
+        await self.input_refused(session_id, input_id)
 
     def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
         """The joined retirement owns the original input and its wire cut."""

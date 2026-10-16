@@ -382,7 +382,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 refused, self.rejected_commands = self.rejected_commands, []
                 self.rejected_signal.clear()
                 for command in refused:
-                    await self.following.refused(command.id)
+                    await self.following.retired(command)
                 raw = await self.watchdog.read(self)
                 if not self.rejected_commands:
                     break  # Otherwise the read was only woken to report a refused input.
@@ -477,6 +477,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     measurements=self.startup.measurements,
                 )
 
+    @property
+    def prompt_id(self) -> str:
+        return self.command.id
+
     @handles(pi.Response)
     async def response(self, event: pi.Response) -> None:
         request = self.native.reader.correlate(event)
@@ -488,6 +492,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             self.admission = self.admission.acknowledge(event)
         elif issubclass(event.command, commands.MutatesSession):
             raise NativePiUnavailable("Native Pi session identity changed during a turn")
+        else:
+            async for update in event.command.on_response(event, self):
+                if self.observe_event is not None:
+                    await self.observe_event(update)
 
     @handles(pi.InputCommitted)
     async def committed_input(self, event: pi.InputCommitted) -> None:

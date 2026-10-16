@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 SESSION_SHA = "65f919c02920b68ff359f26d149a167bf0b3ca041f7fbd578087a2e34c571130"
+AGENT_SHA = "93ed16306399765e79c11f78897f575252d7174b85b81a01cdebb2a479e0e57f"
 RPC_SHA = "6f5438c028032f3bc212b6270a1acf9d3e5d22ce5837b85ff5a6fea6c240c76a"
 LOOP_SHA = "7469aebae3badc125087c55843130fe44c2ea3b68ea1b757c884469dd355d5f4"
 ABORT_AFTER_TOOLS = """\
@@ -35,11 +36,9 @@ CONTINUE = """        // Only a new explicit Send now command permits this conti
         // Consume the existing queued native input, never replay the interrupted input.
         const interruptedIds = this._nativeInterruptIds;
         this._nativeInterruptIds = undefined;
-        const selected = interruptedIds ? this.agent.steeringQueue.messages.filter(message =>
-            interruptedIds.includes(message.inputId)) : [];
+        const selected = interruptedIds
+            ? this.agent.steeringQueue.remove(new Set(interruptedIds)) : [];
         if (selected.length) {
-            this.agent.steeringQueue.messages = this.agent.steeringQueue.messages.filter(message =>
-                !interruptedIds.includes(message.inputId));
             this._nativeRunHadTrackedInput = true;
             this._emit({ type: "steering_interrupt_completed" });
             return selected;
@@ -47,6 +46,59 @@ CONTINUE = """        // Only a new explicit Send now command permits this conti
         // Read the actual completed run's signal, including cancellation during
         // awaited listeners. Plain abort never authorizes an implicit continuation.
         if (this._lastAgentRunSignal?.aborted) return false;
+"""
+
+
+REMOVE = """    remove(inputIds) {
+        const removed = [], remaining = [];
+        for (const message of this.messages) {
+            (inputIds.has(message.inputId) ? removed : remaining).push(message);
+        }
+        this.messages = remaining;
+        return removed;
+    }
+"""
+CLEAR_QUEUE_OLD = """    clearQueue() {
+        const steering = this._steeringMessages.map((item) => item.text);
+        const followUp = this._followUpMessages.map((item) => item.text);
+        const removed = this.agent.clearAllQueues();
+        const removedIds = new Set([...removed.steering, ...removed.followUp]
+            .map((message) => message.inputId).filter(Boolean));
+        for (const item of [...this._steeringMessages, ...this._followUpMessages]) {
+            if (item.inputId && removedIds.has(item.inputId) &&
+                !this.sessionManager.getTrackedInput(item.inputId)) {
+                this._nativeInputClaims.delete(item.inputId);
+            }
+        }
+        this._steeringMessages = [];
+        this._followUpMessages = [];
+        this._emitQueueUpdate();
+        return { steering, followUp };
+    }
+"""
+CLEAR_QUEUE = """    clearQueue(inputIds) {
+        // Direct interactive callers still clear their whole editor queue.
+        // The Core RPC boundary below requires an explicit native-ID selection.
+        if (inputIds !== undefined && (!Array.isArray(inputIds) ||
+            inputIds.some(id => !/^[0-9a-f]{32}$/.test(id))))
+            throw new Error("Invalid native queue input IDs");
+        const clearAll = inputIds === undefined;
+        const removed = clearAll ? this.agent.clearAllQueues()
+            : this.agent.clearQueuedInputs(inputIds);
+        const removedIds = new Set([...removed.steering, ...removed.followUp]
+            .map(message => message.inputId).filter(Boolean));
+        const wasRemoved = item => clearAll || removedIds.has(item.inputId);
+        const steering = this._steeringMessages.filter(wasRemoved).map(item => item.text);
+        const followUp = this._followUpMessages.filter(wasRemoved).map(item => item.text);
+        for (const inputId of removedIds) {
+            if (!this.sessionManager.getTrackedInput(inputId))
+                this._nativeInputClaims.delete(inputId);
+        }
+        this._steeringMessages = this._steeringMessages.filter(item => !wasRemoved(item));
+        this._followUpMessages = this._followUpMessages.filter(item => !wasRemoved(item));
+        this._emitQueueUpdate();
+        return { steering, followUp, inputIds: [...removedIds] };
+    }
 """
 
 
@@ -59,8 +111,10 @@ def replace_once(source, anchor, replacement):
 def main(package):
     session = package / "dist/core/agent-session.js"
     rpc = package / "dist/modes/rpc/rpc-mode.js"
-    loop = package / "node_modules/@earendil-works/pi-agent-core/dist/agent-loop.js"
-    for path, expected in ((session, SESSION_SHA), (rpc, RPC_SHA), (loop, LOOP_SHA)):
+    core = package / "node_modules/@earendil-works/pi-agent-core/dist"
+    loop = core / "agent-loop.js"
+    agent = core / "agent.js"
+    for path, expected in ((session, SESSION_SHA), (rpc, RPC_SHA), (loop, LOOP_SHA), (agent, AGENT_SHA)):
         if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
             raise SystemExit("Native steering source does not match pinned build")
     source = session.read_text()
@@ -93,7 +147,7 @@ def main(package):
         "    _handleAgentEvent = async (event, signal) => {\n"
         '        if (event.type === "agent_end") this._lastAgentRunSignal = signal;\n',
     )
-    session.write_text(source)
+    session.write_text(replace_once(source, CLEAR_QUEUE_OLD, CLEAR_QUEUE))
     source = replace_once(
         rpc.read_text(),
         '            case "steer": {\n',
@@ -102,7 +156,48 @@ def main(package):
         "{ interrupted: session.interruptSteering(command.inputIds) });\n"
         '            }\n            case "steer": {\n',
     )
+    source = replace_once(
+        source,
+        '                return success(id, "clear_queue", session.clearQueue());',
+        '                if (command.inputIds === undefined)\n'
+        '                    throw new Error("clear_queue requires inputIds");\n'
+        '                return success(id, "clear_queue", session.clearQueue(command.inputIds));',
+    )
     rpc.write_text(source)
+    source = replace_once(agent.read_text(), "    clear() {\n", REMOVE + "    clear() {\n")
+    source = replace_once(
+        source, "    clearAllQueues() {\n",
+        "    clearQueuedInputs(inputIds) {\n"
+        "        const selected = new Set(inputIds);\n"
+        "        return { steering: this.steeringQueue.remove(selected),\n"
+        "            followUp: this.followUpQueue.remove(selected) };\n"
+        "    }\n    clearAllQueues() {\n",
+    )
+    agent.write_text(source)
+    client = package / "dist/modes/rpc/rpc-client.js"
+    client.write_text(replace_once(
+        client.read_text(),
+        '    async clearQueue() {\n        const response = await this.send({ type: "clear_queue" });',
+        '    async clearQueue(inputIds) {\n'
+        '        const response = await this.send({ type: "clear_queue", inputIds });',
+    ))
+    for relative, signature in (("dist/core/agent-session.d.ts", "clearQueue(inputIds?: string[])"),
+                                ("dist/modes/rpc/rpc-client.d.ts", "clearQueue(inputIds: string[])")):
+        declaration = package / relative
+        source = replace_once(declaration.read_text(), "clearQueue()", signature)
+        source = replace_once(source, "        followUp: string[];\n", "        followUp: string[];\n        inputIds: string[];\n")
+        declaration.write_text(source)
+    declaration = package / "dist/modes/rpc/rpc-types.d.ts"
+    source = replace_once(declaration.read_text(), '    type: "clear_queue";',
+                          '    type: "clear_queue";\n    inputIds: string[];')
+    source = replace_once(source,
+                          '    command: "clear_queue";\n    success: true;\n    data: {\n',
+                          '    command: "clear_queue";\n    success: true;\n    data: {\n        inputIds: string[];\n')
+    declaration.write_text(source)
+    declaration = core / "agent.d.ts"
+    declaration.write_text(replace_once(declaration.read_text(), "    clearAllQueues(): void;",
+        "    clearQueuedInputs(inputIds: string[]): { steering: AgentMessage[]; followUp: AgentMessage[] };\n"
+        "    clearAllQueues(): void;"))
     loop.write_text(
         replace_once(
             loop.read_text(),

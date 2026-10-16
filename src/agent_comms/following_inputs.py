@@ -17,6 +17,7 @@ from .turn_input_source import AcceptedFollowingInput, SelectedOriginalInput
 
 if TYPE_CHECKING:
     from .threads import Thread
+    from .agent_events import InputRefused
     from .turn_runner import TurnRunner
     from .input_drain import InputDrain
     from .tracked_turn import TrackedTurnSession
@@ -44,8 +45,8 @@ class FollowingInputs:
     async def started(self, input_id: str) -> AcceptedFollowingInput:
         raise AssertionError("A turn without an inbox cannot start a following input")
 
-    async def refused(self, input_id: str | None) -> None:
-        raise AssertionError("A turn without an inbox cannot refuse a following input")
+    async def retired(self, event: InputRefused) -> None:
+        raise AssertionError("A turn without an inbox cannot retire a following input")
 
 
 @dataclass
@@ -116,5 +117,5 @@ class OwnerFollowingInputs(FollowingInputs):
         await self.ready(self.inputs, self.session_id)
         return source
 
-    async def refused(self, input_id: str | None) -> None:
-        await self.inputs.input_refused(self.session_id, input_id)
+    async def retired(self, event: InputRefused) -> None:
+        await event.apply_to(self.inputs, self.session_id)

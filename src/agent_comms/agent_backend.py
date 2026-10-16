@@ -92,10 +92,30 @@ class TurnInboxReceiver(Protocol):
     def place(self, turn: object, item: InputRequest) -> Awaitable[bool]: ...
     def send_now(self, turn: object, item: SendNow) -> Awaitable[bool]: ...
     def use_settings(self, turn: object, item: UseSettings) -> Awaitable[bool]: ...
+    def clear_queue(self, turn: object, item: ClearQueue) -> Awaitable[bool]: ...
+
+
+class TurnInboxItem(ABC):
+    """An inbox item owns its carried inputs and delivery to a running turn."""
+
+    @property
+    @abstractmethod
+    def carried_inputs(self) -> tuple[InputId, ...]: ...
+
+    @abstractmethod
+    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]: ...
+
+
+class TurnInboxControl(TurnInboxItem):
+    """A control carries no new input; unread controls cannot start a turn."""
+
+    @property
+    def carried_inputs(self) -> tuple[InputId, ...]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
-class InputRequest:
+class InputRequest(TurnInboxItem):
     """One queued user input handed to a backend: identity, content and busy policy.
 
     Routing, goal and bus-delivery provenance stay in Core, keyed by ``input_id``.
@@ -115,7 +135,7 @@ class InputRequest:
 
 
 @dataclass(frozen=True)
-class SendNow:
+class SendNow(TurnInboxControl):
     """Ask the running turn to place these queued steering inputs immediately.
 
     Only a backend with the :class:`Interrupts` role accepts it.
@@ -123,17 +143,12 @@ class SendNow:
 
     input_ids: tuple[InputId, ...]
 
-    @property
-    def carried_inputs(self) -> tuple[InputId, ...]:
-        """A control names inputs already queued; it carries no input of its own."""
-        return ()
-
     def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
         return receiver.send_now(turn, self)
 
 
 @dataclass(frozen=True)
-class UseSettings:
+class UseSettings(TurnInboxControl):
     """Ask the running turn to use the thread's stored model and thinking level.
 
     The backend applies them from its next model call; the call in flight
@@ -143,16 +158,18 @@ class UseSettings:
     model: str
     thinking_level: str
 
-    @property
-    def carried_inputs(self) -> tuple[InputId, ...]:
-        return ()
-
     def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
         return receiver.use_settings(turn, self)
 
 
-# Everything a running turn's inbox carries.
-TurnInboxItem = InputRequest | SendNow | UseSettings
+@dataclass(frozen=True)
+class ClearQueue(TurnInboxControl):
+    """Clear only these queued user inputs, never delivered bus inputs."""
+
+    input_ids: tuple[InputId, ...]
+
+    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
+        return receiver.clear_queue(turn, self)
 
 
 class UnansweredReason(DeclaredFamily, affix="Reason"):

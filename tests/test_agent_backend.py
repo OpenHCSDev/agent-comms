@@ -386,5 +386,9 @@ def test_inbox_records_say_which_inputs_they_carry():
     )
     assert request.carried_inputs == (ab.InputId("q1"),)
     assert ab.SendNow((ab.InputId("q1"),)).carried_inputs == ()
+    assert ab.UseSettings("provider/model", "off").carried_inputs == ()
+    assert ab.ClearQueue((ab.InputId("q1"),)).carried_inputs == ()
+    assert isinstance(request, ab.TurnInboxItem)
+    assert isinstance(ab.ClearQueue((ab.InputId("q1"),)), ab.TurnInboxControl)
     with pytest.raises(ValueError):
         ab.InputId("")

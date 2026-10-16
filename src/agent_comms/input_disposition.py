@@ -62,14 +62,17 @@ class InputDocument:
         except KeyError as error:
             raise ValueError("Original input receipt is unavailable") from error
 
-    def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
-        """Original members decide retirement; bound/started evidence stays intact."""
+    def transition(self, keys: tuple[str, ...], change) -> InputDocument:
+        """Each original state decides its successor; unchanged rows stay intact."""
         successors = {
             key: successor
             for key in keys
-            if (successor := self.lookup(key).finish_unbound()) is not None
+            if (successor := change(self.lookup(key))) is not None
         }
         return replace(self, rows={**self.rows, **successors}) if successors else self
+
+    def settle_unbound(self, keys: tuple[str, ...]) -> InputDocument:
+        return self.transition(keys, lambda row: row.finish_unbound())
 
     def started_for_native(
         self, lease: TurnLeaseFence, native_id: str, sent_text: str,
@@ -124,8 +127,7 @@ class InputDocument:
         return {
             reference: row
             for row in self.rows.values()
-            if row.proves_no_native_send
-            and (reference := row.origin.delivery_reference(root_id)) is not None
+            if (reference := row.unbound_delivery(root_id)) is not None
         }
 
     def delivery_overview(
@@ -293,6 +295,15 @@ class InputDispositions(TypedStore):
         self._update(*_members("key", (key,)), update)
         return changed
 
+    def clear_unbound(self, keys: tuple[str, ...]) -> InputDocument:
+        return self._update(
+            *_members("key", keys),
+            lambda document: document.transition(keys, lambda row: row.clear_unbound()),
+        )
+
+    def clear_native(self, key: str, native_id: str, text: str) -> bool:
+        return self._transition(key, lambda row: row.clear_native(native_id, text))
+
     def bind(self, key: str, *, admission: int, turn_id: str, native_id: str, text: str) -> bool:
         return self.bind_originals(
             (key,), admission=admission, turn_id=turn_id, native_id=native_id, text=text
@@ -307,6 +318,8 @@ class InputDispositions(TypedStore):
         ``already_bound`` (a send-now re-send) requires the existing binding to match.
         """
         document = self.read(keys)
+        for row in document.rows.values():
+            row.require_not_cleared()
         if any(not document.lookup(key).unresolved
                or not document.lookup(key).matches_admission(admission) for key in keys):
             return False
