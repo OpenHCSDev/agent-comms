@@ -65,8 +65,8 @@ def carry(source, destination, registry, index_root):
     notice = NoReadNotice() if old.notice is None else ReadMarkerNotice(old.notice)
     document = ReadDocument(messages, source_identity, transcripts, notice)
     ledger = ReadLedger(destination.parent)
-    ledger.create(source_identity, notice)
     with ledger.writing() as connection:
+        ReadHeaderRow(source_identity, notice).insert(connection)
         for key, progress in messages.items():
             ReadMessageRow(key, progress).insert(connection)
         for key, through in transcripts.items():

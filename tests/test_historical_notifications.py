@@ -16,7 +16,7 @@ from agent_comms.assignment_states import (
 from agent_comms.comms import Comms
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 from agent_comms.historical_views import HistoricalDisplay
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.read_ledger import OneViewer, ReadLedger
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
 from agent_comms.wake_policy import FullWake
@@ -79,11 +79,12 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     assert unpainted.displayed_to == ()
     assert not read_mask(live, 'reader', live.registry.snapshot()).conversations
     ledger = ReadLedger(Path(source.root))
-    document = ledger.read()
+    viewer = OneViewer(basis.viewer_identity)
+    document = ledger.read(viewer)
     reused = replace(basis, viewer_created_at=111.0)
     with pytest.raises(ValueError, match="viewer changed"):
         HistoricalDisplay(source, reused).acknowledge(live.bus.history, live.registry)
-    assert ledger.read() == document
+    assert ledger.read(viewer) == document
     newer_namespace = replace(source.provenance, threads={
         **source.provenance.threads,
         "reader": replace(source.provenance.require("reader"), created_at=111.0),
@@ -93,7 +94,7 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     with WireLog(Path(source.root) / 'bus.jsonl').certified_read() as captured:
         identity = ReadSource.from_revision(captured.witness.revision)
     assert ledger.historical_displayed_recipient(messages[1], painted.recipient_identity,
-        newer_namespace, readers=ledger.observations(newer_namespace, identity, document=document)) == ()
+        newer_namespace, readers=document.observations(newer_namespace).for_source(identity)) == ()
 
 
 def test_response_evidence_rejects_mixed_sql_columns():
