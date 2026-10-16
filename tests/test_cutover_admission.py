@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agent_comms.acp import _accept_visible_deliveries
+from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema

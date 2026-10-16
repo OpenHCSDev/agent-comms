@@ -17,6 +17,7 @@ from agent_comms.coordination_errors import IdentityConflict, PublicationActivat
 
 from . import launch_runtime
 from .native_pi import _private_session_dir, _trusted_package
+from .wire_log import WireLog
 from .wire_metadata import WireRootIdText
 
 if TYPE_CHECKING:
@@ -81,16 +82,9 @@ class PrivateNkLaunch:
         Creates no root, registry, SQLite database or provider opportunity when
         the owner-only directory or the reviewed copied Pi is absent.
         """
-        from .comms import Comms
-        from .message_bus import MessageBus
-
         _private_session_dir(self.validated_root)
         cli = _trusted_package(self.native_package)
-        comms = Comms(self.validated_root)
-        bus = MessageBus(
-            self.validated_root / "bus.jsonl", comms.registry, private_response_writes=True
-        )
-        with bus.log.certified_read() as source:
+        with WireLog(self.validated_root / "bus.jsonl").certified_read() as source:
             marker = source.marker
         if marker.root_id != self.wire_root_id:
             raise IdentityConflict("private initial wire root changed")

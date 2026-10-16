@@ -3,7 +3,7 @@
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.acp import _accept_visible_deliveries
+from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_tables.participants import Participants

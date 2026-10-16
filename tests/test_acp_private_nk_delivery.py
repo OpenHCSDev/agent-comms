@@ -22,7 +22,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
-from agent_comms.acp import _accept_visible_deliveries
+from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination

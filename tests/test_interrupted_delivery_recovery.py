@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignment
-from agent_comms.acp import _accept_visible_deliveries
+from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination_cohort import pending_sealed_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.input_attempt import NotSentInput
