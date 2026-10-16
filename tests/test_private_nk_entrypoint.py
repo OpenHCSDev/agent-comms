@@ -351,7 +351,6 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
-    monkeypatch.setattr(cli, "_emit", lambda _payload: None)
     entered_send = threading.Event()
     release_send = threading.Event()
     exclusive_requested = threading.Event()

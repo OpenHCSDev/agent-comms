@@ -132,15 +132,16 @@ class RecordedGoalWait(GoalWait):
 
     def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
         """Join original sender and the actual addressed owner through its source."""
+        if not self.owner_matches(owner.created_at):
+            return False
         return (
-            owner.created_at == self.owner_created_at
-            and original.message.seq > self.after_seq
+            original.message.seq > self.after_seq
             and original.direct_for(owner.lookup)
             and any(target.sent(original) for target in self.targets)
         )
 
     def has_reply(self, bus: WireLog, owner: RecordedThreadIncarnation) -> bool:
-        if owner.created_at != self.owner_created_at:
+        if not self.owner_matches(owner.created_at):
             return False
         return any(
             self.matches(original, owner)
@@ -231,6 +232,15 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
         if not goal.state.active:
             return NoGoalWait()
         return rows.get(goal.id, NoGoalWait())
+
+    @classmethod
+    def execution(
+        cls, goal: Goal | None, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot
+    ) -> GoalExecution | None:
+        """Project an optional thread goal from its resolved wait state."""
+        if goal is None:
+            return None
+        return cls.for_goal(goal, rows).project(goal, snapshot)
 
     @staticmethod
     def target_has_active_turn(target: GoalWaitTarget, snapshot: RegistrySnapshot) -> bool:
