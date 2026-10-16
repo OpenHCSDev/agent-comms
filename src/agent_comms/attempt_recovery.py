@@ -234,7 +234,7 @@ class RecoveryMonitorCapability:
             pointer = CurrentExecutions.one(
                 store.session._connection, owner_lookup=stable_thread_lookup(owner.created_at)
             )
-            if pointer is not None and pointer.execution_id is not None:
+            if pointer is not None and pointer.unresolved:
                 cls.recover_released_native_attempt(store, pointer.execution_id)
 
     @classmethod
@@ -256,8 +256,8 @@ class RecoveryMonitorCapability:
             raise RecoveryBlocked("native attempt has no original input")
         terminal = PendingStopReason
         revision = None
-        if source.session_id is not None:
-            session = source.require_session_identity()
+        session = source.selected_session
+        if session is not None:
             binding = read_expected_prompt_binding(store, source.input_id)
             if binding is None or binding.identity != source.identity:
                 raise RecoveryBlocked("native recovery lacks its bound original input")

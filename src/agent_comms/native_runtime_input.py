@@ -83,13 +83,17 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         self.execution
         # The selected identity and the later context receipt are separate
         # acquisition phases of this ORIGINAL row, never two source selectors.
-        if self.session_id is None:
+        session = self.selected_session
+        if session is None:
             from .field_codec import FieldCodec
 
             FieldCodec.decode(type(None), self.session_file)
-        else:
-            self.require_session_identity()
         self.reference
+
+    @property
+    def selected_session(self) -> NativeSessionIdentity | None:
+        """Decode the optional original SQL session group at its owner."""
+        return None if self.session_id is None else self.require_session_identity()
 
     @property
     def context_anchor(self) -> str | None:

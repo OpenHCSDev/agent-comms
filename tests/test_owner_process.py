@@ -355,7 +355,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
                     arguments = Path(f"/proc/{child_pid}/cmdline").read_bytes().split(b"\0")
                 except FileNotFoundError:
                     continue  # The metadata child finished retiring.
-                if arguments != [b""]:  # A reaped child has no command line.
+                if os.fsencode(package / "dist" / "cli.js") in arguments:
                     assert b"--no-session" in arguments, arguments
         assert all(path.read_bytes() == content for path, content in source_files.items())
         assert not list(tmp_path.rglob("*.input-proof"))

@@ -469,10 +469,8 @@ class InputObservation:
             original = store.session.path.stat()
         observation = PrivateObservation
         if (
-            participant.pointer.execution_id is not None
-            and not owner.thread.executing
-            and session_id not in self.backend_inboxes
-            and session_id not in self.effects.turns.turn_tasks
+            participant.pointer.unresolved
+            and not self.owns_execution(session_id, owner.thread)
         ):
             observation = ExecutionWaitingObservation
         return observation(wire, entry, (
@@ -535,6 +533,14 @@ class InputObservation:
 
 
 class InputDrain(InputObservation):
+    def owns_execution(self, session_id: str, owner: Thread) -> bool:
+        """An attached turn can take follow-ups; a predecessor cannot."""
+        return (
+            owner.turn_state.busy
+            or session_id in self.backend_inboxes
+            or session_id in self.effects.turns.turn_tasks
+        )
+
     def __init__(
         self,
         comms: Comms,
