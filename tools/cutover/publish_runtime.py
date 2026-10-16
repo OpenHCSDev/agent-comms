@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from importlib.metadata import distribution
 import os
 from pathlib import Path
+import subprocess
 import sys
 import uuid
 
@@ -53,7 +54,18 @@ class RuntimePublication:
                 raise FileExistsError(f'Publication cannot replace a regular file: {link}')
         return cls(binary.parent, links)
 
-    def publish(self) -> None:
+    def require_cli(self, root: Path) -> None:
+        result = subprocess.run(
+            [self.runtime / 'bin/agent-comms', '--root', str(root), 'status'],
+            capture_output=True, text=True,
+        )
+        if result.returncode or result.stderr:
+            raise RuntimeError(
+                f'Runtime CLI refused publication (exit {result.returncode}): {result.stderr}'
+            )
+
+    def publish(self, root: Path) -> None:
+        self.require_cli(root)
         if not self.current.is_symlink():
             if self.current.exists():
                 raise FileExistsError(self.current)
@@ -85,18 +97,22 @@ class RuntimePublication:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--root', type=Path, required=True, help='Explicit live bus root to check before relinking')
     parser.add_argument('--check', action='store_true', help='Inspect publication without changing links or queueing restarts')
     options = parser.parse_args()
     publication = RuntimePublication.installed()
     route = read_active_route()
     if route is None:
         raise ValueError('Runtime publication requires the installed route')
+    if options.root.resolve(strict=True) != route.root.resolve(strict=True):
+        raise ValueError('Publication check root differs from the installed route')
     comms = wire(route)
     owners = tuple(OwnerRestartRequest().threads(comms.registry.snapshot()))
     if options.check:
+        publication.require_cli(options.root)
         print(f'{publication.runtime}: {len(owners)} native workers would be queued for idle reload')
         return
-    publication.publish()
+    publication.publish(options.root)
     print(f'Published {publication.runtime}', flush=True)
     # Queue requests keep original process identity and session settings. A
     # pending or uncertain previous request is handled by that existing owner.
