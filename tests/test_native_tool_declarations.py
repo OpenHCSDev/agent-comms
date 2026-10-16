@@ -10,22 +10,23 @@ from acp.schema import ToolCallStart
 from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.comms import wire
-from agent_comms.native_tools import CodingTool, NativeTool
+from agent_comms.native_tools import CodingTool
+from agent_comms.tool_declaration import ToolDeclaration
 from delivery_owner_fixture import canonical_agent
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 async def test_new_tool_declaration_drives_presentation_without_coding_permission(acp_tools):
-    class InspectFixtureTool(NativeTool):
+    class InspectFixtureTool(ToolDeclaration):
         acp_kind = "search"
-        action = "Inspect"
+        label = "Inspect"
 
         @classmethod
         def detail(cls, arguments):
             return arguments["query"]
 
-    event = NativeTool.start("case", "inspect_fixture", {"query": "new declaration"})
+    event = ToolDeclaration.start("case", "inspect_fixture", {"query": "new declaration"})
     assert (event.title, event.kind) == ("Inspect new declaration", "search")
     owner, received = acp_tools
     await owner._emit_event("declared-tool", event, owner.sessions.client)
@@ -38,12 +39,12 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         {"query": "new declaration"},
     )
     with pytest.raises(ValueError):
-        CodingTool.from_call("inspect_fixture", {"query": "new declaration"})
+        CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")
     for member in CodingTool.members_with(CodingTool):
-        call = member.from_call(member.declared_name, {"path": "file", "command": "pwd"})
-        event = NativeTool.start("case", member.declared_name, call.arguments)
-        assert event.kind == member.acp_kind and event.args == call.arguments
-    unknown = NativeTool.start("unknown", "external_extension", {"private": "preserved"})
+        call = member.from_call(member.declared_name, {"path": "file", "command": "pwd"}, call_id="case")
+        event = ToolDeclaration.start("case", member.declared_name, call.tool.arguments)
+        assert event.kind == member.acp_kind and event.args == call.tool.arguments
+    unknown = ToolDeclaration.start("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
         "External Extension",
         "other",

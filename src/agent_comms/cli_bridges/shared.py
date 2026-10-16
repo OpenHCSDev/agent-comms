@@ -24,7 +24,7 @@ from agent_comms.thread_identity import ThreadRole
 from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.native_tools import NativeTool
+from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TranscriptEvent, ToolStartTranscript, ToolEndTranscript
 
@@ -84,7 +84,7 @@ class ToolCall:
     def title(self) -> str:
         # Some external tools accept a scalar. Native previews only inspect objects.
         if isinstance(self.arguments, dict):
-            return NativeTool.start(self.id, self.name, self.arguments).title
+            return ToolDeclaration.start(self.id, self.name, self.arguments).title
         return self.name
 
     def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:

@@ -27,6 +27,7 @@ from .goal_actions import (
 from .goal_states import ActiveGoal
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
+from .native_tools import NativeExecutableTool, NativeRequestTools
 from .owner_launch import RestartEnvironment
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
@@ -76,7 +77,7 @@ def tool_field(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolRequest(Command, DeclaredFamily, affix="Tool"):
+class ToolRequest(NativeRequestTools, Command, NativeExecutableTool):
     family_discriminator = "tool"
     label: ClassVar[str]
     description: ClassVar[str]

@@ -6,54 +6,47 @@ presentable, without acquiring the CodingTool admission capability.
 
 from __future__ import annotations
 
-import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, TYPE_CHECKING
+from typing import Any, ClassVar
 
-from .agent_events import ToolStart
-from .declared_family import DeclaredFamily
+from .tool_declaration import ToolDeclaration
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 
-if TYPE_CHECKING:
-    from .pi_payloads import ToolCallContent
+class NativeExecutableTool(ToolDeclaration):
+    """A declared tool whose calls participate in the existing native owner check."""
 
-
-class NativeTool(DeclaredFamily, affix="Tool"):
-    acp_kind: ClassVar[str] = "other"
-    action: ClassVar[str] = ""
+    claim: ClassVar[None] = None
 
     @classmethod
-    def for_name(cls, name: str) -> type[NativeTool]:
-        try:
-            return cls.decode(name.lower())
-        except ValueError:
-            return cls
+    @abstractmethod
+    def create_call(cls, call_id: str, arguments: dict[str, Any]): ...
 
     @classmethod
-    def start(cls, call_id: str, name: str, arguments: dict[str, Any]) -> ToolStart:
-        declaration = cls.for_name(name)
-        detail = declaration.detail(arguments)
-        action = declaration.action or name.replace("_", " ").title()
-        if detail:
-            try:
-                text = detail if isinstance(detail, str) else json.dumps(detail)
-            except (TypeError, ValueError):
-                text = str(detail)
-            text = text.strip()
-            action += " " + text
-        return ToolStart(call_id, name, action, arguments, declaration.acp_kind)
+    @abstractmethod
+    def native_extension(cls, package: Path) -> Path: ...
 
     @classmethod
-    def detail(cls, arguments: dict[str, Any]) -> object:
-        return None
+    def from_call(cls, name: str, arguments: dict[str, Any], *, call_id: str):
+        cls._member_declarations()
+        FieldCodec.encode(arguments)
+        return cls.decode(name).create_call(call_id, arguments)
+
+
+class NativeRequestTools:
+    """Core requests retain their exact native payload; the existing CLI executes them."""
 
     @classmethod
-    def result_diff(cls, result, ok):
-        """Unknown tool metadata remains opaque; it cannot invent edit evidence."""
-        return None
+    def create_call(cls, call_id: str, arguments: dict[str, Any]):
+        from .channel_coding_tools import CoordinationCall
+
+        return CoordinationCall(call_id, cls, arguments)
+
+    @classmethod
+    def native_extension(cls, package: Path) -> Path:
+        return package / "agent-comms-extensions/global-agent-comms/index.mjs"
 
 
 class PathTool:
@@ -63,7 +56,7 @@ class PathTool:
 
 
 @dataclass(frozen=True)
-class CodingTool(NativeTool):
+class CodingTool(NativeExecutableTool):
     """Pi owns argument schemas; this family owns only cooperative claim behavior."""
 
     arguments: dict[str, Any]
@@ -75,16 +68,15 @@ class CodingTool(NativeTool):
     @abstractmethod
     def _parse_resource(self) -> FileClaimPath | None: ...
 
-    def matches_request(self, request: ToolCallContent) -> bool:
-        """Exact intended invocation, independent of call ID or execution success."""
-        return request.name == self.declared_name and request.arguments == self.arguments
+    @classmethod
+    def create_call(cls, call_id: str, arguments: dict[str, Any]):
+        from .channel_coding_tools import CodingCall
+
+        return CodingCall(call_id, cls(arguments))
 
     @classmethod
-    def from_call(cls, name: str, arguments: dict[str, Any]) -> CodingTool:
-        # The native tool validates its full schema. Preserve it exactly for
-        # event/socket correlation, without maintaining a second Pi schema.
-        FieldCodec.encode(arguments)
-        return cls.decode(name)(arguments)
+    def native_extension(cls, package: Path) -> Path:
+        return package / "dist/channel_coding_tools.mjs"
 
 
 class ReadTool(PathTool, CodingTool):
@@ -96,7 +88,7 @@ class ReadTool(PathTool, CodingTool):
 
 class BashTool(CodingTool):
     acp_kind = "execute"
-    action = "Run"
+    label = "Run"
 
     @classmethod
     def detail(cls, arguments: dict[str, Any]) -> object:
@@ -124,9 +116,9 @@ class WriteTool(PathTool, CodingTool):
         return WritableFileClaim(Path(self.arguments["path"]))
 
 
-class GrepTool(NativeTool):
+class GrepTool(ToolDeclaration):
     acp_kind = "search"
-    action = "Search"
+    label = "Search"
 
     @classmethod
     def detail(cls, arguments: dict[str, Any]) -> object:
@@ -135,9 +127,9 @@ class GrepTool(NativeTool):
         return f"{pattern} in {path}" if pattern and path else pattern or path
 
 
-class GlobTool(NativeTool):
+class GlobTool(ToolDeclaration):
     acp_kind = "search"
-    action = "Find"
+    label = "Find"
 
     @classmethod
     def detail(cls, arguments: dict[str, Any]) -> object:
