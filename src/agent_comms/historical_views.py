@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channels import Channel
+from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
 from .message_page import (
     ConversationMessagePageRequest,
@@ -27,12 +28,14 @@ from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy, ResponsePolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
-from .thread_identity import ThreadProvenance
+from .thread_identity import ThreadProvenance, UnrecordedThreadIncarnation
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
 if TYPE_CHECKING:
     from .presentation import BusPresentation, WireRevision
+    from .history_views import HistoryViews
+    from .registry_document import RegistrySnapshot
 
 
 class HistoryView(ABC):
@@ -80,6 +83,19 @@ class HistoryView(ABC):
         return MessagePageRequest(scope, traversal, limit, max_bytes)
 
 
+@dataclass(frozen=True, slots=True)
+class ConversationRevision:
+    """Core's captured selection and original store observation for one view."""
+
+    stores: WireRevision
+    scope: tuple
+
+    def display_changed_since(self, earlier: ConversationRevision) -> bool:
+        return (self.scope != earlier.scope
+                or self.stores.history != earlier.stores.history
+                or self.stores.bus_replaced_since(earlier.stores))
+
+
 class ConversationHistoryView:
     """Historical views that present conversation content, not owner state."""
 
@@ -104,10 +120,19 @@ class ConversationHistoryView:
         return cls._display_identity(page) is not None
 
     @classmethod
-    def display_changed_since(cls, revision: WireRevision, earlier: WireRevision) -> bool:
-        """Only stores which can replace the viewer, participants or history source."""
-        return ((revision.registry, revision.history) != (earlier.registry, earlier.history)
-                or revision.bus_replaced_since(earlier))
+    def revision(cls, views: HistoryViews, target: str, *, worktree: str) -> ConversationRevision:
+        viewer = views.messaging.user_identity(worktree).name
+        with _store_lock(views._wire_lock_path, shared=True):
+            snapshot = views.registry.snapshot()
+            return ConversationRevision(
+                views.revision(),
+                (cls, target, worktree, *cls._selection(views, snapshot, viewer, target)),
+            )
+
+    @classmethod
+    @abstractmethod
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot,
+                   viewer: str, target: str) -> tuple: ...
 
     def page_request(self, scope, traversal, limit, max_bytes) -> MessagePageRequest:
         return ConversationMessagePageRequest(scope, traversal, limit, max_bytes)
@@ -141,9 +166,13 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
                 page.history_revision)
 
     @classmethod
-    def display_changed_since(cls, revision: WireRevision, earlier: WireRevision) -> bool:
-        return (revision.catalog != earlier.catalog
-                or super(ChannelDisplayHistory, cls).display_changed_since(revision, earlier))
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot,
+                   viewer: str, target: str) -> tuple:
+        channel = views.channels.catalog.read().views(snapshot.threads).get(target)
+        if channel is None:
+            raise ValueError(f"Unknown channel: {target!r}")
+        return (snapshot.require(viewer).incarnation,
+                ChannelDisplayScope.capture(channel, snapshot))
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
         return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
@@ -176,6 +205,16 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         return (basis.root_identity, basis.bus_identity, basis.worktree,
                 basis.requested_peer, basis.viewer_identity, basis.viewer_names,
                 basis.peer_identity, basis.peer_names, page.history_revision)
+
+    @classmethod
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot,
+                   viewer: str, target: str) -> tuple:
+        try:
+            peer = snapshot.participant(target).incarnation
+        except UnregisteredThreadError:
+            peer = UnrecordedThreadIncarnation(snapshot.canonical_name(target))
+        return (snapshot.require(viewer).incarnation, peer,
+                DMDisplayScope.capture(viewer, target, snapshot))
 
     @property
     def viewer(self) -> str:
