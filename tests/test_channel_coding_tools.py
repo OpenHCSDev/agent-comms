@@ -125,6 +125,32 @@ def _request(socket, id, name, args):
 
 
 @pytest.mark.asyncio
+async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_path):
+    import asyncio
+
+    checking, release = asyncio.Event(), asyncio.Event()
+
+    class Owner:
+        input_id = secrets.token_hex(16)
+
+        async def admit(self, round_number, call):
+            checking.set()
+            await release.wait()
+
+    owner = Owner()
+    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
+    socket.announce((ToolCallContent(id="late", name="read", arguments={"path": "a"}),))
+    socket.tool_started(ToolExecutionStart(tool_call_id="late", tool_name="read", args={"path": "a"}))
+    pending = asyncio.create_task(socket.handle_request(_request(socket, "late", "read", {"path": "a"})))
+    await checking.wait()
+    socket.tool_finished(ToolExecutionEnd(tool_call_id="late", tool_name="read", is_error=True), owner.input_id)
+    release.set()
+    with pytest.raises(ValueError, match="not executing"):
+        await pending
+    socket.assert_complete()
+
+
+@pytest.mark.asyncio
 async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog):
     """The live owner logged two tracebacks when Pi gave up on a slow tool check."""
     import asyncio
