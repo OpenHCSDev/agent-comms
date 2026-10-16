@@ -175,11 +175,14 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
 ):
     from agent_comms.native_arguments import NativeArguments
 
-    configured_model = NativeArguments.parse(NativeArguments.default).model
+    arguments = ("--model", "test/model")
+    configured_model = NativeArguments.configured(arguments).model
     assert configured_model is not None
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    owner = CommsAgent(
+        comms, agent_bin="pi", agent_args=arguments, runtime_enabled=True, auto_wake=False
+    )
     from goal_owner_fixture import activate_empty_source
 
     activate_empty_source(owner)
