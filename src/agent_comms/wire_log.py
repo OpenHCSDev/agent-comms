@@ -25,6 +25,7 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
+from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
 from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
@@ -70,6 +71,42 @@ class OpenedWireSnapshot:
     _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | None] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
+
+    def require_page_index_coverage(self, index: BusPageIndex) -> None:
+        if self.stream is None or self.revision is None:
+            raise RelationViolationError("Index coverage requires an opened wire source")
+        saved = BusPageSource.one(index.connection, singleton=1)
+        if saved is None:
+            raise StaleBusPageIndexError("Page index has no prepared source")
+        if not saved.covers(self.stream, self.revision):
+            raise StaleBusPageIndexError("Page index does not cover its opened source")
+
+    def query_page_index[T](
+        self, read: Callable[[BusPageIndex], T], *, empty: Callable[[], T]
+    ) -> T:
+        """Prepare/query this cut; source absence and index repair stay owned here."""
+        if self.stream is None:
+            return empty()
+        access = self.metadata.access
+        with access.open_page_index(Path(self.stream.name)) as index:
+            try:
+                with access.prepare_page_index(index, self):
+                    return read(index)
+            except StaleBusPageIndexError:
+                access.repair_page_index(index)
+            with access.prepare_page_index(index, self):
+                return read(index)
+
+    def indexed_records(self, index: BusPageIndex, rows, *, before_offset: int):
+        """Decode selected offsets through this original descriptor and byte cut."""
+        if self.stream is None or not 0 <= before_offset <= self.boundary:
+            raise RelationViolationError("Indexed read exceeds its opened wire cut")
+        for row in rows:
+            (message, size), = self.public_page_records(
+                *index.record(self.stream, row, max_bytes=before_offset - row.offset),
+                self.metadata,
+            )
+            yield message, size
 
     def capture_append_indexes(
         self, prepared: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...],
@@ -185,49 +222,22 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
 
     def public_records_for(self, sequences: frozenset[int], *, before_offset: int
                            ) -> Iterator[tuple[Message, int]]:
-        """Resolve sparse read changes in this cut using the original page index.
-
-        Index coverage and offsets are captured atomically. Missing or stale
-        derived evidence falls back to the same bounded source, never absence.
-        This reader neither creates nor updates an index.
-        """
-        import sqlite3
-        from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
-
+        """Resolve sparse changes through the same prepared index as page reads."""
         if not 0 <= before_offset <= self.boundary:
             raise ValueError("Public read exceeds its opened source cut")
-        if not sequences or self.stream is None:
+        if not sequences:
             return
-        rows = None
-        try:
-            with BusPageIndex(Path(self.stream.name), readonly=True) as index:
-                saved = BusPageSource.one(index.connection, singleton=1)
-                if saved is not None and saved.covers(self.stream, self.revision):
-                    rows = tuple(
-                        row for seq in sorted(sequences)
-                        for row in index.offsets(lower=seq - 1, upper=seq + 1,
-                                                descending=False, targets=None,
-                                                before_offset=before_offset)
-                    )
-        except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError, ValueError, TypeError):
-            rows = None
-        records = None
-        if rows is not None:
-            try:
-                records = tuple(
-                    record for row in rows
-                    for record in self.public_page_records(
-                        *BusPageIndex.record(self.stream, row,
-                                             max_bytes=before_offset - row.offset),
-                        self.metadata,
-                    )
-                )
-            except (OSError, StaleBusPageIndexError):
-                pass
-        if records is not None:
-            yield from records
-        else:
-            yield from super().public_records_for(sequences, before_offset=before_offset)
+
+        def read(index):
+            rows = (
+                row for seq in sorted(sequences)
+                for row in index.offsets(lower=seq - 1, upper=seq + 1,
+                                        descending=False, targets=None,
+                                        before_offset=before_offset)
+            )
+            return tuple(self.indexed_records(index, rows, before_offset=before_offset))
+
+        yield from self.query_page_index(read, empty=tuple)
 
 
 @dataclass(frozen=True, slots=True)
@@ -654,21 +664,12 @@ class WireLog:
             yield scan.read(raw)
 
     @contextmanager
-    def page_snapshot(self, *, need_sequence: bool = False):
-        """Lend the original opened cut to indexed and sequential page readers."""
-        with self._opened_wire_snapshot(need_sequence=need_sequence) as opened:
-            yield (opened.metadata, opened.through, opened.revision, opened.stream,
-                   opened.public_records())
-
-    @contextmanager
     def _record_snapshot(
         self, *, need_sequence: bool = True
     ) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
-        """Public page accounting borrows the one original opened byte boundary."""
-        with self.page_snapshot(need_sequence=need_sequence) as (
-            _, through, _, _, records,
-        ):
-            yield through, records
+        """Explicit sequential history borrows the original opened byte boundary."""
+        with self._opened_wire_snapshot(need_sequence=need_sequence) as opened:
+            yield opened.through, opened.public_records()
 
     @contextmanager
     def full_history_snapshot(self) -> Iterator[tuple[int, Iterator[Message]]]:
