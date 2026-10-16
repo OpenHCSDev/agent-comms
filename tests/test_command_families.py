@@ -160,13 +160,18 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
 
     comms = Comms(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
-    def require_owned_session(owner, snapshot):
-        assert owner.name == "owner"
-        assert snapshot.require(owner.name) == owner
+    def require_owned_session(entry):
+        assert entry.thread.name == "owner"
+        assert entry.matches_name("owner")
         return "session"
+
+    async def awaiting_input_keys(session_id):
+        assert session_id == "session"
+        return frozenset()
 
     agent = SimpleNamespace(
         _comms=comms,
+        inputs=SimpleNamespace(awaiting_input_keys=awaiting_input_keys),
         sessions=SimpleNamespace(
             bindings={"session": "owner"},
             require_owned_session=require_owned_session,
@@ -181,6 +186,8 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
             "session": "session",
             "owner": "owner",
         }
+        delivery = await proxy.request("input_dispositions")
+        assert delivery["inputs"] == [] and delivery["historicalCount"] == 0
         with pytest.raises(RuntimeError, match="Expected.*int"):
             await proxy.request("contract_probe", amount=True)
         with pytest.raises(RuntimeError, match="Unknown fields.*futureExtension"):

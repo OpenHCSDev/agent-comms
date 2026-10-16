@@ -277,3 +277,14 @@ def test_cached_activity_still_expires_unless_its_thread_is_active(tmp_path):
     with patch("agent_comms.store_files.time.time", return_value=111):
         assert log.current("a").state is ActivityState.IDLE
         assert log.all_current(active=frozenset({"a"}))["a"].state is ActivityState.THINKING
+
+
+def test_failed_checkpoint_reports_error_without_erasing_the_committed_event(tmp_path):
+    path = tmp_path / "activity.jsonl"
+    log = ActivityLog(path)
+    log.checkpoint.path.mkdir()
+    event = Activity("a", ActivityState.WORKING, "already recorded")
+    with pytest.raises(OSError):
+        log.emit(event)
+    assert log.current("a", active=True) == event
+    assert [Activity.from_wire(json.loads(line)) for line in path.read_text().splitlines()] == [event]

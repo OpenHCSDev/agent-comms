@@ -1,6 +1,7 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
 from agent_comms import invoke_tool
+from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import StaleRevision
@@ -264,7 +265,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
             "from": "beta",
             "to": "sender",
             "body": "Original outgoing ownership reply",
-        },
+        }, caller=NoThreadCaller(),
     )
     message = comms.bus.log.message_by_id(receipt["id"])
     after = comms.transcripts.capture_page_read("beta")
@@ -312,7 +313,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
                 "from": "sender",
                 "to": "beta",
                 "body": f"Later original {index}",
-            },
+            }, caller=NoThreadCaller(),
         )
     open_sender = comms.views.thread_presentation("sender")
     open_recipient = comms.views.thread_presentation("beta")

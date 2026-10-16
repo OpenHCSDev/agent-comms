@@ -66,7 +66,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     before = ledger.path.read_bytes()
     messages = comms.bus.inbox("worker")
     comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))
-    result = inbox.invoke(comms, {"thread": "worker", "goal_id": goal.id, "wait_for": ["parent"]})
+    result = inbox.invoke(comms, {"thread": "worker", "goal_id": goal.id, "wait_for": ["parent"]}, caller=ThreadCaller("worker"))
     assert result["messages"] == []  # Display ACK is not handling evidence.
     review = result["standby_review"]
     assert [row["sequence"] for row in review["messages"]] == [m.seq for m in messages]

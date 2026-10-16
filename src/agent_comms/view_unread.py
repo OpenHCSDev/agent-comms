@@ -8,14 +8,14 @@ import os
 import sqlite3
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from multiprocessing.synchronize import Event
 from pathlib import Path
 from threading import RLock
 from time import monotonic
 from typing import TYPE_CHECKING, ClassVar
-from weakref import WeakValueDictionary
+from weakref import WeakValueDictionary, finalize
 
 from .coordination_database import CoordinationStore, StoreBusy
 from .coordination_errors import CoordinationReadUnavailable
@@ -277,16 +277,19 @@ class TranscriptReadState(ThreadOwnedState):
         self._next_source: str | None = None
         self._pool: ProcessPoolExecutor | None = None
         self._preparation: NativeReplyPreparation | None = None
+        self._database_resources = ExitStack()
+        self._resources = ExitStack()
+        self._resources.callback(self._database_resources.close)
+        # Capture the resource stack, not this state: dead roots must remain collectible.
+        self._cleanup = finalize(self, self._resources.close)
 
     def close(self) -> None:
-        """Cancel and join the actual native preparation before closing SQLite."""
-        self._cancelled.set()
+        """Retire the worker and SQLite through their shared resource lifetime."""
         with self._lock:
             if self._preparation is not None:
                 self._preparation.future.cancel()
-            if self._pool is not None:
-                self._pool.shutdown(wait=True, cancel_futures=True)
-                self._pool = None
+            self._cleanup()
+            self._pool = None
             self._preparation = None
             self._close_database()
 
@@ -296,21 +299,16 @@ class TranscriptReadState(ThreadOwnedState):
         return self._preparation.future if self._preparation is not None else None
 
     def _close_database(self) -> None:
-        if self._connection is not None:
-            self._connection.close()
-            self._connection = None
-            self._database_inode = None
-
-    def __del__(self) -> None:
-        self.close()
+        self._database_resources.close()
+        self._connection = None
+        self._database_inode = None
 
     def _database(self) -> sqlite3.Connection:
         revision = FileRevision.capture(self.index_path)
         if self._connection is not None and (
             revision is None or revision.identity.inode != self._database_inode
         ):
-            self._connection.close()
-            self._connection = None
+            self._close_database()
         if self._connection is None:
             self.index_path.parent.mkdir(parents=True, exist_ok=True)
             connection = CoordinationStore.writer(
@@ -339,7 +337,7 @@ class TranscriptReadState(ThreadOwnedState):
             except (sqlite3.DatabaseError, ValueError):
                 connection.close()
                 raise
-            self._connection = connection
+            self._connection = self._database_resources.enter_context(closing(connection))
             self._database_inode = self.index_path.stat().st_ino
         return self._connection
 
@@ -393,7 +391,7 @@ class TranscriptReadState(ThreadOwnedState):
             yield database, indexes
         # Admit only after releasing the read snapshot. Spawn receives data and
         # cancellation, never this connection, the observer pipe or owner custody.
-        if needed and self._preparation is None and not self._cancelled.is_set():
+        if needed and self._preparation is None and self._cleanup.alive:
             names = tuple(needed)
             start = names.index(self._next_source) + 1 if self._next_source in names else 0
             reads = tuple(needed.values())
@@ -403,6 +401,8 @@ class TranscriptReadState(ThreadOwnedState):
                     max_workers=1, mp_context=self._context,
                     initializer=IndexSlice.initialize_worker, initargs=(self._cancelled,),
                 )
+                self._resources.callback(self._pool.shutdown, wait=True, cancel_futures=True)
+                self._resources.callback(self._cancelled.set)
             self._preparation = NativeReplyPreparation(
                 needed, self._pool.submit(ReplyIndexBatch.prepare, ordered)
             )
@@ -411,11 +411,11 @@ class TranscriptReadState(ThreadOwnedState):
         self, viewer: str, sources: Mapping[str, str], *, document: ReadDocument | None = None
     ) -> TranscriptUnread:
         # Counts never wait for native decoding or another in-process reader.
-        if self._cancelled.is_set():
-            raise RuntimeError("Transcript reader is closed")
         if not self._lock.acquire(blocking=False):
             raise CoordinationReadUnavailable("Transcript counts are being read")
         try:
+            if not self._cleanup.alive:
+                raise RuntimeError("Transcript reader is closed")
             document = self.reads.read() if document is None else document
             try:
                 return self._counts_locked(viewer, sources, document)
@@ -480,7 +480,7 @@ def transcript_read_state(path: Path) -> TranscriptReadState:
     key = str(path.expanduser().resolve())
     with _shared_lock:
         state = _shared_states.get(key)
-        if state is None or state._cancelled.is_set():
+        if state is None or not state._cleanup.alive:
             state = TranscriptReadState(Path(key))
             _shared_states[key] = state
         return state

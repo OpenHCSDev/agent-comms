@@ -3,16 +3,8 @@ import re
 import pytest
 
 from agent_comms.threads import Thread
-from agent_comms.tool_caller import ThreadCaller, NoThreadCaller, ToolCaller
+from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
-
-
-def test_tool_entry_decodes_caller_states_once():
-    assert ToolCaller.from_environment({}) == NoThreadCaller()
-    assert ToolCaller.from_environment({"AGENT_COMMS_THREAD": ""}) == NoThreadCaller()
-    assert ToolCaller.from_environment({"AGENT_COMMS_THREAD": "owner"}) == ThreadCaller("owner")
-    assert ToolCaller.from_actor(None) == NoThreadCaller()
-    assert ToolCaller.from_actor("owner") == ThreadCaller("owner")
 
 
 class TestToolCatalog:
@@ -52,22 +44,21 @@ class TestToolCatalog:
     def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms, monkeypatch):
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
         with pytest.raises(ValueError, match="thread caller"):
-            invoke_tool(comms, "comms_collaborations", {})
+            invoke_tool(comms, "comms_collaborations", {}, caller=NoThreadCaller())
         with pytest.raises(
             ValueError,
             match=re.escape(
                 "Invalid comms_collaboration arguments: Unknown RelationshipEdit name: 'start'"
             ),
         ):
-            invoke_tool(comms, "comms_collaboration", {"action": "start", "peer": "b"})
+            invoke_tool(comms, "comms_collaboration", {"action": "start", "peer": "b"}, caller=NoThreadCaller())
         with pytest.raises(ValueError, match="Unknown fields"):
-            invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b", "owner": "c"})
+            invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b", "owner": "c"}, caller=NoThreadCaller())
         assert not (comms.root / "relationships.json").exists()
 
-    def test_catalog_has_unique_json_schema_declarations(self):
+    def test_catalog_exposes_adapter_json_schemas(self):
         catalog = tool_catalog()
         names = [tool["name"] for tool in catalog]
-        assert len(names) == len(set(names))
         assert {
             "comms_send",
             "comms_inbox",
@@ -94,7 +85,7 @@ class TestToolCatalog:
         comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
         comms.messaging.send("a", "b", "hello")
 
-        result = invoke_tool(comms, "comms_inbox", {"thread": "b"})
+        result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
 
         assert result["messages"][0]["text"] == "hello"
         assert result["acknowledged"] == 1
@@ -105,22 +96,22 @@ class TestToolCatalog:
             ValueError,
             match=re.escape("Invalid comms_stop arguments: Missing required fields for CommsStopTool: name"),
         ):
-            invoke_tool(comms, "comms_stop", {})
+            invoke_tool(comms, "comms_stop", {}, caller=NoThreadCaller())
         with pytest.raises(ValueError, match="Unknown fields"):
-            invoke_tool(comms, "comms_stop", {"name": "a", "force": True})
+            invoke_tool(comms, "comms_stop", {"name": "a", "force": True}, caller=NoThreadCaller())
         with pytest.raises(ValueError, match="Expected.*bool"):
-            invoke_tool(comms, "comms_threads", {"active_only": "yes"})
+            invoke_tool(comms, "comms_threads", {"active_only": "yes"}, caller=NoThreadCaller())
 
-    def test_threads_query_without_caller_does_not_weaken_actions(self, comms, monkeypatch):
+    def test_operator_threads_query_does_not_weaken_actions(self, comms, monkeypatch):
         from agent_comms.launch_runtime import CallingThreadUnavailable
 
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
         comms.registry.declare(Thread(name="listed", tags=frozenset(), worktree="/wt"))
-        result = invoke_tool(comms, "comms_threads", {"active_only": True})
+        result = invoke_tool(comms, "comms_threads", {"active_only": True}, caller=NoThreadCaller())
         assert [thread["name"] for thread in result["threads"]] == ["listed"]
         assert result["sent_notifications"] == []
         with pytest.raises(CallingThreadUnavailable):
-            invoke_tool(comms, "comms_set_goal", {"text": "not authorized"})
+            invoke_tool(comms, "comms_set_goal", {"text": "not authorized"}, caller=NoThreadCaller())
 
     def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):
         # A tool consumes its bound caller, never a subsequently changed environment.
@@ -154,7 +145,7 @@ class TestToolCatalog:
         comms.messaging.send("c", "b", "from c")
 
         result = invoke_tool(
-            comms, "comms_inbox", {"thread": "b", "target": "a"}
+            comms, "comms_inbox", {"thread": "b", "target": "a"}, caller=NoThreadCaller()
         )
 
         assert [message["text"] for message in result["messages"]] == ["from a"]

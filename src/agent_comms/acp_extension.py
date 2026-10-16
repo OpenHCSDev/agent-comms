@@ -18,6 +18,7 @@ from .acp_failure import (
 )
 from .agent_events import CompactionEvent
 from .declared_family import DeclaredFamily
+from .context_reading import ContextReading
 from .input_attempt import ACPInputIdText, InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .field_codec import FieldCodec
@@ -447,25 +448,19 @@ class InputStartedUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
-class ContextUsage:
-    used: int
-    size: int
-
-    @property
-    def label(self) -> str:
-        return f"{self.used:,}/{self.size:,} tokens ({self.used / self.size * 100:.1f}%)"
-
-
-@dataclass(frozen=True)
 class CoordinationChangedUpdate(AgentCommsUpdate):
     thread: ThreadIncarnation
     wire_root: str
     owner_pid: int
     worktree: str
-    model: str | None
+    model: str
     thinking_level: str | None
     title: str
-    context_usage: ContextUsage | None
+    context_usage: ContextReading
+
+    @property
+    def status_label(self) -> str:
+        return " · ".join((self.model, *self.context_usage.label_parts()))
 
     @property
     def persistence(self) -> str:

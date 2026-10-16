@@ -18,6 +18,7 @@ from agent_comms.agent_backend import CompactionOutcome, PlacedCompaction
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
+from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
@@ -214,6 +215,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
             calls.append((owner, request["action"], request["thread"]))
             if request["action"] == "subscribe":
                 connections.append(writer)
+                writer.write((json.dumps(FieldCodec.encode(OwnerAnnouncement())) + "\n").encode())
                 writer.write(
                     (
                         json.dumps(

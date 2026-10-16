@@ -102,6 +102,7 @@ class RegistryDocument(RegistryPresence):
             last_seen=self.last_seen[thread.name],
             owner_generation=self.owners.generations[thread.name],
             admission_generation=self.admissions.generations[thread.name],
+            names=RegistryEntry.names_for(thread, self.aliases),
         )
 
     @classmethod
@@ -112,7 +113,8 @@ class RegistryDocument(RegistryPresence):
         thread's declaration is neither decoded nor validated here.
         """
         try:
-            canonical = raw["aliases"].get(name, name)
+            aliases = raw["aliases"]
+            canonical = aliases.get(name, name)
 
             def own(rows: dict) -> dict:
                 return {canonical: rows[canonical]} if canonical in raw["threads"] else {}
@@ -124,7 +126,10 @@ class RegistryDocument(RegistryPresence):
                 "threads": own(raw["threads"]),
                 "statuses": own(raw["statuses"]),
                 "last_seen": own(raw["last_seen"]),
-                "aliases": {name: canonical} if name != canonical else {},
+                "aliases": {
+                    alias: target for alias, target in aliases.items()
+                    if target == canonical
+                },
                 "owners": counter(raw["owners"]),
                 "admissions": counter(raw["admissions"]),
             }
@@ -207,6 +212,7 @@ class RegistryDocument(RegistryPresence):
     def prepare_registration(
         self, thread: Thread, status: ThreadStatus, *, new_owner: bool
     ) -> RegistrationChange:
+        status = thread.execution.registered_status(thread, status)
         if thread.name in self.aliases:
             raise RelationViolationError(
                 f"Thread name {thread.name!r} is a permanent alias and cannot be reused."
@@ -285,8 +291,7 @@ class RegistryDocument(RegistryPresence):
         if new_name == canonical:
             return canonical, canonical
         current = self.threads[canonical]
-        if not self.statuses[canonical].running:
-            raise RelationViolationError("Only a running thread can rename itself.")
+        self.statuses[canonical].require_self_rename()
         alias_owner = self.aliases.get(new_name)
         if new_name in self.threads or (alias_owner is not None and alias_owner != canonical):
             raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
@@ -326,7 +331,8 @@ class RegistryDocument(RegistryPresence):
             raise OwnerChangedBeforeFenceRefusal()
         if snapshot.admission_generations[current.name] != expected_admission_generation:
             raise OwnerGenerationChangedRefusal()
-        self.statuses[expected.name] = StoppedThreadStatus()
+        self.statuses[expected.name] = expected.execution.registered_status(
+            expected, StoppedThreadStatus())
         self.admissions.advance(expected.name)
         self.owners.advance(expected.name)
         return self.admissions.generations[expected.name]
@@ -337,8 +343,9 @@ class RegistryDocument(RegistryPresence):
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         if self.statuses[name].active:
             self.owners.advance(name)
-        self.statuses[name] = StoppedThreadStatus()
-        self.threads[name] = replace(self.threads[name], active_turn=None)
+        thread = self.threads[name]
+        self.statuses[name] = thread.execution.registered_status(thread, StoppedThreadStatus())
+        self.threads[name] = replace(thread, active_turn=None)
         self.admissions.advance(name)
 
     def archive(self, name: str) -> None:
@@ -518,6 +525,24 @@ class RegistryEntry:
     last_seen: float
     owner_generation: int
     admission_generation: int
+    names: frozenset[str]
+
+    @staticmethod
+    def names_for(thread: Thread, aliases: Mapping[str, str]) -> frozenset[str]:
+        return frozenset({thread.name, *(
+            alias for alias, target in aliases.items() if target == thread.name
+        )})
+
+    def matches_name(self, name: str) -> bool:
+        return name in self.names
+
+    def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> Thread:
+        """The exact saved owner lease, current name and process still agree."""
+        if not self.matches_name(owner.incarnation.name):
+            raise RelationViolationError("Thread incarnation changed during owner attachment")
+        self.status.require_active()
+        owner.require_current(self.thread, self.owner_generation, process)
+        return self.thread
 
     @property
     def owner_identity(self) -> OwnerIdentity:
@@ -616,12 +641,8 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
 
     def require_owner_process(self, owner: OwnerIdentity, process: ProcessIdentity) -> None:
         """A read attachment retains its owner lease across startup, not across restart."""
-        if not owner.incarnation.current(self):
-            raise RelationViolationError("Thread incarnation changed during owner attachment")
         thread = self.require_active(owner.incarnation.name)
-        if self.owner_generations[thread.name] != owner.generation:
-            raise RelationViolationError("Owner lease changed during attachment")
-        thread.require_local_process(process)
+        owner.require_current(thread, self.owner_generations[thread.name], process)
 
     def require_stopping_owner(self, expected: Thread, admission: int) -> None:
         """A fenced stop may target a stopped owner, but never a later birth/lease."""

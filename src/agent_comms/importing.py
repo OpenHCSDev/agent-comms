@@ -153,7 +153,7 @@ class ImportSnapshot:
     format: ImportFormat
     source_id: str
     project: str
-    title: str
+    title: str | None
     messages: tuple[ImportedMessage, ...]
     summary: str
     messages_seen: int
@@ -282,7 +282,7 @@ class ImportBuffer:
         self.summary = body[: self.limits.per_message]
 
     def snapshot(
-        self, format: ImportFormat, source_id: str, project: str, title: str,
+        self, format: ImportFormat, source_id: str, project: str, title: str | None,
         *, historical_instructions: tuple[CodexRolloutProvenance, ...] = (),
     ) -> ImportSnapshot:
         if not self.messages and not self.summary:
@@ -336,9 +336,9 @@ class OpenCodeImporter(ImportAdapter, format=ImportFormat.OPENCODE):
             self._message(message, tuple(objects(record.get("parts"))), buffer)
         return buffer.snapshot(
             ImportFormat.OPENCODE,
-            text(info.get("id")) or source.stem,
+            text(info.get("id")),
             text(info.get("directory")),
-            text(info.get("title")),
+            FieldCodec.decode(str | None, info.get("title")),
         )
 
     def _message(
@@ -554,9 +554,9 @@ class CodexImporter(ImportAdapter, format=ImportFormat.CODEX):
             buffer.notices.add("Historical developer/system sources are retained as references, not current instructions.")
         return buffer.snapshot(
             ImportFormat.CODEX,
-            scan.identity or source.stem,
+            scan.identity,
             scan.latest_project or scan.project,
-            source.stem,
+            None,
             historical_instructions=scan.historical_instructions,
         )
 
