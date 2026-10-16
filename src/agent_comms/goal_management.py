@@ -26,7 +26,6 @@ if TYPE_CHECKING:
     from .native_input_owner import RegistryOwner
 from .goal_presentation import GoalExecution, GoalWaitTarget
 from .goals import Goal, GoalNotice
-from .activity import ObservedActivity
 from .fleet import UnitObservation
 from .messages import Message, AlertKind
 from .recorded_time import RecordedEventTime
@@ -55,11 +54,6 @@ class Goals:
             with _store_lock(self._wire_lock_path, shared=shared):
                 yield completed
 
-    def _observation(self, snapshot, thread, event, at):
-        owner = snapshot.owner_identity(thread.name)
-        return UnitObservation(thread, self.agents._observed(thread, owner, event),
-                               thread.execution.latest_tool(self.root, thread), at)
-
     def _previous_at(self, goal, event):
         return max((event.timestamp, *goal.work_time.timestamps,
                     *goal.report_time.timestamps, *goal.author.issued_times))
@@ -69,42 +63,23 @@ class Goals:
         if goal is not None:
             goal = replace(goal, work_time=RecordedEventTime(time.time()))
         snapshot = self.registry.snapshot()
-        event = self.agents.activity.current(thread.name, active=True)
+        previous = thread.goal
         self.registry.register(replace(thread, goal=goal), self.registry.status(thread.name))
-        if goal is not None and goal.notification_targets(snapshot, self.root, previous=thread.goal):
-            before = self._observation(snapshot, thread, event,
-                                       self._previous_at(thread.goal, event)
-                                       if thread.goal is not None else event.timestamp)
-            after = self._observation(snapshot, replace(thread, goal=goal), event,
-                                      max(goal.work_time.timestamps))
-            completed.callback(self._notify_transition, before, after)
+        if goal is not None and goal.notification_targets(snapshot, self.root, previous=previous):
+            activity = self.agents.activity_of(thread.name, snapshot=snapshot)
+            before = (UnitObservation(previous, activity, self._previous_at(previous, activity))
+                      if previous is not None else None)
+            after = UnitObservation(goal, activity, max(goal.work_time.timestamps))
+            completed.callback(self._notify_transition, thread.incarnation.require_recorded(), before, after)
         return goal
 
-    def activity_written(self, snapshot, change):
-        if change is None:
-            return
-        before_event, after_event = change
-        thread = snapshot.threads[after_event.thread]
-        goal = thread.goal
-        if goal is None or not goal.notification_targets(snapshot, self.root, previous=goal):
-            return
-
-        # The original event owns the previous phase. Projecting it through
-        # the just-finished native lease would rewrite busy history as idle.
-        before = UnitObservation(
-            thread, ObservedActivity.acquire(before_event, snapshot.owner_identity(thread.name)),
-            thread.execution.latest_tool(self.root, thread), self._previous_at(goal, before_event),
-        )
-        after = self._observation(snapshot, thread, after_event, after_event.timestamp)
-        self._notify_transition(before, after)
-
-    def _notify_transition(self, before, after):
+    def _notify_transition(self, original, before, after):
         progress = after.progress
-        goal = after.thread.require_goal()
-        same_order = goal.same_order_as(before.thread.goal)
+        goal = after.goal
+        previous = before.goal if before is not None else None
+        same_order = goal.same_order_as(previous)
         if same_order and (not progress.notifies_commander or before.progress == progress):
             return
-        original = after.thread.incarnation
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             if not original.current(snapshot):
@@ -112,7 +87,7 @@ class Goals:
             unit = snapshot.require(original.name)
             results = []
             summary = progress.summary if same_order else "Order assigned"
-            for target in goal.notification_targets(snapshot, self.root, previous=before.thread.goal):
+            for target in goal.notification_targets(snapshot, self.root, previous=previous):
                 message = Message(
                     sender=unit.name, target=target.name, type=AlertKind,
                     timestamp=after.observed_at,

@@ -37,8 +37,7 @@ class GoalRef:
     def current(self, snapshot) -> Goal | None:
         if not self.owner.current(snapshot):
             return None
-        goal = snapshot.require(self.owner.name).goal
-        return goal if goal is not None and goal.id == self.goal_id else None
+        return snapshot.require(self.owner.name).goal_for(self.goal_id)
 
     def require_current(self, registry) -> Goal:
         goal = self.current(registry.snapshot())

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Iterable, Mapping
-from functools import cached_property
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -106,29 +105,18 @@ class LiveRecipientActivity(RecipientActivity):
         return self.thread.turn_started_by(updated_at_ms)
 
 class AgentActivity:
-    def __init__(self, root: Path, registry: Registration, bus=None):
-        from .message_bus import MessageBus
-
-        self.bus = bus if bus is not None else MessageBus(
-            root / "bus.jsonl", registry, private_initial_writes=True,
-        )
+    def __init__(self, root: Path, registry: Registration):
         self.registry = registry
         self._wire_lock_path = root / "wire"
         self.activity = ActivityLog(root / "activity.jsonl")
         self.runtime_info = RuntimeInfoStore(root / RuntimeInfoStore.filename)
 
-    @cached_property
-    def goals(self):
-        from .goal_management import Goals
-
-        return Goals(self._wire_lock_path.parent, self.registry, self.bus, self)
-
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
         """Declare a thread's current activity (thinking/working/idle)."""
         if state.retires_thread:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
-        with self.goals.writing(shared=True) as completed:
-            self._emit_activity(Activity.create(thread, state, detail), completed)
+        with _store_lock(self._wire_lock_path, shared=True):
+            self._emit_activity(Activity.create(thread, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot | None = None) -> ObservedActivity:
         snapshot = snapshot or self.registry.snapshot()
@@ -169,21 +157,20 @@ class AgentActivity:
             observations[lookup] = selected.activity(self, snapshot)
         return observations
 
-    def _emit_activity(self, activity: Activity, completed) -> None:
+    def _emit_activity(self, activity: Activity) -> None:
         snapshot = self.registry.snapshot()
         owner = snapshot.owner_identity(activity.thread)
         activity = replace(activity, thread=owner.incarnation.name)
-        change = self.activity.update(activity.thread, lambda current: replace(
+        self.activity.update(activity.thread, lambda current: replace(
             activity, diagnostic=ObservedActivity.acquire(current, owner).readiness.source_diagnostic(),
         ))
-        completed.callback(self.goals.activity_written, snapshot, change)
 
     def set_drain_diagnostic(
         self, thread: str, owner: OwnerIdentity, diagnostic: DrainDiagnostic,
         *, source_error: BaseException | None = None,
     ) -> bool:
         """Persist one transition, fenced to the observer's exact owner incarnation."""
-        with self.goals.writing(shared=True) as completed:
+        with _store_lock(self._wire_lock_path, shared=True):
             snapshot = self.registry.snapshot()
             if snapshot.owner_identity(thread) != owner:
                 return False
@@ -205,9 +192,7 @@ class AgentActivity:
                     return None
                 return replace(current.source_event(), diagnostic=diagnostic, timestamp=time.time())
 
-            change = self.activity.update(participant.name, record)
-            completed.callback(self.goals.activity_written, snapshot, change)
-            return change is not None
+            return self.activity.update(participant.name, record)
 
     def recover_drain(
         self, thread: str, owner: OwnerIdentity, observed: ObservedActivity,
@@ -221,7 +206,7 @@ class AgentActivity:
         expected = observed.readiness.source_diagnostic()
         if expected is None or expected.owner != owner:
             return False
-        with self.goals.writing(shared=True) as completed:
+        with _store_lock(self._wire_lock_path, shared=True):
             snapshot = self.registry.snapshot()
             if snapshot.owner_identity(thread) != owner:
                 return False
@@ -234,51 +219,49 @@ class AgentActivity:
                     return None
                 return replace(current.source_event(), diagnostic=None, timestamp=time.time())
 
-            change = self.activity.update(participant.name, recover)
-            completed.callback(self.goals.activity_written, snapshot, change)
-            return change is not None
+            return self.activity.update(participant.name, recover)
 
     def begin_turn(
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
     ) -> RegistryOwner:
         """Return the exact owner installed by this atomic begin, including its lease."""
-        with self.goals.writing() as completed:
+        with _store_lock(self._wire_lock_path):
             leased, _ = self.registry.lease_local_turn(name, turn_id, routing=routing)
             lease = leased.turn_lease
             assert lease is not None
             try:
                 phase = PreparingPhase(detail)
                 self.registry.transition_turn(lease, phase)
-                self._record_turn_activity(leased.name, (phase,), completed)
+                self._record_turn_activity(leased.name, (phase,))
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
             return RegistryOwner(thread=leased, admission_generation=lease.admission_generation)
 
-    def _record_turn_activity(self, name: str, phases: Iterable[TurnPhase], completed) -> None:
+    def _record_turn_activity(self, name: str, phases: Iterable[TurnPhase]) -> None:
         """Changed phases are real activity events, just like CLI status reports."""
         for phase in phases:
-            self._emit_activity(phase.activity_event(name), completed)
+            self._emit_activity(phase.activity_event(name))
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        with self.goals.writing(shared=True) as completed:
+        with _store_lock(self._wire_lock_path, shared=True):
             effects = self.registry.transition_turn(lease, phase)
-            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects), completed)
+            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
             return effects
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        with self.goals.writing(shared=True) as completed:
+        with _store_lock(self._wire_lock_path, shared=True):
             effects = self.registry.observe_native_phase(lease, phase)
-            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects), completed)
+            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
             return effects
 
     def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:
         """Persist this lease's terminal identity before publishing idle activity."""
-        with self.goals.writing() as completed:
+        with _store_lock(self._wire_lock_path):
             released, fence = self.registry.release_turn(lease)
             if not released:
                 return None
-            self._emit_activity(Activity(lease.identity.incarnation.name, ActivityState.IDLE), completed)
+            self._emit_activity(Activity(lease.identity.incarnation.name, ActivityState.IDLE))
             return fence
 
     def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:

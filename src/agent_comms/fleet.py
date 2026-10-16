@@ -1,82 +1,29 @@
-"""Fleet views derive work from the registry and original per-thread records."""
-
+"""Order progress derives from its Goal and canonical ActivityLog observation."""
 from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
+from .activity import ObservedActivity
 from .declared_family import DeclaredFamily
 from .field_codec import projected
-from .messages import Message
-from .activity import ObservedActivity
-from .threads import Thread
-from .tool_activity import ToolActivity
-
-
-class UnreadCount(DeclaredFamily, affix="UnreadCount"):
-    pass
-
-
-@dataclass(frozen=True)
-class KnownUnreadCount(UnreadCount):
-    count: int
-
-
-@dataclass(frozen=True)
-class UnreadStoreBusy(UnreadCount):
-    pass
-
-
-@dataclass(frozen=True)
-class UnreadProjectionRebuilding(UnreadCount):
-    through: int
-    size: int
-
-
-@dataclass(frozen=True)
-class SentMessages:
-    messages: tuple[Message, ...]
-
-    @property
-    def timestamps(self):
-        return tuple(message.timestamp for message in self.messages)
+from .goals import Goal
 
 
 @dataclass(frozen=True)
 class UnitObservation:
-    thread: Thread
+    goal: Goal
     activity: ObservedActivity
-    tool: ToolActivity
     observed_at: float
 
     @property
-    def goal(self):
-        return self.thread.goal
-
-    @property
     def open_goal(self):
-        return self.goal is not None and not self.goal.state.terminal
-
-    @property
-    def busy_since(self):
-        return self.thread.execution.busy_time(self.thread, self.activity)
+        return not self.goal.state.terminal
 
     @projected(view="wire")
     def progress(self) -> UnitProgress:
         return UnitProgress.select(self)
-
-
-@dataclass(frozen=True)
-class FleetEntry(UnitObservation):
-    unread: UnreadCount
-    sent: SentMessages
-    last_seen: float
-
-    @projected(view="wire")
-    def last_activity(self) -> float:
-        return max((self.activity.timestamp, self.last_seen,
-                    *self.tool.timestamps, *self.sent.timestamps))
 
 
 @dataclass(frozen=True)
@@ -108,8 +55,7 @@ class DoneUnitProgress(UnitProgress):
 
     @classmethod
     def matches(cls, entry):
-        goal = entry.thread.goal
-        return goal is not None and goal.delivery_complete
+        return entry.goal.delivery_complete
 
 
 class OverdueUnitProgress(UnitProgress):
@@ -120,18 +66,6 @@ class OverdueUnitProgress(UnitProgress):
     @classmethod
     def matches(cls, entry):
         return entry.open_goal and entry.goal.deadline.overdue(entry.observed_at, entry.goal.delivery_time)
-
-
-class ToolSilentUnitProgress(UnitProgress):
-    priority = 20
-    notifies_commander = True
-    summary = "Busy for 30 minutes without a tool call"
-    seconds: ClassVar[int] = 30 * 60
-
-    @classmethod
-    def matches(cls, entry):
-        return (entry.open_goal and entry.activity.state.busy
-                and entry.tool.silent_since(entry.busy_since, entry.observed_at, cls.seconds))
 
 
 class SpinningUnitProgress(UnitProgress):
