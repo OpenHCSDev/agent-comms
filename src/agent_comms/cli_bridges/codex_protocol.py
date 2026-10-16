@@ -256,7 +256,7 @@ RPC_RESPONSE = TypeAdapter(RpcSuccess | RpcFailure | RpcNotification)
 
 class Item(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag',
+        registry_dict={}, key_attribute='__name__',
         skip_if_no_key=True,
     )
     id: str
@@ -480,16 +480,21 @@ class McpToolItem(ToolItem):
             self.result is None or self.result.succeeded)
 
 
-class SendOutputItem(Item):
+class FunctionOutputItem(Item):
     wire_tag = 'functionCallOutput'
     name: str
     output: str
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        # The bridge's send result is already rendered from the bus in Toad.
-        if self.name == SEND_TOOL:
-            return ()
         return (ToolEndTranscript(tool_call_id=self.id, tool_name=self.name, text=self.output),)
+
+
+class SendOutputItem(FunctionOutputItem):
+    name: Literal[SEND_TOOL]
+
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        # The bridge's send result is already rendered from the bus in Toad.
+        return ()
 
 
 class CompactionItem(Item):

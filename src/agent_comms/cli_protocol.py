@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import builtins
 from abc import ABC, abstractmethod
+from graphlib import TopologicalSorter
 from typing import Annotated, ClassVar, Never, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
@@ -40,11 +41,19 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
             if isinstance(value, cls):
                 return value.wire_tag
             return cls.header.model_validate(value).type
-        return Annotated[
-            Union[tuple(Annotated[member, Tag(member.wire_tag)]
-                        for member in cls.__registry_config__.registry_dict.values())],
-            Discriminator(tag),
-        ]
+        by_tag: dict[str, list[builtins.type[TaggedWire]]] = {}
+        for member in cls.__registry_config__.registry_dict.values():
+            by_tag.setdefault(member.wire_tag, []).append(member)
+        variants = []
+        for wire_tag, members in by_tag.items():
+            hierarchy = TopologicalSorter({
+                member: tuple(base for base in member.__mro__[1:] if base in members)
+                for member in members
+            })
+            # An inherited specialization must precede its general parent.
+            alternatives = Union[tuple(reversed(tuple(hierarchy.static_order())))]
+            variants.append(Annotated[alternatives, Tag(wire_tag)])
+        return Annotated[Union[tuple(variants)], Discriminator(tag)]
 
 
 class CoreError(TaggedWire, ABC):
