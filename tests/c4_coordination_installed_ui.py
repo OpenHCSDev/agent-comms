@@ -8,6 +8,8 @@ from pathlib import Path
 import sqlite3
 import sys
 from time import perf_counter
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--toad-tests', type=Path, required=True)
@@ -33,7 +35,7 @@ async def main():
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.environ.update(XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
                       XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_ROOT=str(root / 'wire'))
-    comms = Comms.for_runtime(root / 'wire', private_initial_writes=True)
+    comms = Comms(LocalRoute(root / 'wire'), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
     root_id = comms.messaging.initialize_private_initial_protocol()
     launch = PrivateNkLaunch.from_environment(comms.root, {
         ROOT_ID_ENV: root_id, PACKAGE_ENV: os.environ['AC_NATIVE_COPIED_PACKAGE']})

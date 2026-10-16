@@ -7,6 +7,7 @@ from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordinator import Coordination
 from agent_comms.wake_policy import BoundedTriageWake
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+import dataclasses
 
 
 def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  # noqa: F811
@@ -94,13 +95,7 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
     if not package:
         pytest.skip("Prepared native package required; no model request")
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
-    agent = CommsAgent(
-        comms,
-        agent_bin="pi",
-        auto_wake=False,
-        private_nk_wire_root_id=root_id,
-        private_nk_native_package=Path(package),
-    )
+    agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False, private_nk_wire_root_id=root_id, private_nk_native_package=Path(package))
     turn = OwnedTurn(agent.turns, "alpha", "alpha", "Independently authorized task")
     try:
         async with AsyncExitStack() as resources:

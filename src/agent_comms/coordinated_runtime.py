@@ -35,7 +35,7 @@ from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthori
 
 @dataclass(kw_only=True)
 class SelectedExecution:
-    root: Path
+    comms: Comms
     wire_root_id: str
     owner_name: str
     native_package: Path
@@ -60,6 +60,10 @@ class SelectedExecution:
     _tracked_factory: Callable[..., NativePiRpcLaunch] | None = field(
         init=False, default=None, repr=False, compare=False,
     )
+
+    @property
+    def root(self) -> Path:
+        return self.comms.root
 
     def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
         """Consume the original pre-claim acquisition for each stage's launch.
@@ -137,11 +141,10 @@ class SelectedExecution:
             self.pi_session = pi_session
         if following is not None:
             self.following = following
-        self.root = Path(self.root).absolute()
         # Package acquisition belongs to this execution before it can select
         # a claim. Join its blocking verification before that custody advances.
         await Coordination.run_worker(self.validate)
-        comms = Comms.for_runtime(self.root)
+        comms = self.comms
         with Coordination(str(self.root / "coordination.sqlite3")) as store:
             while True:
                 async with SelectedParticipant.select(

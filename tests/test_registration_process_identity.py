@@ -6,14 +6,17 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.errors import RelationViolationError
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     owner = comms.threads.claim_thread(
         "owner", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()
     )
@@ -23,7 +26,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     session.write_text('{"type":"session","id":"fixture"}\n')
     attached = comms.threads.attach_session(owner.name, str(session))
     assert attached.process_identity == identity
-    assert wire(tmp_path).registry.require(owner.name) == attached
+    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).registry.require(owner.name) == attached
     unbound = comms.threads.attach_session(owner.name, str(session), pid=0)
     assert unbound.process_identity is None and unbound.pid == 0
     rebound = comms.threads.attach_session(owner.name, str(session), pid=os.getpid())
@@ -36,7 +39,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
 
 
 def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     identity = ProcessIdentity.capture(os.getpid())
     owner = Thread("owner", frozenset(), str(tmp_path), process_identity=identity)
     comms.registry.declare(owner)
@@ -57,7 +60,7 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
 
 
 def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     identity = ProcessIdentity.capture(os.getpid())
     owner = comms.threads.claim_thread(
         "owner", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()

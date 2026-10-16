@@ -18,6 +18,8 @@ from tempfile import TemporaryDirectory
 import pytest
 from agent_comms.native_settings import NativeThreadDefaults
 from native_backend_fixture import native_run_command
+from agent_comms.comms import Comms
+from agent_comms.active_route import resolve_comms_route
 
 
 @pytest.mark.asyncio
@@ -31,7 +33,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
         pytest.skip("Requires prepared native Pi and mounted Toad pilot dependencies")
     from runtime_fixture import ToadApp
 
-    from agent_comms.comms import wire
+
 
     live = False
     if live and empty_response:
@@ -172,7 +174,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
             },
             project_dir=str(project),
         )
-        comms = wire(root / "wire")
+        comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
 
         async def until(predicate, timeout=45):
             async with asyncio.timeout(timeout):
@@ -245,7 +247,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                     await until(lambda: native_user_starts() >= 2)
                     assert native_user_starts() == 2
                 await view.slash_command("/goal pause")
-                paused = wire(root / "wire").registry.require("project").goal
+                paused = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime()).registry.require("project").goal
                 assert (
                     paused.state.declared_name == "paused"
                     and comms.registry.require("project").goal.state.pause_source.declared_name == "owner"
@@ -267,7 +269,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                 release.set()
                 await until(lambda: not comms.registry.require("project").executing)
                 await asyncio.sleep(0.4)
-                preserved = wire(root / "wire").registry.require("project").goal
+                preserved = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime()).registry.require("project").goal
                 assert preserved == paused
                 assert attempts()[-1][1] == "succeeded"
                 assert len(attempts()) == (1 if model_origin else 2) and len(requests) == 2

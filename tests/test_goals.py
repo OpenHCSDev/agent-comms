@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -20,17 +20,20 @@ from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Verify the release"))
     comms.threads.set_thread_configuration(comms.registry.require('worker'), model='test/model')
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
-    restored = wire(tmp_path).registry.require("worker")
+    restored = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).registry.require("worker")
     assert restored.goal == goal
     assert restored.model == "test/model"
     assert restored.name == "renamed"
@@ -47,7 +50,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
         )
     assert comms.registry.require("worker").goal == replacement
     comms.goals.update_goal("worker", ClearGoalAction())
-    assert wire(tmp_path).registry.require("worker").goal is None
+    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).registry.require("worker").goal is None
     with pytest.raises(ValueError, match="No goal"):
         comms.goals.update_goal("worker", ActiveGoalAction())
     with pytest.raises(ValueError, match="requires"):
@@ -57,7 +60,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
 
 
 def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish the release"))
@@ -102,7 +105,7 @@ def test_goal_control_distinguishes_resume_retry_and_completion(state, action, l
 
 
 def test_agent_can_set_its_own_persistent_goal(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     tool = next(

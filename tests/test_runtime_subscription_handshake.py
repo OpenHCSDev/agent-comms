@@ -10,18 +10,21 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
 
 async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplog):
-    comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, runtime_enabled=True, auto_wake=False)
-    client = CommsAgent(comms, auto_wake=False)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    owner = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, auto_wake=False)
+    client = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
     session_file = tmp_path / "owner.jsonl"
     session_file.write_text(json.dumps({
         "type": "session", "version": 3, "id": "owner-session",
@@ -82,7 +85,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
     ids=["missing", "null", "number", "empty", "short", "long"],
 )
 async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, token_fields):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(
         Thread(
             "owner",
@@ -113,7 +116,7 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, to
             await writer.wait_closed()
 
     server = await asyncio.start_unix_server(reply, path=path)
-    client = CommsAgent(comms, auto_wake=False)
+    client = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
     proxy = RuntimeProxy(client, "owner", path)
     try:
         async with asyncio.timeout(3):

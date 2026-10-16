@@ -5,11 +5,14 @@ import sqlite3
 
 import pytest
 
-from agent_comms.comms import wire
+
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import MessageDisplayScope
 from agent_comms.threads import Thread
 from agent_comms.store_files import _store_lock
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 @dataclass(frozen=True)
@@ -23,7 +26,7 @@ class ReviewScope(MessageDisplayScope):
 
 @pytest.mark.parametrize("direction", [{"after": 0}, {"before": 10}])
 def test_new_scope_preserves_progress_and_edges_in_both_real_readers(tmp_path, direction):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     for name in ("sender", "recipient"):
         comms.registry.declare(Thread(name, frozenset({"review"}), str(tmp_path)))
     messages = [
@@ -50,7 +53,7 @@ def test_new_scope_preserves_progress_and_edges_in_both_real_readers(tmp_path, d
 
 
 def test_rejected_derived_index_scan_releases_writer_and_keeps_open_boundary(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     for name in ("sender", "recipient"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     original = comms.messaging.send_message("sender", "recipient", "review original")

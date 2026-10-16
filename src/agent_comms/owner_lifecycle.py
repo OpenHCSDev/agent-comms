@@ -124,6 +124,10 @@ class OwnerReleaseReceipt:
 
 
 class OwnerReleaseStore(ThreadOwnedState, LockedStore[dict[str, OwnerReleaseReceipt]]):
+    @classmethod
+    def for_root(cls, root: Path) -> OwnerReleaseStore:
+        return cls(root / "owner_release_receipts.json")
+
     @property
     def record_type(self):
         return dict[str, OwnerReleaseReceipt]
@@ -178,7 +182,7 @@ class OwnerLifecycle:
         self.bus = bus
         self._wire_lock_path = root / "wire"
         self.maintenance = MaintenanceBarrier(registry.store.path)
-        self.releases = OwnerReleaseStore(root / "owner_release_receipts.json")
+        self.releases = OwnerReleaseStore.for_root(root)
         self._private_nk_launch: PrivateNkLaunch | None = None
 
     @contextmanager
@@ -391,7 +395,7 @@ class OwnerLifecycle:
             PACKAGE_ENV,
         ):
             env.pop(key, None)
-        agent_bin = NativeArguments.configured_binary(native)
+        agent_bin = native.binary
         private_launch = self.require_launch_authority()
         if private_launch is not None:
             if agent_bin == "pi":
@@ -443,14 +447,13 @@ class OwnerLifecycle:
             owned = replace(thread, process_identity=identity, active_turn=None)
             self.registry.register(owned, new_owner=True)
 
-        with owner_process_output(self.root, thread) as output, native.inherited() as (arguments, descriptors):
+        with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
-                (sys.executable, "-m", "agent_comms.worker", *arguments),
+                (sys.executable, "-m", "agent_comms.worker", *native.cli_arguments),
                 env=env,
                 cwd=thread.worktree,
                 output=output,
                 before_start=reserve,
-                pass_fds=descriptors,
             )
         assert owned is not None
         return owned

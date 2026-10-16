@@ -27,11 +27,12 @@ from pathlib import Path
 
 import fcntl
 
-from .comms import Comms, wire
+from .comms import Comms
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .store_files import _store_lock
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
+from agent_comms.active_route import resolve_comms_route
 
 DIRECTORY = "owner-restart-queue"
 
@@ -310,7 +311,7 @@ async def run(comms: Comms) -> None:
 def main() -> None:
     if len(sys.argv) != 2:
         raise SystemExit("usage: python -m agent_comms.restart_queue ROOT")
-    comms = wire(sys.argv[1])
+    comms = Comms(resolve_comms_route(sys.argv[1]), native=NativeThreadDefaults.from_runtime())
     try:
         asyncio.run(run(comms))
     except Exception as exc:

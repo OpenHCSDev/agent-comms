@@ -19,6 +19,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from compaction_loopback import LoopbackProvider
 from delivery_owner_fixture import canonical_agent
+import dataclasses
 
 
 @pytest.mark.asyncio
@@ -51,7 +52,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
     launcher = str(Path(__file__).parents[1] / "stack/bin/pi-native")
     arguments = ["--provider", "outcome-offline", "--model", "fixture", "--thinking", "off",
                  "--no-extensions", "--no-skills", "--no-context-files"]
-    agent = canonical_agent(wired, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
+    agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary=launcher, arguments=tuple(arguments)), runtime_enabled=True)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     route = PrivateNkLaunch(Path(agent._comms.root), agent._configured_root_id(), package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))

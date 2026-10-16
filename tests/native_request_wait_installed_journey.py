@@ -27,6 +27,7 @@ from l0a_native_installed_pilot import until, response_painted
 from runtime_fixture import stop_test_children, stop_test_owners
 from saved_state_user_journey_pilot import submit_editor
 from stored_inputs import stored_inputs
+from agent_comms.active_route import LocalRoute
 
 
 class ObservedApp(ToadApp):
@@ -98,7 +99,7 @@ async def run(arguments):
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
     native = NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary(), arguments=("--provider", "wait-local", "--model", "fixture",
         "--no-extensions", "--no-skills", "--no-context-files"))
-    service = Comms(stage / "wire", private_initial_writes=True, native=native)
+    service = Comms(LocalRoute(stage / "wire"), private_initial_writes=True, native=native)
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     environment = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),

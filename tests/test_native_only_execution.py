@@ -12,6 +12,8 @@ from agent_comms.child_process import BoundedRun
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from pi_session_turn import one_turn_events
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 @pytest.mark.parametrize("arguments,code", [(('--help',), 0), (('tools',), 2), ((), 1)])
@@ -154,14 +156,13 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
 
     from agent_comms.native_settings import NativeThreadDefaults
 
-    with tempfile.TemporaryDirectory(prefix="l0b-headless-", dir=tmp_path) as owned, \
-            NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary()).inherited() as (native_arguments, native_descriptors):
+    with tempfile.TemporaryDirectory(prefix="l0b-headless-", dir=tmp_path) as owned:
         base = Path(owned)
         project = base / "owner-project"
         caller_project = base / "caller-project"
         project.mkdir()
         caller_project.mkdir()
-        comms = Comms.for_runtime(base / "wire")
+        comms = Comms(LocalRoute(base / "wire"), native=NativeThreadDefaults.from_runtime())
         root_id = comms.messaging.initialize_private_initial_protocol()
         comms.registry.declare(Thread("headless", frozenset(), str(project)))
         env = dict(
@@ -179,10 +180,9 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         for key in ("PI_PROMPT", "PI_PARENT_ID"):
             env.pop(key, None)
         async with BoundedRun.session(
-            (sys.executable, "-c", "from agent_comms.worker import main; raise SystemExit(main())", *native_arguments),
+            (sys.executable, "-c", "from agent_comms.worker import main; raise SystemExit(main())", *comms.owners.native_defaults.cli_arguments),
             cwd=caller_project,
             env=env,
-            pass_fds=native_descriptors,
             timeout=20,
         ) as child:
             async with asyncio.timeout(12):
@@ -193,9 +193,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             registered = comms.registry.require("headless")
             assert registered.pid == child.pid
             assert registered.worktree == str(project)
-            client = CommsClient(
-                comms, private_nk_wire_root_id=root_id, private_nk_native_package=Path(package)
-            )
+            client = CommsClient(comms, native=comms.owners.native_defaults, private_nk_wire_root_id=root_id, private_nk_native_package=Path(package))
             try:
                 loaded = await client.load_session(str(project), "headless")
                 assert loaded.field_meta["agentComms"]["imagePrompts"]

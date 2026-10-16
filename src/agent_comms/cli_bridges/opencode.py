@@ -22,6 +22,9 @@ from .opencode_protocol import (
     SESSION_STATUSES, MESSAGES, IdleStatus,
 )
 from .opencode_parts import SavedMessage, UserMessage
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 async def event_payloads(response: aiohttp.ClientResponse) -> AsyncIterator[str]:
@@ -67,21 +70,21 @@ class Attach(Watch):
         return operation
 
     def binding(self, options: OpenCodeOptions) -> Binding:
-        from agent_comms.comms import wire
+
 
         if options.session is None:
             raise ValueError('Attach requires the selected native session')
-        comms = wire(options.root)
+        comms = Comms(resolve_comms_route(options.root), native=NativeThreadDefaults.from_runtime())
         name = options.bus_thread or f'opencode-{options.session}'
         options.state = options.state / options.session
         return Binding(str(comms.root), name, options.session)
 
     def start(self, bridge: OpenCodeBridge, tasks: asyncio.TaskGroup) -> None:
-        from agent_comms.comms import wire
+
         from agent_comms.cli_commands import RegisterCliCommand
 
         RegisterCliCommand(name=bridge.binding.bus, worktree=str(bridge.options.directory),
-                           pid=self.pid).apply(wire(bridge.binding.root))
+                           pid=self.pid).apply(Comms(resolve_comms_route(bridge.binding.root), native=NativeThreadDefaults.from_runtime()))
         super().start(bridge, tasks)
 
 
@@ -201,4 +204,3 @@ class OpenCodeBridge(TranscriptBridge[OpenCodeOptions]):
 def main() -> None:
     parser = shared_parser(__doc__, Path.home() / '.local/state/opencode-comms-inbox', OpenCodeBridge)
     run_bridge(OpenCodeBridge, parse_options(parser, OpenCodeOptions))
-

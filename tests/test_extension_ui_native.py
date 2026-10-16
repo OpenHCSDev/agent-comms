@@ -9,6 +9,9 @@ from agent_comms.comms import Comms
 from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 from native_event_host import install_event_host
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -16,10 +19,8 @@ pytest_plugins = ("test_backend_native_lifecycle",)
 async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_backend, monkeypatch):
     fixture = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    owner = canonical_agent(
-        Comms.for_runtime(fixture.root),
-        agent_bin="pi",
-        agent_args=[
+    selected_comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults.from_runtime())
+    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple([
             "--provider",
             "response-local",
             "--model",
@@ -32,10 +33,7 @@ async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_bac
             "--no-context-files",
             "--no-prompt-templates",
             "--no-tools",
-        ],
-        runtime_enabled=True,
-        auto_wake=False,
-    )
+        ])), runtime_enabled=True, auto_wake=False)
     updates, permissions = [], []
 
     class Attachment:

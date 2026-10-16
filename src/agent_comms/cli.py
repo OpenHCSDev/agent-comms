@@ -15,6 +15,8 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 from pathlib import Path
 
+from .active_route import resolve_comms_route
+from .native_settings import NativeThreadDefaults
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import Comms
@@ -34,11 +36,10 @@ class CliArgumentParser(argparse.ArgumentParser):
         raise ValueError(message)
 
 
-def build_parser() -> argparse.ArgumentParser:
-    from .native_settings import NativeThreadDefaults
-
+def build_parser(settings: NativeThreadDefaults) -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
-    NativeThreadDefaults.add_cli_arguments(parser)
+    parser.set_defaults(native_settings=settings)
+    NativeThreadDefaults.add_cli_arguments(parser, required=False)
     parser.add_argument(
         "--root",
         default=None,
@@ -53,15 +54,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         with ExitStack() as route_guard:
-            args = build_parser().parse_args(argv)
+            settings = NativeThreadDefaults.from_runtime()
+            args = build_parser(settings).parse_args(argv)
             command = CliCommand.from_namespace(args)
-            from .active_route import resolve_comms_route
-
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.admit_client())
-            from .native_settings import NativeThreadDefaults
-
-            comms = Comms.bound(route, native=NativeThreadDefaults.from_namespace(args))
+            comms = Comms(route, native=args.native_settings)
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130

@@ -7,11 +7,13 @@ from agent_comms.comms import Comms
 from agent_comms.acp import CommsAgent
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.errors import RelationViolationError
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def main():
     root = Path(sys.argv[1])
-    service = Comms.for_runtime(root)
+    service = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     assert all(not thread.process_alive for thread in service.registry.all_threads().values())
     registry = root / 'registry.json'
     before = json.loads(registry.read_text())
@@ -29,7 +31,7 @@ def main():
     service.views.dm_display_page('phase-alpha', worktree=str(root), limit=1)
     # The ACP configuration owner has another ordinary metadata writer. No
     # backend, session attachment or native operation is started by this call.
-    client = CommsAgent(service)
+    client = CommsAgent(service, native=service.owners.native_defaults)
     config = client.sessions.config
     option = config.catalog_for(ThinkingLevelConfigOption)
     option.persist(config, service.registry.require('phase-alpha'), 'high')

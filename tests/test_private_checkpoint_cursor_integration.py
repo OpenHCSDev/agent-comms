@@ -28,6 +28,8 @@ from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_native_prompt_binding import _fake_model
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 @pytest.fixture
@@ -41,7 +43,7 @@ def tmp_path():
 def _root(tmp_path: Path):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms.for_runtime(root, private_initial_writes=True)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
     people = [
         Thread(
             "sender",
@@ -84,7 +86,7 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first_turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert first_turn is not None and first_turn.cursor_status == "proven"
     for number in range(1000):
@@ -98,12 +100,12 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second.seq, store)
     second_turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert second_turn is not None and second_turn.cursor_status == "proven"
     assert len(calls) == 2 and second_turn.input_id != first_turn.input_id
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        current = NativeSourceCursor(Comms.for_runtime(root).bus, reopened, wire_root_id=root_id).read(
+        current = NativeSourceCursor(Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).bus, reopened, wire_root_id=root_id).read(
             owner_name="alpha"
         )
         assert current is not None
@@ -119,7 +121,7 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     monkeypatch.setattr(TrackedTurnSession, "execute", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
         ).run()
     assert len(bad_calls) == 1  # failed input is UNKNOWN; never retry it
     for number in range(101):
@@ -130,7 +132,7 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
     good, good_calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
     result = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert result is not None and result.cursor_status == "blocked_gap" and len(good_calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
@@ -152,7 +154,7 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
     original = checkpoint.append_private_bus_checkpoint_unlocked
@@ -166,7 +168,7 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
     assert len(comms.bus.log.path.read_bytes().splitlines()) == first.seq + 1
     monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", original)
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        retained = NativeSourceCursor(Comms.for_runtime(root).bus, reopened, wire_root_id=root_id).read(
+        retained = NativeSourceCursor(Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).bus, reopened, wire_root_id=root_id).read(
             owner_name="alpha"
         )
         assert retained is not None and retained.input_id == turn.input_id
@@ -186,7 +188,7 @@ def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
         db.execute("DELETE FROM addressed WHERE lookup=? AND seq=?", (lookup, first.seq))
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         with pytest.raises((RelationViolationError, IdentityConflict)):
-            NativeSourceCursor(Comms.for_runtime(root).bus, reopened, wire_root_id=root_id).read(
+            NativeSourceCursor(Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).bus, reopened, wire_root_id=root_id).read(
                 owner_name="alpha"
             )
         assert (

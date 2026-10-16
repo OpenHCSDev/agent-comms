@@ -18,6 +18,7 @@ from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
 from test_acp import facts
 from test_backend import _NATIVE_PROMPT_START, _stub
+import dataclasses
 
 OVERLOADED = "Our servers are currently overloaded. Please try again later."
 
@@ -59,7 +60,7 @@ def _settled_records():
 async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
     wired, tmp_path, monkeypatch
 ):
-    agent = canonical_agent(wired, agent_bin="pi", agent_args=[], runtime_enabled=True)
+    agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi", arguments=tuple([])), runtime_enabled=True)
     sent: list = []
 
     class FakeClient:

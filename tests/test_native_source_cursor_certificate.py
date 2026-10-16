@@ -26,6 +26,8 @@ from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_native_prompt_binding import _fake_model
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 @pytest.fixture
@@ -39,7 +41,7 @@ def tmp_path():
 def _fresh(tmp_path: Path, count: int = 2):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms.for_runtime(root, private_initial_writes=True)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
     comms.registry.declare(
         Thread(
             "sender",
@@ -88,7 +90,7 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first = _seal(comms, root, root_id, "alpha", "first selected")
     one = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert one is not None and one.cursor_status == "proven"
     # The certificate filters 1,001 committed initials for another owner.
@@ -98,7 +100,7 @@ async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypat
     assert comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
     selected = _seal(comms, root, root_id, "#team", "@alpha selected after churn")
     second = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert second is not None and second.cursor_status == "proven"
     assert len(calls) == 2 and second.input_id != one.input_id
@@ -118,7 +120,7 @@ async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_pat
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first = _seal(comms, root, root_id, "alpha", "first selected")
     one = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert one is not None and one.cursor_status == "proven"
     for n in range(105):
@@ -127,7 +129,7 @@ async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_pat
         _seal(comms, root, root_id, "#team", f"@other001 unrelated {n}")
     selected = _seal(comms, root, root_id, "alpha", "last exact selected")
     second = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert second is not None and second.cursor_status == "proven"
     assert len(calls) == 2 and second.input_id != one.input_id
@@ -151,7 +153,7 @@ async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, rec
     assert len(frozen.audience.recipients) == recipients
     start = time.perf_counter()
     turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     delivery_ms = (time.perf_counter() - start) * 1000
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
@@ -176,7 +178,7 @@ async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path,
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     _seal(comms, root, root_id, "alpha", "exact selected")
     turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
+        comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert turn is not None and turn.cursor_status == "proven" and len(calls) == 1
     path = root / "private_bus_checkpoint.sqlite3"

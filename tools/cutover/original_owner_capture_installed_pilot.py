@@ -8,6 +8,8 @@ import subprocess
 from original_owner_capture import OriginalTypedCapture
 from owner_read_projection import RetiredGoalReportProjection
 from agent_comms.goal_history import GoalHistoryStore
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def digest(path):
@@ -44,7 +46,7 @@ async def profile_runtime_attachment():
     root = Path(os.environ['AGENT_COMMS_ROOT'])
     target = Path(sys.executable).parent.parent
     assert Path(agent_comms.__file__).is_relative_to(target)
-    service = Comms.for_runtime(root)
+    service = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     package = Path(os.environ['AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE'])
     service.owners.pin_private_nk_launch(root, os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'], package)
     original = service.registry.require('replacement-alpha')
@@ -139,7 +141,7 @@ async def runtime_replacement():
         os.environ.update(AGENT_COMMS_ROOT=str(root),
             AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=original['root_id'],
             AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package))
-        service = Comms.for_runtime(root)
+        service = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
         service.owners.pin_private_nk_launch(root, original['root_id'], package)
         names = original['names']
         before = service.registry.snapshot()
@@ -212,16 +214,13 @@ def main():
     environment.pop('PYTHONPATH', None)
     environment.update(AGENT_COMMS_THREAD='captured-original',
                        ORIGINAL_CAPTURE_CREDENTIAL='RAM-only-private-fixture')
-    from agent_comms.native_settings import NativeThreadDefaults
-
     native = NativeThreadDefaults(binary=str(original_python.parent / 'pi-comms-native'),
                                   arguments=('--fixture-private', 'original settings'))
-    with native.inherited() as (arguments, descriptors):
-        process = subprocess.Popen([
-            str(original_python), str(Path(__file__).with_name('seed_original_owner_capture.py')),
-            str(root), *arguments,
-        ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, env=environment, pass_fds=descriptors)
+    process = subprocess.Popen([
+        str(original_python), str(Path(__file__).with_name('seed_original_owner_capture.py')),
+        str(root), *native.cli_arguments,
+    ], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, env=environment)
     try:
         ready = process.stdout.readline()
         assert ready, process.stderr.read()

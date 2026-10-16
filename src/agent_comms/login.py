@@ -27,7 +27,7 @@ def run_login(provider: str = "", *, settings: NativeThreadDefaults) -> int:
         env.pop(key, None)
     env["AGENT_COMMS_LOGIN_PROVIDER"] = provider
     command = [
-        NativeArguments.configured_binary(settings),
+        settings.binary,
         "--no-session",
         "--no-tools",
         "--no-extensions",

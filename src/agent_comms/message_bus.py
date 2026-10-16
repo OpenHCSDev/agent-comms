@@ -26,16 +26,20 @@ from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .presentation import DisplaySelection
-    from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .relationships import PeerRelation
     from .threads import Thread
 
+from .registration import Registration
 from .publisher import Publisher
 from .wire_log import OpenedWireSnapshot, WireLog
 
 
 class MessageBus:
+    @classmethod
+    def for_root(cls, root: Path, **options) -> MessageBus:
+        return cls(root / "bus.jsonl", Registration(root / "registry.json"), **options)
+
     def __init__(
         self,
         bus_path: Path,
@@ -51,7 +55,7 @@ class MessageBus:
         self.reads = ReadLedger(bus_path.parent / ReadLedger.filename)
         self.log = WireLog(bus_path)
         self.history = HistoryArchive(bus_path)
-        self._registry = registry
+        self.registry = registry
         self._channels = ChannelCatalog(bus_path.parent / ChannelCatalog.filename)
         self._activity = self.log.register_append_index(BusActivityIndex(bus_path))
         self.publisher = Publisher(
@@ -108,7 +112,7 @@ class MessageBus:
                     prepared_indexes=prepared,
                 ))
                 with DisplaySelection.reading(
-                    self._registry, self._channels, self.reads, viewer
+                    self.registry, self._channels, self.reads, viewer
                 ) as basis:
                     pass
             yield basis, source
@@ -123,7 +127,7 @@ class MessageBus:
         pending counts, and the page index reads only those rows.
         """
         if snapshot is None:
-            snapshot = self._registry.snapshot()
+            snapshot = self.registry.snapshot()
         catalog = self._channels.read()
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
@@ -155,12 +159,12 @@ class MessageBus:
         from contextlib import aclosing
         from .wire_watch import WatchSource, WireWatch
 
-        reader = self._registry.require(name).incarnation
+        reader = self.registry.require(name).incarnation
         async with aclosing(
             WireWatch.observations(WatchSource.wire(self.log.path.parent))
         ) as changes:
             async for _ in changes:
-                snapshot = self._registry.snapshot()
+                snapshot = self.registry.snapshot()
                 if not reader.current(snapshot):
                     raise UnregisteredThreadError("Watched thread was removed or replaced")
                 for message in self.inbox(name, snapshot=snapshot):
@@ -227,7 +231,7 @@ class MessageBus:
     ) -> int:
         """Mark only the named unread messages delivered and return their count."""
         requested = frozenset(references)
-        snapshot = self._registry.snapshot()
+        snapshot = self.registry.snapshot()
         messages = tuple(
             message
             for message in self.inbox(name, snapshot=snapshot)
@@ -239,7 +243,7 @@ class MessageBus:
 
     def mark_delivered_through(self, name: str, sequence: int) -> None:
         """Advance a thread's global inbox cursor without loading messages."""
-        snapshot = self._registry.snapshot()
+        snapshot = self.registry.snapshot()
         canonical = snapshot.require(name).name
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
@@ -251,7 +255,7 @@ class MessageBus:
 
     def dm_history(self, a: str, b: str) -> Sequence[Message]:
         """Full conversation between two threads, either possibly deleted, in seq order."""
-        snapshot = self._registry.snapshot()
+        snapshot = self.registry.snapshot()
         scope = DMDisplayScope.capture(
             snapshot.participant(a).name, snapshot.participant(b).name, snapshot
         )
@@ -305,7 +309,7 @@ class MessageBus:
 
     def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
         """A bounded delivery stream independent of UI read acknowledgments."""
-        snapshot = self._registry.snapshot()
+        snapshot = self.registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
         return self.display_page(delivery, after=after, limit=limit)
 
@@ -320,7 +324,7 @@ class MessageBus:
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
         """Return one bounded page between two threads, either possibly deleted."""
-        snapshot = self._registry.snapshot()
+        snapshot = self.registry.snapshot()
         scope = DMDisplayScope.capture(
             snapshot.participant(a).name, snapshot.participant(b).name, snapshot
         )
@@ -400,4 +404,4 @@ class MessageBus:
         )
 
     def channels(self) -> Sequence[str]:
-        return list(self._channels.read().views(self._registry.all_threads()))
+        return list(self._channels.read().views(self.registry.all_threads()))

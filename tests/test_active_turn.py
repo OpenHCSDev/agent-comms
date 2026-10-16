@@ -11,7 +11,7 @@ from agent_comms.activity import (
     NativeInputDrainDiagnostic,
 )
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.drain_failures import drain_failures
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.threads import Thread
@@ -22,10 +22,13 @@ from agent_comms.turn_phase import (
     ProviderRetryPhase,
     ToolRunningPhase,
 )
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(
         Thread(
             "worker",
@@ -76,7 +79,7 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
 
 @pytest.mark.asyncio
 async def test_repeated_turn_preparation_displays_real_native_drain_failure(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(
         Thread(
             "worker",

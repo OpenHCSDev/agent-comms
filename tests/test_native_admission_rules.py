@@ -23,6 +23,9 @@ from agent_comms.thread_identity import ThreadRole
 from agent_comms.pi_vocabulary import ThinkingLevel
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.comms import Comms
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 tmp_path = private_root_fixture
 
@@ -165,6 +168,6 @@ async def test_durable_private_admission_names_each_changed_authority(
     )
     with pytest.raises(InspectedError):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
         ).run()
     assert observed == [True]

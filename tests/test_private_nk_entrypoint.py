@@ -22,7 +22,7 @@ from agent_comms import (
 )
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
@@ -30,6 +30,9 @@ from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateN
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 tmp_path = private_root_fixture
 
@@ -62,7 +65,7 @@ def test_private_claim_root_keeps_normal_coding_tools(tmp_path, monkeypatch):
 
     root = tmp_path / "claim-wire"
     root.mkdir(mode=0o700)
-    comms = Comms.for_runtime(root)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     root_id = comms.messaging.initialize_private_initial_protocol()
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     selected = PrivateNkLaunch.from_environment(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
@@ -135,7 +138,7 @@ def test_thread_observation_does_not_admit_an_untrusted_native_owner(tmp_path, m
 
     monkeypatch.setattr(cohort_foreground, "_trusted_package", rejected_package)
     name = next(iter(comms.registry.all_threads()))
-    observed = wire(root)
+    observed = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
     assert observed.views.thread_detail(name, include_pending=False)["name"] == name
     with pytest.raises(PublicationActivationBlocked, match="Reviewed package differs"):
         private_nk_entrypoint.private_nk_from_environment()
@@ -162,7 +165,7 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     for name in ("AGENT_COMMS_ROOT", ROOT_ID_ENV, PACKAGE_ENV):
         monkeypatch.delenv(name, raising=False)
-    routed = wire()
+    routed = Comms(resolve_comms_route(), native=NativeThreadDefaults.from_runtime())
     assert routed.root == root
     assert routed.owners._private_nk_launch == PrivateNkLaunch(root, root_id, tmp_path, None)
     selected = private_nk_entrypoint.private_nk_from_environment()
@@ -174,7 +177,7 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     )
     legacy = tmp_path / "explicit-legacy"
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(legacy))
-    assert wire().root == legacy
+    assert Comms(resolve_comms_route(), native=NativeThreadDefaults.from_runtime()).root == legacy
     assert private_nk_entrypoint.private_nk_from_environment() is None
 
 
@@ -185,7 +188,7 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     active_route.publish_active_route(active_route.ActiveRoute(root, root_id, tmp_path))
-    comms = wire()
+    comms = Comms(resolve_comms_route(), native=NativeThreadDefaults.from_runtime())
     saved = tmp_path / "saved-session.jsonl"
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
@@ -233,7 +236,7 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     assert directory.stat().st_mode & 0o777 == 0o700
     assert route_file.stat().st_mode & 0o777 == 0o600
     assert active_route.read_active_route() == route
-    assert wire().root == root
+    assert Comms(resolve_comms_route(), native=NativeThreadDefaults.from_runtime()).root == root
     assert private_nk_entrypoint.private_nk_from_environment().validated_root == root
     original = route_file.read_bytes()
     with pytest.raises(ValueError, match="already installed"):
@@ -334,7 +337,7 @@ def test_client_custody_explicit_published_root_and_cross_thread_retirement(tmp_
 
 def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
-    legacy = Comms.for_runtime(tmp_path / ".agent-comms")
+    legacy = Comms(LocalRoute(tmp_path / ".agent-comms"), native=NativeThreadDefaults.from_runtime())
     for name in ("sender", "receiver"):
         legacy.registry.declare(
             Thread(
@@ -394,7 +397,7 @@ def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     with pytest.raises(ValueError, match="invalid JSON"):
-        wire()
+        Comms(resolve_comms_route(), native=NativeThreadDefaults.from_runtime())
     with pytest.raises(ValueError, match="invalid JSON"):
         private_nk_entrypoint.private_nk_from_environment()
     assert cli.main(["threads"]) == 1
@@ -473,7 +476,7 @@ async def test_private_relative_root_pinned_across_cwd_change_before_wire(
     def capture_wire(pinned_root):
         seen.append(pinned_root)
         assert pinned_root == root
-        assert wire(pinned_root).root == root
+        assert Comms(resolve_comms_route(pinned_root), native=NativeThreadDefaults.from_runtime()).root == root
         raise StopBeforeOwnerAttachmentError
 
     monkeypatch.setattr(cohort_foreground, "_trusted_package", trust_and_switch)
@@ -498,7 +501,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
     other.mkdir()
     link = tmp_path / "public-link"
     link.symlink_to(physical, target_is_directory=True)
-    comms = Comms.for_runtime(link)
+    comms = Comms(LocalRoute(link), native=NativeThreadDefaults.from_runtime())
     seen = []
 
     class StopBeforeSpawnError(Exception):
@@ -509,7 +512,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
         link.unlink()
         link.symlink_to(other, target_is_directory=True)
         # Actual child env continues to select physical A, not retargeted B.
-        assert wire(env["AGENT_COMMS_ROOT"]).root == physical
+        assert Comms(resolve_comms_route(env["AGENT_COMMS_ROOT"]), native=NativeThreadDefaults.from_runtime()).root == physical
         raise StopBeforeSpawnError
 
     monkeypatch.setattr(ParentedProcess, "launch", intercept)
@@ -522,7 +525,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
 def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    comms = Comms.for_runtime(root)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
     other = tmp_path / "other"
     other.mkdir()
@@ -560,14 +563,9 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     class StopBeforeSpawnError(Exception):
         pass
 
-    def intercept(argv, *, env, pass_fds, **_kwargs):
-        from agent_comms.native_settings import NativeThreadDefaults
-
+    def intercept(argv, *, env, **_kwargs):
         assert env["AGENT_COMMS_ROOT"] == str(root)
-        assert argv[-2:] == (NativeThreadDefaults.descriptor_flag, str(pass_fds[0]))
-        assert NativeThreadDefaults.from_descriptor(pass_fds[0]).binary == str(
-            Path(sys.executable).with_name("pi-comms-native")
-        )
+        assert NativeThreadDefaults.from_command(argv).binary == comms.owners.native_defaults.binary
         with Coordination(str(root / "coordination.sqlite3")) as store:
             participant = store.participants.get(lookup)
             assert participant.committed and participant.owner_thread == "late-owner"

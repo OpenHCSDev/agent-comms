@@ -132,7 +132,7 @@ class PrivateSendAdmission:
             wire_root_id=self.wire_root_id,
             prompt=self.prompt.text,
         )
-        self.owner.require_running_turn(self.bus._registry)
+        self.owner.require_running_turn(self.bus.registry)
 
     async def execute(
         self,
@@ -150,7 +150,7 @@ class PrivateSendAdmission:
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer retains the sole one-use send token after durable admission.
         """
-        registry = await Coordination.run_worker(self.bus._registry.snapshot)
+        registry = await Coordination.run_worker(self.bus.registry.snapshot)
         try:
             result = await TrackedTurnSession.execute(
                 execution.native_package,
@@ -224,11 +224,11 @@ class PrivateSendAdmission:
                     )
                 with self._measurements.operation("maintenance_ingress"):
                     authority.enter_context(MaintenanceBarrier(
-                        self.bus._registry.store.path
+                        self.bus.registry.store.path
                     ).admit_ingress(blocking=False))
                 with self._measurements.operation("registry_exclusion"):
                     document = authority.enter_context(
-                        self.bus._registry.store.reading(blocking=False)
+                        self.bus.registry.store.reading(blocking=False)
                     )
                 with self._measurements.operation("registry_snapshot"):
                     registry = document.snapshot()

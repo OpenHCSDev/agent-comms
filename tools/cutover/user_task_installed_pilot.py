@@ -11,6 +11,8 @@ import sys
 
 import agent_comms
 from agent_comms.comms import Comms
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def main():
@@ -30,7 +32,7 @@ def main():
     )
     results = []
     for name in names:
-        service = Comms.for_runtime(stage / name)
+        service = Comms(LocalRoute(stage / name), native=NativeThreadDefaults.from_runtime())
         getattr(controls, name)(service)
         snapshot = service.registry.snapshot()
         assert all(not owner.pid and owner.turn_lease is None

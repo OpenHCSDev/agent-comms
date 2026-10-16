@@ -47,6 +47,8 @@ from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
 # emulation cannot attest this boundary or exercise its durability contract.
@@ -71,7 +73,7 @@ class Fixture:
 
 
 def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ...] = ()) -> Fixture:
-    comms = Comms.for_runtime(tmp_path / "wire", private_initial_writes=True)
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
     for name in ("sender", "owner"):
         comms.registry.declare(
             Thread(

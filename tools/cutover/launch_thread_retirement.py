@@ -8,6 +8,8 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_restart import OwnerRestartHandoff, StoppedOwnerBatch
 from agent_comms.store_files import _atomic_write_text
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def main():
@@ -17,7 +19,7 @@ def main():
     original = ActiveRoute.from_record(packet['original_route'])
     target = ActiveRoute.from_record(packet['target_route'])
     path, receipt = Path(packet['route_path']), Path(packet['receipt'])
-    service = Comms.for_runtime(Path(handoff.root))
+    service = Comms(LocalRoute(Path(handoff.root)), native=NativeThreadDefaults.from_runtime())
     stopped = StoppedOwnerBatch.accept(service.owners, wire_descriptor, handoff)
     # Validate EVERY original process/admission witness before publication.
     snapshot = service.registry.snapshot()

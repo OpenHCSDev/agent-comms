@@ -6,15 +6,18 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.errors import RelationViolationError
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def registered(root):
-    comms = wire(root)
+    comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
     comms.registry.register(Thread(
         'owner', frozenset({'team'}), str(root),
         process_identity=ProcessIdentity.capture(os.getpid()), goal=Goal('task', 'g'),

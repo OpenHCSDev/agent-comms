@@ -16,6 +16,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_views import HistorySource
 from routing_carry import file_witness
 from retained_routing_cutover import RetainedRoutingCutover
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 async def render(service, source, reference):
@@ -247,7 +249,7 @@ def main():
         assert 'publications' not in json.loads(display[3])
         assert all(json.loads(row[0])['requests'] == json.loads(display[3])['requests']
                    for row in db.execute('SELECT routing FROM transcript_route'))
-    service = Comms.for_runtime(stage / 'reader')
+    service = Comms(LocalRoute(stage / 'reader'), native=NativeThreadDefaults.from_runtime())
     receipt = json.loads((stage / 'carry-receipt.json').read_text())
     acquired = FieldCodec.decode(HistorySource, receipt['recorded_source'])
     source = service.views.attach_history(root, source_read=acquired)

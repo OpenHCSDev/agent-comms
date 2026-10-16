@@ -23,6 +23,9 @@ from agent_comms.private_path import FileRevision
 from agent_comms.tracked_turn import TrackedTurnSession
 from compaction_loopback import LoopbackProvider
 from test_coordinated_runtime import _root
+from agent_comms.comms import Comms
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 SOURCE = os.environ.get("NATIVE_TOOL_LATENCY_SOURCE")
@@ -151,7 +154,7 @@ async def test_installed_retained_native_read_round_preserves_original_custody(t
     started = time.perf_counter()
     try:
         execution = SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta",
+            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="beta",
             native_package=Path(PACKAGE).resolve(strict=True), session_file=saved,
         )
         task = asyncio.create_task(execution.run())
@@ -169,7 +172,7 @@ async def test_installed_retained_native_read_round_preserves_original_custody(t
             before = provider.posts
             try:
                 replay = await SelectedExecution(
-                    root=root, wire_root_id=root_id, owner_name="beta",
+                    comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="beta",
                     native_package=Path(PACKAGE).resolve(strict=True), session_file=saved,
                 ).run()
             except CoordinationError:

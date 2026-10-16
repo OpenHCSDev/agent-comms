@@ -11,17 +11,21 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.private_registry_guard import PrivateRegistryGuard
 from agent_comms.threads import Thread
 from agent_comms.wire_watch import WatchSource, WireChangeWatch, open_wire_watcher
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def test_tick_revision_paths_watch_final_bus_publication(tmp_path, monkeypatch):
     config = tmp_path / "native-config"
     config.mkdir()
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
-    agent = CommsAgent(wire(tmp_path), runtime_enabled=False)
+    selected_comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    agent = CommsAgent(selected_comms, native=selected_comms.owners.native_defaults, runtime_enabled=False)
     paths = agent.inputs._tick_paths()
     declared = {
         *paths.registry,
@@ -109,7 +113,7 @@ async def test_relevant_write_burst_cannot_postpone_owner_wake(tmp_path):
 
 @pytest.mark.asyncio
 async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
-    comms = Comms.for_runtime(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(
         Thread(
             "owner",
@@ -147,7 +151,7 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
         pytest.skip("Native file notifications are unavailable")
     probe.close()
 
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(
         Thread(
             "owner",
@@ -165,7 +169,7 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
         )
     )
     comms.messaging.initialize_private_initial_protocol()
-    agent = CommsAgent(comms, runtime_enabled=False)
+    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     calls = 0
 
@@ -225,12 +229,12 @@ async def test_recoverable_drain_failure_retries_without_another_file_change(
     config = tmp_path / "native-config"
     config.mkdir()
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread(
         "owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
-    agent = CommsAgent(comms, runtime_enabled=False)
+    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     attempts = 0
     retried = asyncio.Event()
@@ -261,12 +265,12 @@ async def test_recoverable_drain_failure_retries_without_another_file_change(
 
 @pytest.mark.asyncio
 async def test_failed_cursor_publish_retries_without_a_wake_task(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread(
         "owner", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
     ))
-    agent = CommsAgent(comms, runtime_enabled=False)
+    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     attempts = 0
     retried = asyncio.Event()
@@ -300,7 +304,8 @@ async def test_failed_cursor_publish_retries_without_a_wake_task(tmp_path, monke
 
 @pytest.mark.asyncio
 async def test_wake_completion_notifies_its_observer_once(tmp_path, monkeypatch):
-    agent = CommsAgent(wire(tmp_path), runtime_enabled=False)
+    selected_comms_2 = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    agent = CommsAgent(selected_comms_2, native=selected_comms_2.owners.native_defaults, runtime_enabled=False)
     notifications = []
     monkeypatch.setattr(agent.inputs, "wake_observer", notifications.append)
     task = asyncio.create_task(asyncio.sleep(0))
@@ -336,7 +341,7 @@ async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
         pytest.skip("Native file notifications are unavailable")
     probe.close()
 
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(
         Thread(
             "owner",
@@ -345,7 +350,7 @@ async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    agent = CommsAgent(comms, runtime_enabled=False)
+    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     entered = asyncio.Event()
 

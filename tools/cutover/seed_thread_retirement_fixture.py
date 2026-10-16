@@ -35,6 +35,8 @@ from agent_comms.threads import Thread
 from agent_comms.turn_lease import ActiveTurn
 from thread_format_retirement import GoalReportMemberRetirement
 from seed_original_owner_capture import author_model_report
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def historical_reservation(root, input_id):
@@ -119,7 +121,7 @@ def main():
     root, route = map(Path, sys.argv[1:])
     root.mkdir(mode=0o700)
     route.parent.mkdir(mode=0o700)
-    service = Comms.for_runtime(root, private_initial_writes=True)
+    service = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
     package = Path(os.environ['AC_NATIVE_COPIED_PACKAGE'])
     service.owners.pin_private_nk_launch(root, root_id, package)
@@ -178,7 +180,7 @@ def main():
 
 if __name__ == '__main__':
     if sys.argv[1] == '--historical':
-        service = Comms.for_runtime(Path(sys.argv[2]), private_initial_writes=True)
+        service = Comms(LocalRoute(Path(sys.argv[2])), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
         print(json.dumps({'input_id': seed_historical_failure(service, sys.argv[3])}))
     else:
         main()

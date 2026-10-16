@@ -16,6 +16,7 @@ from agent_comms.pi_payloads import ProviderTransportFailureDiagnostic
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from delivery_owner_fixture import canonical_agent
 from test_native_refusal_recovery import _settled_records, _stub_with
+import dataclasses
 
 FINAL = "Opaque provider transport failure"
 DIAGNOSTIC = {
@@ -216,7 +217,7 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
     assert result["noOutput"] == {"answer": "visible answer", "retries": 1}
     print(json.dumps({"refusal": result["proof"], "no_output": result["noOutput"]}, sort_keys=True))
     stub = _stub_with(tmp_path, [*records, *_settled_records()])
-    agent = canonical_agent(wired, agent_bin="pi", agent_args=[], runtime_enabled=True)
+    agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi", arguments=tuple([])), runtime_enabled=True)
     original_stream = backend.stream_agent_events
 
     async def recorded(agent_bin, agent_args, task, cwd, *args, **kwargs):

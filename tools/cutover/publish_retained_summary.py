@@ -36,6 +36,8 @@ from retained_summary_reset import RuntimeCompactionFiles, RuntimeGoalFiles
 from native_schema_carry import RuntimeNativeFiles
 from runtime_installation import RuntimeInstallation
 from cutover_child import restore_stopped_batch
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 @dataclass(frozen=True)
@@ -768,7 +770,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_
     if receipt.exists() or receipt.is_symlink() or receipt.with_suffix('.originals').exists():
         raise RuntimeError('Original attempt requires review; never automatically repeat')
     cohort.require_original()
-    service = Comms.for_runtime(ROOT, private_initial_writes=False, private_claim_writes=False)
+    service = Comms(LocalRoute(ROOT), native=NativeThreadDefaults.from_runtime(), private_initial_writes=False, private_claim_writes=False)
     snapshot = service.registry.snapshot()
     owners = tuple(OwnerRestartRequest().threads(snapshot))
     if not owners:

@@ -10,16 +10,19 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
-from agent_comms.comms import wire
+
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import (
     ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def saved_history(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     session = tmp_path / "saved.jsonl"
     session.write_text(json.dumps({
         "type": "message", "id": "saved-answer", "parentId": None,
@@ -83,7 +86,7 @@ async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
 async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path):
     comms, session = saved_history(tmp_path)
     original = session.read_bytes()
-    agent = CommsAgent(comms)
+    agent = CommsAgent(comms, native=comms.owners.native_defaults)
     updates = []
 
     class Client:

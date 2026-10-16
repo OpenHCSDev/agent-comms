@@ -9,7 +9,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.activity import Activity, ActivityState
-from agent_comms.comms import wire
+
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -24,10 +24,13 @@ from agent_comms.thread_status import (
     ThreadStatus,
 )
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
     try:
         thread = Thread("owner", frozenset(), str(tmp_path),
@@ -54,7 +57,7 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
 
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])
 def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     thread = Thread(
         "owner",
         frozenset({"team"}),

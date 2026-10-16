@@ -10,11 +10,13 @@ from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordinator import Coordination
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 @pytest.mark.asyncio
 async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tmp_path):
-    comms = Comms.for_runtime(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     root_id = comms.messaging.initialize_private_initial_protocol()
     for name in ("sender", "receiver", "stopped-reviewer", "unstarted-reviewer"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))

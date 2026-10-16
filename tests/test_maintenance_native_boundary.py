@@ -18,6 +18,9 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from test_coordinated_runtime import _root
+from agent_comms.comms import Comms
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 @pytest.mark.asyncio
@@ -75,7 +78,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
         pytest.raises(RelationViolationError, match="Maintenance"),
     ):
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
+            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
         ).run()
     assert comms.owners.maintenance.read().phase == MaintenancePhase.decode("paused")
     writes = [json.loads(line) for line in received.read_text().splitlines()]

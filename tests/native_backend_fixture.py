@@ -25,6 +25,8 @@ from agent_comms.queued_input import InitialInput
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
+from agent_comms.active_route import LocalRoute
+import dataclasses
 
 
 def native_run_command(native: NativeThreadDefaults) -> str:
@@ -96,10 +98,8 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
     async def open_owner(self, *, runtime_enabled=False, auto_wake=False,
                          native_options=("--no-tools",), client=None):
         """Acquire the real saved ACP owner and attested idle native child."""
-        agent = canonical_agent(
-            Comms.for_runtime(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin="pi",
-            agent_args=self.native_arguments(native_options),
-        )
+        selected_comms = Comms(LocalRoute(self.root), native=NativeThreadDefaults.from_runtime())
+        agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(self.native_arguments(native_options))), auto_wake=auto_wake, runtime_enabled=runtime_enabled)
         agent.on_connect(client)
         try:
             await agent._runtime.start()
@@ -241,7 +241,7 @@ async def native_backend_fixture(tmp_path):
             }
         )
     )
-    root_id = Comms.for_runtime(root).messaging.initialize_private_initial_protocol()
+    root_id = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).messaging.initialize_private_initial_protocol()
     environment = {
         "AGENT_COMMS_ROOT": str(root),
         "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID": root_id,

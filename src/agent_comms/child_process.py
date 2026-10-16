@@ -18,12 +18,11 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from contextlib import AbstractContextManager, asynccontextmanager, contextmanager, nullcontext, suppress
+from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -189,18 +188,6 @@ class Platform(DeclaredFamily, affix="Platform"):
     def release_store_lock(self, descriptor: int) -> None:
         """POSIX custody ends at last close, including inherited descriptors."""
 
-    def inherited_payload(self, payload: bytes) -> AbstractContextManager[int]:
-        raise NotImplementedError("Private inherited launch data is unavailable on this platform")
-
-    def require_inherited_payload(self, descriptor: int) -> None:
-        raise NotImplementedError("Private inherited launch data is unavailable on this platform")
-
-    def read_inherited_payload(self, descriptor: int) -> bytes:
-        self.require_inherited_payload(descriptor)
-        payload = os.pread(descriptor, os.fstat(descriptor).st_size, 0)
-        os.set_inheritable(descriptor, False)
-        return payload
-
     @abstractmethod
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch: ...
 
@@ -238,30 +225,6 @@ class Platform(DeclaredFamily, affix="Platform"):
 
 
 class PosixPlatform(ProcessGroups, Platform):
-    @contextmanager
-    def inherited_payload(self, payload: bytes):
-        # No pathname is handed to the child. Close every writer and unlink
-        # before yielding the sole read-only descriptor.
-        directory = Path.home() / ".cache/agent-scratch/agent-comms-launch"
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="payload-", dir=directory) as owned:
-            path = Path(owned) / "payload"
-            with path.open("xb") as stream:
-                path.chmod(0o600)
-                stream.write(payload)
-            descriptor = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
-            path.unlink()
-            try:
-                yield descriptor
-            finally:
-                os.close(descriptor)
-
-    def require_inherited_payload(self, descriptor: int) -> None:
-        import fcntl
-
-        if fcntl.fcntl(descriptor, fcntl.F_GETFL) & os.O_ACCMODE != os.O_RDONLY:
-            raise ValueError("Inherited launch data is not read-only")
-
     def acquire_store_lock(self, descriptor: int, *, shared: bool, blocking: bool) -> None:
         import fcntl
 
@@ -305,40 +268,6 @@ class PosixPlatform(ProcessGroups, Platform):
 
 
 class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
-    # Linux uapi/fcntl.h and memfd.h. Portable Python builds may omit all of
-    # these symbols even when the running kernel and libc support them.
-    payload_add_seals = 1033
-    payload_get_seals = 1034
-    payload_immutable_seals = 0x000F  # SEAL_SEAL | SHRINK | GROW | WRITE
-    payload_memfd_flags = 0x0003  # CLOEXEC | ALLOW_SEALING
-
-    @contextmanager
-    def inherited_payload(self, payload: bytes):
-        import fcntl
-
-        library = ctypes.CDLL(None, use_errno=True)
-        create = library.memfd_create
-        create.argtypes = (ctypes.c_char_p, ctypes.c_uint)
-        create.restype = ctypes.c_int
-        descriptor = create(b"agent-comms-launch", self.payload_memfd_flags)
-        if descriptor < 0:
-            code = ctypes.get_errno()
-            raise OSError(code, os.strerror(code))
-        try:
-            with os.fdopen(descriptor, "wb", closefd=False) as stream:
-                stream.write(payload)
-                stream.flush()
-            fcntl.fcntl(descriptor, self.payload_add_seals, self.payload_immutable_seals)
-            yield descriptor
-        finally:
-            os.close(descriptor)
-
-    def require_inherited_payload(self, descriptor: int) -> None:
-        import fcntl
-
-        if fcntl.fcntl(descriptor, self.payload_get_seals) != self.payload_immutable_seals:
-            raise ValueError("Inherited launch data is not sealed")
-
     @staticmethod
     def _stat(pid: int) -> tuple[ProcessIdentity, int]:
         try:
@@ -1284,11 +1213,10 @@ class ParentedProcess(SynchronousProcess):
         env: dict[str, str] | None = None,
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
-        pass_fds: tuple[int, ...] = (),
     ) -> ParentedProcess:
         if not command:
             raise ValueError("A child command is required")
-        with Platform.current().launch(command, pass_fds) as launch:
+        with Platform.current().launch(command, ()) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
             try:
                 if before_start is not None:

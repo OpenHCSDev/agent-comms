@@ -10,10 +10,13 @@ import pytest
 from agent_comms.bus_route_counts import (
     BusRouteCounts, OpenedRouteCounts, RouteEntryRow, RouteSourceRow,
 )
-from agent_comms.comms import wire
+
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from agent_comms.routing import DeliveryScope
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def consistent(comms, *names):
@@ -29,7 +32,7 @@ def consistent(comms, *names):
 
 @pytest.mark.parametrize("rebound", ["sender", "recipient"])
 def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, rebound):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     for name in ("sender", "recipient"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     old = comms.messaging.send_message("sender", "recipient", "retained history")
@@ -39,7 +42,7 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, rebound)
     comms.registry.declare(Thread(rebound, frozenset({"team"}), str(tmp_path)))
     new = comms.messaging.send_message("sender", "recipient", "current input")
     comms.messaging.send("sender", "#team", "current channel input")
-    current = wire(tmp_path)
+    current = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     consistent(current, "sender", "recipient")
     assert current.bus.pending_counts("recipient") == {"sender": 1, "#team": 1}
     assert [row.seq for row in current.bus.inbox("recipient", "sender")] == [new.seq]
@@ -51,7 +54,7 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, rebound)
 
 
 def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     for name in ("sender", "recipient"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     birth = comms.registry.require("recipient").created_at
@@ -85,18 +88,18 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
     the same file. Counts and unread listings stay inside the older cut,
     without decoding or regressing the recorded projection.
     """
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for number in range(5):
         comms.messaging.send_message("sender", viewer, f"row {number}")
     assert comms.bus.pending_counts(viewer) == {"sender": 5}
 
-    reader = wire(tmp_path)
+    reader = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     with reader.bus.snapshot(viewer=viewer) as (basis, stale):
         comms.messaging.send_message("sender", viewer, "after the reader's cut")
         # Another reader indexes a later cut while this cut is held.
-        assert wire(tmp_path).bus.pending_counts(viewer) == {"sender": 6}
+        assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).bus.pending_counts(viewer) == {"sender": 6}
         with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
             assert reader.bus.pending_counts_opened(stale, basis) == {"sender": 5}
             delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
@@ -118,18 +121,18 @@ def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
     from. A source that loses the bytes that digest covers fails it and
     rebuilds, the same way a replaced source does.
     """
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for number in range(5):
         comms.messaging.send_message("sender", viewer, f"row {number}")
     assert comms.bus.pending_counts(viewer) == {"sender": 5}
 
-    reader = wire(tmp_path)
+    reader = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     with reader.bus.snapshot(viewer=viewer) as (basis, stale):
         comms.messaging.send_message("sender", viewer, "after the reader's cut")
         comms.messaging.send_message("sender", viewer, "one more after it")
-        assert wire(tmp_path).bus.pending_counts(viewer) == {"sender": 7}
+        assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).bus.pending_counts(viewer) == {"sender": 7}
         path = comms.bus.log.path
         with open(path, "rb") as scan:
             scan.seek(stale.revision.size)
@@ -187,7 +190,7 @@ def test_new_route_table_is_created_and_reset_with_its_scope(tmp_path):
 
 @pytest.mark.parametrize("birth_crossing", [False, True])
 def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_crossing):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     birth = comms.registry.require(viewer).created_at
@@ -218,7 +221,7 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_
 def test_retained_source_uses_its_ledger_identity_after_path_replacement(tmp_path):
     from shutil import copyfile
 
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send_message("sender", viewer, "already read")

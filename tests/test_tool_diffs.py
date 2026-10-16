@@ -8,7 +8,7 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiToolResult
 from agent_comms.tool_declaration import ToolDeclaration
@@ -16,6 +16,9 @@ from agent_comms.threads import Thread
 from agent_comms.tool_results import ToolDiff, tool_result_content
 from agent_comms.transcript_events import ToolEndTranscript, TranscriptEvent
 from pi_session_turn import one_turn_events
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 PATCH = "--- src/example.py\n+++ src/example.py\n@@ -40,2 +40,2 @@\n context\n-old = 1\n+new = 2\n"
 
@@ -118,7 +121,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
         )
         + "\n"
     )
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=1)
     assert len(page.events) == 1
@@ -132,7 +135,7 @@ async def test_live_diff_matches_result_only_replay_page(tmp_path, native_rpc_fi
         async def session_update(self, **kwargs):
             self.updates.append(kwargs["update"].model_dump(by_alias=True, exclude_none=True))
 
-    agent = CommsAgent(comms)
+    agent = CommsAgent(comms, native=comms.owners.native_defaults)
     client = Client()
     await agent._emit_event("worker", live, client)
     live_content = client.updates[-1]["content"]
@@ -159,7 +162,7 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     from agent_comms.tools import invoke_tool
     from agent_comms.transcript_events import SentTranscript
 
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path)))
     published = invoke_tool(comms, "comms_send", {

@@ -20,9 +20,11 @@ import uuid
 
 from agent_comms.active_route import read_active_route
 from agent_comms.cli_bridges import opencode
-from agent_comms.comms import wire
+
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.restart_queue import enqueue
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 @dataclass(frozen=True)
@@ -90,7 +92,7 @@ def main() -> None:
     route = read_active_route()
     if route is None:
         raise ValueError('Runtime publication requires the installed route')
-    comms = wire(route)
+    comms = Comms(route, native=NativeThreadDefaults.from_runtime())
     owners = tuple(OwnerRestartRequest().threads(comms.registry.snapshot()))
     if options.check:
         print(f'{publication.runtime}: {len(owners)} native workers would be queued for idle reload')

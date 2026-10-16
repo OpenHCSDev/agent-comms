@@ -16,6 +16,9 @@ from agent_comms.comms import Comms
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.threads import Thread
 from agent_comms.wire_record import WireRecord
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
 
 
 class Client:
@@ -30,20 +33,16 @@ async def main(output, package, launcher, provider, model, thinking):
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = output / 'project'
     project.mkdir(mode=0o700)
-    comms = Comms.for_runtime(output / 'wire')
+    comms = Comms(LocalRoute(output / 'wire'), native=NativeThreadDefaults.from_runtime())
     root_id = comms.messaging.initialize_private_initial_protocol()
     os.environ.update({
         'AGENT_COMMS_ROOT': str(comms.root), ROOT_ID_ENV: root_id,
         PACKAGE_ENV: str(package),
     })
-    agent = CommsAgent(
-        comms, runtime_enabled=True, auto_wake=False,
-        private_nk_native_package=package, private_nk_wire_root_id=root_id,
-        agent_bin=str(launcher), agent_args=[
+    agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=str(launcher), arguments=tuple([
             '--provider', provider, '--model', model, '--thinking', thinking,
             '--no-extensions', '--no-skills', '--no-context-files', '--tools', 'bash',
-        ],
-    )
+        ])), runtime_enabled=True, auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     client = Client()
     agent.on_connect(client)
     effect = project / 'one-effect.txt'

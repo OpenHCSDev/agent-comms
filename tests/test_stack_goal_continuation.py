@@ -18,6 +18,8 @@ from tempfile import TemporaryDirectory
 import pytest
 from agent_comms.native_settings import NativeThreadDefaults
 from native_backend_fixture import native_run_command
+from agent_comms.comms import Comms
+from agent_comms.active_route import resolve_comms_route
 
 
 @pytest.mark.asyncio
@@ -33,7 +35,7 @@ async def test_mounted_goal_continues_without_progress_tool(
         pytest.skip("Requires prepared native Pi and mounted Toad pilot dependencies")
     from runtime_fixture import ToadApp
 
-    from agent_comms.comms import wire
+
 
     live = bool(os.environ.get("AC_GOAL_LIVE_PROVIDER"))
     if live and (empty_response or compact_tools):
@@ -208,7 +210,7 @@ async def test_mounted_goal_continues_without_progress_tool(
             },
             project_dir=str(project),
         )
-        comms = wire(root / "wire")
+        comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
 
         async def until(predicate, timeout=45):
             async with asyncio.timeout(timeout):

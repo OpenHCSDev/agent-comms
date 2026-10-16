@@ -16,10 +16,12 @@ from agent_comms.cursor_publication import CursorPublication
 from agent_comms.runtime import SocketClient
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monkeypatch):
-    comms = Comms.for_runtime(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     owner = Thread(
         "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )
@@ -42,7 +44,7 @@ async def test_cursor_publication_owns_one_verified_prefix_scope(tmp_path, monke
 
 
 async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
-    comms = Comms.for_runtime(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     owner = Thread(
         "reader", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )
@@ -52,12 +54,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         store.participants.register(
             stable_thread_lookup(owner.created_at), owner.name, owner.name, committed=True
         )
-    agent = CommsAgent(
-        comms,
-        auto_wake=False,
-        private_nk_wire_root_id=root_id,
-        private_nk_native_package=tmp_path / "unused-native-package",
-    )
+    agent = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False, private_nk_wire_root_id=root_id, private_nk_native_package=tmp_path / "unused-native-package")
     agent.sessions.bindings[owner.name] = owner.name
     attached = asyncio.get_running_loop().create_future()
 

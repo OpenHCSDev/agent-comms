@@ -5,13 +5,9 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from .declared_family import DeclaredFamily
-
-if TYPE_CHECKING:
-    from .native_settings import NativeThreadDefaults
-
 
 @dataclass(frozen=True)
 class NativeArgument(DeclaredFamily, affix="Argument"):
@@ -154,14 +150,6 @@ class VersionArgument(NamedOption, OneShotArgument):
 @dataclass(frozen=True)
 class NativeArguments:
     entries: tuple[NativeArgument, ...]
-
-    @classmethod
-    def configured_binary(cls, settings: NativeThreadDefaults) -> str:
-        return settings.binary
-
-    @classmethod
-    def configured(cls, settings: NativeThreadDefaults) -> NativeArguments:
-        return cls.parse(settings.arguments)
 
     @classmethod
     def parse(cls, arguments: Sequence[str]) -> NativeArguments:

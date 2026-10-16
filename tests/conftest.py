@@ -8,6 +8,8 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
@@ -114,7 +116,7 @@ def root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def comms(root: Path) -> Comms:
-    return Comms.for_runtime(root)
+    return Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
 
 
 @pytest.fixture

@@ -30,6 +30,8 @@ from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from test_coordinated_runtime import _fake_model
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="private cohort requires POSIX")
 
@@ -39,7 +41,7 @@ def _root(
 ) -> tuple[Comms, Coordination, WakeCandidateIndex, str]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms.for_runtime(root, private_initial_writes=True)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
     comms.registry.declare(
         Thread(
             "sender",
@@ -253,7 +255,7 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
         runner, calls = _fake_model()
         monkeypatch.setattr(TrackedTurnSession, "execute", runner)
         outcome = await runtime.SelectedExecution(
-            root=comms.root,
+            comms=Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()),
             wire_root_id=root_id,
             owner_name="member000",
             native_package=root,
@@ -513,7 +515,7 @@ async def test_real_selected_caller_after_rename_injects_only_new_generation(
         runner, calls = _fake_model()
         monkeypatch.setattr(TrackedTurnSession, "execute", runner)
         outcome = await runtime.SelectedExecution(
-            root=comms.root, wire_root_id=root_id, owner_name="gamma", native_package=root
+            comms=Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id, owner_name="gamma", native_package=root
         ).run()
         assert outcome is not None and outcome.publications
         assert outcome.assignment_ids[0] == assignment.assignment_id and len(calls) == 1

@@ -29,6 +29,8 @@ from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
 from seed_thread_retirement_fixture import historical_reservation, ready
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -59,7 +61,7 @@ def old_client_write_case(stage, root, original_python, environment):
         log.write_metadata_unlocked(replace(marker, checkpoint_version=None, checkpoint_seal=None))
         (copied/'private_bus_checkpoint.sqlite3').unlink()
         install_private_bus_checkpoint(log)
-    control = Comms.for_runtime(copied).owners.maintenance
+    control = Comms(LocalRoute(copied), native=NativeThreadDefaults.from_runtime()).owners.maintenance
     old_client = FieldCodec.decode(MaintenanceOperatorField, 'disposable-old-client-probe')
     control.advance(control.begin(old_client), PausedPhase)
     result = subprocess.run([original_python, str(Path(__file__).with_name('old_thread_client_probe.py')),
@@ -123,7 +125,7 @@ def main():
         assert installed.returncode == 0, installed.stderr
         results = json.loads(installed.stdout)
         assert len(results) == 2 and all(not ObservedProcess(owner).alive() for owner in originals)
-        service = Comms.for_runtime(root)
+        service = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
         replacements = [service.registry.require(item['thread']).process_identity for item in results]
         for index, (name, args, credential) in enumerate((
             ('phase-alpha', ('--offline','--no-tools','--thinking','off'), 'fixture-alpha'),

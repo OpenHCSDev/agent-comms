@@ -19,6 +19,9 @@ from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
 from delivery_owner_fixture import canonical_agent
 from test_coordinated_runtime import _root
+from agent_comms.comms import Comms
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(not PACKAGE, reason="Reviewed prepared native package required")
@@ -134,14 +137,14 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
     monkeypatch.setattr(AttachedChild, "start", observe_child)
     # The declared live owner must have its actual project-request endpoint,
     # not just a PID in the registry. Keep the whole attempt under basetemp.
-    agent = canonical_agent(comms, auto_wake=False)
+    agent = canonical_agent(comms, native=comms.owners.native_defaults, auto_wake=False)
     agent.on_connect(None)
     agent.sessions.bindings["beta"] = "beta"
     await agent._runtime.start()
     started = time.monotonic()
     task = asyncio.create_task(
         SelectedExecution(
-            root=root,
+            comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()),
             wire_root_id=root_id,
             owner_name="beta",
             native_package=package,
@@ -197,7 +200,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
         before = provider.posts
         try:
             replay = await SelectedExecution(
-                root=root,
+                comms=Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()),
                 wire_root_id=root_id,
                 owner_name="beta",
                 native_package=package,

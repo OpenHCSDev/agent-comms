@@ -62,6 +62,7 @@ from agent_comms.typed_table import (
     ForeignKey,
 )
 from agent_comms.wake import WakeDecision
+from agent_comms.goal_management import Goals
 
 
 class ResponseTable:
@@ -353,9 +354,7 @@ class LiveResponseOwner(RegistryOwner):
         # The last canonical snapshot contains every original assignment.
         # Complete required dependency settlement before the acquired worker
         # can close or report cancellation; no input/goal is reconstructed.
-        from .comms import Comms
-
-        goals = Comms.for_runtime(bus.log.path.parent).goals
+        goals = Goals(bus.log.path.parent, bus.registry, bus)
         for assignment in published.assignments:
             goals.consume_reply_wait(self, assignment.source)
         return published
@@ -369,7 +368,7 @@ def _require_bound_stores(bus: MessageBus, store: Coordination) -> None:
     if (
         store.session.path.name != "coordination.sqlite3"
         or Path(bus.log.path.parent).absolute() != Path(store.session.path.parent).absolute()
-        or bus._registry.store.path.absolute() != (bus.log.path.parent / "registry.json").absolute()
+        or bus.registry.store.path.absolute() != (bus.log.path.parent / "registry.json").absolute()
     ):
         raise IdentityConflict("response bus and coordinator have different trusted roots")
 

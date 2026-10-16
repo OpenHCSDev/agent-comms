@@ -9,12 +9,14 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def main():
     root = Path(sys.argv[1])
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
-    service = Comms.for_runtime(root)
+    service = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     root_id = service.messaging.initialize_private_initial_protocol()
     beta = service.registry.declare(Thread('beta', frozenset({'team'}), str(root)))
     alpha = service.registry.declare(Thread('alpha', frozenset({'team'}), str(root),

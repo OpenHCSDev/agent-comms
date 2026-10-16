@@ -15,13 +15,16 @@ from agent_comms import store_files
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo
 from agent_comms.bus_publication import stable_thread_lookup
-from agent_comms.comms import wire
+
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
-    comms = wire(root)
+    comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
     start.wait()
     for index in range(count):
         comms.messaging.send(sender, "#all", f"{sender}:{index}")
@@ -29,24 +32,24 @@ def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
 
 def _register_thread(root: str, name: str, start: Event) -> None:
     start.wait()
-    wire(root).registry.declare(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
+    Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).registry.declare(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
 
 
 def _register_thread_same_tick(root: str, name: str, start: Event) -> None:
     start.wait()
 
     store_files.time.time = lambda: 1_700_000_000.0
-    wire(root).registry.declare(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
+    Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).registry.declare(Thread(name=name, tags=frozenset({"worker"}), worktree="/tmp"))
 
 
 def _claim_thread(root: str, result_queue: Any, start: Event) -> None:
     start.wait()
-    thread = wire(root).threads.claim_thread("project", tags=frozenset({"acp"}), worktree="/tmp/project")
+    thread = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).threads.claim_thread("project", tags=frozenset({"acp"}), worktree="/tmp/project")
     result_queue.put(thread.name)
 
 
 def _write_runtime_state(root: str, name: str, start: Event) -> None:
-    comms = wire(root)
+    comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
     start.wait()
     comms.agents.observe_runtime_info(name, AgentInfo(model=f"provider/{name}", context_used=25, context_size=100))
     comms.agents.set_activity(name, ActivityState.WORKING, f"work-{name}")
@@ -87,9 +90,9 @@ class TestConcurrentWire:
         second = Thread(name="second", tags=frozenset(), worktree="/tmp")
         assert type(first.created_at) is float
         assert first.created_at == second.created_at
-        wire(root).registry.declare(first)
-        wire(root).registry.declare(second)
-        stored = wire(root).registry
+        Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).registry.declare(first)
+        Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).registry.declare(second)
+        stored = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).registry
         first_time = stored.require("first").created_at
         second_time = stored.require("second").created_at
         assert first_time == first.created_at
@@ -97,7 +100,7 @@ class TestConcurrentWire:
         assert stable_thread_lookup(first_time) != stable_thread_lookup(second_time)
         assert "_generated_created_at" not in stored.require("second").to_wire()
         with pytest.raises(RelationViolationError, match="creation identities collide"):
-            wire(root).registry.declare(
+            Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).registry.declare(
                 Thread(
                     name="explicit",
                     tags=frozenset(),
@@ -105,7 +108,7 @@ class TestConcurrentWire:
                     created_at=first.created_at,
                 )
             )
-        assert set(wire(root).registry.all_threads()) == {"first", "second"}
+        assert set(Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).registry.all_threads()) == {"first", "second"}
 
     def test_six_spawned_same_tick_owners_register_distinct_incarnations(
         self, tmp_path: Path
@@ -114,14 +117,14 @@ class TestConcurrentWire:
         names = [f"worker-{index}" for index in range(6)]
         ctx = multiprocessing.get_context("spawn")
         _run_concurrently(ctx, _register_thread_same_tick, [(str(root), name) for name in names])
-        stored = wire(root).registry
+        stored = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).registry
         times = [stored.require(name).created_at for name in names]
         assert len(set(times)) == len(names)
         assert len({stable_thread_lookup(created_at) for created_at in times}) == len(names)
 
     def test_concurrent_senders_preserve_every_message_and_sequence(self, tmp_path: Path) -> None:
         root = tmp_path / "wire"
-        comms = wire(root)
+        comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
         senders = [f"worker-{index}" for index in range(6)]
         for sender in senders:
             comms.registry.declare(Thread(name=sender, tags=frozenset(), worktree="/tmp"))
@@ -133,7 +136,7 @@ class TestConcurrentWire:
             [(str(root), sender, 40) for sender in senders],
         )
 
-        messages = list(wire(root).views.full_history())
+        messages = list(Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).views.full_history())
         assert len(messages) == len(senders) * 40
         assert [message.seq for message in messages] == list(range(1, len(messages) + 1))
         assert len({message.body for message in messages}) == len(messages)
@@ -147,14 +150,14 @@ class TestConcurrentWire:
             _register_thread,
             [(str(root), name) for name in names],
         )
-        assert set(wire(root).registry.all_threads()) == set(names)
+        assert set(Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).registry.all_threads()) == set(names)
 
         _run_concurrently(
             ctx,
             _write_runtime_state,
             [(str(root), name) for name in names],
         )
-        comms = wire(root)
+        comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
         assert set(comms.agents.runtime_info.read()) == set(names)
         assert set(comms.agents.all_activity()) == set(names)
         assert {name: comms.ledger.read()[name] for name in names} == {

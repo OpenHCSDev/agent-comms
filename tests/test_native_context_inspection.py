@@ -21,6 +21,9 @@ from agent_comms.task_sources import CurrentTaskScopeSelection, OriginalTaskChan
 from agent_comms.tools import tool_catalog
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -67,14 +70,11 @@ async def test_context_manifest_native_acp_and_cli_continuous(
     document["providers"]["response-local"]["models"][0]["input"] = ["text", "image"]
     models.write_text(json.dumps(document))
     original_source = fixture.session.read_bytes()
-    owner = canonical_agent(
-        Comms.for_runtime(fixture.root), agent_bin="pi",
-        agent_args=["--model", "response-local/fixture", "--thinking", "off", "--offline",
+    selected_comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults.from_runtime())
+    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "response-local/fixture", "--thinking", "off", "--offline",
                     "--no-extensions", "--no-skills", "--no-prompt-templates",
                     "--no-builtin-tools", "--extension",
-                    str(package / "agent-comms-extensions/global-agent-comms/index.mjs")],
-        auto_wake=False, runtime_enabled=True,
-    )
+                    str(package / "agent-comms-extensions/global-agent-comms/index.mjs")])), auto_wake=False, runtime_enabled=True)
     failures, updates = [], []
 
     class View:

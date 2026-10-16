@@ -19,6 +19,8 @@ from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
 from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest, SetConfigOptionRuntimeRequest
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 async def exchange(service, name, request):
@@ -121,7 +123,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = stage / 'project'
     project.mkdir()
-    service = Comms.for_runtime(stage / 'wire')
+    service = Comms(LocalRoute(stage / 'wire'), native=NativeThreadDefaults.from_runtime())
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     environment = dict(os.environ)

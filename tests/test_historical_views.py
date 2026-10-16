@@ -11,10 +11,12 @@ from agent_comms.comms import Comms
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def setup(root, count=5):
-    comms = Comms.for_runtime(root)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(root), created_at=10.0))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(root), created_at=11.0))
     comms.messaging.initialize_private_initial_protocol()

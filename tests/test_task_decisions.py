@@ -17,6 +17,8 @@ from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool, tool_catalog
 from agent_comms.tool_caller import ThreadCaller
 from functools import partial
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 # These source declarations belong to alpha unless a case explicitly supplies beta.
 invoke_tool = partial(invoke_tool, caller=ThreadCaller("alpha"))
@@ -262,7 +264,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert bus.read_bytes() == before
     from agent_comms.comms import Comms
 
-    assert Comms.for_runtime(comms.root).bus.log.full_history() == rows
+    assert Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()).bus.log.full_history() == rows
     schema = next(tool for tool in tool_catalog() if tool["name"] == "comms_decision")
     assert set(schema["parameters"]["required"]) == {"chosen", "rejected", "to"}
     assert "author" not in schema["parameters"]["properties"]
@@ -388,7 +390,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     assert original.task.chosen in retained.text and original.task.rejected[0] in retained.text
     from agent_comms.comms import Comms
 
-    reopened = Comms.for_runtime(comms.root)
+    reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
     assert reopened.bus.log.full_history()[1] == corrected
 
 

@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo
-from agent_comms.comms import wire
+
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.messages import QuestionKind
@@ -16,6 +16,9 @@ from agent_comms.owner_launch import CallingThreadUnavailable, RestartEnvironmen
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
@@ -552,27 +555,27 @@ class TestPollAndWire:
 
     def test_wire_defaults_to_agent_comms_dir(self, monkeypatch, tmp_path):
         monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
-        from agent_comms.comms import wire as wire_fn
+
 
         monkeypatch.setattr("os.path.expanduser", lambda p: str(tmp_path / str(p).lstrip("~")))
-        comms = wire_fn(None)
+        comms = Comms(resolve_comms_route(None), native=NativeThreadDefaults.from_runtime())
         assert comms.root == tmp_path / ".agent-comms"
 
     def test_wire_env_root(self, monkeypatch, tmp_path):
         monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path / "custom"))
-        comms = wire(None)
+        comms = Comms(resolve_comms_route(None), native=NativeThreadDefaults.from_runtime())
         assert comms.root == tmp_path / "custom"
 
     def test_runtime_files_created_on_demand(self, tmp_path):
-        comms = wire(tmp_path / "fresh")
+        comms = Comms(resolve_comms_route(tmp_path / "fresh"), native=NativeThreadDefaults.from_runtime())
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         assert (tmp_path / "fresh" / "registry.json").exists()
 
 
 class TestCrossWireIsolation:
     def test_two_wires_do_not_leak(self, tmp_path):
-        a = wire(tmp_path / "a")
-        b = wire(tmp_path / "b")
+        a = Comms(resolve_comms_route(tmp_path / "a"), native=NativeThreadDefaults.from_runtime())
+        b = Comms(resolve_comms_route(tmp_path / "b"), native=NativeThreadDefaults.from_runtime())
         a.registry.declare(Thread(name="only-in-a", tags=frozenset(), worktree="/wt"))
         assert "only-in-a" in a.registry
         with pytest.raises(UnregisteredThreadError):

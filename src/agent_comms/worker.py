@@ -10,7 +10,7 @@ from contextlib import suppress
 
 from .acp import CommsAgent
 from .comms import Comms
-from .active_route import resolve_comms_route
+from .active_route import PinnedRoute, resolve_comms_route
 from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
 from .native_settings import NativeThreadDefaults
 from .child_process import ProcessIdentity
@@ -23,16 +23,13 @@ async def run(settings: NativeThreadDefaults) -> None:
     private_nk = PrivateNkLaunch.current()
     # Fail before wire creation/attach; the check verifies the native package once.
     verified_cli = private_nk.validate() if private_nk is not None else None
-    comms = Comms.bound(resolve_comms_route(private_nk.validated_root if private_nk is not None else None),
-                        native=settings)
-    if private_nk is not None:
-        comms.owners.pin_private_nk_launch(
-            private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
-        )
+    route = (PinnedRoute(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)
+             if private_nk is not None else resolve_comms_route())
+    comms = Comms(route, native=settings)
     name = RestartEnvironment.calling_thread()
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(
-        comms,
+        comms, native=settings,
         runtime_enabled=True,
         private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
         private_nk_native_package=private_nk.native_package if private_nk else None,
@@ -108,15 +105,16 @@ def main() -> int:
             "Use agent-comms for commands."
         ),
     )
-    NativeThreadDefaults.add_launch_argument(parser, required=True)
+    NativeThreadDefaults.add_cli_arguments(parser, required=True)
     namespace = parser.parse_args()
-    settings = NativeThreadDefaults.from_descriptor(namespace.native_settings_fd)
+    settings = namespace.native_settings
     name = RestartEnvironment.calling_thread()
 
     launch = private_nk_from_environment()
     if launch is None:
         raise ValueError("Headless execution requires a configured native route")
-    comms = Comms.bound(resolve_comms_route(launch.validated_root), native=settings)
+    route = PinnedRoute(launch.validated_root, launch.wire_root_id, launch.native_package)
+    comms = Comms(route, native=settings)
     thread = comms.registry.require(name)
     if (thread.process_identity is not None and thread.process_identity.alive()
             and thread.process_identity != ProcessIdentity.capture(os.getpid())):

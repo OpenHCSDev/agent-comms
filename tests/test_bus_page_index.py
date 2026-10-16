@@ -17,10 +17,12 @@ from agent_comms.threads import Thread
 from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import OpenedWireSnapshot
 from agent_comms.wire_metadata import ArchivedAccess
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def retained_source(root, count):
-    comms = Comms.for_runtime(root)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     for name in ("a", "b", "c"):
         comms.registry.declare(Thread(name, frozenset(), str(root)))
     comms.messaging.initialize_private_initial_protocol()
@@ -75,7 +77,7 @@ def test_bad_cached_offset_uses_authoritative_current_source(tmp_path):
 
 
 def test_parallel_preparation_commits_each_message_once(tmp_path):
-    comms = Comms.for_runtime(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
     for name in ("a", "b"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     message = comms.messaging.send_message("a", "b", "once")

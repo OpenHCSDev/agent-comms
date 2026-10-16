@@ -16,6 +16,8 @@ from agent_comms.private_bus_checkpoint import PrefixWitness, verify_private_bus
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.threads import Thread
 from test_private_human_ingress import _root
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def source_witness(bus):
@@ -48,7 +50,7 @@ def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path):
         ).prefix()
         assert selected.blocked_seq == sent.seq  # Selection cannot manufacture native proof.
         assert selected.covered_seq == 0 and selected.injected_source_seqs == ()
-        assert source_witness(Comms.for_runtime(comms.root).bus).through_seq == sent.seq
+        assert source_witness(Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()).bus).through_seq == sent.seq
 
 
 def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path):
@@ -73,7 +75,7 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path):
 def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monkeypatch):
     from agent_comms import wire_log
 
-    comms = Comms.for_runtime(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     write = wire_log._atomic_write_text
 
@@ -88,15 +90,15 @@ def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monk
             comms.messaging.initialize_private_initial_protocol()
     assert (comms.root / "private_bus_checkpoint.sqlite3").exists()
     with pytest.raises(RelationViolationError, match="pending"):
-        Comms.for_runtime(comms.root).registry.snapshot()
+        Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()).registry.snapshot()
     with pytest.raises(RelationViolationError):
         source_witness(comms.bus)
     assert comms.bus.log.path.read_bytes() == b""
 
 
 async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
-    comms = Comms.for_runtime(tmp_path / "wire")
-    agent = CommsAgent(comms)
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    agent = CommsAgent(comms, native=comms.owners.native_defaults)
     with pytest.raises(PublicationActivationBlocked, match="explicit matching root and package"):
         await agent.new_session(cwd=str(tmp_path))
     assert not comms.registry.snapshot().threads
@@ -107,15 +109,10 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     reason="Prepared native package required; no provider request",
 )
 async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tmp_path):
-    comms = Comms.for_runtime(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     root_id = comms.messaging.initialize_private_initial_protocol()
     package = Path(os.environ["AC_NATIVE_COPIED_PACKAGE"])
-    agent = CommsAgent(
-        comms,
-        auto_wake=False,
-        private_nk_wire_root_id=root_id,
-        private_nk_native_package=package,
-    )
+    agent = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False, private_nk_wire_root_id=root_id, private_nk_native_package=package)
     try:
         fresh = await agent.new_session(cwd=str(tmp_path))
         assert fresh.session_id in comms.registry
