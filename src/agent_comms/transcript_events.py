@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -22,6 +23,13 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
 
     def as_context(self) -> TranscriptEvent:
         """Non-text native evidence retains its own presentation declaration."""
+        return self
+
+    @property
+    def tool_calls(self) -> tuple[ToolStartTranscript, ...]:
+        return ()
+
+    def with_tool_start(self, original: ToolStartTranscript) -> TranscriptEvent:
         return self
 
     @property
@@ -200,6 +208,34 @@ class ToolStartTranscript(ToolTranscript):
         from .tool_declaration import ToolDeclaration
 
         return ToolDeclaration.caption(self.tool_name, self.detail)
+
+    @property
+    def tool_calls(self):
+        return (self,)
+
+    def quotes(self, text: str) -> bool:
+        """Whether one string the caller sent contains this exact text.
+
+        JSON escapes each character alone, so an escaped substring cannot span
+        two strings or a key and its value.
+        """
+        return json.dumps(text)[1:-1] in json.dumps(self.raw_input)
+
+    @property
+    def selection_order(self) -> tuple[bool, float]:
+        # Without a recorded selection time, no known call proves it is newer.
+        return self.timestamp is None, self.timestamp or 0
+
+    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None):
+        return (self, ToolEndTranscript(
+            tool_call_id=self.tool_call_id, tool_name=self.tool_name,
+            timestamp=self.timestamp, text=text, ok=ok, diff=diff,
+        ))
+
+    def with_tool_start(self, original):
+        if self.tool_call_id == original.tool_call_id and self.timestamp is None:
+            return replace(self, timestamp=original.timestamp)
+        return self
 
 
 @dataclass(frozen=True, kw_only=True)

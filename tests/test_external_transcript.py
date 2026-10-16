@@ -117,3 +117,36 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     transcript.draft(turn_id="t2", item_id="b", events=(AssistantTranscript("Interrupted"),))
     transcript.end_turn()
     assert transcript.current_draft() is None
+
+
+def test_tool_selector_retains_original_time_without_hiding_unknown_calls(tmp_path):
+    from agent_comms.recorded_time import RecordedEventTime
+    from agent_comms.thread_execution import ExternalThreadExecution
+    from agent_comms.transcript_events import ToolStartTranscript
+
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(Thread("codex", frozenset(), str(tmp_path),
+                                  execution=ExternalThreadExecution))
+    transcript = comms.transcripts.external("codex")
+
+    def call(identity, timestamp):
+        return ToolStartTranscript(tool_call_id=identity, tool_name="bash",
+                                   raw_input={"command": identity}, timestamp=timestamp)
+
+    zero = call("zero", 0)
+    transcript.finish(turn_id="turn", item_id="zero", events=zero.finished("zero", True))
+    assert transcript.latest_tool().call.timestamp == 0
+    known = call("known", 3)
+    transcript.draft(turn_id="turn", item_id="known", events=(known,))
+    transcript.finish(turn_id="turn", item_id="known",
+                      events=call("known", None).finished("known", True))
+    assert transcript.current_draft() is None
+    assert transcript.latest_tool().call == known
+    unknown = call("unknown", None)
+    transcript.finish(turn_id="turn", item_id="unknown", events=unknown.finished("unknown", True))
+    transcript.finish(turn_id="turn", item_id="later-completion",
+                      events=call("later-completion", 4).finished("later", True))
+    selected = transcript.latest_tool()
+    # Completion position cannot establish the unknown call's selection order.
+    assert selected.call == unknown
+    assert not selected.silent_since(RecordedEventTime(0), 1000, 30)

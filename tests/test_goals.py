@@ -73,7 +73,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     )
     assert result["goal"]["id"] == goal.id
     assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
-    assert comms.registry.require("worker").goal.progress == "Explicitly resumed by the user"
+    assert FieldCodec.encode(comms.registry.require("worker").goal.progress) == "Explicitly resumed by the user"
 
     with pytest.raises(ValueError, match="cannot be resumed"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale duplicate"}, caller=ThreadCaller("worker"))

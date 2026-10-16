@@ -12,6 +12,9 @@ from typing import TYPE_CHECKING
 
 from .catalog_store import ChannelCatalog
 from .goal_waits import GoalWaits
+from .fleet import FleetEntry, KnownUnreadCount, UnreadStoreBusy, UnreadProjectionRebuilding, SentMessages
+from .bus_route_counts import RouteIndexRebuilding
+from .coordination_errors import CoordinationReadUnavailable
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
 
@@ -533,6 +536,33 @@ class HistoryViews:
 
     def _presence_views(self):
         return sorted(self.thread_views(), key=lambda view: view.thread.name)
+
+    def fleet(self) -> list[FleetEntry]:
+        """Original typed facts; only the read owner's named busy states are optional."""
+        snapshot = self.registry.snapshot()
+        threads = tuple(thread for name, thread in snapshot.threads.items()
+                        if thread.role.executable and snapshot.statuses[name].running)
+        activities = self.agents.all_activity(snapshot=snapshot)
+        names = tuple(thread.name for thread in threads)
+        try:
+            counts = self.bus.pending_counts_all(names)
+            unread = {name: KnownUnreadCount(counts[name]) for name in names}
+        except RouteIndexRebuilding as rebuilding:
+            unread = {name: UnreadProjectionRebuilding(rebuilding.through, rebuilding.size)
+                      for name in names}
+        except CoordinationReadUnavailable:
+            unread = {name: UnreadStoreBusy() for name in names}
+        messages = self.bus.latest_sent_messages(threads)
+        entries = []
+        now = time.time()
+        for thread in threads:
+            original = messages.get(thread.incarnation.stable_thread_lookup())
+            entries.append(FleetEntry(
+                thread, activities[thread.name], thread.execution.latest_tool(self.root, thread), now,
+                unread[thread.name], SentMessages((original,) if original is not None else ()),
+                snapshot.seen_at(thread.name),
+            ))
+        return sorted(entries, key=lambda entry: entry.last_activity, reverse=True)
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""

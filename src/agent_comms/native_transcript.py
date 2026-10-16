@@ -144,6 +144,11 @@ class NativeTranscript(TranscriptSource):
         """Native in-progress output belongs to the ACP stream."""
         return None
 
+    def latest_tool(self):
+        from .tool_activity import NativeToolSelectorUnavailable
+
+        return NativeToolSelectorUnavailable()
+
     def imported_sources(self):
         """Read original metadata before conversation, including native configuration.
 

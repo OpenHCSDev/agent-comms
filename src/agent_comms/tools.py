@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Literal, Type
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
@@ -25,6 +25,9 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_states import ActiveGoal
+from .goals import Deadline, GoalDeadline, NoDeadline
+from .todos import AcceptanceCheck, Assignment, TodoStore, TodoWhere
+from .goal_progress import GoalProgress
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -38,6 +41,8 @@ from .turn_digests import TurnDigestRead
 from .relationships import RelationshipEdit
 from .thread_status import ThreadStatus
 from .work_branches import WorkBranches
+from .order_records import CaughtStage, Order, StrikeCause
+from .plain_text import PlainText
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
     materialize_oversized_output,
@@ -458,9 +463,12 @@ class CommsSetGoalTool(ThreadToolRequest):
         "start, set, or pursue a goal autonomously."
     )
     text: str = tool_field("Persistent objective to pursue")
+    deadline: GoalDeadline = tool_field("Goal deadline", default_factory=NoDeadline)
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        goal = comms.goals.update_goal(caller.name, SetGoalAction(text=self.text))
+        goal = comms.goals.update_goal(
+            caller.name, SetGoalAction(text=self.text, deadline=self.deadline)
+        )
         return {
             "goal": goal.to_wire() if goal else None,
             "instruction": (
@@ -484,7 +492,10 @@ class CommsGoalTool(ThreadToolRequest):
     )
     goal_id: str = tool_field("Goal identity provided in the turn context")
     status: type[GoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
-    progress: str = tool_field("Progress summary; blocked requires a nonempty explicit reason")
+    progress: GoalProgress = tool_field(
+        "Progress text or a complete report with stupid, deleted, delivery and next; "
+        "blocked requires a nonempty explicit reason"
+    )
     wait_for: list[str] | None = tool_field(
         "Explicit thread names or @names; required for standby", default=None
     )
@@ -526,7 +537,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
         "request. This does not replace the goal or resume blocked/completed goals."
     )
     goal_id: str = tool_field("Identity of the paused goal to resume")
-    progress: str = tool_field("Progress summary for the resumed goal")
+    progress: GoalProgress = tool_field("Progress text or complete report for the resumed goal")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
         name = caller.name
@@ -587,6 +598,96 @@ class CommsGoalHistoryTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsTodoCreateTool(ThreadToolRequest):
+    label = "Create problem"
+    description = "Create a durable Todo owning its source, acceptance check and exclusive assignment."
+    id: str = tool_field("Unique problem ID")
+    repo: str = tool_field("Repository owner/name")
+    text: str = tool_field("Problem and requested repair")
+    where: TodoWhere = tool_field("Declared existing source path/line or original message reference")
+    acceptance: AcceptanceCheck = tool_field(
+        "Checkout repo, command, expected_count; command must exit zero and print one integer")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        todo = TodoStore(comms.root).create(self.id, self.repo, self.text,
+            creator=comms.registry.require(caller.name), where=self.where,
+            acceptance=self.acceptance, bus=comms.bus)
+        return {"todo": FieldCodec.encode(todo)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodoAssignTool(ThreadToolRequest):
+    label = "Assign problem"
+    description = "Assign one Todo and create its acceptance-checked commanded Goal; refuse a busy Goal slot."
+    id: str = tool_field("Problem ID")
+    expected_revision: int = tool_field("Exact current Todo revision")
+    owner: str = tool_field("Assignee thread")
+    generation: str = tool_field("Unique assignment/Goal ID")
+    deadline: float = tool_field("Unix deadline timestamp")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        todo = TodoStore(comms.root).assign(self.id, expected_revision=self.expected_revision,
+            owner=comms.registry.require(self.owner), parent=comms.registry.require(caller.name),
+            generation=self.generation, deadline=Deadline(self.deadline), goals=comms.goals)
+        return todo.order_result(comms.goals)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodoTransferTool(ThreadToolRequest):
+    label = "Transfer problem"
+    description = "Transfer an exact assignment, end its old order and notify its prior owner."
+    id: str = tool_field("Problem ID")
+    expected_revision: int = tool_field("Exact current Todo revision")
+    previous: Assignment = tool_field("Exact previous assignment from Todo listing")
+    owner: str = tool_field("New assignee thread")
+    generation: str = tool_field("Unique new assignment/Goal ID")
+    deadline: float = tool_field("Unix deadline timestamp")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        todo = TodoStore(comms.root).transfer(self.id, expected_revision=self.expected_revision,
+            previous=self.previous, owner=comms.registry.require(self.owner),
+            parent=comms.registry.require(caller.name), generation=self.generation,
+            deadline=Deadline(self.deadline), goals=comms.goals)
+        return todo.order_result(comms.goals)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodoCompleteTool(ThreadToolRequest):
+    label = "Complete problem"
+    description = "Assignee completion executes the problem's declared check against the reported commit."
+    id: str = tool_field("Problem ID")
+    expected_revision: int = tool_field("Exact current Todo revision")
+    progress: GoalProgress = tool_field("Structured progress; works_in_app requires evidence and sha")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        todo = TodoStore(comms.root).complete(self.id, expected_revision=self.expected_revision,
+            actor=comms.registry.require(caller.name), progress=self.progress, goals=comms.goals,
+            actor_kind=ModelInvocable)
+        return todo.order_result(comms.goals)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodosTool(ToolRequest):
+    label = "List problems"
+    description = "List canonical Todo definitions and exclusive assignments; optionally filter by repository."
+    repo: str | None = tool_field("Repository owner/name; omit for all", default=None)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+        return {"todos": FieldCodec.encode(TodoStore(comms.root).list(self.repo))}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsFleetTool(ToolRequest):
+    label = "Fleet"
+    description = "Running threads, goals, deadlines and latest original tool/message activity, newest first."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+        from .cli_commands import FleetCliCommand
+
+        return FleetCliCommand().apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsTurnsTool(ToolRequest):
     label = "Recent turns"
     description = "Read a unit's recent turns with ordered original transcript facts."
@@ -627,6 +728,71 @@ class CommsWorkBranchesTool(ToolRequest):
         branches = WorkBranches(Path(self.checkout)).read(comms.registry.snapshot())
         return {"branches": FieldCodec.encode(tuple(
             branch for branch in branches if not (self.unlinked_only and branch.linked)))}
+
+
+@dataclass(frozen=True, kw_only=True)
+class _OrderJudgementTool(ThreadToolRequest):
+    """The order's own commander judges the unit holding it."""
+
+    unit: str = tool_field("Thread holding the order")
+    goal_id: str = tool_field("The order's Goal ID")
+
+    def order(self, comms: Comms, caller: ThreadCaller) -> Order:
+        return Order.judged_by(comms.goals, self.unit, self.goal_id, caller.name)
+
+
+@dataclass(frozen=True, kw_only=True)
+class _ToolCallVerdictTool(_OrderJudgementTool):
+    tool_call: str = tool_field("Tool call ID from comms_turns")
+    quoted: str = tool_field("Exact text from that call's input the verdict is about")
+    reason: Annotated[str, PlainText] = tool_field("What the call did and why, in plain words (10+)")
+
+    def turns(self, comms: Comms):
+        return comms.transcripts.turns(self.unit, last=Order.judged_turns)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsAcceptTool(_ToolCallVerdictTool):
+    label = "Accept tool call"
+    description = "Accept one tool call of the unit's order work; the reason must cite the order it serves."
+    serves: str = tool_field("4+ exact words of the order this call serves")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        row = self.order(comms, caller).accept(
+            self.turns(comms), self.tool_call, self.quoted, self.serves, self.reason)
+        return {"verdict": FieldCodec.encode(row)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSendBackTool(_ToolCallVerdictTool):
+    label = "Send back tool call"
+    description = (
+        "Send one tool call back: replace the order's text with the edits now required and "
+        "strike the unit. At the strike limit the unit loses its order."
+    )
+    text: str = tool_field("Replacement order text: the exact edits now required")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        return FieldCodec.encode(self.order(comms, caller).send_back(
+            self.turns(comms), self.tool_call, self.quoted, self.reason, self.text))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsStrikeTool(_OrderJudgementTool):
+    label = "Strike"
+    description = (
+        "Strike a miss that is not a judged tool call: a missed deadline, a false done claim "
+        "or missing evidence, against the unit or the commander. At the limit the struck "
+        "thread loses its order."
+    )
+    struck: str = tool_field("Thread the strike counts against: the unit, or the commander")
+    cause: type[StrikeCause] = tool_field("What was missed")
+    what_happened: Annotated[str, PlainText] = tool_field("What actually happened, in plain words (10+)")
+    caught: type[CaughtStage] = tool_field("Where it was caught")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        return FieldCodec.encode(self.order(comms, caller).strike(
+            self.struck, self.cause, self.what_happened, self.caught))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -926,10 +1092,8 @@ class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
         return status.allows_owner_start(owner_pid=owner_pid)
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import StartCliCommand
-
-        return StartCliCommand(name=self.name).apply(comms)
+    def apply(self, comms: Comms, caller: ToolCaller) -> object:
+        return comms.owners.start(self.name)
 
 
 @dataclass(frozen=True, kw_only=True)
