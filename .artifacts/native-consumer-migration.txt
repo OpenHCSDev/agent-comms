@@ -1,0 +1,6 @@
+phase owner modules 452 omissions []
+phase settings modules 452 omissions []
+phase binary modules 452 omissions []
+phase constructors modules 452 omissions []
+{'root-settings-read/write': 179, 'settings-no-runtime': 7, 'offline-no-runtime': 4, 'deleted-settings-executable': 106, 'constructor-reads-Comms': 171}
+LIMITS: native settings on other constructor/method families and embedded Python require semantic reconciliation; this is not behavioral proof.
