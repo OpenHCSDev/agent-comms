@@ -127,6 +127,7 @@ async def detached(root: Path):
     from agent_comms.acp_extension import CompactRequest, encode_request
     from agent_comms.comms import Comms
     from agent_comms.runtime import socket_path
+    from contextlib import aclosing
     from explicit_private_owner_installed_journey import cli
 
     assert 'site-packages' in Path(agent_comms.__file__).parts
@@ -193,6 +194,21 @@ async def detached(root: Path):
                     (root / f'{phase}-request.json').write_text(json.dumps(request, indent=2))
                     assert process.returncode is not None
                     result[phase] = True
+                    if phase == 'resume':
+                        # An agent-peer wake, not the separate human-input operation.
+                        comms.registry.declare(Thread('peer895', frozenset(), str(fixture.project)))
+                        sent = comms.messaging.send_message('peer895', 'worker895', 'peer-wake895')
+                        async with asyncio.timeout(30), aclosing(comms.bus.watch('peer895')) as replies:
+                            reply = await anext(replies)
+                        assert reply.sender == 'worker895' and reply.target == 'peer895'
+                        assert reply.body == fixture.provider.text
+                        request = fixture.provider.requests[-1]
+                        assert sent.body in user_text(request)
+                        assert "thread 'worker895'" in system_text(request)
+                        assert 'Maintenance results' in system_text(request)
+                        assert 'AGENT_COMMS_SESSION_CONTEXT' not in env
+                        (root / 'selected-request.json').write_text(json.dumps(request, indent=2))
+                        result['selected_addressed_reply'] = True
                 finally:
                     await asyncio.to_thread(comms.owners.stop, 'worker895')
             assert len(set(result['worker_pids'])) == 2
