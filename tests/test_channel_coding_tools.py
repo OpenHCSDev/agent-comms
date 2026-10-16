@@ -110,7 +110,7 @@ def test_pi_argument_fields_own_roundtrip_and_display(name, arguments):
     call = CodingCall.decode("typed-argument-shape", name, arguments)
     assert "arguments" not in {item.name for item in fields(call.tool)}
     assert call.tool.arguments == arguments
-    assert call.tool.detail in ToolDeclaration.start("typed", name, arguments).title
+    assert call.tool.detail in ToolDeclaration.start("typed", name, arguments, detail=call.tool.detail).title
 
 
 @pytest.mark.asyncio

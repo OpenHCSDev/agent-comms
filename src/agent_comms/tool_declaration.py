@@ -29,15 +29,14 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def start(cls, call_id: str, name: str, arguments: dict[str, object]) -> ToolStart:
+    def caption(cls, name: str, detail: str = "") -> str:
         declaration = cls.for_name(name)
-        detail = declaration.detail_for(arguments)
-        title = declaration.label + (" " + detail.strip() if detail else "")
-        return ToolStart(call_id, name, title, arguments, declaration.acp_kind)
+        return declaration.label + (" " + detail.strip() if detail else "")
 
     @classmethod
-    def detail_for(cls, arguments: dict[str, object]) -> str:
-        return ""
+    def start(cls, call_id: str, name: str, arguments: dict[str, object], *, detail: str = "") -> ToolStart:
+        declaration = cls.for_name(name)
+        return ToolStart(call_id, name, cls.caption(name, detail), arguments, declaration.acp_kind)
 
     @classmethod
     def result_diff(cls, result, ok):

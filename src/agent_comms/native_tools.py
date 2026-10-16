@@ -48,7 +48,7 @@ class NativeRequestTools:
 
 
 class ArgumentTool(ToolDeclaration):
-    """One declared record supplies decoding, display and native argument serialization."""
+    """One declared execution record supplies validation and native serialization."""
 
     @classmethod
     def parse_arguments(cls, arguments: dict[str, object]):
@@ -70,10 +70,6 @@ class ArgumentTool(ToolDeclaration):
     @property
     @abstractmethod
     def detail(self) -> str: ...
-
-    @classmethod
-    def detail_for(cls, arguments: dict[str, object]) -> str:
-        return cls.parse_arguments(arguments).detail
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -169,30 +165,11 @@ class WriteTool(PathTool, CodingTool):
         return WritableFileClaim(Path(self.path))
 
 
-@dataclass(frozen=True, kw_only=True)
-class GrepTool(ArgumentTool):
+class GrepTool(ToolDeclaration):
     acp_kind = "search"
     label = "Search"
-    pattern: str
-    path: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
-    glob: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
-    ignore_case: bool | None = field(default=None, metadata={"wire_name": "ignoreCase", "wire_omit_default": True, "wire_nonnull": True})
-    literal: bool | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
-    context: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
-    limit: float | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
-
-    @property
-    def detail(self) -> str:
-        return f"{self.pattern} in {self.path}" if self.path is not None else self.pattern
 
 
-@dataclass(frozen=True, kw_only=True)
-class GlobTool(ArgumentTool):
+class GlobTool(ToolDeclaration):
     acp_kind = "search"
     label = "Find"
-    pattern: str
-    path: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_nonnull": True})
-
-    @property
-    def detail(self) -> str:
-        return self.pattern

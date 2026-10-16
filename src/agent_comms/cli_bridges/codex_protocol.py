@@ -319,8 +319,12 @@ class ToolItem(Item, ABC):
     def succeeded(self) -> bool: ...
 
     @property
+    def tool_detail(self) -> str:
+        return ""
+
+    @property
     def call(self) -> ToolCall:
-        return ToolCall(self.id, self.tool_name, self.arguments)
+        return ToolCall(self.id, self.tool_name, self.arguments, self.tool_detail)
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.call.finished(self.output, self.succeeded)
@@ -344,6 +348,10 @@ class CommandItem(ToolItem):
     @property
     def arguments(self) -> JsonValue:
         return {'command': self.command}
+
+    @property
+    def tool_detail(self) -> str:
+        return self.command
 
     @property
     def output(self) -> str:
@@ -627,7 +635,7 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return ToolCall(call_id, 'edit', {'file_path': self.path}).finished(
+        return ToolCall(call_id, 'edit', {'file_path': self.path}, self.path).finished(
             '', ok, diff=self.kind.patch(self.path, self.diff))
 
 

@@ -79,17 +79,15 @@ class ToolCall:
     id: str
     name: str
     arguments: JsonValue
+    detail: str = ""
 
     @property
     def title(self) -> str:
-        # Some external tools accept a scalar. Native previews only inspect objects.
-        if isinstance(self.arguments, dict):
-            return ToolDeclaration.start(self.id, self.name, self.arguments).title
-        return self.name
+        return ToolDeclaration.caption(self.name, self.detail)
 
     def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
         return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=self.arguments),
+                                    raw_input=self.arguments, detail=self.detail),
                 ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
                                   text=text, ok=ok, diff=diff))
 
