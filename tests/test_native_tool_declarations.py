@@ -13,6 +13,7 @@ from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
 from agent_comms.recorded_time import UnrecordedEventTime
+from agent_comms.pi_payloads import ToolCallContent
 from delivery_owner_fixture import canonical_agent
 
 pytest_plugins = ("test_backend_native_lifecycle",)
@@ -44,7 +45,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
     for tool in examples:
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
-        event = ToolDeclaration.start("case", tool.declared_name, call.tool.arguments, detail=call.tool.detail)
+        event = ToolCallContent.start_event("case", tool.declared_name, call.tool.arguments)
         assert event.kind == tool.acp_kind and event.args == tool.arguments
         assert call.tool == tool and tool.detail in event.title
     unknown = ToolDeclaration.start("unknown", "external_extension", {"private": "preserved"})
@@ -65,11 +66,13 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
     foreign = {"file_path": "external.txt"}
-    start = ToolStartTranscript(tool_call_id="saved", tool_name=name, raw_input=foreign)
+    declared_path = "external.txt" if kind in {"read", "edit"} else None
+    start = ToolStartTranscript(tool_call_id="saved", tool_name=name, raw_input=foreign,
+                                path=declared_path)
     end = ToolEndTranscript(tool_call_id="saved", tool_name=name, text="saved result")
     assert (start.title, start.kind, start.raw_input) == (caption, kind, foreign)
     assert (end.title, end.kind) == (label, kind)
-    assert ToolDeclaration.start("saved", name, foreign).title == caption
+    assert ToolDeclaration.start("saved", name, foreign, path=declared_path).title == caption
     assert ToolStartTranscript(tool_call_id="scalar", tool_name=name, raw_input=17).title == label
     with pytest.raises(SelectedToolDenied):
         CodingCall.decode("execution", name, foreign)
@@ -81,11 +84,11 @@ def test_input_caption_is_bounded_and_never_parses_an_execution_request(monkeypa
 
     monkeypatch.setattr(CodingTool, 'parse_arguments', forbidden)
     arguments = {'file_path': 'foreign.txt', 'payload': 'x' * 1_000_000}
-    caption = ToolDeclaration.start('opaque', 'read', arguments).title
+    caption = ToolDeclaration.start('opaque', 'read', arguments, path='foreign.txt').title
     assert 'foreign.txt' in caption and len(caption) < 200
     assert arguments['payload'] == 'x' * 1_000_000
-    assert len(ToolDeclaration.start('command', 'Bash', {'command': 'x' * 1_000_000}).title) <= ToolDeclaration.CAPTION_CHARS
-    plain = ToolDeclaration.start('plain', 'Bash', {'command': 'echo "hello"\nnext line'}).title
+    assert len(ToolCallContent.start_event('command', 'bash', {'command': 'x' * 1_000_000}).title) <= ToolDeclaration.CAPTION_CHARS
+    plain = ToolCallContent.start_event('plain', 'bash', {'command': 'echo "hello"\nnext line'}).title
     assert plain == 'Run echo "hello" next line'
 
 
@@ -98,7 +101,8 @@ def test_foreign_protocol_owners_supply_their_own_recorded_detail():
 
     start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
                             kind=UpdatedFile()).events("codex", True)
-    assert start.title == "Edit codex.txt" and start.raw_input == {"file_path": "codex.txt"}
+    assert start.title == "Edit codex.txt" and start.raw_input == {"path": "codex.txt"}
+    assert start.path == "codex.txt"
     assert end.title == "Edit" and end.diff is not None
     assert FieldCodec.decode(TranscriptEvent, FieldCodec.encode(start)) == start
     part = ToolPart.model_validate({"type": "tool", "id": "part", "sessionID": "session",
@@ -108,6 +112,7 @@ def test_foreign_protocol_owners_supply_their_own_recorded_detail():
     assert call.title == "Read open-code.txt"
     recorded, _ = call.finished("saved", True)
     assert recorded.title == call.title and recorded.raw_input == {"filePath": "open-code.txt"}
+    assert recorded.path == "open-code.txt"
     scalar, _ = ToolCall(UnrecordedEventTime(), "opaque", "external_custom", ["not", "Pi"]).finished("saved", True)
     assert scalar.title == "external_custom" and scalar.raw_input == ["not", "Pi"]
 
@@ -232,7 +237,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     # The declared label/detail own the title; rawInput retains the native argument.
     # The SDK reports raw arguments, not a caption. Presentation does not validate
     # or reinterpret that object as an execution request; disclosure retains it.
-    expected_title = ToolDeclaration.caption('read', arguments={'path': str(source)})
+    expected_title = ToolDeclaration.caption('read', path=str(source))
     assert 'owned.txt' in expected_title
     assert starts[0].kind == "read" and starts[0].title == expected_title
     assert ends[0].ok and "ACTUAL_READ_CONTENT" in ends[0].output

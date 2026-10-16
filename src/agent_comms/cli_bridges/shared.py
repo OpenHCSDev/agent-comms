@@ -110,16 +110,17 @@ class ToolCall(SnapshotDraft):
     name: str
     arguments: JsonValue
     detail: str = ""
+    path: str | None = None
 
     @property
     def title(self) -> str:
-        return ToolDeclaration.caption(self.name, self.arguments, detail=self.detail)
+        return ToolDeclaration.caption(self.name, detail=self.detail, path=self.path)
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:
         return (self.started_at.stamp(ToolStartTranscript(
             tool_call_id=self.id, tool_name=self.name,
-            raw_input=self.arguments, detail=self.detail)),)
+            raw_input=self.arguments, detail=self.detail, path=self.path)),)
 
     def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
         return (*self.events, ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,

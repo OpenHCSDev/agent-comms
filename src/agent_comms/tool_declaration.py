@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Callable, ClassVar
 
 from .agent_events import ToolStart
 from .declared_family import DeclaredFamily
@@ -30,30 +30,29 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def caption(cls, name: str, arguments: object, *, detail: str = "") -> str:
+    def caption(cls, name: str, *, detail: str = "", path: str | None = None) -> str:
         declaration = cls.for_name(name)
-        preview = detail.strip() or declaration.input_preview(arguments)
+        preview = path if path is not None else detail.strip()
         caption = declaration.label + (" " + preview if preview else "")
         if len(caption) > cls.CAPTION_CHARS:
             caption = caption[:cls.CAPTION_CHARS - 1] + '…'
         return ' '.join(caption.split())
 
     @classmethod
-    def input_preview(cls, arguments: object) -> str:
-        """Unknown metadata has no declared preview; never dump raw input."""
-        return ""
-
-    @staticmethod
-    def argument_text(arguments: object, name: str) -> str:
-        if not isinstance(arguments, dict):
-            return ""
-        value = arguments.get(name)
-        return value if isinstance(value, str) else ""
+    def file_location(cls, decode: Callable[[], str]) -> str | None:
+        """Opaque extensions never interpret a known tool's argument schema."""
+        return None
 
     @classmethod
-    def start(cls, call_id: str, name: str, arguments: dict[str, object], *, detail: str = "") -> ToolStart:
+    def command_detail(cls, decode: Callable[[], str]) -> str:
+        return ""
+
+    @classmethod
+    def start(cls, call_id: str, name: str, arguments: dict[str, object], *,
+              detail: str = "", path: str | None = None) -> ToolStart:
         declaration = cls.for_name(name)
-        return ToolStart(call_id, name, cls.caption(name, arguments, detail=detail), arguments, declaration.acp_kind)
+        return ToolStart(call_id, name, cls.caption(name, detail=detail, path=path),
+                         arguments, declaration.acp_kind, path=path, detail=detail)
 
     @classmethod
     def result_diff(cls, result, ok):
@@ -71,14 +70,8 @@ class PathTool:
         return self.path
 
     @classmethod
-    def recorded_path(cls, arguments: object) -> str:
-        # These are the current Pi, Claude and OpenCode input spellings.
-        return next((value for name in ('path', 'file_path', 'filePath')
-                     if (value := ToolDeclaration.argument_text(arguments, name))), '')
-
-    @classmethod
-    def input_preview(cls, arguments: object) -> str:
-        return cls.recorded_path(arguments)
+    def file_location(cls, decode: Callable[[], str]) -> str:
+        return decode()
 
 
 @dataclass(frozen=True)

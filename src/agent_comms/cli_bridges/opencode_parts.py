@@ -11,6 +11,7 @@ from pydantic import Field, JsonValue
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TextTranscript, TranscriptEvent
 
 from .shared import (
@@ -126,6 +127,15 @@ class StatusHeader(WireHeader):
     type: str = Field(alias='status')
 
 
+class ToolArguments(WireModel):
+    """OpenCode owns this input spelling; shared code only sees the path."""
+    filePath: str
+
+
+class CommandArguments(WireModel):
+    command: str
+
+
 class ToolState(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
@@ -137,7 +147,13 @@ class ToolState(TaggedWire, ABC):
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
 
     def call(self, part: ToolPart) -> ToolCall:
-        return ToolCall(UnrecordedEventTime(), part.callID, part.tool, self.input)
+        declaration = ToolDeclaration.for_name(part.tool)
+        return ToolCall(UnrecordedEventTime(), part.callID, part.tool,
+                        self.input,
+                        detail=declaration.command_detail(
+                            lambda: CommandArguments.model_validate(self.input).command),
+                        path=declaration.file_location(
+                            lambda: ToolArguments.model_validate(self.input).filePath))
 
 
 class PendingTool(ToolState):

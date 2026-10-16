@@ -15,6 +15,7 @@ from acp.schema import (
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
+    ToolCallLocation,
     UsageUpdate,
 )
 
@@ -73,6 +74,7 @@ class AcpEventConsumer(MroDispatch):
             tool_call_id=event.id,
             title=event.title or event.name or "tool",
             kind=cast(Any, event.kind),
+            locations=[ToolCallLocation(path=event.path)] if event.path is not None else [],
             status="in_progress",
         )
         if event.args is not None:

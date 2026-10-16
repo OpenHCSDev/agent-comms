@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import Callable, ClassVar
 
 from .tool_declaration import ToolDeclaration, PathTool
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
@@ -118,8 +118,8 @@ class BashTool(CodingTool):
         return self.command
 
     @classmethod
-    def input_preview(cls, arguments: object) -> str:
-        return cls.argument_text(arguments, 'command')
+    def command_detail(cls, decode: Callable[[], str]) -> str:
+        return decode()
 
     def _parse_resource(self) -> None:
         return None

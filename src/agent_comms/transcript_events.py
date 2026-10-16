@@ -194,12 +194,13 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
 class ToolStartTranscript(ToolTranscript):
     raw_input: Any = None
     detail: str = field(default="", metadata={"wire_omit_default": True})
+    path: str | None = field(default=None, metadata={"wire_omit_default": True})
 
     @property
     def title(self) -> str:
         from .tool_declaration import ToolDeclaration
 
-        return ToolDeclaration.caption(self.tool_name, self.raw_input, detail=self.detail)
+        return ToolDeclaration.caption(self.tool_name, detail=self.detail, path=self.path)
 
 
 @dataclass(frozen=True, kw_only=True)

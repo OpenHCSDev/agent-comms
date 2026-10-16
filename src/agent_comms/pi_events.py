@@ -26,6 +26,7 @@ from .pi_payloads import (
     PiPayload,
     PiResponseData,
     PiToolResult,
+    ToolCallContent,
     PiUsage,
     ProviderRetryOutcome,
 )
@@ -822,13 +823,12 @@ class ToolExecutionStart(PiEvent):
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .tool_declaration import ToolDeclaration
-
         name = self.tool_name or "tool"
         tool_id = self.tool_call_id or name
         session.watchdog.prompt_accepted = True
         session.active_tools.add(tool_id)
-        yield ToolDeclaration.start(tool_id, name, self.args or {})
+        arguments = self.args or {}
+        yield ToolCallContent.start_event(tool_id, name, arguments)
 
     @property
     def retry_progress(self) -> bool:

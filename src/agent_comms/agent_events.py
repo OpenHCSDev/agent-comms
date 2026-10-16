@@ -123,6 +123,8 @@ class ToolStart(ToolEvent):
     title: str = ""
     args: dict[str, Any] | None = None
     kind: str = "other"
+    path: str | None = None
+    detail: str = ""
 
 
 @dataclass(frozen=True)

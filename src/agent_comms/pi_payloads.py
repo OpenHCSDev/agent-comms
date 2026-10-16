@@ -309,16 +309,35 @@ class ThinkingContent(PiContent):
 
 
 @dataclass(frozen=True)
+class PiFileArguments(PiPayload):
+    path: str
+
+
+@dataclass(frozen=True)
+class PiCommandArguments(PiPayload):
+    command: str
+
+
+@dataclass(frozen=True)
 class ToolCallContent(PiContent, declared_name="toolCall"):
+    @staticmethod
+    def start_event(call_id: str, name: str, arguments: dict[str, Any]):
+        from .tool_declaration import ToolDeclaration
+
+        declaration = ToolDeclaration.for_name(name)
+        return ToolDeclaration.start(call_id, name, arguments,
+            path=declaration.file_location(lambda: PiFileArguments.from_wire(arguments).path),
+            detail=declaration.command_detail(lambda: PiCommandArguments.from_wire(arguments).command))
+
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return (self,)
 
     def assistant_transcript(self):
         from .transcript_events import ToolStartTranscript
 
-        return [
-            ToolStartTranscript(tool_call_id=self.id, tool_name=self.name, raw_input=self.arguments)
-        ]
+        start = self.start_event(self.id, self.name, self.arguments)
+        return [ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
+                                    raw_input=self.arguments, path=start.path, detail=start.detail)]
 
     id: str
     name: str
