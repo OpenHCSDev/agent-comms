@@ -114,7 +114,7 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
     async with native_backend_fixture(tmp_path) as native:
         target = native.project / "module.py"
         target.write_text("value = 1\n")
-        comms = Comms(native.root)
+        comms = Comms.for_runtime(native.root)
         comms.registry.declare(Thread("worker", frozenset(), str(native.project),
                                       session_file=str(native.session), model="response-local/fixture"))
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))

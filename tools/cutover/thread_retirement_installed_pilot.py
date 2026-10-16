@@ -59,7 +59,7 @@ def old_client_write_case(stage, root, original_python, environment):
         log.write_metadata_unlocked(replace(marker, checkpoint_version=None, checkpoint_seal=None))
         (copied/'private_bus_checkpoint.sqlite3').unlink()
         install_private_bus_checkpoint(log)
-    control = Comms(copied).owners.maintenance
+    control = Comms.for_runtime(copied).owners.maintenance
     old_client = FieldCodec.decode(MaintenanceOperatorField, 'disposable-old-client-probe')
     control.advance(control.begin(old_client), PausedPhase)
     result = subprocess.run([original_python, str(Path(__file__).with_name('old_thread_client_probe.py')),
@@ -123,7 +123,7 @@ def main():
         assert installed.returncode == 0, installed.stderr
         results = json.loads(installed.stdout)
         assert len(results) == 2 and all(not ObservedProcess(owner).alive() for owner in originals)
-        service = Comms(root)
+        service = Comms.for_runtime(root)
         replacements = [service.registry.require(item['thread']).process_identity for item in results]
         for index, (name, args, credential) in enumerate((
             ('phase-alpha', ('--offline','--no-tools','--thinking','off'), 'fixture-alpha'),
@@ -132,7 +132,7 @@ def main():
             owner = service.registry.require(name)
             asyncio.run(ready(root, owner))
             launch = RetainedOwnerLaunch.capture(owner, service.registry.snapshot())
-            assert launch.arguments == args and launch.environment['BATCH_OWNER_CREDENTIAL'] == credential
+            assert launch.native.arguments == args and launch.environment['BATCH_OWNER_CREDENTIAL'] == credential
             assert launch.environment['AGENT_COMMS_THREAD'] == name
             assert owner == replace(expected[index], process_identity=owner.process_identity)
             assert not Path(f'/proc/{owner.pid}/task/{owner.pid}/children').read_text().strip()

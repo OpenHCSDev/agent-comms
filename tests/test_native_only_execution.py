@@ -152,13 +152,16 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
     # The real private boundary disallows volatile or symlinked roots.
     import tempfile
 
-    with tempfile.TemporaryDirectory(prefix="l0b-headless-", dir="/var/tmp") as owned:
+    from agent_comms.native_settings import NativeThreadDefaults
+
+    with tempfile.TemporaryDirectory(prefix="l0b-headless-", dir=tmp_path) as owned, \
+            NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary()).inherited() as (native_arguments, native_descriptors):
         base = Path(owned)
         project = base / "owner-project"
         caller_project = base / "caller-project"
         project.mkdir()
         caller_project.mkdir()
-        comms = Comms(base / "wire")
+        comms = Comms.for_runtime(base / "wire")
         root_id = comms.messaging.initialize_private_initial_protocol()
         comms.registry.declare(Thread("headless", frozenset(), str(project)))
         env = dict(
@@ -167,8 +170,6 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             AGENT_COMMS_THREAD="headless",
             AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
             AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=package,
-            AGENT_COMMS_AGENT_BIN="pi",
-            AGENT_COMMS_AGENT_ARGS="",
             AGENT_COMMS_NO_REPLY_WINDOW="0.05",
             AGENT_COMMS_REPLY_WINDOW="0.1",
             AGENT_COMMS_REPLY_QUIET="0.05",
@@ -178,9 +179,10 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         for key in ("PI_PROMPT", "PI_PARENT_ID"):
             env.pop(key, None)
         async with BoundedRun.session(
-            (sys.executable, "-c", "from agent_comms.worker import main; raise SystemExit(main())"),
+            (sys.executable, "-c", "from agent_comms.worker import main; raise SystemExit(main())", *native_arguments),
             cwd=caller_project,
             env=env,
+            pass_fds=native_descriptors,
             timeout=20,
         ) as child:
             async with asyncio.timeout(12):

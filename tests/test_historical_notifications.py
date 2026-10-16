@@ -23,7 +23,7 @@ from agent_comms.wake_policy import FullWake
 
 @pytest.fixture
 def archived_notification(tmp_path):
-    old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
+    old, live = Comms.for_runtime(tmp_path / "old"), Comms.for_runtime(tmp_path / "live")
     for comms in (old, live):
         comms.registry.declare(Thread("sender", frozenset(), str(tmp_path), created_at=10.0))
         comms.registry.declare(Thread("reader", frozenset(), str(tmp_path),

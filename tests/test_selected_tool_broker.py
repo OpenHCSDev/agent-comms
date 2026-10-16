@@ -188,7 +188,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
     root.mkdir(mode=0o700)
     session_dir = tmp_path / "session"
     session_dir.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     admission = WakeAdmission(
         wire_root_id="a" * 32,
         source_seq=1,

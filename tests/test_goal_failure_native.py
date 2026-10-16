@@ -56,7 +56,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
         )
     )
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    comms = Comms(native.root)
+    comms = Comms.for_runtime(native.root)
     agent = canonical_agent(
         comms,
         auto_wake=False,
@@ -170,7 +170,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
     await native.persistent.close()
     history = native.session.read_bytes()
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    comms = Comms(native.root)
+    comms = Comms.for_runtime(native.root)
     agent = canonical_agent(
         comms, auto_wake=False, runtime_enabled=True,
         agent_args=[
@@ -256,7 +256,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert not agent.inputs.pending_turns.get(sid)
             assert len(native.saved_inputs()) == 3
             if owner_pauses:
-                reopened = Comms(comms.root)
+                reopened = Comms.for_runtime(comms.root)
                 paused = reopened.registry.require(sid).goal
                 assert paused.state.pause_source.instruction()
                 assert reopened.goals.goal_history(sid)[-1].after == paused

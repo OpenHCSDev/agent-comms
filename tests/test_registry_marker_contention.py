@@ -12,7 +12,7 @@ from agent_comms.threads import Thread
 
 
 def _read_registry(root, ready, stop, result):
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     failures, reads = [], 0
     ready.put(os.getpid())
     try:
@@ -27,7 +27,7 @@ def _read_registry(root, ready, stop, result):
 
 
 def test_concurrent_canonical_marker_publication_keeps_registry_readable(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     context = mp.get_context("spawn")
@@ -90,7 +90,7 @@ def _redirect(path):
 
 @pytest.mark.parametrize("damage", [_public_mode, _extra_link, _redirect], ids=lambda f: f.__name__)
 def test_marker_ownership_failures_still_block_real_read_and_send(tmp_path, damage):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))

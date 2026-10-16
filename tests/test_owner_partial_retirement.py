@@ -84,8 +84,10 @@ class AuthoredRetirement(OwnerLifecycle):
         raise AssertionError('A partial retirement must not launch any replacement')
 
     def batch(self):
+        from agent_comms.native_settings import NativeThreadDefaults
+
         launches = tuple(RetainedOwnerLaunch(
-            t.require_process(), '/authored/python', {'AGENT_COMMS_AGENT_BIN': '/authored/pi'},
+            t.require_process(), '/authored/python', {}, NativeThreadDefaults(binary='/authored/pi'),
         ) for t in self.originals)
         return FencedOwnerBatch(
             self, tuple((t, 5) for t in self.originals), launches,

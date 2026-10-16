@@ -170,7 +170,9 @@ class OwnerLifecycle:
         except (RelationViolationError, StaleFence) as error:
             raise OwnerBusyRefusal() from error
 
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus):
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus, *,
+                 native: NativeThreadDefaults):
+        self.native_defaults = native
         self.root = root
         self.registry = registry
         self.bus = bus
@@ -233,8 +235,7 @@ class OwnerLifecycle:
             return owned
 
     def ensure_owner(
-        self, name: str, *, agent_bin: str = NativeThreadDefaults.binary,
-        agent_args: Sequence[str] | None = None,
+        self, name: str, *, native: NativeThreadDefaults,
     ) -> Thread:
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
@@ -245,7 +246,7 @@ class OwnerLifecycle:
             return (
                 thread
                 if thread.process_alive
-                else self._launch_owner_unlocked(thread, agent_bin, agent_args)
+                else self._launch_owner_unlocked(thread, native)
             )
 
     def start(
@@ -262,9 +263,12 @@ class OwnerLifecycle:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.pid, False)
-            owner = self._launch_owner_unlocked(
-                thread, NativeArguments.configured_binary(NativeThreadDefaults().for_launch(agent_bin, agent_args)), agent_args
-            )
+            native = self.native_defaults
+            if agent_bin is not None:
+                native = replace(native, binary=agent_bin)
+            if agent_args is not None:
+                native = replace(native, arguments=tuple(agent_args))
+            owner = self._launch_owner_unlocked(thread, native)
             return OwnerStartResult(owner.name, owner.pid, True)
 
     def restart_entrypoint(self, source_binary: str) -> str:
@@ -272,11 +276,7 @@ class OwnerLifecycle:
         if self._private_nk_launch is None:
             return source_binary
         self._private_nk_launch.validate()
-        return self.native_entrypoint()
-
-    @staticmethod
-    def native_entrypoint() -> str:
-        return str(Path(sys.executable).with_name("pi-comms-native"))
+        return NativeThreadDefaults.runtime_binary()
 
     def restart_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
         """Project the retained launch authority into the target runtime policy."""
@@ -310,6 +310,7 @@ class OwnerLifecycle:
             tuple(agent_args) if agent_args is not None else None,
             expected, runtime, source_interpreter,
         )
+        request.validate(self.native_defaults)
         return cutover.restart(self, request)
 
     @contextmanager
@@ -372,8 +373,7 @@ class OwnerLifecycle:
     def _launch_owner_unlocked(
         self,
         thread: Thread,
-        agent_bin: str,
-        agent_args: Sequence[str] | None = None,
+        native: NativeThreadDefaults,
         *,
         startup_input_key: str | None = None,
         environment: Mapping[str, str] | None = None,
@@ -391,12 +391,13 @@ class OwnerLifecycle:
             PACKAGE_ENV,
         ):
             env.pop(key, None)
+        agent_bin = NativeArguments.configured_binary(native)
         private_launch = self.require_launch_authority()
         if private_launch is not None:
             if agent_bin == "pi":
                 # The default stock binary cannot attest native input IDs.
                 # Keep the owner on this installation's pinned Pi entrypoint.
-                agent_bin = self.native_entrypoint()
+                agent_bin = NativeThreadDefaults.runtime_binary()
             else:
                 # The owner process keeps the launcher selected at its start.
                 # A later PATH or installed-runtime symlink change cannot retarget
@@ -434,7 +435,7 @@ class OwnerLifecycle:
             env["PI_TASK"] = thread.task
         if startup_input_key is not None:
             env["AGENT_COMMS_STARTUP_INPUT_KEY"] = startup_input_key
-        native = NativeThreadDefaults().for_launch(agent_bin, agent_args)
+        native = replace(native, binary=agent_bin)
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:

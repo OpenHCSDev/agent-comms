@@ -619,7 +619,7 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
     async def publish_transcript(self) -> None:
         from agent_comms.comms import Comms
 
-        comms = Comms(Path(self.binding.root))
+        comms = Comms.for_runtime(Path(self.binding.root))
         output = ThreadOutput(
             await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
         # This subscription can assemble only items whose start it receives.

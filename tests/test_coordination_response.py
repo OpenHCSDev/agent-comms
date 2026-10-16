@@ -71,7 +71,7 @@ class Fixture:
 
 
 def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ...] = ()) -> Fixture:
-    comms = Comms(tmp_path / "wire", private_initial_writes=True)
+    comms = Comms.for_runtime(tmp_path / "wire", private_initial_writes=True)
     for name in ("sender", "owner"):
         comms.registry.declare(
             Thread(

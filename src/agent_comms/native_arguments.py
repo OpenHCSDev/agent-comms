@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import sys
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
@@ -156,14 +154,6 @@ class VersionArgument(NamedOption, OneShotArgument):
 @dataclass(frozen=True)
 class NativeArguments:
     entries: tuple[NativeArgument, ...]
-
-    @classmethod
-    def owner_launcher(cls) -> str:
-        """The native launcher installed beside this owner's Python executable."""
-        launcher = Path(sys.executable).with_name("pi-comms-native")
-        if not launcher.is_file():
-            raise ValueError("Owner runtime has no native Pi launcher; restart in a complete runtime")
-        return str(launcher)
 
     @classmethod
     def configured_binary(cls, settings: NativeThreadDefaults) -> str:

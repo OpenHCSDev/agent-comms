@@ -17,7 +17,7 @@ from test_relationships import setup_wire
 
 
 def _read_adopter(root, done):
-    service = Comms(root).relationships
+    service = Comms.for_runtime(root).relationships
     service.collaborations("owner")
     service.contacts("owner")
     service.snapshot("owner")

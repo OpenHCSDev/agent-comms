@@ -39,7 +39,7 @@ def test_legacy_bus_has_no_fabricated_receipts(tmp_path):  # noqa: F811
     from agent_comms.threads import Thread
 
     root = tmp_path / 'legacy'
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     comms.registry.declare(Thread('reader', frozenset(), str(tmp_path)))
     assert comms.views.recent_notifications('reader') == ()
     assert not (root / 'coordination.sqlite3').exists()

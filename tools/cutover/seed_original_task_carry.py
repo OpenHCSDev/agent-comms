@@ -14,7 +14,7 @@ from agent_comms.tools import invoke_tool
 def main():
     root = Path(sys.argv[1])
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
-    service = Comms(root)
+    service = Comms.for_runtime(root)
     root_id = service.messaging.initialize_private_initial_protocol()
     beta = service.registry.declare(Thread('beta', frozenset({'team'}), str(root)))
     alpha = service.registry.declare(Thread('alpha', frozenset({'team'}), str(root),

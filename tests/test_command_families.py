@@ -28,8 +28,6 @@ from agent_comms.threads import Thread
 def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
     monkeypatch.setenv("COLUMNS", "80")
     monkeypatch.setenv("NO_COLOR", "1")
-    monkeypatch.delenv("AGENT_COMMS_AGENT_ARGS", raising=False)
-    monkeypatch.delenv("AGENT_COMMS_AGENT_BIN", raising=False)
     parser = build_parser()
     sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
     actual = {
@@ -41,8 +39,6 @@ def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
 
 
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/a pi")
-    monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", '--label "two words"')
     parser = build_parser()
 
     def parse(args):
@@ -65,7 +61,6 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     explicit = parse(["restart", "--all", "--agent-bin", "/a pi", "--agent-args", '--label "two words"'])
     assert explicit.agent_bin == "/a pi"
     assert explicit.agent_args == ["--label", "two words"]
-    monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "/next pi")
     assert build_parser().parse_args(["restart", "--all"]).agent_bin is None
 
 
@@ -80,7 +75,7 @@ def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, caps
         def apply(self, ctx):
             return {"amount": self.amount + 1, "root": str(ctx.root)}
 
-    comms = Comms(tmp_path)
+    comms = Comms.for_runtime(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     monkeypatch.delenv(ROOT_ID_ENV, raising=False)
     monkeypatch.delenv(PACKAGE_ENV, raising=False)
@@ -158,7 +153,7 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
         async def result(self, ctx):
             return {"amount": self.amount + 1, "session": ctx.session_id, "owner": ctx.name}
 
-    comms = Comms(tmp_path)
+    comms = Comms.for_runtime(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     def require_owned_session(owner, snapshot):
         assert owner.name == "owner"
@@ -213,7 +208,7 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
 def test_normal_history_cli_keeps_migrated_content_and_source_identity(
     tmp_path, capsys, monkeypatch, arguments, key
 ):
-    old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
+    old, live = Comms.for_runtime(tmp_path / "old"), Comms.for_runtime(tmp_path / "live")
     for comms in (old, live):
         for name in ("alice", "bob"):
             comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))

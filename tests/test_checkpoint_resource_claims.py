@@ -20,7 +20,7 @@ from carry_resource_claims_once import carry
 
 
 def authored(tmp_path):
-    comms = Comms(tmp_path / 'wire')
+    comms = Comms.for_runtime(tmp_path / 'wire')
     root_id = comms.messaging.initialize_private_initial_protocol()
     for name in ('owner', 'peer'):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
@@ -77,7 +77,7 @@ def test_multi_resource_admission_consumes_one_operation_even_after_release(tmp_
     with pytest.raises(IdentityConflict, match='already consumed'):
         admitted(comms, admission, paths[2:])
     assert comms.bus.log.path.read_bytes() == before
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     with reopened.bus.log.certified_read() as source:
         assert source.claim_operation_used(admission.operation_id)
         assert source.claim(str(paths[0])) is None
@@ -138,7 +138,7 @@ def test_explicit_carry_preserves_bytes_and_recovers_current_and_used_operations
     assert (backup / checkpoint.name).read_bytes() == checkpoint_bytes
     assert (backup / comms.bus.log.metadata_path.name).read_bytes() == metadata_bytes
     assert comms.bus.log.path.read_bytes() == bus_bytes
-    with Comms(comms.root).bus.log.certified_read() as source:
+    with Comms.for_runtime(comms.root).bus.log.certified_read() as source:
         assert source.claim_operation_used(admission.operation_id)
         assert all(source.claim(str(path)).seq == original.seq for path in paths[:2])
     assert carry(comms.bus.log.path, apply=True)['already_carried']

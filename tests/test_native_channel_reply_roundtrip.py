@@ -25,6 +25,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
@@ -205,7 +206,6 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
     for key, value in {
         "PI_CODING_AGENT_DIR": str(config),
         "AGENT_COMMS_NATIVE_CONFIG_DIR": str(config),
-        "AGENT_COMMS_AGENT_BIN": str(Path(sys.executable).with_name("pi-comms-native")),
         "PYTHONPATH": os.pathsep.join(
             str(Path(__file__).parents[1] / name) for name in ("src", "tests", "")
         ),
@@ -213,12 +213,14 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             "roundtrip-local/questioner,roundtrip-local/answerer,roundtrip-local/answerer2"
             if broadcast else "roundtrip-local/fixture"
         ),
-        "AGENT_COMMS_AGENT_ARGS": "--offline --no-extensions --no-skills --no-context-files",
     }.items():
         monkeypatch.setenv(key, value)
     for key in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(key, raising=False)
-    comms = Comms(tmp_path / "wire")
+    comms = Comms(tmp_path / "wire", native=NativeThreadDefaults(
+        binary=str(Path(sys.executable).with_name("pi-comms-native")),
+        arguments=("--offline", "--no-extensions", "--no-skills", "--no-context-files"),
+    ))
     projects = {}
     for name in (("questioner", "answerer", "answerer2") if broadcast else ("questioner", "answerer")):
         project = tmp_path / name
@@ -526,7 +528,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
     pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     if not pin:
         pytest.skip("Actual immutable native bundle required")
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     before = comms.registry.snapshot()
     entered, release, completed = threading.Event(), threading.Event(), threading.Event()

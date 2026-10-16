@@ -105,7 +105,7 @@ def _root(
     (dist / "agent-comms-import-fence.mjs").write_bytes(import_fence.read_bytes())
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms.for_runtime(root, private_initial_writes=True)
     people = [
         Thread(
             "sender",
@@ -1349,7 +1349,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
 ) -> None:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms.for_runtime(root, private_initial_writes=True)
     comms.registry.declare(
         Thread(
             "sender",
@@ -1810,7 +1810,7 @@ async def test_channel_triage_and_full_use_configured_owner_model(tmp_path, monk
 
 async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypatch):
     root, root_id, comms, initial, people = _root(tmp_path)
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model=None), comms.registry.status("beta"))
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda package: package)

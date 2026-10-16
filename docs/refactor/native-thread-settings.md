@@ -1,58 +1,89 @@
-# Native launch settings: implementation checkpoint
+# Native binary and argv: explicit typed settings
 
-Owner: core-goal-retry. GoalDetails (#958/#689) remains paused.
+Implementation owner: core-goal-retry. GoalDetails (#958/#689) stays paused.
+Draft #978 is not installed or accepted.
 
-## Source findings
+## Source and ownership
 
-At base `50f2b0e0`, production, tools and tests contain 26 binary-variable and
-22 argv-variable references. The NRA source pass covered 1,072 modules across
-Core production/tests/tools, paired Toad and the installed metaclass-registry
-root, with no parse omissions. The census and contexts are retained under
+Starting main `50f2b0e0` contained 26 binary-variable and 22 argv-variable
+references across src/tools/tests. Both names now have zero references, as does
+`NativeThreadDefaults()`; there are no newly added Optional or bare-settings
+lines against that starting main. Checks and NRA evidence are retained under
 `/home/ts/.cache/agent-scratch/core-goal-retry/native-thread-settings/`.
-Syntax coverage does not resolve arbitrary dynamic callers or embedded programs.
 
-`NativeArguments.configured_binary()` preferred a truthy parameter, then an
-ambient environment value, then a string default. `configured()` independently
-read and shell-decoded the ambient argv value. OwnerLifecycle wrote these facts
-into child environments; RetainedOwnerLaunch read them independently at restart.
-Worker.run instead selected the launcher beside its Python executable.
+The NRA pass covered 1,072 modules across Core production/tests/tools, paired
+Toad and the actual metaclass-registry dependency, with no parse omissions.
+Syntax does not resolve arbitrary dynamic aliases or embedded foreign programs.
+The string-based launcher mock was read and migrated explicitly.
 
-`NativeThreadDefaults` already declares native defaults. It now owns binary and
-argv together. The installation build record declares version/package identity,
-not per-launch argv. Private launch selection still resolves the reviewed native
-entrypoint before constructing the immutable settings value.
+The old NativeArguments getters independently selected environment strings and
+silently replaced a false binary with another source/default. OwnerLifecycle
+wrote those strings; retained restart capture shell-decoded them independently.
+Worker.run instead selected the launcher beside its interpreter.
+
+NativeThreadDefaults now owns the required binary and immutable argv tuple.
+NativeArguments.configured/configured_binary require this value. They have no
+environment parameter, environment lookup, override key or default parameter.
+The physical runtime binary is derived in exactly one production method:
+`NativeThreadDefaults.runtime_binary`; both former launcher methods are deleted.
+The installation build record identifies package versions, not per-launch argv.
+
+Settings parameters are required. Application entrypoints load the value from
+the running installation or decode the explicit CLI/worker value once and pass
+it down. Existing explicit SDK scalar overrides are decoded at that boundary,
+not inside the NativeArguments getters. Empty binaries are rejected, including
+restart overrides before any original is fenced or stopped.
+
+Comms requires the settings at composition. Its named `for_runtime` factory
+binds ordinary entrypoints to their actual installation; `bound` owns the route
+binding formerly duplicated at the adapter boundary. A byte-preserving edit
+migrated 307 statically imported constructor calls in 135 files. There were no
+shadowed callees or forwarded keyword dictionaries in that set. Existing wire
+callers retain the existing wire entrypoint, which loads from the typed runtime
+owner and delegates route binding. No settings object is a parameter default.
 
 ## Handoff and lifetime
 
-NativeArguments requires the typed owner; it no longer reads an environment,
-accepts an environment mapping, or chooses a fallback. Existing explicit API
-parameters are bound once through NativeThreadDefaults.for_launch.
+The existing ParentedProcess forwards descriptors through its existing
+Platform.launch mechanism. NativeThreadDefaults lends a sealed anonymous memory
+descriptor encoded by FieldCodec. Only the descriptor number is in the managed
+worker command; arbitrary argument values must not become newly public argv.
+Parent closes its handle after launch. The owner keeps its inherited handle,
+marked close-on-exec after decoding, for its lifetime. There is no persistent
+configuration file, second store, global configuration cache or env override.
 
-The existing ParentedProcess launcher gains descriptor forwarding, using its
-existing Platform.launch mechanism. NativeThreadDefaults lends a sealed anonymous
-memory descriptor, encoded by FieldCodec. Only its descriptor number appears in
-the worker command. Arbitrary native argument values must not become newly
-visible in the worker's public command line. Parent closes its handle after
-launch; the owner keeps its inherited handle for its lifetime. No persistent
-configuration file, second store or environment override is introduced.
+The public CLI accepts an explicitly supplied settings value through the same
+FieldCodec; this public argument form is not for credentials. When omitted, the
+entrypoint binds the running installation, not a hidden settings parameter.
 
-RetainedOwnerLaunch reads that original process's descriptor and retains the
-typed value along with its existing original-process/environment observation.
-The existing identity checks still bracket capture. Queued restart target
-selection takes the typed value, not a mapping of ambient strings.
+RetainedOwnerLaunch captures the original process's sealed descriptor under its
+existing exact-process checks. Consumers take `launch.native`; its old forwarding
+binary/arguments properties are removed. Queued restart target selection also
+takes the typed value, not an environment mapping. Both worker entrypoints now
+share parsing, accepting their own exact pre-registered process identity while
+refusing another live owner.
 
-The anonymous sealed handoff currently requires Linux memfd support. This is an
-explicit implementation constraint, not claimed portable native-worker support.
-Old workers without a typed descriptor refuse capture. There is no legacy env
-reader. A live rollout therefore needs reviewed old-source capture before stop,
-then explicit typed launch into the new runtime; do not switch a live fleet and
-assume old restart capture remains supported. Original sessions and uncertain
-inputs must remain untouched.
+The descriptor path requires Linux memfd support. Old env-only workers refuse
+capture; there is no legacy reader or guessed value. The existing explicit
+old-source projection/stopped carry therefore needs review before default fleet
+installation. Change-report owns that independent producer-boundary adjustment
+or a precise required retirement; core-goal-retry retains this implementation
+and fresh installed-worker verification. Original histories and uncertain inputs
+remain untouched.
 
-## Unfinished / not acceptance
+## Confirmation status
 
-This is an implementation checkpoint, not a working delivered build. Remaining
-consumer migration includes ACP/installed journeys, fixtures, removal of obsolete
-forwarding properties and focused checks. The original 48-reference census has
-not yet reached zero. No tests, native start, shared installation or UI acceptance
-have been run for this change.
+The real source CLI decoded an explicit typed binary/argv selection and returned
+the normal tool catalog on a new isolated root. It did not execute that binary,
+attach to the live bus, submit input or contact a provider.
+
+The three existing Core/Toad fixture command strings use one ordinary imported
+`native_run_command` helper. No automated Toad tests or synthetic applications
+have been run. The CLI parser snapshot also had existing baseline drift: the
+installed baseline already added `new` and changed fork/target command help.
+The snapshot now reflects those accepted declarations plus the new global flags;
+none of the candidate subcommand help differs from the installed baseline.
+
+Focused checks, receiving, private wheel installation, fresh native worker start
+and current-main integration remain unfinished. No merge, default installation,
+provider-answer or physical UI acceptance is claimed.

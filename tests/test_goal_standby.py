@@ -31,7 +31,7 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
 ):
     from agent_comms.native_settings import NativeThreadDefaults
 
-    configured_model = NativeThreadDefaults().model
+    configured_model = NativeThreadDefaults.model
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = canonical_goal_wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi")

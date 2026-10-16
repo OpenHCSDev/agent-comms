@@ -76,7 +76,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         resource.write_bytes(b"before\n")
         package = base / "fake-package"
         package.mkdir(mode=0o700)
-        comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
+        comms = Comms.for_runtime(root, private_initial_writes=True, private_claim_writes=True)
         for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
             comms.registry.declare(
                 Thread(
@@ -215,7 +215,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             assert isinstance(failure, NativeInputDrainDiagnostic)
             assert failure.error_type == "NativePiUnavailable"
             assert len(calls) == 1 and resource.read_bytes() == b"before\n"
-            assert not list(Comms(root).bus.log.claim_projection())
+            assert not list(Comms.for_runtime(root).bus.log.claim_projection())
             await agent.shutdown()
             return
         if scenario in {"reconnect", "lost_process_state"}:
@@ -239,7 +239,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         assert await agent._drain_private_nk("beta", root_id) == 1
         await reply_turn_finished(agent, "beta")
         assert len(calls) == 1 and resource.read_bytes() == b"after selected\n"
-        claim = Comms(root).bus.log.claim_projection()[str(resource)]
+        claim = Comms.for_runtime(root).bus.log.claim_projection()[str(resource)]
         assert claim.admission is not None and claim.admission.operation_id == receipt.operation_id
         rows = list((root / "selected-write-plans").glob("*.json"))
         assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
@@ -261,7 +261,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         resource.write_bytes(b"before\n")
         package = base / "fake-package"
         package.mkdir(mode=0o700)
-        comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
+        comms = Comms.for_runtime(root, private_initial_writes=True, private_claim_writes=True)
         sender_pid = os.getpid()
         comms.registry.declare(
             Thread(
@@ -377,7 +377,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             result = event("terminal")
             assert result["pid"] == process.pid and result["drained"] == 1
             assert result["fake_inputs"] == 1 and resource.read_bytes() == b"after second pid\n"
-            owner = Comms(root).bus.log.claim_projection()[str(resource)]
+            owner = Comms.for_runtime(root).bus.log.claim_projection()[str(resource)]
             assert owner.owner == "beta" and owner.admission is not None
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 assert (

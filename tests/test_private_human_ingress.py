@@ -34,7 +34,7 @@ pytestmark = pytest.mark.skipif(
 def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
         comms.registry.register(Thread(name, frozenset({"team"}), str(root), created_at=created_at))
@@ -179,7 +179,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     assert comms.bus.log.full_history() == []
     assert comms.bus.log._private_marker_unlocked().last_seq == 1
     monkeypatch.setattr(os, "open", original_open)
-    second = Comms(comms.root)
+    second = Comms.for_runtime(comms.root)
     user = second.registry.require(captured["from"])
     same = Message(user.name, "alice", "first input", InfoKind, timestamp=captured["ts"])
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
@@ -228,7 +228,7 @@ def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None
 
 def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Path) -> None:
     comms, _, root_id, _ = _root(tmp_path)
-    roots = [Comms(comms.root), Comms(comms.root)]
+    roots = [Comms.for_runtime(comms.root), Comms.for_runtime(comms.root)]
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [
             pool.submit(wire.messaging.send_user_message, "#team", f"input-{n}", worktree=str(tmp_path))

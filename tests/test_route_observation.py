@@ -23,7 +23,7 @@ def route_fixture(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     root_id = comms.messaging.initialize_private_initial_protocol()
     route = tmp_path / ".local/state/agent-comms/active-route.json"
     route.parent.mkdir(parents=True, mode=0o700)
@@ -57,7 +57,7 @@ def test_observation_never_composes_decodes_or_waits_for_bus_lock(tmp_path, monk
 def test_observation_revalidates_rotation_id_permissions_and_shape(tmp_path, monkeypatch):
     route, root, root_id = route_fixture(tmp_path, monkeypatch)
     second = tmp_path / "second"
-    second_id = Comms(second).messaging.initialize_private_initial_protocol()
+    second_id = Comms.for_runtime(second).messaging.initialize_private_initial_protocol()
     assert resolve_comms_route().observe_root() == root
     install_route(route, second, second_id, tmp_path)
     assert resolve_comms_route().observe_root() == second
@@ -104,7 +104,7 @@ def test_route_record_retains_the_external_format_and_private_marker(tmp_path):
     tmp_path.chmod(0o700)
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
-    root_id = Comms(root).messaging.initialize_private_initial_protocol()
+    root_id = Comms.for_runtime(root).messaging.initialize_private_initial_protocol()
     selected = ActiveRoute(root, root_id, tmp_path)
     encoded = FieldCodec.encode(selected)
     assert encoded == {

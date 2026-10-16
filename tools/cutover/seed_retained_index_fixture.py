@@ -13,7 +13,7 @@ from agent_comms.threads import Thread
 
 def main():
     root = Path(sys.argv[1])
-    service = Comms(root)
+    service = Comms.for_runtime(root)
     for name in ('original_sender', 'alpha', 'beta'):
         service.registry.declare(Thread(
             name, frozenset({'team'}) if name != 'original_sender' else frozenset(),

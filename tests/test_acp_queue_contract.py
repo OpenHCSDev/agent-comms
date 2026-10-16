@@ -35,7 +35,7 @@ from stored_inputs import stored_inputs
 
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     thread = Thread(
         "beta", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )

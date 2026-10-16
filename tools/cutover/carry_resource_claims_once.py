@@ -181,7 +181,7 @@ def finish_install(wire_descriptor: int, route_descriptor: int) -> None:
     publication = RuntimePublication.installed()
     if read_active_route() != route or publication.current.resolve() != Path(packet['previous_runtime']):
         raise RelationViolationError('Original route/runtime changed before migration')
-    service = Comms(route, private_initial_writes=False, private_claim_writes=False)
+    service = Comms.for_runtime(route, private_initial_writes=False, private_claim_writes=False)
     stopped = StoppedOwnerBatch.accept(service.owners, wire_descriptor, handoff)
     service.owners.maintenance.require_draining_unlocked(hold)
     snapshot = service.registry.snapshot()
