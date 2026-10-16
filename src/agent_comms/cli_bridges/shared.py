@@ -85,6 +85,19 @@ class DraftAccumulator:
         raise ValueError('Received a text delta for a non-text item')
 
 
+class NoPrefixDraft(DraftAccumulator):
+    """No observed prefix; retain no per-item state so the instance can be shared."""
+
+    def __init__(self) -> None:
+        super().__init__(UnrecordedEventTime())
+
+    def append(self, text: str, section: int) -> None:
+        """Drop the suffix: without an observed prefix it cannot form a whole item."""
+
+
+NO_PREFIX = NoPrefixDraft()
+
+
 @dataclass
 class TextDraft(DraftAccumulator):
     event_type: type[TextTranscript]
@@ -137,29 +150,26 @@ class ThreadOutput:
         for update in TranscriptUpdate.coalesced(assembled):
             update.publish(self)
 
+    def draft(self, key: tuple[str, str]) -> DraftAccumulator:
+        return self.drafts.get(key, NO_PREFIX)
+
     def start_item(self, update: StartedItem) -> tuple[TranscriptUpdate, ...]:
         key = update.turn_id, update.item_id
-        previous = self.drafts.get(key)
-        current = update.accumulator if previous is None else previous.restarted(update.accumulator)
+        current = self.draft(key).restarted(update.accumulator)
         self.drafts[key] = current
         return current.started(update)
 
     def active_item(self, update: ActiveItem) -> tuple[TranscriptUpdate, ...]:
-        current = self.drafts.get((update.turn_id, update.item_id))
-        return (update,) if current is None else current.activity(update)
+        return self.draft((update.turn_id, update.item_id)).activity(update)
 
     def append_item(self, update: AppendDraftItem) -> tuple[TranscriptUpdate, ...]:
-        current = self.drafts.get((update.turn_id, update.item_id))
-        if current is None:
-            # No observed prefix: a suffix cannot reconstruct the whole item.
-            return ()
+        current = self.draft((update.turn_id, update.item_id))
         current.append(update.text, update.section)
         return current.snapshot(update.turn_id, update.item_id)
 
     def finish_item(self, update: CompletedItem) -> FinishedItem:
         key = update.turn_id, update.item_id
-        current = self.drafts.get(key)
-        started_at = current.started_at if current is not None else UnrecordedEventTime()
+        started_at = self.draft(key).started_at
         self.drafts[key] = ClosedDraft(started_at)
         events = tuple(started_at.stamp(event) for event in update.events)
         return FinishedItem(update.turn_id, update.item_id, events)
