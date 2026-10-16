@@ -134,11 +134,15 @@ class ToolState(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     header = StatusHeader
-    input: dict[str, JsonValue]
     finished: ClassVar[bool] = False
 
     @abstractmethod
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
+
+
+class InvokedTool(ToolState, ABC):
+    """Arguments have arrived; running and ended states share their decoding."""
+    input: dict[str, JsonValue]
 
     def call(self, part: ToolPart) -> ToolCall:
         return ToolArguments.build_call(UnrecordedEventTime(), part.callID, part.tool,
@@ -149,15 +153,19 @@ class PendingTool(ToolState):
     wire_tag = 'pending'
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
+        call = ToolCall(UnrecordedEventTime(), part.callID, part.tool, {})
+        return (StartedItem(message.id, part.id, ActivityState.WORKING, call.title, call),)
+
+
+class RunningTool(InvokedTool):
+    wire_tag = 'running'
+
+    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
         call = self.call(part)
         return (StartedItem(message.id, part.id, ActivityState.WORKING, call.title, call),)
 
 
-class RunningTool(PendingTool):
-    wire_tag = 'running'
-
-
-class EndedTool(ToolState, ABC):
+class EndedTool(InvokedTool, ABC):
     time: PartTime
     ok: ClassVar[bool]
     finished = True
