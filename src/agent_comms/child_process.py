@@ -1215,10 +1215,11 @@ class ParentedProcess(SynchronousProcess):
         env: dict[str, str] | None = None,
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
+        pass_fds: tuple[int, ...] = (),
     ) -> ParentedProcess:
         if not command:
             raise ValueError("A child command is required")
-        with Platform.current().launch(command, ()) as launch:
+        with Platform.current().launch(command, pass_fds) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
             try:
                 if before_start is not None:

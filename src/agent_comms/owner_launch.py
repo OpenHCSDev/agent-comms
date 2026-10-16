@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import os
-import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .child_process import Platform, ProcessIdentity
 from .errors import RelationViolationError
 from . import launch_runtime
-from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
 from .registry_document import RegistrySnapshot
 from .threads import Thread
 
@@ -22,6 +21,7 @@ class RetainedOwnerLaunch:
     process: ProcessIdentity
     interpreter: str
     environment: dict[str, str] = field(repr=False)
+    native: NativeThreadDefaults
     configuration: launch_runtime.RestartEnvironment = field(init=False)
 
     def __post_init__(self) -> None:
@@ -34,8 +34,9 @@ class RetainedOwnerLaunch:
         process = thread.require_process()
         platform = Platform.current()
         platform.require(process)
-        command = Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0", 1)[0]
-        observed_interpreter = os.fsdecode(command)
+        command = tuple(os.fsdecode(token) for token in
+                        Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0") if token)
+        observed_interpreter = command[0] if command else ""
         if not observed_interpreter or (
             interpreter is not None and observed_interpreter != interpreter
         ):
@@ -43,24 +44,22 @@ class RetainedOwnerLaunch:
         raw = Path(f"/proc/{process.pid}/environ").read_bytes()
         values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
+        native = NativeThreadDefaults.from_process(process.pid, command)
         platform.require(process)
         route = environment.get(launch_runtime.RestartEnvironment.owner_key)
-        if not route or not environment.get(NativeArguments.binary_key):
+        if not route:
             raise RelationViolationError("Owner launch configuration cannot be verified")
         # A worker's launch name may have been renamed since exec. The original
         # snapshot owns that relation; a PID or spelling match cannot grant it.
         if snapshot.owner_identity(route) != snapshot.owner_identity(thread.name):
             raise RelationViolationError("Owner launch names another registry incarnation")
         snapshot.require_owner_process(snapshot.owner_identity(thread.name), process)
-        result = cls(process, observed_interpreter, environment)
-        result.arguments  # Decode/validate malformed shell arguments before any fence.
-        return result
+        return cls(process, observed_interpreter, environment, native)
 
     @property
     def binary(self) -> str:
-        return self.environment[NativeArguments.binary_key]
+        return self.native.binary
 
     @property
-    def arguments(self) -> tuple[str, ...] | None:
-        arguments = self.environment.get(NativeArguments.arguments_key)
-        return tuple(shlex.split(arguments)) if arguments is not None else None
+    def arguments(self) -> tuple[str, ...]:
+        return self.native.arguments

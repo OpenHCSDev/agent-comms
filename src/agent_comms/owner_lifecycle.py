@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shlex
 import shutil
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -21,6 +20,7 @@ from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .launch_runtime import LaunchRuntime, RestartEnvironment, PACKAGE_ENV, ROOT_ID_ENV
 from .private_nk_entrypoint import PrivateNkLaunch
+from .native_settings import NativeThreadDefaults
 from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .restart_refusals import (
@@ -232,7 +232,7 @@ class OwnerLifecycle:
             return owned
 
     def ensure_owner(
-        self, name: str, *, agent_bin: str = NativeArguments.default_binary,
+        self, name: str, *, agent_bin: str = NativeThreadDefaults.binary,
         agent_args: Sequence[str] | None = None,
     ) -> Thread:
         with _store_lock(self._wire_lock_path):
@@ -263,7 +263,7 @@ class OwnerLifecycle:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.pid, False)
             owner = self._launch_owner_unlocked(
-                thread, NativeArguments.configured_binary(agent_bin), agent_args,
+                thread, NativeArguments.configured_binary(NativeThreadDefaults().for_launch(agent_bin, agent_args)), agent_args,
                 launch_runtime=LaunchRuntime.current(),
             )
             return OwnerStartResult(owner.name, owner.pid, True)
@@ -419,7 +419,6 @@ class OwnerLifecycle:
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
-                NativeArguments.binary_key: agent_bin,
             }
         )
         if private_launch is not None:
@@ -433,8 +432,7 @@ class OwnerLifecycle:
             env["PI_TASK"] = thread.task
         if startup_input_key is not None:
             env["AGENT_COMMS_STARTUP_INPUT_KEY"] = startup_input_key
-        if agent_args is not None:
-            env[NativeArguments.arguments_key] = shlex.join(agent_args)
+        native = NativeThreadDefaults().for_launch(agent_bin, agent_args)
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:
@@ -442,13 +440,14 @@ class OwnerLifecycle:
             owned = replace(thread, process_identity=identity, active_turn=None)
             self.registry.register(owned, new_owner=True)
 
-        with owner_process_output(self.root, thread) as output:
+        with owner_process_output(self.root, thread) as output, native.inherited() as (arguments, descriptors):
             ParentedProcess.launch(
-                (str(launch_runtime.interpreter), "-m", "agent_comms.worker"),
+                (str(launch_runtime.interpreter), "-m", "agent_comms.worker", *arguments),
                 env=env,
                 cwd=thread.worktree,
                 output=output,
                 before_start=reserve,
+                pass_fds=descriptors,
             )
         assert owned is not None
         return owned

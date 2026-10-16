@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-import os
-import shlex
 from abc import abstractmethod
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
+
+if TYPE_CHECKING:
+    from .native_settings import NativeThreadDefaults
 
 
 @dataclass(frozen=True)
@@ -155,9 +156,6 @@ class VersionArgument(NamedOption, OneShotArgument):
 @dataclass(frozen=True)
 class NativeArguments:
     entries: tuple[NativeArgument, ...]
-    binary_key: ClassVar[str] = "AGENT_COMMS_AGENT_BIN"
-    arguments_key: ClassVar[str] = "AGENT_COMMS_AGENT_ARGS"
-    default_binary: ClassVar[str] = "pi"
 
     @classmethod
     def owner_launcher(cls, runtime: LaunchRuntime) -> str:
@@ -168,23 +166,12 @@ class NativeArguments:
         return str(launcher)
 
     @classmethod
-    def configured_binary(
-        cls, binary: str | None = None, environment: Mapping[str, str] | None = None,
-    ) -> str:
-        source = os.environ if environment is None else environment
-        return binary or source.get(cls.binary_key, cls.default_binary)
+    def configured_binary(cls, settings: NativeThreadDefaults) -> str:
+        return settings.binary
 
     @classmethod
-    def configured(
-        cls,
-        arguments: Sequence[str] | None = None,
-        environment: Mapping[str, str] | None = None,
-    ) -> NativeArguments:
-        if arguments is None:
-            source = os.environ if environment is None else environment
-            encoded = source.get(cls.arguments_key)
-            arguments = () if encoded is None else shlex.split(encoded)
-        return cls.parse(arguments)
+    def configured(cls, settings: NativeThreadDefaults) -> NativeArguments:
+        return cls.parse(settings.arguments)
 
     @classmethod
     def parse(cls, arguments: Sequence[str]) -> NativeArguments:

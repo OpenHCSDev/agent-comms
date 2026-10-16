@@ -25,6 +25,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import LaunchRuntime, RestartEnvironment
@@ -82,7 +83,7 @@ class RestartTarget:
     agent_bin: str
 
     @classmethod
-    def capture(cls, comms: Comms, source: Mapping[str, str]):
+    def capture(cls, comms: Comms, source: NativeThreadDefaults):
         selected = LaunchRuntime.current()
         runtime = RestartEnvironment.inherit(
             comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), selected)
@@ -90,7 +91,7 @@ class RestartTarget:
         return cls(
             str(selected.interpreter),
             runtime,
-            comms.owners.restart_entrypoint(source[NativeArguments.binary_key], selected),
+            comms.owners.restart_entrypoint(source.binary, selected),
         )
 
     @property
@@ -173,7 +174,7 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         owner.require_restart_owner(status)
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
-        target = RestartTarget.capture(comms, launch.environment)
+        target = RestartTarget.capture(comms, launch.native)
         target.require_available(comms)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with _store_lock(directory / "queue"):
