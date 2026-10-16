@@ -13,7 +13,8 @@ import json
 import os
 import sys
 import uuid
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar
@@ -31,6 +32,8 @@ from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .restart_refusals import RestartRefusal
+from .private_path import PrivateDirectoryRole
+from .thread_identity import RecordedThreadIncarnation
 from .store_files import _store_lock
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
 
@@ -44,13 +47,36 @@ class RestartState(DeclaredFamily, affix="Restart"):
     attempting: ClassVar[bool] = False
     active: ClassVar[bool] = False
 
+    def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
+                target: RestartTarget) -> QueuedRestart:
+        # A terminal write interrupted before its move is still settled.
+        return previous
+
 
 class PendingRestart(RestartState):
     pending = active = True
 
+    def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
+                target: RestartTarget) -> QueuedRestart:
+        if previous.selection == selection and previous.target == target:
+            return previous
+        return previous.transition(StaleRestart(
+            reason=f"Superseded pending target {previous.target.interpreter} by {target.interpreter}"
+        ))
+
+
+class RestartAlreadyAttemptingError(RelationViolationError):
+    """An attempted restart cannot be replaced or replayed by enqueue."""
+
 
 class AttemptingRestart(RestartState):
     attempting = active = True
+
+    def enqueue(self, previous: QueuedRestart, selection: OwnerRestartSelection,
+                target: RestartTarget) -> QueuedRestart:
+        raise RestartAlreadyAttemptingError(
+            f"Restart {previous.id} for {previous.name} is already attempting"
+        )
 
 
 class CancelledRestart(RestartState):
@@ -129,12 +155,97 @@ class QueuedRestart:
         return replace(self, state=state)
 
 
-def _directory(comms: Comms) -> Path:
-    path = comms.root / DIRECTORY
-    path.mkdir(mode=0o700, exist_ok=True)
-    if path.is_symlink() or path.stat().st_mode & 0o077:
-        raise ValueError("Restart queue directory must be private and not a symlink")
-    return path
+class RestartQueueLayoutError(RelationViolationError):
+    """The one-use queue layout migration must precede new queue writers."""
+
+
+@dataclass(frozen=True)
+class RestartQueue:
+    """One active record per recorded owner; settled records never enter that set."""
+
+    directory: Path
+
+    def __post_init__(self) -> None:
+        for path in (self.directory, self.active_directory, self.directory / 'settled'):
+            path.mkdir(mode=0o700, exist_ok=True)
+            PrivateDirectoryRole.require(path.lstat())
+
+    @property
+    def active_directory(self) -> Path:
+        return self.directory / 'active'
+
+    @property
+    def lock_path(self) -> Path:
+        return self.directory / 'queue'
+
+    @contextmanager
+    def locked(self):
+        with _store_lock(self.lock_path):
+            if next(self.directory.glob('*.json'), None) is not None:
+                raise RestartQueueLayoutError(
+                    'Move the old restart queue with tools/cutover/move_restart_queue.py first'
+                )
+            yield self
+
+    def active_path(self, owner: RecordedThreadIncarnation) -> Path:
+        return self.active_directory / f'{owner.lookup}.json'
+
+    def settled_path(self, record: QueuedRestart) -> Path:
+        owner = record.selection.identity.incarnation.require_recorded()
+        directory = self.directory / 'settled' / owner.lookup
+        directory.mkdir(mode=0o700, exist_ok=True)
+        PrivateDirectoryRole.require(directory.lstat())
+        return directory / f'{uuid.UUID(record.id).hex}.json'
+
+    def read(self, path: Path) -> QueuedRestart:
+        if path.is_symlink():
+            raise ValueError('Restart queue record must not be a symlink')
+        return FieldCodec.decode(QueuedRestart, json.loads(path.read_text(encoding='utf-8')))
+
+    def path_for(self, record: QueuedRestart) -> Path:
+        return (self.active_path(record.selection.identity.incarnation.require_recorded())
+                if record.state.active else self.settled_path(record))
+
+    def move(self, path: Path, record: QueuedRestart) -> None:
+        destination = self.path_for(record)
+        if destination.exists() or destination.is_symlink():
+            raise FileExistsError(destination)
+        os.rename(path, destination)
+        for parent in (path.parent, destination.parent):
+            descriptor = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(descriptor)
+            finally:
+                os.close(descriptor)
+
+    def save(self, record: QueuedRestart) -> None:
+        path = self.active_path(record.selection.identity.incarnation.require_recorded())
+        _save(path, record)
+        if not record.state.active:
+            self.move(path, record)
+
+    def _active_record(self, path: Path) -> Iterator[QueuedRestart]:
+        record = self.read(path)
+        if path != self.active_path(record.selection.identity.incarnation.require_recorded()):
+            raise ValueError('Restart queue record has another owner key')
+        if record.state.active:
+            yield record
+        else:
+            self.move(path, record)
+
+    def active_for(self, owner: RecordedThreadIncarnation) -> Iterator[QueuedRestart]:
+        path = self.active_path(owner)
+        if path.exists() or path.is_symlink():
+            yield from self._active_record(path)
+
+    def active_records(self) -> Iterator[QueuedRestart]:
+        for path in sorted(self.active_directory.glob('*.json')):
+            yield from self._active_record(path)
+
+    def history(self, owner: RecordedThreadIncarnation) -> Iterator[QueuedRestart]:
+        yield from self.active_for(owner)
+        for path in sorted((self.directory / 'settled' / owner.lookup).glob('*.json')):
+            yield self.read(path)
 
 
 def _save(path: Path, record: QueuedRestart) -> None:
@@ -155,17 +266,10 @@ def _save(path: Path, record: QueuedRestart) -> None:
         temporary.unlink(missing_ok=True)
 
 
-def _records(comms: Comms):
-    for path in sorted(_directory(comms).glob("*.json")):
-        if path.is_symlink():
-            raise ValueError("Restart queue record must not be a symlink")
-        yield path, FieldCodec.decode(QueuedRestart, json.loads(path.read_text(encoding="utf-8")))
-
-
 def enqueue(comms: Comms, name: str) -> QueuedRestart:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
-    directory = _directory(comms)
+    queue = RestartQueue(comms.root / DIRECTORY)
     with _store_lock(comms._wire_lock_path):
         snapshot = comms.registry.snapshot()
         owner = comms.registry.require(name)
@@ -176,18 +280,17 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         target = RestartTarget.capture(comms, launch.environment)
         target.require_available(comms)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
-        with _store_lock(directory / "queue"):
-            for _, previous in _records(comms):
-                if previous.name == owner.name and previous.state.active:
-                    if previous.selection != selection or previous.target != target:
-                        raise RelationViolationError("Previous owner restart requires review")
-                    result = previous
+        with queue.locked():
+            for previous in queue.active_for(owner.incarnation.require_recorded()):
+                result = previous.state.enqueue(previous, selection, target)
+                if result.state.active:
                     break
+                queue.save(result)
             else:
                 result = QueuedRestart(
                     uuid.uuid4().hex, selection, launch.interpreter, target, PendingRestart()
                 )
-                _save(directory / f"{result.id}.json", result)
+                queue.save(result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
     _start_watcher(comms.root, target)
     return result
@@ -202,34 +305,38 @@ def _start_watcher(root: Path, target: RestartTarget) -> ParentedProcess:
 
 
 def status(comms: Comms, name: str) -> list[QueuedRestart]:
-    canonical = comms.registry.require(name).name
-    with _store_lock(_directory(comms) / "queue"):
-        return [record for _, record in _records(comms) if record.name == canonical]
+    owner = comms.registry.require(name).incarnation.require_recorded()
+    queue = RestartQueue(comms.root / DIRECTORY)
+    with queue.locked():
+        return list(queue.history(owner))
 
 
 def cancel(comms: Comms, name: str) -> list[QueuedRestart]:
     """Cancel only requests not yet attempted; never claim a signal was undone."""
-    canonical = comms.registry.require(name).name
-    directory = _directory(comms)
+    owner = comms.registry.require(name).incarnation.require_recorded()
+    queue = RestartQueue(comms.root / DIRECTORY)
     changed = []
-    with _store_lock(directory / "queue"):
-        for path, record in _records(comms):
-            if record.name == canonical and record.state.pending:
+    with queue.locked():
+        for record in queue.active_for(owner):
+            if record.state.pending:
                 cancelled = record.transition(CancelledRestart())
-                _save(path, cancelled)
+                queue.save(cancelled)
                 changed.append(cancelled)
     return changed
 
 
 def step(comms: Comms) -> None:
-    directory = _directory(comms)
-    for path, initial in _records(comms):
-        if not initial.state.pending:
+    queue = RestartQueue(comms.root / DIRECTORY)
+    with queue.locked():
+        initial_records = tuple(queue.active_records())
+    for initial in initial_records:
+        if not initial.state.pending or initial.target.launch_runtime != LaunchRuntime.running():
             continue
-        with _store_lock(directory / "queue"):
-            record = FieldCodec.decode(QueuedRestart, json.loads(path.read_text(encoding="utf-8")))
-            if record != initial or not record.state.pending:
+        with queue.locked():
+            current = tuple(queue.active_for(initial.selection.identity.incarnation.require_recorded()))
+            if current != (initial,):
                 continue
+            record = initial
             snapshot = comms.registry.snapshot()
             try:
                 owner = record.selection.require_current(snapshot)
@@ -250,7 +357,7 @@ def step(comms: Comms) -> None:
                     else:
                         # Persist before any side effect; crashes cannot authorize replay.
                         record = record.transition(AttemptingRestart())
-            _save(path, record)
+            queue.save(record)
         if not record.state.attempting:
             continue
         try:
@@ -279,15 +386,15 @@ def step(comms: Comms) -> None:
                     current=ProcessIdentity.capture(receipt.pid),
                 )
             )
-        with _store_lock(directory / "queue"):
-            _save(path, record)
+        with queue.locked():
+            queue.save(record)
 
 
 async def run(comms: Comms) -> None:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
-    directory = _directory(comms)
-    lock = os.open(directory / "watcher.lock", os.O_CREAT | os.O_RDWR, 0o600)
+    queue = RestartQueue(comms.root / DIRECTORY)
+    lock = os.open(queue.directory / "watcher.lock", os.O_CREAT | os.O_RDWR, 0o600)
     try:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -299,16 +406,21 @@ async def run(comms: Comms) -> None:
             WatchSource.file(comms.registry.store.guard_path),
             WatchSource.file(comms.root / "coordination.sqlite3"),
             WatchSource.file(comms.root / "coordination.sqlite3-wal"),
-            DirectoryWatchSource(directory),
+            DirectoryWatchSource(queue.active_directory),
         ):
             await Coordination.run_worker(lambda: step(comms))
             # Check emptiness and release under enqueue's lock, so a new
             # request cannot slip between the empty check and release.
             def release_if_empty():
-                with _store_lock(directory / "queue"):
-                    if any(record.state.pending for _, record in _records(comms)):
+                with queue.locked():
+                    pending = tuple(record for record in queue.active_records() if record.state.pending)
+                    if any(record.target.launch_runtime == LaunchRuntime.running() for record in pending):
                         return False
                     fcntl.flock(lock, fcntl.LOCK_UN)
+                    # Enqueue may have raced this older runtime's watcher. Its
+                    # lock loser cannot service a newer target; hand it over.
+                    if pending:
+                        _start_watcher(comms.root, pending[0].target)
                     return True
 
             if await Coordination.run_worker(release_if_empty):
@@ -324,16 +436,13 @@ def main() -> None:
     try:
         asyncio.run(run(comms))
     except Exception as exc:
-        directory = _directory(comms)
-        with _store_lock(directory / "queue"):
-            for path, record in _records(comms):
-                if record.state.pending:
-                    _save(
-                        path,
-                        record.transition(
-                            BlockedRestart(reason=f"Watcher failed: {type(exc).__name__}: {exc}")
-                        ),
-                    )
+        queue = RestartQueue(comms.root / DIRECTORY)
+        with queue.locked():
+            for record in queue.active_records():
+                if record.state.pending and record.target.launch_runtime == LaunchRuntime.running():
+                    queue.save(record.transition(
+                        BlockedRestart(reason=f"Watcher failed: {type(exc).__name__}: {exc}")
+                    ))
         raise
 
 
