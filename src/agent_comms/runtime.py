@@ -25,6 +25,7 @@ from acp.exceptions import RequestError
 from acp.schema import RequestPermissionResponse
 
 from .jsonl_stream import JsonlStreamReader
+from .owner_protocol import OwnerAnnouncement
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
@@ -445,6 +446,12 @@ class RuntimeProxy(RuntimeConnection):
                 ).encode()
             )
             await writer.drain()
+            announcement = await reader.readline()
+            if not announcement:
+                raise RuntimeError("Thread owner disconnected during attachment")
+            data = json.loads(announcement)
+            _raise_owner_error(data)
+            OwnerAnnouncement().require_same_core(self.session_id, data)
             while line := await reader.readline():
                 data = json.loads(line)
                 _raise_owner_error(data)

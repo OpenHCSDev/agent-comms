@@ -20,7 +20,9 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, FieldRepresentation, WireValue
 
 if TYPE_CHECKING:
+    from .child_process import ProcessIdentity
     from .registry_provenance import RegistryProvenance
+    from .threads import Thread
 
 T = TypeVar("T")
 
@@ -344,6 +346,13 @@ class OwnerIdentity:
 
     incarnation: ThreadIncarnation
     generation: int
+
+    def require_current(self, thread: Thread, generation: int, process: ProcessIdentity) -> None:
+        if self.incarnation.renamed(thread.name) != thread.incarnation:
+            raise RelationViolationError("Thread incarnation changed during owner attachment")
+        if self.generation != generation:
+            raise RelationViolationError("Owner lease changed during attachment")
+        thread.require_local_process(process)
 
 
 @dataclass(frozen=True, slots=True)

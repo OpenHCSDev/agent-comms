@@ -105,7 +105,7 @@ async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_p
     proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
     before = comms.goals.unresolved_inputs(session)
     try:
-        await owner.inputs.replay_unknown_inputs(session, client=Client())
+        await owner.inputs.emit_input_delivery_changed(session, client=Client())
         assert updates == [], "An idle owner has no currently awaiting inputs to replay"
         snapshot = await proxy.request("input_dispositions")
         assert snapshot["historicalCount"] == 5
