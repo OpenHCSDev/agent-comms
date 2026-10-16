@@ -14,6 +14,60 @@ if TYPE_CHECKING:
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
 
 
+class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus"):
+    """Display activity and warnings, not registry presence or turn authority."""
+
+    @property
+    def busy(self) -> bool:
+        return False
+
+    @property
+    def attention(self) -> bool:
+        return False
+
+    def with_attention(self) -> ThreadPresentationStatus:
+        return AttentionThreadPresentationStatus(self)
+
+    def without_work(self) -> ThreadPresentationStatus:
+        return IdleThreadPresentationStatus()
+
+    def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        """Work and warnings keep their own explanation while the CLI is alive."""
+        return ordinary
+
+
+@dataclass(frozen=True, slots=True)
+class IdleThreadPresentationStatus(ThreadPresentationStatus):
+    def live_cli_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        return replace(ordinary, marker="@", summary="CLI participant")
+
+
+@dataclass(frozen=True, slots=True)
+class WorkingThreadPresentationStatus(ThreadPresentationStatus):
+    @property
+    def busy(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class AttentionThreadPresentationStatus(ThreadPresentationStatus):
+    activity: ThreadPresentationStatus
+
+    @property
+    def busy(self) -> bool:
+        return self.activity.busy
+
+    @property
+    def attention(self) -> bool:
+        return True
+
+    def with_attention(self) -> ThreadPresentationStatus:
+        return self
+
+    def without_work(self) -> ThreadPresentationStatus:
+        return replace(self, activity=self.activity.without_work())
+
+
 class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     """A projection of the registry lease, never an alternative owner store."""
 
@@ -30,7 +84,8 @@ class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
 
     def native_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         """Display this acquired binding, without observing another process cut."""
-        return replace(ordinary, marker="○", summary="Owner exited", busy=False)
+        return replace(ordinary, marker="○", summary="Owner exited",
+                       status=ordinary.status.without_work())
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,10 +125,9 @@ class ThreadPresentation:
     title: str
     marker: str
     summary: str
-    busy: bool = False
+    status: ThreadPresentationStatus = IdleThreadPresentationStatus()
     notifications: tuple[MessageNotification, ...] = ()
     sent_notifications: tuple[MessageNotification, ...] = ()
-    attention: bool = False
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
     read_identity: TranscriptReadIdentity | None = None
 

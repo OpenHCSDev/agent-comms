@@ -82,8 +82,8 @@ class NativeSendStage(ABC):
     async def continue_after_failure(self, settlement, failure: TurnFailure) -> None:
         """Triage and terminal full failures have no subsequent attempt."""
 
-    def fail_unknown(self, bus, owner, witness) -> None:
-        owner.require_registry(bus._registry)
+    async def fail_unknown(self, bus, owner, witness) -> None:
+        await Coordination.run_worker(lambda: owner.require_registry(bus._registry))
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
         input_id = secrets.token_hex(16)
@@ -340,18 +340,21 @@ class FullNativeSend(NativeSendStage):
             row = self.pending_input(store, input_id, owner, token_digest)
             store.attempts.require_fence(self.fence)
             row.commit_context(db, context)
-        settlement = self.progress.fail_terminal(failure)
-        return settlement
+        with self.progress.using_attempts(store.attempts):
+            return self.progress.fail_terminal(failure)
 
     async def continue_after_failure(self, settlement, failure: TurnFailure) -> None:
         if settlement.can_retry:
             await asyncio.sleep(failure.retry_delay(self.execution.attempt_ordinal))
             raise RetryScheduled
 
-    def fail_unknown(self, bus, owner, witness) -> None:
-        with self.progress.attempts.session.boundary(bus) as boundary:
-            witness.require_live(boundary.registry, self.fence)
-            self.progress.fail_unknown(boundary)
+    async def fail_unknown(self, bus, owner, witness) -> None:
+        def settle(store):
+            with self.progress.using_attempts(store.attempts), store.session.boundary(bus) as boundary:
+                witness.require_live(boundary.registry, self.fence)
+                self.progress.fail_unknown(boundary)
+
+        await Coordination.run_async(self.progress.attempts.session.path, settle)
 
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         snapshot, _ = store.attempts.require_fence(self.fence)

@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from functools import partial
 from typing import ClassVar
 
 from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
 from .channel_coding_tools import CodingToolOwner
 from .coordination_errors import IdentityConflict, StaleFence
+from .coordinator import Coordination
 from .coordination_tables.executions import ExecutionOrigin
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.responses import ResponseObligation
@@ -104,9 +106,9 @@ class SelectedAttempt:
     obligations: tuple[ResponseObligation, ...]
 
     @classmethod
-    def engage(cls, participant: SelectedParticipant,
+    async def engage(cls, participant: SelectedParticipant,
                snapshot: RecoverySnapshot) -> SelectedAttempt:
-        participant.prepare_attempt(snapshot)
+        await participant.prepare_attempt(snapshot)
         store = participant.store
         assignment_ids = participant.batch.assignment_ids
         execution_id = participant.batch.execution_id
@@ -134,7 +136,7 @@ class SelectedAttempt:
         selected = started.snapshot.assignments
         if tuple(row.assignment_id for row in selected) != assignment_ids:
             raise IdentityConflict("full wake lost an original batch assignment")
-        participant.transition(
+        await participant.transition(
             PreparingPhase(f"Preparing response to {len(selected)} messages in {participant.batch.target}")
         )
         return cls(
@@ -187,7 +189,7 @@ class SelectedAttempt:
             prompt = await SelectedPrompt(participant).full(
                 self.stage.assignments, self.obligations, action
             )
-            request = SelectedRequest.reserve(
+            request = await SelectedRequest.reserve(
                 participant, session, self.stage, self.token, prompt
             )
         except Exception:
@@ -198,7 +200,7 @@ class SelectedAttempt:
             # previous triage ID is reused for this failed full preparation.
             # A revoked attempt remains with the recovery owner.
             with suppress(StaleFence):
-                self.stage.fail_unknown(
+                await self.stage.fail_unknown(
                     participant.bus, participant.owner, participant.response_owner
                 )
             raise
@@ -208,9 +210,9 @@ class SelectedAttempt:
         participant = self.participant
         request, action = await self.prepare(session, action, write_authority)
         self.stage.progress.input_id = request.admission.input_id
-        with request.native_failures():
+        async with request.native_failures():
             tools = self.tool_owner(session, request.admission.input_id, action)
-            participant.transition(PromptAcceptancePhase())
+            await participant.transition(PromptAcceptancePhase())
             result = await request.admission.execute(
                 execution,
                 provider=participant.provider,
@@ -222,11 +224,16 @@ class SelectedAttempt:
             )
             result.require_publishable()
             replies = (participant.batch.response_message(result.text, participant.owner.thread.name),)
-            participant.transition(PublishingPhase())
-            action.apply(tools)
+            await participant.transition(PublishingPhase())
+            await Coordination.run_async(
+                participant.store.session.path,
+                lambda store: action.apply(replace(tools, store=store)),
+            )
             request.admission.commit(participant.store, result.context)
             self.stage.progress.finish()
-            participant.owner.require_running_turn(participant.comms.registry)
+            await Coordination.run_worker(partial(
+                participant.owner.require_running_turn, participant.comms.registry
+            ))
             published = await participant.response_owner.publish_responses(
                 participant.store.session.path, participant.bus, self.stage.fence, replies
             )
@@ -247,36 +254,36 @@ class SelectedConsideration:
     async def run(self, execution, session):
         participant = self.participant
         if not participant.batch.requires_triage:
-            participant.require_current(participant.store)
+            await participant.require_current()
             created = participant.store.executions.create(
                 participant.batch.execution_id, ExecutionOrigin.WIRE,
                 participant.lookup, participant.owner.thread.name,
                 SelectedAttempt.max_attempts,
                 sources=participant.batch.sources,
             ).value
-            attempt = SelectedAttempt.engage(participant, created)
+            attempt = await SelectedAttempt.engage(participant, created)
             return await attempt.run(execution, session,
                                      execution.action(session), execution.write_authority)
-        participant.transition(
+        await participant.transition(
             PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {participant.batch.target}")
         )
         stage = TriageNativeSend(participant.batch.assignments)
-        request = SelectedRequest.reserve(
+        request = await SelectedRequest.reserve(
             participant,
             session,
             stage,
             prepare_fence_token(),
             SelectedPrompt(participant).triage(),
         )
-        with request.native_failures():
-            participant.transition(PromptAcceptancePhase())
+        async with request.native_failures():
+            await participant.transition(PromptAcceptancePhase())
             result = await request.admission.execute(
                 execution,
                 provider=participant.provider,
                 model=participant.model,
                 observe_event=participant.dispatch,
             )
-            participant.transition(PublishingPhase())
+            await participant.transition(PublishingPhase())
             outcome = SelectedTriageOutcome.acquire(result.text)
             settled = outcome.settle(participant, stage, request.admission, result.context)
             continued = session.continued(result.context)

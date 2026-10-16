@@ -150,12 +150,13 @@ class ExternalThreadExecution(ThreadExecution):
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         # The CLI reports its own activity; between turns it is a participant.
-        if not status.active or ordinary.busy:
+        if not status.active:
             return ordinary
-        # Only a registered CLI process can be known to have exited.
+        # A stale busy report cannot keep a known-dead CLI working.
         if thread.has_process and not thread.process_alive:
-            return replace(ordinary, marker="○", summary="CLI offline")
-        return replace(ordinary, marker="@", summary="CLI participant")
+            return replace(ordinary, marker="○", summary="CLI offline",
+                           status=ordinary.status.without_work())
+        return ordinary.status.live_cli_presentation(ordinary)
 
     @classmethod
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):

@@ -169,7 +169,11 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
 
 
 def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch):
+    from functools import partial
     from agent_comms import invoke_tool
+    from agent_comms.tool_caller import ThreadCaller
+
+    invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
 
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))

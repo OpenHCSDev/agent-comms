@@ -323,9 +323,13 @@ class ToolItem(Item, ABC):
     def succeeded(self) -> bool: ...
 
     @property
+    def tool_detail(self) -> str:
+        return ""
+
+    @property
     def call(self) -> ToolStartTranscript:
         return ToolStartTranscript(tool_call_id=self.id, tool_name=self.tool_name,
-                                   raw_input=self.arguments)
+                                   raw_input=self.arguments, detail=self.tool_detail)
 
     def started(self, turn_id: str, timestamp: float) -> tuple[TranscriptUpdate, ...]:
         return ActiveItem.tool_started(turn_id, self.id, replace(self.call, timestamp=timestamp))
@@ -352,6 +356,10 @@ class CommandItem(ToolItem):
     @property
     def arguments(self) -> JsonValue:
         return {'command': self.command}
+
+    @property
+    def tool_detail(self) -> str:
+        return self.command
 
     @property
     def output(self) -> str:
@@ -641,7 +649,7 @@ class FileChange(WireModel):
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
         return ToolStartTranscript(tool_call_id=call_id, tool_name='edit',
-                                   raw_input={'file_path': self.path}).finished(
+                                   raw_input={'file_path': self.path}, detail=self.path).finished(
             '', ok, diff=self.kind.patch(self.path, self.diff))
 
 

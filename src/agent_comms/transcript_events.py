@@ -184,22 +184,33 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
     tool_call_id: str
     tool_name: str
 
+    @property
+    def title(self) -> str:
+        from .tool_declaration import ToolDeclaration
+
+        return ToolDeclaration.caption(self.tool_name)
+
+    @property
+    def kind(self) -> str:
+        from .tool_declaration import ToolDeclaration
+
+        return ToolDeclaration.for_name(self.tool_name).acp_kind
+
 
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
     raw_input: Any = None
+    detail: str = field(default="", metadata={"wire_omit_default": True})
+
+    @property
+    def title(self) -> str:
+        from .tool_declaration import ToolDeclaration
+
+        return ToolDeclaration.caption(self.tool_name, self.detail)
 
     @property
     def tool_calls(self):
         return (self,)
-
-    @property
-    def title(self) -> str:
-        from .native_tools import NativeTool
-
-        if isinstance(self.raw_input, dict):
-            return NativeTool.start(self.tool_call_id, self.tool_name, self.raw_input).title
-        return self.tool_name
 
     def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None):
         return (self, ToolEndTranscript(

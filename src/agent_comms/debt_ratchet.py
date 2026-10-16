@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
 from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
+from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, projected
@@ -359,21 +360,9 @@ class BooleanChainTerms(PerFileOccurrenceMeasure):
 
 
 class ForeignAbsenceProbe(PerFileOccurrenceMeasure):
-    @staticmethod
-    def foreign(owner: ast.AST) -> int:
-        match owner:
-            case ast.Name(id="self"):
-                return 0
-        return 1
+    """Use the audit owner's explicit absence checks, not arbitrary truthiness."""
 
-    @staticmethod
-    def occurrences(node: ast.AST) -> int:
-        match node:
-            case ast.Compare(left=ast.Attribute(value=owner), ops=[ast.Is() | ast.IsNot()], comparators=[ast.Constant(value=None)]):
-                return ForeignAbsenceProbe.foreign(owner)
-            case ast.UnaryOp(op=ast.Not(), operand=ast.Attribute(value=owner)):
-                return ForeignAbsenceProbe.foreign(owner)
-        return 0
+    occurrences = AuditForeignAbsenceProbe.count
 
 
 class CodecSubclass(PerFileOccurrenceMeasure):

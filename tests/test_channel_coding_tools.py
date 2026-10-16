@@ -77,13 +77,49 @@ def test_coding_names_and_argument_types_come_from_declarations():
         CodingCall.decode("call", "forged", {})
 
 
+@pytest.mark.parametrize("name,arguments", [
+    ("read", {"file_path": "x"}),
+    ("read", {"path": "x", "file_path": "x"}),
+    ("read", {"path": "x", "offset": None}),
+    ("read", {"path": "x", "limit": True}),
+    ("bash", {}),
+    ("bash", {"command": True}),
+    ("bash", {"command": "pwd", "timeout": "1"}),
+    ("edit", {"path": "x", "oldText": "old", "newText": "new"}),
+    ("edit", {"path": "x", "edits": []}),
+    ("edit", {"path": "x", "edits": [{"oldText": False, "newText": "new"}]}),
+    ("write", {"path": "x", "content": 3}),
+])
+def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
+    from agent_comms.native_tool_call import SelectedToolDenied
+
+    with pytest.raises(SelectedToolDenied):
+        CodingCall.decode("bad-argument-shape", name, arguments)
+
+
+@pytest.mark.parametrize("name,arguments", [
+    ("read", {"path": "x", "offset": 2, "limit": 3}),
+    ("bash", {"command": "pwd", "timeout": 2}),
+    ("edit", {"path": "x", "edits": [{"oldText": "old", "newText": "new"}]}),
+    ("write", {"path": "x", "content": "value"}),
+])
+def test_pi_argument_fields_own_roundtrip_and_display(name, arguments):
+    from dataclasses import fields
+    from agent_comms.tool_declaration import ToolDeclaration
+
+    call = CodingCall.decode("typed-argument-shape", name, arguments)
+    assert "arguments" not in {item.name for item in fields(call.tool)}
+    assert call.tool.arguments == arguments
+    assert call.tool.detail in ToolDeclaration.start("typed", name, arguments, detail=call.tool.detail).title
+
+
 @pytest.mark.asyncio
 async def test_multicall_native_transport_matches_events_and_refuses_duplicate(tmp_path):
     class Owner:
         input_id = secrets.token_hex(16)
         calls = []
 
-        def admit(self, round_number, call):
+        async def admit(self, round_number, call):
             self.calls.append(call)
 
     owner = Owner()
@@ -125,6 +161,32 @@ def _request(socket, id, name, args):
 
 
 @pytest.mark.asyncio
+async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_path):
+    import asyncio
+
+    checking, release = asyncio.Event(), asyncio.Event()
+
+    class Owner:
+        input_id = secrets.token_hex(16)
+
+        async def admit(self, round_number, call):
+            checking.set()
+            await release.wait()
+
+    owner = Owner()
+    socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
+    socket.announce((ToolCallContent(id="late", name="read", arguments={"path": "a"}),))
+    socket.tool_started(ToolExecutionStart(tool_call_id="late", tool_name="read", args={"path": "a"}))
+    pending = asyncio.create_task(socket.handle_request(_request(socket, "late", "read", {"path": "a"})))
+    await checking.wait()
+    socket.tool_finished(ToolExecutionEnd(tool_call_id="late", tool_name="read", is_error=True), owner.input_id)
+    release.set()
+    with pytest.raises(ValueError, match="not executing"):
+        await pending
+    socket.assert_complete()
+
+
+@pytest.mark.asyncio
 async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog):
     """The live owner logged two tracebacks when Pi gave up on a slow tool check."""
     import asyncio
@@ -135,7 +197,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog)
     class Owner:
         input_id = secrets.token_hex(16)
 
-        def admit(self, round_number, call):
+        async def admit(self, round_number, call):
             answered.set()
 
     tmp_path.chmod(0o700)
@@ -170,7 +232,7 @@ async def test_tool_call_pi_never_started_is_refused_with_its_reason(tmp_path):
     class Owner:
         input_id = secrets.token_hex(16)
 
-        def admit(self, round_number, call):
+        async def admit(self, round_number, call):
             raise AssertionError("an unstarted call was checked")
 
     tmp_path.chmod(0o700)

@@ -28,7 +28,12 @@ from .store_files import (
 )
 from .thread_identity import OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
-from .thread_presentation import ThreadPresentation
+from .thread_presentation import (
+    IdleThreadPresentationStatus,
+    ThreadPresentation,
+    ThreadPresentationStatus,
+    WorkingThreadPresentationStatus,
+)
 
 if TYPE_CHECKING:
     from .activity_checkpoint import ActivityCheckpoint
@@ -36,16 +41,26 @@ if TYPE_CHECKING:
 
 
 class ActivityState(Enum):
-    IDLE = "idle"
-    THINKING = "thinking"
-    WORKING = "working"
+    """Durable event spellings and their declaration-owned display activity."""
+
+    presentation_status: ThreadPresentationStatus
+
+    def __new__(cls, value: str, presentation_status: ThreadPresentationStatus) -> ActivityState:
+        member = object.__new__(cls)
+        member._value_ = value
+        member.presentation_status = presentation_status
+        return member
+
+    IDLE = ("idle", IdleThreadPresentationStatus())
+    THINKING = ("thinking", WorkingThreadPresentationStatus())
+    WORKING = ("working", WorkingThreadPresentationStatus())
     # Appended once when the thread is permanently deleted. The log stays
     # append-only; the latest-per-thread fold drops the thread on this record.
-    DELETED = "deleted"
+    DELETED = ("deleted", IdleThreadPresentationStatus())
 
     @property
     def busy(self) -> bool:
-        return self in (self.THINKING, self.WORKING)
+        return self.presentation_status.busy
 
     def busy_time(self, activity):
         if not self.busy or activity.timestamp <= 0:
@@ -58,11 +73,11 @@ class ActivityState(Enum):
 
     def presentation(self, title: str, detail: str) -> ThreadPresentation:
         if not self.busy:
-            return ThreadPresentation(title, "✓", "Ready")
+            return ThreadPresentation(title, "✓", "Ready", status=self.presentation_status)
         summary = self.value.title()
         if detail := " ".join(detail.split()):
             summary += f" · {detail}"
-        return ThreadPresentation(title, "⌛", summary, busy=True)
+        return ThreadPresentation(title, "⌛", summary, status=self.presentation_status)
 
 
 @dataclass(frozen=True)
@@ -159,7 +174,7 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
     def source_diagnostic(self) -> DrainDiagnostic | None: ...
 
     @abstractmethod
-    def presentation(self, ordinary: ThreadPresentation, *, busy: bool) -> ThreadPresentation: ...
+    def presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation: ...
 
     def require_available(self) -> None:
         pass
@@ -174,7 +189,7 @@ class ReadyDrainReadiness(DrainReadiness):
     def source_diagnostic(self):
         return None
 
-    def presentation(self, ordinary, *, busy):
+    def presentation(self, ordinary):
         return ordinary
 
 
@@ -187,16 +202,16 @@ class DiagnosticDrainReadiness(DrainReadiness):
     def source_diagnostic(self):
         return self.diagnostic
 
-    def presentation(self, ordinary, *, busy):
-        return ThreadPresentation(ordinary.title, "!", self.diagnostic.summary,
-                                  busy=busy, attention=True)
+    def presentation(self, ordinary):
+        return replace(ordinary, marker="!", summary=self.diagnostic.summary,
+                       status=ordinary.status.with_attention())
 
 
 class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
     """Retain the failed request warning; new messages keep ordinary availability."""
 
-    def presentation(self, ordinary, *, busy):
-        return ordinary if busy or ordinary.busy else super().presentation(ordinary, busy=busy)
+    def presentation(self, ordinary):
+        return ordinary if ordinary.status.busy else super().presentation(ordinary)
 
     def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return replace(activity, readiness=FailedPreparingDrainReadiness(self.diagnostic))
@@ -206,14 +221,13 @@ class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
 class FailedPreparingDrainReadiness(NativeInputDrainReadiness):
     """A retained native failure while the next turn has not reached its request."""
 
-    def presentation(self, ordinary, *, busy):
+    def presentation(self, ordinary):
         when = datetime.fromtimestamp(self.diagnostic.recorded_at).astimezone().strftime("%H:%M")
         return replace(
             ordinary,
             marker="!",
             summary=f"Failed {when}",
-            busy=busy,
-            attention=True,
+            status=ordinary.status.with_attention(),
         )
 
 
@@ -247,7 +261,8 @@ class ActivityData:
         return replace(self, state=state, detail=self.format_detail(detail),
                        interval=self.interval.projected(self.state, state))
 
-    def presentation(self, title: str) -> ThreadPresentation:
+    def ordinary_presentation(self, title: str) -> ThreadPresentation:
+        """Activity alone; the view joins readiness after selecting its source."""
         return self.state.presentation(title, self.detail)
 
     def __post_init__(self) -> None:
@@ -299,8 +314,9 @@ class ObservedActivity(ActivityData):
         return Activity(self.thread, self.state, self.detail, self.timestamp,
                         self.readiness.source_diagnostic(), interval=self.interval)
 
-    def presentation(self, title):
-        return self.readiness.presentation(super().presentation(title), busy=self.state.busy)
+    def presentation(self, title: str) -> ThreadPresentation:
+        """An acquired activity can also be presented independently of a thread view."""
+        return self.readiness.presentation(self.ordinary_presentation(title))
 
 
 @dataclass(frozen=True, slots=True)

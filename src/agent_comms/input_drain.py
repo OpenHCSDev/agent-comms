@@ -22,7 +22,7 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
-from .agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInboxItem
+from .agent_backend import InputContent, InputId, SendNow, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import CoordinationError, IdentityConflict
 from .drain_failures import drain_failures
@@ -37,7 +37,6 @@ from .input_disposition import InputDispositions, InputDocument
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceStatus
 from .input_effects import InputEffects
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
-from .errors import RelationViolationError
 from .private_bus_checkpoint import Addressed
 from .private_path import FileRevision
 from .registry_document import RegistryEntry
@@ -46,7 +45,7 @@ from .routing import ScheduledTurn
 from .runtime import UNBOUND_CONTROLLER, RuntimeServer
 from .schedule_rules import ProjectResumeCheck, WakeScheduleCheck
 from .session_lifecycle import SessionLifecycle
-from .store_files import _async_store_lock, _store_lock
+from .store_files import _store_lock
 from .thread_identity import AdmissionIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
@@ -150,6 +149,17 @@ class PrivateObservation:
     wire: tuple
     entry: RegistryEntry
     work: tuple
+
+    async def drain(self, inputs, session_id: str, root_id: str) -> int:
+        await DeliveredInput.recover_interrupted(inputs, session_id, root_id)
+        return await inputs.effects._drain_private_nk(session_id, root_id)
+
+
+class ExecutionWaitingObservation(PrivateObservation):
+    """A previous execution blocks new input until its stored state changes."""
+
+    async def drain(self, inputs, session_id: str, root_id: str) -> int:
+        return 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -457,7 +467,13 @@ class InputObservation:
                 wire_root_id=root_id, generation=participant.participant_generation,
             ).cursor(store.session._connection)
             original = store.session.path.stat()
-        return PrivateObservation(wire, entry, (
+        observation = PrivateObservation
+        if (
+            participant.pointer.unresolved
+            and not self.owns_execution(session_id, owner.thread)
+        ):
+            observation = ExecutionWaitingObservation
+        return observation(wire, entry, (
             root_id,
             self.effects._private_nk_native_package,
             self.auto_wake,
@@ -517,6 +533,14 @@ class InputObservation:
 
 
 class InputDrain(InputObservation):
+    def owns_execution(self, session_id: str, owner: Thread) -> bool:
+        """An attached turn can take follow-ups; a predecessor cannot."""
+        return (
+            owner.turn_state.busy
+            or session_id in self.backend_inboxes
+            or session_id in self.effects.turns.turn_tasks
+        )
+
     def __init__(
         self,
         comms: Comms,
@@ -532,6 +556,7 @@ class InputDrain(InputObservation):
         self.drain_tasks: dict[str, asyncio.Task[None]] = {}
         self.backend_inboxes: dict[str, asyncio.Queue[TurnInboxItem]] = {}
         self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
+        self.queue_lock = asyncio.Lock()
         self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
         self.queue_revisions: dict[str, int] = {}
         self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}
@@ -556,7 +581,7 @@ class InputDrain(InputObservation):
         Pi's own queue is cleared, then the local deferred-display list is
         reset. Callers may re-send the prompts they want to keep.
         """
-        async with _async_store_lock(self.comms._wire_lock_path):
+        async with self.queue_lock:
             inbox = self.backend_inboxes.get(session_id)
             if inbox is not None:
                 inbox.put_nowait({"type": "clear_queue"})
@@ -676,7 +701,7 @@ class InputDrain(InputObservation):
             await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
             return 0
         self._idle_private_revisions.pop(session_id, None)
-        result = await self.effects._drain_private_nk(session_id, root_id)
+        result = await before.drain(self, session_id, root_id)
         # Never absorb a message/owner/recovery change during a suspended read,
         # or skip queued independent work after a completed native turn.
         if result == 0:
@@ -693,7 +718,7 @@ class InputDrain(InputObservation):
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
         private_root = self.effects._configured_root_id()
-        pushed = await DeliveredInput.recover_before_drain(self, session_id, private_root, self._drain_private_if_changed)
+        pushed = await self._drain_private_if_changed(session_id, private_root)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
         return pushed
 
@@ -755,7 +780,7 @@ class InputDrain(InputObservation):
         return inbox
 
     async def send_now(self, session_id: str) -> None:
-        async with _async_store_lock(self.comms._wire_lock_path):
+        async with self.queue_lock:
             inbox = self.backend_inboxes.get(session_id)
             queued = self.queued_inputs.get(session_id, {})
             if inbox is not None and queued:
