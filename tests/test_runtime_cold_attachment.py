@@ -85,8 +85,8 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     loading = None
     try:
         child = await asyncio.to_thread(
-            comms.threads.fork,
-            ForkSpec("cold-fork", "parent", "One new cold fork diagnostic input"),
+            comms.threads.create,
+            ForkSpec(name="cold-fork", parent="parent", task="One new cold fork diagnostic input"),
             launcher,
         )
         endpoint = socket_path(fixture.root, child.pid)

@@ -196,6 +196,37 @@ class TestStatusCommand:
 
 
 class TestDeclaredTargetActions:
+    def test_new_and_fork_share_fields_and_creation_path(self, tmp_path):
+        from dataclasses import fields
+        from types import SimpleNamespace
+        from agent_comms.cli_commands import CliCommand, NewThreadCliCommand, ForkCliCommand
+        from agent_comms.thread_management import NewThreadSpec, ForkSpec
+        from agent_comms.threads import Thread
+        from agent_comms.comms import wire
+
+        shared = {item.name: item for item in fields(NewThreadCliCommand)}
+        inherited = {item.name: item for item in fields(ForkCliCommand)}
+        assert inherited.keys() == shared.keys() | {'parent'}
+        assert all(inherited[name] is item for name, item in shared.items())
+        assert ForkCliCommand.apply is NewThreadCliCommand.apply
+        comms = wire(tmp_path)
+        actions = CliCommand.target_catalog(comms, None, project=str(tmp_path))
+        assert [action.declaration for action in actions] == [NewThreadCliCommand]
+        assert actions[0].targets == ()
+        assert actions[0].bound[0].project == str(tmp_path)
+        created = []
+        def launch(spec, pi_bin):
+            created.append((spec, pi_bin))
+            return Thread(spec.name, frozenset(), str(tmp_path))
+        ctx = SimpleNamespace(threads=SimpleNamespace(create=launch))
+        new = NewThreadCliCommand(name='fresh', task='task', project=str(tmp_path), pi_bin='pi')
+        fork = ForkCliCommand(name='child', parent='fresh', task='task', project=str(tmp_path), pi_bin='pi')
+        assert new.open_targets(new.apply(ctx)) == ('fresh',)
+        assert fork.open_targets(fork.apply(ctx)) == ('child',)
+        assert [type(spec) for spec, _ in created] == [NewThreadSpec, ForkSpec]
+        assert [spec.initial_prompt for spec, _ in created] == ['task', 'task']
+        assert [binary for _, binary in created] == ['pi', 'pi']
+
     def test_catalog_edit_rename_review_delete_and_reopen(self, cli, tmp_path):
         cli(tmp_path, 'register', '--name', 'tagged', '--worktree', str(tmp_path), '--tags', 'first')
         code, catalog = cli(tmp_path, 'target-actions', '--target', 'tagged', '--project', str(tmp_path))

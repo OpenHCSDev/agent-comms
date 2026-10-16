@@ -76,7 +76,7 @@ class ForkOwnerCase(OwnerAdmissionCase):
 
     async def create(self, comms):
         return await asyncio.to_thread(
-            comms.threads.fork,
+            comms.threads.create,
             ForkSpec(
                 name="physical-child",
                 parent="physical-parent",

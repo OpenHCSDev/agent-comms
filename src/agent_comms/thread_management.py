@@ -8,7 +8,8 @@ import logging
 import os
 import re
 import stat
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -59,26 +60,49 @@ def _session_model(session_file: Path) -> tuple[str, str] | None:
     return None
 
 
-@dataclass(frozen=True, slots=True)
-class ForkSpec:
-    """Declares one fork: a child thread spawned from a parent's session."""
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NewThreadSpec:
+    """One creation declaration; source preparation precedes locked admission."""
 
     name: str
-    parent: str
     task: str = ""
     tags: frozenset[str] | None = None
     prompt: str | None = None
+    project: str | None = None
 
     @property
     def initial_prompt(self) -> str:
         return self.task if self.prompt is None else self.prompt
+
+    @contextmanager
+    def prepared(self, threads: ThreadManagement, pi_bin: str) -> Iterator[Thread]:
+        from .fresh_private_session import create_fresh_private_session
+
+        project = Path(self.project or os.getcwd()).expanduser().resolve(strict=True)
+        if not project.is_dir():
+            raise ValueError(f"Project path is not a directory: {project}")
+        arguments = NativeArguments.configured()
+        thread = Thread(name=self.name, task=self.task, tags=self.tags or frozenset(),
+                        worktree=str(project), model=arguments.model,
+                        thinking_level=arguments.thinking)
+        threads.registry.require_declaration_available(thread)
+        fresh = create_fresh_private_session(threads.root / "sessions", worktree=project)
+        with _store_lock(threads._wire_lock_path):
+            yield replace(thread, session_file=str(fresh.path))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ForkSpec(NewThreadSpec):
+    """A fork differs only in its parent-derived source and inherited settings."""
+
+    parent: str
 
     def child(self, parent: Thread, session_file: str) -> Thread:
         """Derive the child declaration from the exact parent and fork result."""
         return Thread(
             name=self.name,
             tags=parent.tags if self.tags is None else self.tags,
-            worktree=parent.worktree,
+            worktree=str(Path(self.project).expanduser().resolve(strict=True)) if self.project else parent.worktree,
             parent=parent.name,
             task=self.task,
             session_file=session_file,
@@ -86,6 +110,32 @@ class ForkSpec:
             model=parent.model,
             thinking_level=parent.thinking_level,
         )
+
+    def _parent(self, threads: ThreadManagement) -> Thread:
+        parent = threads.registry.require(self.parent)
+        parent.execution.require_native()
+        if threads.registry.name_reserved(self.name):
+            raise RelationViolationError(
+                f"Thread {self.name!r} already exists; reuse it instead of creating it again."
+            )
+        if not parent.session_file:
+            raise RelationViolationError(f"Parent thread {self.parent!r} has no session file to fork.")
+        return parent
+
+    @contextmanager
+    def prepared(self, threads: ThreadManagement, pi_bin: str) -> Iterator[Thread]:
+        # Copy saved history outside the wire lock, retaining writer→wire order.
+        parent = self._parent(threads)
+        threads.registry.require_declaration_available(self.child(parent, parent.require_saved_session()))
+        location = asyncio.run(parent.backend.fork(parent, pi_bin))
+        with _store_lock(threads._wire_lock_path):
+            current = self._parent(threads)
+            if current.incarnation != parent.incarnation or current.session_file != parent.session_file:
+                raise RelationViolationError(
+                    f"Parent thread {self.parent!r} changed its saved session during the fork; "
+                    f"the created fork {location.path} was not registered."
+                )
+            yield self.child(current, location.path)
 
 
 @dataclass(frozen=True, slots=True)
@@ -580,52 +630,14 @@ class ThreadManagement:
         )
 
 
-    def fork(self, spec: ForkSpec, pi_bin: str | None = None) -> Thread:
-        """Fork with the current owner's backend executable unless overridden.
-
-        The native fork copies the parent's whole saved history (the SDK holds
-        both session writer locks and fsyncs). It runs before the global wire
-        lock, in the same writer-then-wire order as other native source edits,
-        so a large parent no longer blocks every owner on the root. The locked
-        declaration re-checks the parent and name against the captured source.
-        """
+    def create(self, spec: NewThreadSpec, pi_bin: str | None = None) -> Thread:
+        """Prepare the declared source, then share admission, launch and first input."""
         resolved_bin = NativeArguments.configured_binary(pi_bin)
-        parent = self._fork_parent(spec)
-        self.registry.require_declaration_available(
-            spec.child(parent, parent.require_saved_session())
-        )
-        location = asyncio.run(parent.backend.fork(parent, resolved_bin))
-        with _store_lock(self._wire_lock_path):
-            return self._fork_unlocked(spec, resolved_bin, parent.session_file, location)
+        with spec.prepared(self, resolved_bin) as child:
+            return self._create_unlocked(spec, resolved_bin, child)
 
-    def _fork_parent(self, spec: ForkSpec) -> Thread:
-        parent = self.registry.require(spec.parent)
-        parent.execution.require_native()
-        if self.registry.name_reserved(spec.name):
-            raise RelationViolationError(
-                f"Thread {spec.name!r} already exists; reuse it instead of forking it again."
-            )
-        if not parent.session_file:
-            raise RelationViolationError(
-                f"Parent thread {spec.parent!r} has no session file to fork."
-            )
-        return parent
-
-    def _fork_unlocked(self, spec: ForkSpec, pi_bin: str, forked_from: str, location) -> Thread:
-        """Declare and launch the forked child under the wire lock.
-
-        Proves the parent is still registered with the forked source and the
-        name is still free, declares the child, registers it, then launches the
-        subprocess. Fail-closed: if the launch fails the registration is rolled
-        back. A lost race leaves the already-created fork unregistered.
-        """
-        parent = self._fork_parent(spec)
-        if parent.session_file != forked_from:
-            raise RelationViolationError(
-                f"Parent thread {spec.parent!r} changed its saved session during the fork; "
-                f"the created fork {location.path} was not registered."
-            )
-        child = spec.child(parent, location.path)
+    def _create_unlocked(self, spec: NewThreadSpec, pi_bin: str, child: Thread) -> Thread:
+        """One launch/rollback tail for fresh and parent-derived sources."""
         # A new incarnation's inbox already starts at its creation time
         # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
         child = self.registry._declare_unlocked(child)

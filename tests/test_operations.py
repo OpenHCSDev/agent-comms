@@ -464,11 +464,11 @@ class TestFork:
 
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(RelationViolationError, match="session file"):
-            wired.threads.fork(ForkSpec(name="child", parent="PR111", task="t"))
+            wired.threads.create(ForkSpec(name="child", parent="PR111", task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.threads.fork(ForkSpec(name="child", parent="ghost", task="t"))
+            wired.threads.create(ForkSpec(name="child", parent="ghost", task="t"))
 
 
 class TestLedgerOps:

@@ -47,7 +47,7 @@ from .native_arguments import NativeArguments
 from .pi_vocabulary import ServiceTier
 from .change_report import ChangeReport
 from .message_reference import MessageReference
-from .thread_management import ForkSpec, ThreadDeleted
+from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
 from .owner_lifecycle import OwnerStartResult
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
@@ -260,7 +260,7 @@ class TargetBatchResult:
 class TargetEdit(Command):
     """Accepted editor values use the original declaration and fresh binding."""
     declaration: type[CliCommand]
-    target: str | tuple[str, ...]
+    target: str | tuple[str, ...] | None
     arguments: dict[str, str]
     confirmed: bool = False
     channel: str | dict[str, tuple[str, ...]] | None = None
@@ -283,8 +283,8 @@ class ThreadArchivedResult:
 
 
 @dataclass(frozen=True)
-class ThreadForkedResult:
-    forked: str
+class ThreadCreatedResult:
+    created: str
     pid: int | None
 
 
@@ -344,6 +344,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return ()
 
     @classmethod
+    def project_bindings(cls, comms, project: str) -> tuple[Self, ...]:
+        return ()
+
+    @classmethod
     def channel_bindings(cls, comms, channel, *, snapshot=None) -> tuple[Self, ...]:
         return ()
 
@@ -375,9 +379,13 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                                    catalog=catalog)
 
     @classmethod
-    def target_catalog(cls, comms: Comms, target: str | tuple[str, ...],
+    def target_catalog(cls, comms: Comms, target: str | tuple[str, ...] | None,
                        channel: str | dict[str, tuple[str, ...]] | None = None,
                        *, project: str) -> tuple[TargetAction, ...]:
+        if target is None:
+            return tuple(TargetAction((command,), ())
+                         for member in cls.members_with(cls)
+                         for command in member.project_bindings(comms, project))
         selected = cls.selected_targets(target)
         from .channel_targets import is_channel_target
         # A catalog is one observation. Declarations borrow its original store
@@ -413,7 +421,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                             commands.append(bound)
         return tuple(TargetAction(tuple(commands), selected) for commands in grouped.values())
 
-    def for_editor(self, comms: Comms, target: str, project: str) -> Self:
+    def for_editor(self, comms: Comms, target: str | None, project: str) -> Self:
         return self
 
     @property
@@ -423,9 +431,9 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return tuple(TargetField(item, hints[item.name], getattr(self, item.name))
                      for item in fields(self) if not item.metadata['target_bound'])
 
-    def describe(self, comms: Comms, target: str, project: str) -> TargetAction:
+    def describe(self, comms: Comms, target: str | None, project: str) -> TargetAction:
         bound = self.for_editor(comms, target, project)
-        return TargetAction((bound,), (target,))
+        return TargetAction((bound,), (target,) if target is not None else ())
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
@@ -443,6 +451,10 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
     @classmethod
     def reconnect_targets(cls, result) -> tuple[str, ...]:
         return result.reconnect_targets() if isinstance(result, TargetBatchResult) else ()
+
+    @classmethod
+    def open_targets(cls, result) -> tuple[str, ...]:
+        return ()
 
     @classmethod
     def editor_arguments(cls, values: dict[str, str]) -> dict[str, object]:
@@ -489,11 +501,16 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
                                        **FieldCodec.encode(captured), **arguments})
 
     @classmethod
-    def execute_target(cls, comms: Comms, target: str | tuple[str, ...], arguments: dict[str, object],
+    def execute_target(cls, comms: Comms, target: str | tuple[str, ...] | None, arguments: dict[str, object],
                        *, confirmed: bool = False,
                        channel: str | dict[str, tuple[str, ...]] | None = None,
                        project: str | None = None) -> object:
         project = os.getcwd() if project is None else project
+        if target is None:
+            bindings = cls.project_bindings(comms, project)
+            if len(bindings) != 1:
+                raise ValueError('This action is no longer available for the project')
+            return bindings[0].edited(arguments).with_confirmation(confirmed).apply(comms)
         selected = cls.selected_targets(target)
         from .channel_targets import is_channel_target
         snapshot = comms.registry.snapshot()
@@ -1340,30 +1357,47 @@ class RenameSelfCliCommand(CliCommand, declared_name="rename-self"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ForkCliCommand(CliCommand):
-    help = "Fork a child pi thread"
+class NewThreadCliCommand(CliCommand, declared_name="new"):
+    help = "Create a new pi thread"
+    spec_type: ClassVar[type[NewThreadSpec]] = NewThreadSpec
     name: str = option("--name")
-    parent: str = option("--parent", target_bound=True)
     task: str = option("--task", default="", multiline=True)
     tags: frozenset[str] | None = option(
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
-    pi_bin: str = option(
-        "--pi-bin", default_factory=NativeArguments.configured_binary
-    )
+    pi_bin: str = option("--pi-bin", default_factory=NativeArguments.configured_binary)
+    project: str | None = option("--project", default=None)
+
+    @classmethod
+    def project_bindings(cls, comms, project):
+        return (cls(name='', project=project),)
+
+    @classmethod
+    def open_targets(cls, result: ThreadCreatedResult) -> tuple[str, ...]:
+        return (result.created,)
+
+    def apply(self, ctx: Comms) -> ThreadCreatedResult:
+        spec = self.spec_type(**{item.name: getattr(self, item.name)
+                                 for item in fields(self.spec_type)})
+        child = ctx.threads.create(spec, pi_bin=self.pi_bin)
+        return ThreadCreatedResult(child.name, child.pid)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ForkCliCommand(NewThreadCliCommand):
+    help = "Fork a child pi thread"
+    spec_type = ForkSpec
+    parent: str = option("--parent", target_bound=True)
+
+    @classmethod
+    def project_bindings(cls, comms, project):
+        return ()
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsForkTool
-        return (cls(name='', parent=thread.name, tags=thread.tags),) if CommsForkTool.available_for_thread(thread, status) else ()
-
-    def apply(self, ctx: Comms) -> ThreadForkedResult:
-        spec = ForkSpec(
-            name=self.name, parent=self.parent, task=self.task, tags=self.tags, prompt=self.prompt
-        )
-        child = ctx.threads.fork(spec, pi_bin=self.pi_bin)
-        return ThreadForkedResult(child.name, child.pid)
+        return (cls(name='', parent=thread.name, tags=thread.tags, project=thread.worktree),) if CommsForkTool.available_for_thread(thread, status) else ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1486,8 +1520,8 @@ class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
     project: str = option('--project', default_factory=os.getcwd)
     channel: str | None = option('--channel', default=None)
     help = 'List applicable operations and their declared parameters'
-    target: str | tuple[str, ...] = option('--target', '--targets', nargs='+',
-        normalize=lambda names: names[0] if len(names) == 1 else names)
+    target: str | tuple[str, ...] | None = option('--target', '--targets', nargs='+', default=None,
+        normalize=lambda names: names[0] if names is not None and len(names) == 1 else names)
 
     def apply(self, ctx: Comms) -> tuple[TargetAction, ...]:
         return CliCommand.target_catalog(ctx, self.target, self.channel, project=self.project)
@@ -1500,8 +1534,8 @@ class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
 class TargetActionCliCommand(CliCommand, declared_name='target-action'):
     channel: str | None = option('--channel', default=None)
     help = 'Execute a declared operation against its current target'
-    target: str | tuple[str, ...] = option('--target', '--targets', nargs='+',
-        normalize=lambda names: names[0] if len(names) == 1 else names)
+    target: str | tuple[str, ...] | None = option('--target', '--targets', nargs='+', default=None,
+        normalize=lambda names: names[0] if names is not None and len(names) == 1 else names)
     operation: str = option('--operation')
     arguments: dict[str, Any] = option('--arguments', default_factory=dict,
                                      parser_default='{}', normalize=_json_object)
