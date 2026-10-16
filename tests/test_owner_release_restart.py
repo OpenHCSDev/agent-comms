@@ -207,9 +207,6 @@ while True: time.sleep(0.01)
 
 
 def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
-    from agent_comms.child_process import ProcessIdentity
-    from agent_comms.threads import Thread
-
     comms = Comms(tmp_path / "wire")
     declared = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     generation = comms.registry.snapshot().admission_generations[declared.name]
