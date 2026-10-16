@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import types
+from contextvars import ContextVar
 from abc import ABC, abstractmethod
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
@@ -29,6 +30,12 @@ from .declared_family import DeclaredFamily
 from .sealed import Sealed
 
 T = TypeVar("T")
+
+# Records whose schemas are being derived in this context, each with the
+# nested fields that referred back to it. A recursive record anchors itself.
+_EXPANDING_RECORDS: ContextVar[types.MappingProxyType[type, list[type]]] = ContextVar(
+    "_EXPANDING_RECORDS", default=types.MappingProxyType({})
+)
 
 
 class FieldRepresentation(ABC):
@@ -343,7 +350,8 @@ class FieldCodec(Sealed):
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
         """Instance values carry their selector inside the encoded object."""
         alternatives = []
-        for member in target.members_with(target):
+        # Name order, not import order, so every process derives one schema.
+        for member in sorted(target.members_with(target), key=lambda item: item.declared_name):
             tag = member.family_discriminator
             alternatives.append(cls._record_schema(
                 member, {tag: {"type": "string", "const": member.declared_name}}, [tag]
@@ -359,29 +367,42 @@ class FieldCodec(Sealed):
     def _record_schema(
         cls, target: type, properties: dict[str, Any], required: list[str]
     ) -> dict[str, Any]:
-        """Build fields once, including an internally supplied family selector."""
-        hints = cls._types(target)
-        for declared, key in cls.record_fields(target):
-            annotation = hints[declared.name]
-            metadata = declared.metadata
-            if metadata.get("wire_nonnull") and get_origin(annotation) in (Union, types.UnionType):
-                members = tuple(item for item in get_args(annotation) if item is not type(None))
-                annotation = members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - runtime tuple
-            schema = cls.value_schema(annotation)
-            if "description" in metadata:
-                schema["description"] = metadata["description"]
-            if "wire_choices" in metadata:
-                schema["enum"] = list(metadata["wire_choices"]())
-            if declared.default is MISSING and declared.default_factory is MISSING:
-                required.append(key)
-            elif declared.default is not MISSING and declared.default is not None:
-                schema["default"] = cls.encode(declared.default, annotation)
-            properties[key] = schema
+        """Build fields once, including an internally supplied family selector.
+
+        A record that contains itself refers back to its own anchor."""
+        expanding = _EXPANDING_RECORDS.get()
+        if target in expanding:
+            expanding[target].append(target)
+            return {"$ref": f"#{target.__qualname__}"}
+        references: list[type] = []
+        token = _EXPANDING_RECORDS.set(types.MappingProxyType({**expanding, target: references}))
+        try:
+            hints = cls._types(target)
+            for declared, key in cls.record_fields(target):
+                annotation = hints[declared.name]
+                metadata = declared.metadata
+                if metadata.get("wire_nonnull") and get_origin(annotation) in (Union, types.UnionType):
+                    members = tuple(item for item in get_args(annotation) if item is not type(None))
+                    annotation = members[0] if len(members) == 1 else Union[members]  # noqa: UP007 - runtime tuple
+                schema = cls.value_schema(annotation)
+                if "description" in metadata:
+                    schema["description"] = metadata["description"]
+                if "wire_choices" in metadata:
+                    schema["enum"] = list(metadata["wire_choices"]())
+                if declared.default is MISSING and declared.default_factory is MISSING:
+                    required.append(key)
+                elif declared.default is not MISSING and declared.default is not None:
+                    schema["default"] = cls.encode(declared.default, annotation)
+                properties[key] = schema
+        finally:
+            _EXPANDING_RECORDS.reset(token)
+        anchor = {"$anchor": target.__qualname__} if references else {}
         return {
             "type": "object",
             "properties": properties,
             "required": required,
             "additionalProperties": False,
+            **anchor,
         }
 
     @classmethod
@@ -419,6 +440,8 @@ class FieldCodec(Sealed):
         }
         if annotation in primitive:
             return {"type": primitive[annotation]}
+        if annotation is Any:
+            return _AnyDecoder.schema()
         if isinstance(annotation, type) and issubclass(annotation, DeclaredFamily):
             return cls._family_schema(annotation)
         if isinstance(annotation, type) and is_dataclass(annotation):
