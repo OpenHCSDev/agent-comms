@@ -23,6 +23,14 @@ class NativeThreadDefaults(CliRecord, JsonFlagRecord):
         "--no-extensions", "--no-skills", "--no-context-files",
     )
 
+    def __post_init__(self) -> None:
+        """Resolve explicit startup selections into this record's creation defaults."""
+        selected = self.parsed_arguments
+        if (model := selected.model) is not None:
+            object.__setattr__(self, "model", model)
+        if (level := selected.thinking) is not None:
+            object.__setattr__(self, "thinking_level", ThinkingLevel.decode(level))
+
     @classmethod
     def offline(cls, *, arguments: tuple[str, ...] = ()) -> NativeThreadDefaults:
         return cls(arguments=("--offline", *cls.isolation_arguments, *arguments))
