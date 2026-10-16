@@ -423,7 +423,7 @@ class Forks(ABC):
 
     @classmethod
     @abstractmethod
-    async def fork(cls, parent: Thread, launcher: str, runtime: LaunchRuntime) -> RuntimeLocation:
+    async def fork(cls, parent: Thread, runtime: LaunchRuntime) -> RuntimeLocation:
         """Copy ``parent``'s history into a new location for a child thread.
 
         ``runtime`` is the same selected installation that will start the child.

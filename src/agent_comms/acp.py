@@ -95,7 +95,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     def __init__(
         self,
         comms: Comms,
-        native: NativeThreadDefaults,
         reply_window: float | None = None,
         no_reply_window: float | None = None,
         reply_quiet: float | None = None,
@@ -124,7 +123,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             from .native_pi import NativePiRpcLaunch
 
             self._verified_native_launcher = NativePiRpcLaunch.verified_launcher(
-                private_nk_native_package, private_nk_verified_cli
+                private_nk_native_package, private_nk_verified_cli, comms.runtime
             )
         self._private_nk_wire_root_id = private_nk_wire_root_id
         self._comms = comms
@@ -141,13 +140,12 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             comms,
             self._runtime,
             self,
-            native=native,
             reply_window=reply_window,
             no_reply_window=no_reply_window,
             reply_quiet=reply_quiet,
         )
         self.sessions = self.session_lifecycle_class(
-            comms, native, self.turns.agent_args, self._runtime, runtime_enabled, self
+            comms, self._runtime, runtime_enabled, self
         )
         self.inputs = InputDrain(comms, self.sessions, self._runtime, self, auto_wake)
         self.turns.bind(self.sessions, self.inputs)
@@ -359,7 +357,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         if self._verified_native_launcher is None:
             self._verified_native_launcher = NativePiRpcLaunch.acquire_tracked(
-                self._private_nk_native_package
+                self._private_nk_native_package, self._comms.runtime
             )
         return self._verified_native_launcher
 
@@ -522,13 +520,13 @@ class CommsClient(CommsAgent):
 def main() -> int:
     from .active_route import resolve_comms_route
     runtime = LaunchRuntime.current()
-    native = NativeThreadDefaults.from_arguments(sys.argv[1:], NativeThreadDefaults.from_runtime(runtime))
+    native = NativeThreadDefaults.from_arguments(sys.argv[1:], NativeThreadDefaults())
     with resolve_comms_route().admit_client():
         if "--login" in sys.argv[1:]:
             from .login import run_login
 
             index = sys.argv.index("--login")
-            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "", settings=native)
+            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "", runtime=runtime)
         debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
         if debug_path:
             import logging
@@ -545,7 +543,7 @@ def main() -> int:
 
         private_nk = private_nk_from_environment()
         comms = Comms(resolve_comms_route(private_nk.validated_root if private_nk is not None else None),
-                            runtime=runtime)
+                            runtime=runtime, settings=native)
         if private_nk is not None:
             comms.owners.pin_private_nk_launch(
                 private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
@@ -571,7 +569,7 @@ def main() -> int:
 
                 asyncio.create_task(watchdog())
             agent = CommsClient(
-                comms, native=native,
+                comms,
                 runtime_enabled=True,
                 use_unstable_protocol=True,
                 private_nk_native_package=private_nk.native_package if private_nk else None,

@@ -706,11 +706,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             thinking_level=level,
             service_tier=self.service_tier,
         )
-        catalogs = ConfigOptions(
-            ctx.owners.native_defaults.binary,
-            NativeArguments.parse(ctx.owners.native_defaults.arguments),
-            RestartEnvironment.inherit(os.environ),
-        )
+        catalogs = ConfigOptions(ctx)
         asyncio.run(catalogs.validate(candidate))
         updated = ctx.threads.set_thread_configuration(
             thread,
@@ -1309,7 +1305,6 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
-    pi_bin: str = option("--pi-bin", setting=lambda settings: settings.binary)
     project: str = option("--project", parser_default_factory=os.getcwd)
     model: str = option("--model", setting=lambda settings: settings.model)
     thinking_level: type[ThinkingLevel] = option(
@@ -1317,8 +1312,8 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
 
     @classmethod
     def project_bindings(cls, comms, project):
-        defaults = comms.owners.native_defaults
-        return (cls(name='', project=project, pi_bin=defaults.binary, model=defaults.model,
+        defaults = comms.settings
+        return (cls(name='', project=project, model=defaults.model,
                     thinking_level=defaults.thinking_level),)
 
     @classmethod
@@ -1328,9 +1323,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> ThreadCreatedResult:
         spec = self.spec_type(**{item.name: getattr(self, item.name)
                                  for item in fields(self.spec_type)})
-        native = replace(ctx.owners.native_defaults, binary=self.pi_bin,
-                         model=self.model, thinking_level=self.thinking_level)
-        child = ctx.threads.create(spec, native=native, runtime=ctx.runtime)
+        child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.pid)
 
 
@@ -1348,7 +1341,6 @@ class ForkCliCommand(NewThreadCliCommand):
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsForkTool
         return (cls(name='', parent=thread.name, tags=thread.tags, project=thread.worktree,
-                    pi_bin=comms.owners.native_defaults.binary,
                     model=thread.model, thinking_level=thread.thinking_level),) if CommsForkTool.available_for_thread(thread, status) else ()
 
 
@@ -1515,7 +1507,7 @@ class StartCliCommand(CliCommand):
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsStartTool
-        return (cls(name=thread.name, native=comms.owners.native_defaults),) if CommsStartTool.available_for_thread(thread, status) else ()
+        return (cls(name=thread.name, native=comms.settings),) if CommsStartTool.available_for_thread(thread, status) else ()
 
     @classmethod
     def channel_bindings(cls, comms, channel, *, snapshot=None):
@@ -1528,7 +1520,8 @@ class StartCliCommand(CliCommand):
         return (result.thread,) if result.launched else ()
 
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
-        return ctx.owners.start(self.name, native=self.native, launch_runtime=ctx.runtime)
+        ctx.settings = self.native
+        return ctx.owners.start(self.name)
 
 
 

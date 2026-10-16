@@ -25,10 +25,11 @@ from .transcripts import Transcripts
 class Comms:
     def __init__(
         self, route: CommsRoute, *, private_initial_writes: bool = True, private_claim_writes: bool = True,
-        runtime: LaunchRuntime,
+        runtime: LaunchRuntime, settings: NativeThreadDefaults = NativeThreadDefaults(),
     ) -> None:
         self.route = route
         self.runtime = runtime
+        self.settings = settings
         if private_initial_writes or private_claim_writes:
             self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._wire_lock_path = self.root / "wire"
@@ -41,14 +42,10 @@ class Comms:
         self.messaging = Messaging(self.root, self.registry, self.bus)
         self.agents = AgentActivity(self.root, self.registry)
         self.ledger = CollaborationLedger(self.root / CollaborationLedger.filename, self.registry)
-        defaults = NativeThreadDefaults.from_runtime(runtime)
-        self.owners = OwnerLifecycle(self.root, self.registry, self.bus, native=defaults)
+        self.owners = OwnerLifecycle(self)
         self.goals = Goals(self.root, self.registry, self.bus)
         self.transcripts = Transcripts(self.root, self.registry, self.bus, self.messaging)
-        self.threads = ThreadManagement(
-            self.root, self.registry, self.bus,
-            ChannelCatalog(self.root / ChannelCatalog.filename), self.agents, self.owners, self.ledger
-        )
+        self.threads = ThreadManagement(self, ChannelCatalog(self.root / ChannelCatalog.filename))
         self.configuration = ThreadConfiguration(self.root, self.registry, self.threads, self.agents)
         self.channels = ChannelManagement(self.root, self.registry, self.bus, self.threads)
         self.views = HistoryViews(

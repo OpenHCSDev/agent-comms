@@ -894,9 +894,7 @@ class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
         return status.allows_owner_start(owner_pid=owner_pid)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        return comms.owners.start(
-            self.name, native=comms.owners.native_defaults, launch_runtime=comms.runtime,
-        )
+        return comms.owners.start(self.name)
 
 
 @dataclass(frozen=True, kw_only=True)

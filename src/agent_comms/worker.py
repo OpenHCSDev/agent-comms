@@ -29,7 +29,7 @@ async def run(settings: NativeThreadDefaults, incarnation: ThreadIncarnation,
     # Verify the selected package before creating or attaching the bus.
     verified_cli = private_nk.validate()
     route = PinnedRoute(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)
-    comms = Comms(route, runtime=runtime)
+    comms = Comms(route, runtime=runtime, settings=settings)
     snapshot = await Coordination.run_worker(comms.registry.snapshot)
     if not incarnation.current(snapshot):
         raise ValueError("Owner launch does not match the current thread incarnation")
@@ -39,7 +39,7 @@ async def run(settings: NativeThreadDefaults, incarnation: ThreadIncarnation,
             and thread.process_identity != ProcessIdentity.capture(os.getpid())):
         raise ValueError(f"Thread {name!r} already has a live owner")
     agent = CommsAgent(
-        comms, native=settings,
+        comms,
         runtime_enabled=True,
         private_nk_wire_root_id=private_nk.wire_root_id,
         private_nk_native_package=private_nk.native_package,
@@ -113,7 +113,7 @@ def main() -> int:
     NativeThreadDefaults.add_cli_arguments(parser, required=True, dest="native_settings")
     ThreadIncarnation.add_cli_arguments(parser, required=True, dest="thread_incarnation")
     namespace = parser.parse_args()
-    runtime = LaunchRuntime.running()
+    runtime = LaunchRuntime.current()
     with suppress(KeyboardInterrupt):
         asyncio.run(run(namespace.native_settings, namespace.thread_incarnation, runtime))
     return 0

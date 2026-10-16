@@ -41,7 +41,7 @@ class LaunchRuntime:
     @classmethod
     def running(cls) -> LaunchRuntime:
         """Identify the decoder already running, for watcher checks and restoration."""
-        return cls(Path(sys.executable))
+        return cls(Path(sys.prefix) / "bin/python")
 
     @property
     def native_entrypoint(self) -> str:

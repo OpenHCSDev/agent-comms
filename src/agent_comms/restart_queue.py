@@ -100,11 +100,6 @@ class QueuedRestart:
 
     def require_available(self, comms: Comms) -> None:
         self.launch_runtime.require_available()
-        binary = self.target.native.binary
-        if binary != comms.owners.restart_entrypoint(binary, self.launch_runtime):
-            raise ValueError("Target agent entrypoint differs from reviewed launch authority")
-        if Path(binary).is_absolute() and not os.access(binary, os.X_OK):
-            raise ValueError("Target agent entrypoint is unavailable")
 
     def require_watcher(self, comms: Comms) -> None:
         self.require_available(comms)
@@ -159,11 +154,10 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         owner.require_restart_owner(status)
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
-        selected = LaunchRuntime.current()
+        selected = comms.runtime
         runtime = RestartEnvironment.inherit(comms.owners.restart_environment(
             RestartEnvironment.inherit(os.environ).encode(), selected))
-        native = replace(launch.native, binary=comms.owners.restart_entrypoint(launch.native.binary, selected))
-        target = RestartTarget(selection, native)
+        target = RestartTarget(selection, launch.native)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with _store_lock(directory / "queue"):
             for _, previous in _records(comms):

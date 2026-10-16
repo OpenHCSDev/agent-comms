@@ -160,6 +160,7 @@ class PrivateSendAdmission:
         try:
             result = await TrackedTurnSession.execute(
                 execution.native_package,
+                runtime=execution.comms.runtime,
                 input_id=self.input_id,
                 prompt=self.prompt.text,
                 context_contributions=self.prompt.contributions,

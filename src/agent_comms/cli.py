@@ -55,7 +55,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         with ExitStack() as route_guard:
             runtime = LaunchRuntime.current()
-            settings = NativeThreadDefaults.from_runtime(runtime)
+            settings = NativeThreadDefaults()
             parser = build_parser(settings)
             args = argparse.Namespace()
             remaining = list(sys.argv[1:] if argv is None else argv)

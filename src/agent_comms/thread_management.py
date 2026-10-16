@@ -12,6 +12,10 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .comms import Comms
 from uuid import uuid4
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
@@ -83,7 +87,7 @@ class NewThreadSpec:
         return self.task if self.prompt is None else self.prompt
 
     @contextmanager
-    def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
+    def prepared(self, threads: ThreadManagement, runtime: LaunchRuntime) -> Iterator[Thread]:
         from .fresh_private_session import create_fresh_private_session
 
         project = Path(self.project).expanduser().resolve(strict=True)
@@ -130,11 +134,11 @@ class ForkSpec(NewThreadSpec):
         return parent
 
     @contextmanager
-    def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
+    def prepared(self, threads: ThreadManagement, runtime: LaunchRuntime) -> Iterator[Thread]:
         # Copy saved history outside the wire lock, retaining writer→wire order.
         parent = self._parent(threads)
         threads.registry.require_declaration_available(self.child(parent, parent.require_saved_session()))
-        location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
+        location = asyncio.run(parent.backend.fork(parent, runtime))
         with _store_lock(threads._wire_lock_path):
             current = self._parent(threads)
             if current.incarnation != parent.incarnation or current.session_file != parent.session_file:
@@ -168,24 +172,16 @@ class ProjectChangeResult:
 
 
 class ThreadManagement:
-    def __init__(
-        self,
-        root: Path,
-        registry: Registration,
-        bus: MessageBus,
-        catalog: ChannelCatalog,
-        agents: AgentActivity,
-        owners: OwnerLifecycle,
-        ledger: CollaborationLedger,
-    ):
-        self.root = root
-        self.registry = registry
-        self.bus = bus
+    def __init__(self, comms: Comms, catalog: ChannelCatalog):
+        self.comms = comms
+        self.root = comms.root
+        self.registry = comms.registry
+        self.bus = comms.bus
         self.catalog = catalog
-        self.agents = agents
-        self.owners = owners
-        self.ledger = ledger
-        self._wire_lock_path = root / "wire"
+        self.agents = comms.agents
+        self.owners = comms.owners
+        self.ledger = comms.ledger
+        self._wire_lock_path = self.root / "wire"
 
     def import_thread(
         self,
@@ -632,26 +628,26 @@ class ThreadManagement:
         )
 
 
-    def create(self, spec: NewThreadSpec, *, native: NativeThreadDefaults,
-               runtime: LaunchRuntime) -> Thread:
-        """Prepare and launch using the caller's one complete selection."""
+    def create(self, spec: NewThreadSpec) -> Thread:
+        """The selected Comms runtime prepares the copy and starts the child."""
+        runtime = self.comms.runtime
         runtime.require_available()
-        with spec.prepared(self, native.binary, runtime) as child:
+        with spec.prepared(self, runtime) as child:
             # A new incarnation's inbox already starts at its creation time
             # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
             child = self.registry._declare_unlocked(child)
 
-            key = f"acp:{uuid4().hex}" if spec.initial_prompt else None
+            key = f"acp:{uuid4().hex}" if spec.task else None
             try:
                 owned = self.owners._launch_owner_unlocked(
                     replace(child, model=self.resolve_thread_model(child.name)),
-                    native, startup_input_key=key, launch_runtime=runtime,
+                    self.comms.settings, startup_input_key=key, launch_runtime=runtime,
                 )
                 if key is not None:
                     InputDispositions(self.root).record(
                         key, seq=None, owner=owned.name, target=owned.name,
                         admission=self.registry.snapshot().admission_generations[owned.name],
-                        text=spec.initial_prompt,
+                        text=spec.task,
                     )
                 return owned
             except OSError:

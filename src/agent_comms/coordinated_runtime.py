@@ -71,15 +71,15 @@ class SelectedExecution:
     def root(self) -> Path:
         return self.comms.root
 
-    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
+    def tracked_launch(self, package: Path, *, runtime, **options) -> NativePiRpcLaunch:
         """Consume the original pre-claim acquisition for each stage's launch.
 
         Every stage rebuilds its complete source/configuration through the
         executable factory acquired by validate before selecting a participant;
         no native child, input proof or readiness is borrowed from a prior turn.
         """
-        if package != self.native_package:
-            raise IdentityConflict("Selected launch differs from its execution package")
+        if package != self.native_package or runtime != self.comms.runtime:
+            raise IdentityConflict("Selected launch differs from its execution runtime or package")
         if self._tracked_factory is None:
             raise IdentityConflict("Selected launch precedes its execution package acquisition")
         return self._tracked_factory(**options)
@@ -122,7 +122,7 @@ class SelectedExecution:
             if self.selected_existing_file_write is not None:
                 raise IdentityConflict("selected tool cannot share an operator file plan")
         if self.verified_launcher is None:
-            self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package)
+            self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package, self.comms.runtime)
             return
         launcher = self.verified_launcher()
         if launcher.args[0] != Path(self.native_package).absolute():

@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 import asyncio
-import os
+import json
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
 from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
 from .native_session_reopen import NativeSessionIdentity
-from .native_pi import NativePiRpcLaunch
+from .field_codec import FieldCodec
+from .private_nk_entrypoint import PrivateNkLaunch
 from .launch_runtime import LaunchRuntime
-from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
+from .pi_helper import PiHelper, PiHelperFailed, RuntimeHelper, SessionHelperRequest
 
 
 @dataclass(frozen=True)
@@ -57,16 +59,48 @@ class ForkSessionHelper(PiHelper):
         )
 
 
-def fork_native_session(
-    file: str, worktree: str, launcher: str, runtime: LaunchRuntime,
-) -> NativeSessionIdentity:
-    """Copy the parent's history once under the native writer locks, before any wire lock.
+@dataclass(frozen=True)
+class RuntimeForkRequest:
+    file: str
+    cwd: str
+    runtime: LaunchRuntime
+    directory: str | None = None
 
-    The native owner fsyncs the new history. An uncertain helper outcome is not
-    retried or inferred from an orphan file, and no input is sent.
+    async def copy(self) -> NativeSessionIdentity:
+        route = PrivateNkLaunch.current()
+        if route is None:
+            raise ValueError("Fork copying requires its configured native package")
+        route.validate()
+        return await ForkSessionHelper.run(
+            ForkSessionRequest(str(route.native_package), self.file, self.cwd, self.directory),
+            cwd=Path(self.cwd),
+        )
+
+
+class RuntimeForkHelper(RuntimeHelper, ForkSessionHelper):
+    """The fork's selected Python loads its own copy implementation and SDK."""
+
+    module = "agent_comms.native_fork"
+    request = RuntimeForkRequest
+
+
+async def fork_native_session(
+    file: str, worktree: str, runtime: LaunchRuntime,
+) -> NativeSessionIdentity:
+    """Copy once in the child's installation before entering a wire lock.
+
+    A failed helper may have copied bytes or held a native writer lock. Preserve
+    that result and the files; never infer success or repeat the request.
     """
-    package = NativePiRpcLaunch.package_for_command(launcher, runtime)
-    return asyncio.run(ForkSessionHelper.run(
-        ForkSessionRequest(str(package), file, worktree), cwd=Path(worktree),
-        env=runtime.environment(os.environ),
-    ))
+    return await RuntimeForkHelper.run(RuntimeForkRequest(file, worktree, runtime), cwd=Path(worktree))
+
+
+def main() -> int:
+    request = FieldCodec.decode(RuntimeForkRequest, json.load(sys.stdin))
+    result = asyncio.run(request.copy())
+    print(json.dumps(FieldCodec.encode(result)))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

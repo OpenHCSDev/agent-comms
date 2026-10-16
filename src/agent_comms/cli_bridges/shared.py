@@ -761,7 +761,7 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         self.binding = binding
         self.journal = journal
         # The CLI of the runtime this bridge runs from.
-        self.core = CoreConnection(str(LaunchRuntime.running().interpreter.with_name('agent-comms')), binding)
+        self.core = CoreConnection(str(LaunchRuntime.current().interpreter.with_name('agent-comms')), binding)
 
     @abstractmethod
     async def deliver(self, message: Message) -> type[Outcome]:

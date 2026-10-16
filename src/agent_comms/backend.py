@@ -43,6 +43,7 @@ from .native_attestation import AttestationError
 from .native_custody import PiSessionChild
 from .native_project import NativeProject
 from .native_pi import NativePiRpcLaunch
+from .launch_runtime import LaunchRuntime
 from .native_errors import NativePiUnavailable
 from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
@@ -110,7 +111,7 @@ async def _maintenance_send_boundary(
 
 
 async def stream_agent_events(
-    agent_bin: str,
+    runtime: LaunchRuntime,
     agent_args: Sequence[str],
     task: str,
     cwd: str,
@@ -151,7 +152,7 @@ async def stream_agent_events(
             try:
                 launch = await Coordination.run_worker(partial(
                     persistent_session.custody.managed_launch,
-                    agent_bin,
+                    runtime,
                     tuple(agent_args),
                     worktree=Path(cwd),
                     environment=env_extra,

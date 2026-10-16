@@ -131,15 +131,14 @@ class OwnerLifecycle:
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
 
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus, *,
-                 native: NativeThreadDefaults):
-        self.native_defaults = native
-        self.root = root
-        self.registry = registry
-        self.bus = bus
-        self._wire_lock_path = root / "wire"
-        self.maintenance = MaintenanceBarrier(registry.store.path)
-        self.releases = OwnerReleaseStore.for_root(root)
+    def __init__(self, comms):
+        self.comms = comms
+        self.root = comms.root
+        self.registry = comms.registry
+        self.bus = comms.bus
+        self._wire_lock_path = self.root / "wire"
+        self.maintenance = MaintenanceBarrier(self.registry.store.path)
+        self.releases = OwnerReleaseStore.for_root(self.root)
         self._private_nk_launch: PrivateNkLaunch | None = None
 
     @contextmanager
@@ -195,9 +194,7 @@ class OwnerLifecycle:
             self.registry.register(owned, new_owner=True)
             return owned
 
-    def ensure_owner(
-        self, name: str, *, native: NativeThreadDefaults, launch_runtime: LaunchRuntime,
-    ) -> Thread:
+    def ensure_owner(self, name: str) -> Thread:
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
@@ -207,12 +204,11 @@ class OwnerLifecycle:
             return (
                 thread
                 if thread.process_alive
-                else self._launch_owner_unlocked(thread, native, launch_runtime=launch_runtime)
+                else self._launch_owner_unlocked(thread, self.comms.settings,
+                                                 launch_runtime=self.comms.runtime)
             )
 
-    def start(
-        self, name: str, *, native: NativeThreadDefaults, launch_runtime: LaunchRuntime
-    ) -> OwnerStartResult:
+    def start(self, name: str) -> OwnerStartResult:
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
@@ -224,16 +220,10 @@ class OwnerLifecycle:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.pid, False)
-            launch_runtime.require_available()
-            owner = self._launch_owner_unlocked(thread, native, launch_runtime=launch_runtime)
+            self.comms.runtime.require_available()
+            owner = self._launch_owner_unlocked(thread, self.comms.settings,
+                                                launch_runtime=self.comms.runtime)
             return OwnerStartResult(owner.name, owner.pid, True)
-
-    def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
-        """Choose this runtime's reviewed native entrypoint for a private handoff."""
-        if self._private_nk_launch is None:
-            return source_binary
-        self._private_nk_launch.validate()
-        return runtime.native_entrypoint
 
     def restart_environment(self, environment: Mapping[str, str], runtime: LaunchRuntime) -> dict[str, str]:
         """Project the retained launch authority into the target runtime policy."""
@@ -341,18 +331,8 @@ class OwnerLifecycle:
             PACKAGE_ENV,
         ):
             env.pop(key, None)
-        agent_bin = native.binary
         private_launch = self.require_launch_authority()
         if private_launch is not None:
-            if agent_bin == "pi":
-                # The default stock binary cannot attest native input IDs.
-                # Keep the owner on this installation's pinned Pi entrypoint.
-                agent_bin = launch_runtime.native_entrypoint
-            else:
-                # The owner process keeps the launcher selected at its start.
-                # A later PATH or installed-runtime symlink change cannot retarget
-                # drains already owned by this process.
-                agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
             # Explicit launch installs the current runtime before registering
             # this owner. Readers never create or repair runtime schemas.
             from .coordinator import Coordination
@@ -383,7 +363,6 @@ class OwnerLifecycle:
             env["PI_TASK"] = thread.task
         if startup_input_key is not None:
             env["AGENT_COMMS_STARTUP_INPUT_KEY"] = startup_input_key
-        native = replace(native, binary=agent_bin)
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:

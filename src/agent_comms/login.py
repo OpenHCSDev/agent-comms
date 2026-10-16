@@ -1,38 +1,20 @@
-"""Launch Pi's native provider-login UI for ACP terminal authentication."""
+"""Launch Pi's provider-login UI using the selected installation."""
 
 import os
 import re
 import subprocess
 from pathlib import Path
 
-from .native_arguments import NativeArguments
-from .launch_runtime import RestartEnvironment
-from .native_settings import NativeThreadDefaults
+from .launch_runtime import LaunchRuntime
+from .native_pi import NativePiRpcLaunch
 
 
-def run_login(provider: str = "", *, settings: NativeThreadDefaults) -> int:
+def run_login(provider: str = "", *, runtime: LaunchRuntime) -> int:
     if provider and not re.fullmatch(r"[a-zA-Z0-9_-]+", provider):
         raise ValueError("Invalid provider identifier")
-    env = os.environ.copy()
-    for key in (
-        "PI_PARENT_ID",
-        "PI_TASK",
-        "PI_PROMPT",
-        "PI_WORKTREE",
-        "AGENT_COMMS_MANAGED",
-    ):
-        env.pop(key, None)
-    env["AGENT_COMMS_LOGIN_PROVIDER"] = provider
-    command = [
-        settings.binary,
-        "--no-session",
-        "--no-tools",
-        "--no-extensions",
-        "-e",
-        str(Path(__file__).with_name("pi_login_control.ts")),
-        "--no-skills",
-        "--no-context-files",
-        "--no-prompt-templates",
-        "--no-themes",
-    ]
-    return subprocess.call(command, env=env)
+    environment = os.environ.copy()
+    for key in ("PI_PARENT_ID", "PI_TASK", "PI_PROMPT", "PI_WORKTREE", "AGENT_COMMS_MANAGED"):
+        environment.pop(key, None)
+    environment["AGENT_COMMS_LOGIN_PROVIDER"] = provider
+    launch = NativePiRpcLaunch.login(runtime, worktree=Path.cwd(), environment=environment)
+    return subprocess.call(launch.argv, cwd=launch.cwd, env=launch.env)
