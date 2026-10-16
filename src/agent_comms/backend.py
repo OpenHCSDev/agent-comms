@@ -84,7 +84,6 @@ async def terminate_task_process(task: asyncio.Task[Any]) -> None:
     """Terminate the backend subprocess owned by an agent turn task."""
     session = TurnSession.active.get(task)
     if session is not None:
-        await session.stop_forwarding()
         await session.native_session.close()
         TurnSession.active.pop(task, None)
 
@@ -246,7 +245,6 @@ class TurnSession:
         self.extension_ui = ExtensionUiSession(ui_request)
         self.startup = startup if startup is not None else NativeStartupAdmission.for_launch(launch)
         self.inputs = InputForwarding(steering_queue)
-        self.steering_task: asyncio.Task[None] | None = None
         self.admission = UnwrittenPrompt()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
@@ -312,9 +310,9 @@ class TurnSession:
         return self.started_input and self.accepts_output and self.output.matches_message(text)
 
     def ensure_input_forwarding(self):
-        if self.steering_task is None and self.inputs.can_forward(self.native.proc.stdin):
+        if self.inputs.can_forward(self.native.proc.stdin):
             self.stdin = self.native.proc.stdin
-            self.steering_task = asyncio.create_task(self.inputs.forward(self))
+            self.native.forward_input(partial(self.inputs.forward, self))
 
     def observe_input_during_abort(self, event):
         if self.accepts_output:
@@ -368,13 +366,8 @@ class TurnSession:
             return False
         return self.require_input_id and self.admission.permits_extension_ui(self)
 
-    async def stop_forwarding(self) -> None:
-        if self.steering_task is not None:
-            self.steering_task.cancel()
-            await asyncio.gather(self.steering_task, return_exceptions=True)
-
     async def abort_stalled_rpc(self) -> None:
-        await self.stop_forwarding()
+        await self.native.finish_input()
         if self.native.proc.stdin is not None and self.native.proc.returncode is None:
             abort_deadline = self.loop.time() + max(0.0, self.rpc_abort_grace)
             try:
@@ -401,8 +394,7 @@ class TurnSession:
                         break
             except (TimeoutError, OSError):
                 pass
-        if self.native.proc.returncode is None:
-            await self.native.proc.stop()
+        await self.native.shutdown()
 
     def context_info(self) -> events.ContextInfo:
         return events.ContextInfo(
@@ -430,9 +422,11 @@ class TurnSession:
     async def acquire_native(self, resources: AsyncExitStack, *, reuse: bool) -> PiSessionChild:
         """Acquire leaf transport once in the original turn's resource lifetime."""
         with self.native_acquisition():
-            with self.startup.measurements.operation("open_transport"):
-                await self.open_transport(resources)
-            native = await self.open_native(reuse=reuse)
+            async with AsyncExitStack() as transport:
+                with self.startup.measurements.operation("open_transport"):
+                    await self.open_transport(transport)
+                native = await self.open_native(reuse=reuse)
+                native.transport = transport.pop_all()
         self.owner = asyncio.current_task()
         if self.owner is not None:
             self.active[self.owner] = self
@@ -504,7 +498,6 @@ class TurnSession:
                     async for event in self.finish_result():
                         yield event
             finally:
-                await self.stop_forwarding()
                 if not self.native_session.custody.retained:
                     await self.native_session.close()
 
@@ -552,7 +545,7 @@ class TurnSession:
                         f"Invalid Pi capability preflight response: {error}"
                     )
                 )
-                await self.native.proc.stop()
+                await self.native.shutdown()
                 self.finished = True
                 return
             raise
@@ -580,7 +573,7 @@ class TurnSession:
                 self.output.record_failure(
                     failures.InputMissing("Input authority changed before Pi prompt send.")
                 )
-                await self.native.proc.stop()
+                await self.native.shutdown()
                 self.finished = True
                 return
             await self.native.proc.stdin.drain()
@@ -590,7 +583,7 @@ class TurnSession:
                     "Pi RPC prompt could not be sent after capability preflight."
                 )
             )
-            await self.native.proc.stop()
+            await self.native.shutdown()
             self.finished = True
             return
 
@@ -643,7 +636,6 @@ class TurnSession:
         self.session_name: str | None = None
         self.active_session_file = self.launch.session.session_file
         self.settlement_count = 0
-        self.native.reader.pending.cancel_all()
         self.native.reader.pending.add(
             commands.GetState,
             self.native.attestation.request.id,
@@ -661,8 +653,7 @@ class TurnSession:
             yield
 
     async def retain_or_close(self) -> AsyncIterator[events.AgentEvent]:
-        await self.stop_forwarding()
-        self.native.reader.pending.cancel_all()
+        await self.native.finish_input()
         identity = self.native.attestation.identity
         if (
             self.persistent_session is not None
@@ -673,7 +664,7 @@ class TurnSession:
             self.native.sensitive_diagnostics = self.output.sensitive
             self.native_session.retain(self.native, identity)
         if not self.native_session.custody.retained:
-            outcome = await self.native.proc.finish()
+            outcome = await self.native.shutdown(graceful=True)
             if isinstance(outcome, TimedOutOutcome):
                 self.output.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
         if False:
