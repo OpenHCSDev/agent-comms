@@ -8,8 +8,7 @@ from importlib import import_module
 
 import pytest
 from metaclass_registry import DuplicateRegistryKeyError
-
-import agent_comms.declared_family as family_module
+from metaclass_registry import core as registry_core
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 
@@ -133,12 +132,13 @@ def test_declared_scope_builds_once_for_module_and_package(tmp_path, monkeypatch
     root = import_module(root_name).Scope
     assert member_name not in sys.modules
     imports = []
+    import_scope = registry_core.import_module_preserving_root_logging
 
     def acquire(name):
         imports.append(name)
-        return import_module(name)
+        return import_scope(name)
 
-    monkeypatch.setattr(family_module, 'import_module', acquire)
+    monkeypatch.setattr(registry_core, 'import_module_preserving_root_logging', acquire)
     with ThreadPoolExecutor(max_workers=2) as workers:
         results = [workers.submit(root.decode, 'native') for _ in range(2)]
         members = [result.result() for result in results]
@@ -156,7 +156,7 @@ def test_discovery_failure_propagates_without_marking_members_complete(monkeypat
     def fail(name):
         raise ImportError(name)
 
-    monkeypatch.setattr(family_module, 'import_module', fail)
+    monkeypatch.setattr(registry_core, 'import_module_preserving_root_logging', fail)
     with pytest.raises(ImportError, match='missing_declared_family_scope'):
         FailingFamily.names()
     assert not FailingFamily.__registry__._discovered
