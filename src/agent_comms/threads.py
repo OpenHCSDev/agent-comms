@@ -132,7 +132,7 @@ class Thread(ThreadProvenance):
             "AGENT_COMMS_ROOT": str(root),
             "PI_PARENT_ID": self.parent or "",
             "AGENT_COMMS_MANAGED": "1",
-            "AGENT_COMMS_SESSION_CONTEXT": TurnContext.render_segments(
+            RestartEnvironment.session_context_key: TurnContext.render_segments(
                 TurnContext.session_segments(self)
             ).text,
             SERVICE_TIER_ENVIRONMENT: self.service_tier.value,

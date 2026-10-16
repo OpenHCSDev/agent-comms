@@ -411,7 +411,7 @@ class NativePiRpcLaunch:
         env["PI_WORKTREE"] = str(cwd)
         env = RestartEnvironment.inherit(env).for_interpreter(Path(sys.executable)).apply_runtime(env)
         env.update(configuration.encode_native())
-        session_context = env.pop("AGENT_COMMS_SESSION_CONTEXT", "")
+        session_context = env.pop(RestartEnvironment.session_context_key, "")
         session_arguments = (("--append-system-prompt", session_context)
                              if session_context else ())
         argv = (
