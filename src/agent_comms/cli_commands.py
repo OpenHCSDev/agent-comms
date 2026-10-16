@@ -759,8 +759,8 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             service_tier=self.service_tier,
         )
         catalogs = ConfigOptions(
-            NativeArguments.configured_binary(ctx.owners.native_defaults),
-            NativeArguments.configured(ctx.owners.native_defaults),
+            ctx.owners.native_defaults.binary,
+            NativeArguments.parse(ctx.owners.native_defaults.arguments),
             RestartEnvironment.inherit(os.environ),
         )
         asyncio.run(catalogs.validate(candidate))

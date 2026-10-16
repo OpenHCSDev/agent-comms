@@ -2,9 +2,12 @@
 
 from dataclasses import dataclass, field, replace
 
-from agent_comms.comms import wire
+
 from agent_comms.registration_inheritance import RegistrationInheritance
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def test_unchanged_registration_retains_generated_creation_marker():
@@ -32,7 +35,7 @@ def test_declared_new_inheritance_case_needs_no_registration_consumer_edit():
 
 
 def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     initial = Thread(
         "owner",
         frozenset({"team"}),
@@ -60,7 +63,7 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
 
 def test_generated_clock_collision_is_still_allocated_by_locked_registry(tmp_path, monkeypatch):
     monkeypatch.setattr("agent_comms.threads.time.time", lambda: 42.0)
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     for name in ("first", "second"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     first, second = comms.registry.require("first"), comms.registry.require("second")
@@ -70,7 +73,7 @@ def test_generated_clock_collision_is_still_allocated_by_locked_registry(tmp_pat
 
 
 def test_operational_alias_redeclaration_returns_preserved_current_owner(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     first = comms.registry.declare(Thread("before", frozenset({"team"}), str(tmp_path)))
     comms.registry.rename("before", "after")
     returned = comms.registry.declare(Thread("before", frozenset(), str(tmp_path), title="new"))
@@ -84,7 +87,7 @@ def test_generated_claim_clock_collision_preserves_allocated_names_and_identitie
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr("agent_comms.threads.time.time", lambda: 42.0)
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     first = comms.threads.claim_thread("owner", tags=frozenset(), worktree=str(tmp_path))
     second = comms.threads.claim_thread("owner", tags=frozenset(), worktree=str(tmp_path))
     assert first.name == "owner" and second.name == "owner-2"
@@ -103,7 +106,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
     old, new = tmp_path / 'old', tmp_path / 'new'
     old.mkdir()
     new.mkdir()
-    comms = wire(tmp_path / 'wire')
+    comms = Comms(resolve_comms_route(tmp_path / 'wire'), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread('owner', frozenset(), str(old),
         process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', 'original-turn')
@@ -137,7 +140,7 @@ def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.coordination_errors import StaleFence
 
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread('owner', frozenset(), str(tmp_path / 'old'),
         process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', 'original-turn')

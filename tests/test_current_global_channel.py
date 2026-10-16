@@ -1,13 +1,16 @@
 import pytest
 
 from agent_comms.channel_targets import BuiltinChannel
-from agent_comms.comms import wire
+
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def test_all_is_the_only_global_target(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     for name in ("sender", "first", "second"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     assert BuiltinChannel.lookup("broadcast") is None

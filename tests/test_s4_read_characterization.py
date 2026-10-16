@@ -4,15 +4,18 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.comms import wire
+
 from agent_comms.threads import Thread
 from agent_comms.view_unread import TranscriptReadState
 from native_unread_fixture import completed_counts, completed_snapshot
 from test_thread_unread import append
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("worker", frozenset({"team"}), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send_message("worker", "#team", "painted")
@@ -41,7 +44,7 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
 
 
 def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     source = tmp_path / "native.jsonl"
     append(source, content="painted reply")
     comms.registry.declare(Thread("worker", frozenset({"team"}), str(tmp_path),

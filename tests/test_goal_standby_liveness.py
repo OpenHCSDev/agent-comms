@@ -29,6 +29,9 @@ from goal_owner_fixture import activate_empty_source, canonical_goal_wire
 from test_backend_native_lifecycle import native_backend as native_backend
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.goal_waits import RecordedGoalWait
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
@@ -38,13 +41,8 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
     """Actual ACP owner and native producer; only the localhost provider is controlled."""
     native = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    comms = Comms.for_runtime(native.root)
-    agent = canonical_agent(
-        comms,
-        agent_bin="pi",
-        runtime_enabled=True,
-        auto_wake=False,
-        agent_args=[
+    comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([
             "--provider=response-local",
             "--model=fixture",
             "--thinking=off",
@@ -54,8 +52,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
             "--no-context-files",
             "--no-prompt-templates",
             "--no-tools",
-        ],
-    )
+        ])), runtime_enabled=True, auto_wake=False)
     try:
         child = (await agent.new_session(str(native.project))).session_id
         drain = agent.inputs.drain_tasks.pop(child)
@@ -192,7 +189,7 @@ def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
     assert comms.goals.release_waits_after_terminal_turn(other_fence) == ()
     child_fence = _finish(comms, "child", "child-turn")
     assert comms.goals.release_waits_after_terminal_turn(child_fence) == ("owner",)
-    reopened = Comms.for_runtime(comms.root)
+    reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
     continued = reopened.registry.require("owner").goal
     assert continued.id == goal.id and continued.state.declared_name == "active"
     assert continued.revision == goal.revision + 2
@@ -254,7 +251,7 @@ def test_progress_write_precedes_wait_clear_on_crash_and_stays_in_standby(tmp_pa
     monkeypatch.setattr(GoalWaits, "clear", crash_before_wait_clear)
     with pytest.raises(OSError, match="injected crash"):
         comms.goals.release_waits_after_terminal_turn(child_fence)
-    reopened = Comms.for_runtime(comms.root)
+    reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
     assert reopened.registry.require("owner").goal.state.declared_name == "active"
     assert reopened.registry.require("owner").goal.id == goal.id
     assert reopened.goals.goal_execution("owner").state.value == "standby"
@@ -479,14 +476,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     comms = canonical_goal_wire(tmp_path / "wire")
     with comms.bus.log.certified_read() as source:
         root_id = source.marker.root_id
-    agent = CommsAgent(
-        comms,
-        agent_bin="pi",
-        runtime_enabled=True,
-        auto_wake=False,
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
-    )
+    agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), runtime_enabled=True, auto_wake=False, private_nk_native_package=tmp_path, private_nk_wire_root_id=root_id)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     activate_empty_source(agent)
     owner = (await agent.new_session(str(tmp_path / "owner"))).session_id

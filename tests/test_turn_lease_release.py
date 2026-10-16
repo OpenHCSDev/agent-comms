@@ -5,15 +5,18 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.comms import wire
+
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import ActiveTurn
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     replacement = []
 
@@ -31,7 +34,7 @@ def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypa
 
 
 def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn("owner", "same-id").turn_lease
     comms.registry.unregister("owner")
@@ -47,7 +50,7 @@ def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
 
 
 def test_revoked_admission_cleanup_cannot_attest_goal_completion(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     lease = comms.agents.begin_turn("owner", "turn").turn_lease
     comms.registry.archive("owner")

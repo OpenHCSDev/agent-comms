@@ -24,6 +24,7 @@ from agent_comms.threads import Thread
 from agent_comms.wire_watch import DirectoryWatchSource, WatchSource, open_wire_watcher
 from explicit_private_owner_installed_journey import Subscriber
 from test_backend_native_lifecycle import native_backend
+from agent_comms.active_route import LocalRoute
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux watcher")
@@ -55,7 +56,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         pytest.skip(
             "Set QUEUE_SOURCE_RUNTIME and QUEUE_SOURCE_PACKAGE to retained reviewed source pins"
         )
-    comms = Comms.for_runtime(fixture.root)
+    comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults.from_runtime())
     comms.owners.pin_private_nk_launch(
         comms.root, os.environ[ROOT_ID_ENV], Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     )

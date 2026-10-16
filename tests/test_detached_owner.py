@@ -11,8 +11,11 @@ import pytest
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import CoordinationChangedUpdate, TurnSettledUpdate, decode_updates
 from agent_comms.child_process import ParentedProcess
-from agent_comms.comms import wire
+
 from compaction_loopback import LoopbackProvider
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX detached owner")
@@ -69,7 +72,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         return launch(*args, **{**kwargs, "output": owner_output})
 
     monkeypatch.setattr(ParentedProcess, "launch", logged_launch)
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     options = dict(
@@ -78,7 +81,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         private_nk_native_package=package,
         private_nk_wire_root_id=root_id,
     )
-    first, second, third = (CommsClient(comms, **options) for _ in range(3))
+    first, second, third = (CommsClient(comms, native=comms.owners.native_defaults, **options) for _ in range(3))
 
     class Client:
         async def session_update(self, session_id, update):

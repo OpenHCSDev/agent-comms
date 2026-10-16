@@ -4,9 +4,12 @@ import json
 
 import pytest
 
-from agent_comms.comms import wire
+
 from agent_comms.threads import Thread
 from native_unread_fixture import completed_snapshot
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def answer(path, text):
@@ -18,7 +21,7 @@ def answer(path, text):
 
 
 def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     source = tmp_path / "sender.jsonl"
     source.touch()
     answer(source, "Saved reply")
@@ -36,7 +39,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     assert comms.bus.pending_count("receiver", "#ci") == 1
 
     comms.views.mark_user_view_read("sender", worktree=str(tmp_path))
-    after_dm = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    after_dm = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path))
     assert after_dm.thread_unread["sender"] == after_dm.unread.get("sender", 0) == 0
     assert after_dm.channel_unread["#ci"] == 1
     assert comms.bus.pending_count("receiver", "sender") == 1
@@ -70,7 +73,7 @@ def bytes_read() -> int:
 
 
 def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("sender", frozenset({"ci"}), str(tmp_path)))
     comms.registry.declare(Thread("archivist", frozenset({"bulk"}), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name

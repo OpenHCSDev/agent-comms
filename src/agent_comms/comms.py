@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from .active_route import CommsRoute, resolve_comms_route
+from .active_route import CommsRoute
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
@@ -15,7 +15,6 @@ from .message_bus import MessageBus
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
 from .native_settings import NativeThreadDefaults
-from .registration import Registration
 from .relationships import ThreadRelationships
 from .thread_management import ThreadManagement
 from .thread_configuration import ThreadConfiguration
@@ -24,20 +23,19 @@ from .transcripts import Transcripts
 
 class Comms:
     def __init__(
-        self, root: CommsRoute | Path, *, private_initial_writes: bool = True, private_claim_writes: bool = True,
+        self, route: CommsRoute, *, private_initial_writes: bool = True, private_claim_writes: bool = True,
         native: NativeThreadDefaults,
     ) -> None:
-        self.route = resolve_comms_route(root)
+        self.route = route
         if private_initial_writes or private_claim_writes:
             self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._wire_lock_path = self.root / "wire"
-        self.registry = Registration(self.root / "registry.json")
-        self.bus = MessageBus(
-            self.root / "bus.jsonl",
-            self.registry,
+        self.bus = MessageBus.for_root(
+            self.root,
             private_initial_writes=private_initial_writes,
             private_claim_writes=private_claim_writes,
         )
+        self.registry = self.bus.registry
         self.messaging = Messaging(self.root, self.registry, self.bus)
         self.agents = AgentActivity(self.root, self.registry)
         self.ledger = CollaborationLedger(self.root / CollaborationLedger.filename, self.registry)
@@ -62,23 +60,8 @@ class Comms:
             self.ledger,
         )
         self.relationships = ThreadRelationships(self.root, self.registry, self.bus, self.views)
-
-    @classmethod
-    def for_runtime(cls, root: CommsRoute | Path, **options) -> Comms:
-        """Compose an ordinary application entrypoint in its running installation."""
-        return cls(root, native=NativeThreadDefaults.from_runtime(), **options)
-
-    @classmethod
-    def bound(cls, route: CommsRoute, *, native: NativeThreadDefaults) -> Comms:
-        comms = cls(route, native=native)
-        route.bind_owners(comms.owners)
-        return comms
+        self.route.bind_owners(self.owners)
 
     @property
     def root(self) -> Path:
         return self.route.root
-
-
-def wire(root: CommsRoute | Path | str | None = None) -> Comms:
-    """Build a Comms wire from an explicit root or the active default route."""
-    return Comms.bound(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())

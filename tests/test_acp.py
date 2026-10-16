@@ -43,7 +43,7 @@ from agent_comms.acp_extension import (
 from agent_comms.activity import ActivityState
 from agent_comms.agent_backend import FailedCompaction
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, ReadyGeneration
 from agent_comms.goal_states import ActiveGoal
@@ -55,6 +55,10 @@ from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.turn_phase import CompactionPhase
 from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
@@ -92,9 +96,8 @@ def _update_text(update) -> str:
 
 class TestHandlers:
     def _agent(self, tmp_path: Path) -> CommsAgent:
-        return canonical_agent(
-            wire(tmp_path / "wire"), reply_window=0.1, no_reply_window=0.1, reply_quiet=0.05
-        )
+        selected_comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+        return canonical_agent(selected_comms, native=selected_comms.owners.native_defaults, reply_window=0.1, no_reply_window=0.1, reply_quiet=0.05)
 
     async def test_initialize_echoes_protocol_version(self, tmp_path):
         agent = self._agent(tmp_path)
@@ -117,7 +120,7 @@ class TestHandlers:
     async def test_foreign_mcp_declarations_rejected_before_thread_or_owner(
         self, tmp_path, agent_type, monkeypatch
     ):
-        agent = agent_type(wire(tmp_path / "wire"))
+        agent = agent_type(Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime()))
 
         def no_owner(*args, **kwargs):
             raise AssertionError("foreign ACP declaration reached owner acquisition")
@@ -158,10 +161,8 @@ class TestHandlers:
 
         monkeypatch.setattr("agent_comms.pi_commands.SettingCommand.configure", configure)
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/one,anthropic/two")
-        agent = canonical_agent(
-            wire(tmp_path / "wire"),
-            agent_args=["--print", "--provider", "openrouter", "--model", "one"],
-        )
+        selected_comms_2 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+        agent = canonical_agent(selected_comms_2, native=dataclasses.replace(selected_comms_2.owners.native_defaults, arguments=tuple(["--print", "--provider", "openrouter", "--model", "one"])))
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         model_config = response.config_options[0]
         assert model_config.current_value == "openrouter/one"
@@ -199,7 +200,8 @@ class TestHandlers:
         agent._comms.agents.observe_runtime_info(
             "proj", ae.AgentInfo(model="test/model", context_used=38723, context_size=272000)
         )
-        reopened = canonical_agent(wire(agent._comms.root))
+        selected_comms_3 = Comms(resolve_comms_route(agent._comms.root), native=NativeThreadDefaults.from_runtime())
+        reopened = canonical_agent(selected_comms_3, native=selected_comms_3.owners.native_defaults)
         assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
@@ -215,9 +217,8 @@ class TestHandlers:
         from acp import RequestError
 
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/one")
-        agent = canonical_agent(
-            wire(tmp_path / "wire"), agent_args=["--provider", "openrouter", "--model", "one"]
-        )
+        selected_comms_4 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+        agent = canonical_agent(selected_comms_4, native=dataclasses.replace(selected_comms_4.owners.native_defaults, arguments=tuple(["--provider", "openrouter", "--model", "one"])))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         with pytest.raises(RequestError):
             await agent.set_config_option(
@@ -366,7 +367,8 @@ class TestHandlers:
             await agent.shutdown()
 
     async def test_new_session_starts_after_existing_wire_history(self, tmp_path):
-        agent = canonical_agent(wire(tmp_path / "wire"), no_reply_window=0.1)
+        selected_comms_5 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+        agent = canonical_agent(selected_comms_5, native=selected_comms_5.owners.native_defaults, no_reply_window=0.1)
         agent._comms.registry.declare(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         agent._comms.messaging.send("peer", "#all", "old message")
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
@@ -465,7 +467,8 @@ class TestHandlers:
         ]
 
     async def test_prompt_broadcasts_to_global_channel(self, tmp_path):
-        agent = canonical_agent(wire(tmp_path / "wire"), no_reply_window=0.1)
+        selected_comms_6 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+        agent = canonical_agent(selected_comms_6, native=selected_comms_6.owners.native_defaults, no_reply_window=0.1)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         response = await agent.prompt(
             session_id="proj", prompt=[{"type": "text", "text": "!relay hello all"}]
@@ -495,9 +498,8 @@ class TestHandlers:
         assert agent._comms.bus.pending_count("proj") == 1
 
     async def test_cancel_ends_active_relay_turn(self, tmp_path):
-        agent = canonical_agent(
-            wire(tmp_path / "wire"), reply_window=30, no_reply_window=30, reply_quiet=30
-        )
+        selected_comms_7 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+        agent = canonical_agent(selected_comms_7, native=selected_comms_7.owners.native_defaults, reply_window=30, no_reply_window=30, reply_quiet=30)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         prompt = asyncio.create_task(
             agent.prompt(
@@ -540,7 +542,7 @@ class TestAgentTurn:
     )
 
     def _agent_with_events(self, tmp_path: Path, wired) -> CommsAgent:
-        return canonical_agent(wired, agent_bin="pi", agent_args=[], auto_wake=False)
+        return canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi", arguments=tuple([])), auto_wake=False)
 
     def _authorize_test_goal(self, agent: CommsAgent, wired, goal) -> None:
         """Check the generation created by Goals; tests never add launch records."""
@@ -781,7 +783,7 @@ class TestAgentTurn:
         def independently_advance(name):
             nonlocal raced
             raced = True
-            wire(wired.root).goals.update_goal(
+            Comms(resolve_comms_route(wired.root), native=NativeThreadDefaults.from_runtime()).goals.update_goal(
                 name,
                 ActiveGoalAction(
                     expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
@@ -843,7 +845,7 @@ class TestAgentTurn:
         def interpose(name, **kwargs):
             nonlocal superseding
             if superseding is None:
-                superseding = wire(wired.root).goals.update_goal(
+                superseding = Comms(resolve_comms_route(wired.root), native=NativeThreadDefaults.from_runtime()).goals.update_goal(
                     name,
                     (
                         SetGoalAction(text="New objective")
@@ -892,7 +894,7 @@ class TestAgentTurn:
 
         async def events(*args, **kwargs):
             yield fake_input_started(args, kwargs)
-            wire(wired.root).goals.update_goal(
+            Comms(resolve_comms_route(wired.root), native=NativeThreadDefaults.from_runtime()).goals.update_goal(
                 "proj",
                 ActiveGoalAction(
                     expect=GoalPrecondition(expected_state=ActiveGoal(), goal_id=initial.id),
@@ -954,7 +956,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
         class FakeClient:
@@ -1001,7 +1003,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = canonical_agent(wired, agent_bin="pi")
+        agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"))
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         updates = []
 
@@ -1056,7 +1058,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
         class FakeClient:
@@ -1097,7 +1099,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
 
-        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
         class FakeClient:
@@ -1132,7 +1134,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
 
@@ -1181,7 +1183,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -1219,7 +1221,7 @@ class TestAgentTurn:
     async def test_owner_resume_checks_attempt_before_publishing_active(
         self, wired, tmp_path, monkeypatch, failed
     ):
-        agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
+        agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
         updates = []
@@ -1270,8 +1272,8 @@ class TestAgentTurn:
 
         with tempfile.TemporaryDirectory(prefix="ac-goal-reopen-", dir="/var/tmp") as base:
             root = Path(base) / "wire"
-            wired = wire(root)
-            agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
+            wired = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
+            agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"), runtime_enabled=True)
             monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
 
             class FakeClient:
@@ -1304,7 +1306,7 @@ class TestAgentTurn:
     ):
         from acp import RequestError
 
-        agent = canonical_agent(wired, agent_bin="pi")
+        agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"))
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         wired.goals.update_goal("proj", SetGoalAction(text="No orphan spend"))
@@ -1321,7 +1323,7 @@ class TestAgentTurn:
     async def test_goal_has_only_one_in_flight_attempt(self, wired, tmp_path, monkeypatch):
         from acp import RequestError
 
-        agent = canonical_agent(wired, agent_bin="pi")
+        agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"))
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="One attempt"))
@@ -1355,7 +1357,7 @@ class TestAgentTurn:
     ):
         from agent_comms.goal_attempts import GoalAttemptStore, StorageUncertainError
 
-        agent = canonical_agent(wired, agent_bin="pi")
+        agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"))
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Count responses"))
@@ -1400,7 +1402,7 @@ class TestWireProtocol:
         tmp_path = native_stdio_root
         (tmp_path / "proj").mkdir()
         root = tmp_path / "wire"
-        comms = wire(root)
+        comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
         root_id = comms.messaging.initialize_private_initial_protocol()
         env = dict(
             __import__("os").environ,
@@ -1444,7 +1446,7 @@ class TestWireProtocol:
             bufsize=0,
         )
         out_lines: list[str] = []
-        comms = wire(root)
+        comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
         try:
             assert proc.stdin is not None and proc.stdout is not None
             import time as _time
@@ -1497,9 +1499,8 @@ class TestWireProtocol:
 
 class TestLiveDrain:
     async def test_cancel_keeps_background_drain_live(self, tmp_path):
-        agent = canonical_agent(
-            wire(tmp_path / "wire"), reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05
-        )
+        selected_comms_8 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+        agent = canonical_agent(selected_comms_8, native=selected_comms_8.owners.native_defaults, reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "!relay hi"}])
         assert "proj" in agent.inputs.drain_tasks
@@ -1512,9 +1513,9 @@ class TestLiveDrain:
 
 class TestFullHistory:
     def test_full_history_is_everything_in_order(self, tmp_path):
-        from agent_comms.comms import wire
 
-        comms = wire(tmp_path / "wire")
+
+        comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
         comms.registry.declare(Thread(name="a", tags=frozenset({"x"}), worktree="/wt"))
         comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
         comms.messaging.send("a", "#all", "one")
@@ -1682,7 +1683,7 @@ class TestTargetPrefix:
         assert parse_target("@fixer")[0] == "#all"
 
     async def test_dm_prompt_reaches_only_target(self, wired):
-        agent = canonical_agent(wired, reply_window=0.1, no_reply_window=0.05, reply_quiet=0.02)
+        agent = canonical_agent(wired, native=wired.owners.native_defaults, reply_window=0.1, no_reply_window=0.05, reply_quiet=0.02)
         wired.registry.declare(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         await agent.prompt(session_id="proj", prompt=[{"type": "text", "text": "@peer hi peer"}])

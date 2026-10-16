@@ -3,10 +3,13 @@
 from unittest.mock import patch
 
 from agent_comms.bus_route_counts import BusRouteCounts, OpenedRouteCounts, RouteSourceRow
-from agent_comms.comms import wire
+
 from agent_comms.messages import InfoKind, Message
 from agent_comms.routing import DeliveryScope
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def measure(index, actor, seen):
@@ -27,13 +30,13 @@ def measure(index, actor, seen):
 
 
 def test_original_empty_cut_cannot_clear_a_later_index(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     with comms.bus.snapshot(viewer=viewer) as (basis, source):
         assert source.through == 0
         message = comms.messaging.send_message('sender', viewer, 'after empty capture')
-        assert wire(tmp_path).bus.pending_counts(viewer) == {'sender': 1}
+        assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).bus.pending_counts(viewer) == {'sender': 1}
         with BusRouteCounts(comms.bus.log.path) as index:
             before = RouteSourceRow.select(index.connection)
         assert comms.bus.pending_counts_opened(source, basis) == {}
@@ -43,7 +46,7 @@ def test_original_empty_cut_cannot_clear_a_later_index(tmp_path):
 
 
 def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     birth = comms.registry.require(viewer).created_at
@@ -85,7 +88,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
                 sender = f'later-{phase}-{number}'
                 comms.registry.declare(Thread(sender, frozenset(), str(tmp_path)))
                 comms.messaging.send_message(sender, viewer, 'a route absent at capture')
-            wire(tmp_path).bus.pending_counts(viewer)  # Real independent catchup.
+            Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).bus.pending_counts(viewer)  # Real independent catchup.
             after = retained()
             assert after[1] == initial[1]  # No future route eligibility calls.
             assert after[0] <= initial[0] + 32  # No suffix or timestamp-range scan.

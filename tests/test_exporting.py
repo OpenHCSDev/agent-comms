@@ -9,7 +9,7 @@ import pytest
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.cli import main
-from agent_comms.comms import wire
+
 from agent_comms.errors import RelationViolationError
 from agent_comms.exporting import (
     ChannelScope,
@@ -27,6 +27,9 @@ from agent_comms.exporting import (
 )
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def message(sequence: int, body: str, *, timestamp: float | None = None) -> Message:
@@ -280,7 +283,7 @@ def test_atomic_private_output_refuses_existing_and_symlink_and_force_replaces(t
 
 
 def test_wire_snapshot_excludes_appends_after_its_fixed_boundary(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     for name in ("alice", "bob"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.messaging.send("alice", "#team", "captured")
@@ -295,7 +298,7 @@ def test_wire_snapshot_excludes_appends_after_its_fixed_boundary(tmp_path):
 
 
 def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     for name in ("alice", "bob"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.messaging.send("alice", "#team", "team row")
@@ -343,7 +346,7 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
 
 def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(tmp_path, capsys):
     root = tmp_path / "wire"
-    comms = wire(root)
+    comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
     for name in ("alice", "bob"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     comms.messaging.send("alice", "#team", "hello")
@@ -373,7 +376,7 @@ def test_export_wire_cli_requires_explicit_scope_and_bound_and_emits_receipt(tmp
 
 
 def test_export_does_not_mutate_wire_or_read_markers(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     for name in ("alice", "bob"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     comms.messaging.send("alice", "bob", "unread")

@@ -6,7 +6,7 @@ from dataclasses import fields
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
 from agent_comms.native_transcript import NativeTranscript
@@ -21,6 +21,9 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def encoded(value):
@@ -70,7 +73,7 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
             for i in range(60)
         )
     )
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
     decoded = []
     original = NativeEntry.read
@@ -163,7 +166,7 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     from agent_comms.transcript_receipts import AssignedTranscriptSource
 
     root = tmp_path / "wire"
-    comms = wire(root)
+    comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
     thread = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     lookup = RecordedThreadIncarnation("fixture", thread.created_at).lookup
     database = root / "coordination.sqlite3"

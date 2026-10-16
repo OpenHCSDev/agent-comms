@@ -11,11 +11,13 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import _store_lock
 from routing_carry import prepare_original
 from routing_recovery import retain_originals
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def main():
     root, target_python, installer, root_id, receipt, provenance_declaration = sys.argv[1:]
-    service = Comms.for_runtime(Path(root))
+    service = Comms(LocalRoute(Path(root)), native=NativeThreadDefaults.from_runtime())
     environment = dict(os.environ)
     environment.pop('PYTHONPATH', None)
     with (service.bus.log.locked() as custody,

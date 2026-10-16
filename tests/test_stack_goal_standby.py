@@ -13,12 +13,16 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import CompletedGeneration
 from agent_comms.goal_presentation import GoalExecutionState
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
 
 
 @pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])
@@ -184,8 +188,8 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             "--extension",
             str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
         ]
-        comms = wire(root / "wire")
-        agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+        comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+        agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
             project = root / "parent"
@@ -241,8 +245,8 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 # Wait intent survives reopening. The new executing owner may
                 # rotate only the unused READY grant at the send boundary.
                 await agent.shutdown()
-                comms = wire(root / "wire")
-                agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+                comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+                agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
                 monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "parent")
                 await agent.turns.goals.schedule_goal("parent")

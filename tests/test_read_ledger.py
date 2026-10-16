@@ -6,13 +6,16 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def prepared(root):
-    comms = wire(root)
+    comms = Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())
     for name, tags in (("alice", {"team"}), ("bob", set())):
         comms.registry.declare(Thread(name, frozenset(tags), str(root)))
     return comms
@@ -47,7 +50,7 @@ def test_conversation_pair_boundary_retains_strict_codec_validation(raw):
 
 
 def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
-    comms = Comms.for_runtime(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime())
     comms.messaging.initialize_private_initial_protocol()
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     notice = "Read positions were reset; reopen conversations to review them."
@@ -59,7 +62,7 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     assert first.read_marker_notice == notice
     assert comms.bus.reads.read().notice is None
 
-    second = Comms.for_runtime(tmp_path).views.presentation.roster(viewer)
+    second = Comms(LocalRoute(tmp_path), native=NativeThreadDefaults.from_runtime()).views.presentation.roster(viewer)
     assert second.read_marker_notice is None
 
 
@@ -71,7 +74,7 @@ def test_bounded_page_marks_only_shown_messages(tmp_path):
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path), through=page.newest_seq, expected_scope=page.display_scope
     )
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
 
 
 def test_displayed_message_is_read_in_every_projection(tmp_path):
@@ -81,7 +84,7 @@ def test_displayed_message_is_read_in_every_projection(tmp_path):
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path), through=page.newest_seq, expected_scope=page.display_scope
     )
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
+    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
 
 
 def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp_path):
@@ -96,7 +99,7 @@ def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp
         "#team", worktree=str(tmp_path), through=shown.seq, expected_scope=page.display_scope
     )
     comms.channels.update_tags("bob", add=frozenset({"team"}))
-    reopened = wire(tmp_path)
+    reopened = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
     seen = reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot())
     assert hidden.seq not in seen and shown.seq in seen
@@ -123,7 +126,7 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
         through=page.newest_seq,
         expected_display_basis=page.display_basis,
     )
-    assert wire(tmp_path).bus.pending_count(viewer, "alice") == 0
+    assert Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime()).bus.pending_count(viewer, "alice") == 0
 
 
 def test_agent_sent_dm_includes_independent_human_read(tmp_path):
@@ -182,7 +185,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
         timeout=15,
     )
     assert child.returncode == 9
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     assert comms.bus.pending_count(viewer, "alice") == 0
     comms.registry.unregister("alice")
     comms.registry.remove("alice")
@@ -221,7 +224,7 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
                 through=through,
                 expected_scope=scope,
             )
-        comms = wire(tmp_path)
+        comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
         seen = comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
         assert seen == shown
 
@@ -285,7 +288,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
         # Unrelated registry changes and previous ACKs do not invalidate the
         # remaining captured proof; participant identity still does.
         comms.registry.register(Thread("unrelated", frozenset(), str(tmp_path)))
-    reopened = wire(tmp_path)
+    reopened = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
     assert reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot()) == {
         messages[2].seq,
@@ -400,7 +403,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
                 timeout=15,
             )
             assert child.returncode == 9, child.stderr.decode()
-            comms = wire(tmp_path)
+            comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
         seen = comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
         assert seen <= current_sequences(painted), (seed, index, operation)
         assert seen == current_sequences(acknowledged), (seed, index, operation)

@@ -17,6 +17,7 @@ from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
 from compaction_loopback import LoopbackProvider
+from agent_comms.active_route import LocalRoute
 
 
 class Subscriber:
@@ -68,7 +69,7 @@ async def main(package, evidence):
             project.mkdir(mode=0o700)
             native = NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary(), arguments=("--offline", "--no-extensions", "--no-skills",
                                                      "--no-context-files", "--no-tools"))
-            comms = Comms(stage / 'wire', native=native)
+            comms = Comms(LocalRoute(stage / 'wire'), native=native)
             root_id = comms.messaging.initialize_private_initial_protocol()
             comms.registry.declare(Thread('recipient', frozenset({'team'}), str(project),
                                           model='selected-offline/fixture', thinking_level='off'))

@@ -31,6 +31,9 @@ from agent_comms.coordination_tables.recovery import (
 from agent_comms.coordinator import Coordination
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
+from agent_comms.message_bus import MessageBus
+from agent_comms.owner_lifecycle import OwnerReleaseStore
+from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
 
 if TYPE_CHECKING:
     from agent_comms.owner_lifecycle import OwnerReleaseReceipt
@@ -68,13 +71,11 @@ class VerifiedOwnerLoss:
         not proof that the input was unsent. Lease expiry or a replaced PID alone
         is insufficient.
         """
-        from agent_comms.comms import Comms
-        from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
-
         if store.session.path.name != "coordination.sqlite3":
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
-        comms = Comms.for_runtime(store.session.path.parent)
-        with store.session.boundary(comms.bus) as boundary:
+        root = store.session.path.parent
+        bus = MessageBus.for_root(root, private_initial_writes=True, private_claim_writes=True)
+        with store.session.boundary(bus) as boundary:
             registry = boundary.registry
             assert_native_runtime_schema(store.session._connection)
             snapshot = store.snapshots.get(execution_id)
@@ -89,7 +90,7 @@ class VerifiedOwnerLoss:
             if source is None or source.owner_identity != attempt.owner_identity:
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
             try:
-                release = comms.owners.releases.read().get(attempt.owner_thread)
+                release = OwnerReleaseStore.for_root(root).read().get(attempt.owner_thread)
             except (OSError, ValueError, TypeError) as error:
                 raise RecoveryBlocked("native owner release receipt is invalid") from error
             if release is None:
@@ -212,11 +213,9 @@ class RecoveryMonitorCapability:
     @classmethod
     def settle_stopped_owner(cls, root: Path, owner) -> None:
         """An explicit stop retires only the exited owner's original local attempt."""
-        from .comms import Comms
-
         if not (root / "coordination.sqlite3").exists():
             return  # No native coordinator, hence no selected attempt claims.
-        receipt = Comms.for_runtime(root).owners.releases.read().get(owner.name)
+        receipt = OwnerReleaseStore.for_root(root).read().get(owner.name)
         if receipt is None or receipt.thread.process_identity != owner.process_identity:
             raise RecoveryBlocked("stopped attempt requires the exact exited owner release")
         cls.recover_owner(root, owner)

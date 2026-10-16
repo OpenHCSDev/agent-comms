@@ -46,6 +46,8 @@ from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.wake_policy import BoundedTriageWake, FullWake
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 pytestmark = pytest.mark.skipif(
     sys.platform == "win32", reason="private initial bus requires POSIX owner/directory durability"
@@ -55,7 +57,7 @@ pytestmark = pytest.mark.skipif(
 def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "comms"
     root.mkdir(mode=0o700)
-    comms = Comms.for_runtime(root, private_initial_writes=True)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
     people = {
         "sender": (17001.0, {"team"}),
         "Alice": (17002.0, {"team"}),
@@ -147,7 +149,7 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     message = comms.messaging.send_initial_cohort("sender", "#team", "all must respond")
     # Full bus fsync occurred; coordinator process crashes before BEGIN IMMEDIATE.
     coordinator.close()
-    reopened = Comms.for_runtime(tmp_path / "comms")
+    reopened = Comms(LocalRoute(tmp_path / "comms"), native=NativeThreadDefaults.from_runtime())
     reopened.registry.rename("Alice", "Alicia")
     reopened.registry.register(replace(reopened.registry.require("Bob"), tags=frozenset({"other"})))
     store = Coordination(str(tmp_path / "comms" / "coordinator.sqlite"), clock_ms=lambda: 4788)
@@ -412,11 +414,11 @@ def test_reader_rejects_later_corrupt_row_even_for_earlier_valid_seq(tmp_path: P
 def test_existing_bus_cannot_acquire_private_marker(tmp_path: Path) -> None:
     root = tmp_path / "legacy"
     root.mkdir(mode=0o700)
-    default = Comms.for_runtime(root)
+    default = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     default.registry.register(Thread(name="sender", tags=frozenset(), worktree=str(root)))
     default.registry.register(Thread(name="Alice", tags=frozenset(), worktree=str(root)))
     default.messaging.send_message("sender", "Alice", "ordinary")
-    gated = Comms.for_runtime(root)
+    gated = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     before = (root / "bus.jsonl").read_bytes()
     with pytest.raises(RelationViolationError, match="unmarked bus data"):
         gated.messaging.initialize_private_initial_protocol()
@@ -440,7 +442,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     open_parent.chmod(0o777)
     try:
         with pytest.raises(RelationViolationError, match="ancestry"):
-            Comms.for_runtime(root, private_initial_writes=True).messaging.initialize_private_initial_protocol()
+            Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True).messaging.initialize_private_initial_protocol()
         assert not (root / "bus_meta.json").exists()
     finally:
         open_parent.chmod(0o700)

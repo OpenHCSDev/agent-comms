@@ -29,6 +29,7 @@ from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from stored_inputs import stored_inputs
+from agent_comms.active_route import LocalRoute
 
 tmp_path = private_root_fixture
 
@@ -111,7 +112,7 @@ class ForkOwnerCase(OwnerAdmissionCase):
             saved = comms.relationships.collaborations(owner.name)
             assert len(saved) == 1
             assert saved[0].counterpart(owner) == peer.incarnation
-        reopened = Comms.for_runtime(comms.root)
+        reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
         assert reopened.relationships.collaborations(parent.name) == (edge,)
         assert reopened.registry.require(parent.name) == parent
 
@@ -176,7 +177,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     )
     debug_log = native.project / "runtime-debug.log"
     monkeypatch.setenv("AGENT_COMMS_DEBUG_LOG", str(debug_log))
-    comms = Comms(native.root, native=NativeThreadDefaults(
+    comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults(
         binary=NativeThreadDefaults.runtime_binary(), arguments=("--offline", "--no-extensions", "--no-skills", "--no-context-files"),
     ))
     comms.registry.declare(
@@ -192,12 +193,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
-    attachment = CommsClient(
-        comms,
-        runtime_enabled=True,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
-    )
+    attachment = CommsClient(comms, native=comms.owners.native_defaults, runtime_enabled=True, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     facts = []
 
     class Client:

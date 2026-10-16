@@ -30,6 +30,7 @@ from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocke
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.active_route import LocalRoute
 
 # Reuse the existing sealed-runtime persistent /var/tmp test root.
 tmp_path = private_root_fixture
@@ -217,7 +218,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         monkeypatch.setenv(key, value)
     for key in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(key, raising=False)
-    comms = Comms(tmp_path / "wire", native=NativeThreadDefaults(
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults(
         binary=str(Path(sys.executable).with_name("pi-comms-native")),
         arguments=("--offline", "--no-extensions", "--no-skills", "--no-context-files"),
     ))
@@ -237,12 +238,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
-    attachment = CommsClient(
-        comms,
-        runtime_enabled=True,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
-    )
+    attachment = CommsClient(comms, native=comms.owners.native_defaults, runtime_enabled=True, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     facts = []
 
     class Client:
@@ -472,10 +468,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 assert current.session_file == old.session_file
                 assert Path(current.session_file).read_bytes() == saved[name]
             assert len(requests) == seed_count + 2, "Restart replayed saved input"
-            attachment = CommsClient(
-                comms, runtime_enabled=True, private_nk_native_package=package,
-                private_nk_wire_root_id=root_id,
-            )
+            attachment = CommsClient(comms, native=comms.owners.native_defaults, runtime_enabled=True, private_nk_native_package=package, private_nk_wire_root_id=root_id)
             attachment.on_connect(Client())
             await attachment.load_session(cwd=str(projects["questioner"]), session_id="questioner")
             async with asyncio.timeout(35):
@@ -528,7 +521,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
     pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     if not pin:
         pytest.skip("Actual immutable native bundle required")
-    comms = Comms.for_runtime(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     root_id = comms.messaging.initialize_private_initial_protocol()
     before = comms.registry.snapshot()
     entered, release, completed = threading.Event(), threading.Event(), threading.Event()
@@ -546,7 +539,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
             completed.set()
 
     monkeypatch.setattr(SelectedExecution, "validate", observed_validation)
-    execution = SelectedExecution(root=comms.root, wire_root_id=root_id,
+    execution = SelectedExecution(comms=Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id,
                                   owner_name="unregistered", native_package=Path(pin))
     task = asyncio.create_task(execution.run())
     try:
@@ -569,7 +562,7 @@ async def test_selected_validation_cancellation_joins_before_claim(tmp_path, mon
     # A separate invalid acquisition still refuses before participant/claim
     # selection; no cancellation or prior validation grants it trust.
     monkeypatch.setattr(SelectedExecution, "validate", validate)
-    invalid = SelectedExecution(root=comms.root, wire_root_id=root_id,
+    invalid = SelectedExecution(comms=Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime()), wire_root_id=root_id,
                                 owner_name="unregistered", native_package=tmp_path)
     with pytest.raises(NativePiUnavailable):
         await invalid.run()

@@ -19,49 +19,34 @@ from agent_comms.native_arguments import (
 )
 from test_backend_native_lifecycle import native_backend as native_backend
 from agent_comms.pi_vocabulary import OffThinkingLevel
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
 
 
 def test_unconfigured_launch_has_no_provider_or_model_policy():
-    from agent_comms.native_settings import NativeThreadDefaults
-
-    arguments = NativeArguments.configured(NativeThreadDefaults.from_runtime())
+    defaults = NativeThreadDefaults.from_runtime()
+    arguments = NativeArguments.parse(defaults.arguments)
     assert arguments.argv == ()
     assert arguments.model is None
     assert arguments.thinking is None
-    assert NativeArguments.configured(NativeThreadDefaults(
-        binary=NativeThreadDefaults.runtime_binary(),
-        arguments=("--provider", "user", "--model", "selected"),
-    )).model == "user/selected"
+    selected = NativeThreadDefaults(
+        binary=defaults.binary, arguments=("--provider", "user", "--model", "selected"),
+    )
+    assert NativeArguments.parse(selected.arguments).model == "user/selected"
 
 
-@pytest.mark.skipif(sys.platform != "linux", reason="Linux sealed launch descriptor")
-def test_native_settings_private_descriptor_and_public_cli_share_the_declared_codec():
-    from agent_comms.native_settings import NativeThreadDefaults
-
+def test_native_settings_cli_and_original_command_share_the_declared_codec():
     selected = NativeThreadDefaults(binary="/fixture pi", arguments=("--label", "two words"))
-    assert NativeThreadDefaults.from_cli(selected.cli_arguments) == selected
-    with selected.inherited() as (arguments, descriptors):
-        descriptor, = descriptors
-        assert arguments == (selected.descriptor_flag, str(descriptor))
-        assert "two words" not in arguments
-        assert NativeThreadDefaults.from_descriptor(descriptor) == selected
-        assert NativeThreadDefaults.from_process(os.getpid(), arguments) == selected
-        with pytest.raises(OSError):
-            os.pwrite(descriptor, b"changed", 0)
-    with pytest.raises(OSError):
-        os.fstat(descriptor)
-
-
-def test_native_settings_require_explicit_original_selection_and_valid_binary():
-    from agent_comms.native_settings import NativeThreadDefaults
-    from agent_comms.owner_restart import OwnerRestartRequest
-
+    assert NativeThreadDefaults.from_cli(selected.cli_arguments, selected) == selected
+    assert NativeThreadDefaults.from_command(("python", "-m", "agent_comms.worker",
+                                             *selected.cli_arguments)) == selected
     with pytest.raises(ValueError, match="no typed native launch settings"):
-        NativeThreadDefaults.from_process(os.getpid(), ("python", "-m", "agent_comms.worker"))
-    with pytest.raises(ValueError, match="native binary"):
-        NativeThreadDefaults(binary="")
-    with pytest.raises(ValueError, match="native binary"):
-        OwnerRestartRequest(agent_bin="").validate(NativeThreadDefaults.from_runtime())
+        NativeThreadDefaults.from_command(("python", "-m", "agent_comms.worker"))
+    with pytest.raises(ValueError):
+        NativeThreadDefaults.from_json('{"binary":42}')
+    with pytest.raises(ValueError):
+        NativeThreadDefaults.from_json('{"binary":"/fixture/pi","arguments":[42]}')
 
 
 def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments():
@@ -156,10 +141,8 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
     proof_path = native.session.with_suffix(native.session.suffix + ".input-proof")
     proof = read_proof_rows(native.session)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    owner = canonical_agent(
-        Comms.for_runtime(native.root),
-        auto_wake=False,
-        agent_args=[
+    selected_comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, arguments=tuple([
             "--provider=response-local",
             "--model=fixture",
             "--thinking=low",
@@ -170,8 +153,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
             "--no-context-files",
             "--no-prompt-templates",
             "--no-tools",
-        ],
-    )
+        ])), auto_wake=False)
     router = build_agent_router(owner)
     try:
         async with asyncio.timeout(25):

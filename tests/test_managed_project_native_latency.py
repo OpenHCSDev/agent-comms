@@ -24,6 +24,9 @@ from agent_comms.runtime_requests import ProjectRuntimeRequest
 from agent_comms.pi_native_backend import PiNativeBackend
 import agent_comms.native_package as native_package
 from delivery_owner_fixture import canonical_agent
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -96,13 +99,10 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
                             "facts": [type(fact).__name__ for fact in facts],
                             "marker": text if "LATENCY_" in text else ""})
 
-    comms = Comms.for_runtime(fixture.root)
-    owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False,
-        agent_args=["--offline", "--no-extensions", "--extension", str(extension),
-                    "--no-skills", "--no-context-files", "--no-prompt-templates", "--tools", "read"])
-    attachment = CommsClient(comms, agent_bin="pi", auto_wake=False,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"])
+    comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults.from_runtime())
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(["--offline", "--no-extensions", "--extension", str(extension),
+                    "--no-skills", "--no-context-files", "--no-prompt-templates", "--tools", "read"])), runtime_enabled=True, auto_wake=False)
+    attachment = CommsClient(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"])
     attachment.on_connect(Observer())
     report = {"complete": False, "spans": spans, "updates": updates,
               "python": os.sys.executable, "core_module": native_package.__file__,

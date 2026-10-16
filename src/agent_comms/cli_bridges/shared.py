@@ -32,6 +32,9 @@ from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent
 from agent_comms.typed_table import Column, TypedTable
+from agent_comms.message_bus import MessageBus
+from agent_comms.messaging import Messaging
+from agent_comms.transcripts import Transcripts
 
 
 class SendResult(WireModel):
@@ -631,11 +634,12 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
         """Observe CLI output without submitting inputs or executing tools."""
 
     async def publish_transcript(self) -> None:
-        from agent_comms.comms import Comms
-
-        comms = Comms.for_runtime(Path(self.binding.root))
+        root = Path(self.binding.root)
+        bus = MessageBus.for_root(root)
+        transcripts = Transcripts(root, bus.registry, bus, Messaging(root, bus.registry, bus))
         output = ThreadOutput(
-            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
+            await asyncio.to_thread(transcripts.external, self.binding.bus),
+            AgentActivity(root, bus.registry))
         # This subscription can assemble only items whose start it receives.
         # A prefix from the previous subscription cannot stand for that stream.
         await asyncio.to_thread(output.transcript.end_turn)

@@ -12,12 +12,14 @@ from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 @pytest.mark.parametrize("ending", ["exit", "lease", "process", "root", "close", "cancel"])
 async def test_unsent_attachment_ends_with_actual_lifetime(tmp_path, ending):
     process = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
-    comms = Comms.for_runtime(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(
         Thread("cold", frozenset(), str(tmp_path), process_identity=process.identity)
     )
@@ -71,7 +73,7 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
     from agent_comms.acp import CommsAgent
     from acp import RequestError
 
-    comms = Comms.for_runtime(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     thread = Thread("owner", frozenset(), str(tmp_path),
                     process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)
@@ -98,7 +100,7 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
             await writer.wait_closed()
 
     server = await asyncio.start_unix_server(subscribe, path=path)
-    agent = CommsAgent(comms, auto_wake=False)
+    agent = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
     loading = asyncio.create_task(agent.sessions.attach_owner(thread, "owner"))
     try:
         async with asyncio.timeout(3):

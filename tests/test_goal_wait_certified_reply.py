@@ -16,6 +16,8 @@ from agent_comms.threads import Thread
 from goal_owner_fixture import canonical_goal_wire
 from stored_inputs import stored_inputs
 from agent_comms.goal_waits import NoGoalWait
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def register(comms, name):
@@ -195,7 +197,7 @@ async def test_native(retained_native_acp_owner):
         assert native.provider.posts == 3
         from agent_comms.comms import Comms
 
-        reopened = Comms.for_runtime(comms.root, private_initial_writes=False, private_claim_writes=False)
+        reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=False, private_claim_writes=False)
         assert isinstance(reopened.goals.goal_wait(sid), NoGoalWait)
         assert reopened.registry.require(sid).goal == parked_goal
         assert reopened.bus.log.message_by_id(original.message_id).reference == original.reference

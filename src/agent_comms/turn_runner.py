@@ -100,8 +100,8 @@ class TurnRunner:
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        self.agent_bin = NativeArguments.configured_binary(native)
-        self.agent_args = NativeArguments.configured(native)
+        self.agent_bin = native.binary
+        self.agent_args = NativeArguments.parse(native.arguments)
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}

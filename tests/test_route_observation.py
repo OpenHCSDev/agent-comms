@@ -8,13 +8,14 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.active_route import ActiveRoute, LocalRoute, read_active_route, resolve_comms_route
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.wire_log import WireLog
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def route_fixture(tmp_path, monkeypatch):
@@ -23,7 +24,7 @@ def route_fixture(tmp_path, monkeypatch):
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
-    comms = Comms.for_runtime(root)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     root_id = comms.messaging.initialize_private_initial_protocol()
     route = tmp_path / ".local/state/agent-comms/active-route.json"
     route.parent.mkdir(parents=True, mode=0o700)
@@ -57,7 +58,7 @@ def test_observation_never_composes_decodes_or_waits_for_bus_lock(tmp_path, monk
 def test_observation_revalidates_rotation_id_permissions_and_shape(tmp_path, monkeypatch):
     route, root, root_id = route_fixture(tmp_path, monkeypatch)
     second = tmp_path / "second"
-    second_id = Comms.for_runtime(second).messaging.initialize_private_initial_protocol()
+    second_id = Comms(LocalRoute(second), native=NativeThreadDefaults.from_runtime()).messaging.initialize_private_initial_protocol()
     assert resolve_comms_route().observe_root() == root
     install_route(route, second, second_id, tmp_path)
     assert resolve_comms_route().observe_root() == second
@@ -94,17 +95,17 @@ def test_explicit_environment_absent_default_and_invalid_route(tmp_path, monkeyp
 
 def test_service_factory_uses_selection_and_retains_private_pin(tmp_path, monkeypatch):
     _, root, root_id = route_fixture(tmp_path, monkeypatch)
-    service = wire()
+    service = Comms(resolve_comms_route(), native=NativeThreadDefaults.from_runtime())
     assert service.root == root
     assert service.owners._private_nk_launch == PrivateNkLaunch(root, root_id, tmp_path, None)
-    assert wire(root).owners._private_nk_launch is None
+    assert Comms(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime()).owners._private_nk_launch is None
 
 
 def test_route_record_retains_the_external_format_and_private_marker(tmp_path):
     tmp_path.chmod(0o700)
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
-    root_id = Comms.for_runtime(root).messaging.initialize_private_initial_protocol()
+    root_id = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).messaging.initialize_private_initial_protocol()
     selected = ActiveRoute(root, root_id, tmp_path)
     encoded = FieldCodec.encode(selected)
     assert encoded == {

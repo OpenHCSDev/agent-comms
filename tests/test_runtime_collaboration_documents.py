@@ -14,6 +14,9 @@ from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -26,10 +29,8 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
     native = native_backend
     arguments = ["--provider=response-local", "--model=fixture", "--thinking=off", "--offline", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"]
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    agent = canonical_agent(
-        Comms.for_runtime(native.root), auto_wake=False, runtime_enabled=False,
-        agent_args=arguments,
-    )
+    selected_comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, arguments=tuple(arguments)), auto_wake=False, runtime_enabled=False)
     child = None
     try:
         async with asyncio.timeout(15):

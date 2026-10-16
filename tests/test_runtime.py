@@ -16,13 +16,17 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.agent_backend import CompactionOutcome, PlacedCompaction
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
 
 
 @pytest.fixture
@@ -81,9 +85,9 @@ async def until(predicate, timeout=10):
 async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
     from acp.exceptions import RequestError
 
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
-    client = canonical_agent(comms)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
+    client = canonical_agent(comms, native=comms.owners.native_defaults)
     response = await owner.new_session(str(tmp_path / "project"))
     proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
     request = {
@@ -120,9 +124,9 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
 async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, monkeypatch):
-    comms = wire(tmp_path / ("long-wire-" * 16))
-    owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
-    client = canonical_agent(comms)
+    comms = Comms(resolve_comms_route(tmp_path / ("long-wire-" * 16)), native=NativeThreadDefaults.from_runtime())
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
+    client = canonical_agent(comms, native=comms.owners.native_defaults)
     updates = []
 
     class Client:
@@ -190,11 +194,11 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
 async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     tmp_path, runtime_processes
 ):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
-    client = canonical_agent(comms)
+    client = canonical_agent(comms, native=comms.owners.native_defaults)
     updates = []
 
     class Client:
@@ -317,7 +321,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
 async def test_request_only_proxy_never_replays_after_request_was_received(
     tmp_path, runtime_processes
 ):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     old, new = runtime_processes
     old_pid, new_pid = old.pid, new.pid
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), process_identity=old))
@@ -365,9 +369,9 @@ async def test_request_only_proxy_never_replays_after_request_was_received(
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
 async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
-    client = canonical_agent(comms)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
+    client = canonical_agent(comms, native=comms.owners.native_defaults)
     updates = []
 
     class Client:
@@ -411,14 +415,9 @@ async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
 async def test_attached_client_receives_owner_model_options(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one,test/two")
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(
-        comms,
-        agent_bin="/bin/echo",
-        agent_args=["--provider", "test", "--model", "one"],
-        runtime_enabled=True,
-    )
-    client = canonical_agent(comms)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple(["--provider", "test", "--model", "one"])), runtime_enabled=True)
+    client = canonical_agent(comms, native=comms.owners.native_defaults)
     response = await owner.new_session(str(tmp_path / "project"))
     try:
         attached = await client.sessions.attach_owner(
@@ -449,8 +448,8 @@ async def test_attached_client_receives_owner_model_options(tmp_path, monkeypatc
 
 @pytest.mark.asyncio
 async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_path):
-    comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="/bin/echo")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo"))
     try:
         response = await agent.new_session(str(tmp_path / "project"))
         assert (
@@ -468,9 +467,9 @@ async def test_new_session_metadata_has_a_display_title_before_first_switch(tmp_
 @pytest.mark.asyncio
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
 async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="/bin/echo", runtime_enabled=True)
-    client = canonical_agent(comms)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo"), runtime_enabled=True)
+    client = canonical_agent(comms, native=comms.owners.native_defaults)
     updates = []
 
     class Client:
@@ -512,7 +511,7 @@ async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
 def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
     from agent_comms.errors import RelationViolationError
 
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
     session = tmp_path / "parent.jsonl"
     session.write_text("")
     comms.registry.declare(

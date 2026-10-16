@@ -15,11 +15,14 @@ import subprocess
 import time
 import hashlib
 from tempfile import TemporaryDirectory
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 sys.path.insert(0, os.environ['TOAD_TEST_HELPERS'])
 from runtime_fixture import ToadApp
 from sidebar_retirement_pilot import until, viewport_text
-from agent_comms.comms import wire
+
 from agent_comms.threads import Thread
 from toad.navigation_target import DirectTarget, NavigationContext, channel_target
 from toad.navigation_preparation import ThreadNavigationRequest
@@ -44,7 +47,7 @@ def prepare_physical_fixture():
         'api':'openai-completions','models':[{'id':'fixture','contextWindow':32768,'maxTokens':2048}]}}}))
     (profile/'auth.json').write_text('{}')
     (profile/'settings.json').write_text(json.dumps({'retry':{'enabled':False,'maxRetries':0}}))
-    comms=wire(destination/'wire');root_id=comms.messaging.initialize_private_initial_protocol()
+    comms=Comms(resolve_comms_route(destination/'wire'), native=NativeThreadDefaults.from_runtime());root_id=comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread('archive-review',frozenset({'comms'}),str(project),
                                   model='selected-offline/fixture',thinking_level='off'))
     reference_actual_history(comms.root,Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
@@ -64,7 +67,7 @@ async def main():
         root=Path(directory)
         os.environ.update(AGENT_COMMS_ROOT=str(root/'wire'),XDG_CONFIG_HOME=str(root/'config'),
                           XDG_STATE_HOME=str(root/'state'),XDG_DATA_HOME=str(root/'data'))
-        comms=wire(root/'wire')
+        comms=Comms(resolve_comms_route(root/'wire'), native=NativeThreadDefaults.from_runtime())
         comms.messaging.initialize_private_initial_protocol()
         for name, parent in [('openhcs-architecture-memory',None),('openhcs-pr159-viewer-bind-owner','openhcs-architecture-memory')]:
             comms.registry.declare(Thread(name,frozenset({'openhcs','comms'}),str(root),parent=parent,

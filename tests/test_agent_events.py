@@ -19,6 +19,7 @@ from agent_comms.pending_requests import PendingRequests
 from agent_comms.threads import Thread
 from agent_comms.coordinator import Coordination
 from agent_comms.transcript_updates import TurnTranscriptUpdate
+import dataclasses
 
 
 async def test_mro_specific_before_shared_and_consumer_override():
@@ -223,7 +224,7 @@ async def test_settle_turn_releases_fence_after_publication_even_on_error(
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    owner = CommsAgent(comms, agent_bin="unused")
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="unused"))
     lease = comms.agents.begin_turn("bot", "turn").turn_lease
     owner.sessions.bindings["session"] = "bot"
     task = asyncio.current_task()
@@ -265,7 +266,7 @@ async def test_stale_settlement_preserves_replacement_turn(
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    owner = CommsAgent(comms, agent_bin="unused")
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="unused"))
     lease = comms.agents.begin_turn("bot", "turn").turn_lease
     owner.sessions.bindings["session"] = "bot"
     released = []
@@ -292,7 +293,7 @@ async def test_cancelled_worker_keeps_original_lease_and_waiter_cleanup(
     """Cancel after the real CAS, before its result crosses back to the loop."""
     comms.registry.declare(Thread("bot", frozenset(), str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid())))
-    owner = CommsAgent(comms, agent_bin="unused")
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="unused"))
     owner.sessions.bindings["session"] = "bot"
     committed, deliver = threading.Event(), threading.Event()
     original = comms.agents.begin_turn if acquiring else comms.agents.finish_turn

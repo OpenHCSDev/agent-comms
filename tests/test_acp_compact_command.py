@@ -18,9 +18,12 @@ from agent_comms.acp_extension import (
     encode_updates,
 )
 from agent_comms.agent_backend import FailedCompaction, PlacedCompaction
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from delivery_owner_fixture import canonical_agent
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 PLACED = PlacedCompaction("summary", "first-kept", 1200)
@@ -36,7 +39,8 @@ def block(text: str) -> TextContentBlock:
 
 @pytest.mark.asyncio
 async def test_compact_is_exclusive_bridge_command_not_model_prompt(tmp_path, monkeypatch):
-    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
+    selected_comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(selected_comms, native=selected_comms.owners.native_defaults, auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
     calls = []
 
@@ -60,7 +64,8 @@ async def test_compact_is_exclusive_bridge_command_not_model_prompt(tmp_path, mo
 
 @pytest.mark.asyncio
 async def test_toad_blank_prompt_metadata_compacts_without_model(tmp_path, monkeypatch):
-    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
+    selected_comms_2 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(selected_comms_2, native=selected_comms_2.owners.native_defaults, auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
     calls = []
 
@@ -89,7 +94,8 @@ async def test_toad_blank_prompt_metadata_compacts_without_model(tmp_path, monke
 
 @pytest.mark.asyncio
 async def test_sdk_router_preserves_toad_wire_metadata(tmp_path, monkeypatch):
-    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
+    selected_comms_3 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(selected_comms_3, native=selected_comms_3.owners.native_defaults, auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
     calls = []
 
@@ -116,7 +122,8 @@ async def test_sdk_router_preserves_toad_wire_metadata(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_compact_failure_is_not_end_turn_success(tmp_path, monkeypatch):
-    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
+    selected_comms_4 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(selected_comms_4, native=selected_comms_4.owners.native_defaults, auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
 
     async def compact_context(*args):
@@ -134,7 +141,8 @@ async def test_compact_failure_is_not_end_turn_success(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_attached_compact_routes_to_owner_not_attached_model(tmp_path):
-    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
+    selected_comms_5 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(selected_comms_5, native=selected_comms_5.owners.native_defaults, auto_wake=False)
     calls = []
 
     class Proxy:
@@ -151,7 +159,8 @@ async def test_attached_compact_routes_to_owner_not_attached_model(tmp_path):
 
 @pytest.mark.asyncio
 async def test_compact_rejects_multimodal_and_overlong_without_bridge_or_model(tmp_path):
-    agent = canonical_agent(wire(tmp_path / "wire"), auto_wake=False)
+    selected_comms_6 = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(selected_comms_6, native=selected_comms_6.owners.native_defaults, auto_wake=False)
     session = (await agent.new_session(cwd=str(tmp_path / "work"))).session_id
     try:
         with pytest.raises(RequestError) as multimodal:

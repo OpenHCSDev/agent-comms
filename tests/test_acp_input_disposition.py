@@ -35,6 +35,8 @@ from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
 from test_backend_native_lifecycle import native_backend
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 class Updates:
@@ -78,7 +80,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
         assert not owner.inputs.pending_turns and not owner.turns.turn_state(session).busy
         assert any(isinstance(fact, InputDeliveryChangedUpdate)
                    for update in updates.rows for fact in decode_updates(update.get("_meta")))
-        assert Comms.for_runtime(native.root).goals.unresolved_inputs(session) == [row.public() for row in rows]
+        assert Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime()).goals.unresolved_inputs(session) == [row.public() for row in rows]
     assert native.session.read_bytes() == saved and native.provider.posts == 0
 
 
@@ -102,7 +104,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
     monkeypatch.setattr(PiRpcChannel, "decode_record", staticmethod(observed_response))
     async with native.open_owner(runtime_enabled=True) as (owner, session):
         turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
-        attachment = canonical_agent(owner._comms, auto_wake=False)
+        attachment = canonical_agent(owner._comms, native=owner._comms.owners.native_defaults, auto_wake=False)
         updates = Updates()
         attachment.on_connect(updates)
         proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
@@ -181,7 +183,7 @@ async def test_native_steer_keeps_original_input_and_turn_custody(native_backend
     native.provider.response_gate = original_response
     async with native.open_owner(runtime_enabled=True) as (owner, session):
         turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
-        attachment = canonical_agent(owner._comms, auto_wake=False)
+        attachment = canonical_agent(owner._comms, native=owner._comms.owners.native_defaults, auto_wake=False)
         attachment.on_connect(Updates())
         proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
         try:
@@ -247,7 +249,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
         try:
             await wait_for(lambda: native.provider.posts == 1)
             message = await Coordination.run_worker(partial(
-                Comms.for_runtime(native.root, private_initial_writes=True).messaging.send_message,
+                Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True).messaging.send_message,
                 "sender", session, "are you still on the parser?",
             ))
             native.provider.response_gate = None
@@ -341,7 +343,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
 
         await Coordination.run_worker(prepare)
         initial = await Coordination.run_worker(partial(
-            Comms.for_runtime(native.root, private_initial_writes=True).messaging.send_message,
+            Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True).messaging.send_message,
             "sender", session, "first",
         ))
         try:
@@ -350,7 +352,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             # implementation while Core still has not opened following input.
             await wait_for(lambda: b'"id":"local-tool-once"' in native.session.read_bytes())
             message = await Coordination.run_worker(partial(
-                Comms.for_runtime(native.root, private_initial_writes=True).messaging.send_message,
+                Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True).messaging.send_message,
                 "sender", session, "deliver as soon as following input opens",
             ))
             await wait_for(lambda: session in owner.inputs._idle_private_revisions)
@@ -429,7 +431,7 @@ async def test_waiting_messages_follow_the_original_on_the_changed_model(
         try:
             await wait_for(lambda: native.provider.posts == 1)
             assert native.provider.requests[0]["model"] == "fixture"
-            sender = Comms.for_runtime(native.root, private_initial_writes=True).messaging
+            sender = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True).messaging
             for body in ("first question", "second question"):
                 await Coordination.run_worker(partial(
                     sender.send_message, "sender", session, body
@@ -493,7 +495,7 @@ asyncio.run(main())
         timeout=15, cwd=native.project,
     )
     assert result.outcome == ExitedOutcome(17), result.stderr.decode()
-    comms = Comms.for_runtime(native.root)
+    comms = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime())
     session = native.project.name
     ledger = InputDispositions(native.root)
     before = ledger.path.read_bytes()
@@ -504,7 +506,7 @@ asyncio.run(main())
     assert not original.process_alive
     comms.threads.restore_stopped(comms.registry.snapshot(), (session,))
     thread = comms.owners.acquire_thread(session, owner_pid=os.getpid())
-    owner = canonical_agent(comms, auto_wake=False)
+    owner = canonical_agent(comms, native=comms.owners.native_defaults, auto_wake=False)
     try:
         await owner.sessions.bind_owned(thread, session)
         assert await owner.inputs.drain_inbox(session) == 0
@@ -554,7 +556,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             reply_turn = owner.inputs.wake_tasks[session]
             known = len(stored_inputs(owner.inputs.dispositions.root).rows)
             assert native.provider.requests[0]["model"] == "fixture"
-            elsewhere = Comms.for_runtime(native.root, private_initial_writes=True)
+            elsewhere = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
 
             def store_change():
                 thread = elsewhere.registry.require(session)
@@ -614,7 +616,7 @@ async def test_model_change_stored_by_another_process_reaches_the_running_turn(n
             await wait_for(lambda: native.provider.posts == 1)
             assert native.provider.requests[0]["model"] == "fixture"
             # What `agent-comms invoke --tool comms_model` does from its own process.
-            elsewhere = Comms.for_runtime(native.root, private_initial_writes=True)
+            elsewhere = Comms(LocalRoute(native.root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
 
             def store_change():
                 thread = elsewhere.registry.require(session)

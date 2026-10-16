@@ -13,6 +13,8 @@ from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
 from delivery_owner_fixture import canonical_agent
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -237,7 +239,8 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
 
 @pytest.fixture
 async def acp_tools(tmp_path):
-    owner = canonical_agent(Comms.for_runtime(tmp_path / "sdk-wire"), auto_wake=False)
+    selected_comms = Comms(LocalRoute(tmp_path / "sdk-wire"), native=NativeThreadDefaults.from_runtime())
+    owner = canonical_agent(selected_comms, native=selected_comms.owners.native_defaults, auto_wake=False)
     received = asyncio.Queue()
 
     class Client(acp.Client):

@@ -637,7 +637,7 @@ class ThreadManagement:
         native = self.owners.native_defaults
         if pi_bin is not None:
             native = replace(native, binary=pi_bin)
-        resolved_bin = NativeArguments.configured_binary(native)
+        resolved_bin = native.binary
         runtime = LaunchRuntime.current()
         with spec.prepared(self, resolved_bin, runtime) as child:
             # A new incarnation's inbox already starts at its creation time

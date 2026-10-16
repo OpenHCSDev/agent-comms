@@ -55,7 +55,8 @@ from .acp_extension import (
 from .agent_event_updates import AcpEventConsumer
 from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
-from .comms import Comms, wire
+from .comms import Comms
+from .native_settings import NativeThreadDefaults
 from .coordination_cohort import next_sealed_assignment
 from .field_codec import FieldCodec
 from .cursor_publication import CursorPublication
@@ -96,8 +97,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     def __init__(
         self,
         comms: Comms,
-        agent_bin: str | None = None,
-        agent_args: list[str] | None = None,
+        native: NativeThreadDefaults,
         reply_window: float | None = None,
         no_reply_window: float | None = None,
         reply_quiet: float | None = None,
@@ -139,11 +139,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         self.annotations = AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())
         self.cursors = CursorPublication(comms, self._runtime, private_nk_wire_root_id)
-        native = comms.owners.native_defaults
-        if agent_bin is not None:
-            native = dataclasses.replace(native, binary=agent_bin)
-        if agent_args is not None:
-            native = dataclasses.replace(native, arguments=tuple(agent_args))
         self.turns = TurnRunner(
             comms,
             self._runtime,
@@ -409,7 +404,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # One execution owns this wake's package acquisition: acceptance of new
         # originals and the selected launch share it instead of verifying twice.
         execution = SelectedExecution(
-            root=self._comms.root,
+            comms=self._comms,
             wire_root_id=wire_root_id,
             owner_name=thread_name,
             native_package=package,
@@ -528,9 +523,7 @@ class CommsClient(CommsAgent):
 
 def main() -> int:
     from .active_route import resolve_comms_route
-    from .native_settings import NativeThreadDefaults
-
-    native = NativeThreadDefaults.from_cli(sys.argv[1:])
+    native = NativeThreadDefaults.from_cli(sys.argv[1:], NativeThreadDefaults.from_runtime())
     with resolve_comms_route().admit_client():
         if "--login" in sys.argv[1:]:
             from .login import run_login
@@ -552,7 +545,7 @@ def main() -> int:
         from .private_nk_entrypoint import private_nk_from_environment
 
         private_nk = private_nk_from_environment()
-        comms = Comms.bound(resolve_comms_route(private_nk.validated_root if private_nk is not None else None),
+        comms = Comms(resolve_comms_route(private_nk.validated_root if private_nk is not None else None),
                             native=native)
         if private_nk is not None:
             comms.owners.pin_private_nk_launch(

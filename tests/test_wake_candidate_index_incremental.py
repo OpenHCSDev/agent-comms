@@ -22,6 +22,8 @@ from agent_comms.wake_candidate_index import (
     ProjectionUnavailableError,
     WakeCandidateIndex,
 )
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus requires POSIX")
 
@@ -38,7 +40,7 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
     tmp_path.mkdir(parents=True, exist_ok=True)
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms.for_runtime(root, private_initial_writes=True)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
     comms.registry.declare(
         Thread(
             "sender",

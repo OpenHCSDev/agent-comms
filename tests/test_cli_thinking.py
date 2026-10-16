@@ -86,18 +86,17 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
 
 
 def test_native_arguments_configured_uses_typed_selection():
-    from agent_comms.native_settings import NativeThreadDefaults
-
     defaults = NativeThreadDefaults.from_runtime()
-    assert NativeArguments.configured_binary(defaults) == defaults.binary
-    assert NativeArguments.configured(defaults) == NativeArguments(entries=())
+    assert NativeArguments.parse(defaults.arguments) == NativeArguments(entries=())
     selected = NativeThreadDefaults(
         binary="/fixture/pi", arguments=("--model", "fixture/model", "--thinking", "off"),
     )
-    assert NativeArguments.configured_binary(selected) == "/fixture/pi"
-    assert NativeArguments.configured(selected).model == "fixture/model"
-    assert NativeArguments.configured(selected).thinking == "off"
-    assert NativeArguments.configured(NativeThreadDefaults(binary=selected.binary, arguments=())).argv == ()
+    assert selected.binary == "/fixture/pi"
+    parsed = NativeArguments.parse(selected.arguments)
+    assert parsed.model == "fixture/model"
+    assert parsed.thinking == "off"
+    cleared = NativeThreadDefaults(binary=selected.binary, arguments=())
+    assert NativeArguments.parse(cleared.arguments).argv == ()
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,8 @@ from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from agent_comms.wake_policy import FullWake
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 _SCHEDULE = maintenance.schedule_candidate_catchup
 
@@ -26,7 +28,7 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus requires
 def _wire(base: Path) -> tuple[Comms, str]:
     root = base / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms.for_runtime(root)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(
         Thread(
             "sender", frozenset(), str(base), process_identity=ProcessIdentity.capture(os.getpid())

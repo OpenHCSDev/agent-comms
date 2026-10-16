@@ -21,6 +21,9 @@ from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
 
 
 @pytest.mark.asyncio
@@ -286,15 +289,10 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
         owner = None
         if surface.startswith("acp"):
             from agent_comms.acp import CommsAgent
-            from agent_comms.comms import wire
 
-            owner = CommsAgent(
-                wire(root / "wire"),
-                agent_bin=native_bin,
-                agent_args=native_args,
-                runtime_enabled=False,
-                auto_wake=False,
-            )
+
+            selected_comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+            owner = CommsAgent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary=native_bin, arguments=tuple(native_args)), runtime_enabled=False, auto_wake=False)
 
             class Client:
                 async def session_update(self, session_id, update):
@@ -599,9 +597,9 @@ async def _mounted_send_now(
             lambda: any("NEW_FINAL" in block.source for block in view.query(AgentResponse)), 3
         )
         if goal_mode:
-            from agent_comms.comms import wire
 
-            comms = wire(root / "wire")
+
+            comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
             await until(lambda: not view.queued_prompts and len(requests) == 3)
             goal = comms.registry.require("project").goal
             assert goal is not None and goal.state.active, goal

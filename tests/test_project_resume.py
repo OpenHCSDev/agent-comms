@@ -13,7 +13,7 @@ import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.coordination_errors import StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
@@ -22,13 +22,16 @@ from agent_comms.threads import Thread
 from agent_comms.turn_phase import CancellingPhase
 from agent_comms.schedule_rules import ProjectResumeCheck, WakeScheduleCheck
 from native_backend_fixture import native_backend_fixture
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 def declared_owner(tmp_path):
     old, new = tmp_path / "old", tmp_path / "new"
     old.mkdir()
     new.mkdir()
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
     comms.registry.declare(Thread(
         "owner", frozenset(), str(old), process_identity=ProcessIdentity.capture(os.getpid()),
     ))

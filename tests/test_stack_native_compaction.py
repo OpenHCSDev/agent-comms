@@ -21,11 +21,15 @@ from agent_comms import backend
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.activity import ActivityState
-from agent_comms.comms import wire
+
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
@@ -291,7 +295,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     """The owner's turn shows 'Compacting context' while Pi summarizes, then replies."""
     for key, value in child_env.items():
         monkeypatch.setenv(key, value)
-    comms = wire(root / "wire")
+    comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
     root_id = comms.messaging.initialize_private_initial_protocol()
     package_path = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     assert package_path, "Set PI_COMPACTION_TEST_PACKAGE to the verified native package"
@@ -299,10 +303,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
-    owner = CommsAgent(
-        comms, agent_bin=native_bin, agent_args=native_args, runtime_enabled=True,
-        auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id,
-    )
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native_bin, arguments=tuple(native_args)), runtime_enabled=True, auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     updates = []
     resumed_activity = []
 

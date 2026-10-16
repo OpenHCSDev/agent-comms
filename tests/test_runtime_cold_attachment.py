@@ -15,6 +15,8 @@ from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.runtime import socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+import dataclasses
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -26,7 +28,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     await fixture.run("Parent saved history for cold attachment")
     await fixture.persistent.close()
     fixture.provider.text = "Cold fork first reply received."
-    comms = Comms.for_runtime(fixture.root)
+    comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults.from_runtime())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
     arguments = [
@@ -69,14 +71,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         return child
 
     monkeypatch.setattr(ParentedProcess, "launch", hold_worker)
-    client = CommsClient(
-        comms,
-        agent_bin=launcher,
-        agent_args=arguments,
-        auto_wake=False,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
-    )
+    client = CommsClient(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=launcher, arguments=tuple(arguments)), auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     updates = []
 
     class View:

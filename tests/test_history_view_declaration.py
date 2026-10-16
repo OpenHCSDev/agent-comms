@@ -5,6 +5,8 @@ from agent_comms.historical_views import HistoryView
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import ChannelDisplayScope
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 class ReviewHistory(HistoryView):
@@ -18,7 +20,7 @@ class ReviewHistory(HistoryView):
 
 
 def test_new_history_case_owns_both_source_interpretations_without_reader_dispatch(tmp_path):
-    roots = [Comms.for_runtime(tmp_path / name) for name in ("prior", "current")]
+    roots = [Comms(LocalRoute(tmp_path / name), native=NativeThreadDefaults.from_runtime()) for name in ("prior", "current")]
     for comms in roots:
         comms.registry.declare(Thread("writer", frozenset({"review", "other"}), str(comms.root)))
         for number in range(3):

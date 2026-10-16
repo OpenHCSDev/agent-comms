@@ -3,6 +3,8 @@ from dataclasses import replace
 
 from agent_comms.comms import Comms
 from test_private_bus_checkpoint import _root
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def facts_for(comms, owner):
@@ -39,7 +41,7 @@ def test_original_channel_recipient_reuse_and_new_member_do_not_inherit_old_fact
     assert facts_for(comms, replacement) == ()
 
     second = comms.messaging.send_user_message("#team", "New exact user constraint", worktree=str(tmp_path))
-    reopened = Comms.for_runtime(comms.root)
+    reopened = Comms(LocalRoute(comms.root), native=NativeThreadDefaults.from_runtime())
     assert [fact.source.reference for fact in facts_for(reopened, replacement)] == [second.reference]
     assert [fact.source.reference for fact in facts_for(reopened, outsider)] == [second.reference]
     assert [fact.source.reference for fact in facts_for(reopened, original)] == [first.reference]

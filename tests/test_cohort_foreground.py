@@ -40,6 +40,8 @@ from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 from native_proof_cases import write_proof_rows
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux",
@@ -81,7 +83,7 @@ def configured_foreground(monkeypatch):
 def _wire(base: Path) -> tuple[Path, str, Comms]:
     root = base / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms.for_runtime(root, private_initial_writes=True)
+    comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
     comms.registry.declare(
         Thread(
             "sender", frozenset(), str(base), process_identity=ProcessIdentity.capture(os.getpid())
@@ -262,7 +264,7 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         assert published_resources == [resource]
         assert len(calls) == 1 and resource.read_bytes() == b"after selected claim\n"
         # Successful publication releases the exact selected file claim.
-        assert Comms.for_runtime(root).bus.log.claim_projection().get(str(resource)) is None
+        assert Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).bus.log.claim_projection().get(str(resource)) is None
         assert result.assignment_ids
         assert any(
             message.body == "42" for message in comms.views.dm_history("sender", "beta")
@@ -282,7 +284,7 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
         resource.write_bytes(b"before\n")
         root = base / "wire"
         root.mkdir(mode=0o700)
-        comms = Comms.for_runtime(root, private_initial_writes=True)
+        comms = Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime(), private_initial_writes=True)
         root_id = "0" * 32  # No issuer has initialized this root yet.
         plan = SelectedExistingFileWrite(ExistingFileClaim(Path(resource)), b"forbidden\n")
         with pytest.raises(RelationViolationError, match="no durable protocol marker"):
@@ -442,7 +444,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         )
         assert isinstance(result, foreground.NoWakeReceipt)
         assert calls == [] and resource.read_bytes() == b"unchanged\n"
-        assert Comms.for_runtime(root).bus.log.claim_projection().get(str(resource)) is None
+        assert Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).bus.log.claim_projection().get(str(resource)) is None
 
 
 async def test_foreground_two_recipients_one_no_wake_and_no_model(

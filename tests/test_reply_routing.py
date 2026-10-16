@@ -8,9 +8,13 @@ from agent_comms import invoke_tool
 from agent_comms.acp_extension import QueuePromptRequest, encode_request
 from agent_comms.input_origin import HumanInputOrigin
 from delivery_owner_fixture import canonical_agent
-from agent_comms.comms import wire
+
 from agent_comms.routing import MessageRoute
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
 
 
 def test_incoming_route_distinguishes_channel_and_direct_delivery():
@@ -20,8 +24,8 @@ def test_incoming_route_distinguishes_channel_and_direct_delivery():
 
 async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True, auto_wake=False)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([])), runtime_enabled=True, auto_wake=False)
     await agent.new_session(str(tmp_path / "worker"))
     comms.channels.update_tags("worker", add=frozenset({"test"}))
     session = tmp_path / "session.jsonl"
@@ -79,7 +83,7 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
             if (update.field_meta or {}).get("agentComms", {}).get("route")
         ]
         assert routed[0].field_meta["agentComms"]["route"]["targets"] == ("#test",)
-        page = wire(tmp_path / "wire").transcripts.thread_transcript_page("worker")
+        page = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime()).transcripts.thread_transcript_page("worker")
         assert page.events[0].text == "Question in channel"
         assert page.events[0].routing.requests[0].sender == "user"
         assert page.events[-1].routing.reply.outgoing_label == "To #test"
@@ -96,7 +100,7 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
                 + "\n"
             )
         assert (
-            wire(tmp_path / "wire").transcripts.thread_transcript_page("worker").events[-1].routing
+            Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime()).transcripts.thread_transcript_page("worker").events[-1].routing
             is None
         )
     finally:
@@ -110,9 +114,7 @@ async def test_native_user_dm_reply_ignores_earlier_channel_route(
     project = tmp_path / "worker"
     project.mkdir()
     comms = wired
-    agent = canonical_agent(
-        comms, agent_bin="pi", agent_args=[], runtime_enabled=True, auto_wake=False
-    )
+    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([])), runtime_enabled=True, auto_wake=False)
     session = await agent.new_session(str(project))
 
     class Client:
@@ -174,8 +176,8 @@ async def test_native_user_dm_reply_ignores_earlier_channel_route(
 
 
 async def test_coordination_context_does_not_override_scheduled_response_policy(tmp_path):
-    comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
     await agent.new_session(str(tmp_path / "worker"))
     seen: dict = {}
 

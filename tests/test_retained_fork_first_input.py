@@ -19,6 +19,8 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.active_route import LocalRoute
+import dataclasses
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -47,7 +49,7 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
-    comms = Comms(fixture.root, native=NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary(), arguments=(
+    comms = Comms(LocalRoute(fixture.root), native=NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary(), arguments=(
         "--offline", "--no-extensions", "--no-skills", "--no-context-files",
         "--no-prompt-templates", "--no-tools",
     )))
@@ -64,13 +66,7 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
             thinking_level="off",
         )
     )
-    attachment = CommsClient(
-        comms,
-        agent_bin=launcher,
-        runtime_enabled=True,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
-    )
+    attachment = CommsClient(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=launcher), runtime_enabled=True, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     failures = []
     answered = asyncio.Event()
 

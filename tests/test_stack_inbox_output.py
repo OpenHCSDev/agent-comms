@@ -15,10 +15,14 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from stored_inputs import insert_inputs, stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
 
 
 async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkeypatch):
@@ -193,8 +197,8 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
                 yield event
 
         monkeypatch.setattr(backend, "stream_agent_events", collect_events)
-        comms = wire(root / "wire")
-        agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+        comms = Comms(resolve_comms_route(root / "wire"), native=NativeThreadDefaults.from_runtime())
+        agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
             project = root / "parent"

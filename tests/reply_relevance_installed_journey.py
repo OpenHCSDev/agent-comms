@@ -9,7 +9,7 @@ import time
 
 import acp
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import PublicationReceipts
@@ -24,6 +24,9 @@ from agent_comms.presentation import MessageNotification
 from agent_comms.selected_triage import FullSelectedTriage
 from agent_comms.threads import Thread
 from shared_bus_restart_native import attach
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
 
 
 async def run(stage, package):
@@ -40,7 +43,7 @@ async def run(stage, package):
     assert stage.is_relative_to(Path('/home/ts/wt'))
     stage.mkdir(mode=0o700, exist_ok=False)
     verify_native_package(package)
-    public = wire()
+    public = Comms(resolve_comms_route(), native=NativeThreadDefaults.from_runtime())
     snapshot = public.registry.snapshot()
     source = snapshot.require_active('openhcs-helper')
     launch = RetainedOwnerLaunch.capture(source, snapshot)
@@ -56,7 +59,7 @@ async def run(stage, package):
             settings_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     # Only the offline canonical fork helper's output directory differs. Workers
     # retain the actual original model/settings/auth/extension environment.
-    service = Comms.for_runtime(stage / 'w')
+    service = Comms(LocalRoute(stage / 'w'), native=NativeThreadDefaults.from_runtime())
     fork = await ForkSessionHelper.run(
         ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
         cwd=Path(source.worktree),

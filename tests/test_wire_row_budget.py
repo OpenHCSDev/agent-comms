@@ -14,6 +14,8 @@ from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCan
 from agent_comms.wire_log import OpenedWireSnapshot
 from agent_comms.wire_metadata import WireMetadata
 from agent_comms.wire_record import WireRecord, WireScan
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def _row(size: int, newline: bool) -> bytes:
@@ -61,7 +63,7 @@ def test_scan_and_candidate_share_physical_boundary(tmp_path, extra, newline):
 
 
 def test_oversized_append_preserves_marker_and_sequence(tmp_path):
-    comms = Comms.for_runtime(tmp_path / 'wire')
+    comms = Comms(LocalRoute(tmp_path / 'wire'), native=NativeThreadDefaults.from_runtime())
     comms.messaging.initialize_private_initial_protocol()
     log = comms.bus.log
     before = log.path.read_bytes(), log.metadata_path.read_bytes()

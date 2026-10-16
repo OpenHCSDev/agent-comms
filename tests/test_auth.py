@@ -3,7 +3,7 @@ from acp.schema import SessionConfigSelectOption
 
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
+
 from agent_comms.config_options import InvalidConfigChoice, ModelConfigOption
 from agent_comms.login import run_login
 from agent_comms.native_arguments import NativeArguments
@@ -12,10 +12,14 @@ from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
+from agent_comms.comms import Comms
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
 
 
 async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
-    agent = CommsAgent(wire(tmp_path), agent_bin="pi")
+    selected_comms = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    agent = CommsAgent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi"))
     assert not (await agent.initialize(1, {})).auth_methods
     methods = (await agent.initialize(1, {"auth": {"terminal": True}})).auth_methods
     method, = methods
@@ -85,10 +89,9 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
         return models
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)
-    agent = canonical_agent(
-        wire(tmp_path), agent_bin=LaunchRuntime.running().native_entrypoint,
-        agent_args=["--model", "test/base"],
-    )
+    selected_comms_2 = Comms(resolve_comms_route(tmp_path), native=NativeThreadDefaults.from_runtime())
+    agent = canonical_agent(selected_comms_2, native=dataclasses.replace(selected_comms_2.owners.native_defaults,
+        binary=LaunchRuntime.running().native_entrypoint, arguments=("--model", "test/base")))
     # Exercise the explicit refresh path without the background drain racing it.
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session_id: None)
     updates = []

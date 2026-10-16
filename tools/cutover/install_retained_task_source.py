@@ -15,6 +15,8 @@ from agent_comms.wire_record import WireScan
 from install_retained_index import require_retained_writer
 from routing_recovery import write_original
 from task_envelope_promotion import AuthoredTaskMemberPromotion
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def prepare(bus, packet):
@@ -71,7 +73,7 @@ def main():
     # These resources contain positions/derivations of the old physical prefix,
     # not input outcomes. Candidate replay explicitly refuses an inode change
     # until the stopped operator retires its disposable database and WAL.
-    candidate = WakeCandidateIndex(Comms.for_runtime(root).bus).path
+    candidate = WakeCandidateIndex(Comms(LocalRoute(root), native=NativeThreadDefaults.from_runtime()).bus).path
     indices = [BusActivityIndex(bus.path).path, *root.glob('bus_display_*.json'),
                candidate, candidate.with_name(candidate.name + '-wal'),
                candidate.with_name(candidate.name + '-shm')]
