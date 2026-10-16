@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from ..field_codec import FieldCodec
-from ..goal_history import GoalHistoryEntry
+from ..goal_history import GoalHistoryEntry, GoalHistoryQuery
 from ..goals import GoalRevision
 from ..goal_states import GoalState
 from ..peer_relevance import Informed
@@ -32,7 +32,7 @@ class PartnerGoalChange:
     def latest(cls, peer: str, history: tuple[GoalHistoryEntry, ...]):
         if not history:
             return None
-        entry = history[-1]
+        entry = history[0]
         goal = entry.after
         if goal is None:
             return cls(peer, entry.observed_at, None, None, "")
@@ -52,7 +52,9 @@ class PartnerActivitySegment(InstructionSegment):
             for relation in relations
             if relation.relevance.grants(Informed)
             for change in (
-                PartnerGoalChange.latest(relation.peer.name, goals.goal_history(relation.peer.name)),
+                PartnerGoalChange.latest(relation.peer.name, goals.goal_history(
+                    relation.peer.name, query=GoalHistoryQuery(limit=1),
+                )),
             )
             if change is not None
         )

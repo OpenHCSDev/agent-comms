@@ -6,6 +6,7 @@ import sqlite3
 import pytest
 
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
+from agent_comms.goal_history_state import Committed, Pending
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
@@ -35,7 +36,7 @@ def test_acquire_full_rows_without_store_initialization_or_observation(tmp_path,
     with registry.store.reading():
         rows = GoalHistoryStore.acquire_read_only(registry.store.path)
     assert len(rows) == 1
-    assert rows[0].state == 'committed'
+    assert rows[0].state is Committed
     assert rows[0].owner_created_at == registry.require('author').created_at
     assert rows[0].after.id == 'first'
     assert before == preserved_files(registry.store.path.parent)
@@ -49,7 +50,7 @@ def test_pending_rows_remain_pending_and_original_bytes_unchanged(tmp_path):
     before = preserved_files(registry.store.path.parent)
     with registry.store.reading():
         rows = GoalHistoryStore.acquire_read_only(registry.store.path)
-    assert [(row.sequence, row.state) for row in rows] == [(1, 'committed'), (sequence, 'pending')]
+    assert [(row.sequence, row.state) for row in rows] == [(1, Committed), (sequence, Pending)]
     assert before == preserved_files(registry.store.path.parent)
 
 

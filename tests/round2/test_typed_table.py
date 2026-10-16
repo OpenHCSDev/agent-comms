@@ -1,6 +1,7 @@
 """Declaration families round-trip through real SQLite without a schema roster."""
 
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass, field, replace
 
 import pytest
@@ -218,3 +219,20 @@ def test_streamed_query_decodes_only_consumed_rows_and_releases_cursor():
         rows = StreamProjection.iterate(db.execute("SELECT 2 AS enabled"))
         with pytest.raises(ValueError):
             next(rows)
+
+
+def test_bounded_selection_keeps_predicate_key_and_limit_parameters_together():
+    with sqlite3.connect(":memory:") as db:
+        TableParentRow.create(db)
+        values = [TableParentRow("a", 1), TableParentRow("b", 2), TableParentRow("c", 3)]
+        for value in values:
+            value.insert(db)
+        assert TableParentRow.select(
+            db, where="count>=?", parameters=(2,), order_by=("key",),
+            descending=True, limit=2,
+        ) == [values[2], values[1]]
+        assert TableParentRow.select(db, key="b", limit=1) == values[1:2]
+        with closing(TableParentRow.stream(
+            db, order_by=("key",), descending=True, limit=1,
+        )) as rows:
+            assert list(rows) == values[2:]

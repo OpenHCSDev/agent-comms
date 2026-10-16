@@ -22,6 +22,7 @@ from .goal_actions import (
     ModelInvocable,
     SetGoalAction,
 )
+from .goal_history import GoalHistoryQuery
 from .goal_states import ActiveGoal
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
@@ -571,14 +572,12 @@ class CommsEditGoalTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsGoalHistoryTool(ThreadToolRequest):
+class CommsGoalHistoryTool(GoalHistoryQuery, ThreadToolRequest):
     label = "Goal history"
-    description = "Read recorded goal revisions and recorded provenance and observation gaps."
-    goal_id: str = tool_field("Optional goal ID; omit for this thread's full history", default="")
+    description = "Read a bounded newest-first page of goal revisions and observation gaps."
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        requested = self.goal_id.strip()
-        entries = comms.goals.goal_history(caller.name, goal_id=requested or None)
+        entries = comms.goals.goal_history(caller.name, query=self)
         return {"history": [entry.to_wire() for entry in entries]}
 
 

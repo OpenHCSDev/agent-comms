@@ -262,18 +262,27 @@ class Column:
 
 @dataclass(frozen=True)
 class Index:
-    columns: tuple[str, ...]
+    terms: tuple[str, ...]
     unique: bool = False
     where: str | None = None
+
+    def terms_sql(self, owner: type[TypedTable]) -> str:
+        return owner._column_list(self.terms)
 
     def sql(self, owner: type[TypedTable], name: str, *, if_not_exists: bool = False) -> str:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         return (
-            f"CREATE {'UNIQUE ' if self.unique else ''}INDEX "
-            f"{existence}{_identifier(name)} ON {_identifier(owner.declared_name)} "
-            f"({owner._column_list(self.columns)})"
+            f"CREATE {'UNIQUE ' if self.unique else ''}INDEX {existence}{_identifier(name)} "
+            f"ON {_identifier(owner.declared_name)} ({self.terms_sql(owner)})"
             + (f" WHERE {self.where}" if self.where else "")
         )
+
+
+class ExpressionIndex(Index):
+    """Trusted declaration-owned SQL expressions, not external column names."""
+
+    def terms_sql(self, owner: type[TypedTable]) -> str:
+        return ", ".join(self.terms)
 
 
 @dataclass(frozen=True)
@@ -545,14 +554,20 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             cls.declared_name: f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
             + (", WITHOUT ROWID" if cls.without_rowid else "")
         }
+        statements.update(cls.index_schema(if_not_exists=if_not_exists))
+        statements.update(cls.triggers(if_not_exists=if_not_exists))
+        return statements
+
+    @classmethod
+    def index_schema(cls, *, if_not_exists: bool = False) -> dict[str, str]:
         indexes = cls.indexes + tuple(
             Index((item.name,)) for item in cls._fields() if item.column.index
         )
-        for ordinal, index in enumerate(indexes):
-            index_name = f"{cls.declared_name}_{ordinal}_idx"
-            statements[index_name] = index.sql(cls, index_name, if_not_exists=if_not_exists)
-        statements.update(cls.triggers(if_not_exists=if_not_exists))
-        return statements
+        return {
+            name: index.sql(cls, name, if_not_exists=if_not_exists)
+            for ordinal, index in enumerate(indexes)
+            for name in (f"{cls.declared_name}_{ordinal}_idx",)
+        }
 
     @classmethod
     def trigger_bodies(cls) -> dict[str, str]:
@@ -588,19 +603,41 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return where, parameters
 
     @classmethod
-    def _query(
-        cls, db: sqlite3.Connection, where: str, parameters: tuple,
-        order_by: tuple[str, ...], descending: bool, key: dict[str, object]
-    ) -> sqlite3.Cursor:
+    def select_statement(
+        cls, columns: tuple[str, ...], *, where: str = "1", parameters: tuple = (),
+        order_by: tuple[str, ...] = (), descending: bool = False,
+        limit: int | None = None, **key: object,
+    ) -> tuple[str, tuple]:
+        """Compile a declared projection for execution or bounded subselection."""
         where, parameters = cls._condition(where, parameters, key)
         cls._fields_named(order_by)
         direction = " DESC" if descending else ""
-        return db.execute(
-            f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
+        if limit is not None:
+            parameters = (*parameters, limit)
+        return (
+            f"SELECT {cls._column_list(columns)} FROM {_identifier(cls.declared_name)} "
             f"WHERE {where}"
             + (" ORDER BY " + ", ".join(_identifier(name) + direction for name in order_by)
-               if order_by else ""),
+               if order_by else "")
+            + (" LIMIT ?" if limit is not None else ""),
             parameters,
+        )
+
+    @classmethod
+    def select_union(
+        cls, db: sqlite3.Connection, *, column: str,
+        queries: tuple[tuple[str, tuple], ...], order_by: tuple[str, ...] = (),
+        descending: bool = False, limit: int | None = None,
+    ) -> list[Self]:
+        """Select unique rows matching bounded indexed projections of one key."""
+        if not queries:
+            raise ValueError("A union selection requires source queries")
+        selected = cls._column_list((column,))
+        union = " UNION ".join(f"SELECT * FROM ({statement})" for statement, _ in queries)
+        return cls.select(
+            db, where=f"{selected} IN ({union})",
+            parameters=tuple(value for _, parameters in queries for value in parameters),
+            order_by=order_by, descending=descending, limit=limit,
         )
 
     @classmethod
@@ -612,9 +649,14 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
         descending: bool = False,
+        limit: int | None = None,
         **key: object,
     ) -> list[Self]:
-        return cls.read(cls._query(db, where, parameters, order_by, descending, key))
+        statement = cls.select_statement(
+            cls.columns(), where=where, parameters=parameters, order_by=order_by,
+            descending=descending, limit=limit, **key,
+        )
+        return cls.read(db.execute(*statement))
 
     @classmethod
     def stream(
@@ -625,10 +667,15 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
         descending: bool = False,
+        limit: int | None = None,
         **key: object,
     ) -> Generator[Self, None, None]:
         """Rows decoded as the caller consumes them; close it to release the query."""
-        return cls.iterate(cls._query(db, where, parameters, order_by, descending, key))
+        statement = cls.select_statement(
+            cls.columns(), where=where, parameters=parameters, order_by=order_by,
+            descending=descending, limit=limit, **key,
+        )
+        return cls.iterate(db.execute(*statement))
 
     @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:

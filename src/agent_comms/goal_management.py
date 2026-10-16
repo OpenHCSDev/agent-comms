@@ -14,7 +14,7 @@ from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, Unre
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .native_input_owner import GoalLaunchOwner
-from .goal_history import GoalHistoryEntry
+from .goal_history import GoalHistoryEntry, GoalHistoryQuery
 from .bus_publication import stable_thread_lookup
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 from .registration import Registration
@@ -175,11 +175,10 @@ class Goals:
         )
 
     def goal_history(
-        self, name: str, *, goal_id: str | None = None
+        self, name: str, *, query: GoalHistoryQuery = GoalHistoryQuery(),
     ) -> tuple[GoalHistoryEntry, ...]:
-        """Read durable revisions for one thread incarnation and optional goal ID."""
-        with _store_lock(self._wire_lock_path, shared=True):
-            return self.registry.goal_history(name, goal_id=goal_id)
+        """Decode a bounded page outside the registry and wire locks."""
+        return self.registry.goal_history(name).entries(query)
 
     def goal_wait(self, name: str) -> GoalWait | None:
         waits = self.waits

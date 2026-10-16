@@ -21,6 +21,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .private_bus_checkpoint import ContextManifestReference
 from .goal_actions import GoalAction
+from .goal_history import GoalHistoryQuery
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
 from .thread_identity import ThreadIncarnation
@@ -257,12 +258,10 @@ class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
-    goal_id: str | None = None
-
+class GoalHistoryRuntimeRequest(GoalHistoryQuery, ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
         history = await Coordination.run_worker(partial(
-            ctx.server.agent._comms.goals.goal_history, ctx.name, goal_id=self.goal_id,
+            ctx.server.agent._comms.goals.goal_history, ctx.name, query=self,
         ))
         return {"history": [row.to_wire() for row in history]}
 

@@ -128,9 +128,8 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         self.expect.check(ctx)
         if not isinstance(self, ctx.actor):
             raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
-        if ctx.model_report and any(
-            entry.reports_turn(ctx.report_turn)
-            for entry in ctx.goals.registry.goal_history(ctx.thread.name)
+        if ctx.model_report and ctx.goals.registry.goal_history(ctx.thread.name).reports_turn(
+            ctx.report_turn
         ):
             raise ValueError("This goal was already reported in this turn.")
         goal = self.change(ctx)
