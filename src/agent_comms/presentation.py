@@ -21,7 +21,7 @@ from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
-from .notification_assignment import DeliveryProgress, HumanReadProgress, ReadDelivery
+from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
@@ -111,11 +111,8 @@ class MessageNotification:
         ordered = cls.ordered(notifications)
         if not ordered:
             return "No recorded notification result"
-        delivered = read = 0
-        for notification in ordered:
-            received, opened = notification.progress.counts()
-            delivered += received
-            read += opened
+        delivered = sum(notification.progress.delivered for notification in ordered)
+        read = sum(notification.progress.read for notification in ordered)
         total = len(ordered)
         return (f"{ordered[0].state} · Delivered {delivered}/{total}"
                 f" · {ReadDelivery.label} {read}/{total}")

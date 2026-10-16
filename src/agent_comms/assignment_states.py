@@ -10,6 +10,7 @@ from typing import ClassVar
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
+from .notification_progress import UnrecordedProgress
 from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
 from typing import TYPE_CHECKING
@@ -93,7 +94,6 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
         triage_inflight: bool = False,
     ):
         from .presentation import MessageNotification
-        from .notification_assignment import UnrecordedProgress
 
         return MessageNotification(
             recipient,
