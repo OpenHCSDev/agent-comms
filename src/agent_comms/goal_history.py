@@ -100,14 +100,16 @@ class GoalHistoryQuery:
         upper = through_sequence
         if self.before_sequence is not None:
             upper = min(upper, self.before_sequence - 1)
-        table = _identifier(GoalHistoryEntry.declared_name)
-        columns = GoalHistoryEntry._column_list(GoalHistoryEntry.columns())
         basis = "owner_created_at=? AND state='committed' AND sequence<=?"
         parameters = (owner_created_at, upper)
         if self.goal_id is None:
-            statement = f"SELECT {columns} FROM {table} WHERE {basis} ORDER BY sequence DESC LIMIT ?"
-            parameters = (*parameters, self.limit)
+            return tuple(GoalHistoryEntry.select(
+                connection, where=basis, parameters=parameters,
+                order_by=("sequence",), descending=True, limit=self.limit,
+            ))
         else:
+            table = _identifier(GoalHistoryEntry.declared_name)
+            columns = GoalHistoryEntry._column_list(GoalHistoryEntry.columns())
             # Limit each indexed endpoint before merging. A goal replacement belongs
             # to both goals; UNION removes that duplicate without scanning either past.
             matches = " UNION ".join(
@@ -152,7 +154,7 @@ class GoalHistoryRead:
                     where=f"{GoalHistoryEntry.REPORTED_TURN}=? AND sequence<=?",
                     parameters=(turn_id, self.through_sequence),
                     owner_created_at=self.owner_created_at, state="committed",
-                    order_by=("sequence",), descending=True,
+                    order_by=("sequence",), descending=True, limit=1,
                 )) as rows:
                     return next(rows, None) is not None
         except (OSError, sqlite3.Error, ValueError, TypeError) as error:
@@ -324,11 +326,10 @@ class GoalHistoryStore:
                 if state is not None:
                     where += " AND state=?"
                     parameters += (state,)
-                rows = GoalHistoryEntry.read(connection.execute(
-                    f"SELECT {GoalHistoryEntry._column_list(GoalHistoryEntry.columns())} "
-                    f"FROM {_identifier(GoalHistoryEntry.declared_name)} "
-                    f"WHERE {where} ORDER BY sequence DESC LIMIT 1", parameters,
-                ))
+                rows = GoalHistoryEntry.select(
+                    connection, where=where, parameters=parameters,
+                    order_by=("sequence",), descending=True, limit=1,
+                )
                 return next(iter(rows), None)
         except (sqlite3.Error, ValueError, TypeError) as error:
             raise GoalHistoryError("Cannot read goal history tail.") from error

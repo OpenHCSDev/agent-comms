@@ -558,7 +558,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def _query(
         cls, db: sqlite3.Connection, where: str, parameters: tuple,
-        order_by: tuple[str, ...], descending: bool, key: dict[str, object]
+        order_by: tuple[str, ...], descending: bool, limit: int | None, key: dict[str, object]
     ) -> sqlite3.Cursor:
         selected = cls._fields_named(tuple(key))
         if selected:
@@ -567,11 +567,14 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
         cls._fields_named(order_by)
         direction = " DESC" if descending else ""
+        if limit is not None:
+            parameters = (*parameters, limit)
         return db.execute(
             f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
             f"WHERE {where}"
             + (" ORDER BY " + ", ".join(_identifier(name) + direction for name in order_by)
-               if order_by else ""),
+               if order_by else "")
+            + (" LIMIT ?" if limit is not None else ""),
             parameters,
         )
 
@@ -584,9 +587,10 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
         descending: bool = False,
+        limit: int | None = None,
         **key: object,
     ) -> list[Self]:
-        return cls.read(cls._query(db, where, parameters, order_by, descending, key))
+        return cls.read(cls._query(db, where, parameters, order_by, descending, limit, key))
 
     @classmethod
     def stream(
@@ -597,10 +601,11 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
         descending: bool = False,
+        limit: int | None = None,
         **key: object,
     ) -> Generator[Self, None, None]:
         """Rows decoded as the caller consumes them; close it to release the query."""
-        return cls.iterate(cls._query(db, where, parameters, order_by, descending, key))
+        return cls.iterate(cls._query(db, where, parameters, order_by, descending, limit, key))
 
     @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
