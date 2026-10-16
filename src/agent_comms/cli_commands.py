@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import asyncio
 import os
 import re
 import shlex
@@ -17,7 +18,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Literal, Self, TextIO, Type, TYPE_CHECKING, get_args, get_origin, get_type_hints
 
 from .activity import ActivityState
 from .channels import Channel
@@ -28,6 +29,10 @@ from .child_process import ProcessIdentity
 from .command import Command
 from .field_codec import FieldCodec
 from .comms import Comms
+from .config_options import (
+    CatalogConfigOption, CatalogSelection, ConfigOptions,
+    ModelConfigOption, ThinkingLevelConfigOption,
+)
 from .declared_family import DeclaredFamily
 from .read_basis import WatchAcknowledgment, OnReadWatchAcknowledgment
 from .exporting import (
@@ -54,6 +59,9 @@ from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
 from .owner_lifecycle import OwnerStartResult
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
+
+if TYPE_CHECKING:
+    from acp.schema import SessionConfigSelectOption
 
 
 def _duration_seconds(value: str) -> float:
@@ -110,6 +118,7 @@ def option(
     multiline: bool = False,
     target_bound: bool = False,
     editor_format: Callable[[Any], str] | None = None,
+    catalog: type[CatalogConfigOption] | None = None,
     **parser_options: Any,
 ) -> Any:
     """One field owns both its CLI projection and JSON boundary conversion."""
@@ -126,6 +135,8 @@ def option(
     }
     if wire_name is not None:
         metadata["wire_name"] = wire_name
+    if catalog is not None:
+        metadata[CatalogConfigOption] = catalog
     return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
@@ -162,20 +173,44 @@ class TargetField:
         return encoded if isinstance(encoded, str) else json.dumps(encoded)
 
     @property
-    def choices(self) -> tuple[tuple[str, str], ...]:
+    def catalog(self) -> type[CatalogConfigOption] | None:
+        return self.declaration.metadata.get(CatalogConfigOption)
+
+    @property
+    def choices(self) -> tuple[tuple[str, str], ...] | None:
+        if self.catalog is not None:
+            return ()
         if isinstance(self.annotation, type) and issubclass(self.annotation, DeclaredFamily):
             return tuple((member.label, FieldCodec.encode(member))
                          for member in self.annotation.members_with(self.annotation))
-        return tuple((str(value), str(value))
-                     for value in FieldCodec.value_schema(self.annotation).get('enum', ()))
+        values = FieldCodec.value_schema(self.annotation).get('enum')
+        return None if values is None else tuple((str(value), str(value)) for value in values)
+
+    async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> TargetField:
+        if (member := self.catalog) is None:
+            return self
+        options = await catalogs.catalog_for(member).choices(selection)
+        return CatalogTargetField(self.declaration, self.annotation, self.value, tuple(options))
 
     @property
     def required(self) -> bool:
         return self.declaration.default is MISSING and self.declaration.default_factory is MISSING
 
     def json_schema(self) -> dict[str, object]:
-        return {**FieldCodec.value_schema(self.annotation), 'multiline': self.multiline,
+        schema = (FieldCodec.value_schema(self.annotation) if self.catalog is None
+                  else {'type': 'string', 'configuration': FieldCodec.encode(self.catalog)})
+        return {**schema, 'multiline': self.multiline,
                 'description': self.description, 'editor_default': self.editor_default}
+
+
+@dataclass(frozen=True)
+class CatalogTargetField(TargetField):
+    """A form projects the choices supplied by its declared configuration owner."""
+    options: tuple[SessionConfigSelectOption, ...]
+
+    @property
+    def choices(self) -> tuple[tuple[str, str], ...]:
+        return tuple((choice.name, choice.value) for choice in self.options)
 
 
 @dataclass(frozen=True)
@@ -192,6 +227,9 @@ class TargetAction:
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
         return self.bound[0].editable_fields
+
+    async def prepare_fields(self) -> tuple[TargetField, ...]:
+        return await self.bound[0].prepare_fields()
 
     @property
     def label(self) -> str:
@@ -426,6 +464,13 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         hints = get_type_hints(type(self))
         return tuple(TargetField(item, hints[item.name], getattr(self, item.name))
                      for item in fields(self) if not item.metadata['target_bound'])
+
+    async def prepare_fields(self) -> tuple[TargetField, ...]:
+        declared = self.editable_fields
+        if not any(item.catalog is not None for item in declared):
+            return declared
+        catalogs = ConfigOptions.configured()
+        return tuple([await item.prepare(catalogs, self) for item in declared])
 
     def describe(self, comms: Comms, target: CommandTarget | str, project: str) -> TargetAction:
         target = CommandTarget.named(target)
@@ -745,10 +790,6 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
     service_tier: ServiceTier | None = option("--service-tier", default=None)
 
     def apply(self, ctx: Comms) -> Any:
-        import asyncio
-
-        from .config_options import ConfigOptions
-        from .launch_runtime import RestartEnvironment
         from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
 
@@ -762,12 +803,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             thinking_level=level,
             service_tier=self.service_tier,
         )
-        catalogs = ConfigOptions(
-            NativeArguments.configured_binary(),
-            NativeArguments.configured(),
-            RestartEnvironment.inherit(os.environ),
-        )
-        asyncio.run(catalogs.validate(candidate))
+        asyncio.run(ConfigOptions.configured().validate(candidate))
         updated = ctx.threads.set_thread_configuration(
             thread,
             model=candidate.model,
@@ -930,7 +966,6 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
         return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
-        import asyncio
         from contextlib import aclosing
 
         async def stream() -> None:
@@ -1369,12 +1404,12 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     tags: frozenset[str] | None = option(
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
-    prompt: str | None = option("--prompt", default=None, multiline=True)
-    pi_bin: str = option("--pi-bin", default=NativeArguments.default_binary)
     project: str = option("--project", parser_default_factory=os.getcwd)
-    model: str = option("--model", parser_default=NativeThreadDefaults.model)
+    model: str = option("--model", parser_default=NativeThreadDefaults.model,
+                        catalog=ModelConfigOption)
     thinking_level: type[ThinkingLevel] = option(
-        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level)
+        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level,
+        catalog=ThinkingLevelConfigOption)
 
     @classmethod
     def project_bindings(cls, comms, project):
@@ -1389,7 +1424,8 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
         spec = self.spec_type(**{item.name: getattr(self, item.name)
                                  for item in fields(self.spec_type)})
-        child = ctx.threads.create(spec, pi_bin=self.pi_bin)
+        asyncio.run(ConfigOptions.configured().validate(self))
+        child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.pid)
 
 
@@ -1475,7 +1511,6 @@ class ContextCliCommand(CliCommand):
                 raise ValueError("No preceding recorded turn exists for comparison")
             return {"manifests": tuple(reversed(selected)),
                     "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
-        import asyncio
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
         from .runtime import RuntimeConnection, socket_path
