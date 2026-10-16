@@ -17,7 +17,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
+from typing import Any, ClassVar, Literal, Self, TextIO, Type, TYPE_CHECKING, get_args, get_origin, get_type_hints
 
 from .activity import ActivityState
 from .channels import Channel
@@ -32,7 +32,6 @@ from .config_options import (
     CatalogConfigOption, CatalogSelection, ConfigOptions,
     ModelConfigOption, ThinkingLevelConfigOption,
 )
-from acp.schema import SessionConfigSelectOption
 from .declared_family import DeclaredFamily
 from .read_basis import WatchAcknowledgment, OnReadWatchAcknowledgment
 from .exporting import (
@@ -59,6 +58,9 @@ from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
 from .owner_lifecycle import OwnerStartResult
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
+
+if TYPE_CHECKING:
+    from acp.schema import SessionConfigSelectOption
 
 
 def _duration_seconds(value: str) -> float:

@@ -11,14 +11,6 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
-from acp import RequestError
-from acp.schema import (
-    ConfigOptionUpdate,
-    SessionConfigOptionSelect,
-    SessionConfigSelectOption,
-    SetSessionConfigOptionResponse,
-)
-
 from .pi_vocabulary import ThinkingLevel
 from .comms import Comms
 from .agent_backend import UseSettings
@@ -28,11 +20,12 @@ from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_pi import NativePiUnavailable
 from .launch_runtime import RestartEnvironment
-from .runtime import RuntimeServer
-from .session_effects import SessionEffects
 from .threads import Thread
 
 if TYPE_CHECKING:
+    from acp.schema import ConfigOptionUpdate, SessionConfigOptionSelect, SessionConfigSelectOption, SetSessionConfigOptionResponse
+    from .runtime import RuntimeServer
+    from .session_effects import SessionEffects
     from .pi_commands import SettingCommand
     from .session_lifecycle import SessionLifecycle
 
@@ -102,6 +95,8 @@ class CatalogConfigOption(ConfigOption):
             return self.catalogs[key]
 
     async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect:
+        from acp.schema import SessionConfigOptionSelect, SessionConfigSelectOption
+
         choices = await self.choices(thread)
         configured = self.current_value(thread)
         selected = configured if configured is not None else ""
@@ -132,6 +127,8 @@ class CatalogConfigOption(ConfigOption):
     async def change(
         self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None:
+        from acp import RequestError
+
         try:
             await self.validate(thread, value)
         except InvalidConfigChoice as error:
@@ -161,6 +158,8 @@ class ModelConfigOption(CatalogConfigOption):
         return None
 
     async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
+        from acp.schema import SessionConfigSelectOption
+
         values = [
             value.strip()
             for value in os.environ.get("AGENT_COMMS_AGENT_MODELS", "").split(",")
@@ -195,6 +194,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         return ThinkingLevel.optional_name(thread.thinking_level)
 
     async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
+        from acp.schema import SessionConfigSelectOption
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
@@ -282,6 +282,8 @@ class SessionConfigOptions(ConfigOptions):
 
     async def _publish(self, session_id: str, options: list[SessionConfigOptionSelect]) -> None:
         """Publish within the original session_options acquisition lifetime."""
+        from acp.schema import ConfigOptionUpdate
+
         update = ConfigOptionUpdate(
             session_update="config_option_update", config_options=options
         )
@@ -295,6 +297,9 @@ class SessionConfigOptions(ConfigOptions):
     async def set_option(
         self, config_id: str, session_id: str, value: str | bool
     ) -> SetSessionConfigOptionResponse:
+        from acp import RequestError
+        from acp.schema import SetSessionConfigOptionResponse
+
         try:
             member = CatalogConfigOption.decode(config_id)
             if not isinstance(value, str):
