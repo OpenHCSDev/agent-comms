@@ -130,7 +130,7 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
                 await asyncio.sleep(0.01)
         child = owner.children[-1]
         session = backend.TurnSession.active[turn]
-        stderr, forwarding = session.native.stderr_task, session.steering_task
+        stderr, forwarding = session.native.stderr_task, session.native.forwarding_task
         if termination == "cancel":
             turn.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -162,7 +162,7 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
     owner.provider.status = 0
     turn = asyncio.create_task(owner.run("Uncertain input before interrupted owner stop"))
     entered, release = asyncio.Event(), asyncio.Event()
-    close = PiSessionChild._close
+    close = PiSessionChild._shutdown
     stop = None
     try:
         async with asyncio.timeout(15):
@@ -171,26 +171,27 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
                 await asyncio.sleep(0.01)
         session = backend.TurnSession.active[turn]
 
-        async def held_close(child):
+        async def held_close(child, *, graceful):
             if child is session.native:
                 entered.set()
                 await release.wait()
-            return await close(child)
+            return await close(child, graceful=graceful)
 
-        monkeypatch.setattr(PiSessionChild, "_close", held_close)
+        monkeypatch.setattr(PiSessionChild, "_shutdown", held_close)
         stop = asyncio.create_task(backend.terminate_task_process(turn))
         await asyncio.wait_for(entered.wait(), 5)
         stop.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await stop
+        assert not stop.done()
         assert backend.TurnSession.active[turn] is session
         assert isinstance(owner.persistent.custody, RetiringNative)
-        assert not owner.persistent.custody.child.retire().done()
+        assert not owner.persistent.custody.child._close_job.done()
         release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await stop
         result = await asyncio.wait_for(turn, 10)
         assert not result[-1].ok
         assert not session.native.proc.alive()
-        assert session.native.stderr_task.done() and session.steering_task.done()
+        assert session.native.stderr_task.done() and session.native.forwarding_task.done()
         assert turn not in backend.TurnSession.active
         assert owner.provider.posts == len(owner.saved_inputs()) == 1
     finally:
