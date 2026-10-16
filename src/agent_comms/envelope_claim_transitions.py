@@ -21,7 +21,7 @@ from .coordination_errors import IdentityConflict
 from .errors import RelationViolationError
 from .message_reference import MessageReference
 from .field_codec import FieldCodec
-from .thread_identity import GenerationCounter, TurnId
+from .thread_identity import GenerationCounter, ThreadIncarnation, TurnId
 
 
 class ClaimTransitionError(ValueError):
@@ -295,16 +295,9 @@ class ClaimTransition:
             raise ClaimTransitionError("Claim sequence must increase.")
         next_state = dict(previous)
         for release in self.releases:
-            current = next_state.get(release.resource)
-            if current is None:
-                raise ClaimTransitionError("Cannot release a resource without a live claim.")
-            # Renaming preserves incarnation; exact generation fences release
-            # after somebody else acquires this same resource.
-            if (current.incarnation, current.generation) != (self.incarnation, release.generation):
-                raise ClaimTransitionError("Only the exact owner incarnation/generation may release.")
+            previous.claim(release.resource).validate_release(self.incarnation, release)
         for resource in self.claims:
-            if existing := next_state.get(resource):
-                raise ClaimConflict(existing)
+            previous.claim(resource).require_free()
         for release in self.releases:
             del next_state[release.resource]
         for resource in self.claims:
@@ -312,8 +305,46 @@ class ClaimTransition:
         return ClaimProjection(self.seq, next_state)
 
 
+class Claim(ABC):
+    """A resource is free or held; callers never interpret a missing owner."""
+
+    @abstractmethod
+    def require_free(self) -> None: ...
+
+    @abstractmethod
+    def release(self) -> ClaimRelease: ...
+
+    @abstractmethod
+    def validate_release(self, incarnation: str, release: ClaimRelease) -> None: ...
+
+    @abstractmethod
+    def for_admission(self, owner: ThreadIncarnation, admission: WakeAdmission) -> Claim: ...
+
+    @abstractmethod
+    def matches(self, owner: ClaimOwner) -> bool: ...
+
+
 @dataclass(frozen=True, slots=True)
-class ClaimOwner:
+class FreeClaim(Claim):
+    def require_free(self) -> None:
+        pass
+
+    def release(self) -> ClaimRelease:
+        raise RelationViolationError('Cannot release an unclaimed resource.')
+
+    def validate_release(self, incarnation: str, release: ClaimRelease) -> None:
+        raise ClaimTransitionError('Cannot release a resource without a live claim.')
+
+    def for_admission(self, owner: ThreadIncarnation, admission: WakeAdmission) -> Claim:
+        return self
+
+    def matches(self, owner: ClaimOwner) -> bool:
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimOwner(Claim):
+    """The existing owner record is the held member, not a second wrapper."""
     resource: str
     owner: str
     incarnation: str
@@ -333,6 +364,25 @@ class ClaimOwner:
         if self.admission is not None and type(self.admission) is not WakeAdmission:
             raise ClaimTransitionError("Claim owner requires a typed wake admission.")
 
+    def require_free(self) -> None:
+        raise ClaimConflict(self)
+
+    def release(self) -> ClaimRelease:
+        return ClaimRelease(self.resource, self.generation)
+
+    def validate_release(self, incarnation: str, release: ClaimRelease) -> None:
+        if (self.incarnation, self.generation) != (incarnation, release.generation):
+            raise ClaimTransitionError('Only the exact owner incarnation/generation may release.')
+
+    def for_admission(self, owner: ThreadIncarnation, admission: WakeAdmission) -> Claim:
+        if (self.admission == admission and self.incarnation == str(owner.created_at)
+                and self.owner == owner.name):
+            return self
+        raise ClaimConflict(self)
+
+    def matches(self, owner: ClaimOwner) -> bool:
+        return self == owner
+
 
 @dataclass(frozen=True, slots=True)
 class ClaimProjection(Mapping[str, ClaimOwner]):
@@ -350,6 +400,9 @@ class ClaimProjection(Mapping[str, ClaimOwner]):
         ):
             raise ClaimTransitionError("Previous projection is malformed.")
         object.__setattr__(self, "_claims", MappingProxyType(dict(sorted(self._claims.items()))))
+
+    def claim(self, resource: str) -> Claim:
+        return self._claims.get(resource, FreeClaim())
 
     def __getitem__(self, key: str) -> ClaimOwner:
         return self._claims[key]

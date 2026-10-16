@@ -282,10 +282,7 @@ class Publisher:
                         release_records.append(release)
                     else:
                         resource = _release_resource(worktree, release)
-                        current = source.claim(resource)
-                        if current is None:
-                            raise RelationViolationError("Cannot release an unclaimed resource.")
-                        release_records.append(ClaimRelease(resource, current.generation))
+                        release_records.append(source.claim(resource).release())
                 release_records.sort(key=lambda release: release.resource)
                 transition = ClaimTransition(
                     stored.sender, owner_incarnation, stored.seq, stored.message_id,

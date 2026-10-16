@@ -6,9 +6,9 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, WakeAdmission
+from agent_comms.envelope_claim_transitions import ClaimConflict, ClaimOwner, ExistingFileClaim, FreeClaim, WakeAdmission
 from agent_comms.messages import InfoKind, Message
-from agent_comms.private_bus_checkpoint import CertifiedSourceRead, ClaimCommits
+from agent_comms.private_bus_checkpoint import CertifiedSourceRead, ClaimCommits, ResourceClaims
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
@@ -48,7 +48,10 @@ def test_multi_resource_admission_consumes_one_operation_even_after_release(tmp_
         commits = ClaimCommits.select(source.connection)
         assert len(commits) == 1 and commits[0].operation_id == admission.operation_id
         assert source.claim_operation_used(admission.operation_id)
-        assert all(source.claim(str(path)).admission == admission for path in paths[:2])
+        for path in paths[:2]:
+            held = source.claim(str(path))
+            assert isinstance(held, ClaimOwner)
+            assert held.admission == admission
     comms.messaging.send_message('owner', 'peer', 'release', releases=paths[:2])
     assert not comms.bus.log.claim_projection()
     before = comms.bus.log.path.read_bytes()
@@ -58,7 +61,7 @@ def test_multi_resource_admission_consumes_one_operation_even_after_release(tmp_
     reopened = Comms(comms.root)
     with reopened.bus.log.certified_read() as source:
         assert source.claim_operation_used(admission.operation_id)
-        assert source.claim(str(paths[0])) is None
+        assert isinstance(source.claim(str(paths[0])), FreeClaim)
     again = admitted(reopened, replace(admission, operation_id='a' * 32), paths[:2])
     assert again.seq > claimed.seq
 
@@ -81,13 +84,26 @@ def test_claim_decisions_never_read_or_decode_retained_messages(tmp_path, monkey
     assert not comms.bus.log.claim_projection()
 
 
+def test_empty_resource_subset_is_not_the_complete_projection(tmp_path):
+    comms, paths, admission = authored(tmp_path)
+    claimed = admitted(comms, admission, paths[:2])
+    with comms.bus.log.certified_read() as source:
+        full = ResourceClaims.projection(source.connection)
+        empty = ResourceClaims.projection_for(source.connection, ())
+        selected = ResourceClaims.projection_for(source.connection, (str(paths[0]),))
+        assert tuple(full) == tuple(str(path) for path in paths[:2])
+        assert not empty and empty.last_seq == claimed.seq
+        assert tuple(selected) == (str(paths[0]),)
+        assert isinstance(empty.claim(str(paths[0])), FreeClaim)
+
+
 def test_resource_and_operation_queries_use_their_unique_indexes(tmp_path):
     comms, paths, admission = authored(tmp_path)
     admitted(comms, admission, paths[:1])
     with comms.bus.log.certified_read() as source:
         statements = []
         source.connection.set_trace_callback(statements.append)
-        assert source.claim(str(paths[0])) is not None
+        assert isinstance(source.claim(str(paths[0])), ClaimOwner)
         assert source.claim_operation_used(admission.operation_id)
         source.connection.set_trace_callback(None)
         assert len(statements) == 2

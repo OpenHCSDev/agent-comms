@@ -22,20 +22,20 @@ from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from collections.abc import Iterator, Mapping
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, Self, TypeVar
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import (
-    ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
+    Claim, ClaimProjection, ClaimTransition, ClaimTransitionError, FreeClaim,
 )
 from .coordination_tables.publications import PublicationIntents
 from .errors import HumanAdmissionBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .field_codec import FieldCodec
-from .typed_table import Column, GeneratedColumn, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedRow, TypedTable
+from .typed_table import Column, GeneratedColumn, ForeignKey, In, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedRow, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
 from .thread_identity import ThreadIncarnation
@@ -267,7 +267,7 @@ class CertifiedSourceRead:
         for row in self.message_rows():
             yield from WireRecord.certified_public_messages(row)
 
-    def claim(self, resource: str) -> ClaimOwner | None:
+    def claim(self, resource: str) -> Claim:
         """One current normalized resource, through the certified checkpoint."""
         self.require_open_prefix()
         return ResourceClaims.owner_for(self.connection, resource)
@@ -617,7 +617,7 @@ class ClaimCommits(CheckpointTable, TypedTable):
 
     @classmethod
     def prepare(cls, db: sqlite3.Connection, transition: ClaimTransition) -> ClaimProjection:
-        projected = transition.apply(ResourceClaims.projection(db, transition.resources))
+        projected = transition.apply(ResourceClaims.projection_for(db, transition.resources))
         transition.require_new_operation(lambda operation: cls.operation_used(db, operation))
         return projected
 
@@ -628,9 +628,7 @@ class ClaimCommits(CheckpointTable, TypedTable):
         except (ClaimTransitionError, IdentityConflict) as error:
             raise RelationViolationError("Committed claim transition is inconsistent.") from error
         inserted = super().insert(db)
-        marks = ",".join("?" for _ in self.transition.resources)
-        ResourceClaims.delete(db, where=f'"resource" IN ({marks})',
-                              parameters=self.transition.resources)
+        ResourceClaims.delete(db, resource=In(self.transition.resources))
         for owner in projected.values():
             ResourceClaims(owner.resource, owner.seq).insert(db)
         return inserted
@@ -648,27 +646,27 @@ class ResourceClaims(CheckpointTable, TypedTable):
                            deferred=True, on_delete="CASCADE"),)
 
     @classmethod
-    def owner_for(cls, db: sqlite3.Connection, resource: str) -> ClaimOwner | None:
+    def owner_for(cls, db: sqlite3.Connection, resource: str) -> Claim:
         original = ClaimCommits.one(
             db, where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
             parameters=(resource,),
         )
-        return original.transition.claimed(resource) if original is not None else None
+        return original.transition.claimed(resource) if original is not None else FreeClaim()
 
     @classmethod
-    def projection(
-        cls, db: sqlite3.Connection, resources: tuple[str, ...] | None = None,
-    ) -> ClaimProjection:
-        if resources is None:
-            current = cls.select(db)
-        else:
-            marks = ",".join("?" for _ in resources)
-            current = cls.select(db, where=f'"resource" IN ({marks})', parameters=resources)
+    def projection(cls, db: sqlite3.Connection) -> ClaimProjection:
+        return cls._projection(db, cls.select(db))
+
+    @classmethod
+    def projection_for(cls, db: sqlite3.Connection, resources: tuple[str, ...]) -> ClaimProjection:
+        return cls._projection(db, cls.select(db, resource=In(resources)))
+
+    @classmethod
+    def _projection(cls, db: sqlite3.Connection, current: list[Self]) -> ClaimProjection:
         owners = {}
         if current:
             sequences = tuple(sorted({row.claim_seq for row in current}))
-            marks = ",".join("?" for _ in sequences)
-            originals = ClaimCommits.select(db, where=f'"seq" IN ({marks})', parameters=sequences)
+            originals = ClaimCommits.select(db, seq=In(sequences))
             transitions = {row.transition.seq: row.transition for row in originals}
             owners = {row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current}
         return ClaimProjection(ClaimCommits.latest_sequence(db), owners)

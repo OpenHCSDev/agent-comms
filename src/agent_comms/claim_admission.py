@@ -24,8 +24,8 @@ from .coordination_cohort import _receipt_matches
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
-    ClaimConflict,
     ClaimOwner,
+    FreeClaim,
     ExistingFileClaim,
     FileClaimPath,
     WakeAdmission,
@@ -187,15 +187,12 @@ def publish_selected_resource_claim(
     ):
         resource = resource_path.normalized(Path(owner.worktree))
         with bus_lock.current_source(bus.log, metadata) as source:
-            existing = source.claim(resource)
-            if existing is not None:
-                if (
-                    existing.admission == admission
-                    and existing.incarnation == str(owner.created_at)
-                    and existing.owner == owner.name
-                ):
+            existing = source.claim(resource).for_admission(owner.incarnation, admission)
+            match existing:
+                case ClaimOwner():
                     return existing
-                raise ClaimConflict(existing)
+                case FreeClaim():
+                    pass
             if source.claim_operation_used(admission.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
         target = initial.message.sender
@@ -342,7 +339,7 @@ def write_selected_claimed_file(
             _verify_selected_wake_state(initial, owner, generation, scoped, admission)
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
             with bus_lock.current_source(bus.log, marker) as source:
-                if claimed.admission != admission or source.claim(normalized) != claimed:
+                if claimed.admission != admission or not source.claim(normalized).matches(claimed):
                     raise IdentityConflict("Selected write has no current exact resource claim")
             with _opened_selected_file(Path(owner.worktree), normalized) as (fd, stable):
                 os.ftruncate(fd, 0)
