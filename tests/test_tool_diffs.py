@@ -1,6 +1,7 @@
 """Native edit evidence survives RPC, ACP, paging and transcript serialization."""
 
 import json
+from agent_comms.tool_caller import NoThreadCaller
 import sys
 
 import pytest
@@ -163,7 +164,7 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
     comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("recipient", frozenset(), str(tmp_path)))
     published = invoke_tool(comms, "comms_send", {
-        "from": "sender", "to": "recipient", "body": "Original private publication"})
+        "from": "sender", "to": "recipient", "body": "Original private publication"}, caller=NoThreadCaller())
     raw = {"content": [{"type": "text", "text": json.dumps(published)}], "details": published}
     result = PiToolResult.from_wire(raw)
     message, = comms.views.full_history()

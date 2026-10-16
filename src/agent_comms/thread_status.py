@@ -7,10 +7,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
+from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
-    from .thread_presentation import ThreadPresentation
 
 
 @dataclass(frozen=True)
@@ -25,19 +26,17 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
         """Whether this lifecycle belongs in the requested executable roster."""
 
     def require_running(self) -> None:
-        from .errors import RelationViolationError
-
         raise RelationViolationError("goal owner is not running")
 
     def require_active(self) -> None:
-        from .errors import RelationViolationError
-
         raise RelationViolationError("live owner is stopped or unavailable")
 
     def require_stopped(self) -> None:
-        from .errors import RelationViolationError
-
         raise RelationViolationError("Retired owner is no longer stopped")
+
+    def require_self_rename(self) -> None:
+        """Only the thread's present participant may rename it."""
+        raise RelationViolationError("Only a running thread can rename itself.")
 
     def require_mutable(self, name: str) -> None:
         """Registration/heartbeat may update this thread's presence."""
@@ -66,8 +65,6 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
         return self.allows_owner_control()
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
-        from .thread_presentation import ThreadPresentation
-
         return ThreadPresentation(title, "○", self.declared_name.title())
 
 
@@ -84,8 +81,6 @@ class ActiveThreadPresence:
         return True
 
     def for_deletion(self) -> ThreadStatus:
-        from .errors import RelationViolationError
-
         raise RelationViolationError("Stop a running thread before permanently deleting it.")
 
     def allows_owner_start(self, *, owner_pid: int) -> bool:
@@ -99,6 +94,9 @@ class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):
     running = True
 
     def require_running(self) -> None:
+        pass
+
+    def require_self_rename(self) -> None:
         pass
 
 
@@ -117,6 +115,39 @@ class StoppedThreadStatus(ThreadStatus):
         return show_stopped
 
 
+class CliInboxPresence:
+    """Presence of a CLI inbox: only its bridge's registration changes it."""
+
+    def restored(self) -> ThreadStatus:
+        """A restored inbox has no bridge until one registers again."""
+        return NoBridgeThreadStatus()
+
+    def after_heartbeat(self, name: str) -> ThreadStatus:
+        """A CLI command is not a bridge; a heartbeat keeps the inbox as it is."""
+        self.require_mutable(name)
+        return self
+
+
+class ConnectedThreadStatus(CliInboxPresence, RunningThreadStatus):
+    """A CLI inbox whose bridge process is watching it."""
+
+
+class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
+    """A CLI inbox with no bridge attached; its messages wait unread.
+
+    It has no launched process to stop or restart, so it stays in every view.
+    """
+
+    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
+        return True
+
+    def require_self_rename(self) -> None:
+        """The CLI participant itself calls rename; it needs no bridge."""
+
+    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
+        return ThreadPresentation(title, "○", "CLI inbox · no bridge")
+
+
 class ArchivedThreadStatus(ThreadStatus):
     def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
         return show_archived
@@ -133,6 +164,4 @@ class DeletingThreadStatus(ThreadStatus):
         return False
 
     def require_mutable(self, name: str) -> None:
-        from .errors import RelationViolationError
-
         raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")

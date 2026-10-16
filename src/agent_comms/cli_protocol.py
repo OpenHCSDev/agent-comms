@@ -1,15 +1,20 @@
 """Declared JSON boundaries shared by Core's CLI and external CLI adapters."""
 from __future__ import annotations
 
+import asyncio
 import builtins
+import sys
 from abc import ABC, abstractmethod
 from graphlib import TopologicalSorter
-from typing import Annotated, ClassVar, Never, Union
+from typing import TYPE_CHECKING, Annotated, ClassVar, Never, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
 from pydantic import BaseModel, ConfigDict, Discriminator, Tag, TypeAdapter, computed_field
 
 from .coordination_errors import CoordinationReadUnavailable
+
+if TYPE_CHECKING:
+    from .cli_bridges.shared import CliBridge
 
 
 class WireModel(BaseModel):
@@ -56,7 +61,14 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
         return Annotated[Union[tuple(variants)], Discriminator(tag)]
 
 
-class CoreError(TaggedWire, ABC):
+class WatchItem(ABC):
+    """One item of a Core watch stream; it knows how a CLI bridge takes it."""
+
+    @abstractmethod
+    async def handle(self, bridge: CliBridge) -> None: ...
+
+
+class CoreError(TaggedWire, WatchItem):
     """One-line Core failure; each member owns its source and watch behavior."""
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
@@ -84,6 +96,13 @@ class CoreError(TaggedWire, ABC):
     @abstractmethod
     def watch_delay(self) -> float:
         """Delay another read subscription, or raise for a permanent failure."""
+
+    async def handle(self, bridge: CliBridge) -> None:
+        """Core ended this read stream; wait before the bridge opens the next."""
+        delay = self.watch_delay()
+        print(f'Core watch unavailable: {self.error}; reconnecting read stream',
+              file=sys.stderr, flush=True)
+        await asyncio.sleep(delay)
 
 
 class UnavailableCoreError(CoreError):

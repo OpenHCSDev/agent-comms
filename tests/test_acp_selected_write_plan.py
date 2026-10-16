@@ -15,7 +15,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import cohort_foreground, coordinated_runtime
+from agent_comms import coordinated_runtime, private_nk_entrypoint, selected_write_plan
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.acp import CommsAgent
@@ -161,7 +161,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                 contents="not written",
             )
         if scenario == "parent_retry":
-            original_sync = SelectedWritePlans._fsync_dir
+            original_sync = selected_write_plan.fsync_directory
 
             def fail_parent(path):
                 if path == root:
@@ -169,13 +169,13 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                 return original_sync(path)
 
             with monkeypatch.context() as fault:
-                fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_parent))
+                fault.setattr(selected_write_plan, "fsync_directory", fail_parent)
                 with pytest.raises(OSError, match="ambiguous parent fsync"):
                     await agent.prompt("beta", [], field_meta=options)
             assert (root / "selected-write-plans").is_dir()
             assert not list((root / "selected-write-plans").glob("*.json"))
         if scenario == "commit_unknown":
-            original_sync = SelectedWritePlans._fsync_dir
+            original_sync = selected_write_plan.fsync_directory
 
             def fail_commit(path):
                 if path.name == "selected-write-plans":
@@ -183,7 +183,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                 return original_sync(path)
 
             with monkeypatch.context() as fault:
-                fault.setattr(SelectedWritePlans, "_fsync_dir", staticmethod(fail_commit))
+                fault.setattr(selected_write_plan, "fsync_directory", fail_commit)
                 with pytest.raises(OSError, match="ambiguous"):
                     await agent.prompt("beta", [], field_meta=options)
             with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
@@ -202,7 +202,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             return
         with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
             await agent.prompt("beta", [], field_meta=options)
-        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
         monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
         fake, calls = _fake_model(
             decision="FULL", fail_on=1 if scenario == "native_failure" else None

@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Self
+from typing import Literal, Self
 
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
@@ -149,6 +149,31 @@ class CoordinationStore:
                 yield db
         except sqlite3.OperationalError as error:
             CoordinationReadUnavailable.raise_from(error)
+
+    @staticmethod
+    def observation_failure(path: Path) -> Literal["missing", "invalid_store"] | None:
+        """Never let a read-only SQLite open create a WAL shared-memory sidecar.
+
+        WAL-mode SQLite can create -shm even when opened with mode=ro. Refuse such a
+        database *before* opening SQLite; rollback-journal mode is the current
+        coordinator configuration. Do not create directories, chmod, or recover a
+        hot journal. A concurrent WAL conversion is outside this schema contract.
+        """
+        try:
+            info = path.lstat()
+            if not stat.S_ISREG(info.st_mode):
+                return "invalid_store"
+            with path.open("rb") as stream:
+                header = stream.read(100)
+        except FileNotFoundError:
+            return "missing"
+        except OSError:
+            return "invalid_store"
+        if len(header) < 100 or header[:16] != b"SQLite format 3\0":
+            return "invalid_store"
+        if header[18:20] != b"\x01\x01":
+            return "invalid_store"
+        return None
 
     @staticmethod
     @contextmanager
