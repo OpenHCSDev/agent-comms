@@ -89,31 +89,41 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     assert not agent.inputs.pending_turns.get('beta')
 
 
-async def test_cutover_abort_clears_pending_channel_post(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize('abort', [False, True])
+async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monkeypatch, abort: bool) -> None:
     from agent_comms import cohort_foreground, native_pi
+    from agent_comms.tracked_turn import TrackedTurnSession
+    from test_coordinated_runtime import _fake_model
     from agent_comms.bus_publication import stable_thread_lookup
     from agent_comms.coordination_cohort import next_sealed_assignment
     from agent_comms.coordinator import Coordination
-    from agent_comms.schedule_rules import SelectedWakeCheck
     from test_acp_private_nk_delivery import _session
 
     comms, agent, _root_id = _session(tmp_path)
     monkeypatch.setattr(cohort_foreground, '_trusted_package', lambda _: None)
     monkeypatch.setattr(native_pi, '_trusted_package', lambda _: None)
     gate = comms.owners.maintenance
-    receipt = gate.begin('aborted-cutover')
-    post = comms.messaging.send_message('sender', '#team', 'while aborting')
+    receipt = gate.begin('scratch-cutover')
+    post = comms.messaging.send_message('sender', '#team', 'while draining')
     assert await agent.inputs.drain_inbox('beta') == 0
     assert await agent.inputs.drain_inbox('beta') == 0
     beta = comms.registry.require('beta')
     with Coordination(comms.root / 'coordination.sqlite3') as store:
         assert next_sealed_assignment(store, stable_thread_lookup(beta.created_at), beta.name).wire_seq == post.seq
     assert beta.active_turn is None
-    assert gate.clear(receipt).phase is ReadyPhase
-    selected = []
-    monkeypatch.setattr(SelectedWakeCheck, 'schedule', lambda check: selected.append(check))
+    if abort:
+        assert gate.clear(receipt).phase is ReadyPhase
+    else:
+        for phase in (PausedPhase, InstallingPhase, ReadyPhase):
+            receipt = gate.advance(receipt, phase)
+    fake, calls = _fake_model(decision='FULL')
+    monkeypatch.setattr(TrackedTurnSession, 'execute', fake)
     assert await agent.inputs.drain_inbox('beta') == 1
-    assert len(selected) == 1
+    task = agent.inputs.wake_tasks.get('beta')
+    assert task is not None
+    await task
+    assert calls and 'while draining' in calls[0][1]
+    assert await agent.inputs.drain_inbox('beta') == 0  # same post is not replayed
 
 
 def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
