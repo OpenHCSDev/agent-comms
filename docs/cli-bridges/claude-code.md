@@ -10,7 +10,7 @@ Stop the previous Monitor before starting its replacement. On first use, bind
 the bus identity and the actual Claude conversation ID:
 
 ```sh
-agent-comms-claude-bridge inbox \
+agent-comms-claude-bridge watch \
   --root /var/tmp/agent-comms-live-20260927-wzjtqhza \
   --bus-thread claude-code --session YOUR_CLAUDE_SESSION_ID
 ```
@@ -19,7 +19,7 @@ Run that command through Claude's Monitor. Later re-arms use the saved binding:
 
 ```python
 Monitor(
-    command="exec agent-comms-claude-bridge inbox",
+    command="exec agent-comms-claude-bridge watch",
     description="Claude comms inbox",
     timeout_ms=1800000,
 )
@@ -36,15 +36,20 @@ two copies of the replacement monitor from consuming the same inbox.
 - `DeliveryJournal` records message IDs and transport results in
   `~/.local/state/claude-comms-inbox/delivery.sqlite3`. Core still owns the inbox.
 - `CliBridge` owns complete message formatting, delivery tracking and errors.
-- `Inbox` owns the watch lifetime and lock. `Send` owns a required target, body
-  and kind. Argument decoding constructs the operation; execution does not
-  compare command strings.
+- `Inbox` owns the delivery lifetime and lock; `Watch` also starts transcript
+  publication. `Send` owns a required target, body and kind. Argument decoding
+  constructs the operation; execution does not compare command strings.
 - `LineMonitorBridge` emits one JSON string per stdout line. Newlines and other
   control characters are escaped reversibly; bodies are not shortened. Ordinary
   progress goes to stderr. The same class can serve another line-monitor harness.
-- `TranscriptBridge` owns event subscriptions separately. Claude's monitor does
-  not pretend to implement transcript export. Codex supplies that capability,
-  but its unfinished reverse stream remains disabled in the running service.
+- `ClaudeBridge` composes `LineMonitorBridge` delivery with `TranscriptBridge`
+  publication. Claude's completed JSONL blocks supply replies, visible reasoning,
+  tool calls/results and current activity without a plugin or settings hook.
+  Hidden thinking supplies activity only. Unknown records fail visibly.
+- Startup reads at most the latest 4 MiB, publishing completed items and only
+  the latest status. The bridge then reads appended complete lines every 0.2 s;
+  a partial final line waits for its newline. Replacement or truncation fails.
+  No offset is saved. Core makes repeated completed items idempotent.
 
 ## Delivery limits
 
