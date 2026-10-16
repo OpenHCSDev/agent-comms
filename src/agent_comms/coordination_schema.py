@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Final
 
 from agent_comms.assignment_states import AssignmentState
-from agent_comms.attempt_states import AttemptState
+from agent_comms.attempt_states import AttemptState, RetryPredecessor
 from agent_comms.execution_states import ExecutionState
 from agent_comms.obligation_states import ResponseState
 from agent_comms.recovery_states import RecoveryCondition
@@ -65,6 +65,10 @@ def _schema_context():
         assignment_edges=_sql_edges(AssignmentState, "json_extract({row}.lifecycle, '$.kind')"),
         obligation_edges=_sql_edges(ResponseState, "json_extract({row}.lifecycle, '$.kind')"),
         terminal_attempt_names=_sql_members(AttemptState, lambda member: member.terminal),
+        failed_attempt_phases=_sql_members(AttemptState, lambda member: member.failed),
+        retry_attempt_phases=_sql_values(
+            member.declared_name for member in AttemptState.members_with(RetryPredecessor)
+        ),
         engaged_execution_names=_sql_members(
             ExecutionState, lambda member: member.assignment_state().engaged
         ),

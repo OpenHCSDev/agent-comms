@@ -56,15 +56,15 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
             _SCHEDULE,
         )
         indexed = threading.Event()
-        original = WakeCandidateIndex.catch_up_committed_append
+        original = maintenance._drain_candidate
 
-        def observe(self, hint, **kwargs):
-            result = original(self, hint, **kwargs)
-            if result.caught_up:
-                indexed.set()
-            return result
+        def observe(root):
+            original(root)
+            # Candidate catch-up alone is not completion: the same worker
+            # still owns route preparation and its final pending-root check.
+            indexed.set()
 
-        monkeypatch.setattr(WakeCandidateIndex, "catch_up_committed_append", observe)
+        monkeypatch.setattr(maintenance, "_drain_candidate", observe)
         message = comms.messaging.send_message("sender", "beta", "selected original")
         assert indexed.wait(timeout=5), "deferred checkpoint did not catch up"
         page = WakeCandidateIndex(comms.bus.log).page(
@@ -169,3 +169,40 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
             limit=100,
         )
         assert len(page.entries) >= 1 and not page.has_more
+
+
+def test_concurrent_ordinary_publication_keeps_maintenance_alive(monkeypatch, tmp_path):
+    comms, root_id = _wire(tmp_path)
+    root = comms.bus.log.path.parent
+    finished = threading.Condition()
+    failures = []
+    drain = maintenance._drain_candidate
+
+    def observed_drain(path):
+        try:
+            drain(path)
+        except Exception as error:
+            failures.append(error)
+            raise
+        finally:
+            with finished:
+                finished.notify_all()
+
+    def retired():
+        with maintenance._guard:
+            return root not in maintenance._pending
+
+    monkeypatch.setattr(maintenance, "_drain_candidate", observed_drain)
+    monkeypatch.setattr(maintenance, "schedule_candidate_catchup", _SCHEDULE)
+    messages = [comms.messaging.send_message("sender", "beta", str(n) + "x" * (128 * 1024))
+                for n in range(128)]
+    with finished:
+        assert finished.wait_for(retired, timeout=15), "maintenance did not finish"
+    assert failures == []
+    index = WakeCandidateIndex(comms.bus.log)
+    assert index._verified_checkpoint(root_id).last_seq == messages[-1].seq
+    page = index.page(root_id=root_id,
+                      recipient_lookup=stable_thread_lookup(comms.registry.require("beta").created_at),
+                      after_seq=0, required_through_seq=messages[-1].seq, limit=32)
+    assert len(page.entries) == 32 and page.has_more
+    assert comms.bus.pending_counts("beta") == {"sender": len(messages)}

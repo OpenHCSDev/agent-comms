@@ -196,13 +196,14 @@ class QueuedInput:
         inbox: Queue[TurnInboxItem], content: InputContent,
     ) -> None:
         """The accepted input owns transfer into this turn's existing native queue."""
-        from .agent_backend import InputId, InputRequest, WhenBusy
+        from .agent_backend import InputId, InputRequest
 
         inputs.require_inbox(session_id, inbox)
-        inputs.following_sources.setdefault(session_id, {})[self.input_id] = self.source()
+        source = self.source()
+        inputs.following_sources.setdefault(session_id, {})[self.input_id] = source
         inputs.queued_inputs.setdefault(session_id, {})[self.input_id] = self
         inbox.put_nowait(InputRequest(
-            input_id=InputId(self.input_id), content=content, when_busy=WhenBusy.STEER,
+            input_id=InputId(self.input_id), content=content, when_busy=source.when_busy,
         ))
 
     def bind_turn(

@@ -240,14 +240,14 @@ def accept_delivery_cohort(
     """
     if type(bus) is not MessageBus or type(store) is not Coordination:
         raise TypeError("cohort acceptance requires the actual bus and coordinator stores")
-    with bus.log.certified_read() as source:
+    # Hold the bus read open for the whole SQL write.
+    with bus.log.certified_read() as source, store.session.transaction() as db:
         marker = source.marker
         if marker.root_id != wire_root_id:
             raise IdentityConflict("cohort admission wire root changed")
         if wire_seq <= marker.admission_after_seq:
             raise IdentityConflict("historical source precedes the current admission floor")
-    initial = bus.log.read_delivery_cohort(wire_root_id, wire_seq)
-    with store.session.transaction() as db:
+        initial = source.delivery(wire_seq)
         assert_cohort_schema(db)
         receipt = ClaimBatchReceipts.one(db, wire_root_id=wire_root_id, wire_seq=wire_seq)
         if receipt is not None:

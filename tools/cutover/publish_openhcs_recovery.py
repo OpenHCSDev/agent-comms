@@ -93,6 +93,9 @@ def require_no_clients(audience):
     batch. A Toad/ACP/CLI without a distinct explicit root is not safe to exclude.
     Unknown Python processes explicitly bound to this root also refuse.
     """
+    from publish_runtime import RuntimePublication
+
+    commands_for_runtime = {path.name for path in RuntimePublication.installed().links} | {'toad-comms'}
     platform = Platform.current()
     for entry in Path('/proc').iterdir():
         if not entry.name.isdecimal() or int(entry.name) == os.getpid():
@@ -107,7 +110,7 @@ def require_no_clients(audience):
             head = argv[:3]
             module = head[2] if len(head) == 3 and head[1] == '-m' else ''
             commands = {Path(arg).name for arg in head}
-            client = bool(commands.intersection((*COMMANDS, 'toad-comms'))) or module in {'toad', 'agent_comms'} or module.startswith('agent_comms.')
+            client = bool(commands.intersection(commands_for_runtime)) or module in {'toad', 'agent_comms'} or module.startswith('agent_comms.')
             python = Path(head[0]).name.startswith('python')
             if not client and not python:
                 continue
