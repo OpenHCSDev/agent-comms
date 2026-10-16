@@ -468,6 +468,15 @@ class CoordinationChangedUpdate(AgentCommsUpdate):
     context_usage: ContextUsage | None
 
     @property
+    def status_label(self) -> str:
+        parts = []
+        if self.model:
+            parts.append(self.model)
+        if self.context_usage is not None:
+            parts.append(self.context_usage.label)
+        return " · ".join(parts)
+
+    @property
     def source_identity(self):
         from .transcript_receipts import AssignedSourceIdentity
 

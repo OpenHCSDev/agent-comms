@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
@@ -17,8 +18,27 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
+class RuntimeInfo(ABC):
+    """A runtime-info read is observed or explicitly unobserved."""
+
+    __slots__ = ()
+    model: str | None
+
+    @property
+    @abstractmethod
+    def context_usage(self) -> ContextUsage | None: ...
+
+
+class UnobservedRuntimeInfo(RuntimeInfo):
+    """No observation exists; do not invent a model or observation timestamp."""
+
+    __slots__ = ()
+    model = None
+    context_usage = None
+
+
 @dataclass(frozen=True, slots=True)
-class AgentRuntimeInfo:
+class AgentRuntimeInfo(RuntimeInfo):
     """Declares mutable runtime metadata for one registered thread."""
 
     thread: str
@@ -51,10 +71,6 @@ class AgentRuntimeInfo:
 
         return ContextUsage(self.context_used, self.context_size)
 
-    @classmethod
-    def optional_context_usage(cls, info: AgentRuntimeInfo | None) -> ContextUsage | None:
-        return info.context_usage if info is not None else None
-
 
 @dataclass(frozen=True, slots=True)
 class RuntimeInfoStore(ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]]):
@@ -69,6 +85,9 @@ class RuntimeInfoStore(ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]
 
     def empty(self) -> dict[str, AgentRuntimeInfo]:
         return {}
+
+    def for_thread(self, thread: str) -> RuntimeInfo:
+        return self.read().get(thread, UnobservedRuntimeInfo())
 
     def observe(self, thread: str, timestamp: float, observation: RuntimeInfoObservation) -> None:
         """Apply only this observation's fields in the original store transaction."""
