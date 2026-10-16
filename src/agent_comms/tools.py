@@ -588,6 +588,7 @@ class CommsGoalHistoryTool(ThreadToolRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class CommsTurnsTool(ToolRequest):
+    label = "Recent turns"
     description = "Read a unit's recent turns with ordered original transcript facts."
     context = "thread"
     thread: str = tool_field("Thread whose own saved turn records to read", binding=SubjectBinding)

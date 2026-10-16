@@ -8,16 +8,12 @@ from typing import TYPE_CHECKING
 
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
-from .transcript_events import TranscriptEvent
+from .external_transcript import ExternalTranscript
+from .native_transcript import NativeTranscript
+from .transcript_events import TurnDigest
 
 if TYPE_CHECKING:
     from .threads import Thread
-
-
-@dataclass(frozen=True)
-class TurnDigest:
-    turn_id: str
-    events: tuple[TranscriptEvent, ...]
 
 
 @dataclass(frozen=True)
@@ -41,14 +37,10 @@ class TurnDigestRead(ConversationPreparation):
                            self.thread.execution.prepare_conversation(self))
 
     def native(self) -> tuple[TurnDigest, ...]:
-        from .native_transcript import NativeTranscript
-
-        if not self.thread.session_file:
+        if self.thread.session_file is None:
             return ()
         return NativeTranscript(Path(self.thread.session_file)).turns(self.last)
 
     def external(self) -> tuple[TurnDigest, ...]:
-        from .external_transcript import ExternalTranscript
-
         with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:
             return source.turns(self.last)

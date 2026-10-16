@@ -20,7 +20,7 @@ from typing import ClassVar
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
-from .transcript_events import TranscriptEvent
+from .transcript_events import TranscriptEvent, TurnDigest
 from .transcript_receipts import TranscriptSource
 from .typed_table import Column, TypedRow, TypedStore, TypedTable
 
@@ -137,9 +137,7 @@ class ExternalTranscriptRead:
         finally:
             rows.close()
 
-    def turns(self, last: int):
-        from .turn_digests import TurnDigest
-
+    def turns(self, last: int) -> tuple[TurnDigest, ...]:
         if self.connection is None:
             return ()
         return tuple(

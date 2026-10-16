@@ -14,7 +14,9 @@ if TYPE_CHECKING:
     from .thread_identity import RecordedThreadIncarnation
 
 from .declared_family import DeclaredFamily
-from .native_entries import NativeEntry, SessionEntry
+from .coordination_errors import StaleRevision
+from .native_entries import NativeEntry, SessionEntry, TranscriptProjection
+from .transcript_events import TurnDigest
 from .private_path import FileRevision
 from .transcript_receipts import TranscriptSource
 
@@ -305,12 +307,8 @@ class NativeTranscript(TranscriptSource):
 
     def turns(self, last: int):
         """Read newest input-bounded turns through the existing record decoder."""
-        from .coordination_errors import StaleRevision
-        from .native_entries import TranscriptProjection
-        from .turn_digests import TurnDigest
-
         cut = self.cut()
-        if not cut.offset:
+        if cut.offset == 0:
             return ()
         turns, pending = [], []
         with closing(self.reverse(cut.offset)) as records:
