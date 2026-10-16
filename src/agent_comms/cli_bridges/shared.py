@@ -84,6 +84,11 @@ class DraftAccumulator:
     def append(self, text: str, section: int) -> None:
         raise ValueError('Received a text delta for a non-text item')
 
+    def finish(self, update: CompletedItem) -> tuple[ClosedDraft, FinishedItem]:
+        """Close on a full item, preserving provider time when no start was observed."""
+        events = tuple(self.started_at.stamp(event) for event in update.events)
+        return ClosedDraft(self.started_at), FinishedItem(update.turn_id, update.item_id, events)
+
 
 class NoPrefixDraft(DraftAccumulator):
     """No observed prefix; retain no per-item state so the instance can be shared."""
@@ -169,10 +174,8 @@ class ThreadOutput:
 
     def finish_item(self, update: CompletedItem) -> FinishedItem:
         key = update.turn_id, update.item_id
-        started_at = self.draft(key).started_at
-        self.drafts[key] = ClosedDraft(started_at)
-        events = tuple(started_at.stamp(event) for event in update.events)
-        return FinishedItem(update.turn_id, update.item_id, events)
+        self.drafts[key], finished = self.draft(key).finish(update)
+        return finished
 
     def end_turn(self, turn_id: str) -> None:
         for key in tuple(self.drafts):
