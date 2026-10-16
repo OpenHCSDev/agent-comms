@@ -8,6 +8,9 @@ from pathlib import Path
 import subprocess
 import sys
 
+SOURCE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(SOURCE / 'tools' / 'cutover'))
+
 import pytest
 
 from agent_comms.comms import Comms
@@ -23,7 +26,6 @@ from owner_read_projection import CurrentThreadProjection, RetiredGoalReportProj
 from thread_format_retirement import GoalReportMemberRetirement
 from seed_original_owner_capture import author_model_report
 
-SOURCE = Path(__file__).resolve().parents[1]
 TURN = 'c7cc88d777b947d99b6f28f9e0b6ef97'
 
 

@@ -3,7 +3,7 @@
 Only a source-declaration-decoded carrier with acquired committed goal history
 can produce the target postimage. No ordinary reader accepts the retired field.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import ClassVar
 
@@ -27,7 +27,7 @@ class GoalReportMemberRetirement:
         # This is an explicitly selected one-shot operation, not format discovery.
         # Its producer must own the actual stored member; no target default or
         # synthesized property can supply the original report evidence.
-        if cls.retired_member not in FieldCodec.record_schema(Thread)['properties']:
+        if not any(item.name == cls.retired_member and item.init for item in fields(Thread)):
             raise RelationViolationError(
                 'Goal report retirement requires the retained amended720 Thread declaration; '
                 'use CurrentThreadProjection for a current-format producer'

@@ -77,13 +77,12 @@ class RecordedRegistryProjection(OwnerReadProjection):
     @classmethod
     def project(cls, document: RegistryDocument, declaration) -> dict:
         requested = declaration['properties']['threads']['additionalProperties']['properties']
-        threads = {}
-        for name, thread in document.threads.items():
-            declared = {key: item for item, key in FieldCodec._fields(type(thread))}
-            threads[name] = {
-                key: FieldCodec.encode(getattr(thread, declared[key].name)) for key in requested
-            }
-        return {'threads': threads, 'aliases': FieldCodec.encode(document.aliases)}
+        encoded = FieldCodec.encode(document)
+        return {
+            'threads': {name: {key: thread[key] for key in requested}
+                        for name, thread in encoded['threads'].items()},
+            'aliases': encoded['aliases'],
+        }
 
     @classmethod
     def read(cls, registry, root: Path, name: str, request):
