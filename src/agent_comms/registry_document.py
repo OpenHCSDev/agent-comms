@@ -656,7 +656,9 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         try:
             entry = self.entry(owner.incarnation.name)
         except UnregisteredThreadError as error:
-            raise RelationViolationError("Thread incarnation changed during owner attachment") from error
+            raise RelationViolationError(
+                "Thread incarnation changed during owner attachment"
+            ) from error
         entry.require_owner_process(owner, process)
 
     def require_stopping_owner(self, expected: Thread, admission: int) -> None:

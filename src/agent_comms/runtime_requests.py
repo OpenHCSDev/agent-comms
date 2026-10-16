@@ -377,7 +377,7 @@ class ContextSourceRuntimeRequest(ContextRuntimeRequest):
 class ContextCoreRuntimeRequest(ResultRuntimeRequest):
     def read_context(self, ctx):
         comms = ctx.server.agent._comms
-        owner = self.require_owner(comms.registry.snapshot())
+        owner = self.require_owner(comms.registry.entry(ctx.name).entry)
         return TurnContext.for_inspection(comms, owner)
 
     async def inspect(self, ctx):

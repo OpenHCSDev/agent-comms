@@ -70,7 +70,10 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         assert await proxy.request("goal_history") == {"history": []}
         comms.registry.rename("registered", "renamed-owner")
         assert await proxy.request("goal_history") == {"history": []}
-        assert owner.sessions.require_owned_session(comms.registry.entry("renamed-owner").entry) == "original-acp-session"
+        assert (
+            owner.sessions.require_owned_session(comms.registry.entry("renamed-owner").entry)
+            == "original-acp-session"
+        )
         assert owner.sessions.bindings == {
             "retired-acp-session": "retired-owner",
             "original-acp-session": "registered",

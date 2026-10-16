@@ -130,11 +130,11 @@ class Goals:
         targets = tuple(
             dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
         )
-        owners = self.registry.aliases_for(thread.name)
+        snapshot = self.registry.snapshot()
+        owners = snapshot.entry(thread.name).names
         dispositions = InputDispositions(self.root)
         unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
         eligible = set()
-        snapshot = self.registry.snapshot()
         from .input_attempt import ReservedInput
 
         lookup = thread.incarnation.lookup
