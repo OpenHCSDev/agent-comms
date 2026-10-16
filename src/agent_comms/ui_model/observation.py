@@ -827,11 +827,8 @@ class ObservationService:
             request.receive(self)
 
     def store_names(self) -> frozenset[bytes]:
-        def paths(value) -> Iterator[Path]:
-            yield from value if isinstance(value, tuple) else (value,)
-
-        return frozenset(os.fsencode(path.name) for value in self.comms.views.revision_paths().values()
-                         for path in paths(value) if path.parent == self.comms.root)
+        return frozenset(os.fsencode(path.name) for group in self.comms.views.revision_paths().values()
+                         for path in group if path.parent == self.comms.root)
 
     async def watch(self) -> None:
         from agent_comms.wire_watch import ModifiedWatchSource, WireWatch

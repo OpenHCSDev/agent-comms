@@ -47,7 +47,6 @@ from .presentation import (
     ThreadView,
     WireRevision,
 )
-from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayBasis
 from .store_files import _store_lock
 from .thread_presentation import ThreadPresentation

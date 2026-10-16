@@ -7,7 +7,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, get_origin, get_type_hints
 
 from .activity import ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
@@ -855,6 +855,19 @@ class WireRevision:
     expiry_tick: int
 
     expiry_seconds: ClassVar[int] = 30
+
+    @classmethod
+    def capture(cls, paths: Mapping[str, tuple[Path, ...]], *, expiry_tick: int) -> WireRevision:
+        """Capture uniform path groups through the revision field declarations."""
+        declarations = get_type_hints(cls)
+        captured = {}
+        for name, group in paths.items():
+            revisions = tuple(map(FileRevision.capture, group))
+            if get_origin(declarations[name]) is tuple:
+                captured[name] = revisions
+            else:
+                captured[name], = revisions
+        return cls(**captured, expiry_tick=expiry_tick)
 
     @property
     def expiry_period(self) -> int:
