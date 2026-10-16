@@ -16,7 +16,7 @@ from agent_comms.private_bus_checkpoint import CertifiedSourceRead, ClaimCommits
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
-from carry_resource_claims_once import carry
+from tools.cutover.carry_resource_claims_once import carry
 
 
 def authored(tmp_path):

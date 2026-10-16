@@ -45,6 +45,37 @@ def test_declared_tool_json_and_optional_containers_do_not_infer_dictionary_keys
         FieldCodec.encode({'still': 'undeclared'})
 
 
+def test_projection_retains_declared_container_grammar_and_redacts_nested_values():
+    from agent_comms.field_codec import projected
+
+    @dataclass(frozen=True, order=True)
+    class Secret:
+        public: str
+        secret: str = field(metadata={'status_exclude': True})
+
+    @dataclass(frozen=True)
+    class Payload:
+        rows: list[dict[str, Secret]] | None
+        indexed: dict[int, Secret]
+        groups: tuple[dict[str, Secret], ...]
+        members: frozenset[Secret]
+
+        @projected(view='status')
+        def computed(self) -> dict[str, Secret]:
+            return self.rows[0]
+
+    secret = Secret('visible', 'never expose this')
+    payload = Payload([{'v': secret}], {1: secret}, ({'v': secret},), frozenset((secret,)))
+    shown = {'public': 'visible'}
+    assert FieldCodec.project(payload, 'status') == {
+        'rows': [{'v': shown}], 'indexed': [[1, shown]],
+        'groups': [{'v': shown}], 'members': [shown], 'computed': {'v': shown},
+    }
+    assert FieldCodec.encode(payload)['rows'][0]['v']['secret'] == secret.secret
+    with pytest.raises(TypeError, match='declared dict'):
+        FieldCodec.project({'v': 1}, 'status')
+
+
 def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter():
     value = OwnedWireRecord(OwnedWireText("retained"), (OwnedWireText("nested"),))
     encoded = {"value": "retained", "nested": ["nested"]}

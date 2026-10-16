@@ -188,6 +188,10 @@ class Projected(property):
         self.view = view
         self.wire_name = name or getter.__name__
 
+    @property
+    def annotation(self):
+        return get_type_hints(self.fget, include_extras=True).get('return')
+
 
 def projected(*, view: str, name: str | None = None):
     return lambda getter: Projected(getter, view=view, name=name)
@@ -281,6 +285,17 @@ class FieldCodec(Sealed):
             raise TypeError('Container encoding requires one declared element/key type')
         return declarations[0] if declarations else ()
 
+    @classmethod
+    def _sequence_items(cls, values, annotation):
+        """One declared element grammar for persistence and redacted views."""
+        container = (frozenset if isinstance(values, frozenset)
+                     else list if isinstance(values, list) else tuple)
+        args = cls._container_types(annotation, container)
+        uniform = bool(args) and (container is not tuple or len(args) == 2 and args[1] is Ellipsis)
+        items = sorted(values) if container is frozenset else values
+        for index, item in enumerate(items):
+            yield item, (args[0] if uniform else args[index] if index < len(args) else None)
+
     @overload
     @classmethod
     def encode(cls, value: DeclaredFamily) -> dict[str, Any]: ...
@@ -328,7 +343,7 @@ class FieldCodec(Sealed):
                 )
             )
             result.update(
-                (member.wire_name, cls.encode(getattr(value, name), get_type_hints(member.fget).get('return')))
+                (member.wire_name, cls.encode(getattr(value, name), member.annotation))
                 for name, member in cls._projections(type(value), "wire").items()
             )
             return result
@@ -336,21 +351,10 @@ class FieldCodec(Sealed):
             return value.declared_name
         if isinstance(value, Enum):
             return cls.encode(value.value)
-        if isinstance(value, frozenset):
-            args = cls._container_types(annotation, frozenset)
-            return [cls.encode(item, args[0] if args else None) for item in sorted(value)]
-        if isinstance(value, (list, tuple)):
-            container = list if isinstance(value, list) else tuple
-            args = cls._container_types(annotation, container)
-            return [cls.encode(item, (args[0] if args and (container is list or len(args) == 2 and args[1] is Ellipsis)
-                                      else args[index] if index < len(args) else None))
-                    for index, item in enumerate(value)]
+        if isinstance(value, (list, tuple, frozenset)):
+            return [cls.encode(item, item_type) for item, item_type in cls._sequence_items(value, annotation)]
         if isinstance(value, dict):
-            args = cls._container_types(annotation, dict)
-            if len(args) != 2:
-                raise TypeError('Dictionary encoding requires a declared dict[K, V] annotation')
-            key_type, value_type = args
-            return _DictDecoder.for_key(key_type).encode(value, key_type, value_type)
+            return _DictDecoder.encode_declared(value, annotation, cls.encode)
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
     @classmethod
@@ -451,7 +455,7 @@ class FieldCodec(Sealed):
         from a read-only view, and a view never serves as a persistence record.
         """
         representation = cls._value_representation(value, annotation)
-        if representation is not None:
+        if representation is not None or annotation is Any:
             return cls.encode(value, annotation)
         if is_dataclass(value) and not isinstance(value, type):
             hints = cls._types(type(value))
@@ -464,13 +468,18 @@ class FieldCodec(Sealed):
             }
             properties = cls._projections(type(value), view)
             result.update(
-                (member.wire_name, cls.project(getattr(value, name), view))
+                (member.wire_name, cls.project(getattr(value, name), view, member.annotation))
                 for name, member in properties.items()
             )
             return result
-        if isinstance(value, (tuple, list)):
-            return [cls.project(item, view) for item in value]
-        return cls.encode(value)
+        if isinstance(value, (tuple, list, frozenset)):
+            return [cls.project(item, view, item_type)
+                    for item, item_type in cls._sequence_items(value, annotation)]
+        if isinstance(value, dict):
+            return _DictDecoder.encode_declared(
+                value, annotation, lambda item, item_type: cls.project(item, view, item_type)
+            )
+        return cls.encode(value, annotation)
 
     @dataclass(frozen=True)
     class _FieldPlan:
@@ -691,6 +700,14 @@ class _DictDecoder(ValueDecoder):
     def for_key(annotation):
         return _ObjectDictDecoder if annotation is str else _EntriesDictDecoder
 
+    @classmethod
+    def encode_declared(cls, values, annotation, encode_value):
+        args = FieldCodec._container_types(annotation, dict)
+        if len(args) != 2:
+            raise TypeError('Dictionary encoding requires a declared dict[K, V] annotation')
+        key_type, value_type = args
+        return cls.for_key(key_type).encode(values, key_type, value_type, encode_value)
+
     @staticmethod
     def collect(entries):
         result = {}
@@ -709,8 +726,8 @@ class _ObjectDictDecoder(_DictDecoder):
                             for key, value in data.items())
 
     @staticmethod
-    def encode(values, key_type, value_type):
-        return {FieldCodec.decode(str, key): FieldCodec.encode(value, value_type)
+    def encode(values, key_type, value_type, encode_value):
+        return {FieldCodec.decode(str, key): encode_value(value, value_type)
                 for key, value in values.items()}
 
     @staticmethod
@@ -726,8 +743,8 @@ class _EntriesDictDecoder(_DictDecoder):
         return self.collect(pair.decode(value) for value in data)
 
     @staticmethod
-    def encode(values, key_type, value_type):
-        return [[FieldCodec.encode(key, key_type), FieldCodec.encode(value, value_type)]
+    def encode(values, key_type, value_type, encode_value):
+        return [[FieldCodec.encode(key, key_type), encode_value(value, value_type)]
                 for key, value in values.items()]
 
     @staticmethod
