@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import ClassVar
+from xml.etree import ElementTree
 
 from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
@@ -26,6 +27,7 @@ from .shared import (
     TranscriptUpdate,
     TurnEnded,
     TurnStarted,
+    monitor_notifications,
 )
 
 
@@ -200,8 +202,19 @@ class HumanPrompt(PromptOrigin):
 
 
 class TaskNotification(PromptOrigin):
-    """Monitor output; bus messages in it already reach Toad through Core."""
+    """The original session record confirms its monitor's notification."""
     wire_tag = 'task-notification'
+
+    def prompt(self, record: UserRecord, text: str,
+               session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        try:
+            notification = ElementTree.fromstring(text)
+        except ElementTree.ParseError:
+            return ()  # Other task-notification producers do not use this envelope.
+        if notification.tag != 'task-notification':
+            return ()
+        return monitor_notifications(notification.findtext('event', default=''),
+                                     record.sessionId, record.uuid, record.timestamp)
 
 
 class PeerMessage(PromptOrigin):
@@ -268,6 +281,7 @@ class UserMessage(ContentBlocks):
 class UserRecord(ClaudeRecord, TimedRecord):
     wire_tag = 'user'
     promptId: str
+    sessionId: str
     message: UserMessage
     origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
     isMeta: bool = False

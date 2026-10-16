@@ -29,6 +29,7 @@ from .command import Command
 from .field_codec import FieldCodec
 from .comms import Comms
 from .declared_family import DeclaredFamily
+from .read_basis import WatchAcknowledgment, OnReadWatchAcknowledgment
 from .exporting import (
     ChannelScope,
     DmScope,
@@ -920,9 +921,10 @@ class InboxCliCommand(CliCommand):
 class WatchCliCommand(CliCommand, declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
     thread: str = option("--thread")
+    acknowledgment: type[WatchAcknowledgment] = option("--acknowledgment", default=OnReadWatchAcknowledgment)
 
     def apply(self, ctx: Comms) -> AsyncIterator[Message]:
-        return ctx.bus.watch(self.thread)
+        return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         import asyncio

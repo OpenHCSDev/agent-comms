@@ -20,6 +20,8 @@ from .read_basis import (
     DMDisplayScope,
     ListedDeliveries,
     MessageDisplayScope,
+    WatchAcknowledgment,
+    OnReadWatchAcknowledgment,
 )
 from .routing import DeliveryScope
 from .store_files import _store_lock
@@ -146,7 +148,7 @@ class MessageBus:
             )
             return list(page.messages)
 
-    async def watch(self, name: str) -> AsyncIterator[Message]:
+    async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment] = OnReadWatchAcknowledgment) -> AsyncIterator[Message]:
         """Yield unread messages, recording only messages the caller takes.
 
         Notifications and inbox reads use the same owners as native delivery.
@@ -166,7 +168,7 @@ class MessageBus:
                 for message in self.inbox(name, snapshot=snapshot):
                     displayed = self.reads.capture(name, (message,), snapshot, self.log.path)
                     yield message
-                    self.reads.mark_displayed(displayed.viewer, displayed)
+                    acknowledgment.taken(self.reads, displayed)
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
