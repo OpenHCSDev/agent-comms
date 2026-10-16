@@ -74,6 +74,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
             None,
             "Pilot",
             None,
+            "",
         ),
         GoalChangedUpdate(None, None),
         CompactionChangedUpdate(CompactionStart()),

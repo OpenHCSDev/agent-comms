@@ -549,7 +549,7 @@ class ThreadManagement:
         if thread.session_file and (model := _session_model(Path(thread.session_file))):
             return "/".join(model)
         info = self.agents.agent_info_of(thread.name)
-        return info.model or default
+        return info.model_or(default)
 
     def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
         """Attach authoritative Pi runtime state to an existing thread."""

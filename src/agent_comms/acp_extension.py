@@ -466,15 +466,7 @@ class CoordinationChangedUpdate(AgentCommsUpdate):
     thinking_level: str | None
     title: str
     context_usage: ContextUsage | None
-
-    @property
-    def status_label(self) -> str:
-        parts = []
-        if self.model:
-            parts.append(self.model)
-        if self.context_usage is not None:
-            parts.append(self.context_usage.label)
-        return " · ".join(parts)
+    status_label: str
 
     @property
     def source_identity(self):

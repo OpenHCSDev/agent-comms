@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from functools import partial
 from pathlib import Path
 
 from .acp_extension import CoordinationChangedUpdate
@@ -23,7 +24,8 @@ class ThreadConfiguration:
     def answer(self, name: str) -> CoordinationChangedUpdate:
         thread = self.registry.require(name)
         info = self.agents.agent_info_of(thread.name)
-        return CoordinationChangedUpdate(
+        return info.configuration_update(partial(
+            CoordinationChangedUpdate,
             ThreadIncarnation(thread.name, thread.created_at),
             str(self.root.resolve()),
             os.getpid(),
@@ -31,5 +33,4 @@ class ThreadConfiguration:
             self.threads.resolve_thread_model(thread.name),
             ThinkingLevel.optional_name(thread.thinking_level),
             thread.title or thread.name,
-            info.context_usage,
-        )
+        ))

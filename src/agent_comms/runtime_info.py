@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
@@ -14,7 +14,7 @@ from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
-    from .acp_extension import ContextUsage
+    from .acp_extension import ContextUsage, CoordinationChangedUpdate
     from .threads import Thread
 
 
@@ -25,19 +25,33 @@ class RuntimeInfo(ABC):
 
     @property
     @abstractmethod
-    def model(self) -> str | None: ...
+    def status_label(self) -> str: ...
 
-    @property
     @abstractmethod
-    def context_usage(self) -> ContextUsage | None: ...
+    def model_or(self, default: str | None) -> str | None: ...
+
+    @abstractmethod
+    def configuration_update(
+        self, create: Callable[[ContextUsage | None, str], CoordinationChangedUpdate]
+    ) -> CoordinationChangedUpdate: ...
 
 
 class UnobservedRuntimeInfo(RuntimeInfo):
     """No observation exists; do not invent a model or observation timestamp."""
 
     __slots__ = ()
-    model = None
-    context_usage = None
+
+    @property
+    def status_label(self) -> str:
+        return ""
+
+    def model_or(self, default: str | None) -> str | None:
+        return default
+
+    def configuration_update(
+        self, create: Callable[[ContextUsage | None, str], CoordinationChangedUpdate]
+    ) -> CoordinationChangedUpdate:
+        return create(None, self.status_label)
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +87,24 @@ class AgentRuntimeInfo(RuntimeInfo):
         from .acp_extension import ContextUsage
 
         return ContextUsage(self.context_used, self.context_size)
+
+    @property
+    def status_label(self) -> str:
+        parts = []
+        if self.model:
+            parts.append(self.model)
+        usage = self.context_usage
+        if usage is not None:
+            parts.append(usage.label)
+        return " · ".join(parts)
+
+    def model_or(self, default: str | None) -> str | None:
+        return self.model or default
+
+    def configuration_update(
+        self, create: Callable[[ContextUsage | None, str], CoordinationChangedUpdate]
+    ) -> CoordinationChangedUpdate:
+        return create(self.context_usage, self.status_label)
 
 
 @dataclass(frozen=True, slots=True)
