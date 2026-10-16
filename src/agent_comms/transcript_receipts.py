@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 from .bus_publication import CommittedDelivery
 from .routing import MessageRoute, TurnRouting
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, UserTranscript
 
 from .wire_log import ConversationSourceWindowRequest
@@ -272,12 +272,12 @@ class TranscriptSource:
 @dataclass(frozen=True)
 class AssignedTranscriptSource(TranscriptSource):
     root: Path
-    recipient: ThreadIncarnation
+    recipient: RecordedThreadIncarnation
     log: WireLog
 
     @classmethod
     def for_thread(cls, root, thread, log):
-        return cls(root, thread.incarnation, log)
+        return cls(root, thread.incarnation.require_recorded(), log)
 
     @classmethod
     def open(cls, identity: AssignedSourceIdentity):
