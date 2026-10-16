@@ -168,10 +168,13 @@ disposition*, invariant*, semantic*, ownership, lifecycle, acceptance.
 
 ### The story (derived on read)
 
-`OrderStory.for_goal(goal)` merges the order's `GoalHistoryEntry` transitions, its verdicts and its
-strikes by time; each event type renders its own plain line. `FleetStory.recent(limit)` is every
-strike and send-back, newest first. `fleet-narrative.md` and `fleet-board.md` become outputs of
-`comms_fleet_story` and `comms_todos`, not files anyone appends to.
+`HeldOrder.story()` returns the order's `GoalHistoryEntry` transitions, verdicts and strikes, each
+in its owner's own wire form; nothing is re-rendered or merged into a copy. `HeldOrder.work(turns)`
+lists the unit's tool calls since the order's first history entry as `JudgedOrderCall` or
+`UnjudgedOrderCall`. `OrderRecords.recent_strikes(limit)` reads the `at` indexes of both tables
+newest first; each row's projected `line` is its plain sentence. `fleet-narrative.md` and
+`fleet-board.md` become outputs of `comms_fleet_story` and `comms_todos`, not files anyone
+appends to.
 
 ## Operations (one `ToolRequest` each; CLI is `invoke --from THREAD --tool NAME`)
 
@@ -184,12 +187,12 @@ strike and send-back, newest first. `fleet-narrative.md` and `fleet-board.md` be
 | `comms_todos` | anyone | existing; the board | `board` |
 | `comms_fleet` | anyone | existing; overdue, silent, spinning, idle | `overdue` |
 | `comms_work_branches` | anyone | new; branches ahead of main and their links | `branches-*.txt` |
-| `comms_order_work` | anyone | new; assignee's tool calls during the order, newest first | `tool_watch.py`, `judge.py show` |
+| `comms_order_work` | anyone | new; assignee's tool calls since the order was issued, newest first, judged or unjudged | `tool_watch.py`, `judge.py show` |
 | `comms_accept` | order's commander | new; accept one tool call | `judge.py ok` |
 | `comms_send_back` | order's commander | new; revises the order, strikes, releases at the limit | `judge.py back` |
 | `comms_strike` | order's commander | new; misses that are not a verdict; releases at the limit | `order.py strike` |
-| `comms_order_story` | anyone | new; one order's story | — |
-| `comms_fleet_story` | anyone | new; public record | `fleet-narrative.md` |
+| `comms_order_story` | anyone | new; the order's Goal history, verdicts and strikes | — |
+| `comms_fleet_story` | anyone | new; every strike and send-back, newest first, with its plain line | `fleet-narrative.md` |
 
 ## Moving the current records (one shot, outside src)
 
@@ -206,7 +209,7 @@ transcripts if needed. After it runs, the rts scripts and stores are deleted.
 | A | `invoke --from`; `comms_work_branches`; this design | main | none |
 | B | Delete #934's duplicate Todo/Fleet CLI classes | #934 | #934 |
 | C | `PlainText`, verdicts, strikes, strike limit, send-back revision (late and false-done strikes follow #934) | #934 | #934 |
-| D | `comms_order_work` from transcripts (folds `feat/turn-digest`) | C | C |
+| D | `comms_order_work` from transcripts (`feat/turn-digest` merged as #1032) | C | C |
 | E | `comms_order_story`, `comms_fleet_story` | D | D |
 | F | One-shot move of the rts records; delete rts scripts | main | E installed |
 | G | rts-command skill uses only Comms tools | — | F |
