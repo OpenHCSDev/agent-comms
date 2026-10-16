@@ -1,14 +1,14 @@
 """Declaration families round-trip through real SQLite without a schema roster."""
 
 import sqlite3
-from dataclasses import dataclass, field, replace
+from dataclasses import MISSING, dataclass, field, fields, replace
 
 import pytest
 from typing import Type
 
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
-    Column, GeneratedColumn,
+    Column, GeneratedColumn, In,
     ExactStorage,
     ForeignKey,
     Index,
@@ -71,7 +71,7 @@ def test_declared_table_family(tmp_path):
         assert TableChildRow.one(db) == replace(child, enabled=False)
         with pytest.raises(ValueError, match="Unknown fields"):
             TableChildRow.select(db, missing=1)
-        with pytest.raises(ValueError, match="Update requires fields"):
+        with pytest.raises(ValueError, match="Write requires fields"):
             TableChildRow.update(db, where="key=?", parameters=("c",))
         with pytest.raises(ValueError, match="Empty column list"):
             TableChildRow._column_list(())
@@ -213,3 +213,39 @@ def test_streamed_query_decodes_only_consumed_rows_and_releases_cursor():
         rows = StreamProjection.iterate(db.execute("SELECT 2 AS enabled"))
         with pytest.raises(ValueError):
             next(rows)
+
+
+def test_in_selection_and_delete_share_typed_condition_encoding():
+    with sqlite3.connect(':memory:') as db:
+        TableParentRow.create(db)
+        for key, count in (('a', 1), ('b', 2), ('c', 3)):
+            TableParentRow(key, count).insert(db)
+        assert {row.key for row in TableParentRow.select(db, key=In(('a', 'c')))} == {'a', 'c'}
+        TableParentRow.delete(db, key=In(()))
+        with pytest.raises(ValueError, match='Write requires fields'):
+            TableParentRow.insert_values(db)
+        with pytest.raises(ValueError, match='Write requires fields'):
+            TableParentRow.insertion_statement(())
+        assert len(TableParentRow.select(db)) == 3
+        with pytest.raises(ValueError):
+            TableParentRow.select(db, count=In((True,)))
+        TableParentRow.delete(db, count=In((1, 3)))
+        assert TableParentRow.select(db) == [TableParentRow('b', 2)]
+
+
+def test_generated_kind_has_no_constructor_input_or_default():
+    generated = GeneratedColumn(expression='length(label)')
+
+    @dataclass
+    class Declaration:
+        label: str
+        length: int = generated.field()
+
+    item = fields(Declaration)[1]
+    assert not item.init and item.default is MISSING and item.default_factory is MISSING
+    assert not generated.compile(item, int).column.writable
+    with pytest.raises(TypeError):
+        Declaration('label', length=5)
+    for invalid in (field(), field(init=False, default=0), field(init=False, default_factory=int)):
+        with pytest.raises(TypeError, match='no constructor field or default'):
+            generated.compile(invalid, int)

@@ -1,9 +1,27 @@
 """Await the actual native preparation in synchronous saved-state assertions."""
+from agent_comms.read_ledger import (
+    AbsentReadSource, NoReadNotice, ReadLedger, TranscriptViewer,
+)
+from agent_comms.view_unread import TranscriptReadState
+
+
+def transcript_fixture(path):
+    """Explicitly create the standalone fixture's authority before opening a reader."""
+    ledger = ReadLedger(path.parent)
+    if not ledger.path.exists():
+        ledger.create(AbsentReadSource(), NoReadNotice())
+    return TranscriptReadState(path)
+
+
+def counts(state, viewer, sources):
+    document = state.reads.read(TranscriptViewer(viewer))
+    return state.counts(viewer, sources, document=document)
 
 
 def completed_counts(state, viewer, sources):
+    document = state.reads.read(TranscriptViewer(viewer))
     for _ in range(50):
-        result = state.counts(viewer, sources)
+        result = state.counts(viewer, sources, document=document)
         if not result.pending:
             return result
         preparation = state.preparation

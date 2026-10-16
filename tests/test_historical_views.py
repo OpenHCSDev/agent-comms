@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms import HistoricalMessage, HistoryCursor
 from agent_comms.comms import Comms
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.read_ledger import OneViewer, ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
 
@@ -97,7 +97,7 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
     )
     live.views.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
     ledger = ReadLedger(Path(source.root))
-    key, state = next(iter(ledger.read().messages.items()))
+    key, state = next(iter(ledger.read(OneViewer(viewer.incarnation)).messages.items()))
     assert key.viewer == viewer.incarnation
     assert state.contains(page.messages[1].seq)
     assert all(not state.contains(message.seq) for message in page.messages if message.seq != page.messages[1].seq)
@@ -220,6 +220,46 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     assert delivered == [(str(live.root), live.registry.require("alice"))]
     assert (old.root / "registry.json").read_bytes() == original_registry
     assert native.read_bytes() == original_native
+
+
+def test_original_typed_acquisition_attaches_without_destination_registry_decode(tmp_path, monkeypatch):
+    from agent_comms.errors import RelationViolationError
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.historical_views import HistorySource
+    from agent_comms.private_path import FileRevision
+    from agent_comms.registration import Registration
+    from agent_comms.registry_provenance import RegistryProvenance
+
+    old, live = setup(tmp_path / 'old', 0), setup(tmp_path / 'live', 0)
+    original = old.registry.store.path.read_bytes()
+    provenance = RegistryProvenance.capture(old.registry.snapshot())
+    info = old.bus.log.path.stat()
+    acquired = HistorySource(
+        str(old.root), str(old.root), old.bus.log.read_metadata_unlocked(required=True).root_id,
+        (info.st_dev, info.st_ino), info.st_size,
+        FileRevision.capture(old.bus.log.path), FileRevision.capture(old.registry.store.path),
+        provenance,
+    )
+    packet = FieldCodec.encode(acquired)
+    observed = FieldCodec.decode(HistorySource, packet)
+    observed.require_original(old.root)
+    snapshot = Registration.snapshot
+
+    def destination_only(registry, *args, **kwargs):
+        assert registry.store.path != old.registry.store.path, 'The original decoder already supplied provenance'
+        return snapshot(registry, *args, **kwargs)
+
+    with monkeypatch.context() as destination:
+        destination.setattr(Registration, 'snapshot', destination_only)
+        attached = live.views.attach_history(old.root, source_read=observed)
+    assert attached.provenance == provenance
+    assert (Path(attached.root) / 'registry.json').read_bytes() == original
+    assert old.registry.store.path.read_bytes() == original
+    with pytest.raises(ValueError):
+        FieldCodec.decode(HistorySource, {**packet, 'provenance': {**packet['provenance'], 'extra': True}})
+    old.registry.store.path.write_bytes(original + b' ')
+    with pytest.raises(RelationViolationError, match='guard'):
+        RegistryProvenance.capture(old.registry.snapshot())
 
 
 def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrated):

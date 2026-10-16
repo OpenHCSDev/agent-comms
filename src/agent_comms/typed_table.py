@@ -691,16 +691,20 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             parameters))
 
     @classmethod
-    def _writable_fields(cls, columns: tuple[str, ...] = ()) -> tuple[_Field, ...]:
-        if not columns:
-            return tuple(item for item in cls._fields() if item.column.writable)
+    def _insertion_fields(cls) -> tuple[_Field, ...]:
+        return tuple(item for item in cls._fields() if item.column.writable)
+
+    @classmethod
+    def _writable_fields(cls, columns: tuple[str, ...]) -> tuple[_Field, ...]:
         selected = cls._fields_named(columns)
+        if not selected:
+            raise ValueError(f"Write requires fields for {cls.declared_name}")
         if any(not item.column.writable for item in selected):
             raise ValueError("Generated columns cannot be written")
         return selected
 
     @classmethod
-    def insertion_statement(cls, columns: tuple[str, ...] = ()) -> str:
+    def insertion_statement(cls, columns: tuple[str, ...]) -> str:
         writable = cls._writable_fields(columns)
         return (f"INSERT INTO {_identifier(cls.declared_name)} "
                 f"({cls._column_list(tuple(item.name for item in writable))}) "
@@ -721,8 +725,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return db.execute(f"DELETE FROM {_identifier(cls.declared_name)} WHERE {where}", parameters)
 
     def _insertion(self) -> tuple[str, tuple]:
-        writable = self._writable_fields()
-        return (self.insertion_statement(),
+        writable = self._insertion_fields()
+        return (self.insertion_statement(tuple(item.name for item in writable)),
                 tuple(item.encode(getattr(self, item.name)) for item in writable))
 
     def insert(self, db: sqlite3.Connection) -> sqlite3.Cursor:
@@ -738,7 +742,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         keys = tuple(item.name for item in self._fields() if item.column.primary_key)
         updates = tuple(
             item.name
-            for item in self._writable_fields()
+            for item in self._insertion_fields()
             if not item.column.primary_key
         )
         statement += f" ON CONFLICT ({self._column_list(keys)}) DO "
@@ -760,8 +764,6 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         **changes: object,
     ) -> sqlite3.Cursor:
         selected = cls._writable_fields(tuple(changes))
-        if not selected:
-            raise ValueError(f"Update requires fields for {cls.declared_name}")
         return db.execute(
             f"UPDATE {_identifier(cls.declared_name)} SET "
             + ", ".join(f"{_identifier(item.name)}=?" for item in selected)

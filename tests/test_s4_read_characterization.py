@@ -1,5 +1,7 @@
 """Current S4 Part B: authority lifetime and disposable-index recovery."""
 
+from native_unread_fixture import counts, transcript_fixture
+from tests.read_membership import stored_read_state
 from tests.read_membership import read_mask
 from dataclasses import replace
 
@@ -7,7 +9,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
-from agent_comms.view_unread import TranscriptReadState
+
 from native_unread_fixture import completed_counts, completed_snapshot
 from test_thread_unread import append
 
@@ -56,26 +58,26 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     assert not read_mask(comms, viewer, comms.registry.snapshot()).contains(message)
     comms.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=shown)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 1
-    document = comms.bus.reads.read()
+    document = stored_read_state(comms.bus.reads)
     assert document.transcripts and not document.messages
     index_owner = comms.views.transcript_reads
     index_owner.close()
     index_owner.index_path.unlink()
-    rebuilt = TranscriptReadState(comms.bus.reads.path)
+    rebuilt = transcript_fixture(comms.bus.reads.path)
     try:
         assert completed_counts(rebuilt, viewer, {"worker": str(source)}).counts == {"worker": 1}
-        assert comms.bus.reads.read() == document
+        assert stored_read_state(comms.bus.reads) == document
         assert comms.bus.pending_count("receiver", "#team") == 1
         comms.views.mark_channel_view_read(
             "#team", worktree=str(tmp_path), through=page.newest_seq,
             expected_scope=page.display_scope,
         )
-        assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
+        assert counts(rebuilt, viewer, {'worker': str(source)}).counts == {"worker": 1}
         assert comms.bus.pending_count("receiver", "#team") == 1
-        assert comms.bus.reads.read().transcripts == document.transcripts
+        assert stored_read_state(comms.bus.reads).transcripts == document.transcripts
         references = tuple(message.reference for message in comms.bus.inbox("receiver"))
         comms.messaging.acknowledge("receiver", references)
         assert comms.bus.pending_count("receiver", "#team") == 0
-        assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
+        assert counts(rebuilt, viewer, {'worker': str(source)}).counts == {"worker": 1}
     finally:
         rebuilt.close()

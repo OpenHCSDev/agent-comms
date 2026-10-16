@@ -1,5 +1,6 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+from tests.read_membership import stored_read_state
 import asyncio
 import json
 import os
@@ -106,10 +107,10 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         else:
             # Optional compaction tolerates transient coordination, not permanent
             # I/O failure. Refusal must leave durable read progress unchanged.
-            unchanged = comms.bus.reads.read()
+            unchanged = stored_read_state(comms.bus.reads)
             with pytest.raises(sqlite3.OperationalError):
                 mark_channel()
-            assert comms.bus.reads.read() == unchanged
+            assert stored_read_state(comms.bus.reads) == unchanged
         comms.messaging.send_message("bob", viewer.name, "later direct")
         comms.registry.rename("bob", "renamed-bob")
         if not indexed:
@@ -158,7 +159,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
     before = projection_bytes()
 
     receiver, connection = Pipe()
-    service = ObservationService(comms, connection)
+    service = ObservationService(comms, connection, comms.messaging.user_identity(str(tmp_path)))
     request = ObserveSidebar(str(tmp_path), True, False)
     request.receive(service)
     results = []
@@ -226,7 +227,7 @@ async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_
     index.prepare()
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
     receiver, connection = Pipe()
-    service = ObservationService(comms, connection)
+    service = ObservationService(comms, connection, comms.messaging.user_identity(str(tmp_path)))
     request = ObserveSidebar(str(tmp_path), True, False)
     request.receive(service)
     try:
@@ -281,7 +282,7 @@ async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
     comms.messaging.send("bob", "#team", "first")
 
     receiver, connection = Pipe()
-    service = ObservationService(comms, connection)
+    service = ObservationService(comms, connection, comms.messaging.user_identity(str(tmp_path)))
     request = ObserveSidebar(str(tmp_path), True, False)
     request.receive(service)
     try:
@@ -522,9 +523,9 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         assert wire(tmp_path).bus.pending_counts(viewer) == expected
         assert decode.call_count == 0
-    ledger = comms.bus.reads.read()
+    ledger = stored_read_state(comms.bus.reads)
     receiver, connection = Pipe()
-    service = ObservationService(comms, connection)
+    service = ObservationService(comms, connection, comms.messaging.user_identity(str(tmp_path)))
     request = ObserveSidebar(str(tmp_path), True, False)
     request.receive(service)
     try:
@@ -559,7 +560,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         assert wire(tmp_path).bus.pending_counts(viewer) == {"renamed-bob": 3}
         assert service.observations[SidebarReading] is observer
         assert observer.request is request
-        assert comms.bus.reads.read() == ledger
+        assert stored_read_state(comms.bus.reads) == ledger
     finally:
         connection.close()
         receiver.close()

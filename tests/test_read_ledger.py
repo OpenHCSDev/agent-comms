@@ -1,5 +1,7 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
+from tests.read_membership import install_read_state, stored_read_state
+from agent_comms.read_ledger import AbsentReadSource, NoReadNotice
 from tests.read_membership import read_mask
 import random
 from dataclasses import replace
@@ -28,7 +30,7 @@ def test_conversation_persisted_pairs_decode_once_without_an_encode_round_trip()
 
     conversation = Conversation(participants=(ThreadIncarnation("alice", 1.0),))
     from agent_comms.read_ledger import ConversationKey, ReadDocument, ReadProgress
-    document = ReadDocument({ConversationKey(ThreadIncarnation('viewer', 2.0), conversation): ReadProgress(3)})
+    document = ReadDocument({ConversationKey(ThreadIncarnation('viewer', 2.0), conversation): ReadProgress(3)}, AbsentReadSource(), {}, NoReadNotice())
     encoded = FieldCodec.encode(document)
     decoded = FieldCodec.decode(ReadDocument, encoded)
     with patch.object(FieldCodec, 'encode', side_effect=AssertionError('Already decoded')):
@@ -51,21 +53,68 @@ def test_conversation_pair_boundary_retains_strict_codec_validation(raw):
         FieldCodec.decode(Conversation, raw)
 
 
+def test_exact_dm_selection_survives_aliases_and_refuses_unknown_participants(tmp_path, monkeypatch):
+    from agent_comms.read_ledger import AbsentReadSource, ReadMessageRow, ReadSource
+
+    comms = prepared(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path))
+    messages = tuple(
+        comms.messaging.send_message(sender, viewer.name, sender)
+        for sender in ('alice', 'bob')
+    )
+    snapshot = comms.registry.snapshot()
+    for message in messages:
+        comms.bus.reads.mark_displayed(viewer.name, comms.bus.reads.capture(
+            viewer.name, (message,), snapshot, comms.bus.log.path
+        ), snapshot=snapshot)
+    assert len(stored_read_state(comms.bus.reads).messages) == 2
+    comms.registry.rename('alice', 'renamed-alice')
+    snapshot = comms.registry.snapshot()
+    with comms.bus.log.certified_read() as source:
+        delivery = source.delivery(messages[0].seq)
+        identity = ReadSource.from_revision(source.witness.revision)
+    decoded = []
+    decode = ReadMessageRow._decode_row.__func__
+
+    def count(cls, row, positions):
+        value = decode(cls, row, positions)
+        decoded.append(value.key)
+        return value
+
+    monkeypatch.setattr(ReadMessageRow, '_decode_row', classmethod(count))
+    prepared_reads = comms.bus.reads.capture_observations(snapshot, (delivery,))
+    assert len(decoded) == 1  # The unrelated target='' DM never crosses decoding.
+    mask = prepared_reads.for_source(identity)[viewer.name]
+    assert mask.contains(messages[0]) and not mask.contains(messages[1])
+    assert prepared_reads.for_source(AbsentReadSource()) == {}
+
+    def unknown(*args, **kwargs):
+        raise KeyError('unknown captured participant')
+
+    monkeypatch.setattr(type(snapshot), 'participant', unknown)
+    with pytest.raises(KeyError, match='unknown captured participant'):
+        comms.bus.reads.capture_observations(snapshot, (delivery,))
+
+
 def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     comms = Comms(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    notice = "Read positions were reset; reopen conversations to review them."
-    comms.bus.reads.replace(replace(comms.bus.reads.read(), notice=notice))
-    assert comms.bus.reads.take_notice(None) is None
-    assert comms.bus.reads.read().notice == notice
+    from unittest.mock import patch
+    from agent_comms.read_ledger import ReadMarkerNotice
+
+    notice = ReadMarkerNotice("Read positions were reset; reopen conversations to review them.")
+    install_read_state(comms.bus.reads, replace(stored_read_state(comms.bus.reads), notice=notice))
+    with patch.object(type(comms.bus.reads), 'take_notice', side_effect=AssertionError('No notice was shown')):
+        assert NoReadNotice().take(comms.bus.reads) == NoReadNotice()
+    assert stored_read_state(comms.bus.reads).notice == notice
 
     first = comms.views.presentation.roster(viewer)
     assert first.read_marker_notice == notice
-    assert comms.bus.reads.read().notice is None
+    assert stored_read_state(comms.bus.reads).notice == NoReadNotice()
 
     second = Comms(tmp_path).views.presentation.roster(viewer)
-    assert second.read_marker_notice is None
+    assert second.read_marker_notice == NoReadNotice()
 
 
 def test_bounded_page_marks_only_shown_messages(tmp_path):
@@ -401,7 +450,9 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
                     sys.executable,
                     "-c",
                     "import os,sys; from agent_comms.comms import wire; "
-                    "wire(sys.argv[1]).bus.reads.read(); os._exit(9)",
+                    "from agent_comms.read_ledger import OneViewer; "
+                    "comms=wire(sys.argv[1]); viewer=comms.messaging.user_identity(sys.argv[1]); "
+                    "comms.bus.reads.read(OneViewer(viewer.incarnation)); os._exit(9)",
                     str(tmp_path),
                 ],
                 env=dict(os.environ),

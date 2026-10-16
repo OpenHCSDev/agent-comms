@@ -1,3 +1,4 @@
+from native_unread_fixture import counts, transcript_fixture
 from agent_comms.read_ledger import ReadLedger
 import json
 import sqlite3
@@ -13,7 +14,7 @@ from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor
-from agent_comms.view_unread import ReplyIndex, TranscriptReadState, TranscriptReply
+from agent_comms.view_unread import ReplyIndex, TranscriptReply
 from native_unread_fixture import completed_counts, completed_snapshot
 
 
@@ -29,6 +30,7 @@ def setup_thread(tmp_path):
     source = tmp_path / "session.jsonl"
     source.touch()
     comms = wire(tmp_path / "wire")
+    comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread("worker", frozenset({"ci"}), str(tmp_path), session_file=str(source)))
     return comms, source
 
@@ -76,7 +78,7 @@ def test_new_process_uses_reply_index_without_reparsing_history(tmp_path):
     for _ in range(100):
         append(source)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 100
-    fresh = TranscriptReadState(comms.views.transcript_reads.path)
+    fresh = transcript_fixture(comms.views.transcript_reads.path)
     sources = {"worker": str(source)}
     try:
         # Another process preparing an update must not prevent a fresh reader
@@ -86,11 +88,11 @@ def test_new_process_uses_reply_index_without_reparsing_history(tmp_path):
             blocked.callback(database.close)
             blocked.callback(database.rollback)
             database.execute("BEGIN IMMEDIATE")
-            assert fresh.counts(str(tmp_path), sources).counts["worker"] == 100
+            assert counts(fresh, str(tmp_path), sources).counts["worker"] == 100
         assert fresh.preparation is None
         through = source.stat().st_size
         append(source)
-        assert fresh.counts(str(tmp_path), sources).pending == {"worker"}
+        assert counts(fresh, str(tmp_path), sources).pending == {"worker"}
         update = fresh.preparation.result(timeout=10).updates[0]
         assert update.before.through == through
         assert len(update.replies) == 1
@@ -122,7 +124,7 @@ def test_sidebar_native_counts_use_the_original_captured_read_document(tmp_path)
 
 
 def test_ready_native_sources_share_bulk_rows_and_one_predecessor_snapshot(tmp_path):
-    state = TranscriptReadState(tmp_path / ReadLedger.filename)
+    state = transcript_fixture(tmp_path / ReadLedger.filename)
     sources = {}
     for number in range(20):
         source = tmp_path / f"session-{number}.jsonl"
@@ -143,7 +145,7 @@ def test_ready_native_sources_share_bulk_rows_and_one_predecessor_snapshot(tmp_p
 
     try:
         with patch.object(TranscriptReply, "preceding", side_effect=captured_predecessors):
-            assert state.counts("viewer", sources).counts == expected
+            assert counts(state, 'viewer', sources).counts == expected
         assert sum(f"SELECT * FROM {ReplyIndex.declared_name} " in sql for sql in reads) == 1
         assert sum("SELECT reply.* FROM json_each" in sql for sql in reads) == 1
         assert not database.in_transaction
@@ -157,20 +159,20 @@ def test_native_preparation_releases_sqlite_and_losing_commit_keeps_original_ord
     source = tmp_path / "source.jsonl"
     append(source)
     path = tmp_path / ReadLedger.filename
-    first, other = TranscriptReadState(path), TranscriptReadState(path)
+    first, other = transcript_fixture(path), transcript_fixture(path)
     sources = {"worker": str(source)}
     try:
         assert completed_counts(first, "viewer", sources).counts == {"worker": 1}
-        assert other.counts("viewer", sources).counts == {"worker": 1}
+        assert counts(other, 'viewer', sources).counts == {"worker": 1}
         append(source)
-        assert first.counts("viewer", sources).pending == {"worker"}
-        assert other.counts("viewer", sources).pending == {"worker"}
+        assert counts(first, 'viewer', sources).pending == {"worker"}
+        assert counts(other, 'viewer', sources).pending == {"worker"}
         assert not first._connection.in_transaction and not other._connection.in_transaction
         for state in (first, other):
             update = state.preparation.result(timeout=10).updates[0]
             assert (update.before.total, update.after.total) == (1, 2)
-        assert first.counts("viewer", sources).counts == {"worker": 2}
-        assert other.counts("viewer", sources).counts == {"worker": 2}
+        assert counts(first, 'viewer', sources).counts == {"worker": 2}
+        assert counts(other, 'viewer', sources).counts == {"worker": 2}
         assert len(TranscriptReply.select(first._database(), source=str(source))) == 2
     finally:
         first.close()
@@ -202,12 +204,12 @@ def test_many_threads_do_not_reparse_saved_histories_on_attach(tmp_path):
         for _ in range(20):
             append(source)
         sources[f"thread-{number}"] = str(source)
-    first = TranscriptReadState(comms.views.transcript_reads.path)
+    first = transcript_fixture(comms.views.transcript_reads.path)
     assert set(completed_counts(first, "viewer", sources).counts.values()) == {20}
     first.close()
-    fresh = TranscriptReadState(comms.views.transcript_reads.path)
+    fresh = transcript_fixture(comms.views.transcript_reads.path)
     try:
-        assert set(fresh.counts("viewer", sources).counts.values()) == {20}
+        assert set(counts(fresh, 'viewer', sources).counts.values()) == {20}
         assert fresh.preparation is None
     finally:
         fresh.close()
@@ -221,7 +223,7 @@ def test_reply_index_rebuilds_after_source_replacement(tmp_path):
     replacement = tmp_path / "new-session.jsonl"
     append(replacement)
     replacement.replace(source)
-    fresh = TranscriptReadState(comms.views.transcript_reads.path)
+    fresh = transcript_fixture(comms.views.transcript_reads.path)
     try:
         assert completed_counts(fresh, str(tmp_path), {"worker": str(source)}).counts == {"worker": 1}
     finally:
@@ -235,7 +237,7 @@ def test_corrupt_derived_index_rebuilds_from_transcript(tmp_path):
     index = comms.views.transcript_reads.index_path
     comms.views.transcript_reads.close()
     index.write_bytes(b"damaged cache")
-    fresh = TranscriptReadState(comms.views.transcript_reads.path)
+    fresh = transcript_fixture(comms.views.transcript_reads.path)
     try:
         assert completed_counts(fresh, str(tmp_path), {"worker": str(source)}).counts == {"worker": 1}
     finally:
@@ -311,16 +313,16 @@ def test_bounded_batches_resume_after_process_exit_and_preserve_read_cursor(tmp_
     for _ in range(1200):
         append(source)
     path = tmp_path / ReadLedger.filename
-    first = TranscriptReadState(path)
+    first = transcript_fixture(path)
     first.mark_read("viewer", str(source), source.stat().st_size)
     sources = {"worker": str(source)}
-    partial = first.counts("viewer", sources)
+    partial = counts(first, 'viewer', sources)
     assert partial.pending == {"worker"} and "worker" not in partial.counts
     first.preparation.result(timeout=10)
-    assert first.counts("viewer", sources).pending == {"worker"}  # Commit one bounded prefix.
+    assert counts(first, 'viewer', sources).pending == {"worker"}  # Commit one bounded prefix.
     assert 0 < ReplyIndex.one(first._database(), source=str(source)).through < source.stat().st_size
     first.close()
-    fresh = TranscriptReadState(path)
+    fresh = transcript_fixture(path)
     try:
         assert completed_counts(fresh, "viewer", sources).counts == {"worker": 0}
         append(source)
@@ -336,11 +338,11 @@ def test_large_first_source_does_not_starve_other_sources(tmp_path):
         for _ in range(600):
             append(source)
         sources[str(number)] = str(source)
-    state = TranscriptReadState(tmp_path / ReadLedger.filename)
+    state = transcript_fixture(tmp_path / ReadLedger.filename)
     completed = set()
     try:
         for _ in range(40):
-            observed = state.counts("viewer", sources)
+            observed = counts(state, 'viewer', sources)
             completed.update(observed.counts)
             if not observed.pending:
                 break
@@ -357,9 +359,9 @@ def test_close_cancels_executor_without_scanning_rest_of_native_file(tmp_path):
     source = tmp_path / "large.jsonl"
     for _ in range(5000):
         append(source, content="real native record " * 100)
-    state = TranscriptReadState(tmp_path / ReadLedger.filename)
+    state = transcript_fixture(tmp_path / ReadLedger.filename)
     started = monotonic()
-    assert state.counts("viewer", {"worker": str(source)}).pending == {"worker"}
+    assert counts(state, 'viewer', {'worker': str(source)}).pending == {"worker"}
     pool = state._pool
     processes = tuple(pool._processes.values())
     state.close()
@@ -367,20 +369,20 @@ def test_close_cancels_executor_without_scanning_rest_of_native_file(tmp_path):
     assert state.preparation is None
     assert not any(process.is_alive() for process in processes)
     with pytest.raises(RuntimeError, match="Transcript reader is closed"):
-        state.counts("viewer", {"worker": str(source)})
+        counts(state, 'viewer', {'worker': str(source)})
 
 
 def test_busy_index_is_not_discarded(tmp_path):
     source = tmp_path / "source.jsonl"
     append(source)
-    state = TranscriptReadState(tmp_path / ReadLedger.filename)
+    state = transcript_fixture(tmp_path / ReadLedger.filename)
     assert completed_counts(state, "viewer", {"worker": str(source)}).counts == {"worker": 1}
     inode = state.index_path.stat().st_ino
     append(source)
     blocker = sqlite3.connect(state.index_path)
     blocker.execute("BEGIN IMMEDIATE")
     try:
-        busy = state.counts("viewer", {"worker": str(source)})
+        busy = counts(state, 'viewer', {'worker': str(source)})
         assert (busy.counts, busy.pending) == ({}, frozenset({"worker"}))
         assert state.index_path.stat().st_ino == inode
     finally:
@@ -397,11 +399,11 @@ def test_pending_publication_does_not_erase_other_committed_counts(tmp_path, bus
     sources = {name: str(tmp_path / f"{name}.jsonl") for name in ("ready", "growing")}
     for source in sources.values():
         append(Path(source))
-    state = TranscriptReadState(tmp_path / ReadLedger.filename)
+    state = transcript_fixture(tmp_path / ReadLedger.filename)
     try:
         assert completed_counts(state, "viewer", sources).counts == {"ready": 1, "growing": 1}
         append(Path(sources["growing"]))
-        assert state.counts("viewer", sources).pending == {"growing"}
+        assert counts(state, 'viewer', sources).pending == {"growing"}
         preparation = state.preparation
         preparation.result(timeout=10)
         with ExitStack() as blocked:
@@ -412,11 +414,11 @@ def test_pending_publication_does_not_erase_other_committed_counts(tmp_path, bus
                 blocked.callback(database.close)
                 blocked.callback(database.rollback)
                 database.execute("BEGIN IMMEDIATE")
-            result = state.counts("viewer", sources)
+            result = counts(state, 'viewer', sources)
             assert result.counts == {"ready": 1}
             assert result.pending == {"growing"}
             assert state.preparation is preparation
-        assert state.counts("viewer", sources).counts == {"ready": 1, "growing": 2}
+        assert counts(state, 'viewer', sources).counts == {"ready": 1, "growing": 2}
     finally:
         state.close()
 
@@ -424,9 +426,9 @@ def test_pending_publication_does_not_erase_other_committed_counts(tmp_path, bus
 def test_oversized_native_record_is_counted_without_truncation_or_input_limit(tmp_path):
     source = tmp_path / "oversized.jsonl"
     append(source, content="Actual text " * 200000)
-    state = TranscriptReadState(tmp_path / ReadLedger.filename)
+    state = transcript_fixture(tmp_path / ReadLedger.filename)
     try:
-        first = state.counts("viewer", {"worker": str(source)})
+        first = counts(state, 'viewer', {'worker': str(source)})
         assert first.pending == {"worker"} and not first.counts
         assert completed_counts(state, "viewer", {"worker": str(source)}).counts == {"worker": 1}
     finally:
@@ -450,14 +452,14 @@ def test_two_processes_indexing_one_growing_transcript_count_each_reply_once(tmp
     source.touch()
     index = tmp_path / "wire" / ReadLedger.filename
     index.parent.mkdir()
-    states = [TranscriptReadState(index), TranscriptReadState(index)]
+    states = [transcript_fixture(index), transcript_fixture(index)]
     failures = []
     done = False
 
     def observe(state):
         while not done and not failures:
             try:
-                state.counts("viewer", {"worker": str(source)})
+                counts(state, 'viewer', {'worker': str(source)})
             except CoordinationReadUnavailable:
                 continue  # The observation owner retries unavailable reads, not fake counts.
             except BaseException as error:
@@ -485,12 +487,12 @@ def test_two_processes_indexing_one_growing_transcript_count_each_reply_once(tmp
 def test_deleted_source_withdraws_the_original_preparation_without_resurrection(tmp_path):
     source = tmp_path / "source.jsonl"
     append(source)
-    state = TranscriptReadState(tmp_path / ReadLedger.filename)
+    state = transcript_fixture(tmp_path / ReadLedger.filename)
     try:
-        assert state.counts("viewer", {"worker": str(source)}).pending == {"worker"}
+        assert counts(state, 'viewer', {'worker': str(source)}).pending == {"worker"}
         state.preparation.result(timeout=10)
         state.remove_threads((Thread("worker", frozenset(), str(tmp_path), session_file=str(source)),))
-        assert state.counts("viewer", {}).counts == {}
+        assert counts(state, 'viewer', {}).counts == {}
         assert ReplyIndex.one(state._database(), source=str(source)) is None
     finally:
         state.close()
@@ -499,16 +501,16 @@ def test_deleted_source_withdraws_the_original_preparation_without_resurrection(
 def test_append_commit_does_not_scan_or_delete_historical_reply_rows(tmp_path):
     source = tmp_path / "source.jsonl"
     append(source)
-    state = TranscriptReadState(tmp_path / ReadLedger.filename)
+    state = transcript_fixture(tmp_path / ReadLedger.filename)
     sources = {"worker": str(source)}
     try:
         assert completed_counts(state, "viewer", sources).counts == {"worker": 1}
         append(source)
-        assert state.counts("viewer", sources).pending == {"worker"}
+        assert counts(state, 'viewer', sources).pending == {"worker"}
         state.preparation.result(timeout=10)
         queries = []
         state._database().set_trace_callback(queries.append)
-        assert state.counts("viewer", sources).counts == {"worker": 2}
+        assert counts(state, 'viewer', sources).counts == {"worker": 2}
         assert not any(sql.startswith("DELETE") for sql in queries)
     finally:
         state.close()

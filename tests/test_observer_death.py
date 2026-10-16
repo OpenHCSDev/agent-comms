@@ -9,10 +9,10 @@ import pytest
 from agent_comms.active_route import LocalRoute
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
-from agent_comms.ui_model.observation import ObservationProcess, ObserverDied, ReadNotifications, StopSidebar
+from agent_comms.ui_model.observation import ReadObservationProcess, ObserverDied, ReadNotifications, StopSidebar
 
 
-async def readable(process: ObservationProcess) -> None:
+async def readable(process: ReadObservationProcess) -> None:
     """Wait until the observer's pipe has something to read, as the UI's event loop does."""
     ready = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -25,7 +25,7 @@ async def readable(process: ObservationProcess) -> None:
 
 
 async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awaited_reads(comms):
-    process = ObservationProcess(comms.route)
+    process = ReadObservationProcess(comms.route)
     try:
         await readable(process)
         assert process.results()  # the first observation: the service is running
@@ -52,7 +52,7 @@ async def test_a_killed_observer_is_reported_once_with_its_signal_and_fails_awai
 
 async def test_an_invalid_notification_reference_does_not_kill_the_observer(comms):
     comms.messaging.initialize_private_initial_protocol()
-    with ObservationProcess.awaited(comms.route) as process:
+    with ReadObservationProcess.awaited(comms.route) as process:
         with pytest.raises(RelationViolationError, match="not its original source"):
             await process.read(ReadNotifications(
                 str(comms.root), (MessageReference(1, "not-the-original"),)
@@ -63,7 +63,7 @@ async def test_an_invalid_notification_reference_does_not_kill_the_observer(comm
 async def test_an_observer_that_failed_is_reported_with_its_own_traceback_and_exit_status(tmp_path):
     not_a_wire = tmp_path / "not-a-wire"
     not_a_wire.write_text("")
-    process = ObservationProcess(LocalRoute(not_a_wire))
+    process = ReadObservationProcess(LocalRoute(not_a_wire))
     try:
         with pytest.raises(ObserverDied) as died:
             while True:

@@ -55,6 +55,7 @@ def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_p
 @pytest.mark.parametrize("status", [member() for member in ThreadStatus.members_with(ThreadStatus)])
 def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status):
     comms = wire(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
     thread = Thread(
         "owner",
         frozenset({"team"}),
@@ -79,7 +80,8 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     comms.agents.activity.emit(activity)
     view = ThreadView.capture(thread, reopened.snapshot(), comms.agents.activity_of('owner'), None, {})
     assert view.to_wire()["status"] == status.declared_name
-    assert view.presentation.status.busy == status.active
+    # A running process and a stale activity label are not an active backend turn.
+    assert not view.presentation.status.busy
     visible = comms.views.thread_views()
     individual = comms.views.thread_presentation("owner")
     if visible:
@@ -173,22 +175,33 @@ def test_batch_presentations_acquire_documents_once_and_release_locks_before_row
     from collections import Counter
     from agent_comms.goal_waits import GoalWaits
     from agent_comms.locked_store import JsonDocument
+    from agent_comms.read_ledger import ReadDocument, ReadLedger
 
+    comms.messaging.initialize_private_initial_protocol()
     for name in ("alpha", "beta"):
         comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
     comms.agents.runtime_info.replace({})
     waits = GoalWaits(comms.root / GoalWaits.filename)
     waits.replace({})
-    comms.bus.reads.replace(comms.bus.reads.empty())
     counts = Counter()
+    read = ReadLedger.read
+    prepare = ReadDocument.observations
     decode = JsonDocument._decode
     capture = ThreadView.capture.__func__
     source = comms.transcripts.capture_page_window
 
     def counted(self, data):
-        if self.path.name in ("runtime_info.json", "goal_waits.json", "read_ledger.json"):
+        if self.path.name in ("runtime_info.json", "goal_waits.json"):
             counts[self.path.name] += 1
         return decode(self, data)
+
+    def counted_read(self, viewers):
+        counts[ReadLedger.filename] += 1
+        return read(self, viewers)
+
+    def counted_preparation(self, snapshot):
+        counts['read_masks'] += 1
+        return prepare(self, snapshot)
 
     def unlocked(cls, *args, **kwargs):
         for store in (comms.agents.runtime_info, waits, comms.registry.store):
@@ -197,11 +210,15 @@ def test_batch_presentations_acquire_documents_once_and_release_locks_before_row
         return capture(cls, *args, **kwargs)
 
     def unlocked_source(*args, **kwargs):
-        for store in (comms.agents.runtime_info, waits, comms.registry.store, comms.bus.reads):
+        for store in (comms.agents.runtime_info, waits, comms.registry.store):
             with store.locked(blocking=False):
                 pass
+        with comms.bus.reads.writing():
+            pass
         return source(*args, **kwargs)
 
+    monkeypatch.setattr(ReadLedger, 'read', counted_read)
+    monkeypatch.setattr(ReadDocument, 'observations', counted_preparation)
     monkeypatch.setattr(JsonDocument, "_decode", counted)
     monkeypatch.setattr(ThreadView, "capture", classmethod(unlocked))
     monkeypatch.setattr(comms.transcripts, "capture_page_window", unlocked_source)
@@ -210,19 +227,22 @@ def test_batch_presentations_acquire_documents_once_and_release_locks_before_row
     assert batch.read("missing") is None
     assert batch.read("alpha").read_identity.thread.incarnation == batch.views["alpha"].thread.incarnation
     assert batch.read("beta").read_identity.thread.incarnation == batch.views["beta"].thread.incarnation
-    assert counts == {"runtime_info.json": 1, "goal_waits.json": 1, "read_ledger.json": 1}
+    assert counts == {"runtime_info.json": 1, "goal_waits.json": 1, ReadLedger.filename: 1, 'read_masks': 1}
 
     def unrelated(*args, **kwargs):
         pytest.fail("A missing thread acquired unrelated activity/documents")
 
     monkeypatch.setattr(comms.agents, "all_activity", unrelated)
     monkeypatch.setattr(JsonDocument, "_decode", unrelated)
+    monkeypatch.setattr(ReadLedger, 'read', unrelated)
+    monkeypatch.setattr(ReadDocument, 'observations', unrelated)
     assert comms.views.thread_presentation("missing") is None
 
 
 def test_batch_source_rename_keeps_the_original_registry_fence(comms):
     from agent_comms.coordination_errors import StaleRevision
 
+    comms.messaging.initialize_private_initial_protocol()
     comms.registry.register(
         Thread("alpha", frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())),
         RunningThreadStatus(),
@@ -240,6 +260,7 @@ def test_observed_batch_keeps_source_busy_scoped_to_one_thread(comms, monkeypatc
     from agent_comms.coordination_errors import CoordinationReadUnavailable
     from agent_comms.ui_model.observation import ObserveThreads, ThreadReading
 
+    comms.messaging.initialize_private_initial_protocol()
     for name in ("alpha", "beta"):
         comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
     capture = comms.transcripts.capture_page_window
@@ -262,6 +283,7 @@ def test_observed_batch_acquisition_busy_recovers_without_a_new_revision(comms, 
     from agent_comms.runtime_info import RuntimeInfoStore
     from agent_comms.ui_model.observation import ObserveThreads, ThreadReading
 
+    comms.messaging.initialize_private_initial_protocol()
     for name in ("alpha", "beta"):
         comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
     calls = []

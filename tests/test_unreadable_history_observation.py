@@ -20,12 +20,12 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
+from agent_comms.thread_presentation import AttentionThreadPresentationStatus
 from agent_comms.ui_model.observation import (
     ObservationProcess,
     ObservationService,
     SidebarReading,
     CompleteSidebarRead,
-    UnboundHumanViewer,
     ObserveSidebar,
     ObserveThreads,
     OwnerRead,
@@ -88,7 +88,7 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
     observed = ThreadsObserved(None, {}, {"saved": answer.error}, frozenset(), frozenset({"saved"}))
     status = OpenThreadStatus(lambda callback: callback())
     status.observed(observed)
-    assert status.rows.rows["saved"].status.attention
+    assert isinstance(status.rows.rows["saved"].status, AttentionThreadPresentationStatus)
     assert "unavailable_future_segment" in status.rows.rows["saved"].lines[0]
 
 
@@ -146,11 +146,13 @@ def test_sidebar_deferred_read_does_not_replace_its_original_interest(
     def deferred(*args, **kwargs):
         raise error_type("original sidebar read deferred")
 
+    comms.messaging.initialize_private_initial_protocol()
+    viewer = comms.messaging.user_identity(str(comms.root.parent))
     monkeypatch.setattr(comms.views, "viewer_snapshot", deferred)
     request = ObserveSidebar(str(comms.root.parent), True, True)
     parent, child = Pipe()
     with parent, child:
-        service = ObservationService(comms, child)
+        service = ObservationService(comms, child, viewer)
         request.receive(service)
         reading = service.observations[SidebarReading]
         reading.stage = CompleteSidebarRead()
@@ -158,45 +160,42 @@ def test_sidebar_deferred_read_does_not_replace_its_original_interest(
         assert service.observations[SidebarReading] is reading
 
 
-def test_human_binding_is_admitted_with_the_read_and_deferred_without_losing_interest(comms, monkeypatch):
+def test_sidebar_requires_its_bound_viewer_and_never_selects_one_during_receipt_or_read(comms, monkeypatch):
+    comms.messaging.initialize_private_initial_protocol()
+    viewer = comms.messaging.user_identity(str(comms.root.parent))
     parent, child = Pipe()
     with parent, child:
-        service = ObservationService(comms, child)
-        request = ObserveSidebar(str(comms.root.parent), True, True)
-        attempts = []
-        original = comms.messaging.user_identity
-
-        def unavailable(worktree):
-            attempts.append(worktree)
-            raise CoordinationReadUnavailable('human binding temporarily unavailable')
-
-        with monkeypatch.context() as held:
-            held.setattr(comms.messaging, 'user_identity', unavailable)
-            request.receive(service)
-            assert attempts == []  # Pipe receipt does no blocking store acquisition.
-            reading = service.observations[SidebarReading]
-            assert list(reading.read(comms, comms.views.revision())) == []
-        assert attempts == [request.worktree]
-        assert isinstance(service.viewer_binding, UnboundHumanViewer)
+        with pytest.raises(TypeError, match='viewer'):
+            ObservationService(comms, child)
+        service = ObservationService(comms, child, viewer)
         selected = []
+        original_snapshot = comms.views.viewer_snapshot
 
-        def choose(worktree):
-            selected.append(worktree)
-            return original(worktree)
+        def snapshot(bound, *args, **kwargs):
+            selected.append(bound)
+            return original_snapshot(bound, *args, **kwargs)
 
-        monkeypatch.setattr(comms.messaging, 'user_identity', choose)
+        def unexpected(*args, **kwargs):
+            pytest.fail('The caller already selected the human before construction')
+
+        monkeypatch.setattr(comms.messaging, 'user_identity', unexpected)
+        monkeypatch.setattr(comms.views, 'viewer_snapshot', snapshot)
+        request = ObserveSidebar(str(comms.root.parent), True, True)
+        request.receive(service)
+        reading = service.observations[SidebarReading]
+        reading.stage = CompleteSidebarRead()
         assert list(reading.read(comms, comms.views.revision()))
-        ObserveSidebar(request.worktree, False, True).receive(service)
-        list(service.observations[SidebarReading].read(comms, comms.views.revision()))
-        assert selected == [request.worktree]
+        assert service.viewer is viewer
+        assert selected == [viewer]
 
 
 async def test_unknown_saved_member_does_not_kill_the_real_observation_process(comms):
     row = saved_row(comms)
+    viewer = comms.messaging.user_identity(str(comms.root.parent))
     row["observation"]["manifest"]["segments"][0]["manifest"]["kind"] = "unavailable_future_segment"
     comms.bus.log.path.write_text(json.dumps(row) + "\n")
     original = comms.bus.log.path.read_bytes()
-    process = ObservationProcess(comms.route)
+    process = ObservationProcess(comms.route, viewer)
     try:
         await readable(process)
         process.results()

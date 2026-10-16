@@ -174,24 +174,35 @@ class MessageNotification:
         return cls.read_references(
             log,
             references,
-            lambda sources, identity: cls.delivery_window(
+            lambda sources, identity, prepared: cls.observed_delivery_window(
                 root, registry, sources, NotificationAssignment.read(root, sources),
-                snapshot=snapshot, identity=identity,
+                snapshot=snapshot, identity=identity, read_observations=prepared,
+                view=AllNotificationRecipients(),
             ),
+            snapshot=snapshot,
         )
 
     @classmethod
     def read_references(
         cls, log: WireLog, references: Sequence[MessageReference],
-        project: Callable[[Sequence[CommittedDelivery], ReadSource], dict[tuple[int, str], tuple[MessageNotification, ...]]],
+        project: Callable[[Sequence[CommittedDelivery], ReadSource, ReadObservations], dict[tuple[int, str], tuple[MessageNotification, ...]]],
+        *, snapshot: RegistryProvenance,
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
-        """Share bounded original delivery acquisition across live/recorded cuts."""
-        result = {}
+        """Bound wire acquisition by window; prepare indexed read state once per operation."""
+        windows = []
         for start in range(0, len(references), cls.window_limit):
             with log.certified_read() as captured:
                 sources = tuple(captured.references(references[start:start + cls.window_limit]))
                 identity = ReadSource.from_revision(captured.witness.revision)
-            result.update(project(sources, identity))
+            windows.append((sources, identity))
+        if not windows:
+            return {}
+        prepared = ReadLedger(log.path.parent).capture_observations(
+            snapshot, tuple(source for sources, _ in windows for source in sources)
+        )
+        result = {}
+        for sources, identity in windows:
+            result.update(project(sources, identity, prepared))
         return result
 
     @classmethod
@@ -233,13 +244,13 @@ class MessageNotification:
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
-                                 sources: Sequence[CommittedDelivery], identity: ReadSource):
+                                 sources: Sequence[CommittedDelivery], identity: ReadSource,
+                                 read_observations: ReadObservations):
         from .agent_activity import RecordedRecipientActivity
         from .notification_assignment import NotificationAssignment
 
         if not sources:
             return {}
-        captured = ReadLedger(root).capture_observations(namespace, sources)
         observations = {
             recipient.recipient_lookup: RecordedRecipientActivity()
             for source in sources for recipient in source.audience.recipients
@@ -247,7 +258,7 @@ class MessageNotification:
         return cls.project_delivery_window(
             root, namespace, sources, observations,
             assignment_read=NotificationAssignment.read(root, sources), identity=identity,
-            read_observations=captured,
+            read_observations=read_observations,
         )
 
     @classmethod

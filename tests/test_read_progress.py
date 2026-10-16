@@ -6,7 +6,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
 from agent_comms.read_basis import Conversation
 from agent_comms.read_ledger import (ConversationKey, ReadMask, ReadProgress,
-    ReadPrefix, PrefixUnavailable, AllViewers, OneViewer, ReadRevision,
+    ReadPrefix, PrefixUnavailable, SelectedViewers, OneViewer, ReadRevision,
     PresentReadRevision, AbsentReadRevision)
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
@@ -27,7 +27,7 @@ def test_interleaved_global_sequences_do_not_grant_a_conversation_gap(tmp_path):
         comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
             viewer, (message,), snapshot, comms.bus.log.path), snapshot=snapshot)
         assert comms.bus.pending_count(viewer, 'sender') == unread
-    state, = comms.bus.reads.read().messages.values()
+    state, = comms.bus.reads.read(OneViewer(snapshot.participant(viewer).incarnation)).messages.values()
     assert state.read_through == last.seq and not state.sparse
 
 
@@ -83,5 +83,23 @@ def test_revision_family_roundtrip_and_explicit_viewer_scope(tmp_path):
     revision = ReadRevision.capture((path,))
     assert isinstance(revision, PresentReadRevision)
     assert FieldCodec.decode(ReadRevision, FieldCodec.encode(revision)) == revision
-    assert isinstance(AllViewers(), AllViewers)
+    assert SelectedViewers((ThreadIncarnation('viewer', 1.0),)).incarnations == (ThreadIncarnation('viewer', 1.0),)
     assert OneViewer(ThreadIncarnation('viewer', 1.0)).incarnation.name == 'viewer'
+
+
+def test_required_authority_and_header_cannot_look_like_empty_state(tmp_path):
+    from agent_comms.read_ledger import (
+        AbsentReadSource, NoReadNotice, ReadHeaderRow, ReadLedger,
+    )
+
+    ledger = ReadLedger(tmp_path)
+    with pytest.raises(FileNotFoundError):
+        ledger.read(SelectedViewers(()))
+    ledger.create(AbsentReadSource(), NoReadNotice())
+    assert ledger.read(SelectedViewers(())).messages == {}
+    with pytest.raises(FileExistsError):
+        ledger.create(AbsentReadSource(), NoReadNotice())
+    with ledger.writing() as connection:
+        ReadHeaderRow.delete(connection)
+    with pytest.raises(ValueError):
+        ledger.read(SelectedViewers(()))

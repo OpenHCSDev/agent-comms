@@ -203,7 +203,8 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_
             viewer, (later,), basis.registry, comms.bus.log.path,
         ), snapshot=basis.registry)
         assert comms.bus.pending_counts(viewer) == {"sender": 1}
-        later_reads = comms.bus.reads.read().memberships(basis.registry, source.revision.identity)[viewer]
+        from agent_comms.read_ledger import ReadSource
+        later_reads = comms.bus.reads.membership(viewer, basis.registry, ReadSource.from_revision(source.revision))
         assert later_reads.contains(later) and not later_reads.contains(first)
         delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
         with OpenedRouteCounts(

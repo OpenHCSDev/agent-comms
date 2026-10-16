@@ -33,6 +33,7 @@ def archived_notification(tmp_path):
         comms.registry.declare(Thread("agent", frozenset(), str(tmp_path),
                                      created_at=12.0 if comms is old else 212.0))
     root_id = old.messaging.initialize_private_initial_protocol()
+    live.messaging.initialize_private_initial_protocol()
     messages = (
         old.messaging.send_initial_cohort("sender", "agent", "authored pending delivery"),
         old.messaging.send_initial_cohort("sender", "reader", "painted historical delivery"),

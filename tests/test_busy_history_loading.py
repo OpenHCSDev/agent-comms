@@ -14,7 +14,7 @@ from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import (
-    ObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
+    ReadObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
 
 
@@ -55,7 +55,7 @@ def held_source(comms):
 async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
     comms, session = saved_history(tmp_path)
     original = session.read_bytes()
-    with ObservationProcess.awaited(comms.route) as process:
+    with ReadObservationProcess.awaited(comms.route) as process:
         with held_source(comms):
             answer = ReadTranscript(str(comms.root), "saved", request_id=19).answer(comms)
             assert isinstance(answer, ReadBusy)
@@ -119,7 +119,7 @@ async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path):
 
 async def test_cancelled_busy_read_is_removed_without_resubmission(tmp_path):
     comms, _session = saved_history(tmp_path)
-    with ObservationProcess.awaited(comms.route) as process:
+    with ReadObservationProcess.awaited(comms.route) as process:
         with held_source(comms):
             waiting = asyncio.create_task(process.read(ReadTranscript(str(comms.root), "saved")))
             await asyncio.sleep(0.15)
@@ -158,7 +158,7 @@ async def test_retirement_detaches_and_settles_reads_before_one_pipe_close(tmp_p
     # Register the actual loop method after instrumenting it; no replacement
     # pipe, child, source result or lifecycle implementation.
     monkeypatch.setattr(loop, "remove_reader", removed)
-    with ObservationProcess.awaited(comms.route) as process:
+    with ReadObservationProcess.awaited(comms.route) as process:
         descriptor = process.fileno()
         monkeypatch.setattr(Connection, "close", closed)
         with held_source(comms):
@@ -182,7 +182,7 @@ async def test_retirement_detaches_and_settles_reads_before_one_pipe_close(tmp_p
 async def test_awaited_scope_preserves_exit_and_closes_once(comms, monkeypatch, error):
     from multiprocessing.connection import Connection
 
-    process = ObservationProcess.awaited(comms.route)
+    process = ReadObservationProcess.awaited(comms.route)
     original = Connection.close
     closes = []
 
@@ -223,7 +223,7 @@ def test_observer_start_failure_releases_both_real_pipe_endpoints(comms, monkeyp
     monkeypatch.setattr(Connection, "close", closing)
     monkeypatch.setattr(BaseProcess, "start", failed)
     with pytest.raises(OSError) as raised:
-        ObservationProcess(comms.route)
+        ReadObservationProcess(comms.route)
     assert raised.value is failure
     assert len(closed) == 2 and all(connection.closed for connection in closed)
     assert endpoints and endpoints[0] in closed
@@ -231,11 +231,11 @@ def test_observer_start_failure_releases_both_real_pipe_endpoints(comms, monkeyp
 
 def test_viewer_reset_with_unread_observations_ends_the_service(comms):
     import multiprocessing
-    from agent_comms.ui_model.observation import ObservationService, RevisionObserved
+    from agent_comms.ui_model.observation import ReadService, RevisionObserved
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
-        service = ObservationService(comms, connection)
+        service = ReadService(comms, connection)
         connection.send(RevisionObserved(comms.views.revision()))
         viewer.close()  # The unread observation makes the real socketpair reset.
         service.receive()
@@ -245,11 +245,11 @@ def test_viewer_reset_with_unread_observations_ends_the_service(comms):
 async def test_peer_write_failure_retires_once_and_cancels_owner_reads(comms):
     import multiprocessing
 
-    from agent_comms.ui_model.observation import ObservationService, ReadAnswered
+    from agent_comms.ui_model.observation import ReadService, ReadAnswered
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
-        service = ObservationService(comms, connection)
+        service = ReadService(comms, connection)
         asking = asyncio.create_task(asyncio.Event().wait())
         service.owner_reads[7] = asking
         viewer.close()
@@ -269,11 +269,11 @@ async def test_owner_reply_uses_the_same_peer_retirement(comms):
     import multiprocessing
 
     from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.ui_model.observation import ObservationService, ReadOwnerGoal
+    from agent_comms.ui_model.observation import ReadService, ReadOwnerGoal
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
-        service = ObservationService(comms, connection)
+        service = ReadService(comms, connection)
         # A real missing-owner refusal still has to be sent through the shared endpoint.
         request = ReadOwnerGoal(str(comms.root), ThreadIncarnation("missing", 0), request_id=7)
         request.receive(service)
@@ -286,7 +286,7 @@ async def test_owner_reply_uses_the_same_peer_retirement(comms):
 
 
 async def test_awaited_notifications_then_immediate_close_retires_successfully(comms):
-    with ObservationProcess.awaited(comms.route) as process:
+    with ReadObservationProcess.awaited(comms.route) as process:
         assert await process.read(ReadNotifications(str(comms.root), ())) == {}
     assert process.connection.closed and process.process.exitcode == 0
     assert not process.reads
@@ -295,11 +295,11 @@ async def test_awaited_notifications_then_immediate_close_retires_successfully(c
 def test_local_pipe_corruption_is_not_peer_retirement(comms):
     import multiprocessing
 
-    from agent_comms.ui_model.observation import ObservationService, ReadAnswered
+    from agent_comms.ui_model.observation import ReadService, ReadAnswered
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
-        service = ObservationService(comms, connection)
+        service = ReadService(comms, connection)
         connection.close()
         with pytest.raises(OSError, match="handle is closed"):
             service.send(ReadAnswered(1, None))
@@ -309,11 +309,11 @@ def test_local_pipe_corruption_is_not_peer_retirement(comms):
 def test_other_write_errors_are_not_reclassified_as_peer_retirement(comms, monkeypatch):
     import multiprocessing
 
-    from agent_comms.ui_model.observation import ObservationService, ReadAnswered
+    from agent_comms.ui_model.observation import ReadService, ReadAnswered
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
-        service = ObservationService(comms, connection)
+        service = ReadService(comms, connection)
         error = ConnectionResetError("not the observation pipe's EPIPE")
 
         def failed_write(_result):

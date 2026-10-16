@@ -14,11 +14,10 @@ from .catalog_store import ChannelCatalog
 from .goal_waits import GoalWaits
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
-from .read_ledger import SelectedViewers
+from .read_ledger import AbsentReadSource, ReadObservations, SelectedViewers
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
-    from .read_ledger import ReadObservations
     from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .wire_log import OpenedWireSnapshot
@@ -372,9 +371,13 @@ class HistoryViews:
             show_archived=False,
         )
         reads = self.transcripts.bus.reads
-        viewers = SelectedViewers(tuple(thread.incarnation for thread in snapshot.threads.values()
-                                       if views and reads.human(thread.role)))
-        read_observations = reads.read(viewers).observations(snapshot)
+        if views:
+            viewers = SelectedViewers(tuple(thread.incarnation for thread in snapshot.threads.values()
+                                           if reads.human(thread.role)))
+            read_observations = reads.read(viewers).observations(snapshot)
+        else:
+            # No selected consumer needs a read cut. This is not an absent-store fallback.
+            read_observations = ReadObservations(AbsentReadSource(), {})
         return ThreadPresentations(
             snapshot,
             {view.thread.name: view for view in views},

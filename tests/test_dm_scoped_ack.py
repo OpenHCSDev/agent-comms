@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from tests.read_membership import stored_read_state
 from agent_comms.read_ledger import ReadLedger
 import os
 import sqlite3
@@ -178,7 +179,7 @@ def test_scoped_marker_sql_commit_denial_is_not_success(tmp_path, monkeypatch):
         assert database.execute('PRAGMA synchronous').fetchone()[0] == 2
     comms.messaging.send('peer', viewer, 'next painted')
     next_page = comms.views.dm_display_page('peer', worktree=str(tmp_path))
-    before = comms.bus.reads.read()
+    before = stored_read_state(comms.bus.reads)
     original = ReadLedger.writing
 
     @contextmanager
@@ -194,5 +195,5 @@ def test_scoped_marker_sql_commit_denial_is_not_success(tmp_path, monkeypatch):
         with pytest.raises(sqlite3.DatabaseError, match='not authorized'):
             comms.views.mark_dm_view_read('peer', worktree=str(tmp_path), through=next_page.newest_seq,
                                          expected_display_basis=next_page.display_basis)
-    assert comms.bus.reads.read() == before
+    assert stored_read_state(comms.bus.reads) == before
     assert comms.bus.pending_count(viewer, 'peer') == 1
