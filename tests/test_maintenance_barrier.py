@@ -15,12 +15,79 @@ from agent_comms.backend import _maintenance_send_boundary
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.maintenance_barrier import MaintenanceBarrier, PausedPhase, InstallingPhase, ReadyPhase
 from agent_comms.registration import Registration
 from agent_comms.store_files import _async_store_lock, _store_lock
 from agent_comms.threads import Thread
 from maintenance_control_fixture import FixtureMaintenanceControl
 from pi_session_turn import one_turn_events
+
+
+async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, monkeypatch) -> None:
+    from agent_comms.bus_publication import stable_thread_lookup
+    from agent_comms.coordination_cohort import next_sealed_assignment
+    from agent_comms.coordinator import Coordination
+    from agent_comms.routing import ScheduledTurn
+    from agent_comms.schedule_rules import SelectedWakeCheck, WakeScheduleCheck
+    from test_acp_private_nk_delivery import _session
+    from agent_comms import cohort_foreground, native_pi
+
+    comms, agent, _root_id = _session(tmp_path)
+    monkeypatch.setattr(cohort_foreground, '_trusted_package', lambda _: None)
+    monkeypatch.setattr(native_pi, '_trusted_package', lambda _: None)
+    control = FixtureMaintenanceControl(comms.owners.maintenance)
+    receipt = control.begin('scratch-cutover')
+    # Message publication remains live: only new turns are held. Use the actual
+    # scratch bus, not a constructed message pretending to be a post.
+    post = comms.messaging.send_message('sender', '#team', 'mid-drain channel post')
+    queued = ScheduledTurn.incoming(post)
+    starts = []
+
+    async def start(*args, **kwargs):
+        starts.append((args, kwargs))
+
+    monkeypatch.setattr(agent.turns, 'run_agent_turn', start)
+    check = WakeScheduleCheck(session_id='beta', inputs=agent.inputs)
+    assert comms.owners.maintenance.pending_turn() == receipt
+    paths = agent.inputs._tick_paths()
+    assert paths.maintenance == comms.owners.maintenance.witness_paths
+    assert all(any(source.directory == path.parent and source.includes(os.fsencode(path.name))
+                   for source in paths.watch_sources) for path in paths.maintenance)
+    assert await agent.inputs.drain_inbox('beta') == 0
+    assert await agent.inputs.drain_inbox('beta') == 0  # settled closed tick
+    assert starts == [] and not agent.inputs.wake_tasks
+    beta = comms.registry.require('beta')
+    with Coordination(comms.root / 'coordination.sqlite3') as store:
+        pending = next_sealed_assignment(store, stable_thread_lookup(beta.created_at), beta.name)
+        assert pending.wire_seq == post.seq
+    assert beta.active_turn is None
+
+    # The local queue follows the same typed gate; its origin is retained.
+    agent.inputs.pending_turns['beta'] = [queued]
+    assert await check.run() == receipt
+    assert agent.inputs.pending_turns['beta'] == [queued] and starts == []
+    agent.inputs.pending_turns.pop('beta')
+    for phase in (PausedPhase, InstallingPhase, ReadyPhase):
+        receipt = control.advance(receipt, phase)
+    assert comms.owners.maintenance.pending_turn() is None
+    selected = []
+    monkeypatch.setattr(SelectedWakeCheck, 'schedule', lambda check: selected.append(check))
+    assert await agent.inputs.drain_inbox('beta') == 1
+    assert len(selected) == 1
+    with Coordination(comms.root / 'coordination.sqlite3') as store:
+        assert next_sealed_assignment(store, stable_thread_lookup(beta.created_at), beta.name).wire_seq == post.seq
+    # Selection scheduled just before another drain must still refuse at the
+    # effect boundary without consuming that durable assignment.
+    another_drain = control.begin('second-cutover')
+    assert await selected[0].run() == another_drain
+    with Coordination(comms.root / 'coordination.sqlite3') as store:
+        assert next_sealed_assignment(store, stable_thread_lookup(beta.created_at), beta.name).wire_seq == post.seq
+    for phase in (PausedPhase, InstallingPhase, ReadyPhase):
+        another_drain = control.advance(another_drain, phase)
+    agent.inputs.pending_turns['beta'] = [queued]
+    await check.run()
+    assert len(starts) == 1 and starts[0][1]['origins'] == (post,)
+    assert not agent.inputs.pending_turns.get('beta')
 
 
 def test_production_has_no_same_uid_phase_mutator(tmp_path: Path) -> None:

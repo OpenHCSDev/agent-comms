@@ -27,6 +27,8 @@ from .store_files import _async_store_lock, _store_lock
 
 
 class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
+    turn_pending = True
+
     @classmethod
     def require_open(cls) -> None:
         raise RelationViolationError("Maintenance admission closed")
@@ -51,6 +53,8 @@ class InstallingPhase(MaintenancePhase):
 
 
 class ReadyPhase(MaintenancePhase):
+    turn_pending = False
+
     @classmethod
     def successors(cls):
         return (DrainingPhase,)
@@ -117,6 +121,10 @@ class MaintenanceBarrier:
         self.marker_path = self.registry_path.parent / ".maintenance-enabled"
         self.state_path = self.registry_path.parent / ".maintenance-state"
 
+    @property
+    def witness_paths(self) -> tuple[Path, Path]:
+        return self.marker_path, self.state_path
+
     @staticmethod
     def _read(path: Path, declaration):
         try:
@@ -171,6 +179,14 @@ class MaintenanceBarrier:
     def read(self) -> MaintenanceReceipt | None:
         with _store_lock(self.wire_path, shared=True):
             return self.current_unlocked()
+
+    def pending_turn(self) -> MaintenanceReceipt | None:
+        """Return the cutover-owned typed reason to retain, not launch, a wake.
+
+        Missing/corrupt witnesses still fail closed rather than looking like READY.
+        """
+        receipt = self.read()
+        return receipt if receipt is not None and receipt.phase.turn_pending else None
 
     @contextmanager
     def admit_ingress(self, *, blocking: bool = True) -> Iterator[MaintenanceReceipt | None]:
