@@ -16,8 +16,9 @@ from agent_comms.cli_bridges.shared import (
     Binding,
     DeliveryJournal,
     DeliveryRow,
+    MonitorAttemptRow,
     Inbox,
-    LineMonitorBridge,
+    CliBridge,
     Options,
     Outcome,
 )
@@ -203,7 +204,9 @@ def test_legacy_journal_reopen_preserves_schema_binding_and_delivery(tmp_path):
     try:
         assert journal.bind(binding) == journal.bind(None) == binding
         assert DeliveryRow.select(journal.db) == [pending]
-        assert journal.db.execute('SELECT name, sql FROM sqlite_master ORDER BY name').fetchall() == schema
+        current = dict(journal.db.execute('SELECT name, sql FROM sqlite_master ORDER BY name').fetchall())
+        assert {name: current[name] for name, _ in schema} == dict(schema)
+        assert MonitorAttemptRow.select(journal.db) == []
     finally:
         journal.close()
 
@@ -219,11 +222,25 @@ def test_journal_initialization_failure_closes_owned_connection(tmp_path, monkey
         connection.execute('SELECT 1')
 
 
+class AcceptedBridge(CliBridge):
+    """Controlled API acknowledgment; these checks concern Core read recovery."""
+
+    async def deliver(self, message):
+        print(self.incoming_text(message))
+        return Outcome.DELIVERED
+
+    async def show_sent(self, result, target, body):
+        pass
+
+    async def report_failure(self, text):
+        pass
+
+
 @pytest.mark.asyncio
 async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys):
     journal = DeliveryJournal(tmp_path)
     binding = Binding(str(tmp_path), 'viewer', 'external-session')
-    bridge = LineMonitorBridge(Options(Inbox(), None, None, None, tmp_path), binding, journal)
+    bridge = AcceptedBridge(Options(Inbox(), None, None, None, tmp_path), binding, journal)
     message = Message(sender='peer', target='viewer', type=InfoKind,
                       body='one delivery', timestamp=1.0, seq=1)
     delivered = asyncio.get_running_loop().create_future()
@@ -232,6 +249,9 @@ async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys
     waiting = asyncio.Event()
 
     class ReadStream:
+        async def acknowledge(self, message):
+            assert message.body == 'one delivery'
+
         async def watch(self, state):
             subscriptions.append(state)
             try:
@@ -250,7 +270,7 @@ async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys
     try:
         await asyncio.wait_for(delivered, 3)
         assert len(subscriptions) == 2
-        assert journal.db.execute('SELECT outcome FROM delivery').fetchone()[0] == Outcome.EMITTED.value
+        assert journal.db.execute('SELECT outcome FROM delivery').fetchone()[0] == Outcome.DELIVERED.value
     finally:
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -263,7 +283,7 @@ async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys
 @pytest.mark.asyncio
 async def test_watch_failed_error_raises_without_resubscribing(tmp_path):
     journal = DeliveryJournal(tmp_path)
-    bridge = LineMonitorBridge(Options(Inbox(), None, None, None, tmp_path),
+    bridge = AcceptedBridge(Options(Inbox(), None, None, None, tmp_path),
                               Binding(str(tmp_path), 'viewer', 'external-session'), journal)
     subscriptions = []
 
