@@ -47,6 +47,7 @@ from agent_comms.coordination_tables.executions import (
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
+    PublicationReceipts,
     canonical_publication_key,
 )
 from agent_comms.coordination_tables.responses import ResponseObligation
@@ -1396,10 +1397,12 @@ def test_numeric_only_message_id_input_is_not_text(db):
     c.execute("COMMIT")
     with pytest.raises(sqlite3.IntegrityError):
         c.execute(
-            "INSERT INTO publication_receipts VALUES ('e',1,?,100)", (int(message.message_id),)
+            "INSERT INTO publication_receipts VALUES ('e','requester',1,?,100)",
+            (int(message.message_id),),
         )
     c.execute("BEGIN IMMEDIATE")
-    c.execute("INSERT INTO publication_receipts VALUES ('e',1,?,100)", (message.message_id,))
+    PublicationReceipts(execution_id="e", exact_target="requester", seq=1,
+                        message_id=message.message_id, received_at_ms=100).insert(c)
     c.execute(
         (
             "UPDATE obligations SET lifecycle=json_object('kind','published','message_id'"
@@ -1531,8 +1534,10 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
             == "publishing"
         )
         assert reopened._connection.execute(
-            "SELECT typeof(payload),payload FROM publication_intents"
-        ).fetchone() == ("text", body)
+            "SELECT typeof(message) FROM publication_intents"
+        ).fetchone()[0] == "text"
+        intent = PublicationIntents.one(reopened._connection, execution_id="e", exact_target="requester")
+        assert intent is not None and intent.message == message
         assert (
             reopened._connection.execute("SELECT count(*) FROM publication_receipts").fetchone()[0]
             == 0
@@ -1541,12 +1546,13 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
     with pytest.raises(sqlite3.IntegrityError, match="disposition must change"):
         c.execute("UPDATE obligations SET reason_code='rewrite',revision=3 WHERE execution_id='e'")
     with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
-        c.execute(
-            "INSERT INTO publication_receipts VALUES ('e',1,?,100)", (message.message_id,)
-        )  # PUBLISHING cannot retain receipt at COMMIT.
+        PublicationReceipts(execution_id="e", exact_target="requester", seq=1,
+                            message_id=message.message_id, received_at_ms=100).insert(c)
+        # PUBLISHING cannot retain receipt at COMMIT.
     assert c.execute("SELECT count(*) FROM publication_receipts").fetchone()[0] == 0
     c.execute("BEGIN IMMEDIATE")
-    c.execute("INSERT INTO publication_receipts VALUES ('e',1,?,100)", (message.message_id,))
+    PublicationReceipts(execution_id="e", exact_target="requester", seq=1,
+                        message_id=message.message_id, received_at_ms=100).insert(c)
     c.execute(
         (
             "UPDATE obligations SET lifecycle=json_object('kind','published','message_id'"
@@ -1561,7 +1567,7 @@ def test_publication_intent_receipt_and_lineage_remain_frozen(db):
         with pytest.raises(sqlite3.IntegrityError):
             c.execute(f"DELETE FROM {table}")
     with pytest.raises(sqlite3.IntegrityError):
-        c.execute("UPDATE publication_intents SET payload=x'41' WHERE execution_id='e'")
+        c.execute("UPDATE publication_intents SET message=x'41' WHERE execution_id='e'")
     with pytest.raises(sqlite3.IntegrityError):
         c.execute("UPDATE publication_receipts SET seq=2 WHERE execution_id='e'")
     with pytest.raises(sqlite3.IntegrityError, match="cannot erase publication receipt"):
