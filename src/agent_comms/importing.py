@@ -556,7 +556,7 @@ class CodexImporter(ImportAdapter, format=ImportFormat.CODEX):
             ImportFormat.CODEX,
             scan.identity or source.stem,
             scan.latest_project or scan.project,
-            source.stem,
+            "",  # A storage filename is not a source-authored conversation title.
             historical_instructions=scan.historical_instructions,
         )
 
