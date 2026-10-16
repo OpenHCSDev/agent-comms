@@ -8,7 +8,7 @@ import threading
 import time
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import Enum
@@ -309,9 +309,28 @@ class ActivityLog(ThreadOwnedState):
         self._stale_after = stale_after
         self._read = ActivityReadState.for_path(store_path)
 
+    @contextmanager
+    def _writing(self):
+        """The source writer alone persists its derived checkpoint.
+
+        Reads may fold a newer cut into process-local state, but must never
+        acquire an exclusive document lock or write files. Keep the source
+        lock through checkpoint capture and publication, including rewrites.
+        """
+        with _store_lock(self._path):
+            before = FileRevision.capture(self._path)
+            yield
+            if FileRevision.capture(self._path) != before:
+                self._latest_events()
+                checkpoint = self._read.checkpoint
+                if checkpoint is not None:
+                    # A disposable projection failure cannot undo an appended event.
+                    with suppress(OSError):
+                        self.checkpoint.replace(checkpoint)
+
     def emit(self, activity: Activity) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        with _store_lock(self._path):
+        with self._writing():
             _append_jsonl(self._path, FieldCodec.encode(activity))
 
     def update(self, thread: str, transition: Callable[[Activity], Activity | None]) -> bool:
@@ -320,7 +339,7 @@ class ActivityLog(ThreadOwnedState):
         The activity owner supplies the transition. Returning no event leaves
         the log unchanged; an append cannot overtake its own comparison.
         """
-        with _store_lock(self._path):
+        with self._writing():
             event = transition(self.current(thread, active=True))
             if event is None:
                 return False
@@ -380,7 +399,6 @@ class ActivityLog(ThreadOwnedState):
                             checkpoint = None
                         complete = dict(checkpoint.latest) if checkpoint is not None else {}
                         offset = checkpoint.offset if checkpoint is not None else 0
-                        original_offset = offset
                         latest = complete
                         stream.seek(offset)
                         while stream.tell() < revision.size:
@@ -418,11 +436,6 @@ class ActivityLog(ThreadOwnedState):
                     # one. Reacquire the actual current file, not that older cut.
                     continue
                 read.checkpoint, read.latest = captured, latest
-            if captured is not None and (checkpoint is None or offset != original_offset):
-                # The log remains authoritative if its disposable read
-                # projection cannot be persisted.
-                with suppress(OSError):
-                    self.checkpoint.replace(captured)
             return latest
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
@@ -437,7 +450,7 @@ class ActivityLog(ThreadOwnedState):
                 self.emit(Activity(thread.name, ActivityState.DELETED))
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
-        with _store_lock(self._path):
+        with self._writing():
             records = [dict(record) for record in _jsonl_records(self._path)]
             for record in records:
                 if record.get("thread") == old_name:
