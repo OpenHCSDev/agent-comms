@@ -290,8 +290,15 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
             await tick()
         settled = len(drains)
         assert settled <= 3
+        activity_of = comms.agents.activity_of
+
+        def no_idle_activity(*_args, **_kwargs):
+            raise AssertionError("an unchanged tick reread activity and the registry")
+
+        monkeypatch.setattr(comms.agents, "activity_of", no_idle_activity)
         for _ in range(20):
             await tick()
+        monkeypatch.setattr(comms.agents, "activity_of", activity_of)
         assert len(drains) == settled, "an unchanged tick re-read the stores"
         assert len(syncs) == settled
         # Another thread's declaration, change, stop, coordination row and removal
@@ -393,8 +400,14 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         # Process-local work waiting on the next tick is never skipped.
         for _ in range(2):
             await tick()
+        from agent_comms.routing import ScheduledTurn
+        from agent_comms.schedule_rules import WakeScheduleCheck
+
+        # The observer owns this check; a real queued turn is dispatched by
+        # another owner, whose separate tests exercise the provider path.
+        monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         before = len(drains)
-        agent.inputs.pending_turns["beta"] = [object()]
+        agent.inputs.pending_turns["beta"] = [ScheduledTurn("queued locally")]
         await tick()
         assert len(drains) == before + 1
     finally:

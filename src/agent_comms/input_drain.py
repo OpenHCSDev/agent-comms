@@ -193,6 +193,8 @@ class InputObservation:
             self._observation_watchers.pop(session_id, None)
 
     def wake_observer(self, session_id: str) -> None:
+        # A process-local wake can carry work that did not change an input file.
+        self._repeat_private_observations.add(session_id)
         watcher = self._observation_watchers.get(session_id)
         if watcher is not None:
             watcher.notify()
@@ -291,14 +293,6 @@ class InputObservation:
                     and revision.other == settled.revision.other
                     and self._quiescent(session_id)
                 )
-                if idle:
-                    # A selected wake or an earlier observer can have recorded
-                    # a failure without changing this tick's input stores. Only
-                    # a full successful drain can recover that original fact.
-                    activity = await Coordination.run_worker(partial(
-                        self.comms.agents.activity_of, self.sessions.require(session_id),
-                    ))
-                    idle = activity.readiness.source_diagnostic() is None
                 # The settled entry is still current only while the registry is unchanged.
                 entry = settled.entry if idle else None
                 entry_current = idle and revision.registry == settled.revision.registry
@@ -537,8 +531,8 @@ class InputDrain(InputObservation):
         # Only a completed, quiescent observation can suppress another scan.
         # These revisions never authorize delivery, acceptance or a native send.
         self._idle_private_revisions: dict[str, PrivateObservation] = {}
-        # The private observation owner records only a read that changed while
-        # it was being established. Its next stable read consumes this fact.
+        # A changed read or process-local wake needs a full observation.
+        # A completed stable drain consumes this pending work.
         self._repeat_private_observations: set[str] = set()
 
     async def clear_queued_inputs(self, session_id: str) -> None:
