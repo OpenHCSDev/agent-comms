@@ -501,6 +501,7 @@ class TestSelectedTargetActions:
     def test_mixed_read_marks_human_views_without_advancing_executor_delivery(self, tmp_path):
         from agent_comms.cli_commands import ReadTargetCliCommand, TargetEdit
         from agent_comms.threads import Thread
+        from native_unread_fixture import completed_snapshot
 
         comms = self.declared(tmp_path)
         source = tmp_path / 'alpha.jsonl'
@@ -514,14 +515,14 @@ class TestSelectedTargetActions:
         comms.messaging.send('alpha', 'beta', 'Executor message')
         comms.messaging.send('alpha', viewer, 'Human DM')
         comms.messaging.send('alpha', '#team', 'Channel message')
-        before = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
+        before = completed_snapshot(comms, str(tmp_path))
         assert before.thread_unread['alpha'] == before.unread['alpha'] == 1
         # The canonical tag change also publishes its membership notification.
         assert before.channel_unread['#team'] == 2
         result = TargetEdit(ReadTargetCliCommand, ('alpha', '#team'),
                             {}, project=str(tmp_path)).apply(comms)
         assert result.successful and tuple(item.result.read for item in result.outcomes) == ('alpha', '#team')
-        after = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
+        after = completed_snapshot(comms, str(tmp_path))
         assert after.thread_unread['alpha'] == after.unread.get('alpha', 0) == 0
         assert after.channel_unread['#team'] == 0
         assert comms.bus.pending_count('beta', 'alpha') == 1

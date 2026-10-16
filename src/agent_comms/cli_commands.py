@@ -234,7 +234,7 @@ class TargetOutcome:
 class TargetCompleted(TargetOutcome):
     target: str
     command: CliCommand
-    result: Any
+    result: object
     successful: ClassVar[bool] = True
 
     def reconnect_targets(self) -> tuple[str, ...]:
@@ -486,15 +486,20 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return self
 
     def edited(self, arguments: dict[str, object]) -> Self:
-        captured = {declared.metadata.get('wire_name', declared.name): getattr(self, declared.name)
-                    for declared in fields(self) if declared.metadata['target_bound']}
+        annotations = get_type_hints(type(self), include_extras=True)
+        captured = {
+            declared.metadata.get('wire_name', declared.name): FieldCodec.encode(
+                getattr(self, declared.name), annotations[declared.name]
+            )
+            for declared in fields(self) if declared.metadata['target_bound']
+        }
         if captured.keys() & arguments.keys():
             raise ValueError('Target-bound parameters cannot be overridden')
         editable = {item.name for item in self.editable_fields}
         if arguments.keys() - editable:
             raise ValueError('Parameters not offered by this target command cannot be overridden')
         return type(self).from_payload({'kind': FieldCodec.encode(type(self)),
-                                       **FieldCodec.encode(captured), **arguments})
+                                       **captured, **arguments})
 
     @classmethod
     def execute_target(cls, comms: Comms, target: CommandTarget | str | tuple[CommandTarget | str, ...], arguments: dict[str, object],
