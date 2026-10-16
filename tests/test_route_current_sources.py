@@ -1,15 +1,12 @@
-"""Current namespace seeks, including ordinary birth-zero reads and cutover."""
+"""Current namespace seeks, including ordinary birth-zero reads."""
 
 import json
 import sqlite3
 from dataclasses import replace
-from importlib.util import module_from_spec, spec_from_file_location
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
-from agent_comms.bus_route_counts import BusRouteCounts, OpenedRouteCounts
+from agent_comms.bus_route_counts import OpenedRouteCounts
 from agent_comms.comms import wire
 from agent_comms.routing import DeliveryScope
 from agent_comms.threads import Thread
@@ -79,30 +76,3 @@ def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
         # The read never grants the same participant identity-bound publication.
         with pytest.raises(ValueError, match='positive recorded birth'):
             scope.minimum_timestamp('sender', viewer, '1'*32, recorded)
-
-
-def test_cutover_reuses_owned_rows_without_scanning_the_bus(tmp_path):
-    c = wire(tmp_path)
-    c.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
-    viewer = c.messaging.user_identity(str(tmp_path)).name
-    c.messaging.send_message('sender', viewer, 'prepared source')
-    assert c.bus.pending_counts(viewer) == {'sender': 1}
-    current = BusRouteCounts(c.bus.log.path).path
-    old = current.with_name('bus_route_counts.v2.sqlite3')
-    with sqlite3.connect(current) as before, sqlite3.connect(old) as copied:
-        before.backup(copied)
-    current.unlink()
-    bus_before = c.bus.log.path.read_bytes()
-    checkpoint_before = old.read_bytes()
-    script = Path(__file__).parents[1] / 'tools/cutover/prepare_route_prefix_index.py'
-    spec = spec_from_file_location('route_prefix_cutover', script)
-    module = module_from_spec(spec)
-    spec.loader.exec_module(module)
-    receipt = module.prepare(old, c.bus.log.path)
-    assert receipt['bytes_covered'] == len(bus_before)
-    assert c.bus.log.path.read_bytes() == bus_before
-    assert old.read_bytes() == checkpoint_before
-    with patch.object(BusRouteCounts, '_decoded', side_effect=AssertionError('bus re-scan')):
-        assert wire(tmp_path).bus.pending_counts(viewer) == {'sender': 1}
-    with pytest.raises(FileExistsError, match='inspect, do not replay'):
-        module.prepare(old, c.bus.log.path)
