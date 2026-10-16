@@ -226,7 +226,8 @@ class AcceptedBridge(CliBridge):
     """Controlled API acknowledgment; these checks concern Core read recovery."""
 
     async def deliver(self, message):
-        print(self.incoming_text(message))
+        for part in self.incoming_frame(message).parts:
+            print(part)
         return DeliveredOutcome
 
     async def show_sent(self, result, target, body):

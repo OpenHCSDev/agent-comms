@@ -118,7 +118,8 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
 
     async def deliver(self, message: Message) -> type[Outcome]:
         async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
-            await codex.message(self.incoming_text(message), message.message_id)
+            for part in self.incoming_frame(message).parts:
+                await codex.message(part, message.message_id)
         return DeliveredOutcome
 
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:

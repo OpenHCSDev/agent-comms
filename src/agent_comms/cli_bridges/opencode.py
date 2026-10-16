@@ -186,7 +186,8 @@ class OpenCodeBridge(TranscriptBridge[OpenCodeOptions]):
 
     async def deliver(self, message: Message) -> type[Outcome]:
         async with OpenCodeConnection.open(self.options, self.binding.thread) as connection:
-            await connection.deliver(self.incoming_text(message))
+            for part in self.incoming_frame(message).parts:
+                await connection.deliver(part)
         return DeliveredOutcome
 
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
