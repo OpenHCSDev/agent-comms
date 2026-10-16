@@ -35,10 +35,10 @@ class AssignedSourceIdentity:
     @property
     def publication_key(self) -> tuple[str, float]:
         """Published authorship survives a rename, not a new birth or wire."""
-        return self.root, self.recipient.created_at
+        return self.root, self.recipient.require_recorded().created_at
 
     def same_publication_source(self, other: AssignedSourceIdentity) -> bool:
-        return self.recipient.has_recorded_birth and self.publication_key == other.publication_key
+        return self.root == other.root and self.recipient.same_publication_birth(other.recipient)
 
 
 @dataclass(frozen=True)
@@ -285,8 +285,10 @@ class AssignedTranscriptSource(TranscriptSource):
         from .wire_log import WireLog
 
         root = Path(identity.root)
-        return (cls(root, identity.recipient, WireLog(root / "bus.jsonl"))
-                if identity.recipient.has_recorded_birth else TranscriptSource())
+        return identity.recipient.transcript_source(
+            lambda recorded: cls(root, recorded, WireLog(root / "bus.jsonl")),
+            TranscriptSource(),
+        )
 
     def resolve_sent(self, messages):
         """Qualify reports against exact full rows in one bounded wire read.
@@ -324,9 +326,9 @@ class AssignedTranscriptSource(TranscriptSource):
     @classmethod
     def for_recorded(cls, root, thread, log, records):
         """Only the original recorded birth can select frozen assignments."""
-        if thread.incarnation.has_recorded_birth:
-            return cls.for_thread(root, thread, log)
-        return records
+        return thread.incarnation.transcript_source(
+            lambda recorded: cls(root, recorded, log), records
+        )
 
     def rows(
         self, predicate="1", parameters=(), *, limit=1, ascending=False,

@@ -94,15 +94,25 @@ def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path):
     assert incarnation.birth_description == "created 1700000000.0"
     assert deleted.birth_description == "deleted declaration"
     assert historical.birth_description == "birth unrecorded"
+    assert not hasattr(deleted, "created_at") and not hasattr(historical, "created_at")
+    assert (deleted.wire_birth, historical.wire_birth) == (-1.0, 0.0)
+    assert incarnation.same_publication_birth(incarnation.renamed("alias"))
+    assert not incarnation.same_publication_birth(historical)
+    missing = []
+    assert deleted.route_lookup(lambda: missing.append("deleted")) == ()
+    assert missing == ["deleted"]
+    assert incarnation.route_lookup(lambda: missing.append("recorded")) == (incarnation.lookup,)
+    assert missing == ["deleted"]
     target = GoalWaitTarget(incarnation)
-    assert (target.name, target.created_at) == ("worker", 1_700_000_000.0)
+    assert not hasattr(target, "name") and not hasattr(target, "created_at")
+    assert (target.incarnation.name, target.incarnation.created_at) == ("worker", 1_700_000_000.0)
     assert FieldCodec.encode(target) == {"name": "worker", "created_at": 1_700_000_000.0}
     assert FieldCodec.decode(GoalWaitTarget, FieldCodec.encode(target)) == target
-    with pytest.raises(TypeError, match="exactly its declared wire fields"):
+    with pytest.raises(ValueError, match="Unknown fields for ThreadIncarnationRecord"):
         FieldCodec.decode(GoalWaitTarget, {**target.to_wire(), "lookup": incarnation.lookup})
     assert FieldCodec.decode(ThreadIncarnation, FieldCodec.encode(deleted)) == deleted
     assert FieldCodec.decode(ThreadIncarnation, FieldCodec.encode(historical)) == historical
-    with pytest.raises(ValueError, match="declared member"):
+    with pytest.raises(ValueError, match="positive recorded birth"):
         FieldCodec.decode(RecordedThreadIncarnation, FieldCodec.encode(historical))
     assert not hasattr(deleted, "lookup") and not hasattr(historical, "lookup")
     with pytest.raises(ValueError, match="positive recorded birth"):

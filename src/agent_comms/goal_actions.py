@@ -257,10 +257,10 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         snapshot = ctx.goals.registry.snapshot()
         if not any(
             GoalWaits.target_has_active_turn(target, snapshot)
-            and snapshot.threads[snapshot.canonical_name(target.name)].process_alive
+            and snapshot.threads[snapshot.canonical_name(target.incarnation.name)].process_alive
             for target in wait_targets
         ):
-            names = ", ".join(f"@{target.name}" for target in wait_targets)
+            names = ", ".join(f"@{target.incarnation.name}" for target in wait_targets)
             raise ValueError(
                 f"No declared dependency has an active turn ({names}). "
                 "A running/ready process or queued input does not prove active work. "
@@ -306,7 +306,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 target_turn_generations=tuple(
                     (
                         snapshot.threads[
-                            snapshot.canonical_name(target.name)
+                            snapshot.canonical_name(target.incarnation.name)
                         ].turn_generation
                         if GoalWaits.target_has_active_turn(target, snapshot)
                         else None

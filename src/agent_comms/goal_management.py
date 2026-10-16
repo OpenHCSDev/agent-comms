@@ -128,7 +128,7 @@ class Goals:
         if not wait_for:
             raise ValueError("Standby requires explicit wait_for thread names.")
         resolved = tuple(self.registry.require(target.removeprefix("@")) for target in wait_for)
-        if any(target.created_at == thread.created_at for target in resolved):
+        if any(target.incarnation == thread.incarnation for target in resolved):
             raise ValueError("A goal cannot wait for its own thread.")
         targets = tuple(
             dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
@@ -266,8 +266,8 @@ class Goals:
                     wait is None
                     or not wait.current_for(goal, owner.created_at)
                     or not any(
-                        snapshot.canonical_name(target.name) == canonical
-                        and target.created_at == fence.identity.incarnation.created_at
+                        target.incarnation.resolved(snapshot)
+                        == fence.identity.incarnation.resolved(snapshot)
                         and (generation := wait.target_turn_generations[index]) is not None
                         and 0 < generation <= fence.identity.generation
                         for index, target in enumerate(wait.targets)

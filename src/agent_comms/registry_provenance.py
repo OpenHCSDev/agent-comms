@@ -147,9 +147,7 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
     def historical_recipient(self, recipient: FrozenRecipient) -> ArchivedRecipient | RetiredRecipient:
         """Archives select by original name and birth; duplicate births stay distinct."""
         thread = self.threads.get(self.canonical_name(recipient.canonical_thread))
-        if thread is not None and thread.incarnation.has_recorded_birth and (
-            thread.incarnation.require_recorded().lookup == recipient.recipient_lookup
-        ):
+        if thread is not None and thread.incarnation.selects_lookup(recipient.recipient_lookup):
             return ArchivedRecipient(thread)
         return RetiredRecipient(recipient.recipient_lookup)
 

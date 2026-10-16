@@ -217,10 +217,7 @@ class DeliveryScope(MessageDisplayScope):
         probe for an assigned stamp; admission must refuse that unproven stamp.
         """
         yield ""
-        if source.has_recorded_birth:
-            yield source.lookup
-        else:
-            on_unrecorded()
+        yield from source.route_lookup(on_unrecorded)
 
     def minimum_timestamp(
         self, sender: str, target: str, sender_lookup: str, snapshot: RegistryProvenance

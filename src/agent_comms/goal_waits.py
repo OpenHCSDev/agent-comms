@@ -110,7 +110,7 @@ class RecordedGoalWait(GoalWait):
 
     def project(self, goal: Goal, snapshot: RegistrySnapshot) -> GoalExecution:
         targets = tuple(
-            GoalWaitTarget(target.incarnation.renamed(snapshot.canonical_name(target.name)))
+            GoalWaitTarget(target.incarnation.renamed(snapshot.canonical_name(target.incarnation.name)))
             for target in self.targets
         )
         inactive = tuple(
@@ -179,7 +179,7 @@ class GoalInputReview:
                 eligible.append(item)
         return {
             "goal_id": self.goal_id,
-            "wait_for": [target.name for target in self.targets],
+            "wait_for": [target.incarnation.name for target in self.targets],
             "reviewed_inputs": [item["inputId"] for item in eligible],
             "messages": eligible,
             "already_reviewed_inputs": reviewed,
@@ -234,12 +234,12 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
 
     @staticmethod
     def target_has_active_turn(target: GoalWaitTarget, snapshot: RegistrySnapshot) -> bool:
-        canonical = snapshot.canonical_name(target.name)
+        canonical = snapshot.canonical_name(target.incarnation.name)
         thread = snapshot.threads.get(canonical)
         status = snapshot.statuses.get(canonical)
         return bool(
             thread is not None
-            and thread.created_at == target.created_at
+            and target.incarnation.resolved(snapshot) == thread.incarnation
             and status is not None
             and status.running
             and thread.executing
@@ -276,9 +276,9 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
                 wait = None
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
-                canonical = snapshot.canonical_name(target.name)
+                canonical = snapshot.canonical_name(target.incarnation.name)
                 peer = snapshot.threads.get(canonical)
-                if peer is None or peer.created_at != target.created_at:
+                if peer is None or target.incarnation.resolved(snapshot) != peer.incarnation:
                     continue
                 if canonical == owner:
                     pending.append(owner)
