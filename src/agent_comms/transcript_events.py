@@ -199,7 +199,7 @@ class ToolStartTranscript(ToolTranscript):
     def title(self) -> str:
         from .tool_declaration import ToolDeclaration
 
-        return ToolDeclaration.caption(self.tool_name, self.detail)
+        return ToolDeclaration.caption(self.tool_name, self.detail, arguments=self.raw_input)
 
 
 @dataclass(frozen=True, kw_only=True)

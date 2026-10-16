@@ -346,16 +346,18 @@ class ToolItem(Item, ABC):
     def tool_detail(self) -> str:
         return ""
 
-    @property
-    def call(self) -> ToolCall:
-        return ToolCall(self.id, self.tool_name, self.arguments, self.tool_detail)
+    def call(self, started_at: EventTime = UnrecordedEventTime()) -> ToolCall:
+        return ToolCall(self.id, self.tool_name, self.arguments, self.tool_detail, started_at=started_at)
+
+    def accumulator(self, started_at: EventTime) -> ToolCall:
+        return self.call(started_at)
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return self.call.finished(self.output, self.succeeded)
+        return self.call().finished(self.output, self.succeeded)
 
     @property
     def activity_detail(self) -> str:
-        return self.call.title
+        return self.call().title
 
 
 class CommandItem(ToolItem):

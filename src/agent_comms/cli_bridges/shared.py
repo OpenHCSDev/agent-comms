@@ -45,25 +45,6 @@ class SendResult(WireModel):
     id: str
 
 @dataclass(frozen=True)
-class ToolCall:
-    """A CLI invocation uses the same preview and history as a native tool."""
-    id: str
-    name: str
-    arguments: JsonValue
-    detail: str = ""
-
-    @property
-    def title(self) -> str:
-        return ToolDeclaration.caption(self.name, self.detail)
-
-    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
-        return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=self.arguments, detail=self.detail),
-                ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
-                                  text=text, ok=ok, diff=diff))
-
-
-@dataclass(frozen=True)
 class Binding(TypedTable):
     root: str
     bus: str
@@ -111,8 +92,43 @@ class NoPrefixDraft(DraftAccumulator):
 NO_PREFIX = NoPrefixDraft()
 
 
+class SnapshotDraft(DraftAccumulator, ABC):
+    """A complete pending view, shared by textual and tool items."""
+
+    @property
+    @abstractmethod
+    def events(self) -> tuple[TranscriptEvent, ...]: ...
+
+    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+        return (DraftItem(turn_id, item_id, self),)
+
+
 @dataclass
-class TextDraft(DraftAccumulator):
+class ToolCall(SnapshotDraft):
+    """The same invocation owns its pending preview and completed history."""
+    started_at: EventTime = field(default_factory=UnrecordedEventTime, kw_only=True)
+    id: str
+    name: str
+    arguments: JsonValue
+    detail: str = ""
+
+    @property
+    def title(self) -> str:
+        return ToolDeclaration.caption(self.name, self.detail, arguments=self.arguments)
+
+    @property
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return (self.started_at.stamp(ToolStartTranscript(
+            tool_call_id=self.id, tool_name=self.name,
+            raw_input=self.arguments, detail=self.detail)),)
+
+    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
+        return (*self.events, ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
+                                               text=text, ok=ok, diff=diff))
+
+
+@dataclass
+class TextDraft(SnapshotDraft):
     event_type: type[TextTranscript]
     sections: dict[int, list[str]]
     separator: ClassVar[str] = ''
@@ -129,9 +145,6 @@ class TextDraft(DraftAccumulator):
         text = self.separator.join(text for index in sorted(self.sections)
                                    if (text := ''.join(self.sections[index])))
         return (self.started_at.stamp(self.event_type(text)),) if text else ()
-
-    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
-        return (DraftItem(turn_id, item_id, self),)
 
 
 class ParagraphDraft(TextDraft):
@@ -277,7 +290,7 @@ class DraftItem(TranscriptUpdate):
     """A pending view; build its text only if this preview survives coalescing."""
     turn_id: str
     item_id: str
-    accumulator: TextDraft
+    accumulator: SnapshotDraft
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:

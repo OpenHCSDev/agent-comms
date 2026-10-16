@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import reprlib
 from typing import ClassVar
 
 from .agent_events import ToolStart
@@ -29,14 +30,17 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def caption(cls, name: str, detail: str = "") -> str:
+    def caption(cls, name: str, detail: str = "", *, arguments: object = None) -> str:
         declaration = cls.for_name(name)
-        return declaration.label + (" " + detail.strip() if detail else "")
+        # Opaque external arguments stay opaque. reprlib bounds their display;
+        # captioning must not parse execution records or resolve file claims.
+        preview = detail.strip() or (reprlib.repr(arguments) if arguments is not None else "")
+        return declaration.label + (" " + preview if preview else "")
 
     @classmethod
     def start(cls, call_id: str, name: str, arguments: dict[str, object], *, detail: str = "") -> ToolStart:
         declaration = cls.for_name(name)
-        return ToolStart(call_id, name, cls.caption(name, detail), arguments, declaration.acp_kind)
+        return ToolStart(call_id, name, cls.caption(name, detail, arguments=arguments), arguments, declaration.acp_kind)
 
     @classmethod
     def result_diff(cls, result, ok):

@@ -152,7 +152,8 @@ class PendingTool(ToolState):
     wire_tag = 'pending'
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
-        return (ActiveItem(message.id, part.id, ActivityState.WORKING, self.call(part).title),)
+        call = self.call(part)
+        return (StartedItem(message.id, part.id, ActivityState.WORKING, call.title, call),)
 
 
 class RunningTool(PendingTool):

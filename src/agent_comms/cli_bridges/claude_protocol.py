@@ -13,6 +13,7 @@ from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_valid
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -24,9 +25,11 @@ from agent_comms.transcript_events import (
 from .shared import (
     ActiveItem,
     FinishedItem,
+    CompletedItem,
+    StartedItem,
+    AllTurnsEnded,
     ToolCall,
     TranscriptUpdate,
-    TurnEnded,
     TurnStarted,
     IncomingFrame,
     MonitorFrame,
@@ -110,8 +113,17 @@ class ClaudeSession:
     tools: dict[str, ToolCall] = field(default_factory=dict)
     catching_up: bool = True
 
-    def started(self, call: ToolCall) -> None:
+    def started(self, call: ToolCall) -> TranscriptUpdate:
         self.tools[call.id] = call
+        if not self.turn:
+            if self.catching_up:
+                return ActiveItem(self.turn, call.id, ActivityState.WORKING, call.title)
+            raise ValueError('Claude started a tool before identifying its turn')
+        return StartedItem(self.turn, call.id, ActivityState.WORKING, call.title, call)
+
+    def ended(self) -> AllTurnsEnded:
+        self.tools.clear()
+        return AllTurnsEnded()
 
     def result_for(self, tool_id: str) -> ToolCall | None:
         call = self.tools.pop(tool_id, None)
@@ -213,9 +225,8 @@ class ToolUse(AssistantBlock):
     input: JsonValue
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        call = ToolCall(self.id, self.name, self.input)
-        session.started(call)
-        return (ActiveItem(session.turn, self.id, ActivityState.WORKING, call.title),)
+        call = ToolCall(self.id, self.name, self.input, started_at=RecordedEventTime(record.timestamp))
+        return (session.started(call),)
 
 
 class AssistantMessage(WireModel):
@@ -308,7 +319,7 @@ class UserText(UserBlock, TextContent):
 
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         if self.text.startswith('[Request interrupted by user'):
-            return (TurnEnded(),)
+            return (session.ended(),)
         return super().updates(record, session) + record.origin.prompt(record, self.text, session)
 
 
@@ -391,8 +402,8 @@ class ToolResult(UserBlock, ContentBlocks):
         if call is None:
             return ()  # Only an initial window may lack the original tool start.
         text = '\n'.join(part.result_text() for part in self.content)
-        return (FinishedItem(session.turn, self.tool_use_id, call.finished(text, not self.is_error)),
-                ActiveItem(session.turn, self.tool_use_id, ActivityState.WORKING, ''))
+        return (CompletedItem(session.turn, self.tool_use_id, call.finished(text, not self.is_error)),
+                TurnStarted())
 
 
 class UserMessage(ContentBlocks):
@@ -439,7 +450,7 @@ class TurnDuration(SystemEvent):
     wire_tag = 'turn_duration'
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return (TurnEnded(),)
+        return (session.ended(),)
 
 
 class CompactBoundary(SystemEvent, TimedRecord):
