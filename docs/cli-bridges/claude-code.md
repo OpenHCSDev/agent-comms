@@ -29,8 +29,9 @@ Monitor owns notification injection and its duration. The bridge owns its Core
 watch child and joins that child when cancelled. The shared session lock prevents
 two watchers for the same session, even with different state directories.
 Before reading the inbox, the bridge emits a fresh challenge and waits for that
-challenge in this session's existing transcript subscription. A wrong receiver
-fails after 30 seconds without consuming or acknowledging a message.
+challenge in this session's existing transcript subscription. Without that proof
+it never consumes or acknowledges a message. Monitor owns notification scheduling
+and cancellation; an internal startup timer cannot safely guess its latency.
 
 ## What is shared
 
@@ -64,7 +65,10 @@ fails after 30 seconds without consuming or acknowledging a message.
 
 Flushed stdout parts are **emitted**, not delivered. Core's bridge watch uses
 explicit acknowledgment: reading the stream never marks its messages read.
-The existing Claude record decoder recognizes monitor task envelopes at ingress.
+The existing Claude record decoder recognizes task envelopes at ingress in both
+user records and queued-command attachments. Their shared TaskContent owns decoding;
+ClaudeSession supplies the selected transcript's identity. A pending queue-operation
+record is not proof that the session received its notification.
 The journal retains each numbered part's actual session record and body. Only
 parts 1..n from the target session, with the original sender and exact concatenated
 message body, change delivery to **delivered** and acknowledge that Core message.
