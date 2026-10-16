@@ -7,7 +7,6 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import agent_events as ae
 from agent_comms.acp_extension import (
     CoordinationChangedUpdate,
     TranscriptSnapshotUpdate,
@@ -22,6 +21,7 @@ from agent_comms.runtime import RuntimeProxy, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
+from native_backend_fixture import native_backend_fixture
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
@@ -118,73 +118,62 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
+@pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
 async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, monkeypatch):
-    comms = wire(tmp_path / ("long-wire-" * 16))
-    owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
-    client = canonical_agent(comms)
-    updates = []
+    long_root = tmp_path / ("long-wire-" * 16)
+    long_root.mkdir()
+    async with native_backend_fixture(long_root) as native:
+        await native.author_history()
+        native.provider.text = "socket roundtrip"
+        updates = []
 
-    class Client:
-        async def session_update(self, session_id, update):
-            updates.append(update)
+        class Client:
+            async def session_update(self, session_id, update):
+                updates.append(update)
 
-    client.on_connect(Client())
-    response = await owner.new_session(str(tmp_path / "project"))
+        async with native.open_owner(runtime_enabled=True) as (owner, session):
+            client = canonical_agent(wire(native.root))
+            client.on_connect(Client())
+            path = socket_path(native.root, os.getpid())
+            assert path.exists()
+            proxy = RuntimeProxy(client, session, path)
+            try:
+                metadata = await proxy.subscribe()
+                assert next(f for f in decode_updates(metadata)
+                            if isinstance(f, CoordinationChangedUpdate)).owner_pid == os.getpid()
+                updates.clear()
+                result = await proxy.request(
+                    "prompt", prompt=[{"type": "text", "text": "socket roundtrip"}]
+                )
+                assert result["stopReason"] == "end_turn"
+                await until(
+                    lambda: any(
+                        any(isinstance(f, TurnChangedUpdate)
+                            and not f.state.busy and f.state.finished_turn_id is not None
+                            for f in decode_updates(u.get("_meta")))
+                        for u in updates
+                    )
+                )
+                assert any("socket roundtrip" in u.get("content", {}).get("text", "") for u in updates)
+                assert native.provider.posts == 1
+                assert await proxy.request("cancel") == {}
+                compact_calls = []
 
-    async def native_events(_bin, _args, task, *_pos, **options):
-        native_id = "a" * 32
-        with options["send_boundary"](None, native_id, task) as admitted:
-            assert admitted
-        assert options["native_start"](None, native_id, task)
-        yield ae.Chunk(text="socket roundtrip")
-        yield ae.StreamSettled()
-        yield ae.Done(ok=True, text="socket roundtrip")
+                async def compact_context(runner, session_id, instructions):
+                    compact_calls.append((session_id, instructions))
+                    return PlacedCompaction("summary", "first-kept", 1200)
 
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", native_events)
-    path = socket_path(comms.root, os.getpid())
-    assert path.exists()  # Actual bind and the exchanges below prove OS path admission.
-    proxy = RuntimeProxy(client, response.session_id, path)
-    try:
-        metadata = await proxy.subscribe()
-        assert (
-            next(
-                f for f in decode_updates(metadata) if isinstance(f, CoordinationChangedUpdate)
-            ).owner_pid
-            == os.getpid()
-        )
-        updates.clear()
-        result = await proxy.request(
-            "prompt", prompt=[{"type": "text", "text": "socket roundtrip"}]
-        )
-        assert result["stopReason"] == "end_turn"
-        await until(
-            lambda: any(
-                any(isinstance(f, TurnChangedUpdate)
-                    and not f.state.busy and f.state.finished_turn_id is not None
-                    for f in decode_updates(u.get("_meta")))
-                for u in updates
-            )
-        )
-        assert any("socket roundtrip" in u.get("content", {}).get("text", "") for u in updates)
-        assert await proxy.request("cancel") == {}
-        compact_calls = []
-
-        async def compact_context(runner, session_id, instructions):
-            compact_calls.append((session_id, instructions))
-            return PlacedCompaction("summary", "first-kept", 1200)
-
-        monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
-        assert FieldCodec.decode(
-            CompactionOutcome, await proxy.request("compact", instructions="focus")
-        ) == PlacedCompaction("summary", "first-kept", 1200)
-        assert compact_calls == [(response.session_id, "focus")]
-        with pytest.raises(ValueError, match="not registered"):
-            RuntimeProxy(client, "missing-thread", path)
-    finally:
-        await proxy.close()
-        await owner.shutdown()
-    assert not path.exists()
+                monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
+                assert FieldCodec.decode(
+                    CompactionOutcome, await proxy.request("compact", instructions="focus")
+                ) == PlacedCompaction("summary", "first-kept", 1200)
+                assert compact_calls == [(session, "focus")]
+                with pytest.raises(ValueError, match="not registered"):
+                    RuntimeProxy(client, "missing-thread", path)
+            finally:
+                await proxy.close()
+                await client.shutdown()
+        assert not path.exists()
 
 
 @pytest.mark.asyncio

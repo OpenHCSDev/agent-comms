@@ -27,7 +27,6 @@ from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import (
     ClearQueueRequest,
-    ContextUsage,
     CoordinationChangedUpdate,
     GoalChangedUpdate,
     InputDeliveryChangedUpdate,
@@ -191,25 +190,21 @@ class TestHandlers:
         assert changed.config_options[1].current_value == "high"
         assert agent._comms.registry.require("proj").thinking_level is HighThinkingLevel
 
-    async def test_attach_metadata_restores_saved_context_without_reading_transcript(
-        self, tmp_path
-    ):
-        agent = self._agent(tmp_path)
-        await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.agents.observe_runtime_info(
-            "proj", ae.AgentInfo(model="test/model", context_used=38723, context_size=272000)
-        )
-        reopened = canonical_agent(wire(agent._comms.root))
-        assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
-            0
-        ].context_usage == ContextUsage(38723, 272000)
-        agent._comms.agents.observe_runtime_info(
-            "proj", ae.ContextInfo(context_used=None, context_size=272000)
-        )
-        assert (
-            facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[0].context_usage
-            is None
-        )
+    async def test_reopened_metadata_reports_observed_usage(self, native_backend):
+        native = native_backend
+        await native.author_history()
+        async with native.open_owner() as (agent, session):
+            agent._comms.agents.observe_runtime_info(
+                session, ae.AgentInfo(model="response-local/fixture", context_used=38723, context_size=272000)
+            )
+            reopened = canonical_agent(wire(native.root))
+            try:
+                answer, = facts(await reopened.sessions.metadata(session), CoordinationChangedUpdate)
+                assert answer.context_usage.used == 38723
+                assert answer.context_usage.size == 272000
+            finally:
+                await reopened.shutdown()
+        assert native.provider.posts == 0
 
     async def test_unknown_model_is_rejected(self, tmp_path, monkeypatch):
         from acp import RequestError
