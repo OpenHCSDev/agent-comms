@@ -18,7 +18,7 @@ query = GoalHistoryQuery(scope=OneGoal(goal.id), cursor=Before(sequence), limit=
 payload = FieldCodec.encode(query)
 ```
 
-Core requests, native tools, tests and the one-shot report-retirement tool's state consumers are migrated. Toad owns its paired consumer/UI change; there is no compatibility path.
+Core requests, native tools, tests and the one-shot report-retirement tool's state consumers are migrated. The paired Toad implementation owner is not confirmed; Codex must assign one. There is no compatibility path.
 
 ## Preserved behavior and bounds
 
@@ -64,7 +64,7 @@ Removed owner paths: optional retained sequence, optional scope/cursor scalars, 
 
 - Codex owns current-main integration/default installation. Keep #966's stopped-worker claim carry and UNKNOWN-launch handling intact. Its `_condition()` already serves the public SELECT builder and deletion; do not restore `_query` or a second predicate compiler.
 - Existing goal journals need **four nonunique indexes only** through `tools/cutover/goal_history_indexes.py`, default read-only plan, reviewed apply with old strict writers stopped. Do not use the superseded five-index/unique-pending proposal. No goal rows/table/state labels are rewritten.
-- Toad-close-lifecycle owns nested query consumption, newest-first/older-page modal behavior and isolated physical UI acceptance. Do not install this standalone wheel over newer main work; integrate first.
+- **Paired Toad migration blocks merge/install.** Toad-close-lifecycle explicitly retained #677 only and never claimed or edited GoalDetails; the earlier ownership handoff was wrong. Codex must assign/confirm a paired implementation owner for nested queries, newest-first/older-page modal behavior and isolated physical UI acceptance. The existing reverse/full-history consumer must migrate in the paired change; otherwise ordering is wrong and history is clipped to one page. Do not install this standalone wheel over newer main work.
 - Separate pre-existing defect: `thread_format_retirement.py` still accesses the removed `Thread.last_goal_report_turn` carrier member. Its earlier 11 preservation failures were reproduced on the untouched baseline; this change migrates its state comparisons but does not claim its carrier contract is repaired. Codex was asked to assign that repair; those failures are not included in the 42-pass selection.
 
 ## Retained evidence and scratch ownership
