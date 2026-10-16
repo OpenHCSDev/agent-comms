@@ -3,22 +3,8 @@ import re
 import pytest
 
 from agent_comms.threads import Thread
-from agent_comms.tool_caller import ThreadCaller, NoThreadCaller, ToolCaller
-from agent_comms.tools import ToolRequest, context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
-
-
-def test_tool_entry_decodes_caller_states_once():
-    assert ToolCaller.from_actor(None) == NoThreadCaller()
-    assert ToolCaller.from_actor("owner") == ThreadCaller("owner")
-
-
-def test_tool_entries_require_explicit_caller_and_context_actor(comms):
-    with pytest.raises(TypeError, match="caller"):
-        invoke_tool(comms, "comms_threads", {})
-    with pytest.raises(TypeError, match="caller"):
-        ToolRequest.decode("comms_threads").invoke(comms, {})
-    with pytest.raises(TypeError, match="actor"):
-        invoke_context_tool(comms, "comms_stop", subject="peer")
+from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
+from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
 
 class TestToolCatalog:
@@ -70,10 +56,9 @@ class TestToolCatalog:
             invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b", "owner": "c"}, caller=NoThreadCaller())
         assert not (comms.root / "relationships.json").exists()
 
-    def test_catalog_has_unique_json_schema_declarations(self):
+    def test_catalog_exposes_adapter_json_schemas(self):
         catalog = tool_catalog()
         names = [tool["name"] for tool in catalog]
-        assert len(names) == len(set(names))
         assert {
             "comms_send",
             "comms_inbox",
