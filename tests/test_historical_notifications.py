@@ -104,10 +104,9 @@ def test_unshown_assignment_resolves_running_turn_as_timed_queue():
     from agent_comms.notification_assignment import (
         AssignmentActivityEvidence,
         NotShownContextEvidence,
-        QueuedProgress,
-        SentProgress,
         UnansweredResponse,
     )
+    from agent_comms.notification_progress import QueuedProgress, SentProgress
 
     pending = AssignmentActivityEvidence(
         False, None, NotShownContextEvidence(), UnansweredResponse()
@@ -138,9 +137,9 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
     from agent_comms.notification_assignment import (
         AssignmentActivity,
-        ShownToModelProgress,
         UnansweredResponse,
     )
+    from agent_comms.notification_progress import ShownToModelProgress
 
     activity = AssignmentActivity(
         triage_inflight=False,
@@ -178,11 +177,9 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     from agent_comms.notification_assignment import (
         AnsweredResponse,
         AssignmentActivity,
-        QueuedProgress,
-        SentProgress,
-        ShownToModelProgress,
         UnansweredResponse,
     )
+    from agent_comms.notification_progress import QueuedProgress, SentProgress, ShownToModelProgress
 
     sent_activity = AssignmentActivity(
         triage_inflight=False,
@@ -239,11 +236,11 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         updated_at_ms=2_000,
     )
 
-    assert sent.state.startswith("Sent ") and sent.read_at_ms is None
-    assert queued.state.startswith("Queued ") and queued.read_at_ms is None
-    assert read.state.startswith("Read ") and read.read_at_ms == 2_000
+    assert sent.state.startswith("Sent ") and sent.progress == SentProgress(1_000)
+    assert queued.state.startswith("Queued ") and queued.progress == QueuedProgress(1_000)
+    assert read.state.startswith("Read ") and read.progress == ShownToModelProgress(2_000)
     assert answered.state.startswith("Answered ") and answered.answered_at_ms == 3_000
-    assert delivered.state.startswith("Read ") and delivered.read_at_ms == 2_000
+    assert delivered.state.startswith("Read ") and delivered.progress == ShownToModelProgress(2_000)
     assert delivered_answer.state.startswith("Answered ")
     assert delivered_answer.answer == MessageReference(99, "durable-reply")
     assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
