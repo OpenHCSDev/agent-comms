@@ -55,21 +55,23 @@ reader context are deleted. There are no production references to the deleted
   Failed verification now explicitly reports durability UNKNOWN rather than hiding
   that uncertainty behind only “unavailable”. No replay permission was added.
 
-## Durable cutover — not performed on the live root
+## Installed migration — 2026-10-16
 
-`tools/cutover/carry_resource_claims_once.py --bus /explicit/bus.jsonl` plans by
-default. `--apply` is an offline operation after old writers stop. It reuses the
-physical lock and canonical checkpoint installer, verifies the original final seal,
-exact preceding schema and source revision, then atomically reconstructs the
-checkpoint with the two declared claim relations from original verified envelopes.
-Bus bytes and every non-seal marker fact remain unchanged. Foreign, changed, partial
-and unfinished sources refuse. An interrupted apply remains UNKNOWN; do not retry
-or replay application input to conceal it.
+The live installation added `claim_commits` and `resource_claims`, preserving all
+6,083,204,606 original bus bytes through sequence 12537. The installed runtime is
+Core `50f2b0e0` with Toad `79cd79d24`; eighteen retained workers and two separately
+stopped workers were started through the existing owner. Both bridges are running.
 
-The new runtime has no old-shape reader or scan fallback. Integrate current main
-before default publication; do not install the old-base standalone wheel over
-newer unrelated work. Delete the temporary carry tool after reviewed cutover and
-acceptance. No source data, user session/auth or UNKNOWN input was modified here.
+Ten subsequent live claim changes from three agents were read through the installed
+indexed claim and operation lookups. The two-minute sample found wire waiters in
+4 of 120 one-second samples, with a maximum of five; this is not a universal
+latency bound. Original sessions and uncertain inputs were preserved.
+
+The temporary migration tool and its two migration-only tests are deleted. Normal
+claim acquisition, release, consumed-operation, conflict and index checks remain.
+The original backups, installation result, live claim observations and lock sample
+are retained under `/home/ts/.cache/agent-scratch/claims-migration-20261016-1450/`.
+The new runtime has no old-schema reader or history-scan fallback.
 
 ## Measured actual wire-lock scope
 

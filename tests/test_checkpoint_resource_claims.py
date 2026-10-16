@@ -1,22 +1,17 @@
 """Checkpoint commit owns current membership and consumed-operation history."""
-from contextlib import closing
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.checkpoint_seals import FinalSeal
 from agent_comms.comms import Comms
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, WakeAdmission
-from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
-from agent_comms.private_bus_checkpoint import CertifiedSourceRead, ClaimCommits, ResourceClaims, _path
+from agent_comms.private_bus_checkpoint import CertifiedSourceRead, ClaimCommits
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
-from carry_resource_claims_once import carry
 
 
 def authored(tmp_path):
@@ -44,23 +39,6 @@ def admitted(comms, admission, paths):
             claims=tuple(ExistingFileClaim(path) for path in paths),
             _locked_registry_snapshot=snapshot, _bus_lock=lock, _admission=admission,
         )
-
-
-def previous_checkpoint(comms, *, foreign=False):
-    """Author the preceding physical access paths, preserving sealed bus bytes."""
-    with comms.bus.log.locked() as lock:
-        source = lock.certified_read()
-        witness, marker = source.witness, source.marker
-        checkpoint = _path(comms.bus.log.path)
-        with closing(CoordinationStore.writer(checkpoint)) as db, db:
-            if foreign:
-                db.execute('CREATE TABLE unexpected (value TEXT)')
-            else:
-                for row in (ResourceClaims, ClaimCommits):
-                    db.execute(f'DROP TABLE "{row.declared_name}"')
-        published = replace(marker)
-        published.seal_with(FinalSeal.capture(witness, checkpoint))
-        comms.bus.log.write_metadata_unlocked(published)
 
 
 def test_multi_resource_admission_consumes_one_operation_even_after_release(tmp_path):
@@ -117,41 +95,3 @@ def test_resource_and_operation_queries_use_their_unique_indexes(tmp_path):
             plan = [row[3] for row in source.connection.execute('EXPLAIN QUERY PLAN ' + sql)]
             assert any('SEARCH' in detail and 'INDEX' in detail for detail in plan)
             assert not any('SCAN ' in detail for detail in plan)
-
-
-def test_explicit_carry_preserves_bytes_and_recovers_current_and_used_operations(tmp_path):
-    comms, paths, admission = authored(tmp_path)
-    original = admitted(comms, admission, paths[:2])
-    bus_bytes = comms.bus.log.path.read_bytes()
-    previous_checkpoint(comms)
-    checkpoint = _path(comms.bus.log.path)
-    checkpoint_bytes = checkpoint.read_bytes()
-    metadata_bytes = comms.bus.log.metadata_path.read_bytes()
-    with pytest.raises(RelationViolationError, match='checkpoint schema'):
-        comms.bus.log.claim_projection()
-    plan = carry(comms.bus.log.path)
-    assert not plan['applied'] and not plan['already_carried']
-    assert checkpoint.read_bytes() == checkpoint_bytes and comms.bus.log.path.read_bytes() == bus_bytes
-    backup = tmp_path / 'migration-backup'
-    applied = carry(comms.bus.log.path, apply=True, backup=backup)
-    assert applied['applied'] and applied['bus_bytes_rewritten'] == 0
-    assert (backup / checkpoint.name).read_bytes() == checkpoint_bytes
-    assert (backup / comms.bus.log.metadata_path.name).read_bytes() == metadata_bytes
-    assert comms.bus.log.path.read_bytes() == bus_bytes
-    with Comms(comms.root).bus.log.certified_read() as source:
-        assert source.claim_operation_used(admission.operation_id)
-        assert all(source.claim(str(path)).seq == original.seq for path in paths[:2])
-    assert carry(comms.bus.log.path, apply=True)['already_carried']
-    with pytest.raises(RelationViolationError, match='already applied'):
-        carry(comms.bus.log.path, apply=True, backup=tmp_path / 'second-attempt')
-    assert not (tmp_path / 'second-attempt').exists()
-
-
-def test_carry_refuses_a_foreign_schema_without_changing_anything(tmp_path):
-    comms, _, _ = authored(tmp_path)
-    previous_checkpoint(comms, foreign=True)
-    checkpoint = _path(comms.bus.log.path)
-    before = (comms.bus.log.path.read_bytes(), checkpoint.read_bytes(), comms.bus.log.metadata_path.read_bytes())
-    with pytest.raises(RelationViolationError, match='Foreign, changed'):
-        carry(comms.bus.log.path, apply=True)
-    assert before == (comms.bus.log.path.read_bytes(), checkpoint.read_bytes(), comms.bus.log.metadata_path.read_bytes())
