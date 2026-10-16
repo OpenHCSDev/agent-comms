@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -153,24 +154,64 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     assert comms.bus.pending_count("new_user", "peer") == before
 
 
-def test_marker_changed_during_page_fails_before_basis_issued(tmp_path: Path, monkeypatch):
+@pytest.mark.parametrize("marked_sender", ("peer", "other"))
+def test_read_progress_during_fetch_does_not_invalidate_page(
+    tmp_path: Path, monkeypatch, marked_sender,
+):
     comms = wire(tmp_path)
-    comms.registry.declare(_peer(tmp_path, "peer"))
+    for name in ("peer", "other"):
+        comms.registry.declare(_peer(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send("peer", viewer, "painted")
+    messages = {name: comms.messaging.send(name, viewer, name) for name in ("peer", "other")}
     original = comms.bus.conversation_page
 
     def interpose(*args, **kwargs):
         page = original(*args, **kwargs)
         comms.bus.reads.mark_displayed(
             viewer,
-            comms.bus.reads.capture(viewer, page.messages, comms.registry.snapshot(), comms.bus.log.path),
+            comms.bus.reads.capture(
+                viewer, (messages[marked_sender],), comms.registry.snapshot(), comms.bus.log.path,
+            ),
         )
         return page
 
     monkeypatch.setattr(comms.bus, "conversation_page", interpose)
-    with pytest.raises(ValueError, match="changed while paging"):
-        comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    assert page.messages == (messages["peer"],)
+    assert page.display_basis is not None and not page.display_basis.older_unread
+    _mark(comms, "peer", tmp_path, page)
+    assert comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot()) == frozenset(
+        (messages["peer"].seq, messages[marked_sender].seq)
+    )
+
+
+def test_read_progress_after_older_check_keeps_conservative_page(tmp_path: Path, monkeypatch):
+    comms = wire(tmp_path)
+    comms.registry.declare(_peer(tmp_path, "peer"))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    older = comms.messaging.send("peer", viewer, "older")
+    newest = comms.messaging.send("peer", viewer, "newest")
+    scan = comms.bus.log._record_snapshot
+
+    @contextmanager
+    def progress_after_scan(*args, **kwargs):
+        with scan(*args, **kwargs) as source:
+            yield source
+        comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
+            viewer, (older,), comms.registry.snapshot(), comms.bus.log.path,
+        ))
+
+    monkeypatch.setattr(comms.bus.log, "_record_snapshot", progress_after_scan)
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=1)
+    assert page.messages == (newest,)
+    assert page.display_basis is not None and page.display_basis.older_unread
+    with pytest.raises(ValueError, match="contiguous"):
+        _mark(comms, "peer", tmp_path, page)
+    assert comms.bus.pending_count(viewer, "peer") == 1
+    fresh = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=1)
+    assert not fresh.display_basis.older_unread
+    _mark(comms, "peer", tmp_path, fresh)
+    assert comms.bus.pending_count(viewer, "peer") == 0
 
 
 def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):

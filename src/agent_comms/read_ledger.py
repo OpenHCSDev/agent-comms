@@ -76,10 +76,6 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
             return None
         return info.st_dev, info.st_ino
 
-    def revision(self) -> FileRevision | None:
-        """Identify the read state used while a display page is prepared."""
-        return FileRevision.capture(self.path)
-
     @staticmethod
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
         from .channel_targets import BuiltinChannel, is_channel_target
