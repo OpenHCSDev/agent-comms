@@ -123,9 +123,9 @@ class ToolArguments(WireModel):
 
     @classmethod
     def build_call(cls, started_at: EventTime, call_id: str, name: str, raw: JsonValue, *,
-                   call_type: type[Call] = ToolCall, detail: str | None = None) -> Call:
+                   call_type: type[Call] = ToolCall) -> Call:
         declaration = ToolDeclaration.for_name(name)
         arguments = declaration.recorded_arguments(cls, raw)
         return call_type(started_at, call_id, name, raw,
-                         detail=declaration.command_detail(arguments.command) if detail is None else detail,
+                         detail=declaration.command_detail(arguments.command),
                          path=declaration.file_location(arguments.path))

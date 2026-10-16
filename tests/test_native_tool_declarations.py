@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from dataclasses import dataclass
 
 import acp
 import pytest
@@ -10,7 +11,7 @@ from acp.schema import ToolCallStart
 from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.comms import Comms
-from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
+from agent_comms.native_tools import ArgumentTool, BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
 from agent_comms.tool_declaration import ToolArguments, ToolCall, ToolDeclaration, UndeclaredTool
 from agent_comms.recorded_time import UnrecordedEventTime
 from agent_comms.pi_payloads import ToolCallContent
@@ -20,13 +21,22 @@ pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 async def test_new_tool_declaration_drives_presentation_without_coding_permission(acp_tools):
-    class InspectFixtureTool(ToolDeclaration):
+    @dataclass(frozen=True, kw_only=True)
+    class InspectFixtureTool(ArgumentTool):
         acp_kind = "search"
         label = "Inspect"
+        command: str
+
+        @property
+        def detail(self):
+            return self.command
+
+        @classmethod
+        def command_detail(cls, command):
+            return command
 
     event = events.ToolStart.from_call(ToolArguments.build_call(
-        UnrecordedEventTime(), "case", "inspect_fixture", {"query": "new declaration"},
-        detail="new declaration"))
+        UnrecordedEventTime(), "case", "inspect_fixture", {"command": "new declaration"}))
     assert (event.title, event.kind) == ("Inspect new declaration", "search")
     owner, received = acp_tools
     await owner._emit_event("declared-tool", event, owner.sessions.client)
@@ -36,7 +46,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     assert (update.kind, update.title, update.raw_input) == (
         "search",
         "Inspect new declaration",
-        {"query": "new declaration"},
+        {"command": "new declaration"},
     )
     with pytest.raises(ValueError):
         CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")

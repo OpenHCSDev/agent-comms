@@ -343,13 +343,9 @@ class ToolItem(Item, ABC):
     @abstractmethod
     def succeeded(self) -> bool: ...
 
-    @property
-    def tool_detail(self) -> str | None:
-        return None
-
     def call(self, started_at: EventTime = UnrecordedEventTime()) -> ToolCall:
         return ToolArguments.build_call(started_at, self.id, self.tool_name, self.arguments,
-                                        detail=self.tool_detail, call_type=ToolCall)
+                                        call_type=ToolCall)
 
     def accumulator(self, started_at: EventTime) -> ToolCall:
         return self.call(started_at)
@@ -376,10 +372,6 @@ class CommandItem(ToolItem):
     @property
     def arguments(self) -> JsonValue:
         return {'command': self.command}
-
-    @property
-    def tool_detail(self) -> str:
-        return self.command
 
     @property
     def output(self) -> str:
