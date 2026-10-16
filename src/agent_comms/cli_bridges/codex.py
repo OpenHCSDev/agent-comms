@@ -120,7 +120,7 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
         async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:
             for part in self.incoming_frame(message).parts:
                 await codex.message(part, message.message_id)
-        return await self.finish_delivery(message, DeliveredOutcome)
+        return DeliveredOutcome
 
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
         async with CodexConnection.open(self.options.socket, self.binding.thread) as codex:

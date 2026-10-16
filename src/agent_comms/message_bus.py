@@ -21,7 +21,6 @@ from .read_basis import (
     ListedDeliveries,
     MessageDisplayScope,
     WatchAcknowledgment,
-    OnReadWatchAcknowledgment,
 )
 from .routing import DeliveryScope
 from .store_files import _store_lock
@@ -148,7 +147,7 @@ class MessageBus:
             )
             return list(page.messages)
 
-    async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment] = OnReadWatchAcknowledgment) -> AsyncIterator[Message]:
+    async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment]) -> AsyncIterator[Message]:
         """Yield unread messages, recording only messages the caller takes.
 
         Notifications and inbox reads use the same owners as native delivery.
