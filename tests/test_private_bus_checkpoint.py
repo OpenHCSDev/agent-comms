@@ -54,7 +54,7 @@ def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
     return witness, tuple(captured), more
 
 
-def test_claim_barrier_retains_post_durability_marker_sample(tmp_path, monkeypatch):
+def test_claim_barrier_lends_the_verified_checkpoint_marker(tmp_path, monkeypatch):
     from agent_comms.wire_log import WireLog
 
     comms, root_id = _root(tmp_path)
@@ -70,8 +70,9 @@ def test_claim_barrier_retains_post_durability_marker_sample(tmp_path, monkeypat
     monkeypatch.setattr(WireLog, "read_metadata_unlocked", observe)
     with comms.bus.log.locked() as lock:
         source = lock.certified_read()
-        # One gate read, then the original post-fsync currentness sample.
-        assert reads == [source.marker, source.marker]
+        # The gate lends its one marker; the opened checkpoint verifies its
+        # sealed original prefix, rather than inventing another marker owner.
+        assert reads == [source.marker]
         assert source.marker.root_id == root_id
         assert source.marker.last_seq == first.seq
         source.require_current()
@@ -79,7 +80,7 @@ def test_claim_barrier_retains_post_durability_marker_sample(tmp_path, monkeypat
     reads.clear()
     with comms.bus.log.locked() as lock:
         source = lock.certified_read()
-        assert reads == [source.marker, source.marker]
+        assert reads == [source.marker]
         assert source.marker.last_seq == second.seq
         source.require_current()
 

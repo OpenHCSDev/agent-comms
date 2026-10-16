@@ -1466,7 +1466,7 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *, sh
             db.execute("PRAGMA query_only=ON")
         except (sqlite3.Error, OSError) as error:
             raise RelationViolationError(
-                "Private bus checkpoint verification is unavailable."
+                "Private bus checkpoint verification is unavailable; durability is UNKNOWN."
             ) from error
         yield CertifiedSourceRead(bus.path, marker, db, stream, saved)
 
