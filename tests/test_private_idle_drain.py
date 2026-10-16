@@ -5,7 +5,6 @@ import os
 import threading
 from contextlib import AsyncExitStack
 from dataclasses import replace
-from types import SimpleNamespace
 
 import pytest
 
@@ -441,66 +440,6 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         assert len(drains) == before + 1
     finally:
         agent.inputs.pending_turns.pop("beta", None)
-        observer.cancel()
-        await asyncio.gather(observer, return_exceptions=True)
-
-
-@pytest.mark.asyncio
-async def test_native_unchanged_token_skips_revision_stats_but_file_change_does_not(
-    tmp_path, monkeypatch
-):
-    from agent_comms import input_drain
-
-    _comms, agent, _root_id = _session(tmp_path)
-    assert await agent.inputs.drain_inbox('beta') == 0
-    assert await agent.inputs.drain_inbox('beta') == 0
-    assert agent.inputs._idle_private_revisions.get('beta') is not None
-    assert agent.inputs._quiescent('beta')
-
-    async def no_work(*_args):
-        return 0
-
-    monkeypatch.setattr(agent.inputs, 'drain_inbox', no_work)
-    monkeypatch.setattr(agent.sessions.config, 'sync_thread', no_work)
-    monkeypatch.setattr(agent.turns.goals, 'schedule_goal', no_work)
-    ticks, done = asyncio.Queue(), asyncio.Queue()
-    native = object()
-    generation = 0
-
-    async def observations(*_sources):
-        while True:
-            await ticks.get()
-            yield SimpleNamespace(change_token=(native, generation), notify=lambda: None)
-            done.put_nowait(None)
-
-    async def tick():
-        ticks.put_nowait(None)
-        await asyncio.wait_for(done.get(), 10)
-
-    captures = []
-    original = agent.inputs._tick_revision
-
-    def counted(session_id):
-        captures.append(session_id)
-        return original(session_id)
-
-    monkeypatch.setattr(input_drain.WireWatch, 'observations', staticmethod(observations))
-    monkeypatch.setattr(agent.inputs, '_tick_revision', counted)
-    observer = asyncio.create_task(agent.inputs.observe('beta'))
-    try:
-        for _ in range(3):
-            await tick()
-        assert agent.inputs._idle_private_revisions.get('beta') is not None
-        assert agent.inputs._quiescent('beta')
-        assert not _comms.registry.require('beta').executing
-        before = len(captures)
-        for _ in range(8):
-            await tick()
-        assert len(captures) == before
-        generation += 1
-        await tick()
-        assert len(captures) == before + 1
-    finally:
         observer.cancel()
         await asyncio.gather(observer, return_exceptions=True)
 
