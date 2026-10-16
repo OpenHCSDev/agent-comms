@@ -11,6 +11,7 @@ from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar
 
+from .cli_options import JsonFlagRecord
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
@@ -18,7 +19,8 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadIncarnation:
+class ThreadIncarnation(JsonFlagRecord):
+    value_flag: ClassVar[str] = "--thread-incarnation"
     name: str
     created_at: float
 
