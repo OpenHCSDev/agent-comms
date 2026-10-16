@@ -26,6 +26,16 @@ def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def check_pending(updates):
+    update, = updates
+    assert isinstance(update.accumulator, PendingToolCall)
+    assert not hasattr(update.accumulator, 'arguments')
+    visible, = update.accumulator.events
+    assert visible.title == update.detail == update.accumulator.title
+    assert isinstance(visible, ToolPendingTranscript)
+    assert not {'raw_input', 'detail', 'path'} & FieldCodec.encode(visible).keys()
+
+
 async def run(options):
     core = Path(agent_comms.__file__).resolve()
     assert core.is_relative_to(options.installed.resolve()), core
@@ -42,6 +52,7 @@ async def run(options):
         messages[info['id']] = dict(info=info, parts=parts)
     assert messages, options.messages
     session = options.messages.name
+    originals[options.pending_part] = digest(options.pending_part)
     requests = []
 
     async def saved_message(request):
@@ -74,13 +85,16 @@ async def run(options):
                     part = event.properties.part
                     if isinstance(part, ToolPart) and isinstance(part.state, PendingTool):
                         report['pending_parts'] += 1
-                        update, = updates
-                        assert isinstance(update.accumulator, PendingToolCall)
-                        assert not hasattr(update.accumulator, 'arguments')
-                        visible, = update.accumulator.events
-                        assert visible.title == update.detail == update.accumulator.title
-                        assert isinstance(visible, ToolPendingTranscript)
-                        assert not {'raw_input', 'detail', 'path'} & FieldCodec.encode(visible).keys()
+                        check_pending(updates)
+        report['http_pending_parts'] = report['pending_parts']
+        # This native pending Edit survives as a part file, but its original
+        # parent header is gone. Do not fabricate one: tool states take their
+        # turn identity from the original part itself, as the live path does.
+        pending = ToolPart.model_validate_json(options.pending_part.read_bytes())
+        assert pending.sessionID == session and isinstance(pending.state, PendingTool)
+        check_pending(pending.state.present(pending))
+        report.update(pending_parts=report['pending_parts'] + 1, orphan_pending_parts=1,
+            pending_scope='actual orphan part decoder and renderer; no parent-header or full pending-stream claim')
         assert report['pending_parts'] > 0
         assert all(method == 'GET' for method in requests)
         assert all(digest(path) == original for path, original in originals.items())
@@ -102,6 +116,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--messages', required=True, type=Path)
     parser.add_argument('--parts', required=True, type=Path)
+    parser.add_argument('--pending-part', required=True, type=Path)
     parser.add_argument('--installed', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     asyncio.run(run(parser.parse_args()))

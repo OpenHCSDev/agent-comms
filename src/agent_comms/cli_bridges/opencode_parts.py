@@ -139,7 +139,7 @@ class ToolState(TaggedWire, ABC):
     finished: ClassVar[bool] = False
 
     @abstractmethod
-    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
+    def present(self, part: ToolPart) -> tuple[TranscriptUpdate, ...]: ...
 
 
 class InvokedTool(WireModel):
@@ -154,17 +154,17 @@ class InvokedTool(WireModel):
 class PendingTool(ToolState):
     wire_tag = 'pending'
 
-    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
+    def present(self, part: ToolPart) -> tuple[TranscriptUpdate, ...]:
         call = PendingToolCall(UnrecordedEventTime(), part.callID, part.tool)
-        return (StartedItem(message.id, part.id, ActivityState.WORKING, call.title, call),)
+        return (StartedItem(part.messageID, part.id, ActivityState.WORKING, call.title, call),)
 
 
 class RunningTool(InvokedTool, ToolState):
     wire_tag = 'running'
 
-    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
+    def present(self, part: ToolPart) -> tuple[TranscriptUpdate, ...]:
         call = self.call(part)
-        return (StartedItem(message.id, part.id, ActivityState.WORKING, call.title, call),)
+        return (StartedItem(part.messageID, part.id, ActivityState.WORKING, call.title, call),)
 
 
 class EndedTool(ToolState, ABC):
@@ -179,10 +179,10 @@ class EndedTool(ToolState, ABC):
     @abstractmethod
     def result(self) -> str: ...
 
-    def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
+    def present(self, part: ToolPart) -> tuple[TranscriptUpdate, ...]:
         event_time = RecordedEventTime(self.time.start / 1000)
         events = tuple(event_time.stamp(event) for event in self.call(part).finished(self.result, self.ok))
-        return (CompletedItem(message.id, part.id, events),)
+        return (CompletedItem(part.messageID, part.id, events),)
 
 
 class CompletedTool(InvokedTool, EndedTool):
@@ -233,7 +233,7 @@ class ToolPart(Part):
         return self.state.finished
 
     def present(self, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
-        return self.state.present(self, message)
+        return self.state.present(self)
 
 
 class StructuralPart(Part, ABC):
