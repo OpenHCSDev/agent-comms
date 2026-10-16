@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib import import_module
 from typing import ClassVar, TypeVar
 
 from pydantic import JsonValue
@@ -12,13 +13,20 @@ from .declared_family import DeclaredFamily
 from .recorded_time import EventTime
 
 
-class ToolDeclaration(DeclaredFamily, affix="Tool", discovery_package="agent_comms.tools"):
+class ToolDeclaration(DeclaredFamily, affix="Tool"):
     CAPTION_CHARS: ClassVar[int] = 80
     acp_kind: ClassVar[str] = "other"
     label: ClassVar[str]
 
     @classmethod
+    def _member_declarations(cls):
+        # The catalogue imports the native execution declarations it uses.
+        import_module('.tools', __package__)
+        return super()._member_declarations()
+
+    @classmethod
     def for_name(cls, name: str) -> type[ToolDeclaration] | UndeclaredTool:
+        cls._member_declarations()
         try:
             return cls.decode(name.lower())
         except ValueError:
