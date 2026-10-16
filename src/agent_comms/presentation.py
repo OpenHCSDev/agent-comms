@@ -756,6 +756,14 @@ class ThreadView:
 
 
 @dataclass(frozen=True, slots=True)
+class ListingFilter:
+    """The stopped/archived selection that produced a roster."""
+
+    show_stopped: bool = True
+    show_archived: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class CoordinationSnapshot:
     threads: tuple[ThreadView, ...]
     channels: tuple[ChannelView, ...]
@@ -766,8 +774,7 @@ class CoordinationSnapshot:
     channel_order: type[ChannelSort] = NameChannelSort
     thread_unread: Mapping[str, int] = field(default_factory=dict)
     unread_pending: frozenset[str] = frozenset()
-    show_stopped: bool = True
-    show_archived: bool = False
+    filters: ListingFilter = field(default_factory=ListingFilter)
     read_marker_notice: str | None = None
 
     @classmethod
@@ -792,8 +799,9 @@ class CoordinationSnapshot:
             ),
             unread=unread, last_sent=sent, channel_unread=channel_unread,
             references=DisplayReferences.capture(root, registry, declarations),
-            channel_order=catalog.list_order, show_stopped=show_stopped,
-            show_archived=show_archived, read_marker_notice=read_marker_notice,
+            channel_order=catalog.list_order,
+            filters=ListingFilter(show_stopped, show_archived),
+            read_marker_notice=read_marker_notice,
         )
 
     def participants(self, channel: str) -> tuple[ThreadView, ...]:

@@ -75,6 +75,13 @@ class Channel:
         builtin = self.builtin
         return builtin.matches(tags) if builtin is not None else bool(self.tags & tags)
 
+    @property
+    def tag_description(self) -> str:
+        builtin = self.builtin
+        if builtin is not None:
+            return builtin.value
+        return ', '.join(sorted(self.tags))
+
     def can_set_archived(self, archived: bool) -> bool:
         """Only nonbuiltin channels admit a changed archive preference."""
         return self.builtin is None and self.archived != archived
