@@ -1,4 +1,4 @@
-"""Read-only assignment receipt projection; never an execution or ACK authority."""
+"""Read-only assignment display; never executes or acknowledges work."""
 
 from __future__ import annotations
 
@@ -25,8 +25,47 @@ if TYPE_CHECKING:
     from .wake import NoWakeDecision, WakeDecision
 
 
-class AssignmentProgress(DeclaredFamily, affix="Progress"):
-    """The original model-context receipt owns the displayed read fact."""
+class DeliveryProgress(DeclaredFamily, affix="Progress"):
+    """One recipient's proved delivery progress, independent of wake policy."""
+
+    @abstractmethod
+    def counts(self) -> tuple[int, int]:
+        """Delivered and read contributions to a message's totals."""
+        ...
+
+
+class PendingDelivery:
+    def counts(self) -> tuple[int, int]:
+        return 0, 0
+
+
+class ReadDelivery:
+    label = "Read"
+
+    def counts(self) -> tuple[int, int]:
+        return 1, 1
+
+
+@dataclass(frozen=True)
+class UnrecordedProgress(PendingDelivery, DeliveryProgress):
+    """No recipient delivery has been recorded."""
+
+
+@dataclass(frozen=True)
+class AcknowledgedProgress(DeliveryProgress):
+    """An external client acknowledged delivery, not a model-context read."""
+
+    def counts(self) -> tuple[int, int]:
+        return 1, 0
+
+
+@dataclass(frozen=True)
+class HumanReadProgress(ReadDelivery, DeliveryProgress):
+    """The human recipient displayed the message; not model-context input."""
+
+
+class AssignmentProgress(DeliveryProgress):
+    """A native input owns its delivery time and model-read time."""
 
     label: ClassVar[str]
     answered_label: ClassVar[str] = "Answered"
@@ -35,16 +74,12 @@ class AssignmentProgress(DeclaredFamily, affix="Progress"):
     @abstractmethod
     def at_ms(self) -> int: ...
 
-    def read_fields(self) -> dict[str, int]:
-        """Read facts every notification derived from this progress carries."""
-        return {}
-
     def labelled(self, notification: MessageNotification, **fields) -> MessageNotification:
         return replace(
             notification,
-            state=notification.receipt_state(self.label, self.at_ms),
+            state=notification.timed_state(self.label, self.at_ms),
             detail="",
-            **self.read_fields(),
+            progress=self,
             **fields,
         )
 
@@ -64,16 +99,16 @@ class AssignmentProgress(DeclaredFamily, affix="Progress"):
     ) -> MessageNotification:
         return replace(
             notification,
-            state=notification.receipt_state(self.answered_label, answered_at_ms),
+            state=notification.timed_state(self.answered_label, answered_at_ms),
             detail="",
             answer=reference,
             answered_at_ms=answered_at_ms,
-            **self.read_fields(),
+            progress=self,
         )
 
 
 @dataclass(frozen=True)
-class SentProgress(AssignmentProgress):
+class SentProgress(PendingDelivery, AssignmentProgress):
     sent_at_ms: int
 
     label = "Sent"
@@ -102,17 +137,12 @@ class QueuedProgress(SentProgress):
 
 
 @dataclass(frozen=True)
-class ShownToModelProgress(AssignmentProgress):
+class ShownToModelProgress(ReadDelivery, AssignmentProgress):
     read_at_ms: int
-
-    label = "Read"
 
     @property
     def at_ms(self):
         return self.read_at_ms
-
-    def read_fields(self):
-        return {"read_at_ms": self.read_at_ms}
 
     def selected_notification(self, notification, *, busy):
         return self.labelled(notification, busy=busy)
@@ -192,10 +222,10 @@ class UnansweredResponse(AssignmentResponse):
     def delivered_notification(self, notification, delivered_at_ms):
         return replace(
             notification,
-            state=notification.receipt_state("Read", delivered_at_ms),
+            state=notification.timed_state(ShownToModelProgress.label, delivered_at_ms),
             detail="",
             busy=False,
-            read_at_ms=delivered_at_ms,
+            progress=ShownToModelProgress(delivered_at_ms),
         )
 
 
@@ -212,11 +242,11 @@ class AnsweredResponse(AssignmentResponse):
     def delivered_notification(self, notification, delivered_at_ms):
         return replace(
             notification,
-            state=notification.receipt_state("Answered", self.received_at_ms),
+            state=notification.timed_state(AssignmentProgress.answered_label, self.received_at_ms),
             detail="",
             busy=False,
             answer=self.reference,
-            read_at_ms=delivered_at_ms,
+            progress=ShownToModelProgress(delivered_at_ms),
             answered_at_ms=self.received_at_ms,
         )
 

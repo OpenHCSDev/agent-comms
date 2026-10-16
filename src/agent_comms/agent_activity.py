@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .native_input_owner import RegistryOwner
+from .notification_assignment import AcknowledgedProgress
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
@@ -82,6 +83,7 @@ class ExternalRecipientActivity(RecipientActivity):
                 notification,
                 state="Acknowledged",
                 detail="",
+                progress=AcknowledgedProgress(),
                 priority=2,
                 busy=False,
                 changed=True,

@@ -93,6 +93,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
         triage_inflight: bool = False,
     ):
         from .presentation import MessageNotification
+        from .notification_assignment import UnrecordedProgress
 
         return MessageNotification(
             recipient,
@@ -101,6 +102,7 @@ class AssignmentState(DeclaredFamily, LifecycleState, affix="Assignment"):
             self.notification_priority,
             self.notification_busy,
             changed=self.notification_changed,
+            progress=UnrecordedProgress() if activity is None else activity.progress,
         )
 
     terminal: ClassVar[bool] = False
