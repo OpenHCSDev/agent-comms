@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-import time
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -837,11 +836,10 @@ class PeerState:
     @classmethod
     def listed(
         cls, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], slots: int,
-        *, senders: tuple[str, ...] = (), dependencies: frozenset[ThreadIncarnation] = frozenset(),
-        now: float | None = None,
+        *, now: float, senders: tuple[str, ...] = (),
+        dependencies: frozenset[ThreadIncarnation] = frozenset(),
     ) -> tuple[PeerState, ...]:
         """Senders first, then goal contacts and recent collaborators, all bounded."""
-        now = time.time() if now is None else now
         viewed = {
             view.thread.incarnation: view for view in views
             if view.status.active and view.thread.role.executable
@@ -893,7 +891,7 @@ class CoordinationSegment(InstructionSegment):
     @classmethod
     def capture(
         cls, owner: Thread, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...],
-        *, senders: tuple[str, ...] = (),
+        *, now: float, senders: tuple[str, ...] = (),
     ) -> CoordinationSegment:
         instruction = InstructionFile.read("peers.md")
         dependencies = set()
@@ -904,7 +902,7 @@ class CoordinationSegment(InstructionSegment):
             elif owner.incarnation in targets:
                 dependencies.add(view.thread.incarnation)
         peers = PeerState.listed(views, relations, cls.PEER_SLOTS,
-                                senders=senders, dependencies=frozenset(dependencies))
+                                now=now, senders=senders, dependencies=frozenset(dependencies))
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
         return cls(
             provenance=(OwnerProvenance(owner.incarnation, revision), instruction.source),
@@ -1100,14 +1098,15 @@ class TurnContext:
     segments: tuple[ContextSegment, ...]
 
     @classmethod
-    def for_inspection(cls, comms, owner: Thread) -> TurnContext:
+    def for_inspection(cls, comms, owner: Thread, *, now: float) -> TurnContext:
         """The current Core contributors, before any future original input.
 
         This is a preview through the same contributor declarations used by
         preparation. It is never a recorded SDK request or an input grant.
         """
         relations = comms.relationships.peer_relations(owner.name)
-        context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations)
+        context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations,
+                                now=now)
         for segment in owner.context_goal_segments():
             context = context.prepend(segment)
         return context.with_awareness(comms, owner, relations, blocking=True)
@@ -1162,7 +1161,7 @@ class TurnContext:
         relations: tuple[PeerRelation, ...],
         origins: tuple[MessageReference, ...] = (),
         inputs: tuple[StoredInput, ...] = (),
-        *, senders: tuple[str, ...] = (),
+        *, now: float, senders: tuple[str, ...] = (),
     ) -> TurnContext:
         source = tuple(WireProvenance(ref) for ref in origins) or (
             OwnerProvenance(owner.incarnation, turn.source_revision(owner)),
@@ -1172,7 +1171,7 @@ class TurnContext:
             owner.incarnation,
             turn,
             (
-                CoordinationSegment.capture(owner, views, relations, senders=senders),
+                CoordinationSegment.capture(owner, views, relations, now=now, senders=senders),
                 UserInputSegment(provenance=source, content=task),
             ),
         )

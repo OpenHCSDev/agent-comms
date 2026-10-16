@@ -1,4 +1,5 @@
 """Source membership, public-only capture, and selected recorded values."""
+import time
 
 from dataclasses import replace
 import hashlib
@@ -66,7 +67,7 @@ def test_current_native89_shape_and_authenticated_file_read(tmp_path):
 def test_current_core_context_is_independent_and_source_selection_is_current(tmp_path):
     comms, _ = _root(tmp_path)
     owner = comms.registry.require("Alice")
-    context = TurnContext.for_inspection(comms, owner)
+    context = TurnContext.for_inspection(comms, owner, now=time.time())
     assert FieldCodec.decode(TurnContext, FieldCodec.encode(context)) == context
     request = ContextCoreRuntimeRequest(thread=owner.name)
     assert RuntimeRequest.from_wire(request.to_wire()) == request
@@ -103,7 +104,7 @@ async def test_core_context_socket_reads_without_native_session_or_preview(tmp_p
         try:
             context = FieldCodec.decode(TurnContext, await connection.request("context_core"))
             assert context.thread == owner.incarnation
-            assert context.segments == TurnContext.for_inspection(comms, owner).segments
+            assert context.segments == TurnContext.for_inspection(comms, owner, now=time.time()).segments
             position, segment = next((i, s) for i, s in enumerate(context.segments)
                                      if any(isinstance(p, FileProvenance) for p in s.provenance))
             source = next(p for p in segment.provenance if isinstance(p, FileProvenance))

@@ -7,6 +7,8 @@ commands do not own coordination, backend or identity lifecycles.
 
 from __future__ import annotations
 
+import time
+
 import asyncio
 import json
 import os
@@ -375,7 +377,7 @@ class ContextCoreRuntimeRequest(ResultRuntimeRequest):
     def read_context(self, ctx):
         comms = ctx.server.agent._comms
         owner = self.require_owner(comms.registry.snapshot())
-        return TurnContext.for_inspection(comms, owner)
+        return TurnContext.for_inspection(comms, owner, now=time.time())
 
     async def inspect(self, ctx):
         return await Coordination.run_worker(partial(self.read_context, ctx))

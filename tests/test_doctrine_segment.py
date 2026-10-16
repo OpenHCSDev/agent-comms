@@ -1,4 +1,5 @@
 """Session rules have one source and never accumulate in turn history."""
+import time
 import pytest
 
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
@@ -30,6 +31,7 @@ def test_owner_turns_do_not_repeat_session_rules(tmp_path):
     for name in ("Alice", "Bob", "outsider"):
         context = TurnContext.for_owner(
             comms.registry.require(name), NextContextTurn(), "ping", (), (),
+            now=time.time(),
         )
         assert [type(segment) for segment in context.segments] == [
             CoordinationSegment, UserInputSegment,

@@ -1,4 +1,5 @@
 """How much one thread matters to another, and what its peers see of that."""
+import time
 
 import json
 
@@ -38,6 +39,7 @@ def _peers(comms, name):
     context = TurnContext.for_owner(
         owner, NextContextTurn(), "", comms.views.thread_views(),
         comms.relationships.peer_relations(name),
+        now=time.time(),
     )
     return next(s for s in context.segments if isinstance(s, CoordinationSegment)).peers
 
@@ -105,12 +107,13 @@ def test_peer_list_excludes_unrelated_channelmates_whatever_the_thread_count(tmp
 def _coordination_text(comms, name):
     owner = comms.registry.require(name)
     return CoordinationSegment.capture(
-        owner, comms.views.thread_views(), comms.relationships.peer_relations(name)
+        owner, comms.views.thread_views(), comms.relationships.peer_relations(name),
+        now=time.time(),
     ).text()
 
 
 def _partner_activity(comms, name):
-    context = TurnContext.for_inspection(comms, comms.registry.require(name))
+    context = TurnContext.for_inspection(comms, comms.registry.require(name), now=time.time())
     return tuple(s for s in context.segments if isinstance(s, PartnerActivitySegment))
 
 
@@ -179,7 +182,7 @@ def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_p
     comms = _wire(tmp_path, ("owner", ()), ("partner", ()), ("mentioned", ()), ("nobody", ()))
 
     def records(name):
-        context = TurnContext.for_inspection(comms, comms.registry.require(name))
+        context = TurnContext.for_inspection(comms, comms.registry.require(name), now=time.time())
         segments = [s for s in context.segments if isinstance(s, RelationshipsSegment)]
         return segments[0].records if segments else ()
 
@@ -200,7 +203,7 @@ def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_p
         "mentioned", GoalContactRelevance, "owner", None)
     assert records("partner")[0].peer == "owner" and records("partner")[0].author == "partner"
     assert records("nobody") == ()
-    context = TurnContext.for_inspection(comms, comms.registry.require("owner"))
+    context = TurnContext.for_inspection(comms, comms.registry.require("owner"), now=time.time())
     shown = json.loads(next(
         s for s in context.segments if isinstance(s, RelationshipsSegment)
     ).text().splitlines()[-1])
@@ -216,7 +219,7 @@ def test_many_explicit_contacts_cannot_bypass_the_bound_and_sender_is_first(tmp_
                                  f'contact-{i}', 'Current shared work')
     owner = comms.registry.require('owner')
     segment = CoordinationSegment.capture(owner, comms.views.thread_views(),
-        comms.relationships.peer_relations('owner'), senders=('sender',))
+        comms.relationships.peer_relations('owner'), senders=('sender',), now=time.time())
     assert len(segment.peers) == slots
     assert segment.peers[0].name == 'sender'
     assert len(segment.peer_identities()) == slots
@@ -239,6 +242,27 @@ def test_stale_collaboration_does_not_hide_a_separate_goal_contact(tmp_path):
     assert [peer.name for peer in peers] == ['partner']
 
 
+def test_peer_selection_requires_the_callers_clock(tmp_path, monkeypatch):
+    from agent_comms.turn_context import PeerState
+
+    comms = _wire(tmp_path, ('owner', ()), ('partner', ()))
+    comms.relationships.edit('owner', RelationshipEdit.decode('add'), 'partner', 'Current work')
+    views = comms.views.thread_views()
+    relations = comms.relationships.peer_relations('owner')
+    now = max(view.activity.timestamp for view in views)
+    with pytest.raises(TypeError, match='now'):
+        PeerState.listed(views, relations, 8)
+
+    def forbidden_clock_read():
+        raise AssertionError('Peer selection must use its caller-owned time')
+
+    with monkeypatch.context() as clock:
+        clock.setattr(time, 'time', forbidden_clock_read)
+        assert [peer.name for peer in PeerState.listed(views, relations, 8, now=now)] == ['partner']
+        assert PeerState.listed(views, relations, 8, now=now + 901) == ()
+        assert PeerState.listed(views, relations, 8, now=now - 1) == ()
+
+
 def test_declared_wait_dependencies_and_waiting_owners_are_prompt_peers(tmp_path):
     from dataclasses import replace
     from agent_comms.goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
@@ -254,5 +278,5 @@ def test_declared_wait_dependencies_and_waiting_owners_are_prompt_peers(tmp_path
     )) if view.thread.name in ('owner', 'waiting-owner') else view
                   for view in comms.views.thread_views())
     segment = CoordinationSegment.capture(owner, views,
-        comms.relationships.peer_relations('owner'))
+        comms.relationships.peer_relations('owner'), now=time.time())
     assert {peer.name for peer in segment.peers} == {'dependency', 'waiting-owner'}

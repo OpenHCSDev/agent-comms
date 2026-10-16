@@ -1,4 +1,5 @@
 """Original sealed messaging survives silent context rows through every projection."""
+import time
 from dataclasses import replace
 import hashlib
 import json
@@ -54,7 +55,7 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
             with pytest.raises(TimeoutError):
                 pending.result(timeout=.05)
         assert pending.result(timeout=2) == original
-    inspection = TurnContext.for_inspection(comms, owner)
+    inspection = TurnContext.for_inspection(comms, owner, now=time.time())
     assert original[0] in inspection.segments
     assert comms.bus.log.path.read_bytes() == before
 
@@ -382,7 +383,7 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
     images = (ImageInput('YQ==', 'image/png'),)
-    context = TurnContext.for_owner(owner, manifest(owner).turn, 'Original unicode task π 🙂', (), ())
+    context = TurnContext.for_owner(owner, manifest(owner).turn, 'Original unicode task π 🙂', (), (), now=time.time())
     rendered = context.render(images=images)
     expected = ''.join(segment.text() for segment in context.segments)
     assert rendered.text == expected

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import asyncio
 from contextlib import AsyncExitStack, ExitStack
 from dataclasses import replace
@@ -220,7 +222,7 @@ class OwnedTurn:
             self.relations,
             tuple(origin.reference for origin in self.origins),
             batch.originals,
-            senders=tuple(origin.sender for origin in self.origins),
+            now=time.time(), senders=tuple(origin.sender for origin in self.origins),
         )
         if self.goal_permit is not None:
             for segment in self.thread.context_goal_segments():
