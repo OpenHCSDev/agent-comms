@@ -312,7 +312,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     self.native = await self.acquire_native(transport, reuse=True)
                     custody.push_async_callback(self.retain_or_close)
                     await custody.enter_async_context(self.native.failures())
-                    custody.callback(self.native.reader.pending.cancel_all)
                     if self.tool_socket is not None:
                         self.tool_socket.expected_pid = self.native.proc.pid
                     self.watchdog.reading()
@@ -345,7 +344,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def retain_or_close(self) -> None:
         """Keep a settled, proved child idle in the owner's custody; retire anything else."""
-        await self.stop_forwarding()
+        await self.native.finish_input()
         identity = self.native.attestation.identity
         # An input written but never started may still run in the child; it is not idle.
         self.retainable = self.retainable and self.inputs.settled
@@ -388,7 +387,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 f"Native Pi RPC record is invalid or incomplete; {type(error).__name__}: {error}"
             ) from error
         if event is None:
-            await self.native.proc.finish()
+            await self.native.shutdown(graceful=True)
             stderr = await self.native.stderr_task
             raise NativePiUnavailable(
                 f"Native Pi RPC record is incomplete; native exit={self.native.proc.returncode}; "

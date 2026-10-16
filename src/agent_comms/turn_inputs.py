@@ -118,7 +118,6 @@ class InputForwarding:
             session.output.record_failure(
                 failures.AuthorityChanged("Input authority changed before immediate steering.")
             )
-            await session.native.proc.stop()
             return False
         await session.stdin.drain()
         return True
@@ -162,7 +161,6 @@ class InputForwarding:
             session.output.record_failure(
                 failures.AuthorityChanged("Input authority changed before Pi prompt send.")
             )
-            await session.native.proc.stop()
             return False
         # None means never sent; preserve the owner's UNKNOWN, not a replay.
         self.pending[:] = [entry for entry in self.pending if entry[2] != native_id]

@@ -66,7 +66,7 @@ async def run(root: Path, package: Path) -> dict:
             pending_message_count=state.pending_message_count,
         )
     except Exception as error:
-        await child.close()
+        await child.shutdown()
         stderr = await child.stderr_task
         failure = NativePiUnavailable(
             f"Fresh get_state failed before any prompt: {type(error).__name__}; "
@@ -84,8 +84,7 @@ async def run(root: Path, package: Path) -> dict:
         receipt.update(ok=False, error_type=type(error).__name__, diagnostic=diagnostic.name)
     finally:
         admission.release()
-        child.reader.pending.cancel_all()
-        await child.close()
+        await child.shutdown()
         receipt["stderr_bytes"] = len((await child.stderr_task).encode())
         receipt["child_retired"] = not child.proc.identity.alive()
         receipt["elapsed_ms"] = round((time.monotonic() - started) * 1000)

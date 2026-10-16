@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from contextlib import ExitStack, asynccontextmanager
+from collections.abc import Callable, Coroutine
+from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .child_process import AttachedChild, join_retirement
+from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
@@ -29,7 +30,9 @@ class PiSessionChild:
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
     resources: ExitStack = field(default_factory=ExitStack, repr=False)
-    _close_job: asyncio.Task[BaseException | None] | None = field(default=None, init=False, repr=False)
+    transport: AsyncExitStack = field(default_factory=AsyncExitStack, repr=False)
+    forwarding_task: asyncio.Task[None] | None = field(default=None, init=False, repr=False)
+    _close_job: asyncio.Task[ChildOutcome | BaseException] | None = field(default=None, init=False, repr=False)
 
     async def reply_ui(self, response) -> None:
         await asyncio.wait_for(self.proc.write(self.reader.encode(response)), timeout=2)
@@ -62,61 +65,71 @@ class PiSessionChild:
             tail = (tail + chunk)[-16000:]
         return tail.decode(errors="replace").strip()
 
-    def retire(self) -> asyncio.Task[BaseException | None]:
-        """Start the one complete shutdown, or return its original operation."""
-        if self._close_job is None:
-            self._close_job = asyncio.create_task(self._close())
-        return self._close_job
-
     @property
     def retired(self) -> bool:
         job = self._close_job
         if job is None or not job.done():
             return False
-        return not job.cancelled() and job.exception() is None and job.result() is None
+        return not job.cancelled() and job.exception() is None and isinstance(job.result(), ChildOutcome)
 
-    @staticmethod
-    def _deliver_close_result(error: BaseException | None) -> None:
-        if error is not None:
-            raise error
+    def forward_input(self, operation: Callable[[], Coroutine[None, None, None]]) -> None:
+        if self.forwarding_task is None:
+            self.forwarding_task = asyncio.create_task(operation())
 
-    async def wait_closed(self) -> None:
-        """Cancel this wait without cancelling or forgetting the shutdown."""
-        job = self.retire()
-        await asyncio.wait((job,))
-        self._deliver_close_result(job.result())
+    async def finish_input(self) -> None:
+        """Retire this input's ingress without retiring a retained idle child."""
+        forwarding, self.forwarding_task = self.forwarding_task, None
+        if forwarding is not None:
+            forwarding.cancel()
+            await asyncio.gather(forwarding, return_exceptions=True)
+        self.reader.pending.cancel_all()
 
-    async def close(self) -> None:
-        """Join the same shutdown even when this cleanup caller is cancelled."""
-        job = self.retire()
+    async def shutdown(self, *, graceful: bool = False) -> ChildOutcome:
+        """Join the one gateway, ingress, process, pipe and resource retirement.
+
+        A settled non-retained protocol gets its existing bounded EOF grace;
+        refusals and interruptions terminate immediately. The first request
+        owns that choice and every caller joins the same complete operation.
+        """
+        if self._close_job is None:
+            self._close_job = asyncio.create_task(self._shutdown(graceful=graceful))
+        job = self._close_job
         try:
-            error = await join_retirement(job)
+            result = await join_retirement(job)
         except asyncio.CancelledError as cancellation:
-            if (error := job.result()) is not None:
+            if isinstance(error := job.result(), BaseException):
                 raise cancellation from error
             raise
-        self._deliver_close_result(error)
+        if isinstance(result, BaseException):
+            raise result
+        return result
 
-    async def _close(self) -> BaseException | None:
-        # Record the original error as the job's result. Task cancellation would
-        # otherwise discard a typed CancelledError after its first observation.
+    async def _shutdown(self, *, graceful: bool) -> ChildOutcome | BaseException:
+        # Return the original error: asyncio otherwise discards a typed
+        # CancelledError after its first observation by a task-result reader.
         try:
             try:
-                await self.proc.stop()
-            except BaseException as error:
-                if self.proc.retired:
-                    try:
-                        await self._release_resources()
-                    except asyncio.CancelledError:
-                        raise
-                    except BaseException as cleanup_error:
-                        raise error from cleanup_error
-                raise
-            else:
-                await self._release_resources()
+                try:
+                    await self.finish_input()
+                finally:
+                    await self.transport.aclose()
+            finally:
+                try:
+                    outcome = await self.proc.finish() if graceful else await self.proc.stop()
+                except BaseException as error:
+                    if self.proc.retired:
+                        try:
+                            await self._release_resources()
+                        except asyncio.CancelledError:
+                            raise
+                        except BaseException as cleanup_error:
+                            raise error from cleanup_error
+                    raise
+                else:
+                    await self._release_resources()
         except BaseException as error:
             return error
-        return None
+        return outcome
 
     async def _release_resources(self) -> None:
         try:
@@ -130,7 +143,7 @@ class PiSessionChild:
         try:
             yield
         except BaseException as error:
-            await self.close()
+            await self.shutdown()
             stderr = await self.stderr_task
             error.add_note(f"Original native child stderr:\n{stderr or '(empty)'}")
             if isinstance(error, NativePiUnavailable):
@@ -192,11 +205,10 @@ class ChildNative(NativeCustody):
 
     def retire(self, successor=None):
         following = self._shutdown_successor() if successor is None else successor
-        self.child.retire()
         return RetiringNative(self.child, following)
 
     async def closed(self) -> None:
-        await self.child.wait_closed()
+        await self.child.shutdown()
 
 
 @dataclass
