@@ -535,9 +535,8 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     _threads_by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        # RegistryDocument.snapshot supplies the detached mapping. Neither its
-        # membership nor the derived index can change after this read cut.
-        object.__setattr__(self, "threads", MappingProxyType(self.threads))
+        # RegistryDocument.snapshot supplies detached membership. Derive the
+        # immutable lookup projection once; the codec still owns the wire dict.
         object.__setattr__(self, "_threads_by_lookup", MappingProxyType({
             thread.incarnation.stable_thread_lookup: thread
             for thread in self.threads.values()
