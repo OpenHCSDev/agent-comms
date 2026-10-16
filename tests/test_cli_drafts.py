@@ -9,6 +9,7 @@ from agent_comms.cli_bridges.shared import (
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolStartTranscript, ToolEndTranscript, ToolPendingTranscript, TranscriptEvent, UserTranscript, ContextTranscript
 from agent_comms.field_codec import FieldCodec
+from agent_comms.transcript_receipts import EarlierTranscript, LaterTranscript
 from agent_comms.cli_bridges.claude_protocol import CLAUDE_RECORD, ClaudeSession
 from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
 from agent_comms.cli_bridges.opencode_parts import AssistantMessage, ToolPart
@@ -274,6 +275,25 @@ def test_claude_missing_origin_is_human_but_compaction_is_context(compact, event
     assert events[0].text == 'actual input text' and session.turn == 'prompt'
     payload['isMeta'] = True
     assert CLAUDE_RECORD.validate_python(payload).updates(ClaudeSession()) == ()
+
+
+@pytest.mark.parametrize('traversal,call_edges,result_edges', [
+    (EarlierTranscript(), (set(), {'round'}), ({'round'}, set())),
+    (LaterTranscript(), ({'round'}, set()), (set(), {'round'})),
+])
+@pytest.mark.parametrize('opening', [
+    ToolPendingTranscript(tool_call_id='round', tool_name='bash'),
+    ToolStartTranscript(tool_call_id='round', tool_name='bash',
+                        raw_input={'command': 'pwd'}, detail='pwd'),
+])
+def test_pending_and_invoked_events_own_their_tool_round_edges(
+    traversal, call_edges, result_edges, opening,
+):
+    end = ToolEndTranscript(tool_call_id='round', tool_name='bash')
+    assert traversal.round_edges((opening,)) == call_edges
+    assert traversal.round_edges((end,)) == result_edges
+    assert traversal.round_edges((AssistantTranscript('reply'),)) == (set(), set())
+    assert 'tool_opening' not in TranscriptEvent.names()
 
 
 def test_claude_turn_end_releases_tool_lookup_and_shared_prefix(tmp_path):
