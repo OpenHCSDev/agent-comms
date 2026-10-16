@@ -17,21 +17,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
+from .bus_projection import AppendCheckpoint
 from .bus_publication import (
     unique_wire_object,
 )
-from .delivery_policy import KeyedResponseReceipt
 from .bus_source_page import CandidateQuery
-from .bus_projection import AppendCheckpoint
 from .checkpoint_seals import PrefixSource
 from .coordination_database import CoordinationStore, StoreBusy
-from .field_codec import FieldCodec
-from .wire_metadata import WireRootIdText
+from .delivery_policy import KeyedResponseReceipt
 from .errors import RelationViolationError
-from .wire_log import WireLog
+from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 from .wake import NoWakeDecision, WakeDecision
 from .wake_policy import WakePolicy
+from .wire_log import OpenedWireSnapshot, WireLog
+from .wire_metadata import WireRootIdText
 
 _MAX_ROW = 8 * 1024 * 1024
 
@@ -256,15 +256,15 @@ class WakeCandidateIndex:
     @classmethod
     def _replay_prefix(
         cls,
-        stream: Any,
+        source: OpenedWireSnapshot,
         offset: int,
         last_seq: int,
-        root_id: str,
         *,
         max_rows: int,
         max_bytes: int,
     ) -> _ReplayBatch:
-        """Read only a bounded complete prefix; yield parsed receipts to SQL."""
+        """Replay a bounded batch inside the original committed source cut."""
+        stream = source.stream
         rows: list[Candidate] = []
         response_keys: list[CandidateResponseKey] = []
         stream.seek(offset)
@@ -276,7 +276,10 @@ class WakeCandidateIndex:
             available = max_bytes - (stream.tell() - offset)
             if available <= 0:
                 break
-            raw = stream.readline(_MAX_ROW + 1)
+            remaining = source.boundary - stream.tell()
+            if remaining <= 0:
+                break
+            raw = stream.readline(min(_MAX_ROW + 1, remaining))
             if not raw:
                 break
             if not raw.endswith(b"\n"):
@@ -293,20 +296,20 @@ class WakeCandidateIndex:
             record = json.loads(raw, object_pairs_hook=unique_wire_object)
             if not isinstance(record, dict):
                 raise ProjectionUnavailableError("candidate bus row is not an object")
-            parsed = cls._parse_row(record, root_id, last_seq)
+            parsed = cls._parse_row(record, source.metadata.root_id, last_seq)
             last_seq = parsed.seq
             rows.extend(parsed.recipients)
             if parsed.response is not None:
                 response_keys.append(CandidateResponseKey(parsed.response.publication_key))
         return _ReplayBatch(stream.tell(), last_seq, tuple(rows), tuple(response_keys))
 
-    def _source_end(self, stream: Any, next_offset: int) -> tuple[os.stat_result, str]:
+    def _source_end(self, stream: Any, next_offset: int) -> str:
         """Reject path replacement before committing an index checkpoint."""
         after = os.fstat(stream.fileno())
         current_path = self.log.path.stat()
         if (after.st_dev, after.st_ino) != (current_path.st_dev, current_path.st_ino):
             raise ProjectionRebuildRequiredError("candidate bus was replaced")
-        return after, AppendCheckpoint.fingerprint(stream, next_offset)
+        return AppendCheckpoint.fingerprint(stream, next_offset)
 
     @staticmethod
     def _commit_batch(
@@ -347,9 +350,11 @@ class WakeCandidateIndex:
         self._validate_limits(max_rows, max_bytes)
         bootstrap_new = FieldCodec.decode(bool, bootstrap_new)
         try:
-            marker = self.log._private_marker_unlocked()
-            root_id = marker.root_id
-            with self.log.path.open("rb") as stream:
+            with self.log._opened_wire_snapshot(need_sequence=False) as source:
+                stream = source.stream
+                if stream is None:
+                    raise ProjectionUnavailableError("candidate bus source is missing")
+                root_id = source.metadata.root_id
                 stat = os.fstat(stream.fileno())
                 with closing(self._connect(self.path, readonly=False)) as db:
                     # Rebuild replays current-format projections only; old schemas
@@ -363,20 +368,19 @@ class WakeCandidateIndex:
                         )
                         offset, last_seq = checkpoint.byte_offset, checkpoint.last_seq
                         batch = self._replay_prefix(
-                            stream,
+                            source,
                             offset,
                             last_seq,
-                            root_id,
                             max_rows=max_rows,
                             max_bytes=max_bytes,
                         )
-                        after, tail = self._source_end(stream, batch.next_offset)
+                        tail = self._source_end(stream, batch.next_offset)
                         self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
                         db.commit()
                     except BaseException:
                         db.rollback()
                         raise
-                    return batch.next_offset == after.st_size
+                    return batch.next_offset >= source.boundary
         except (
             OSError,
             ValueError,
@@ -417,15 +421,6 @@ class WakeCandidateIndex:
                 with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
                     checkpoint = self._checkpoint_start(db, stream, stat, root_id, rebuild=False)
-                    self._source_end(stream, checkpoint.byte_offset)
-                    # _checkpoint_start verifies the saved prefix; the source
-                    # may have newer complete rows not yet in this projection.
-                    if stat.st_size:
-                        stream.seek(-1, os.SEEK_END)
-                        if stream.read(1) != b"\n":
-                            raise ProjectionUnavailableError(
-                                "candidate source has an incomplete tail"
-                            )
                 return checkpoint
         except (OSError, RelationViolationError, sqlite3.DatabaseError) as error:
             raise ProjectionUnavailableError("candidate checkpoint unavailable") from error
@@ -523,12 +518,6 @@ class WakeCandidateIndex:
                     raise ProjectionUnavailableError("candidate projection is stale or unrelated")
                 with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
-                    if stat.st_size:
-                        stream.seek(-1, os.SEEK_END)
-                        if stream.read(1) != b"\n":
-                            raise ProjectionUnavailableError(
-                                "candidate source has an incomplete tail"
-                            )
                     checkpoint.require_source(stream, stat, request.root_id)
                 data = Candidate.read(
                     db.execute(
