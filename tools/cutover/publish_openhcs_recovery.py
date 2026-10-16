@@ -397,7 +397,7 @@ def main():
                        'owners_before':FieldCodec.encode(audience)}, opened,indent=2)
             opened.flush()
             os.fsync(opened.fileno())
-        runtime = RestartEnvironment(path=str(TARGET / 'bin')+':'+os.environ['PATH'], virtual_env=str(TARGET))
+        runtime = RestartEnvironment(path=os.environ.get('PATH'), virtual_env=str(TARGET)).for_interpreter(TARGET / 'bin/python')
         results = service.owners.restart_owners(runtime=runtime,
             source_interpreter=str(args.source_interpreter), cutover=operation)
         print(json.dumps({'state':'published-and-launched','owners':len(results)}),flush=True)

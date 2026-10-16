@@ -99,7 +99,6 @@ def main() -> None:
     print(f'Published {publication.runtime}', flush=True)
     # Queue requests keep original process identity and session settings. A
     # pending or uncertain previous request is handled by that existing owner.
-    os.environ['PATH'] = f'{publication.runtime / "bin"}:{os.environ["PATH"]}'
     os.environ['VIRTUAL_ENV'] = str(publication.runtime)
     for owner in owners:
         request = enqueue(comms, owner.name)

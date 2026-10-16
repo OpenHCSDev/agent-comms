@@ -5,28 +5,29 @@ consumers neither inspect JSON fields nor rediscover what kind of item it is.
 """
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import replace
 from difflib import unified_diff
-import json
 from typing import ClassVar, Generic, Literal, TypeVar
 
 from metaclass_registry import RegistryConfig
 from pydantic import (
-    Field, JsonValue, TypeAdapter,
+    Field,
+    JsonValue,
+    TypeAdapter,
 )
 
 from agent_comms.activity import ActivityState
+from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
     AssistantTranscript, ThinkingTranscript, ToolEndTranscript, ToolStartTranscript,
     TranscriptEvent, UserTranscript, NoticeTranscript,
 )
 
-
 from .shared import (
-    ActiveItem, DraftItem, FinishedItem, RegisteredWireMeta, TranscriptUpdate,
-    TurnEnded, TurnStarted, WireModel, TaggedWire,
+    ActiveItem, DraftItem, FinishedItem, TranscriptUpdate, TurnEnded, TurnStarted,
 )
 
 
@@ -245,7 +246,7 @@ RPC_RESPONSE = TypeAdapter(RpcSuccess | RpcFailure | RpcNotification)
 
 class Item(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
-        registry_dict={}, key_attribute='wire_tag',
+        registry_dict={}, key_attribute='__name__',
         skip_if_no_key=True,
     )
     id: str
@@ -476,16 +477,21 @@ class McpToolItem(ToolItem):
             self.result is None or self.result.succeeded)
 
 
-class SendOutputItem(Item):
+class FunctionOutputItem(Item):
     wire_tag = 'functionCallOutput'
     name: str
     output: str
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        # The bridge's send result is already rendered from the bus in Toad.
-        if self.name == SEND_TOOL:
-            return ()
         return (ToolEndTranscript(tool_call_id=self.id, tool_name=self.name, text=self.output),)
+
+
+class SendOutputItem(FunctionOutputItem):
+    name: Literal[SEND_TOOL]
+
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        # The bridge's send result is already rendered from the bus in Toad.
+        return ()
 
 
 class CompactionItem(Item):

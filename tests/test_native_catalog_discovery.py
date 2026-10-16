@@ -85,7 +85,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
                 response = await pending.request.exchange(child.reader, child.proc.stdin, strict=True)
                 pending.accept(response).require_identity().require_same_session(session.identity)
         finally:
-            await child.close()
+            await child.shutdown()
         assert child.proc.retired and await child.stderr_task == ""
     assert len(verifications) == 1  # both stages consume the pre-claim acquisition
     assert launches[0][1] != launches[1][1]

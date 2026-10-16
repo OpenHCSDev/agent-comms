@@ -31,6 +31,10 @@ class ChangedSelection:
         return StaleRestart(reason=str(self))
 
 
+class OwnerMaintenancePendingRefusal(WaitForIdle, RestartRefusal):
+    message = "Maintenance is holding new owner restarts."
+
+
 class OwnerBusyRefusal(WaitForIdle, RestartRefusal):
     message = "Wait until the owner is idle before restart."
 

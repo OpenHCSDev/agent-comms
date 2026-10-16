@@ -1,8 +1,8 @@
 """OpenCode message parts own their Core history, drafts and activity."""
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import builtins
+from abc import ABC, abstractmethod
 from dataclasses import replace
 from typing import ClassVar, Literal
 
@@ -10,12 +10,13 @@ from metaclass_registry import RegistryConfig
 from pydantic import ConfigDict, Field, JsonValue
 
 from agent_comms.activity import ActivityState
+from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.transcript_events import (
     AssistantTranscript, ThinkingTranscript, TranscriptEvent, ToolStartTranscript,
 )
+
 from .shared import (
-    ActiveItem, DraftItem, FinishedItem, TaggedWire, TranscriptUpdate,
-    WireHeader, WireModel,
+    ActiveItem, DraftItem, FinishedItem, TranscriptUpdate,
 )
 
 

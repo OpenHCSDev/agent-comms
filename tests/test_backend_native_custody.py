@@ -47,7 +47,7 @@ async def test_stop_failure_accounts_for_native_resources_and_retains_uncertaint
             assert calls == [stage]
             assert child.proc.retired
             assert child.stderr_task.done() and resource.closed
-            assert child.retire().result() is stopped.value
+            assert child._close_job.result() is stopped.value
             assert not child.retired
             assert isinstance(owner.persistent.custody, RetiringNative)
             assert owner.persistent.custody.child is child
@@ -75,7 +75,7 @@ async def test_resource_release_failure_retains_exact_native_child(tmp_path):
             with pytest.raises(RuntimeError) as stopped:
                 await owner.persistent.close_idle()
             assert stopped.value is failure
-            retirement = child.retire()
+            retirement = child._close_job
             assert retirement.done() and retirement.result() is failure
             assert child.proc.retired and child.stderr_task.done() and resource.closed
             assert not child.retired
@@ -83,7 +83,7 @@ async def test_resource_release_failure_retains_exact_native_child(tmp_path):
             assert owner.persistent.custody.child is child
             with pytest.raises(RuntimeError) as repeated:
                 await owner.persistent.close_idle()
-            assert repeated.value is failure and child.retire() is retirement
+            assert repeated.value is failure and child._close_job is retirement
     assert fixture_failure.value is failure
 
 
@@ -102,6 +102,9 @@ async def test_all_native_shutdown_consumers_share_one_complete_job(
     entered, release = asyncio.Event(), asyncio.Event()
     stop, release_resources = child.proc.stop, child._release_resources
     calls = []
+    async def retire_gateway():
+        calls.append("gateway")
+    child.transport.push_async_callback(retire_gateway)
     async def counted_stop():
         calls.append("stop")
         return await stop()
@@ -119,19 +122,20 @@ async def test_all_native_shutdown_consumers_share_one_complete_job(
     waiters = [handler]
     try:
         await asyncio.wait_for(entered.wait(), 5)
-        operation = child.retire()
+        operation = child._close_job
         retiring = owner.persistent.custody.retire()
-        assert retiring.child is child and child.retire() is operation
+        assert retiring.child is child and child._close_job is operation
         state_waiter = asyncio.create_task(owner.persistent._finish_retirement(retiring))
-        direct_waiter = asyncio.create_task(child.close())
+        direct_waiter = asyncio.create_task(child.shutdown())
         waiters.extend((state_waiter, direct_waiter))
         release.set()
         with pytest.raises(ValueError, match="original consumer error"):
             await handler
         await state_waiter
         await direct_waiter
-        assert child.retire() is operation and operation.result() is None
-        assert calls == ["stop", "resources"]
+        from agent_comms.child_process import ChildOutcome
+        assert child._close_job is operation and isinstance(operation.result(), ChildOutcome)
+        assert calls == ["gateway", "stop", "resources"]
         assert child.retired and child.stderr_task.done()
         assert isinstance(owner.persistent.custody, EmptyNative)
         if borrowed:
@@ -200,30 +204,31 @@ async def test_cancelled_retirement_joins_exact_child_before_new_borrow(
     assert (await owner.run("Before cancelled retirement"))[-1].ok
     previous = owner.persistent.custody.child.proc
     entered, release = asyncio.Event(), asyncio.Event()
-    close = PiSessionChild._close
+    close = PiSessionChild._shutdown
 
-    async def held_close(child):
+    async def held_close(child, *, graceful):
         if child.proc is previous:
             entered.set()
             await release.wait()
-        return await close(child)
+        return await close(child, graceful=graceful)
 
-    monkeypatch.setattr(PiSessionChild, "_close", held_close)
+    monkeypatch.setattr(PiSessionChild, "_shutdown", held_close)
     retire = asyncio.create_task(owner.force_reopen())
     try:
         await asyncio.wait_for(entered.wait(), 5)
         retire.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await retire
+        assert not retire.done()
         assert isinstance(owner.persistent.custody, RetiringNative)
-        retained_cleanup = owner.persistent.custody.child.retire()
+        retained_cleanup = owner.persistent.custody.child._close_job
         assert previous.alive() and not retained_cleanup.done()
+        assert owner.persistent.lock.locked()
         next_turn = asyncio.create_task(owner.run("New explicit input after retirement"))
         try:
-            await asyncio.sleep(0.05)
             assert len(owner.children) == owner.provider.posts == 1
-            assert owner.persistent.custody.child.retire() is retained_cleanup
+            assert owner.persistent.custody.child._close_job is retained_cleanup
             release.set()
+            with pytest.raises(asyncio.CancelledError):
+                await retire
             result = await next_turn
             assert result[-1].ok, result[-1]
             assert not previous.alive()
@@ -240,8 +245,9 @@ async def test_cancelled_retirement_joins_exact_child_before_new_borrow(
 
 @pytest.mark.parametrize("failure", [TimeoutError, ChildRetirementCancelled])
 @pytest.mark.parametrize("already_done", [False, True])
+@pytest.mark.parametrize("gateway", [False, True])
 async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
-    tmp_path, failure, already_done
+    tmp_path, failure, already_done, gateway
 ):
     from native_backend_fixture import native_backend_fixture
     from agent_comms.native_custody import RetiringNative
@@ -255,11 +261,15 @@ async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
             def failed_resources():
                 calls.append("release")
                 raise original_error
-            child.resources.callback(failed_resources)
+            if gateway:
+                child.transport.callback(failed_resources)
+            else:
+                child.resources.callback(failed_resources)
             with pytest.raises(failure) as caught:
                 if already_done:
                     retiring = owner.persistent.custody.retire()
-                    await asyncio.wait((child.retire(),))
+                    observer = asyncio.create_task(child.shutdown())
+                    await asyncio.gather(observer, return_exceptions=True)
                     await owner.persistent._finish_retirement(retiring)
                 else:
                     await owner.persistent.close_idle()
@@ -267,7 +277,7 @@ async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
             if failure is ChildRetirementCancelled:
                 assert isinstance(caught.value, ChildRetirementError)
                 assert not isinstance(caught.value, Exception)
-            operation = child.retire()
+            operation = child._close_job
             assert operation.done() and operation.result() is original_error
             assert not child.retired and child.proc.retired and child.stderr_task.done()
             assert isinstance(owner.persistent.custody, RetiringNative)
@@ -275,12 +285,12 @@ async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
                 await owner.persistent.close_idle()
             assert repeated.value is original_error
             with pytest.raises(failure) as direct:
-                await child.close()
+                await child.shutdown()
             assert direct.value is original_error
             with pytest.raises(failure) as handler:
                 async with child.failures():
                     raise ValueError("independent diagnostic failure")
             assert handler.value is original_error
-            assert child.retire() is operation and calls == ["release"]
+            assert child._close_job is operation and calls == ["release"]
             assert owner.provider.posts == len(owner.saved_inputs()) == 1
     assert fixture_failure.value is original_error

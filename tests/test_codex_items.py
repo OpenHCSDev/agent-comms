@@ -103,3 +103,44 @@ def test_coalescing_preserves_completion_and_unrelated_updates():
     end = TurnEnded()
     assert TranscriptUpdate.coalesced([first, other, newer]) == [other, newer]
     assert TranscriptUpdate.coalesced([first, other, newer, final, end]) == [other, final, end]
+
+
+def test_function_outputs_keep_wire_fields_and_share_page_and_live_decoding():
+    from agent_comms.cli_bridges.codex_protocol import (
+        FunctionOutputItem, ItemStream, RpcNotification, SendOutputItem,
+    )
+    from agent_comms.transcript_events import ToolEndTranscript
+
+    for name, item_type in (("comms_send", SendOutputItem), ("other_tool", FunctionOutputItem)):
+        wire = {"type": "functionCallOutput", "id": "out", "name": name, "output": "result"}
+        page = ItemsPage.model_validate({"data": [{
+            "turnId": "turn", "startedAtMs": 1000, "completedAtMs": 2000, "item": wire,
+        }]})
+        entry, = page.data
+        assert type(entry.item) is item_type
+        assert entry.item.model_dump(mode="json") == wire
+        expected = () if item_type is SendOutputItem else (
+            ToolEndTranscript(tool_call_id="out", tool_name=name, text="result", timestamp=1.0),)
+        assert entry.publication().events == expected
+
+        stream = ItemStream("thread")
+        stream.receive(RpcNotification(method="item/started", params={
+            "threadId": "thread", "turnId": "turn", "startedAtMs": 1000, "item": wire,
+        }))
+        finished = stream.receive(RpcNotification(method="item/completed", params={
+            "threadId": "thread", "turnId": "turn", "completedAtMs": 2000, "item": wire,
+        }))
+        assert finished == entry.publication()
+
+
+def test_function_output_names_remain_required_and_strict():
+    import pytest
+    from pydantic import ValidationError
+
+    for name_fields in ({}, {"name": None}, {"name": 5}):
+        with pytest.raises(ValidationError):
+            ItemsPage.model_validate({"data": [{
+                "turnId": "turn", "item": {
+                    "type": "functionCallOutput", "id": "out", "output": "result", **name_fields,
+                },
+            }]})

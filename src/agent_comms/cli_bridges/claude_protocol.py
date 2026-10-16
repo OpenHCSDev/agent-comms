@@ -10,6 +10,7 @@ from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from agent_comms.activity import ActivityState
+from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -18,9 +19,9 @@ from agent_comms.transcript_events import (
     ToolStartTranscript,
     UserTranscript,
 )
+
 from .shared import (
-    ActiveItem, FinishedItem, TaggedWire, TranscriptUpdate, TurnEnded,
-    TurnStarted, WireHeader, WireModel,
+    ActiveItem, FinishedItem, TranscriptUpdate, TurnEnded, TurnStarted,
 )
 
 

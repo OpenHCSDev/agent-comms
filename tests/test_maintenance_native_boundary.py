@@ -31,13 +31,14 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
     program.write_text(
         "import json, os, sys\n"
         "from pathlib import Path\n"
-        "from agent_comms.maintenance_barrier import MaintenanceBarrier, PausedPhase\n"
-        "from maintenance_control_fixture import FixtureMaintenanceControl\n"
+        "from agent_comms.field_codec import FieldCodec\n"
+        "from agent_comms.maintenance_barrier import (\n"
+        "    MaintenanceBarrier, MaintenanceOperatorField, PausedPhase)\n"
         f"Path({str(child_pid)!r}).write_text(str(os.getpid()))\n"
         "request = json.loads(sys.stdin.readline())\n"
         f"with open({str(received)!r}, 'a') as log: log.write(json.dumps(request) + '\\n')\n"
-        f"control = FixtureMaintenanceControl(MaintenanceBarrier(Path({str(root / 'registry.json')!r})))\n"
-        "first = control.begin('disposable-operator')\n"
+        f"control = MaintenanceBarrier(Path({str(root / 'registry.json')!r}))\n"
+        "first = control.begin(FieldCodec.decode(MaintenanceOperatorField, 'disposable-operator'))\n"
         "assert control.advance(first, PausedPhase).phase is PausedPhase\n"
         "file = sys.argv[1]\n"
         f"reply = {{'type':'response','id':request['id'],'command':'get_state','success':True,"
@@ -48,7 +49,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
         f"    with open({str(received)!r}, 'a') as log: log.write(line)\n"
     )
 
-    def launch(package, *, worktree, session_dir, session_file=None, **_kwargs):
+    def launch(*, worktree, session, **_kwargs):
         # Keep the real selected tool socket inside the owned basetemp and
         # below the operating system Unix socket path limit.
         session_dir = tmp_path_factory.getbasetemp() / "native-pause"
@@ -70,7 +71,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
 
     with (
         patch("agent_comms.native_pi._trusted_package", lambda _package: None),
-        patch.object(native_pi.NativePiRpcLaunch, "tracked", launch),
+        patch.object(native_pi.NativePiRpcLaunch, "acquire_tracked", return_value=launch),
         pytest.raises(RelationViolationError, match="Maintenance"),
     ):
         await runtime.SelectedExecution(

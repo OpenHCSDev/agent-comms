@@ -77,6 +77,12 @@ class WakeScheduleCheck(SessionScheduleCheck):
             if ClosingScheduleRule().violated(self):
                 return
             async with inputs.effects.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
+                # The bus may admit a channel post while an operator drains the
+                # fleet. Keep its existing queued origin; do not start a native
+                # turn or consume it until this root's typed phase is READY.
+                hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
+                if hold.turn_pending:
+                    return hold
                 snapshot = await Coordination.run_worker(inputs.comms.registry.snapshot)
                 owner = snapshot.require(inputs.sessions.require(session_id))
                 try:
@@ -147,6 +153,11 @@ class SelectedWakeCheck(SessionScheduleCheck):
             partial(inputs.retry_observer, session_id),
         ):
             try:
+                # Selection may have been scheduled just before maintenance
+                # began. Keep its accepted assignment unselected for READY.
+                hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
+                if hold.turn_pending:
+                    return hold
                 before = await inputs._observe_private_revision(session_id, root_id)
                 result = await effects.turns.run_selected(session_id, self.execution)
                 if result is not None:

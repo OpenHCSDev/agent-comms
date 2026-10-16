@@ -172,6 +172,11 @@ class StoreLock:
         )
 
 
+def store_lock_path(store_path: Path) -> Path:
+    """The original named inode for one store's physical lock."""
+    return store_path.with_name(f'.{store_path.name}.lock')
+
+
 @contextmanager
 def _store_lock_file(store_path: Path):
     """Own the original lock inode's descriptor before any acquisition.
@@ -181,7 +186,7 @@ def _store_lock_file(store_path: Path):
     owner watching the store directory, once per lock taken.
     """
     store_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = store_path.with_name(f".{store_path.name}.lock")
+    lock_path = store_lock_path(store_path)
     with StoreLock.releasing(), os.fdopen(
         os.open(lock_path, os.O_RDONLY | os.O_CREAT, 0o666), "rb"
     ) as lock_file:
