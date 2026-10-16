@@ -33,9 +33,8 @@ class SelectedSession:
     """
     directory: Path
     creation: FreshPrivateSession | None = field(default=None, kw_only=True)
-    # The owner's native custody for this source. Custody only; it never takes
-    # part in the launch key.
-    custody: PersistentPiSession | None = field(default=None, kw_only=True, compare=False, repr=False)
+    # The owner's live Pi session for this source; not part of the launch key.
+    pi_session: PersistentPiSession | None = field(default=None, kw_only=True, compare=False, repr=False)
 
     @property
     def path(self) -> Path | None:
@@ -100,7 +99,7 @@ class SelectedSession:
         self.require_context(context)
         return SavedSelectedSession(self.directory,
             identity=NativeSessionIdentity(context.session_id, str(context.session_file)),
-            creation=self.creation, custody=self.custody)
+            creation=self.creation, pi_session=self.pi_session)
 
     @classmethod
     def for_launch(cls, directory: Path, path: Path | None, package: Path) -> SelectedSession:
@@ -141,8 +140,8 @@ class SelectedSession:
                 retained = execution.retained_source(Path(selected).absolute())
                 if retained is not None:
                     return SavedSelectedSession(directory, identity=retained.identity,
-                                                custody=execution.pi_session)
-                return SavedSelectedSession(directory, custody=execution.pi_session,
+                                                pi_session=execution.pi_session)
+                return SavedSelectedSession(directory, pi_session=execution.pi_session,
                                             identity=SessionIdentityHelper.locate(
                     execution.native_package, str(Path(selected).absolute()),
                 ))
@@ -199,9 +198,9 @@ class SavedSelectedSession(SelectedSession):
         return KnownSessionAttestation(self.identity)
 
     def require_launch_header(self) -> None:
-        if self.custody is not None:
+        if self.pi_session is not None:
             try:
-                retained = self.custody.custody.idle()
+                retained = self.pi_session.native_state.idle()
             except NativePiUnavailable:
                 retained = None
             if retained is not None and retained.identity.same_session(self.identity):

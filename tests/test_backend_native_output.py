@@ -59,7 +59,7 @@ async def test_actual_native_cold_preparation_retains_without_admitting_input(na
     assert observed == [(state, observed[0][1])]
     assert state.session_file == str(owner.session) and state.session_id
     assert state.is_streaming is False and state.is_compacting is False
-    assert owner.persistent.available and owner.persistent.custody.child.proc.alive()
+    assert owner.persistent.available and owner.persistent.native_state.child.proc.alive()
     assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 0
 
 
@@ -136,8 +136,8 @@ async def test_actual_native_retained_image_failure_redacts_provider_text(native
     )
     first = await owner.run("Inspect this diagnostic image", images=(image,))
     assert first[-1].ok, first[-1]
-    retained = owner.persistent.custody.child.proc
-    assert retained is not None and owner.persistent.custody.child.sensitive_diagnostics
+    retained = owner.persistent.native_state.child.proc
+    assert retained is not None and owner.persistent.native_state.child.sensitive_diagnostics
     owner.provider.status = 503
     second = await owner.run("A new diagnostic input after the image")
     assert not second[-1].ok

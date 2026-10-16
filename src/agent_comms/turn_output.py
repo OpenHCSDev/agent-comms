@@ -96,9 +96,9 @@ class TurnOutput:
             self.failure = self.failure.with_startup_diagnostics(stderr.strip())
 
     def done(self, session: TurnSession, stderr: str) -> Iterator[events.AgentEvent]:
-        # Read admission and custody from their actual owners; output never grants either.
+        # Read admission and ownership from their actual owners; output never grants either.
         transport_ok = not self.failure_text and (
-            session.native_session.custody.retained or session.native.proc.returncode == 0
+            session.native_session.native_state.retained or session.native.proc.returncode == 0
         )
         self.settle(session, transport_ok)
         success = transport_ok and self.clean and session.inputs.settled
@@ -134,7 +134,7 @@ class TurnOutput:
                 self.record_failure(cause(cause.explanation(self)))
 
     def permits_retention(self, session: TurnSession) -> bool:
-        # Called only after the native lifecycle has proved idle custody. Apply
+        # Called only after the native lifecycle has proved idle ownership. Apply
         # declaration-owned terminal evidence before handing the child back.
         self.settle(session, transport_ok=True)
         return self.clean

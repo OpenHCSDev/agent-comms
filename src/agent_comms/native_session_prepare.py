@@ -49,7 +49,7 @@ class NativeSessionPreparation(backend.TurnSession):
         await self.stats.request(self)
 
     async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
-        if not self.native_session.custody.retained:
+        if not self.native_session.native_state.retained:
             self.admission.raise_native_failure(
                 NativePiUnavailable(
                     self.output.failure_text or "Native session preparation failed"
@@ -81,10 +81,10 @@ class NativeSessionPreparation(backend.TurnSession):
         worktree: str, environment: dict[str, str], session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
-        """Borrow existing child custody through launch, observation and retention."""
+        """Borrow existing child ownership through launch, observation and retention."""
         owner = asyncio.current_task()
         launch = await Coordination.run_worker(partial(
-            persistent.custody.managed_launch,
+            persistent.native_state.managed_launch,
             agent_bin, tuple(agent_args), worktree=Path(worktree),
             environment=environment, session_file=session_file,
         ))

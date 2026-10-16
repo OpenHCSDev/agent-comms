@@ -2606,7 +2606,7 @@ for line in sys.stdin:
                     persistent_session=persistent,
                 )
             ]
-            first_proc = persistent.custody.child.proc
+            first_proc = persistent.native_state.child.proc
             second = [
                 event
                 async for event in backend.stream_agent_events(
@@ -2619,7 +2619,7 @@ for line in sys.stdin:
                 )
             ]
             assert first[-1].ok is True and second[-1].ok is True, second
-            assert persistent.custody.child.proc is first_proc and first_proc is not None
+            assert persistent.native_state.child.proc is first_proc and first_proc is not None
             assert first_proc.returncode is None
             ids = [line.split() for line in ids_file.read_text().splitlines()]
             assert len(ids) == 2
@@ -2640,9 +2640,9 @@ for line in sys.stdin:
                 )
             ]
             assert third[-1].ok is True
-            assert persistent.custody.child.proc is not first_proc
+            assert persistent.native_state.child.proc is not first_proc
             assert first_proc.returncode is not None
-            third_proc = persistent.custody.child.proc
+            third_proc = persistent.native_state.child.proc
             proof_file.write_text("outside writer changed the proof\n")
             proof_changed = [
                 event
@@ -2656,9 +2656,9 @@ for line in sys.stdin:
                 )
             ]
             assert proof_changed[-1].ok is True
-            assert persistent.custody.child.proc is not third_proc
+            assert persistent.native_state.child.proc is not third_proc
             assert third_proc is not None and third_proc.returncode is not None
-            fourth_proc = persistent.custody.child.proc
+            fourth_proc = persistent.native_state.child.proc
 
             async def cancelled_turn():
                 return [
@@ -2726,7 +2726,7 @@ for line in sys.stdin:
                 )
             ]
             assert revived[-1].ok is True
-            before_image_proc = persistent.custody.child.proc
+            before_image_proc = persistent.native_state.child.proc
             image = ImageInput("U0VDUkVUX0lNQUdFX0JZVEVT", "image/png")
             image_turn = [
                 event
@@ -2741,7 +2741,7 @@ for line in sys.stdin:
                 )
             ]
             assert image_turn[-1].ok is True
-            assert persistent.custody.child.proc is before_image_proc and before_image_proc is not None
+            assert persistent.native_state.child.proc is before_image_proc and before_image_proc is not None
             failed = [
                 event
                 async for event in backend.stream_agent_events(
@@ -2768,7 +2768,7 @@ for line in sys.stdin:
                 )
             ]
             assert revived[-1].ok is True
-            borrowed_proc = persistent.custody.child.proc
+            borrowed_proc = persistent.native_state.child.proc
 
             async def delayed_turn():
                 return [

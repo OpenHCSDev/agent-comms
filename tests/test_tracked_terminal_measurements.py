@@ -48,8 +48,8 @@ async def test_acquisition_retirement_measurement_preserves_cleanup_and_failure(
 
     assert [name for name, _ in callbacks] == ["last", "first"]
     operations = turn.startup.measurements.operations
-    assert set(operations) == {"native_custody_retirement"}
-    retirement = operations["native_custody_retirement"]
+    assert set(operations) == {"pi_session_retirement"}
+    retirement = operations["pi_session_retirement"]
     assert retirement.count == 1
     assert retirement.maximum_started_ns <= callbacks[0][1]
     assert retirement.maximum_finished_ns >= callbacks[-1][1]

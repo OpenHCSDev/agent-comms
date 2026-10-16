@@ -77,7 +77,7 @@ class SelectedExecution:
     def retained_source(self, session_file: Path):
         """The owner's idle child on this saved source with this package, if still current."""
         try:
-            retained = self.pi_session.custody.idle()
+            retained = self.pi_session.native_state.idle()
         except NativePiUnavailable:
             return None
         if retained.identity.session_file != str(session_file) or retained.child.key[0].package != self.native_package:
@@ -139,7 +139,7 @@ class SelectedExecution:
             self.following = following
         self.root = Path(self.root).absolute()
         # Package acquisition belongs to this execution before it can select
-        # a claim. Join its blocking verification before that custody advances.
+        # a claim. Join its blocking verification before that ownership advances.
         await Coordination.run_worker(self.validate)
         comms = Comms(self.root)
         with Coordination(str(self.root / "coordination.sqlite3")) as store:

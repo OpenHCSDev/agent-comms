@@ -148,7 +148,7 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
         assert not comms.registry.require(session).executing
         report["complete"] = True
     finally:
-        children = [persistent.custody.idle().child.proc
+        children = [persistent.native_state.idle().child.proc
                     for persistent in owner.turns.persistent_backends.values()
                     if persistent.available]
         await attachment.shutdown()

@@ -104,7 +104,7 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
 async def test_shutdown_joins_running_turn_before_releasing_session(prepared_owner):
     owner, session, native = prepared_owner
     native.provider.response_gate = asyncio.Event()
-    child = owner.turns.persistent_backends[session].custody.child.proc
+    child = owner.turns.persistent_backends[session].native_state.child.proc
     turn = asyncio.create_task(owner.prompt(session, [{"type": "text", "text": "Work"}]))
     try:
         async with asyncio.timeout(30):
@@ -155,7 +155,7 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
 
     async def stream(*args, **kwargs):
         persistent = owner.turns.persistent_backends[session]
-        assert persistent.available and persistent.custody.child.proc.alive()
+        assert persistent.available and persistent.native_state.child.proc.alive()
         if prior is not None:
             yield prior
         raise RuntimeError("execution failed")

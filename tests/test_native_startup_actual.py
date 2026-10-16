@@ -59,7 +59,7 @@ class StoppedNativePreparation(NativeSessionPreparation):
 async def prepare(owner, preparation_type, monkeypatch):
     seeded = await owner.run("Saved history, never replay this input")
     assert seeded[-1].ok, seeded[-1]
-    launch = owner.persistent.custody.child.key[0]
+    launch = owner.persistent.native_state.child.key[0]
     await owner.force_reopen()
     monkeypatch.setattr(backend, "CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS", 0.05)
     admission = NativeStartupAdmission(owner.root)
@@ -97,7 +97,7 @@ async def test_actual_saved_native_ready_pipe_survives_busy_owner(
     assert preparation.native.attestation.observed
     assert preparation.native.attestation.identity.session_file == str(native_backend.session)
     assert preparation.native.attestation.state.pending_message_count == 0
-    assert native_backend.persistent.custody.idle().current
+    assert native_backend.persistent.native_state.idle().current
 
 
 @pytest.mark.skipif(not hasattr(signal, "SIGSTOP"), reason="Native stop observation needs POSIX")

@@ -182,7 +182,7 @@ def test_cli_registry_reads_do_not_load_the_pi_runtime():
             "from agent_comms.threads import Thread\n"
             "Thread('a', frozenset(), '/tmp').backend\n"
             "assert 'agent_comms.backend' not in sys.modules\n"
-            "assert 'agent_comms.native_custody' not in sys.modules\n"
+            "assert 'agent_comms.pi_session_state' not in sys.modules\n"
         )],
         capture_output=True, text=True, timeout=60,
     )
@@ -355,7 +355,7 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         assert "".join(event.text for event in events if isinstance(event, ae.Chunk)) == "pong"
         assert isinstance(events[-1], ae.Done) and events[-1].ok and events[-1].text == "pong"
         assert starts == ["ping"]
-        assert backend.custody.retained
+        assert backend.native_state.retained
 
         usage = await backend.context_usage(thread)
         assert usage == ab.ContextUsage(tokens=321, window=1000)
