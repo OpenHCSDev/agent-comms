@@ -629,7 +629,7 @@ class CommsTodoAssignTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsTodoTransferTool(ThreadToolRequest):
     label = "Transfer problem"
-    description = "Transfer an exact assignment, pause the previous Goal and notify its prior owner."
+    description = "Transfer an exact assignment, end its old order and notify its prior owner."
     id: str = tool_field("Problem ID")
     expected_revision: int = tool_field("Exact current Todo revision")
     previous: Assignment = tool_field("Exact previous assignment from Todo listing")

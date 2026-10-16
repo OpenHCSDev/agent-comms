@@ -31,11 +31,30 @@ class GoalRef:
         self.owner.require_recorded()
         GoalRevision(self.goal_id, 0)
 
+    def current(self, snapshot) -> Goal | None:
+        if not self.owner.current(snapshot):
+            return None
+        goal = snapshot.require(self.owner.name).goal
+        return goal if goal is not None and goal.id == self.goal_id else None
+
     def require_current(self, registry) -> Goal:
-        thread = registry.require(self.owner.name)
-        if thread.incarnation != self.owner:
-            raise ValueError("Goal reference owner incarnation changed.")
-        return thread.require_goal(self.goal_id)
+        goal = self.current(registry.snapshot())
+        if goal is None:
+            raise ValueError("Goal reference is no longer current.")
+        return goal
+
+    def end_current(self, goals, completed) -> None:
+        """Free this exact order's slot; retain it in the existing Goal journal."""
+        from .goal_actions import (
+            ClearGoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable,
+        )
+
+        snapshot = goals.registry.snapshot()
+        goal = self.current(snapshot)
+        if goal is not None:
+            thread = snapshot.require(self.owner.name)
+            ClearGoalAction(expect=GoalPrecondition(expected_goal=goal))._apply_locked(
+                GoalActionContext(goals, thread, RuntimeInvocable, completed=completed))
 
 
 @dataclass(frozen=True, kw_only=True)

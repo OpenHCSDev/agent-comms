@@ -1146,7 +1146,7 @@ class TodoAssignCliCommand(CliCommand, declared_name="todo-assign"):
 
 @dataclass(frozen=True, kw_only=True)
 class TodoTransferCliCommand(CliCommand, declared_name="todo-transfer"):
-    help = "Transfer one exact assignment, pause its old Goal and notify the prior owner"
+    help = "Transfer one exact assignment, end its old order and notify the prior owner"
     id: str = option("--id")
     expected_revision: int = option("--expected-revision")
     previous: Assignment = option("--previous", normalize=json.loads)

@@ -22,7 +22,7 @@ from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .goal_actions import (
     CompletedGoalAction, GoalActionContext, GoalPrecondition,
-    PausedGoalAction, RuntimeInvocable, SetGoalAction,
+    RuntimeInvocable, SetGoalAction,
 )
 from .goal_mentions import bind_goal_mentions
 from .goals import Goal, GoalAuthor, GoalRef
@@ -525,16 +525,6 @@ class OrderGoalAction(SetGoalAction):
         if current is None or goal.id != current.id:
             super().before_publish(goal, ctx)
 
-    @staticmethod
-    def pause_previous(goals: Goals, previous: Assignment, completed):
-        snapshot = goals.registry.snapshot()
-        if previous.owner.current(snapshot):
-            thread = snapshot.require(previous.owner.name)
-            current = thread.goal
-            if current is not None and current.id == previous.goal.goal_id and current.state.active:
-                PausedGoalAction(expect=GoalPrecondition(expected_goal=current))._apply_locked(
-                    GoalActionContext(goals, thread, RuntimeInvocable, completed=completed))
-
     def issue(self, goals: Goals, assignment: Assignment, completed):
         self._apply_locked(GoalActionContext(
             goals, goals.registry.require(assignment.owner.name), RuntimeInvocable,
@@ -689,7 +679,7 @@ class TodoStore:
                 todo=TodoRef(todo_id), goal_id=proposed.generation, previous=previous.goal)
             order.require_target(goals, proposed.goal)
             result = self._apply(todo_id, TransferTodoChange(expected_revision, previous, proposed))
-            order.pause_previous(goals, previous, completed)
+            previous.goal.end_current(goals, completed)
             order.issue(goals, proposed, completed)
             return result
 
@@ -712,7 +702,7 @@ class TodoStore:
                 goals: Goals) -> Todo:
         with goals.writing() as completed:
             result = self._apply(todo_id, ReleaseTodoChange(expected_revision, previous))
-            OrderGoalAction.pause_previous(goals, previous, completed)
+            previous.goal.end_current(goals, completed)
             return result
 
     def set_state(self, todo_id: str, *, expected_revision: int, state: type[TodoState],
