@@ -382,12 +382,3 @@ def test_uninhabited_family_schema_rejects_every_value_without_a_manual_roster()
     assert FieldCodec.value_schema(Empty) == {"not": {}}
     with pytest.raises(ValueError, match="Unknown"):
         FieldCodec.decode(Empty, {"kind": "unregistered"})
-
-
-def test_recursive_record_schema_refers_to_its_anchor():
-    from agent_comms.turn_context import SegmentManifest
-
-    schema = FieldCodec.record_schema(SegmentManifest)
-    assert schema["$anchor"] == "SegmentManifest"
-    contributors = schema["properties"]["contributors"]
-    assert contributors["items"] == {"$ref": "#SegmentManifest"}

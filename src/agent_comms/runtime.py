@@ -25,7 +25,7 @@ from acp.exceptions import RequestError
 from acp.schema import RequestPermissionResponse
 
 from .jsonl_stream import JsonlStreamReader
-from .owner_protocol import OwnerProtocol
+from .owner_protocol import OwnerAnnouncement
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
@@ -144,9 +144,6 @@ def _raise_owner_error(data: dict[str, Any]) -> None:
 
 
 class RuntimeServer:
-    # Derived once before the socket listens; every subscription announces it.
-    protocol: OwnerProtocol
-
     def __init__(self, agent: Any):
         self.agent = agent
         self.server: asyncio.Server | None = None
@@ -171,7 +168,6 @@ class RuntimeServer:
         if self.server is not None or os.name == "nt":
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.protocol = await Coordination.run_worker(OwnerProtocol.current)
         try:
             address = self._resources.enter_context(PrivateSocketRole.address(self.path))
             self.server = await asyncio.start_unix_server(
@@ -455,8 +451,7 @@ class RuntimeProxy(RuntimeConnection):
                 raise RuntimeError("Thread owner disconnected during attachment")
             data = json.loads(announcement)
             _raise_owner_error(data)
-            protocol = await Coordination.run_worker(OwnerProtocol.current)
-            protocol.require_compatible(self.session_id, data)
+            OwnerAnnouncement().require_same_core(self.session_id, data)
             while line := await reader.readline():
                 data = json.loads(line)
                 _raise_owner_error(data)

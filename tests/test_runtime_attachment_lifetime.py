@@ -10,12 +10,11 @@ import pytest
 
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_protocol import (
-    CoreBuild,
-    ExportedCoreBuild,
     IncompatibleOwner,
-    OtherProtocolOwner,
-    OwnerProtocol,
+    OtherCoreOwner,
+    OwnerAnnouncement,
     UnannouncedOwner,
 )
 from agent_comms.session_load import FailedSessionLoadPlan
@@ -78,10 +77,10 @@ async def test_unsent_attachment_ends_with_actual_lifetime(tmp_path, ending):
 _UNANNOUNCED_FIRST_LINE = {"update": {"_meta": {"agentComms": {"updates": [
     {"kind": "coordination_changed", "context_usage": {"used": 1, "size": 2}},
 ]}}}}
-_OTHER_BUILD = ExportedCoreBuild("496609b95" + "0" * 31)
+_OTHER_COMMIT = "496609b95" + "0" * 31
 
 
-@pytest.mark.parametrize("ending", ["invalid_ready", "cancel", "unannounced", "other_protocol"])
+@pytest.mark.parametrize("ending", ["invalid_ready", "cancel", "unannounced", "other_core"])
 async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending):
     """Exercise lifecycle cleanup at the actual subscription protocol boundary."""
     import json
@@ -103,15 +102,15 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
             assert request["action"] == "subscribe"
             entered.set()
             if ending == "invalid_ready":
-                writer.write((json.dumps(OwnerProtocol.current().announcement()) + "\n").encode())
+                writer.write((json.dumps(FieldCodec.encode(OwnerAnnouncement())) + "\n").encode())
                 writer.write(b'{"ready": {}}\n')
                 await writer.drain()
             elif ending == "unannounced":
                 writer.write((json.dumps(_UNANNOUNCED_FIRST_LINE) + "\n").encode())
                 await writer.drain()
-            elif ending == "other_protocol":
-                other = replace(OwnerProtocol.current(), wire="0" * 64, build=_OTHER_BUILD)
-                writer.write((json.dumps(other.announcement()) + "\n").encode())
+            elif ending == "other_core":
+                other = FieldCodec.encode(OwnerAnnouncement(_OTHER_COMMIT))
+                writer.write((json.dumps(other) + "\n").encode())
                 await writer.drain()
             assert await reader.read() == b""
         except BaseException as error:
@@ -140,11 +139,9 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
                     assert owner is None
                 else:
                     expected = (
-                        UnannouncedOwner(thread="owner", frontend=CoreBuild.current())
+                        UnannouncedOwner(thread="owner")
                         if ending == "unannounced"
-                        else OtherProtocolOwner(
-                            thread="owner", frontend=CoreBuild.current(), owner=_OTHER_BUILD
-                        )
+                        else OtherCoreOwner(thread="owner", core_commit=_OTHER_COMMIT)
                     )
                     assert owner == expected
                     assert raised.value.data["reason"] == expected.line()

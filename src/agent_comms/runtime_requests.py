@@ -21,6 +21,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .private_bus_checkpoint import ContextManifestReference
 from .goal_actions import GoalAction
+from .owner_protocol import OwnerAnnouncement
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
 from .thread_identity import ThreadIncarnation
@@ -136,8 +137,7 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
 class SubscribeRuntimeRequest(RuntimeRequest):
     async def apply(self, ctx: RuntimeRequestContext) -> None:
         agent = ctx.server.agent
-        # The frontend compares the protocol before it decodes any update.
-        await ctx.send(ctx.server.protocol.announcement())
+        await ctx.send(FieldCodec.encode(OwnerAnnouncement()))
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
         await agent.sessions.transcript.replay(

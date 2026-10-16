@@ -267,8 +267,7 @@ class SessionLifecycle:
                 self.proxies[session_id] = proxy
             except IncompatibleOwnerError as error:
                 raise RequestError.invalid_params(
-                    {"reason": str(error), **error.owner.failure_metadata(),
-                     **failed_command.failure_metadata()}
+                    {**error.owner.failure_metadata(), **failed_command.failure_metadata()}
                 ) from error
             except (OSError, RuntimeError, TypeError, ValueError) as error:
                 raise RequestError.invalid_params(
