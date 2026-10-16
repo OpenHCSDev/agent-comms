@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from agent_comms.activity import Activity, ActivityLog, ActivityState
 from agent_comms.agent_activity import UnavailableRecipientActivity
 from agent_comms.audience_manifest import FrozenRecipient
@@ -16,6 +18,8 @@ def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
         comms.registry.declare(Thread(f"peer-{index}", frozenset(), str(tmp_path), created_at=1_700_000_000.0 + index))
     snapshot = comms.registry.snapshot()
     wanted = snapshot.threads["peer-7"]
+    with pytest.raises(TypeError):
+        snapshot.threads["peer-7"] = snapshot.threads["peer-0"]
     lookup = wanted.incarnation.stable_thread_lookup
     assert snapshot.thread_for_lookup(lookup) is wanted
     assert snapshot.thread_for_lookup("not-a-recipient") is None
