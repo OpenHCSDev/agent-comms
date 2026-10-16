@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
 from .goal_presentation import GoalExecution, GoalWaitTarget
-from .goals import Goal
+from .goals import Goal, GoalDeadline
 from .message_bus import MessageBus
 from .store_files import _store_lock
 from .threads import Thread
@@ -367,6 +367,24 @@ class Goals:
                 if not wait.matches(original):
                     return False
             return self.waits.clear(goal.id, wait_id=wait.wait_id)
+
+    def order_goal(self, sender: str, recipient: str, text: str, deadline: GoalDeadline) -> Goal:
+        """Bind the real commander and recipient together before the declared action."""
+        from .goal_actions import NewOrderGoalAction, OrderInvocable, ReviseOrderGoalAction
+
+        with _store_lock(self._wire_lock_path):
+            snapshot = self.registry.snapshot()
+            commander = snapshot.require(sender).incarnation
+            target = snapshot.require(recipient)
+            target.role.require_executable()
+            action = (
+                ReviseOrderGoalAction
+                if target.goal is not None and not target.goal.state.terminal
+                else NewOrderGoalAction
+            )
+            return action(text=text, deadline=deadline, commander=commander).apply(
+                GoalActionContext(self, target, OrderInvocable)
+            )
 
     def update_goal(
         self,

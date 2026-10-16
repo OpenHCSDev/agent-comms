@@ -27,6 +27,7 @@ from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
 from .field_codec import FieldCodec
+from .goals import GoalDeadline
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .exporting import (
@@ -714,6 +715,21 @@ class SendCliCommand(CliCommand):
             else FieldCodec.decode(ChangeReport, self.report),
         )
         return {"id": mid}
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrderCliCommand(CliCommand):
+    help = "Issue or revise a goal as its registered commander, without replaying attempts"
+    sender: str = option("--from")
+    target: str = option("--to")
+    text: str = option("--text")
+    deadline: GoalDeadline = option(
+        "--deadline", normalize=_json_object, choices=None,
+        help='Deadline JSON: {"kind":"deadline","at":UNIX_TIME} or {"kind":"no_deadline"}',
+    )
+
+    def apply(self, ctx: Comms) -> Any:
+        return {"goal": ctx.goals.order_goal(self.sender, self.target, self.text, self.deadline).to_wire()}
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -23,8 +23,9 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWait, GoalWaits
-from .goals import Goal, GoalDeadline, NoDeadline
-from .goal_progress import GoalProgress
+from .goals import Goal, GoalDeadline, IssuedGoalCommand, NoDeadline
+from .goal_progress import GoalProgress, GoalReport
+from .thread_identity import ThreadIncarnation
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -46,6 +47,10 @@ class RuntimeInvocable:
 
 class OwnerControlInvocable:
     pass
+
+
+class OrderInvocable:
+    """Only the order entrypoint supplies the registry-bound commander."""
 
 
 @dataclass(frozen=True)
@@ -134,6 +139,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             for entry in ctx.goals.registry.goal_history(ctx.thread.name)
         ):
             raise ValueError("This goal was already reported in this turn.")
+        self.before_change(ctx)
         goal = self.change(ctx)
         self.before_publish(goal, ctx)
         ctx.goals.registry.register(
@@ -150,13 +156,16 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
     @abstractmethod
     def change(self, ctx: GoalActionContext) -> Goal | None: ...
 
+    def before_change(self, ctx: GoalActionContext) -> None:
+        pass
+
     def before_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
         pass
 
 
 @dataclass(frozen=True, kw_only=True)
 class TransitionGoalAction(GoalAction):
-    progress: GoalProgress | None = None
+    progress: GoalProgress | GoalReport | str | None = None
 
     def __post_init__(self) -> None:
         if self.progress is not None:
@@ -167,6 +176,9 @@ class TransitionGoalAction(GoalAction):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = ctx.require_goal()
+        if self.progress is not None or ctx.model_report:
+            goal.command.require_report(self.progress)
+        progress = goal.progress if self.progress is None else self.progress.submitted()
         state = self.next_state(ctx)
         goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
         self.before_transition(ctx)
@@ -174,7 +186,7 @@ class TransitionGoalAction(GoalAction):
             goal,
             state=state,
             revision=goal.revision + 1,
-            progress=goal.progress if self.progress is None else self.progress,
+            progress=progress,
             reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn,
         )
 
@@ -355,6 +367,10 @@ class PausedGoalAction(
 
 @dataclass(frozen=True, kw_only=True)
 class ReplacementGoalAction(GoalAction):
+    def before_change(self, ctx: GoalActionContext) -> None:
+        if ctx.thread.goal is not None:
+            ctx.thread.goal.require_replacement()
+
     def before_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
         goal = ctx.thread.goal
         if goal is not None:
@@ -410,6 +426,7 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = ctx.require_goal()
+        goal.command.require_text_edit(ctx.actor)
         text = self.text.strip()
         if not text:
             raise ValueError("A goal requires text.")
@@ -418,10 +435,54 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
             goal,
             text=text,
             revision=revision,
-            mention_source=bind_goal_mentions(
-                text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()
+            mention_source=replace(
+                bind_goal_mentions(text, goal.id, revision, ctx.thread, ctx.goals.registry.snapshot()),
+                command=goal.command,
             ),
         )
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommandedGoalAction(OrderInvocable):
+    """Compose original set/edit lifetimes with verified command binding."""
+
+    commander: ThreadIncarnation
+    deadline: GoalDeadline
+
+    def change(self, ctx: GoalActionContext) -> Goal:
+        if ctx.actor is not OrderInvocable:
+            raise ValueError("An order requires the commander's bound order entrypoint.")
+        snapshot = ctx.goals.registry.snapshot()
+        self.commander.require_recorded()
+        if not self.commander.current(snapshot):
+            raise ValueError("The original commander is no longer registered.")
+        command = self.issued_command(ctx, snapshot)
+        goal = super().change(ctx)
+        return replace(
+            goal, deadline=self.deadline,
+            mention_source=replace(goal.require_mention_source(), command=command),
+        )
+
+    @abstractmethod
+    def issued_command(self, ctx: GoalActionContext, snapshot) -> IssuedGoalCommand: ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class NewOrderGoalAction(CommandedGoalAction, SetGoalAction):
+    def issued_command(self, ctx: GoalActionContext, snapshot) -> IssuedGoalCommand:
+        if ctx.thread.goal is not None and not ctx.thread.goal.state.terminal:
+            raise ValueError("An open goal must be revised, not replaced by an order.")
+        return IssuedGoalCommand.issue(self.commander)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReviseOrderGoalAction(CommandedGoalAction, EditGoalAction):
+    def issued_command(self, ctx: GoalActionContext, snapshot) -> IssuedGoalCommand:
+        goal = ctx.require_goal()
+        source = goal.require_mention_source()
+        if goal.state.terminal or not source.matches(goal, ctx.thread, snapshot):
+            raise ValueError("The open goal's original recipient/text proof changed.")
+        return source.command.reissued(self.commander, snapshot)
 
 
 def required_block_reason(reason: str | None) -> str:

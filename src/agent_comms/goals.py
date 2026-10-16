@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from math import isfinite
+import time
 from typing import Literal
 from abc import abstractmethod
 
@@ -119,6 +120,65 @@ class ResolvedMentionBinding(GoalMentionBinding):
         ), ()
 
 
+class GoalCommand(DeclaredFamily, affix="GoalCommand"):
+    """Command facts live with the goal's original mention proof, not a second store."""
+
+    def require_report(self, progress: GoalProgress | None) -> None:
+        pass
+
+    def require_text_edit(self, actor: type) -> None:
+        pass
+
+    def require_replacement(self) -> None:
+        pass
+
+    def reissued(self, commander: ThreadIncarnation, registry) -> IssuedGoalCommand:
+        raise ValueError("An open self-directed goal cannot be commandeered; resolve it first.")
+
+
+@dataclass(frozen=True)
+class NoGoalCommand(GoalCommand):
+    pass
+
+
+@dataclass(frozen=True)
+class IssuedGoalCommand(GoalCommand):
+    commander: ThreadIncarnation
+    revision: int
+    issued_at: float
+
+    def __post_init__(self) -> None:
+        self.commander.require_recorded()
+        if type(self.revision) is not int or not 1 <= self.revision < 1 << 63:
+            raise ValueError("A command requires a positive exact revision.")
+        if (type(self.issued_at) not in (int, float)
+                or not isfinite(self.issued_at) or self.issued_at <= 0):
+            raise ValueError("A command requires a positive finite server issue time.")
+
+    @classmethod
+    def issue(cls, commander: ThreadIncarnation, revision: int = 1) -> IssuedGoalCommand:
+        return cls(commander, revision, time.time())
+
+    def reissued(self, commander: ThreadIncarnation, registry) -> IssuedGoalCommand:
+        if self.commander.resolved(registry) != commander:
+            raise ValueError("Only this goal's original commander may revise its order.")
+        return type(self).issue(self.commander, self.revision + 1)
+
+    def require_report(self, progress: GoalProgress | None) -> None:
+        if progress is None:
+            raise ValueError("Commanded goals require a complete report: stupid, deleted, delivery, next.")
+        progress.require_report()
+
+    def require_text_edit(self, actor: type) -> None:
+        from .goal_actions import OrderInvocable
+
+        if actor is not OrderInvocable:
+            raise ValueError("Revise commanded goal text through its original commander's order.")
+
+    def require_replacement(self) -> None:
+        raise ValueError("An open commanded goal cannot be cleared or replaced; resolve it first.")
+
+
 @dataclass(frozen=True, slots=True)
 class GoalMentionSource:
     """Text-revision and owner-incarnation proof saved with its registry Goal."""
@@ -129,6 +189,9 @@ class GoalMentionSource:
     owner_name: str
     owner_created_at: float
     bindings: tuple[GoalMentionBinding, ...]
+    command: GoalCommand = field(
+        default_factory=NoGoalCommand, metadata={"wire_omit_default": True}
+    )
 
     def __post_init__(self) -> None:
         from .text_digest import TextDigest
@@ -231,6 +294,19 @@ class Goal:
     deadline: GoalDeadline = field(
         default_factory=NoDeadline, metadata={"wire_omit_default": True}
     )
+
+    @property
+    def command(self) -> GoalCommand:
+        return self.mention_source.command if self.mention_source is not None else NoGoalCommand()
+
+    def require_mention_source(self) -> GoalMentionSource:
+        if self.mention_source is None:
+            raise ValueError("This goal has no original recipient/contact proof.")
+        return self.mention_source
+
+    def require_replacement(self) -> None:
+        if not self.state.terminal:
+            self.command.require_replacement()
 
     def after_failed_turn(self, diagnostic: str) -> Goal:
         return self._failure_projection(

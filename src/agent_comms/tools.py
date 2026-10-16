@@ -25,7 +25,7 @@ from .goal_actions import (
 )
 from .goal_states import ActiveGoal
 from .goals import GoalDeadline, NoDeadline
-from .goal_progress import GoalProgress
+from .goal_progress import GoalReport
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
 from .owner_launch import RestartEnvironment
@@ -463,6 +463,23 @@ class CommsSetGoalTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsOrderTool(ToolRequest):
+    label = "Issue or revise an order"
+    description = (
+        "Create a commanded goal on another thread, or revise your own open order. "
+        "Revisions preserve BLOCKED/paused state, attempts and dependency waits; "
+        "they never authorize replay. The commander is the calling thread, not an argument."
+    )
+    target: str = tool_field("Exact recipient thread")
+    text: str = tool_field("Objective text, including any contact @mentions")
+    deadline: GoalDeadline = tool_field("Declared deadline, or explicit no_deadline")
+
+    def apply(self, comms: Comms) -> JsonObject:
+        goal = comms.goals.order_goal(_executing_thread(), self.target, self.text, self.deadline)
+        return {"goal": goal.to_wire()}
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsGoalTool(ToolRequest):
     label = "Goal progress"
     description = (
@@ -477,9 +494,10 @@ class CommsGoalTool(ToolRequest):
     )
     goal_id: str = tool_field("Goal identity provided in the turn context")
     status: type[GoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
-    progress: GoalProgress = tool_field(
-        "Progress text or a complete report with stupid, deleted, delivery and next; "
-        "blocked requires a nonempty explicit reason"
+    progress: GoalReport | str = tool_field(
+        "Self-directed progress text, or a complete report with stupid, deleted, delivery "
+        "and next. Commanded goals require the report. Core records its time; do not "
+        "supply a timestamp. Blocked requires a nonempty explicit reason."
     )
     wait_for: list[str] | None = tool_field(
         "Explicit thread names or @names; required for standby", default=None
@@ -522,7 +540,7 @@ class CommsResumeGoalTool(ToolRequest):
         "request. This does not replace the goal or resume blocked/completed goals."
     )
     goal_id: str = tool_field("Identity of the paused goal to resume")
-    progress: GoalProgress = tool_field("Progress text or complete report for the resumed goal")
+    progress: GoalReport | str = tool_field("Progress text or complete report for the resumed goal")
 
     def apply(self, comms: Comms) -> JsonObject:
         name = _executing_thread()
@@ -542,7 +560,7 @@ class CommsResumeGoalTool(ToolRequest):
                 progress=progress,
             ),
         )
-        if goal is None or not goal.state.active or goal.progress != progress:
+        if goal is None or not goal.state.active:
             raise ValueError("Goal changed during resume; refresh its state.")
         return {"goal": goal.to_wire()}
 

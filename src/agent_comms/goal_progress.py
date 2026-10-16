@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, fields
-from typing import ClassVar, Self
+from math import isfinite
+import time
+from typing import Self
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
+from .field_codec import JsonShapeFamily, JsonShapeMember
 
 
 @dataclass(frozen=True)
 class Delivery(DeclaredFamily):
-    works_in_app: ClassVar[bool] = False
-
     def __post_init__(self) -> None:
         for item in fields(self):
             value = getattr(self, item.name)
@@ -56,7 +56,6 @@ class Installed(Delivery):
 @dataclass(frozen=True)
 class WorksInApp(Delivery):
     evidence: str
-    works_in_app = True
 
     @property
     def summary(self) -> str:
@@ -89,10 +88,27 @@ class GoalReport:
         if not isinstance(self.delivery, Delivery):
             raise TypeError("Goal reports require a declared Delivery.")
 
+    def recorded(self) -> RecordedGoalReport:
+        return RecordedGoalReport(
+            **{item.name: getattr(self, item.name) for item in fields(GoalReport)},
+            recorded_at=time.time(),
+        )
+
     @property
     def summary(self) -> str:
         return (f"Stupid: {self.stupid}\nDeleted: {self.deleted}\n"
                 f"Delivery: {self.delivery.summary}\nNext: {self.next}")
+
+
+@dataclass(frozen=True)
+class RecordedGoalReport(GoalReport):
+    recorded_at: float
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if (type(self.recorded_at) not in (int, float)
+                or not isfinite(self.recorded_at) or self.recorded_at <= 0):
+            raise ValueError("A recorded goal report requires a positive finite server time.")
 
 
 class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
@@ -102,7 +118,18 @@ class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
     def capture(cls, value: GoalProgress | GoalReport | str) -> GoalProgress:
         if isinstance(value, cls):
             return value
-        return cls.from_wire(FieldCodec.encode(value))
+        if isinstance(value, GoalReport):
+            return ReportedGoalProgress(value.recorded())
+        return TextGoalProgress(value)
+
+    def submitted(self) -> GoalProgress:
+        return self
+
+    def require_report(self) -> None:
+        raise ValueError("Commanded goals require a complete report: stupid, deleted, delivery, next.")
+
+    def reported_since(self, at: float) -> bool:
+        return False
 
     @property
     @abstractmethod
@@ -130,6 +157,10 @@ class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
 class TextGoalProgress(GoalProgress, JsonShapeMember):
     value: str = ""
 
+    def __post_init__(self) -> None:
+        if type(self.value) is not str:
+            raise TypeError("Plain goal progress requires text.")
+
     @property
     def summary(self) -> str:
         return self.value
@@ -147,7 +178,16 @@ class TextGoalProgress(GoalProgress, JsonShapeMember):
 
 @dataclass(frozen=True)
 class ReportedGoalProgress(GoalProgress, JsonShapeMember):
-    value: GoalReport
+    value: RecordedGoalReport
+
+    def submitted(self) -> ReportedGoalProgress:
+        return type(self)(self.value.recorded())
+
+    def require_report(self) -> None:
+        pass
+
+    def reported_since(self, at: float) -> bool:
+        return self.value.recorded_at >= at
 
     @property
     def summary(self) -> str:
