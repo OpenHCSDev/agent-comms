@@ -121,6 +121,10 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         assert comms.bus.pending_counts_opened(source, basis) == before
         assert comms.views.last_sent_timestamps(source=source, registry=basis.registry) == sent
         assert "bob" in sent and "renamed-bob" not in sent
+    if not indexed:
+        # The refused mark never happened. Once the resource is repaired, a
+        # fresh exact mark succeeds; the retained selection above stays frozen.
+        mark_channel()
     latest = comms.views.viewer_snapshot(str(tmp_path))
     assert latest.unread == {"renamed-bob": 1}
     assert "renamed-bob" in latest.last_sent and "bob" not in latest.last_sent
