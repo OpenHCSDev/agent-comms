@@ -30,7 +30,7 @@ from .field_codec import FieldCodec, JsonShapeFamily
 from .goals import Deadline, GoalDeadline, NoDeadline
 from .goal_actions import OwnerInvocable
 from .goal_progress import GoalProgress
-from .todos import AcceptanceCheck, Assignment, TodoStore, TodoWhere
+from .todos import AcceptanceCheck, Assignment, TodoWhere
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .read_basis import WatchAcknowledgment, OnReadWatchAcknowledgment
@@ -1128,7 +1128,7 @@ class TodoCreateCliCommand(CliCommand, declared_name="todo-create"):
         help="JSON: repo checkout, command, expected_count; command must print one integer")
 
     def apply(self, ctx: Comms) -> object:
-        todo = TodoStore(ctx.root).create(self.id, self.repo, self.text,
+        todo = ctx.todos.create(self.id, self.repo, self.text,
             creator=ctx.registry.require(self.creator), where=self.where,
             acceptance=self.acceptance, bus=ctx.bus)
         return {"todo": FieldCodec.encode(todo)}
@@ -1145,7 +1145,7 @@ class TodoAssignCliCommand(CliCommand, declared_name="todo-assign"):
     deadline: float = option("--deadline", help="Unix timestamp")
 
     def apply(self, ctx: Comms) -> object:
-        todo = TodoStore(ctx.root).assign(self.id, expected_revision=self.expected_revision,
+        todo = ctx.todos.assign(self.id, expected_revision=self.expected_revision,
             owner=ctx.registry.require(self.owner), parent=ctx.registry.require(self.parent),
             generation=self.generation, deadline=Deadline(self.deadline), goals=ctx.goals)
         return todo.order_result(ctx.goals)
@@ -1163,7 +1163,7 @@ class TodoTransferCliCommand(CliCommand, declared_name="todo-transfer"):
     deadline: float = option("--deadline", help="Unix timestamp")
 
     def apply(self, ctx: Comms) -> object:
-        todo = TodoStore(ctx.root).transfer(self.id, expected_revision=self.expected_revision,
+        todo = ctx.todos.transfer(self.id, expected_revision=self.expected_revision,
             previous=self.previous, owner=ctx.registry.require(self.owner),
             parent=ctx.registry.require(self.parent), generation=self.generation,
             deadline=Deadline(self.deadline), goals=ctx.goals)
@@ -1179,7 +1179,7 @@ class TodoCompleteCliCommand(CliCommand, declared_name="todo-complete"):
     progress: GoalProgress = option("--progress", help="Structured report JSON including delivery SHA")
 
     def apply(self, ctx: Comms) -> object:
-        todo = TodoStore(ctx.root).complete(self.id, expected_revision=self.expected_revision,
+        todo = ctx.todos.complete(self.id, expected_revision=self.expected_revision,
             actor=ctx.registry.require(self.actor), progress=self.progress, goals=ctx.goals,
             actor_kind=OwnerInvocable)
         return todo.order_result(ctx.goals)
@@ -1191,7 +1191,7 @@ class TodosCliCommand(CliCommand, declared_name="todos"):
     repo: str | None = option("--repo", default=None)
 
     def apply(self, ctx: Comms) -> object:
-        return {"todos": FieldCodec.encode(TodoStore(ctx.root).list(self.repo))}
+        return {"todos": FieldCodec.encode(ctx.todos.list(self.repo))}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1199,7 +1199,7 @@ class FleetCliCommand(CliCommand):
     help = "Canonical problems, exact current orders and observed activity"
 
     def apply(self, ctx: Comms) -> object:
-        return {"problems": FieldCodec.encode(TodoStore(ctx.root).fleet(ctx.registry, ctx.agents))}
+        return {"problems": FieldCodec.encode(ctx.todos.fleet(ctx.registry, ctx.agents))}
 
 
 @dataclass(frozen=True, kw_only=True)

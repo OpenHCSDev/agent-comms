@@ -68,15 +68,6 @@ class OverdueUnitProgress(UnitProgress):
         return entry.open_goal and entry.goal.deadline.overdue(entry.observed_at, entry.goal.delivery_time)
 
 
-class SpinningUnitProgress(UnitProgress):
-    priority = 30
-    summary = "Sent back at least twice without WorksInApp"
-
-    @classmethod
-    def matches(cls, entry):
-        return entry.open_goal and entry.goal.author.revision_count >= 2
-
-
 class MovingUnitProgress(UnitProgress):
     priority = 40
     summary = "Working"

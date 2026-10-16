@@ -24,7 +24,7 @@ from .goal_actions import (
 )
 from .goal_states import ActiveGoal
 from .goals import Deadline, GoalDeadline, NoDeadline
-from .todos import AcceptanceCheck, Assignment, TodoStore, TodoWhere
+from .todos import AcceptanceCheck, Assignment, TodoWhere
 from .goal_progress import GoalProgress
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
@@ -603,7 +603,7 @@ class CommsTodoCreateTool(ThreadToolRequest):
         "Checkout repo, command, expected_count; command must exit zero and print one integer")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        todo = TodoStore(comms.root).create(self.id, self.repo, self.text,
+        todo = comms.todos.create(self.id, self.repo, self.text,
             creator=comms.registry.require(caller.name), where=self.where,
             acceptance=self.acceptance, bus=comms.bus)
         return {"todo": FieldCodec.encode(todo)}
@@ -620,7 +620,7 @@ class CommsTodoAssignTool(ThreadToolRequest):
     deadline: float = tool_field("Unix deadline timestamp")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        todo = TodoStore(comms.root).assign(self.id, expected_revision=self.expected_revision,
+        todo = comms.todos.assign(self.id, expected_revision=self.expected_revision,
             owner=comms.registry.require(self.owner), parent=comms.registry.require(caller.name),
             generation=self.generation, deadline=Deadline(self.deadline), goals=comms.goals)
         return todo.order_result(comms.goals)
@@ -638,7 +638,7 @@ class CommsTodoTransferTool(ThreadToolRequest):
     deadline: float = tool_field("Unix deadline timestamp")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        todo = TodoStore(comms.root).transfer(self.id, expected_revision=self.expected_revision,
+        todo = comms.todos.transfer(self.id, expected_revision=self.expected_revision,
             previous=self.previous, owner=comms.registry.require(self.owner),
             parent=comms.registry.require(caller.name), generation=self.generation,
             deadline=Deadline(self.deadline), goals=comms.goals)
@@ -654,7 +654,7 @@ class CommsTodoCompleteTool(ThreadToolRequest):
     progress: GoalProgress = tool_field("Structured progress; works_in_app requires evidence and sha")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        todo = TodoStore(comms.root).complete(self.id, expected_revision=self.expected_revision,
+        todo = comms.todos.complete(self.id, expected_revision=self.expected_revision,
             actor=comms.registry.require(caller.name), progress=self.progress, goals=comms.goals,
             actor_kind=ModelInvocable)
         return todo.order_result(comms.goals)
@@ -667,7 +667,7 @@ class CommsTodosTool(ToolRequest):
     repo: str | None = tool_field("Repository owner/name; omit for all", default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        return {"todos": FieldCodec.encode(TodoStore(comms.root).list(self.repo))}
+        return {"todos": FieldCodec.encode(comms.todos.list(self.repo))}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -676,7 +676,7 @@ class CommsFleetTool(ToolRequest):
     description = "Canonical problems, exact current orders and observed activity."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        return {"problems": FieldCodec.encode(TodoStore(comms.root).fleet(comms.registry, comms.agents))}
+        return {"problems": FieldCodec.encode(comms.todos.fleet(comms.registry, comms.agents))}
 
 
 @dataclass(frozen=True, kw_only=True)

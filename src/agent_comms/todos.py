@@ -390,6 +390,12 @@ class Todo(TypedTable):
         if self.revision != expected:
             raise TodoConflict(self)
 
+    def require_order(self, reference: GoalRef) -> Assignment:
+        assignment = self.assignment.require_assigned(self)
+        if not assignment.goal.same_order(reference):
+            raise TodoConflict(self)
+        return assignment
+
     def require_actor(self, actor: RecordedThreadIncarnation):
         if (not self.creator.same_publication_birth(actor)
                 and not self.assignment.require_assigned(self).owner.same_publication_birth(actor)):
@@ -436,21 +442,11 @@ class TodoRef:
 
     def require_current(self, root: Path, goal: GoalRef) -> Todo:
         current = self.read(root)
-        if not current.assignment.require_assigned(current).goal.same_order(goal):
-            raise TodoConflict(current)
+        current.require_order(goal)
         return current
 
     def require_completion(self, root: Path, goal: GoalRef, sha: str) -> AcceptedCommit:
         return self.require_current(root, goal).acceptance.check(sha)
-
-    def complete(self, goals: Goals, reference: GoalRef) -> None:
-        current = self.require_current(goals.root, reference)
-        goal = reference.require_current(goals.registry)
-        if not goal.delivery_complete:
-            raise TodoError("The assigned Goal has no accepted completion.")
-        goal.author.require_order_source(self.id)
-        assignment = current.assignment.require_assigned(current)
-        TodoStore(goals.root)._apply(current.id, CompleteTodo(current.revision, assignment))
 
 
 @dataclass(frozen=True)
@@ -480,7 +476,7 @@ class CommandedGoalAuthor(GoalAuthor):
         return RecordedEventTime(accepted.committed_at)
 
     def complete_problem(self, goals, reference):
-        self.todo.complete(goals, reference)
+        goals.todos.complete_order(self.todo.id, reference, goals.registry)
 
     def require_self_direction(self):
         raise TodoError("Only the problem's commander can revise this order.")
@@ -509,10 +505,18 @@ class CommandedGoalAuthor(GoalAuthor):
                 "\"evidence\":\"actual application evidence\"}. Core executes the problem's "
                 "declared acceptance check; a mismatch cannot complete the order.")
 
+    def require_commander(self, actor, snapshot):
+        if self.thread.resolved(snapshot) != actor:
+            raise TodoError("Only this order's original commander can judge it or send it back.")
+
     def revised(self, author, registry, now):
-        if self.thread.resolved(registry) != author:
-            raise TodoError("Only this order's original commander can send it back.")
+        self.require_commander(author, registry)
         return replace(self, issued_at=now, revisions=self.revisions + 1)
+
+    def release(self, goals, reference):
+        current = self.todo.require_current(goals.root, reference)
+        goals.todos.release(current.id, expected_revision=current.revision,
+                            previous=current.assignment.require_assigned(current), goals=goals)
 
 
 @dataclass(frozen=True)
@@ -613,36 +617,27 @@ class TodoStore:
         if not directory.is_dir():
             raise TodoError("Todo root must already exist.")
         self.path = directory / self.filename
-        with closing(self._connect()) as db:
-            db.execute("PRAGMA journal_mode=WAL")
-            db.execute("BEGIN IMMEDIATE")
-            tables = _TodoTable.read(db.execute("SELECT name FROM sqlite_master WHERE type='table'"))
-            if not tables:
-                Todo.create(db)
-            elif tables != [_TodoTable(FieldCodec.encode(Todo))]:
-                raise TodoError("Todo storage requires the one-shot durable migration.")
-            Todo.select(db, where="0")
-            db.execute("COMMIT")
-
-    def _connect(self) -> sqlite3.Connection:
-        db = CoordinationStore.writer(self.path, isolation_level=None)
-        db.execute("PRAGMA busy_timeout=5000")
-        db.execute("PRAGMA synchronous=FULL")
-        return db
 
     @contextmanager
     def _write(self) -> Iterator[sqlite3.Connection]:
-        db = self._connect()
-        try:
-            db.execute("BEGIN IMMEDIATE")
-            yield db
-            db.execute("COMMIT")
-        except BaseException:
-            if db.in_transaction:
-                db.execute("ROLLBACK")
-            raise
-        finally:
-            db.close()
+        with closing(CoordinationStore.writer(self.path, isolation_level=None)) as db:
+            db.execute("PRAGMA journal_mode=WAL")
+            db.execute("PRAGMA busy_timeout=5000")
+            db.execute("PRAGMA synchronous=FULL")
+            try:
+                db.execute("BEGIN IMMEDIATE")
+                tables = _TodoTable.read(db.execute("SELECT name FROM sqlite_master WHERE type='table'"))
+                if not tables:
+                    Todo.create(db)
+                elif tables != [_TodoTable(FieldCodec.encode(Todo))]:
+                    raise TodoError("Todo storage requires the one-shot durable migration.")
+                Todo.select(db, where="0")
+                yield db
+                db.execute("COMMIT")
+            except BaseException:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+                raise
 
     @staticmethod
     def _current(db: sqlite3.Connection, todo_id: str) -> Todo:
@@ -654,25 +649,48 @@ class TodoStore:
     @classmethod
     def read_existing(cls, root: Path, todo_id: str) -> Todo:
         _text(todo_id, "Todo ID", 128)
-        with closing(CoordinationStore.read_snapshot(Path(root) / cls.filename)) as db:
+        path = Path(root) / cls.filename
+        try:
+            path.lstat()
+        except FileNotFoundError as error:
+            raise TodoError(f"Unknown todo: {todo_id}.") from error
+        with closing(CoordinationStore.read_snapshot(path)) as db:
             return cls._current(db, todo_id)
 
     def get(self, todo_id: str) -> Todo:
         return self.read_existing(self.path.parent, todo_id)
 
     def list(self, repo: str | None = None) -> tuple[Todo, ...]:
+        if repo is not None:
+            repo = _repo(repo)
+        try:
+            self.path.lstat()
+        except FileNotFoundError:
+            return ()
         with closing(CoordinationStore.read_snapshot(self.path)) as db:
             if repo is None:
                 return tuple(Todo.select(db, order_by=("created_at", "id")))
             return tuple(Todo.read(db.execute(
-                f"SELECT * FROM {Todo.declared_name} WHERE repo=? ORDER BY rowid", (_repo(repo),))))
+                f"SELECT * FROM {Todo.declared_name} WHERE repo=? ORDER BY rowid", (repo,))))
+
+    def complete_order(self, todo_id: str, reference: GoalRef, registry: Registration) -> None:
+        current = self.get(todo_id)
+        assignment = current.require_order(reference)
+        goal = reference.require_current(registry)
+        if not goal.delivery_complete:
+            raise TodoError("The assigned Goal has no accepted completion.")
+        goal.author.require_order_source(todo_id)
+        self._apply(todo_id, CompleteTodo(current.revision, assignment))
 
     def fleet(self, registry: Registration, agents: AgentActivity) -> tuple[FleetEntry, ...]:
+        problems = self.list()
+        if not problems:
+            return ()
         snapshot = registry.snapshot()
         activities = agents.all_activity(snapshot.threads.values(), snapshot=snapshot)
         now = time.time()
         return tuple(problem.assignment.observe(problem, snapshot, activities, now)
-                     for problem in self.list())
+                     for problem in problems)
 
     def create(self, todo_id: str, repo: str, text: str, *, creator: Thread,
                where: TodoWhere, acceptance: AcceptanceCheck, bus: MessageBus) -> Todo:

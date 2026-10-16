@@ -32,17 +32,19 @@ from .recorded_time import RecordedEventTime
 from .message_bus import MessageBus
 from .store_files import _store_lock
 from .threads import Thread
+from .todos import TodoStore
 from .turn_lease import FinishedTurnFence
 
 _LOG = logging.getLogger(__name__)
 
 
 class Goals:
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus, agents):
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus, agents, todos: TodoStore):
         self.root = root
         self.registry = registry
         self.bus = bus
         self.agents = agents
+        self.todos = todos
         self._wire_lock_path = root / "wire"
         self.waits = GoalWaits(root / GoalWaits.filename)
         self.goal_store: GoalAttemptStore | None = None

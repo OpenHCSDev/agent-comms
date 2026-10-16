@@ -265,6 +265,39 @@ def test_declared_problem_location_and_reference_validation(todo_comms: Comms):
     assert assignment.owner == assignment.goal.owner and assignment.generation == assignment.goal.goal_id
 
 
+def test_comms_owns_one_store_and_reads_do_not_create_its_database(todo_comms: Comms):
+    store = todo_comms.todos
+    assert todo_comms.goals.todos is store
+    assert store.list() == ()
+    assert FleetCliCommand().apply(todo_comms) == {"problems": []}
+    with pytest.raises(TodoError, match="exact owner/repo"):
+        store.list("invalid")
+    with pytest.raises(TodoError, match="Unknown todo"):
+        store.get("missing")
+    assert not store.path.exists()
+
+
+def test_goal_authors_own_commander_check_and_order_release(todo_comms: Comms):
+    create(todo_comms)
+    assigned = assign(todo_comms)
+    reference = assigned.assignment.require_assigned(assigned).goal
+    goal = reference.require_current(todo_comms.registry)
+    snapshot = todo_comms.registry.snapshot()
+    with pytest.raises(TodoError, match="original commander"):
+        goal.author.require_commander(snapshot.require("worker-b").incarnation, snapshot)
+    goal.author.require_commander(snapshot.require("lead").incarnation, snapshot)
+    goal.author.release(todo_comms.goals, reference)
+    assert todo_comms.todos.get(assigned.id).assignment == UnassignedTodoAssignment()
+    assert todo_comms.registry.require("worker-a").goal is None
+
+    independent = todo_comms.goals.update_goal("worker-b", SetGoalAction(text="Independent work"),
+                                               actor=OwnerInvocable)
+    with pytest.raises(ValueError, match="not issued by a commander"):
+        independent.author.require_commander(snapshot.require("lead").incarnation, snapshot)
+    independent.author.release(todo_comms.goals, GoalRef(snapshot.require("worker-b").incarnation, independent.id))
+    assert todo_comms.registry.require("worker-b").require_goal() == independent
+
+
 def test_fleet_uses_problem_assignment_and_exact_current_order(todo_comms: Comms):
     problem = create(todo_comms)
     store = TodoStore(todo_comms.root)
