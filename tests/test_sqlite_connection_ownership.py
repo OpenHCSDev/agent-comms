@@ -3,6 +3,7 @@
 import ast
 import asyncio
 import threading
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -37,6 +38,32 @@ def test_sqlite_connections_and_busy_policy_have_one_owner():
                 timeout_arguments.append(f"{path.relative_to(PACKAGE)}:{node.lineno}")
     assert direct_connections == []
     assert timeout_arguments == []
+
+
+def test_reader_binds_temp_parameters_without_ever_writing_main(tmp_path):
+    from agent_comms.bus_route_counts import RouteSenderBindingRow
+
+    path = tmp_path / 'coordination.sqlite3'
+    with CoordinationStore(path):
+        pass
+    calls = []
+
+    def bind(connection):
+        calls.append(1)
+        with pytest.raises(sqlite3.OperationalError, match='readonly'):
+            connection.execute('CREATE TABLE main.not_admitted (value TEXT)')
+        RouteSenderBindingRow.create(connection)
+        RouteSenderBindingRow('reader', None).insert(connection)
+
+    connection = CoordinationStore.read_snapshot(path, bind=bind)
+    try:
+        assert calls == [1]
+        assert RouteSenderBindingRow.one(connection, sender='reader').sender_lookup is None
+        assert connection.execute('PRAGMA query_only').fetchone()[0] == 1
+        with pytest.raises(sqlite3.OperationalError, match='readonly'):
+            connection.execute(f'DELETE FROM "{RouteSenderBindingRow.declared_name}"')
+    finally:
+        connection.close()
 
 
 @pytest.mark.asyncio

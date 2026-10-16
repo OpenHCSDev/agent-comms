@@ -14,7 +14,7 @@ from .catalog_store import ChannelCatalog
 from .goal_waits import GoalWaits
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
-from .read_ledger import AbsentReadSource, ReadMasks, ReadObservations, SelectedViewers
+from .read_ledger import AbsentReadSource, ReadMasks, ReadObservations, HumanViewers
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
@@ -372,8 +372,9 @@ class HistoryViews:
         )
         reads = self.transcripts.bus.reads
         if views:
-            viewers = SelectedViewers.humans(snapshot.threads.values())
-            read_observations = reads.read(viewers).observations(snapshot)
+            viewers = HumanViewers.capture(snapshot.threads.values())
+            with viewers.reading(reads, AbsentReadSource()) as document:
+                read_observations = document.observations(snapshot)
         else:
             # No selected consumer needs a read cut. This is not an absent-store fallback.
             read_observations = ReadObservations(AbsentReadSource(), ReadMasks())

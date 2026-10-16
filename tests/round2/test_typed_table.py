@@ -105,6 +105,29 @@ def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation
             NativeContextJournal.create(db)
 
 
+def test_temporary_table_keeps_indexes_and_triggers_in_its_connection():
+    @dataclass(frozen=True)
+    class TemporaryParametersRow(TypedTable):
+        key: str = field(metadata={'sql': Column(primary_key=True)})
+        count: int
+        temporary = True
+        indexes = (Index(('count',)),)
+
+        @classmethod
+        def trigger_bodies(cls):
+            return {f'{cls.declared_name}_observe':
+                    f' AFTER INSERT ON "{cls.declared_name}" BEGIN SELECT 1; END'}
+
+    with sqlite3.connect(':memory:') as db:
+        TemporaryParametersRow.create(db)
+        TemporaryParametersRow('reader', 1).insert(db)
+        assert TemporaryParametersRow.select(db) == [TemporaryParametersRow('reader', 1)]
+        assert db.execute('SELECT name FROM sqlite_master').fetchall() == []
+        assert {row[0] for row in db.execute('SELECT type FROM sqlite_temp_master')} == {
+            'table', 'index', 'trigger',
+        }
+
+
 def test_index_owns_unique_partial_creation():
     with sqlite3.connect(':memory:') as db:
         TableParentRow.create(db)

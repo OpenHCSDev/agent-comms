@@ -30,6 +30,7 @@ def test_original_empty_cut_cannot_clear_a_later_index(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
+    comms.messaging.initialize_private_initial_protocol()
     with comms.bus.snapshot(viewer=viewer) as (basis, source):
         assert source.through == 0
         message = comms.messaging.send_message('sender', viewer, 'after empty capture')

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -15,7 +15,6 @@ from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .registry_document import RegistrySnapshot
-    from .thread_identity import ThreadIncarnation
 
 
 @dataclass(frozen=True, slots=True)
@@ -207,23 +206,6 @@ class DeliveryScope(MessageDisplayScope):
             target in self.channels or self.canonical(target) == self.actor
         )
 
-    @staticmethod
-    def sender_lookups(
-        source: ThreadIncarnation, on_unrecorded: Callable[[], None]
-    ) -> Iterator[str]:
-        """Share format discovery; each consumer owns its missing-birth action.
-
-        The unstamped format matches before a birth is required. An index must
-        probe for an assigned stamp; admission must refuse that unproven stamp.
-        """
-        from .bus_publication import stable_thread_lookup
-
-        yield ""
-        if source.has_recorded_birth:
-            yield stable_thread_lookup(source.created_at)
-        else:
-            on_unrecorded()
-
     def minimum_timestamp(
         self, sender: str, target: str, sender_lookup: str, snapshot: RegistrySnapshot
     ) -> float | None:
@@ -235,7 +217,7 @@ class DeliveryScope(MessageDisplayScope):
         if source is None:
             return None
         incarnation = source.incarnation
-        if sender_lookup not in self.sender_lookups(incarnation, incarnation.require_recorded):
+        if sender_lookup not in incarnation.sender_lookups(incarnation.require_recorded):
             return None
         return max(source.created_at, snapshot.threads[self.actor].created_at)
 

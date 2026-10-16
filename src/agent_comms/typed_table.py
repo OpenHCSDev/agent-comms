@@ -517,6 +517,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     checks: ClassVar[tuple[str, ...]] = ()
     indexes: ClassVar[tuple[Index, ...]] = ()
     without_rowid: ClassVar[bool] = False
+    temporary: ClassVar[bool] = False
 
     @classmethod
     def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
@@ -577,7 +578,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         definitions.extend(reference.sql(cls) for reference in cls.references())
         table = _identifier(cls.declared_name)
         statements = {
-            cls.declared_name: f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
+            cls.declared_name: f"CREATE {'TEMP ' if cls.temporary else ''}TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
             + (", WITHOUT ROWID" if cls.without_rowid else "")
         }
         indexes = cls.indexes + tuple(

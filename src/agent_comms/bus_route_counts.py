@@ -241,6 +241,22 @@ class RouteIdentityRow(RouteTable, TypedTable):
 
 
 @dataclass(frozen=True)
+class RouteSenderBindingRow(TypedTable):
+    """Current namespace parameters, owned by one opened reader connection."""
+
+    sender: str = field(metadata={"sql": Column(primary_key=True)})
+    sender_lookup: str | None = field(metadata={"sql": Column(nullable=True)})
+    temporary = True
+    without_rowid = True
+
+    @classmethod
+    def bind(cls, connection: sqlite3.Connection, registry: RegistrySnapshot) -> None:
+        cls.create(connection)
+        for name, source in registry.named_members():
+            cls(name, source.incarnation.sender_lookup).insert(connection)
+
+
+@dataclass(frozen=True)
 class RouteUnread(TypedRow):
     actor: str
     target: str
@@ -315,12 +331,17 @@ class BusRouteCounts:
             CoordinationReadUnavailable.raise_from(error)
 
     def _acquire(self) -> BusRouteCounts:
-        self.connection = self._open()
+        self.connection = self._open(bind=self._bind_reader)
         return self
 
-    def _open(self) -> sqlite3.Connection:
+    def _open(
+        self, *, bind: Callable[[sqlite3.Connection], None] | None = None,
+    ) -> sqlite3.Connection:
         self._initialize()
-        return CoordinationStore.read_snapshot(self.path)
+        return CoordinationStore.read_snapshot(self.path, bind=bind)
+
+    def _bind_reader(self, connection: sqlite3.Connection) -> None:
+        """An unscoped index has no namespace parameters to bind."""
 
     def __exit__(self, _error_type, _error, _traceback) -> None:
         self.connection.close()
@@ -516,6 +537,9 @@ class OpenedRouteCounts(BusRouteCounts):
             for target in delivery.channels:
                 self._channel_members.setdefault(target, set()).add(actor)
 
+    def _bind_reader(self, connection: sqlite3.Connection) -> None:
+        RouteSenderBindingRow.bind(connection, self.registry)
+
     def _decode(self, record: Mapping) -> tuple[DeliveryMessage, ...]:
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
@@ -595,16 +619,20 @@ class OpenedRouteCounts(BusRouteCounts):
                 SELECT DISTINCT target.value AS target
                 FROM json_each(:targets) AS owner,json_each(owner.value) AS target
             ), unrecorded AS MATERIALIZED (
-                SELECT target.target,source.value AS sender,
+                SELECT target.target,source.sender,
                     (SELECT sender_lookup FROM "{RouteIdentityRow.declared_name}" AS route
-                     WHERE route.target=target.target AND route.sender=source.value
+                     WHERE route.target=target.target AND route.sender=source.sender
                          AND route.first_seq<=:through AND route.sender_lookup<>''
                      ORDER BY route.first_seq LIMIT 1) AS sender_lookup
-                FROM request_targets AS target,json_each(:unrecorded) AS source
+                FROM request_targets AS target,"{RouteSenderBindingRow.declared_name}" AS source
+                WHERE source.sender_lookup IS NULL
             ), route_keys AS (
-                SELECT target.target,sender.key AS sender,lookup.value AS sender_lookup
-                FROM request_targets AS target,json_each(:senders) AS sender,
-                    json_each(sender.value) AS lookup
+                SELECT target.target,sender.sender,'' AS sender_lookup
+                FROM request_targets AS target,"{RouteSenderBindingRow.declared_name}" AS sender
+                UNION ALL
+                SELECT target.target,sender.sender,sender.sender_lookup
+                FROM request_targets AS target,"{RouteSenderBindingRow.declared_name}" AS sender
+                WHERE sender.sender_lookup IS NOT NULL
                 UNION ALL
                 SELECT * FROM unrecorded WHERE sender_lookup IS NOT NULL
             ), roots AS MATERIALIZED (
@@ -627,17 +655,10 @@ class OpenedRouteCounts(BusRouteCounts):
             )"""
 
     def _request_bindings(self, actors):
-        senders = {}
-        unrecorded = []
-        for name, source in self.registry.named_members():
-            senders[name] = tuple(DeliveryScope.sender_lookups(
-                source.incarnation, lambda: unrecorded.append(name)
-            ))
         return {
             "targets": json.dumps({
                 actor: sorted(self.deliveries[actor].index_targets) for actor in actors
             }),
-            "senders": json.dumps(senders), "unrecorded": json.dumps(unrecorded),
             "through": self.source.through,
         }
 

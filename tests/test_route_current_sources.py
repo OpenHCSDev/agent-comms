@@ -1,12 +1,11 @@
 """Current namespace seeks, including ordinary birth-zero reads."""
 
-import json
 import sqlite3
 from dataclasses import replace
 
 import pytest
 
-from agent_comms.bus_route_counts import OpenedRouteCounts
+from agent_comms.bus_route_counts import OpenedRouteCounts, RouteSenderBindingRow
 from agent_comms.comms import wire
 from agent_comms.routing import DeliveryScope
 from agent_comms.threads import Thread
@@ -69,10 +68,39 @@ def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
         assert scope.unread(ordinary, recorded, basis.seen)
         with OpenedRouteCounts(c.bus.log.path, source, recorded, {viewer: scope}) as index:
             bindings = index._request_bindings((viewer,))
-            assert json.loads(bindings['senders'])['sender'] == ['']
-            assert 'sender' in json.loads(bindings['unrecorded'])
+            assert 'senders' not in bindings and 'unrecorded' not in bindings
+            assert list(recorded.threads['sender'].incarnation.sender_lookups(lambda: None)) == ['']
+            assert RouteSenderBindingRow.one(index.connection, sender='sender').sender_lookup is None
             with pytest.raises(sqlite3.OperationalError, match='user-defined function'):
                 index.unseen_counts({viewer: basis.seen})
         # The read never grants the same participant identity-bound publication.
         with pytest.raises(ValueError, match='positive recorded birth'):
             scope.minimum_timestamp('sender', viewer, '1'*32, recorded)
+
+
+def test_sender_namespace_is_bound_once_and_reader_stays_sealed(tmp_path, monkeypatch):
+    c = wire(tmp_path)
+    c.registry.declare(Thread('sender', frozenset(), str(tmp_path)))
+    viewer = c.messaging.user_identity(str(tmp_path)).name
+    message = c.messaging.send_message('sender', viewer, 'unpainted')
+    with c.bus.snapshot(viewer=viewer) as (basis, source):
+        scope = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
+        original = type(basis.registry).named_members
+        visits = []
+
+        def named_members(registry):
+            if registry is basis.registry:
+                visits.append(1)
+            yield from original(registry)
+
+        monkeypatch.setattr(type(basis.registry), 'named_members', named_members)
+        with OpenedRouteCounts(c.bus.log.path, source, basis.registry, {viewer: scope}) as index:
+            assert index.unseen_counts({viewer: basis.seen}) == {viewer: {'sender': 1}}
+            assert [row.seq for row in index.unseen_deliveries(viewer, basis.seen)] == [message.seq]
+            assert index.unseen_counts({viewer: basis.seen}) == {viewer: {'sender': 1}}
+            assert visits == [1]
+            assert index.connection.execute('PRAGMA query_only').fetchone()[0] == 1
+            with pytest.raises(sqlite3.OperationalError, match='readonly'):
+                index.connection.execute(f'DELETE FROM "{RouteSenderBindingRow.declared_name}"')
+            with pytest.raises(sqlite3.OperationalError, match='readonly'):
+                index.connection.execute('CREATE TABLE main.reader_cannot_write (value TEXT)')

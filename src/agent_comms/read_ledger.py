@@ -319,14 +319,31 @@ class SelectedViewers(ReadViewers):
     incarnations: tuple[ThreadIncarnation, ...]
 
     @classmethod
-    def humans(cls, participants):
-        return cls(tuple(p.incarnation for p in participants if ReadLedger.human(p.role)))
+    def capture(cls, participants):
+        return cls(tuple(p.incarnation for p in participants))
+
+    @contextmanager
+    def reading(self, ledger: ReadLedger, source: ReadSource):
+        if self.incarnations:
+            with ledger.reading(self) as document:
+                yield document
+        else:
+            # No selected reader consumes state; this is not missing-authority recovery.
+            yield ReadDocument({}, source, {}, NoReadNotice())
 
     def messages(self, connection):
         return ReadMessageRow.select(connection, viewer_birth=In(tuple(p.created_at for p in self.incarnations)))
 
     def transcripts(self, connection):
         return ReadTranscriptRow.select(connection, viewer_name=In(tuple(p.name for p in self.incarnations)))
+
+
+class HumanViewers(SelectedViewers):
+    __slots__ = ()
+
+    @classmethod
+    def capture(cls, participants):
+        return super().capture(p for p in participants if ReadLedger.human(p.role))
 
 
 @dataclass(frozen=True, slots=True)

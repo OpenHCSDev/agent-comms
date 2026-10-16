@@ -7,6 +7,7 @@ import sqlite3
 import stat
 import tempfile
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -98,11 +99,15 @@ class CoordinationStore:
         _TableName.read(db.execute("SELECT name FROM sqlite_master LIMIT 1"))
 
     @staticmethod
-    def _configure_reader(db: sqlite3.Connection) -> sqlite3.Connection:
+    def _configure_reader(
+        db: sqlite3.Connection, bind: Callable[[sqlite3.Connection], None] | None = None,
+    ) -> sqlite3.Connection:
         try:
             db.row_factory = sqlite3.Row
-            db.execute("PRAGMA query_only=ON")
             db.execute("PRAGMA foreign_keys=ON")
+            if bind is not None:
+                bind(db)
+            db.execute("PRAGMA query_only=ON")
             return db
         except BaseException:
             db.close()
@@ -110,10 +115,13 @@ class CoordinationStore:
 
     @classmethod
     def _open_reader(
-        cls, path: Path, contention: StoreContention
+        cls, path: Path, contention: StoreContention,
+        bind: Callable[[sqlite3.Connection], None] | None = None,
     ) -> sqlite3.Connection:
+        # Bind connection-local parameters while URI mode=ro still forbids
+        # canonical writes; seal query_only before admitting the reader.
         return cls._configure_reader(
-            contention.reader(path.resolve().as_uri() + "?mode=ro")
+            contention.reader(path.resolve().as_uri() + "?mode=ro"), bind,
         )
 
     @classmethod
@@ -127,10 +135,11 @@ class CoordinationStore:
 
     @classmethod
     def read_snapshot(
-        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
+        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
+        *, bind: Callable[[sqlite3.Connection], None] | None = None,
     ) -> sqlite3.Connection:
-        """Open and acquire one consistent read-only snapshot with SQLite's busy handler."""
-        return cls._acquire_snapshot(cls._open_reader(path, contention))
+        """Bind local parameters, seal read-only access, then acquire one WAL cut."""
+        return cls._acquire_snapshot(cls._open_reader(path, contention, bind))
 
     @classmethod
     def recovering_snapshot(cls, path: Path) -> sqlite3.Connection:

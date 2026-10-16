@@ -21,6 +21,20 @@ def prepared(root):
     return comms
 
 
+def test_reader_selection_owns_empty_acquisition_not_participant_role(tmp_path):
+    from agent_comms.read_ledger import HumanViewers, ReadLedger, SelectedViewers
+
+    ledger = ReadLedger(tmp_path)
+    agent = Thread('agent', frozenset(), str(tmp_path), created_at=1.0)
+    with HumanViewers.capture((agent,)).reading(ledger, AbsentReadSource()) as document:
+        assert document.messages == {}
+    assert not ledger.path.exists()
+    with pytest.raises(FileNotFoundError):
+        with SelectedViewers.capture((agent,)).reading(ledger, AbsentReadSource()):
+            pytest.fail('A selected reader cannot recover missing authority')
+    assert not ledger.path.exists()
+
+
 def test_conversation_persisted_pairs_decode_once_without_an_encode_round_trip():
     from unittest.mock import patch
 

@@ -25,7 +25,7 @@ from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import (ReadDocument, ReadLedger, ReadMask, ReadMasks, ReadSource, AbsentReadSource,
-                          ReadRevision, SelectedViewers, ReadNotice, NoReadNotice,
+                          ReadRevision, SelectedViewers, HumanViewers, ReadNotice, NoReadNotice,
                           ReadObservations)
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
@@ -428,6 +428,7 @@ class DisplaySelection:
     def reading(
         cls, registry: Registration, catalog: ChannelCatalog,
         reads: ReadLedger, viewer: str | None, source: ReadSource,
+        *, reader_selection: type[SelectedViewers] = HumanViewers,
     ) -> Iterator[DisplaySelection]:
         """Borrow the original identity resources and read the ledger once.
 
@@ -438,15 +439,8 @@ class DisplaySelection:
             snapshot = document.snapshot()
             participants = ((snapshot.participant(viewer),) if viewer is not None
                             else snapshot.threads.values())
-            viewers = SelectedViewers.humans(participants)
-            if viewers.incarnations:
-                with reads.reading(viewers) as read_document:
-                    selected = cls.capture(snapshot, channels, read_document, viewer, source)
-            else:
-                # No human consumes read state. Never open/recover a missing authority.
-                selected = cls.capture(
-                    snapshot, channels, ReadDocument({}, source, {}, NoReadNotice()), viewer, source
-                )
+            with reader_selection.capture(participants).reading(reads, source) as read_document:
+                selected = cls.capture(snapshot, channels, read_document, viewer, source)
             yield selected
 
     @property
