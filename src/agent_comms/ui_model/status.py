@@ -97,8 +97,11 @@ class OpenThreadStatus:
         A thread whose store was busy keeps its previous row (or shows
         unavailable until a first read succeeds); the service reads it again.
         """
-        rows = {name: ThreadStatusModel.known(name, presentation)
-                for name, presentation in result.presentations.items()}
+        rows = {
+            name: (ThreadStatusModel.unavailable(name, "Thread is no longer available")
+                   if presentation is None else ThreadStatusModel.known(name, presentation))
+            for name, presentation in result.presentations.items()
+        }
         rows.update((name, ThreadStatusModel.unavailable(name, str(error)))
                     for name, error in result.unavailable.items())
         rows.update((name, self.rows.rows.get(name) or ThreadStatusModel.unavailable(name))
