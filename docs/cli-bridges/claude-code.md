@@ -42,9 +42,11 @@ fails after 30 seconds without consuming or acknowledging a message.
 - `Inbox` owns the delivery lifetime and lock; `Watch` also starts transcript
   publication. `Send` owns a required target, body and kind. Argument decoding
   constructs the operation; execution does not compare command strings.
-- `LineMonitorBridge` emits typed JSON monitor frames for incoming messages,
-  carrying the session, message ID, a fresh token, and complete text. Ordinary
-  send/failure displays remain JSON strings. Progress goes to stderr.
+- `ClaudeMonitorFrame` owns Monitor's 500-character event cap. It splits a body
+  into numbered parts; each begins `Comms in · sender · id · k/n`. The encoded
+  JSON string stays within 500 UTF-16 units, including quotes and escapes.
+  `LineMonitorBridge` emits those parts without truncation. API transports use
+  the declared `UnsplitFrame`. Progress goes to stderr.
 - `ClaudeBridge` composes `LineMonitorBridge` delivery with `TranscriptBridge`
   publication. Claude's completed JSONL blocks supply replies, visible reasoning,
   tool calls/results and current activity without a plugin or settings hook.
@@ -56,17 +58,19 @@ fails after 30 seconds without consuming or acknowledging a message.
 
 ## Delivery limits
 
-A flushed stdout frame is **emitted**, not delivered. Core's bridge watch uses
+Flushed stdout parts are **emitted**, not delivered. Core's bridge watch uses
 explicit acknowledgment: reading the stream never marks its messages read.
-The existing Claude transcript decoder recognizes monitor task notifications.
-Only a complete frame matching the target session, message ID, token and original
-body changes delivery to **delivered** and acknowledges that exact Core message.
-The journal retains the original session record ID and timestamp. Codex and
-OpenCode complete the same shared transition after their API acknowledgment.
+The existing Claude record decoder recognizes monitor task envelopes at ingress.
+The journal retains each numbered part's actual session record and body. Only
+parts 1..n from the target session, with the original sender and exact concatenated
+message body, change delivery to **delivered** and acknowledge that Core message.
+Duplicates do not advance progress; missing parts stay queued. The journal retains
+the completing session record ID and timestamp. Codex and OpenCode complete the
+same shared transition after their API acknowledgment.
 Neither establishes that a human saw the terminal.
 
 Unconfirmed and emitted attempts remain visible and are not automatically
-replayed. Historical emissions have no new token and remain untouched. Absence
+replayed. Historical emissions have no new multipart attempt and remain untouched. Absence
 from the bounded startup window cannot prove a message was never received.
 If Monitor truncates a frame, it is not confirmation and the message stays
 pending. This is not an exactly-once transport.
