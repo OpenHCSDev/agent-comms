@@ -15,6 +15,10 @@ const SERVICE_TIER_CAPABLE_APIS = new Set([
 	"openai-codex-responses",
 ]);
 
+export type CallerRecord =
+	| { kind: "operator"; label: string }
+	| { kind: "thread"; name: string; parent: string | null; task: string | null; service_tier: "standard" | "priority" };
+
 interface ToolDeclaration {
 	name: string;
 	label: string;
@@ -22,9 +26,9 @@ interface ToolDeclaration {
 	parameters: Record<string, unknown>;
 }
 
-function run(args: string[], timeout = 30_000): Record<string, unknown> {
+function runCli(args: string[], timeout = 30_000, callerArguments: string[] = []): Record<string, unknown> {
 	try {
-		const stdout = execFileSync(CLI, args, {
+		const stdout = execFileSync(CLI, [...callerArguments, ...args], {
 			encoding: "utf-8",
 			timeout,
 		});
@@ -51,11 +55,26 @@ function run(args: string[], timeout = 30_000): Record<string, unknown> {
 }
 
 export default function (pi: ExtensionAPI) {
-	const currentThread = process.env.AGENT_COMMS_THREAD;
-	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
-	const task = process.env.PI_TASK || "";
-	const managed = process.env.AGENT_COMMS_MANAGED === "1";
-	let serviceTier = process.env.AGENT_COMMS_SERVICE_TIER;
+	const flagName = "thread-incarnation";
+	pi.registerFlag(flagName, { description: "Recorded comms caller identity", type: "string" });
+	const payload = pi.getFlag(flagName);
+	if (payload !== undefined && typeof payload !== "string") {
+		throw new Error("Comms caller identity must be typed JSON");
+	}
+	const callerArguments = payload === undefined ? [] : [`--${flagName}`, payload];
+	const run = (args: string[], timeout = 30_000) => runCli(args, timeout, callerArguments);
+	const catalog = runCli(["tools"], 30_000, callerArguments);
+	const caller = catalog.caller as CallerRecord;
+	const native = caller.kind === "thread" ? caller : undefined;
+	const currentThread = native?.name;
+	const forkThread = native?.parent ? native.name : undefined;
+	const task = native?.task ?? "";
+	const managed = native !== undefined;
+	pi.events.on("agent-comms:caller", (consume: unknown) => {
+		if (typeof consume !== "function") throw new TypeError("Caller consumer must be a function");
+		consume(caller);
+	});
+	let serviceTier = native?.service_tier;
 	if (serviceTier !== undefined && serviceTier !== "standard" && serviceTier !== "priority") {
 		throw new Error(`Unsupported agent-comms service tier: ${serviceTier}`);
 	}
@@ -138,8 +157,7 @@ export default function (pi: ExtensionAPI) {
 		});
 	}
 
-	const catalog = run(["tools"]).tools as ToolDeclaration[];
-	for (const declaration of catalog) {
+	for (const declaration of catalog.tools as ToolDeclaration[]) {
 		pi.registerTool({
 			name: declaration.name,
 			label: declaration.label,
