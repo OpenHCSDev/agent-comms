@@ -18,6 +18,7 @@ from agent_comms.coordination_errors import CoordinationReadUnavailable, StaleRe
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
+from agent_comms.wire_log import OpenedWireSnapshot
 from agent_comms.ui_model.observation import (
     ObservationService,
     ObserveSidebar,
@@ -391,7 +392,7 @@ def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 99
 
 
-def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
+def test_display_read_changes_prepare_missing_index_then_query_sparse_rows(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
@@ -405,12 +406,22 @@ def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
     index_path = comms.bus.log.path.with_name("bus_page_index.sqlite3")
     assert not index_path.exists()
 
-    with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
+    read_appended = OpenedWireSnapshot.public_records
+
+    def no_full_scan(source, offset=0, *, before_offset=None):
+        assert offset > 0, "Missing page index must be prepared, not bypassed"
+        return read_appended(source, offset, before_offset=before_offset)
+
+    with (
+        patch.object(Message, "from_wire", wraps=Message.from_wire) as decode,
+        patch.object(OpenedWireSnapshot, "public_records", no_full_scan),
+    ):
         after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
         assert after.channel_unread["#team"] == 9
-        assert decode.call_count == 10
+        assert decode.call_count == len(messages) + 1  # Build once, then select one row.
+        assert decode.call_args_list[-1].args[0]["seq"] == messages[3].seq
     assert after.channels == before.channels
-    assert not index_path.exists()
+    assert index_path.exists()
 
 
 def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):

@@ -195,7 +195,7 @@ class BusPageIndex:
             record = json.loads(raw)
             if not isinstance(record, Mapping):
                 raise ValueError("JSONL bus row must be an object.")
-            for message in WireRecord.public_from_wire(record).messages():
+            for message in opened.messages(record):
                 if last_sequence is not None and message.seq <= last_sequence:
                     raise RelationViolationError("Wire sequences are not increasing.")
                 rows.append(BusPageRow(message.seq, row_offset, message.sender, message.target))
