@@ -58,12 +58,21 @@ def test_unstamped_and_zero_birth_sources_cannot_match_current_delivery(tmp_path
     viewer = c.messaging.user_identity(str(tmp_path)).name
     original = c.messaging.send_message('sender', viewer, 'assigned source')
     with c.bus.snapshot(viewer=viewer) as (basis, source):
-        current = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
         ordinary, = PublicWireRecord(original).delivery_messages()
+        current = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
         assert not current.unread(ordinary, basis.registry, basis.seen)
-        threads = dict(basis.registry.threads)
-        threads['sender'] = replace(threads['sender'], created_at=0.0)
-        recorded = replace(basis.registry, threads=threads)
+        from agent_comms.registry_provenance import RegistryProvenance
+        from agent_comms.thread_identity import UnrecordedThreadProvenance
+
+        recorded = RegistryProvenance.capture(basis.registry)
+        threads = dict(recorded.threads)
+        original_sender = threads['sender']
+        threads['sender'] = UnrecordedThreadProvenance(
+            name=original_sender.name, tags=original_sender.tags,
+            worktree=original_sender.worktree, created_at=0.0,
+            session_file=original_sender.session_file, title=original_sender.title,
+        )
+        recorded = replace(recorded, threads=threads)
         scope = DeliveryScope.capture(viewer, recorded, basis.catalog)
         with pytest.raises(ValueError, match='creation identity is unavailable'):
             scope.unread(ordinary, recorded, basis.seen)

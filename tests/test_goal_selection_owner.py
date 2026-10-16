@@ -22,6 +22,7 @@ from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.threads import Thread
 from agent_comms.tools import CommsEditGoalTool, CommsResumeGoalTool
 from goal_owner_fixture import canonical_goal_wire
+from agent_comms.goal_waits import NoGoalWait
 
 
 @pytest.fixture
@@ -138,7 +139,7 @@ def test_certified_reply_consumes_only_original_wait(selected_goal):
         assert not comms.goals.consume_reply_wait(captured, wrong.reference)
         assert comms.goals.goal_wait("worker") == wait
         assert comms.goals.consume_reply_wait(captured, reply.reference)
-        assert comms.goals.goal_wait("worker") is None
+        assert isinstance(comms.goals.goal_wait("worker"), NoGoalWait)
         assert not comms.goals.consume_reply_wait(captured, reply.reference)
     finally:
         if owner is not None:

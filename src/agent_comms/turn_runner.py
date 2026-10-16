@@ -32,6 +32,7 @@ from .goal_actions import (
 )
 from .goal_scheduler import GoalScheduler
 from .messages import Message
+from .read_ledger import ReadSource
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import NativeArguments
 from .native_input_owner import RegistryOwner
@@ -296,12 +297,15 @@ class TurnRunner:
 
     def peer_progress(self, thread_name: str, sent_seq: int) -> bool:
         """True when a peer is active on, or has read, our message."""
-        for name, activity in self.comms.agents.all_activity().items():
-            if name != thread_name and activity.state.busy:
+        snapshot = self.comms.registry.snapshot()
+        running = (
+            thread for name, thread in snapshot.threads.items()
+            if name != thread_name and snapshot.statuses[name].active
+        )
+        for activity in self.comms.agents.all_activity(running, snapshot=snapshot).values():
+            if activity.state.busy:
                 return True
         if sent_seq:
-            snapshot = self.comms.registry.snapshot()
-            from .read_ledger import ReadSource
             with self.comms.bus.log.certified_read() as source:
                 delivery = source.delivery(sent_seq)
                 identity = ReadSource.from_revision(source.witness.revision)

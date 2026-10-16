@@ -16,7 +16,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .declared_family import DeclaredFamily
 from .historical_views import HistorySource
-from .thread_provenance import ThreadProvenance
+from .thread_identity import ThreadProvenance
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .read_ledger import ReadLedger, ReadRevision, ReadSource

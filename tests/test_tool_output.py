@@ -19,6 +19,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.field_codec import FieldCodec
 from agent_comms.text_digest import TextDigest
 from stored_inputs import insert_inputs, stored_inputs
+from agent_comms.goal_waits import RecordedGoalWait
 
 
 def seed_unknown(comms, count, text):
@@ -209,7 +210,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     )
     comms.agents.begin_turn("a", "next-a-result-in-flight")
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]}, caller=ThreadCaller("b"))
-    assert comms.goals.goal_wait("b") is not None
+    assert isinstance(comms.goals.goal_wait("b"), RecordedGoalWait)
     assert all(
         stored_inputs(dispositions.root).rows[f"bus:{message.seq}"].declared_name == "reserved"
         for message in messages
@@ -329,6 +330,6 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     )["standby_review"]
     assert fresh["reviewed_inputs"] == [f"bus:{messages[1].seq}", f"bus:{late.seq}"]
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]}, caller=ThreadCaller("b"))
-    assert comms.goals.goal_wait("b") is not None
+    assert isinstance(comms.goals.goal_wait("b"), RecordedGoalWait)
     assert stored_inputs(dispositions.root).rows[f"bus:{messages[1].seq}"].declared_name == "reserved"
     assert not stored_inputs(dispositions.root).rows.get("acp:owner-0").goal_reviews

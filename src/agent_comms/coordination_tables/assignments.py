@@ -44,11 +44,10 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
 
     def require_selected_source(self, initial, owner) -> None:
         from agent_comms.audience_manifest import FrozenRecipient
-        from agent_comms.bus_publication import stable_thread_lookup
         from agent_comms.coordination_errors import IdentityConflict
 
         if self.recipient_identity != FrozenRecipient(
-            stable_thread_lookup(owner.created_at), owner.name
+            owner.incarnation.lookup, owner.name
         ):
             raise IdentityConflict("wake frame does not match a committed recipient")
         self.require_committed_source(initial)

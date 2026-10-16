@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from functools import partial
 
 from .agent_events import CompactionEvent, NativePhaseChanged
-from .bus_publication import CommittedDelivery, stable_thread_lookup
+from .bus_publication import CommittedDelivery
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
@@ -202,7 +202,7 @@ class SelectedParticipant(MroDispatch):
             raise StaleFence("recipient registry identity stopped or changed") from error
         owner = RegistryOwner(thread=thread, admission_generation=generation)
         owner.require_registry(comms.registry)
-        lookup = stable_thread_lookup(thread.created_at)
+        lookup = thread.incarnation.lookup
         sent_owner, sent_window = MessageNotification.sent_sources(
             comms.root, comms.registry, comms.bus.log, name,
             limit=MessageNotification.window_limit,

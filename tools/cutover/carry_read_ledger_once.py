@@ -4,6 +4,8 @@ Never overwrite a running ledger: its old writers would restore the old format.
 The runtime installation owner installs this output only after retiring old writers.
 """
 from __future__ import annotations
+
+from agent_comms.thread_identity import RecordedThreadIncarnation
 import argparse
 import hashlib
 import json
@@ -49,8 +51,8 @@ def carry(source, destination, registry, index_root):
     with BusRouteCounts(index_root / 'bus.jsonl') as index:
         for raw, sequences in old.messages.items():
             name, created, conversation = FieldCodec.decode(tuple[str, float, OldConversation], json.loads(raw))
-            conversation = Conversation(conversation.target, tuple(ThreadIncarnation(*p) for p in conversation.participants))
-            key = ConversationKey(ThreadIncarnation(name, created), conversation).resolved(snapshot)
+            conversation = Conversation(conversation.target, tuple(RecordedThreadIncarnation(*p) for p in conversation.participants))
+            key = ConversationKey(RecordedThreadIncarnation(name, created), conversation).resolved(snapshot)
             state = messages.get(key, ReadProgress()).mark(sequences, lambda state:
                 index.read_prefix(key.conversation, state, snapshot, old.bus_identity)
                 if key.viewer.current(snapshot) and key.conversation.current(snapshot) else PrefixUnavailable())

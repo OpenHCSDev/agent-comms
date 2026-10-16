@@ -16,6 +16,7 @@ from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import (
     ReadObservationProcess, ReadBusy, ReadNotifications, ReadTranscript,
 )
+from agent_comms.thread_identity import UnrecordedThreadIncarnation
 
 
 def saved_history(tmp_path):
@@ -268,14 +269,13 @@ async def test_peer_write_failure_retires_once_and_cancels_owner_reads(comms):
 async def test_owner_reply_uses_the_same_peer_retirement(comms):
     import multiprocessing
 
-    from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.ui_model.observation import ReadService, ReadOwnerGoal
 
     connection, viewer = multiprocessing.get_context("spawn").Pipe()
     with connection, viewer:
         service = ReadService(comms, connection)
         # A real missing-owner refusal still has to be sent through the shared endpoint.
-        request = ReadOwnerGoal(str(comms.root), ThreadIncarnation("missing", 0), request_id=7)
+        request = ReadOwnerGoal(str(comms.root), UnrecordedThreadIncarnation("missing"), request_id=7)
         request.receive(service)
         asking = service.owner_reads[7]
         viewer.close()

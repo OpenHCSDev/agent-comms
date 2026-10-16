@@ -1,4 +1,6 @@
 """Read ownership: sparse paint, real conversation prefixes and typed boundaries."""
+
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from dataclasses import replace
 import pytest
 from agent_comms.comms import wire
@@ -32,7 +34,7 @@ def test_interleaved_global_sequences_do_not_grant_a_conversation_gap(tmp_path):
 
 
 def test_typed_conversation_keys_decode_once_and_reject_duplicates():
-    key = ConversationKey(ThreadIncarnation('viewer', 1.0), Conversation(target='#team'))
+    key = ConversationKey(RecordedThreadIncarnation('viewer', 1.0), Conversation(target='#team'))
     states = {key: ReadProgress(4, frozenset({8}))}
     encoded = FieldCodec.encode(states, dict[ConversationKey, ReadProgress])
     assert FieldCodec.decode(dict[ConversationKey, ReadProgress], encoded) == states
@@ -110,8 +112,8 @@ def test_revision_family_roundtrip_and_explicit_viewer_scope(tmp_path):
     revision = ReadRevision.capture((path,))
     assert isinstance(revision, PresentReadRevision)
     assert FieldCodec.decode(ReadRevision, FieldCodec.encode(revision)) == revision
-    assert SelectedViewers((ThreadIncarnation('viewer', 1.0),)).incarnations == (ThreadIncarnation('viewer', 1.0),)
-    assert OneViewer(ThreadIncarnation('viewer', 1.0)).incarnation.name == 'viewer'
+    assert SelectedViewers((RecordedThreadIncarnation('viewer', 1.0),)).incarnations == (RecordedThreadIncarnation('viewer', 1.0),)
+    assert OneViewer(RecordedThreadIncarnation('viewer', 1.0)).incarnation.name == 'viewer'
 
 
 def test_required_authority_and_header_cannot_look_like_empty_state(tmp_path):

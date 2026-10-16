@@ -12,13 +12,12 @@ from acp import spawn_agent_process
 from acp.schema import TextContentBlock
 
 from agent_comms import restart_queue as queue
-from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from agent_comms.owner_launch import RetainedOwnerLaunch
+from agent_comms.launch_runtime import RestartEnvironment, PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.native_arguments import NativeArguments
-from agent_comms.private_nk_entrypoint import PACKAGE_ENV
 from agent_comms.comms import Comms
 from agent_comms.child_process import AttachedChild
 from agent_comms.field_codec import FieldCodec
-from agent_comms.private_nk_entrypoint import ROOT_ID_ENV
 from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
 from agent_comms.wire_watch import DirectoryWatchSource, WatchSource, open_wire_watcher

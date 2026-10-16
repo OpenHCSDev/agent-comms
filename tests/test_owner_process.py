@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.child_process import ObservedProcess, ParentedProcess
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
@@ -154,7 +155,7 @@ def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> Non
         )
         comms.registry.declare(owner)
         comms.registry.declare(peer)
-        targets = (GoalWaitTarget(peer.name, peer.created_at),)
+        targets = (GoalWaitTarget(peer.incarnation.require_recorded()),)
         assert GoalWaits.closed_wait_group(owner.name, targets, {}, comms.registry.snapshot()) == ()
         stale = replace(
             peer, process_identity=replace(child.identity, start_time=child.identity.start_time + 1)
@@ -325,7 +326,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", "--thinking high")
         monkeypatch.setenv("BATCH_OWNER_CREDENTIAL", "operator-only")
         target_binary = tmp_path / "target-pi-comms-native"
-        target_binary.symlink_to(comms.owners.native_entrypoint())
+        target_binary.symlink_to(LaunchRuntime.current().native_entrypoint)
         receipts = comms.owners.restart_owners(
             selected, agent_bin=str(target_binary), cutover=cutover
         )
@@ -543,7 +544,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
 
 
 def test_native_configuration_retains_original_home_across_writable_fork(tmp_path, monkeypatch):
-    from agent_comms.owner_launch import RestartEnvironment
+    from agent_comms.launch_runtime import RestartEnvironment
 
     original = tmp_path / "original-home"
     canonical = original / "credentials"
@@ -569,7 +570,7 @@ def test_native_configuration_retains_original_home_across_writable_fork(tmp_pat
 
 
 def test_native_configuration_uses_original_pi_directory_when_not_explicit(tmp_path):
-    from agent_comms.owner_launch import RestartEnvironment
+    from agent_comms.launch_runtime import RestartEnvironment
 
     configuration = RestartEnvironment.inherit({
         "HOME": str(tmp_path), "PI_CODING_AGENT_DIR": "~/configured-agent",

@@ -12,6 +12,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.threads import Thread
 from tests.read_membership import displayed_sequences
+from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 def prepared(root):
@@ -40,11 +41,10 @@ def test_conversation_persisted_pairs_decode_once_without_an_encode_round_trip()
 
     from agent_comms.field_codec import FieldCodec
     from agent_comms.read_basis import Conversation
-    from agent_comms.thread_identity import ThreadIncarnation
 
-    conversation = Conversation(participants=(ThreadIncarnation("alice", 1.0),))
+    conversation = Conversation(participants=(RecordedThreadIncarnation("alice", 1.0),))
     from agent_comms.read_ledger import ConversationKey, ReadDocument, ReadProgress
-    document = ReadDocument({ConversationKey(ThreadIncarnation('viewer', 2.0), conversation): ReadProgress(3)}, AbsentReadSource(), {}, NoReadNotice())
+    document = ReadDocument({ConversationKey(RecordedThreadIncarnation('viewer', 2.0), conversation): ReadProgress(3)}, AbsentReadSource(), {}, NoReadNotice())
     encoded = FieldCodec.encode(document)
     decoded = FieldCodec.decode(ReadDocument, encoded)
     with patch.object(FieldCodec, 'encode', side_effect=AssertionError('Already decoded')):

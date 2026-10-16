@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from .bus_publication import stable_thread_lookup
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
@@ -153,7 +152,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     @property
     def lookup(self) -> str:
-        return stable_thread_lookup(self.incarnation.created_at)
+        return self.incarnation.lookup
 
     def finish(self, *, turn_id: str, item_id: str,
                events: tuple[TranscriptEvent, ...]) -> None:

@@ -136,7 +136,7 @@ class AttachmentScope:
 
     @property
     def owner_created_at(self):
-        return self.admission.incarnation.created_at
+        return self.admission.incarnation.require_recorded().created_at
 
     @property
     def admission_generation(self):
@@ -190,11 +190,11 @@ class CursorScope(AttachmentScope):
 
     def __post_init__(self):
         WireRootIdText.decode(self.wire_root_id)
+        self.admission.incarnation.require_recorded()
         if (
             not self.session_id
             or self.owner_pid <= 0
             or self.admission.admission_generation <= 0
-            or self.admission.incarnation.created_at <= 0
         ):
             raise ValueError("Invalid native cursor scope")
 
@@ -466,14 +466,6 @@ class CoordinationChangedUpdate(AgentCommsUpdate):
     thinking_level: str | None
     title: str
     context_usage: ContextUsage | None
-
-    @property
-    def source_identity(self):
-        from .transcript_receipts import AssignedSourceIdentity
-
-        if self.thread.has_recorded_birth:
-            return AssignedSourceIdentity(self.wire_root, self.thread)
-        return None
 
     @property
     def persistence(self) -> str:

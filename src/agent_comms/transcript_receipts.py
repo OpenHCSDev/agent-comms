@@ -16,9 +16,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
-from .bus_publication import CommittedDelivery, stable_thread_lookup
+from .bus_publication import CommittedDelivery
 from .routing import MessageRoute, TurnRouting
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, UserTranscript
 
 from .wire_log import ConversationSourceWindowRequest
@@ -36,10 +36,10 @@ class AssignedSourceIdentity:
     @property
     def publication_key(self) -> tuple[str, float]:
         """Published authorship survives a rename, not a new birth or wire."""
-        return self.root, self.recipient.created_at
+        return self.root, self.recipient.require_recorded().created_at
 
     def same_publication_source(self, other: AssignedSourceIdentity) -> bool:
-        return self.recipient.has_recorded_birth and self.publication_key == other.publication_key
+        return self.root == other.root and self.recipient.same_publication_birth(other.recipient)
 
 
 @dataclass(frozen=True)
@@ -275,12 +275,12 @@ class TranscriptSource:
 @dataclass(frozen=True)
 class AssignedTranscriptSource(TranscriptSource):
     root: Path
-    recipient: ThreadIncarnation
+    recipient: RecordedThreadIncarnation
     log: WireLog
 
     @classmethod
     def for_thread(cls, root, thread, log):
-        return cls(root, thread.incarnation, log)
+        return cls(root, thread.incarnation.require_recorded(), log)
 
     @classmethod
     def open(cls, identity: AssignedSourceIdentity):
@@ -288,8 +288,10 @@ class AssignedTranscriptSource(TranscriptSource):
         from .wire_log import WireLog
 
         root = Path(identity.root)
-        return (cls(root, identity.recipient, WireLog(root / "bus.jsonl"))
-                if identity.recipient.has_recorded_birth else TranscriptSource())
+        return identity.recipient.recorded_or(
+            lambda recorded: cls(root, recorded, WireLog(root / "bus.jsonl")),
+            TranscriptSource,
+        )
 
     def resolve_sent(self, messages):
         """Qualify reports against exact full rows in one bounded wire read.
@@ -303,7 +305,7 @@ class AssignedTranscriptSource(TranscriptSource):
         messages = tuple(messages)
         if not messages:
             return messages
-        lookup = stable_thread_lookup(self.recipient.created_at)
+        lookup = self.recipient.lookup
         marks = ",".join("?" for _ in messages)
         originals = {
             original.message.reference: original.message
@@ -327,15 +329,15 @@ class AssignedTranscriptSource(TranscriptSource):
     @classmethod
     def for_recorded(cls, root, thread, log, records):
         """Only the original recorded birth can select frozen assignments."""
-        if thread.incarnation.has_recorded_birth:
-            return cls.for_thread(root, thread, log)
-        return records
+        return thread.incarnation.recorded_or(
+            lambda recorded: cls(root, recorded, log), lambda: records
+        )
 
     def rows(
         self, predicate="1", parameters=(), *, limit=1, ascending=False,
     ) -> Iterator[CommittedDelivery]:
         return self.log.conversation_sources(
-            stable_thread_lookup(self.recipient.created_at),
+            self.recipient.lookup,
             predicate,
             parameters,
             limit=limit,
@@ -344,7 +346,7 @@ class AssignedTranscriptSource(TranscriptSource):
 
     @property
     def frontier(self):
-        lookup = stable_thread_lookup(self.recipient.created_at)
+        lookup = self.recipient.lookup
         return AssignedSourceCursor(
             str(self.root), self.recipient,
             ConversationSourceWindowRequest.frontier(self.log, lookup),
@@ -352,7 +354,7 @@ class AssignedTranscriptSource(TranscriptSource):
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
         """One certified cut owns conversation, sent rows and their frontier."""
-        lookup = stable_thread_lookup(self.recipient.created_at)
+        lookup = self.recipient.lookup
         conversation_request = ConversationSourceWindowRequest("1", (), limit, False)
         sent_request = ConversationSourceWindowRequest(
             "w.sender_lookup=?", (lookup,), sent_limit, False
@@ -375,7 +377,7 @@ class AssignedTranscriptSource(TranscriptSource):
         entry = record.entry
         published = False
         routing = routes.get(entry.id)
-        lookup = stable_thread_lookup(self.recipient.created_at)
+        lookup = self.recipient.lookup
         events = super().native_events(record, routes, project_events, references)
         if entry.final_reply:
             if routing is not None and routing.publications:
@@ -429,7 +431,7 @@ class AssignedTranscriptSource(TranscriptSource):
 
     def events(self, original):
         message = original.message
-        if original.audience.sender_lookup == stable_thread_lookup(self.recipient.created_at):
+        if original.audience.sender_lookup == self.recipient.lookup:
             return (
                 SentTranscript.from_message(message),
             )
@@ -455,7 +457,7 @@ class LiveAssignedTranscriptSource(AssignedTranscriptSource):
         from .native_runtime_input import NativeRuntimeInput
         from .transcripts import TranscriptRead
 
-        lookup = stable_thread_lookup(self.recipient.created_at)
+        lookup = self.recipient.lookup
         for fragment in fragments:
             fragment = tuple(fragment)
             selected = tuple(zip(fragment, reader.inputs_for(fragment)))

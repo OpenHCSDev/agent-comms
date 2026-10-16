@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import sealed_cohort_assignments
@@ -21,7 +21,7 @@ async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_coh
     stopped = comms.registry.require("stopped-reviewer")
     comms.registry.register(stopped, StoppedThreadStatus())
     receiver = comms.registry.require("receiver")
-    lookup = stable_thread_lookup(receiver.created_at)
+    lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         with store.session.read():
             assert Participants.select(store.session._connection) == []

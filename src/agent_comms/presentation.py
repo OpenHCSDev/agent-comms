@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -231,7 +231,7 @@ class MessageNotification:
         if not sources:
             return {}
         observations = AgentActivity(root, registry).observe_recipients(
-            (recipient for source in sources for recipient in source.audience.recipients
+            ((source, recipient) for source in sources for recipient in source.audience.recipients
              if view.includes(source, recipient)),
             snapshot=snapshot,
         )
@@ -310,7 +310,6 @@ class MessageNotification:
         cls, source, snapshot, reads, document, *, view: NotificationView
     ) -> MessageNotification | None:
         """Project a human DM read even though humans have no wake assignment."""
-        from .bus_publication import stable_thread_lookup
         from .channel_targets import is_channel_target
 
         message = source.message
@@ -324,9 +323,9 @@ class MessageNotification:
         target = snapshot.threads.get(name)
         if target is None or not reads.human(target.role):
             return None
-        recipient = FrozenRecipient(stable_thread_lookup(target.created_at), target.name)
+        recipient = FrozenRecipient(target.incarnation.lookup, target.name)
         displayed_to = reads.displayed_recipient(
-            message, recipient, snapshot, readers=document
+            source, recipient, snapshot, readers=document
         )
         if not displayed_to:
             return None
@@ -386,11 +385,9 @@ class MessageNotification:
         """Project outcomes from the caller's original certified source window."""
         if not sources:
             return ()
-        from .bus_publication import stable_thread_lookup
-
         projected = cls.delivery_window(
             root, registry, sources,
-            view=OwnerNotificationRecipients(stable_thread_lookup(owner.created_at)),
+            view=OwnerNotificationRecipients(owner.incarnation.lookup),
             assignment_read=assignment_read,
             snapshot=registry.snapshot(), identity=identity,
         )
@@ -722,6 +719,15 @@ class ThreadView:
         )
 
     @classmethod
+    def visible_threads(
+        cls, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
+    ) -> Iterator[Thread]:
+        return (
+            thread for thread in snapshot.threads.values()
+            if cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+        )
+
+    @classmethod
     def capture(
         cls,
         thread: Thread,
@@ -755,16 +761,16 @@ class ThreadView:
     ) -> tuple[ThreadView, ...]:
         selected = None if names is None else {snapshot.canonical_name(name) for name in names}
         threads = tuple(
-            thread for name, thread in snapshot.threads.items()
-            if (selected is None or name in selected)
-            and cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+            thread for thread in cls.visible_threads(
+                snapshot, show_stopped=show_stopped, show_archived=show_archived
+            ) if selected is None or thread.name in selected
         )
         if not threads:
             return ()
         runtime = agents.runtime_info.read()
         waits = goal_waits.read()
         if activities is None:
-            activities = agents.all_activity(snapshot=snapshot)
+            activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(
             cls.capture(thread, snapshot, activities[thread.name], runtime.get(thread.name), waits)
             for thread in threads
@@ -802,7 +808,7 @@ class ThreadView:
             "last_activity": self.activity.timestamp,
             "activity": self.activity.state.value,
             "activity_detail": self.activity.detail,
-            "goal_execution": asdict(self.goal_execution) if self.goal_execution else None,
+            "goal_execution": self.goal_execution.to_wire() if self.goal_execution else None,
             "session_name": self.runtime.session_name if self.runtime else None,
             "context_used": self.runtime.context_used if self.runtime else None,
             "context_size": self.runtime.context_size if self.runtime else None,
@@ -834,7 +840,10 @@ class CoordinationSnapshot:
         show_stopped: bool, show_archived: bool, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
-        activities = agents.all_activity(snapshot=registry)
+        visible = ThreadView.visible_threads(
+            registry, show_stopped=show_stopped, show_archived=show_archived
+        )
+        activities = agents.all_activity(visible, snapshot=registry)
         return cls(
             channels=ChannelView.roster(
                 registry, declarations, catalog.pinned_members(), catalog.list_order,

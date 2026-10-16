@@ -192,7 +192,6 @@ class ThreadPresentation:
     def with_sources(self, window: TranscriptSourceWindow, *, snapshot: RegistrySnapshot,
                      read_observations: ReadObservations) -> ThreadPresentation:
         """Incoming and sent outcomes are views of one captured notification window."""
-        from .bus_publication import stable_thread_lookup
         from .notification_assignment import NotificationAssignment
         from .presentation import MessageNotification, OwnerNotificationRecipients
 
@@ -203,7 +202,7 @@ class ThreadPresentation:
             transcripts.root, transcripts.registry, sources,
             NotificationAssignment.read(transcripts.root, sources),
             snapshot=snapshot, identity=window.read_source, read_observations=read_observations,
-            view=OwnerNotificationRecipients(stable_thread_lookup(window.read.identity.thread.created_at)),
+            view=OwnerNotificationRecipients(window.read.identity.thread.incarnation.lookup),
         )
         incoming, sent = (
             tuple(replace(notification, message=source.message)

@@ -14,7 +14,7 @@ from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
-    from .registry_document import RegistrySnapshot
+    from .registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,7 +172,7 @@ class DeliveryScope(MessageDisplayScope):
 
     @classmethod
     def capture(
-        cls, name: str, snapshot: RegistrySnapshot, catalog: CatalogDocument
+        cls, name: str, snapshot: RegistryProvenance, catalog: CatalogDocument
     ) -> DeliveryScope:
         thread = snapshot.require(name)
         return cls(thread.name, snapshot.aliases, catalog.targets_for(thread.tags))
@@ -207,7 +207,7 @@ class DeliveryScope(MessageDisplayScope):
         )
 
     def minimum_timestamp(
-        self, sender: str, target: str, sender_lookup: str, snapshot: RegistrySnapshot
+        self, sender: str, target: str, sender_lookup: str, snapshot: RegistryProvenance
     ) -> float | None:
         """Require current identities while preserving aliases of one incarnation."""
 
@@ -216,14 +216,12 @@ class DeliveryScope(MessageDisplayScope):
         source = snapshot.threads.get(self.canonical(sender))
         if source is None:
             return None
-        from .bus_publication import stable_thread_lookup
-
-        if sender_lookup != stable_thread_lookup(source.incarnation.created_at):
+        if sender_lookup != source.incarnation.require_recorded().lookup:
             return None
         return max(source.created_at, snapshot.threads[self.actor].created_at)
 
     def unread(
-        self, delivery: DeliveryMessage, snapshot: RegistrySnapshot, seen: frozenset[int]
+        self, delivery: DeliveryMessage, snapshot: RegistryProvenance, seen: frozenset[int]
     ) -> bool:
         message = delivery.message
         if seen.contains(message):

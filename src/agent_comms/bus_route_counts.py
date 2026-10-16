@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, NoReturn
 
 from .coordination_database import CoordinationStore, ReadSnapshot
-from .bus_publication import stable_thread_lookup
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -30,8 +29,9 @@ from .store_files import _store_lock
 from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, TypedRow, TypedTable
 
 if TYPE_CHECKING:
-    from .registry_document import RegistrySnapshot
     from .read_ledger import ReadMask
+    from .registry_provenance import RegistryProvenance
+    from .registry_document import RegistrySnapshot
     from .wire_log import OpenedWireSnapshot
 
 
@@ -262,7 +262,7 @@ class RouteSenderBindingRow(TypedTable):
     def bind(cls, connection: sqlite3.Connection, registry: RegistrySnapshot) -> None:
         cls.create(connection)
         for name, source in registry.named_members():
-            cls(name, stable_thread_lookup(source.incarnation.created_at)).insert(connection)
+            cls(name, source.incarnation.require_recorded().lookup).insert(connection)
 
 
 @dataclass(frozen=True)
@@ -525,7 +525,7 @@ class OpenedRouteCounts(BusRouteCounts):
 
     def __init__(
         self, bus_path: Path, source: OpenedWireSnapshot,
-        registry: RegistrySnapshot, deliveries: Mapping[str, DeliveryScope],
+        registry: RegistryProvenance, deliveries: Mapping[str, DeliveryScope],
     ):
         super().__init__(bus_path)
         self.source = source

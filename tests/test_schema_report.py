@@ -37,7 +37,7 @@ def test_comparison_names_changed_missing_and_extra_objects():
 
 def test_cli_inspects_existing_stores_without_rewriting_them(tmp_path, capsys, monkeypatch):
     # A disposable bus is not this agent's private owner-launch root.
-    from agent_comms.private_nk_entrypoint import ROOT_ID_ENV, PACKAGE_ENV
+    from agent_comms.launch_runtime import ROOT_ID_ENV, PACKAGE_ENV
     monkeypatch.delenv(ROOT_ID_ENV, raising=False)
     monkeypatch.delenv(PACKAGE_ENV, raising=False)
     comms, _ = _root(tmp_path)

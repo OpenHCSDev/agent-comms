@@ -15,7 +15,7 @@ from .fresh_private_session import FreshPrivateSession, create_fresh_private_ses
 from .maintenance_barrier import MaintenanceBarrier
 from .native_session_reopen import NativeSessionIdentity, SessionIdentityHelper
 from .native_pi import NativePiUnavailable, _session_location
-from .owner_launch import RestartEnvironment
+from .launch_runtime import RestartEnvironment
 from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAction
 
 if TYPE_CHECKING:

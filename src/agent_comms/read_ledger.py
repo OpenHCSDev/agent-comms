@@ -17,6 +17,7 @@ from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
+    from .bus_publication import CommittedDelivery
     from .messages import Message
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadRole
@@ -333,10 +334,8 @@ class SelectedViewers(ReadViewers):
         return cls.capture(snapshot.threads[name] for name in canonical & snapshot.threads.keys())
 
     def displayed(self, message, recipient, readers: ReadMasks):
-        from .bus_publication import stable_thread_lookup
-
         return tuple(viewer for viewer in self.incarnations
-                     if stable_thread_lookup(viewer.created_at) == recipient.recipient_lookup
+                     if viewer.require_recorded().lookup == recipient.recipient_lookup
                      and readers[viewer.name].contains(message))
 
     @contextmanager
@@ -536,11 +535,18 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
         with self.reading(OneViewer(participant.incarnation)) as document:
             return document.observations(snapshot).for_source(source)[participant.incarnation.name]
 
-    def displayed_recipient(self, message, recipient, snapshot, *, readers):
-        return HumanViewers.named(snapshot, (recipient.canonical_thread,)).displayed(message, recipient, readers)
+    def displayed_recipient(self, original: CommittedDelivery, recipient, snapshot, *, readers):
+        return snapshot.recipient(recipient, original).read_effect(
+            self, original.message, snapshot, readers=readers
+        )
 
     def historical_displayed_recipient(self, message, recipient, snapshot, *, readers):
-        return SelectedViewers.named(snapshot, (recipient.canonical_thread,)).displayed(message, recipient, readers)
+        return snapshot.historical_recipient(recipient).read_effect(
+            self, message, snapshot, readers=readers
+        )
+
+    def _displayed_recipient(self, message, thread, snapshot, *, readers):
+        return (thread.incarnation,) if readers[thread.name].contains(message) else ()
 
     def remove_threads(self, threads: Sequence[Thread]):
         if not threads:
