@@ -14,8 +14,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .locked_store import LockedStore
-from .read_basis import Conversation, DisplayBasis, DisplayedConversation
 from .private_path import FileIdentity, FileRevision
+from .read_basis import Conversation, DisplayBasis, DisplayedConversation
 from .sealed import Sealed
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState

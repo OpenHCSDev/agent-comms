@@ -9,12 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.comms import wire
-from agent_comms.thread_identity import ThreadRole
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.threads import Thread
+from agent_comms.comms import wire
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.store_files import _store_lock
+from agent_comms.thread_identity import ThreadRole
+from agent_comms.threads import Thread
 
 
 def _peer(root: Path, name: str) -> Thread:
@@ -162,7 +162,9 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
     for name in ("peer", "other"):
         comms.registry.declare(_peer(tmp_path, name))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    messages = {name: comms.messaging.send(name, viewer, name) for name in ("peer", "other")}
+    messages = {
+        name: comms.messaging.send_message(name, viewer, name) for name in ("peer", "other")
+    }
     original = comms.bus.conversation_page
 
     def interpose(*args, **kwargs):
@@ -189,8 +191,8 @@ def test_read_progress_after_older_check_keeps_conservative_page(tmp_path: Path,
     comms = wire(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    older = comms.messaging.send("peer", viewer, "older")
-    newest = comms.messaging.send("peer", viewer, "newest")
+    older = comms.messaging.send_message("peer", viewer, "older")
+    newest = comms.messaging.send_message("peer", viewer, "newest")
     scan = comms.bus.log._record_snapshot
 
     @contextmanager
