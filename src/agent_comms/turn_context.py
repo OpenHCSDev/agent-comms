@@ -836,7 +836,10 @@ class PeerState:
             if relation.peer in viewed and relation.relevance.grants(Visible)
         )
         always = tuple(r for r in visible if r.relevance.grants(AlwaysListed))
-        others = tuple(r for r in visible if not r.relevance.grants(AlwaysListed))
+        others = tuple(
+            r for r in visible
+            if not r.relevance.grants(AlwaysListed) and viewed[r.peer].status.active
+        )
         return tuple(
             cls.from_view(viewed[relation.peer], relation)
             for relation in (*always, *others[: max(0, slots - len(always))])
@@ -850,7 +853,7 @@ class CoordinationSegment(InstructionSegment):
     parent: str | None
     project: str
     peers: tuple[PeerState, ...]
-    PEER_SLOTS: ClassVar[int] = 50
+    PEER_SLOTS: ClassVar[int] = 8
 
     @classmethod
     def capture(
@@ -879,7 +882,7 @@ class CoordinationSegment(InstructionSegment):
             name=self.owner.name,
             parent=self.parent,
             project=self.project,
-            peers=json.dumps(FieldCodec.encode(self.peers)),
+            peers=json.dumps(FieldCodec.encode(self.peers), separators=(",", ":")),
         )
 
 @dataclass(frozen=True, kw_only=True)
