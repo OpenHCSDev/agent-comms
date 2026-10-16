@@ -88,7 +88,7 @@ class NativeSourceCursor:
     @classmethod
     def _refresh_owned(cls, bus, wire_root_id, owner_name, source_reads, store):
         owner, admission = bus._registry.live_owner_with_admission(owner_name)
-        person = store.participants.get(owner.incarnation.stable_thread_lookup)
+        person = store.participants.get(owner.incarnation.lookup)
         return cls._advance_owned(
             bus, wire_root_id, owner, admission, person.participant_generation, None,
             store, source_reads=source_reads,
@@ -228,7 +228,7 @@ class NativeSourceCursor:
                 db = self.store.session._connection
                 assert_native_runtime_schema(db)
                 person = self.store.participants.get(
-                    captured.thread.incarnation.stable_thread_lookup
+                    captured.thread.incarnation.lookup
                 )
                 if not person.committed or person.owner_thread != owner_name:
                     raise StaleFence("current native cursor recipient is not committed")

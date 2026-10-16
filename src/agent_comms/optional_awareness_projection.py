@@ -214,7 +214,7 @@ class OptionalAwarenessProjection:
         if turn is None or turn.admission_generation != self.expected_admission_generation:
             raise ProjectionUnavailableError("selected owner turn changed")
         if FrozenRecipient(assignment.recipient_lookup, assignment.recipient) != FrozenRecipient(
-            owner.incarnation.stable_thread_lookup,
+            owner.incarnation.lookup,
             owner.name,
         ):
             raise ProjectionUnavailableError("selected recipient changed")

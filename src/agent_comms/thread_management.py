@@ -274,7 +274,7 @@ class ThreadManagement:
                     for name in selected:
                         thread = self.registry.require(name)
                         store.participants.register(
-                            thread.incarnation.stable_thread_lookup,
+                            thread.incarnation.lookup,
                             thread.name,
                             thread.name,
                             committed=True,
@@ -408,7 +408,7 @@ class ThreadManagement:
                 raise ValueError("Private coordinator owner name exceeds its bound.")
             with Coordination(str(coordinator)) as store:
                 try:
-                    person = store.participants.get(before.incarnation.stable_thread_lookup)
+                    person = store.participants.get(before.incarnation.lookup)
                 except IdentityConflict as error:
                     if str(error) != "participant aggregate is not registered":
                         raise

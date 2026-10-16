@@ -12,9 +12,9 @@ from typing import Any
 import pytest
 
 from agent_comms import store_files
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.threads import Thread
@@ -94,7 +94,7 @@ class TestConcurrentWire:
         second_time = stored.require("second").created_at
         assert first_time == first.created_at
         assert first_time != second_time
-        assert stable_thread_lookup(first_time) != stable_thread_lookup(second_time)
+        assert ThreadIncarnation("fixture", first_time).lookup != ThreadIncarnation("fixture", second_time).lookup
         assert "_generated_created_at" not in stored.require("second").to_wire()
         with pytest.raises(RelationViolationError, match="creation identities collide"):
             wire(root).registry.declare(
@@ -117,7 +117,7 @@ class TestConcurrentWire:
         stored = wire(root).registry
         times = [stored.require(name).created_at for name in names]
         assert len(set(times)) == len(names)
-        assert len({stable_thread_lookup(created_at) for created_at in times}) == len(names)
+        assert len({ThreadIncarnation("fixture", created_at).lookup for created_at in times}) == len(names)
 
     def test_concurrent_senders_preserve_every_message_and_sequence(self, tmp_path: Path) -> None:
         root = tmp_path / "wire"

@@ -152,7 +152,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     @property
     def lookup(self) -> str:
-        return self.incarnation.stable_thread_lookup
+        return self.incarnation.lookup
 
     def finish(self, *, turn_id: str, item_id: str,
                events: tuple[TranscriptEvent, ...]) -> None:

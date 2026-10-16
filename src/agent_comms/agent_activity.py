@@ -148,7 +148,7 @@ class AgentActivity:
             lookup = recipient.recipient_lookup
             if lookup in observations:
                 continue
-            thread = snapshot.thread_for_lookup(lookup)
+            thread = snapshot.by_lookup.get(lookup)
             observations[lookup] = (
                 thread.execution.observe_recipient(self, snapshot, thread)
                 if thread is not None else UnavailableRecipientActivity()

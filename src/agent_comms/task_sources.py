@@ -505,9 +505,9 @@ class HumanConstraintPin(ScopedTaskDeclaration):
     def require_wording_publication(self, registry, original_source):
         delivery, = original_source.references((self.subject,))
         delivery.message.sender_role.require_user()
-        if delivery.audience.sender_lookup != self.source_user.stable_thread_lookup:
+        if delivery.audience.sender_lookup != self.source_user.lookup:
             raise RelationViolationError("USER pin differs from its original human author")
-        if not delivery.audience.includes_lookup(self.recipient.stable_thread_lookup):
+        if not delivery.audience.includes_lookup(self.recipient.lookup):
             raise RelationViolationError("USER pin recipient did not receive its original message")
 
     def user_task_facts(self, message):

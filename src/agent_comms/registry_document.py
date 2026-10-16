@@ -4,21 +4,27 @@ from __future__ import annotations
 
 import math
 import time
-from typing import TYPE_CHECKING
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
-from .registration_change import InitialRegistration, NativeSourcePublication, RegistrationChange, UpdatedRegistration
-from .routing import TurnRouting
+from .registration_change import (
+    InitialRegistration,
+    NativeSourcePublication,
+    RegistrationChange,
+    UpdatedRegistration,
+)
+from .registry_provenance import RegistryNames, RegistryProvenance
 from .restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
     OwnerGenerationChangedRefusal,
 )
+from .routing import TurnRouting
 from .thread_identity import AdmissionIdentity, GenerationCounter, OwnerIdentity
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
@@ -27,7 +33,6 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
-from .registry_provenance import RegistryNames, RegistryProvenance
 from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
 
@@ -532,18 +537,38 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
-    _threads_by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
+    by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
+    _ambiguous_lookups: frozenset[str] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        # RegistryDocument.snapshot supplies detached membership. Derive the
-        # immutable lookup projection once; the codec still owns the wire dict.
-        object.__setattr__(self, "_threads_by_lookup", MappingProxyType({
-            thread.incarnation.stable_thread_lookup: thread
-            for thread in self.threads.values()
-        }))
+        # An archive may retain two names with the same birth. Neither may be
+        # selected by lookup alone; live publication refuses that snapshot.
+        indexed: dict[str, Thread] = {}
+        ambiguous: set[str] = set()
+        for thread in self.threads.values():
+            lookup = thread.incarnation.lookup
+            if lookup in indexed:
+                del indexed[lookup]
+                ambiguous.add(lookup)
+            elif lookup not in ambiguous:
+                indexed[lookup] = thread
+        object.__setattr__(self, "by_lookup", MappingProxyType(indexed))
+        object.__setattr__(self, "_ambiguous_lookups", frozenset(ambiguous))
 
-    def thread_for_lookup(self, lookup: str) -> Thread | None:
-        return self._threads_by_lookup.get(lookup)
+    def require_unambiguous_ownership(self) -> None:
+        """Archived collisions stay readable; publication requires unique owners."""
+        if self._ambiguous_lookups:
+            raise RelationViolationError("Registry creation identities collide.")
+
+    def thread_for_recipient(self, lookup: str, name: str) -> Thread | None:
+        """Resolve a frozen recipient, including same-birth historical aliases."""
+        canonical = self.canonical_name(name)
+        thread = self.by_lookup.get(lookup)
+        if thread is None and lookup in self._ambiguous_lookups:
+            thread = self.threads.get(canonical)
+            if thread is not None and thread.incarnation.lookup != lookup:
+                return None
+        return thread if thread is not None and thread.name == canonical else None
 
     def retired(self, name: str) -> bool:
         """Removal keeps the name's generations; they are the deletion record."""
@@ -561,11 +586,6 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         return {
             alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching
         }
-
-    def require_unambiguous_ownership(self) -> None:
-        """Archived identities remain readable; publication requires unique owners."""
-        if len({thread.created_at for thread in self.threads.values()}) != len(self.threads):
-            raise RelationViolationError("Registry creation identities collide.")
 
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.canonical_name(name)

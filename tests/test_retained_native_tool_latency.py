@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_errors import CoordinationError
@@ -67,7 +67,7 @@ async def test_installed_retained_native_read_round_preserves_original_custody(t
     assert original.size >= 40 * 1024**2, "This acceptance requires representative retained history"
     root, root_id, comms, initial, _ = _root(tmp_path, direct=True, body="Perform three isolated fixture reads, then answer once.")
     owner = comms.registry.require("beta")
-    directory = root / "native-sessions" / stable_thread_lookup(owner.created_at)
+    directory = root / "native-sessions" / ThreadIncarnation("fixture", owner.created_at).lookup
     directory.mkdir(parents=True, mode=0o700)
     saved = directory / source.name
     shutil.copyfile(source, saved)

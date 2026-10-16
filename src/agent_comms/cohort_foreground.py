@@ -196,7 +196,7 @@ async def run_foreground_once(
             comms.registry.register(thread)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             store.install_private_runtime()
-            lookup = comms.registry.require(name).incarnation.stable_thread_lookup
+            lookup = comms.registry.require(name).incarnation.lookup
             store.participants.register(lookup, name, name, committed=True)
         return thread, lookup, action
 

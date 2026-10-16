@@ -201,7 +201,7 @@ class SelectedParticipant(MroDispatch):
             raise StaleFence("recipient registry identity stopped or changed") from error
         owner = RegistryOwner(thread=thread, admission_generation=generation)
         owner.require_registry(comms.registry)
-        lookup = thread.incarnation.stable_thread_lookup
+        lookup = thread.incarnation.lookup
         sent_owner, sent_sources = MessageNotification.sent_sources(
             comms.root, comms.registry, comms.bus.log, name,
             limit=MessageNotification.window_limit,

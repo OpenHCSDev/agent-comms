@@ -18,7 +18,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -60,7 +60,7 @@ def alice_batch(*sent: tuple[str, str]):
                 )
             for message in messages:
                 accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-            lookup = stable_thread_lookup(comms.registry.require("Alice").created_at)
+            lookup = ThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
             assignments = sealed_cohort_assignments(store, lookup)
             yield SelectedSourceBatch.first_route(tuple(
                 SelectedSource(assignment.assignment_id, store.assignments, delivery)

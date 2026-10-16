@@ -1,10 +1,10 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
 from agent_comms import invoke_tool
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.assignment_states import IgnoredAssignment
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.coordinator import Coordination
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.errors import RelationViolationError
@@ -28,7 +28,7 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
 
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
-    lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+    lookup = ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     original = NotificationAssignment.read(root, (initial,)).resolve(root)
     wire_before = comms.bus.log.path.read_bytes()
     assert original
@@ -67,7 +67,7 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
 
     root, _root_id, comms, _initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
-    lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
+    lookup = ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     commit_requested = threading.Event()
     committed = threading.Event()
     errors, statements = [], []
@@ -186,8 +186,7 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     notices = comms.views.message_notifications((message,))[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
     assert beta.state=='Sent' and beta.detail == ''
-    assert beta.recipient_identity.recipient_lookup==stable_thread_lookup(
-        comms.registry.require('beta').created_at)
+    assert beta.recipient_identity.recipient_lookup==ThreadIncarnation("fixture", comms.registry.require('beta').created_at).lookup
     with Coordination(str(root/'coordination.sqlite3')) as store:
         assert WakeAssignment.select(store.session._connection)==before
     assert not any(row.wire_seq==message.seq for row in before)
@@ -238,7 +237,7 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
         comms.root, comms.registry.require("beta"), comms.bus.log
     )
     original = tuple(source.rows("w.seq=?", (reply.seq,)))
-    lookup = stable_thread_lookup(source.recipient.created_at)
+    lookup = ThreadIncarnation("fixture", source.recipient.created_at).lookup
     intent = TurnRouting((initial.message.reference,), MessageRoute("beta", ("sender", "alpha")))
     # A later send can fail; this first committed subset stays a valid relation.
     intent.require_publications(original, lookup)
@@ -295,7 +294,7 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     before = comms.transcripts.capture_page_read("sender")
     sender_page = before.read()
     target = comms.registry.require("beta")
-    lookup = stable_thread_lookup(target.created_at)
+    lookup = ThreadIncarnation("fixture", target.created_at).lookup
     receipts = comms.views.recent_notifications("sender")
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
     assert beta.message.reference == message.reference and beta.state == "Sent"
@@ -401,9 +400,7 @@ def test_open_thread_shares_original_notification_and_frontier_read(tmp_path, mo
     assert len(barriers) == 1
     assert view.read_identity.receipt_frontier.sequence == initial.message.seq
     assert view.notifications[0].message.reference == initial.message.reference
-    assert view.notifications[0].recipient_identity.recipient_lookup == stable_thread_lookup(
-        view.read_identity.thread.created_at
-    )
+    assert view.notifications[0].recipient_identity.recipient_lookup == ThreadIncarnation("fixture", view.read_identity.thread.created_at).lookup
 
 
 def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noqa: F811

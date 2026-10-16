@@ -496,7 +496,7 @@ class CertifiedSourceRead:
         now; its decoder may run after publication custody closes. No unrelated
         record is decoded and no fact is stored in the checkpoint.
         """
-        lookup = incarnation.stable_thread_lookup
+        lookup = incarnation.lookup
         originals = self.conversation_sources(
             lookup, "1", (), limit=-1, ascending=True,
         )

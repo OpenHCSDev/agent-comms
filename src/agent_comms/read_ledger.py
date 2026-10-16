@@ -166,9 +166,12 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         Processing, assignment acceptance and a reply cannot grant this fact.
         A reused name with a different creation identity cannot inherit it.
         """
+        thread = snapshot.thread_for_recipient(
+            recipient.recipient_lookup, recipient.canonical_thread
+        )
         return self._displayed_recipient(
             message, recipient, snapshot,
-            (thread for thread in snapshot.threads.values() if self.human(thread.role)),
+            thread if thread is not None and self.human(thread.role) else None,
             document=document,
         )
 
@@ -181,17 +184,17 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         different frozen recipient or replace the recorded namespace.
         """
         return self._displayed_recipient(
-            message, recipient, snapshot, snapshot.threads.values(), document=document
+            message, recipient, snapshot,
+            snapshot.thread_for_recipient(recipient.recipient_lookup, recipient.canonical_thread),
+            document=document,
         )
 
-    def _displayed_recipient(self, message, recipient, snapshot, threads, *, document):
-        for thread in threads:
-            if (
-                thread.incarnation.stable_thread_lookup == recipient.recipient_lookup
-                and snapshot.canonical_name(recipient.canonical_thread) == thread.name
-                and message.seq in self.seen_sequences(thread.name, snapshot, document=document)
-            ):
-                return (thread.incarnation,)
+    def _displayed_recipient(self, message, recipient, snapshot, thread, *, document):
+        if (
+            thread is not None
+            and message.seq in self.seen_sequences(thread.name, snapshot, document=document)
+        ):
+            return (thread.incarnation,)
         return ()
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:

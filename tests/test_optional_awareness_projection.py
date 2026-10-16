@@ -11,7 +11,8 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import coordination_cohort as cohort
-from agent_comms.bus_publication import CommittedDelivery, stable_thread_lookup
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -107,7 +108,7 @@ def _projection(
         through_seq,
         registry=Registration(index.log.path.with_name("registry.json")),
         expected_participant_generation=store.participants.get(
-            stable_thread_lookup(owner.created_at)
+            ThreadIncarnation("fixture", owner.created_at).lookup
         ).participant_generation,
         expected_admission_generation=admission_generation,
         max_rows=max_rows,
@@ -425,7 +426,7 @@ def test_fresh_gen2_selected_and_old_pending_obligation_are_scoped(tmp_path: Pat
 def test_fresh_gen2_only_selected_is_available(tmp_path: Path) -> None:
     comms, store, index, root_id = _root(tmp_path)
     try:
-        lookup = stable_thread_lookup(comms.registry.require("member000").created_at)
+        lookup = ThreadIncarnation("fixture", comms.registry.require("member000").created_at).lookup
         store.participants.register(lookup, "member000", "member000", committed=True)
         store.participants.advance_generation(lookup, "member000", expected_generation=1)
         initial, assignment = _accepted(comms, store, root_id, "member000", "fresh")
@@ -628,7 +629,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         passive = accept_delivery_cohort(comms.bus, root_id, notice.seq, store).value.assignments[0]
         assert isinstance(passive.lifecycle, PassiveAssignment)
         assert not passive.lifecycle.engageable and not passive.lifecycle.mode.active
-        observer = stable_thread_lookup(comms.registry.require("member001").created_at)
+        observer = ThreadIncarnation("fixture", comms.registry.require("member001").created_at).lookup
         assert not WakeAssignment.select(
             store.session._connection,
             where="recipient_lookup=? AND wire_seq=?",

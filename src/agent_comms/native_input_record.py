@@ -321,7 +321,7 @@ class NativeInputRecord(ABC):
         """Join original coordinator naming/birth; this grants no live ownership."""
         from .coordination_errors import IdentityConflict
 
-        expected = OwnerGenerations(owner_lookup=thread.incarnation.stable_thread_lookup, owner_thread=thread.name, generation=self.owner_generation)
+        expected = OwnerGenerations(owner_lookup=thread.incarnation.lookup, owner_thread=thread.name, generation=self.owner_generation)
         if self.owner_identity != expected:
             raise IdentityConflict("Native input belongs to another recorded owner")
 

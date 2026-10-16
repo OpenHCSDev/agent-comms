@@ -8,7 +8,7 @@ from unittest import TestCase
 
 import pytest
 
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
@@ -37,7 +37,7 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
             model="openai-codex/gpt-6-sol",
         ))
     root_id = comms.messaging.initialize_private_initial_protocol()
-    lookup = stable_thread_lookup(comms.registry.require("receiver").created_at)
+    lookup = ThreadIncarnation("fixture", comms.registry.require("receiver").created_at).lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(lookup, "receiver", "receiver", committed=True)
 
@@ -147,7 +147,7 @@ async def test_a_mixed_route_wave_turns_one_route_at_a_time(tmp_path):
             model="openai-codex/gpt-6-sol",
         ))
     root_id = comms.messaging.initialize_private_initial_protocol()
-    lookup = stable_thread_lookup(comms.registry.require("receiver").created_at)
+    lookup = ThreadIncarnation("fixture", comms.registry.require("receiver").created_at).lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(lookup, "receiver", "receiver", committed=True)
 
@@ -191,7 +191,7 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
             model="openai-codex/gpt-6-sol",
         ))
     root_id = comms.messaging.initialize_private_initial_protocol()
-    lookup = stable_thread_lookup(comms.registry.require("receiver").created_at)
+    lookup = ThreadIncarnation("fixture", comms.registry.require("receiver").created_at).lookup
     session = NativeSessionIdentity("native-session", str(tmp_path / "session.jsonl"))
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(lookup, "receiver", "receiver", committed=True)

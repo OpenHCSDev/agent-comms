@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms import acp, cohort_foreground, coordinated_runtime, native_pi
 from agent_comms import agent_events as events
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_cohort import next_sealed_assignment
 from agent_comms.native_source_cursor import NativeSourceCursor
@@ -200,7 +200,7 @@ def _covered_session(tmp_path):
     comms.registry.declare(other)
     with Coordination(comms.root / "coordination.sqlite3") as store:
         store.participants.register(
-            stable_thread_lookup(other.created_at), other.name, other.name, committed=True,
+            ThreadIncarnation("fixture", other.created_at).lookup, other.name, other.name, committed=True,
         )
     comms.messaging.send_initial_cohort("sender", other.name, "another recipient's original source")
     return comms, agent, root_id
@@ -506,7 +506,7 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
         # Actual recovery/reassignment of beta must still invalidate the
         # observation without a wire append or a provider request.
         beta = comms.registry.require("beta")
-        person = store.participants.get(stable_thread_lookup(beta.created_at))
+        person = store.participants.get(ThreadIncarnation("fixture", beta.created_at).lookup)
         store.participants.advance_generation(
             person.lookup, beta.name, expected_generation=person.participant_generation,
         )
@@ -525,11 +525,11 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
     assert first.seq < second.seq
     with Coordination(comms.root / "coordination.sqlite3") as store:
         await cohort_foreground._accept_visible_deliveries(
-            comms.bus, _root_id, store.session.path, stable_thread_lookup(beta.created_at), 0,
+            comms.bus, _root_id, store.session.path, ThreadIncarnation("fixture", beta.created_at).lookup, 0,
             owner_name=beta.name,
         )
         pending = next_sealed_assignment(
-            store, stable_thread_lookup(beta.created_at), beta.name,
+            store, ThreadIncarnation("fixture", beta.created_at).lookup, beta.name,
         )
         assert pending.wire_seq == second.seq
     assert await agent.inputs._observe_private_revision("beta", _root_id) != before
@@ -564,7 +564,7 @@ async def test_during_scan_change_is_not_absorbed_as_idle(tmp_path, monkeypatch)
 @pytest.mark.asyncio
 async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypatch):
     root, root_id, comms, original, people = _root(tmp_path, direct=True)
-    lookup = stable_thread_lookup(people[2].created_at)
+    lookup = ThreadIncarnation("fixture", people[2].created_at).lookup
     accepted = []
     accept = cohort_foreground.accept_delivery_cohort
 

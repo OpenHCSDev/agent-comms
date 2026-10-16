@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, StaleFence
@@ -54,7 +54,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
         comms.registry.declare(member)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             store.participants.register(
-                stable_thread_lookup(member.created_at),
+                ThreadIncarnation("fixture", member.created_at).lookup,
                 member.name,
                 member.name,
                 committed=True,
@@ -73,7 +73,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
             comms.bus,
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=ThreadIncarnation("fixture", people[1].created_at).lookup,
         ).read()
         assert coverage.blocked_seq == selected.seq
     second = await runtime.SelectedExecution(
@@ -116,7 +116,7 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
     other = comms.registry.require("other")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
-            stable_thread_lookup(other.created_at), "other", "other", committed=True
+            ThreadIncarnation("fixture", other.created_at).lookup, "other", "other", committed=True
         )
     for number in range(101):
         message = comms.messaging.send_initial_cohort("sender", "#team", f"@other note-{number}")
@@ -189,7 +189,7 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
         )
         assert valid is not None and valid.input_id == first.input_id
 
-    lookup = stable_thread_lookup(people[1].created_at)
+    lookup = ThreadIncarnation("fixture", people[1].created_at).lookup
     comms.registry.rename("alpha", "alpha-new")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, "alpha-new", expected_generation=1)
@@ -248,7 +248,7 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert result is not None and result.cursor_status == "proven"
-    lookup = stable_thread_lookup(people[1].created_at)
+    lookup = ThreadIncarnation("fixture", people[1].created_at).lookup
     original = SourceCoverage.prefix
 
     def advance_generation(*args, **kwargs):

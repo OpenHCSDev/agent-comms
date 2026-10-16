@@ -87,21 +87,6 @@ def reject_private_wire_fields(record: Mapping[str, object]) -> None:
         raise ValueError("Bus-private wire fields cannot be exported.")
 
 
-def stable_thread_lookup(created_at: float) -> str:
-    """Immutable creation identity; duplicate timestamps fail at capture.
-
-    The registry preserves Thread.created_at across renames and restarts. Its
-    canonical name, aliases, mutable tags, PID, and session attachment are NOT
-    lookup identities. An unknown creation time (zero) cannot authorize delivery.
-    """
-    if isinstance(created_at, bool) or not isinstance(created_at, (float, int)):
-        raise ValueError("Thread creation identity is invalid.")
-    if not math.isfinite(created_at) or created_at <= 0:
-        raise ValueError("Thread creation identity is unavailable.")
-    identity = f"agent-comms:thread-creation:v1\0{float(created_at)!r}".encode()
-    return hashlib.sha256(identity).hexdigest()[:32]
-
-
 def _decision_wire(decision: WakeDecision | NoWakeDecision) -> dict[str, str]:
     from .wake import NoWakeDecision, WakeDecision
 

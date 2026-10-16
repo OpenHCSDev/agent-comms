@@ -224,7 +224,7 @@ class TranscriptRoutes:
             raise RelationViolationError("Native publication evidence is invalid") from error
         ids = routing.annotation_ids(reader, checkpoint, str(path), final.end)
         inputs = InputDispositions(log.path.parent)
-        lookup = incarnation.stable_thread_lookup
+        lookup = incarnation.lookup
         with log.certified_read() as source, registry.store.reading() as document:
             snapshot = document.snapshot()
             incarnation = lease.identity.incarnation.resolved(snapshot)

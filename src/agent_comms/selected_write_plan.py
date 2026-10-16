@@ -201,7 +201,7 @@ class SelectedWritePlans:
             initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
             if initial.message.message_id != source_message_id:
                 raise IdentityConflict("Selected write source identity changed")
-            lookup = owner.incarnation.stable_thread_lookup
+            lookup = owner.incarnation.lookup
             with Coordination(str(self.comms.root / "coordination.sqlite3")) as store:
                 assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
                 selected = [
@@ -250,7 +250,7 @@ class SelectedWritePlans:
     def load(
         self, assignment: WakeAssignment, owner: Thread, admission_generation: int
     ) -> PlannedWrite | None:
-        lookup = owner.incarnation.stable_thread_lookup
+        lookup = owner.incarnation.lookup
         path = self._path(assignment.wire_seq, lookup)
         row = self._read(path)
         if row is None:
@@ -265,7 +265,7 @@ class SelectedWritePlans:
         return row.planned(owner.worktree)
 
     def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: str) -> None:
-        path = self._path(assignment.wire_seq, owner.incarnation.stable_thread_lookup)
+        path = self._path(assignment.wire_seq, owner.incarnation.lookup)
         row = self._read(path)
         if row is None:
             raise IdentityConflict("Selected write intent is missing")

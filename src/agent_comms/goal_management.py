@@ -140,7 +140,7 @@ class Goals:
         snapshot = self.registry.snapshot()
         from .input_attempt import ReservedInput
 
-        lookup = thread.incarnation.stable_thread_lookup
+        lookup = thread.incarnation.lookup
         # Original certification supplies both sides of the reply. Display ACKs
         # and today's sender aliases cannot admit a different incarnation.
         replies = {

@@ -7,8 +7,8 @@ import pytest
 from acp.agent.router import build_agent_router
 from acp.schema import SessionConfigSelectOption
 
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.acp import CommsClient
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
@@ -64,7 +64,7 @@ async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owne
     thread = owner._comms.registry.require(session.session_id)
     assert thread.process_identity == ProcessIdentity.capture(os.getpid())
     with Coordination(str(owner._comms.root / "coordination.sqlite3")) as store:
-        participant = store.participants.get(stable_thread_lookup(thread.created_at))
+        participant = store.participants.get(ThreadIncarnation("fixture", thread.created_at).lookup)
     assert participant.committed and participant.owner_thread == thread.name
     assert participant.pointer.execution_id is None
     assert session.session_id not in owner.sessions.config.publications
@@ -93,7 +93,7 @@ async def test_attached_declaration_publishes_membership_without_acquiring_execu
         assert owner._comms.registry.status(thread.name).active
         assert not attachment.sessions.bindings and not attachment.sessions.proxies
         with Coordination(str(owner._comms.root / "coordination.sqlite3")) as store:
-            participant = store.participants.get(stable_thread_lookup(thread.created_at))
+            participant = store.participants.get(ThreadIncarnation("fixture", thread.created_at).lookup)
         assert participant.committed and participant.owner_thread == thread.name
         assert participant.pointer.execution_id is None
     finally:

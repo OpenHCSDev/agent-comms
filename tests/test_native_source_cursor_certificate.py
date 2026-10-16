@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -69,7 +69,7 @@ def _fresh(tmp_path: Path, count: int = 2):
             name = "alpha" if n == 0 else f"other{n:03}"
             owner = comms.registry.require(name)
             store.participants.register(
-                stable_thread_lookup(owner.created_at), name, name, committed=True
+                ThreadIncarnation("fixture", owner.created_at).lookup, name, name, committed=True
             )
     return root, root_id, comms
 

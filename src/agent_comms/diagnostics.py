@@ -37,7 +37,7 @@ def owner_process_output(root: Path, thread: Thread):
     """
     directory = root / "diagnostics"
     directory.mkdir(mode=0o700, exist_ok=True)
-    path = directory / f"owner-{thread.incarnation.stable_thread_lookup}-{uuid4().hex}.log"
+    path = directory / f"owner-{thread.incarnation.lookup}-{uuid4().hex}.log"
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w") as output:
         output.write(f"Owner launch: {thread.name}\n")

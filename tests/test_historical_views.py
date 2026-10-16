@@ -323,7 +323,9 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     recorded = source.provenance.require("alice")
     assert type(recorded) is ThreadProvenance
     assert recorded.incarnation == old.registry.require("alice").incarnation
-    assert set(FieldCodec.encode(recorded)) == {item.name for item in fields(ThreadProvenance)}
+    assert set(FieldCodec.encode(recorded)) == {
+        item.name for item in fields(ThreadProvenance) if item.init
+    }
     assert not hasattr(recorded, "process_identity")
     assert not hasattr(recorded, "active_turn")
     assert not hasattr(source.provenance, "admission_generations")

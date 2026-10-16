@@ -47,7 +47,7 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
         from agent_comms.coordination_errors import IdentityConflict
 
         if self.recipient_identity != FrozenRecipient(
-            owner.incarnation.stable_thread_lookup, owner.name
+            owner.incarnation.lookup, owner.name
         ):
             raise IdentityConflict("wake frame does not match a committed recipient")
         self.require_committed_source(initial)

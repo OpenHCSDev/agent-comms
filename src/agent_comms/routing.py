@@ -218,7 +218,7 @@ class DeliveryScope(MessageDisplayScope):
         """
         yield ""
         if source.has_recorded_birth:
-            yield source.stable_thread_lookup
+            yield source.lookup
         else:
             on_unrecorded()
 

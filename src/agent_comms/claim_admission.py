@@ -79,7 +79,7 @@ def _verify_selected_wake_state(
         raise IdentityConflict("Wake source or owner turn does not match") from error
     if initial.message.reference != admission.source:
         raise IdentityConflict("Wake source message changed")
-    if owner.incarnation.stable_thread_lookup != admission.recipient_lookup:
+    if owner.incarnation.lookup != admission.recipient_lookup:
         raise IdentityConflict("Wake recipient incarnation changed")
     if generation != admission.owner_admission_generation or turn.id != admission.turn_id:
         raise IdentityConflict("Wake source or owner turn does not match")

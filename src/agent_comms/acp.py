@@ -419,7 +419,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             ),
         )
         await _accept_visible_deliveries(
-            bus, wire_root_id, store_path, owner.incarnation.stable_thread_lookup, 0,
+            bus, wire_root_id, store_path, owner.incarnation.lookup, 0,
             owner_name=owner.name, acquire_package=execution.validate,
         )
         if self.inputs.owns_execution(session_id, owner):
@@ -432,7 +432,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return 0
         def select(store):
             with store.session.read():
-                participant = store.participants.get(owner.incarnation.stable_thread_lookup)
+                participant = store.participants.get(owner.incarnation.lookup)
                 candidate = next_sealed_assignment(
                     store, participant.lookup, owner.name, after_seq=admission_after_seq,
                 )

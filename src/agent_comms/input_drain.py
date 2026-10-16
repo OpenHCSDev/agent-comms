@@ -425,7 +425,7 @@ class InputObservation:
                     self._indexed_changes_for_owner,
                     settled,
                     revision,
-                    entry.thread.incarnation.stable_thread_lookup,
+                    entry.thread.incarnation.lookup,
                 ))
                 if marker.admission_after_seq != settled.admission_after_seq or addressed:
                     return None
@@ -457,7 +457,7 @@ class InputObservation:
         """
         owner = RegistryOwner(thread=entry.thread, admission_generation=entry.admission_generation)
         with store.session.read():
-            participant = store.participants.get(owner.thread.incarnation.stable_thread_lookup)
+            participant = store.participants.get(owner.thread.incarnation.lookup)
             pending = next_sealed_assignment(
                 store, participant.lookup, owner.thread.name, after_seq=wire[-1],
             )

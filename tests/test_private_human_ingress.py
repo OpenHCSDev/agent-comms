@@ -11,7 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.bus_publication import HumanOrigin, stable_thread_lookup
+from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.bus_publication import HumanOrigin
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
@@ -38,7 +39,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
         comms.registry.register(Thread(name, frozenset({"team"}), str(root), created_at=created_at))
-        lookups[name] = stable_thread_lookup(created_at)
+        lookups[name] = ThreadIncarnation("fixture", created_at).lookup
     store = Coordination(str(root / "coordination.sqlite"), clock_ms=lambda: 9999)
     install_private_cohort_schema(store)
     for name in lookups:

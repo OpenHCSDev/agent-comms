@@ -271,7 +271,7 @@ class MessageNotification:
         target = snapshot.threads.get(name)
         if target is None or not reads.human(target.role):
             return None
-        recipient = FrozenRecipient(target.incarnation.stable_thread_lookup, target.name)
+        recipient = FrozenRecipient(target.incarnation.lookup, target.name)
         displayed_to = reads.displayed_recipient(
             message, recipient, snapshot, document=document
         )
@@ -332,7 +332,7 @@ class MessageNotification:
         """Project outcomes from the caller's original certified source window."""
         projected = cls.delivery_window(
             root, registry, sources,
-            owner_lookup=owner.incarnation.stable_thread_lookup,
+            owner_lookup=owner.incarnation.lookup,
             assignment_read=assignment_read,
         )
         return tuple(

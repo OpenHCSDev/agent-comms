@@ -19,7 +19,7 @@ from agent_comms import claim_admission
 from agent_comms import cohort_foreground as foreground
 from agent_comms import cohort_send
 from agent_comms import coordinated_runtime as runtime
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -420,7 +420,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         def ready(thread: Thread) -> None:
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 store.participants.register(
-                    stable_thread_lookup(comms.registry.require("beta").created_at),
+                    ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
                     "beta",
                     "beta",
                     committed=True,
@@ -526,7 +526,7 @@ async def test_foreground_refuses_takeover_and_cosmetic_subprocess_pid(
             install_private_response_schema(store)
             install_native_runtime_schema(store)
             store.participants.register(
-                stable_thread_lookup(comms.registry.require("beta").created_at),
+                ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
                 "beta",
                 "beta",
                 committed=True,

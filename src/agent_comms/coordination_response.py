@@ -248,7 +248,7 @@ class LiveResponseOwner(RegistryOwner):
 
     @property
     def recipient_lookup(self) -> str:
-        return self.thread.incarnation.stable_thread_lookup
+        return self.thread.incarnation.lookup
 
     def require_live(self, snapshot: RegistrySnapshot, fence: OwnerFence) -> None:
         self.require_snapshot(snapshot, "response owner turn stopped or changed before publication")

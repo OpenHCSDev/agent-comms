@@ -5,6 +5,7 @@ import json
 
 import pytest
 
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.agent_events import AgentInfo
 from agent_comms.field_codec import FieldCodec
 from agent_comms.thread_identity import TurnId, TurnIdentity
@@ -15,7 +16,6 @@ from agent_comms.wire_record import WireRecord, ObservationWireRecord, RecordedC
 from agent_comms.cli_commands import ContextCliCommand
 from agent_comms.comms import Comms
 from test_private_bus_checkpoint import _root, _page
-from agent_comms.bus_publication import stable_thread_lookup
 
 
 def manifest(owner, generation=1):
@@ -206,7 +206,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
     try:
         with Coordination(str(comms.root / 'coordination.sqlite3')) as store:
             for registered in comms.registry.snapshot().threads.values():
-                store.participants.register(stable_thread_lookup(registered.created_at),
+                store.participants.register(ThreadIncarnation("fixture", registered.created_at).lookup,
                     registered.name, registered.name, committed=True)
             accept_delivery_cohort(comms.bus, root_id, original_message.seq, store)
             await publish_while_contended(progress, ContextObserved(data), cancel=True)
@@ -245,7 +245,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
 def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_path, monkeypatch):
     comms,root_id=_root(tmp_path)
     first=comms.messaging.send_initial_cohort('sender','#team','@Alice original question')
-    lookup=stable_thread_lookup(17002.0)
+    lookup=ThreadIncarnation("fixture", 17002.0).lookup
     prior=_page(comms,lookup)
     raw=comms.bus.log.path.read_bytes()
     activity=comms.bus.channel_activity()

@@ -198,7 +198,7 @@ class ThreadPresentation:
         projected = MessageNotification.delivery_window(
             transcripts.root, transcripts.registry, sources,
             NotificationAssignment.read(transcripts.root, sources),
-            owner_lookup=window.read.identity.thread.incarnation.stable_thread_lookup,
+            owner_lookup=window.read.identity.thread.incarnation.lookup,
         )
         incoming, sent = (
             tuple(replace(notification, message=source.message)

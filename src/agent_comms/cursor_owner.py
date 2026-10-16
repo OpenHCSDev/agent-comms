@@ -38,7 +38,7 @@ class CursorOwner(RegistryOwner):
 
     @property
     def lookup(self) -> str:
-        return self.thread.incarnation.stable_thread_lookup
+        return self.thread.incarnation.lookup
 
     def require_live(self, bus: MessageBus, registry: RegistrySnapshot, reason: str) -> None:
         if bus.log._private_marker_unlocked().root_id != self.wire_root_id:

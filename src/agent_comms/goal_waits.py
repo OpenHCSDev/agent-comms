@@ -4,18 +4,17 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .bus_publication import CommittedDelivery, stable_thread_lookup
-
+from .bus_publication import CommittedDelivery
 from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
 from .goals import Goal
 from .input_attempt import InputAttempt
 from .locked_store import LockedStore
 from .registry_document import RegistrySnapshot
+from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
@@ -30,6 +29,7 @@ class GoalWait:
     after_seq: int
     targets: tuple[GoalWaitTarget, ...]
     owner_created_at: float
+    _owner_lookup: str = field(init=False, repr=False, compare=False)
     # An idle dependency has no turn generation at the moment of declaration.
     target_turn_generations: tuple[int | None, ...]
     # Runtime declarations outside a turn explicitly carry no reporting turn.
@@ -48,6 +48,9 @@ class GoalWait:
             )
         ):
             raise ValueError("A wait requires its owner incarnation and aligned target turns.")
+        object.__setattr__(
+            self, "_owner_lookup", ThreadIncarnation._lookup_for_birth(self.owner_created_at)
+        )
         if (self.report_turn_id is None) != (self.report_turn_generation is None) or (
             self.report_turn_id is not None
             and (
@@ -73,7 +76,7 @@ class GoalWait:
         """Join original sender and addressed owner through the certified source."""
         return (
             original.message.seq > self.after_seq
-            and original.direct_for(stable_thread_lookup(self.owner_created_at))
+            and original.direct_for(self._owner_lookup)
             and any(target.sent(original) for target in self.targets)
         )
 
@@ -81,7 +84,7 @@ class GoalWait:
         return any(
             self.matches(original)
             for original in bus.addressed_sources(
-                stable_thread_lookup(self.owner_created_at), self.after_seq
+                self._owner_lookup, self.after_seq
             )
         )
 

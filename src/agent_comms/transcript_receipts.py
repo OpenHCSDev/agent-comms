@@ -300,7 +300,7 @@ class AssignedTranscriptSource(TranscriptSource):
         messages = tuple(messages)
         if not messages:
             return messages
-        lookup = self.recipient.stable_thread_lookup
+        lookup = self.recipient.lookup
         marks = ",".join("?" for _ in messages)
         originals = {
             original.message.reference: original.message
@@ -332,7 +332,7 @@ class AssignedTranscriptSource(TranscriptSource):
         self, predicate="1", parameters=(), *, limit=1, ascending=False,
     ) -> Iterator[CommittedDelivery]:
         return self.log.conversation_sources(
-            self.recipient.stable_thread_lookup,
+            self.recipient.lookup,
             predicate,
             parameters,
             limit=limit,
@@ -341,7 +341,7 @@ class AssignedTranscriptSource(TranscriptSource):
 
     @property
     def frontier(self):
-        lookup = self.recipient.stable_thread_lookup
+        lookup = self.recipient.lookup
         return AssignedSourceCursor(
             str(self.root), self.recipient,
             ConversationSourceWindowRequest.frontier(self.log, lookup),
@@ -349,7 +349,7 @@ class AssignedTranscriptSource(TranscriptSource):
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
         """One certified cut owns conversation, sent rows and their frontier."""
-        lookup = self.recipient.stable_thread_lookup
+        lookup = self.recipient.lookup
         conversation_request = ConversationSourceWindowRequest("1", (), limit, False)
         sent_request = ConversationSourceWindowRequest(
             "w.sender_lookup=?", (lookup,), sent_limit, False
@@ -371,7 +371,7 @@ class AssignedTranscriptSource(TranscriptSource):
         entry = record.entry
         published = False
         routing = routes.get(entry.id)
-        lookup = self.recipient.stable_thread_lookup
+        lookup = self.recipient.lookup
         events = super().native_events(record, routes, project_events, references)
         if entry.final_reply:
             if routing is not None and routing.publications:
@@ -425,7 +425,7 @@ class AssignedTranscriptSource(TranscriptSource):
 
     def events(self, original):
         message = original.message
-        if original.audience.sender_lookup == self.recipient.stable_thread_lookup:
+        if original.audience.sender_lookup == self.recipient.lookup:
             return (
                 SentTranscript.from_message(message),
             )
@@ -451,7 +451,7 @@ class LiveAssignedTranscriptSource(AssignedTranscriptSource):
         from .native_runtime_input import NativeRuntimeInput
         from .transcripts import TranscriptRead
 
-        lookup = self.recipient.stable_thread_lookup
+        lookup = self.recipient.lookup
         for fragment in fragments:
             fragment = tuple(fragment)
             selected = tuple(zip(fragment, reader.inputs_for(fragment)))

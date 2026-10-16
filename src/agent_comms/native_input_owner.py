@@ -193,7 +193,7 @@ class ParticipantOwner:
         participant = store.participants.get(lookup)
         if not participant.committed or participant.owner_identity != self.coordinator_identity(lookup):
             raise StaleFence("cohort participant generation changed")
-        if self.thread.incarnation.stable_thread_lookup != lookup:
+        if self.thread.incarnation.lookup != lookup:
             raise StaleFence("cohort participant incarnation changed")
         if self.thread.process_identity != ProcessIdentity.capture(os.getpid()):
             raise StaleFence("cohort recipient is not this live registered owner generation")

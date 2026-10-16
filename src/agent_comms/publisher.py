@@ -393,12 +393,8 @@ class Publisher:
                     and channel.matches(thread.tags)
                 ]
             selected = [snapshot.threads[name] for name in names]
-            lookups = [thread.incarnation.stable_thread_lookup for thread in selected]
-            if len(set(lookups)) != len(lookups):
-                raise RelationViolationError("Recipient creation identities collide.")
-            sender_lookup = snapshot.threads[sender].incarnation.stable_thread_lookup
-            if sender_lookup in lookups:
-                raise RelationViolationError("Sender creation identity collides with recipient.")
+            lookups = [thread.incarnation.lookup for thread in selected]
+            sender_lookup = snapshot.threads[sender].incarnation.lookup
             stored = self._prepare_message_unlocked(
                 message,
                 sender=sender,

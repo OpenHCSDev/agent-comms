@@ -8,8 +8,8 @@ from functools import partial
 
 import pytest
 
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignment
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination_cohort import pending_sealed_assignments
 from agent_comms.coordinator import Coordination
@@ -31,7 +31,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     owner = comms.registry.require("beta")
     message = comms.messaging.send_initial_cohort("sender", "beta", "must survive selection")
     store_path = comms.root / "coordination.sqlite3"
-    lookup = stable_thread_lookup(owner.created_at)
+    lookup = ThreadIncarnation("fixture", owner.created_at).lookup
     await _accept_visible_deliveries(
         comms.bus, root_id, store_path, lookup, 0, owner_name=owner.name,
     )
@@ -115,7 +115,7 @@ async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_
     original = comms.messaging.send_initial_cohort("sender", "beta", "selected batch")
     owner = comms.registry.require("beta")
     path = comms.root / "coordination.sqlite3"
-    lookup = stable_thread_lookup(owner.created_at)
+    lookup = ThreadIncarnation("fixture", owner.created_at).lookup
     await _accept_visible_deliveries(comms.bus, root_id, path, lookup, 0, owner_name="beta")
     entered, release = asyncio.Event(), threading.Event()
     loop = asyncio.get_running_loop()
@@ -173,7 +173,7 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
     owner = comms.registry.require("beta")
     comms.messaging.send_initial_cohort("sender", "beta", "unbound recovery source")
     store_path = comms.root / "coordination.sqlite3"
-    lookup = stable_thread_lookup(owner.created_at)
+    lookup = ThreadIncarnation("fixture", owner.created_at).lookup
     await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, 0, owner_name="beta")
     with Coordination(str(store_path)) as store:
         assignments = pending_sealed_assignments(store, lookup, "beta")
@@ -211,7 +211,7 @@ async def test_delivery_worker_retires_unplaced_inputs_after_cancellation_or_inb
     agent.inputs.original_sources["beta"] = SelectedOriginalInput.answering("live selected work")
     message = comms.messaging.send_initial_cohort("sender", "beta", "worker-held delivery")
     path = comms.root / "coordination.sqlite3"
-    lookup = stable_thread_lookup(leased.thread.created_at)
+    lookup = ThreadIncarnation("fixture", leased.thread.created_at).lookup
     await _accept_visible_deliveries(comms.bus, root_id, path, lookup, 0, owner_name="beta")
     loop = asyncio.get_running_loop()
     entered, release = asyncio.Event(), threading.Event()

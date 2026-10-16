@@ -444,7 +444,7 @@ class DeliveredInput(QueuedInput):
             path = str(comms.root / "coordination.sqlite3")
             with Coordination(path, session_type=ReadNativeCoordinationSession) as store:
                 assignments = store.assignments.recoverable_unbound_deliveries(
-                    owner.incarnation.stable_thread_lookup, frozenset(rows),
+                    owner.incarnation.lookup, frozenset(rows),
                 )
             if not assignments:
                 return 0
@@ -473,7 +473,7 @@ class DeliveredInput(QueuedInput):
         if inbox is None or session_id not in inputs.original_sources:
             return
         store_path = inputs.comms.root / "coordination.sqlite3"
-        lookup = owner.incarnation.stable_thread_lookup
+        lookup = owner.incarnation.lookup
 
         def read(store: Coordination):
             with store.session.read():

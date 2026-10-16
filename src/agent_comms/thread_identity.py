@@ -6,6 +6,7 @@ does not create a new historical thread; a new turn does not change its owner.
 
 from __future__ import annotations
 
+import hashlib
 import math
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -21,6 +22,7 @@ if TYPE_CHECKING:
 class ThreadIncarnation:
     name: str
     created_at: float
+    _lookup: str | None = field(default=None, init=False, repr=False, compare=False)
 
     # The persisted birth of a deleted participant: its declaration and real
     # birth are gone, its name stays on the bus. See DeletedThread.
@@ -43,19 +45,38 @@ class ThreadIncarnation:
             raise ValueError("Thread incarnation requires a finite birth")
 
     @property
-    def stable_thread_lookup(self) -> str:
-        """The durable lookup of this recorded incarnation, across renames."""
-        from .bus_publication import stable_thread_lookup
+    def lookup(self) -> str:
+        """The creation lookup of a recorded birth, computed once per incarnation."""
+        if (cached := self._lookup) is not None:
+            return cached
+        lookup = self._lookup_for_birth(self.created_at)
+        object.__setattr__(self, "_lookup", lookup)
+        return lookup
 
-        return stable_thread_lookup(self.created_at)
+    @staticmethod
+    def _require_recorded_birth(created_at: float) -> float:
+        if (
+            isinstance(created_at, bool)
+            or not isinstance(created_at, (int, float))
+            or not math.isfinite(created_at)
+            or created_at <= 0
+        ):
+            raise ValueError("Thread incarnation requires a positive recorded birth")
+        return float(created_at)
+
+    @staticmethod
+    def _lookup_for_birth(created_at: float) -> str:
+        """The retained birth-only GoalWait format uses this same identity rule."""
+        birth = ThreadIncarnation._require_recorded_birth(created_at)
+        identity = f"agent-comms:thread-creation:v1\0{birth!r}".encode()
+        return hashlib.sha256(identity).hexdigest()[:32]
 
     @property
     def has_recorded_birth(self) -> bool:
         return self.created_at > 0
 
     def require_recorded(self) -> None:
-        if not self.has_recorded_birth:
-            raise ValueError("Thread incarnation requires a positive recorded birth")
+        self._require_recorded_birth(self.created_at)
 
     def resolved(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
@@ -131,7 +152,7 @@ class TurnIdentity:
     incarnation: ThreadIncarnation
     generation: int
 
-    def resolved(self, snapshot: RegistrySnapshot) -> TurnIdentity:
+    def resolved(self, snapshot: RegistryProvenance) -> TurnIdentity:
         """Resolve the original incarnation; retain this turn allocation."""
         return replace(self, incarnation=self.incarnation.resolved(snapshot))
 

@@ -8,7 +8,7 @@ from dataclasses import replace
 from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
 from test_backend_native_lifecycle import native_backend as native_backend
 
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.goal_presentation import GoalWaitTarget
@@ -38,7 +38,7 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     with comms.bus.log.certified_read() as source:
         original = source.delivery(reply.seq)
         assert wait.matches(original)
-        assert original.audience.sender_lookup == stable_thread_lookup(peer.created_at)
+        assert original.audience.sender_lookup == ThreadIncarnation("fixture", peer.created_at).lookup
 
     comms.agents.finish_turn(lease)
     comms.registry.unregister("peer")
@@ -174,7 +174,7 @@ async def test_native(retained_native_acp_owner):
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             proofs = read_historical_native_inputs(
                 store, wire_root_id=root_id,
-                recipient_lookup=stable_thread_lookup(owner.created_at),
+                recipient_lookup=ThreadIncarnation("fixture", owner.created_at).lookup,
                 source_seq=original.seq,
             )
             assert len(proofs) == 1 and isinstance(proofs[0].execution, FullNativeExecution)

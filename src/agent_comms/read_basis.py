@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Collection
-from dataclasses import astuple, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -40,7 +40,9 @@ class Conversation:
     def to_wire(self) -> dict:
         """Encode the persisted participant pair format."""
         data = FieldCodec.encode(replace(self, participants=()))
-        data["participants"] = FieldCodec.encode(tuple(astuple(p) for p in self.participants))
+        data["participants"] = FieldCodec.encode(
+            tuple((p.name, p.created_at) for p in self.participants)
+        )
         return data
 
     @classmethod

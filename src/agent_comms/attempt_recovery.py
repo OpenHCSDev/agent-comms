@@ -231,7 +231,7 @@ class RecoveryMonitorCapability:
             return
         with Coordination(str(path)) as store:
             pointer = CurrentExecutions.one(
-                store.session._connection, owner_lookup=owner.incarnation.stable_thread_lookup
+                store.session._connection, owner_lookup=owner.incarnation.lookup
             )
             if pointer is not None and pointer.unresolved:
                 cls.recover_released_native_attempt(store, pointer.execution_id)

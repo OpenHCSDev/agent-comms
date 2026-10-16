@@ -172,7 +172,7 @@ class NativeTranscript(TranscriptSource):
         if not self.path.is_file():
             return PublishedReplyRevision(0, 0)
         return NativeRuntimeInput.publication_revision(
-            root, self, thread.incarnation.stable_thread_lookup)
+            root, self, thread.incarnation.lookup)
 
     @contextmanager
     def projection(self, receipts, routes):

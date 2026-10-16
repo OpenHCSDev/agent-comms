@@ -12,7 +12,6 @@ import sqlite3
 import sys
 
 from agent_comms.active_route import read_active_route
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ObservedProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.compaction_records import PrivateRawInput
@@ -138,7 +137,7 @@ def main():
             assert not Path(f'/proc/{owner.pid}/task/{owner.pid}/children').read_text().strip()
         with Coordination(str(root/'coordination.sqlite3')) as store:
             owner = service.registry.require('phase-alpha')
-            assert next_sealed_assignment(store, stable_thread_lookup(owner.created_at), owner.name,
+            assert next_sealed_assignment(store, owner.incarnation.lookup, owner.name,
                 after_seq=0) is None, 'Historical failed reservation became a fresh native attempt'
         assert historical_reservation(root, source['historical_input_id']) == source['historical_reservation_sha256']
         assert all(row.public_status == 'unknown'

@@ -162,7 +162,7 @@ class OwnerLifecycle:
                 with Coordination(str(path), session_type=ReadNativeCoordinationSession) as store:
                     pointer = CurrentExecutions.one(
                         store.session._connection,
-                        owner_lookup=thread.incarnation.stable_thread_lookup,
+                        owner_lookup=thread.incarnation.lookup,
                     )
                     if pointer is not None:
                         pointer.require_idle()
@@ -408,7 +408,7 @@ class OwnerLifecycle:
             with Coordination(str(self.root / "coordination.sqlite3")) as store:
                 store.install_private_runtime()
                 store.participants.register(
-                    thread.incarnation.stable_thread_lookup,
+                    thread.incarnation.lookup,
                     thread.name,
                     thread.name,
                     committed=True,
