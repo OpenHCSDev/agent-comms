@@ -67,7 +67,7 @@ You are one of several agents coordinating through agent-comms. Tristan owns pro
 
 ## Standing owner corrections
 
-- Fleet carries typed owner records to FieldCodec at the command/tool boundary. Do not turn arbitrary decode, SQL or programming failures into reason-string unavailable states. Only an existing source owner's named condition may become a typed unavailable member. ThreadIncarnation owns its lookup API; activity-state behavior dispatches through the state member. Goal history has one implementation owner: consume its indexed report/tail/page APIs, never add a competing scan or query family in a feature branch.
+- Fleet carries typed owner records to FieldCodec at the command/tool boundary. Its answer shape and encoding have one owner: the declared tool reuses the CLI command's apply rather than copying its response construction. Do not turn arbitrary decode, SQL or programming failures into reason-string unavailable states. Only an existing source owner's named condition may become a typed unavailable member. ThreadIncarnation owns its lookup API; activity-state behavior dispatches through the state member. Goal history has one implementation owner: consume its indexed report/tail/page APIs, never add a competing scan or query family in a feature branch.
 
 - Carry the source-first ownership method into every delegated task and after compaction through these existing instructions. Reason from source before implementation; tests and the actual configured saved-session/application path confirm the coherent change last. Each check, review and handoff needs a concrete delivery or risk reason; "industry best practice" alone justifies nothing. Propagate the instruction directly without acknowledgement chatter or another reminder mechanism.
 
