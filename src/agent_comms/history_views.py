@@ -18,6 +18,7 @@ from .thread_identity import ThreadIncarnation
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
     from .registry_document import RegistrySnapshot
+    from .threads import Thread
     from .wire_log import OpenedWireSnapshot
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
@@ -370,12 +371,14 @@ class HistoryViews:
         )
 
     def viewer_snapshot(
-        self, worktree: str, *, show_stopped: bool = True, show_archived: bool = False
+        self, viewer: Thread, *, show_stopped: bool = True, show_archived: bool = False
     ) -> CoordinationSnapshot:
-        """Local presentation scope, independent of agent delivery cursors."""
-        viewer = self.messaging.user_identity(worktree).name
-        with self.presentation.snapshot(viewer=viewer) as (basis, source):
+        """Read the caller's bound human, without choosing another identity."""
+        with self.presentation.snapshot(viewer=viewer.name) as (basis, source):
+            if not viewer.incarnation.current(basis.registry):
+                raise StaleRevision('The bound viewer incarnation changed')
             captured_viewer = basis.require_viewer()
+            basis.registry.require(captured_viewer).role.require_user()
             display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,

@@ -52,6 +52,7 @@ if TYPE_CHECKING:
     from agent_comms.runtime import RuntimeConnection
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
+    from agent_comms.threads import Thread
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
     from agent_comms.ui_model.delivery import InputDelivery
     from agent_comms.ui_model.goal import OwnerGoalSnapshot
@@ -71,10 +72,10 @@ class InterestRequest(ObservationRequest):
     """Changes what is observed; the service observes again."""
 
     @abstractmethod
-    def observation(self) -> Observation: ...
+    def observation(self, service: ObservationService) -> Observation: ...
 
     def receive(self, service: ObservationService) -> None:
-        observation = self.observation()
+        observation = self.observation(service)
         kind = type(observation)
         service.observations[kind] = observation.for_interest(service.observations.get(kind))
         service.observe_again()
@@ -378,11 +379,11 @@ class ObserveSidebar(InterestRequest):
     show_stopped: bool
     show_archived: bool
 
-    def observation(self) -> SidebarReading:
-        return SidebarReading(self)
+    def observation(self, service: ObservationService) -> SidebarReading:
+        return SidebarReading(self, service.viewer)
 
     def _answer(
-        self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str
+        self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str | Thread
     ) -> SidebarObserved | SidebarUnreadable | None:
         from agent_comms.ui_model.sidebar import SidebarModel
 
@@ -398,21 +399,20 @@ class ObserveSidebar(InterestRequest):
             return SidebarUnreadable(revision, self, UnreadableHistory.capture(error))
 
     def roster(
-        self, comms: Comms, revision: WireRevision
+        self, comms: Comms, revision: WireRevision, viewer: Thread
     ) -> SidebarObserved | SidebarUnreadable | None:
-        viewer = comms.messaging.user_identity(self.worktree).name
-        return self._answer(revision, comms.views.presentation.roster, viewer)
+        return self._answer(revision, comms.views.presentation.roster, viewer.name)
 
     def answer(
-        self, comms: Comms, revision: WireRevision
+        self, comms: Comms, revision: WireRevision, viewer: Thread
     ) -> SidebarObserved | SidebarUnreadable | None:
-        return self._answer(revision, comms.views.viewer_snapshot, self.worktree)
+        return self._answer(revision, comms.views.viewer_snapshot, viewer)
 
 
 class SidebarReadStage(ABC):
     @abstractmethod
     def read(
-        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision, viewer: Thread
     ) -> SidebarObserved | SidebarUnreadable | None: ...
 
     def next(self) -> SidebarReadStage:
@@ -421,9 +421,9 @@ class SidebarReadStage(ABC):
 
 class RosterSidebarRead(SidebarReadStage):
     def read(
-        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision, viewer: Thread
     ) -> SidebarObserved | SidebarUnreadable | None:
-        return request.roster(comms, revision)
+        return request.roster(comms, revision, viewer)
 
     def next(self) -> SidebarReadStage:
         return CompleteSidebarRead()
@@ -431,14 +431,15 @@ class RosterSidebarRead(SidebarReadStage):
 
 class CompleteSidebarRead(SidebarReadStage):
     def read(
-        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision, viewer: Thread
     ) -> SidebarObserved | SidebarUnreadable | None:
-        return request.answer(comms, revision)
+        return request.answer(comms, revision, viewer)
 
 
 class SidebarReading(Observation[ObserveSidebar]):
-    def __init__(self, request: ObserveSidebar):
+    def __init__(self, request: ObserveSidebar, viewer: Thread):
         super().__init__(request)
+        self.viewer = viewer
         self.stage: SidebarReadStage = RosterSidebarRead()
         self.sent: SidebarSent | None = None
         self.published: SidebarResult | None = None
@@ -467,7 +468,7 @@ class SidebarReading(Observation[ObserveSidebar]):
                 return
             stage = self.stage
             try:
-                result = stage.read(self.request, comms, revision)
+                result = stage.read(self.request, comms, revision, self.viewer)
             except RouteIndexRebuilding:
                 # Continue bounded preparation, letting the service accept and
                 # serve foreground requests between every bounded unit.
@@ -509,7 +510,7 @@ class StopObserving(ObservationRequest):
 class ObserveThreads(InterestRequest):
     names: frozenset[str]
 
-    def observation(self) -> ThreadReading:
+    def observation(self, service: ObservationService) -> ThreadReading:
         return ThreadReading(self)
 
 
@@ -520,7 +521,7 @@ class ObserveViews(InterestRequest):
     threads: frozenset
     channels: frozenset[str]
 
-    def observation(self) -> ViewReading:
+    def observation(self, service: ObservationService) -> ViewReading:
         return ViewReading(self)
 
 
@@ -530,7 +531,7 @@ class ObserveNotifications(InterestRequest):
 
     reads: frozenset[ReadNotifications]
 
-    def observation(self) -> NotificationReading:
+    def observation(self, service: ObservationService) -> NotificationReading:
         return NotificationReading(self)
 
 
@@ -777,6 +778,7 @@ class ObservationService:
 
     def __init__(self, comms, connection: Connection):
         self.comms = comms
+        self.viewer = comms.messaging.user_identity(str(comms.root))
         self.connection = connection
         self.observations: dict[type[Observation], Observation] = {}
         self.changed = asyncio.Event()
