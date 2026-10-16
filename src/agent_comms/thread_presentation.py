@@ -106,6 +106,29 @@ class StatusPending(ThreadPresentationStatus):
 
 
 @dataclass(frozen=True, slots=True)
+class SessionDisconnected(ThreadPresentationStatus):
+    """A viewer's session to the thread failed; the owner process may still be live.
+
+    Every place a viewer shows the thread (its row, tab, status line and
+    input notice) shows this one state while that session stays failed.
+    """
+
+    reason: str
+
+    @property
+    def notice(self) -> str:
+        return f"Thread disconnected: {self.reason}"
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        return ThreadPresentation(title, "✗", self.notice, status=self)
+
+    def over(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        """The ordinary presentation, with its notifications, showing the disconnection."""
+        shown = self.presentation(ordinary.title)
+        return replace(ordinary, marker=shown.marker, summary=shown.summary, status=self)
+
+
+@dataclass(frozen=True, slots=True)
 class ThreadRetired(ThreadPresentationStatus):
     """An observation explicitly reports that the thread is gone."""
 

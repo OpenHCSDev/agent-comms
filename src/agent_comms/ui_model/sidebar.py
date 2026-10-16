@@ -9,14 +9,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
 from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.thread_presentation import ThreadPresentationStatus
+from agent_comms.thread_presentation import SessionDisconnected, ThreadPresentationStatus
 from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
@@ -53,6 +53,10 @@ class ThreadRowModel:
     @property
     def name(self) -> str:
         return self.incarnation.name
+
+    def disconnected(self, status: SessionDisconnected) -> ThreadRowModel:
+        shown = status.presentation(self.title)
+        return replace(self, label=shown.label, summary=shown.summary, status=status)
 
     @classmethod
     def of(cls, person: ThreadView, snapshot: CoordinationSnapshot | None) -> ThreadRowModel:
