@@ -112,6 +112,11 @@ class WireWatch(ABC):
     def notify(self) -> None:
         """Wake for a process-local transition owned by the observer."""
 
+    @property
+    def change_token(self) -> tuple[WireWatch, int] | None:
+        """Native file-change generation; None requires a full observation."""
+        return None
+
     def close(self) -> None:
         pass
 
@@ -153,6 +158,7 @@ class WireChangeWatch(WireWatch):
         self.loop = loop
         self.changed = asyncio.Event()
         self.invalid = False
+        self._change_revision = 0
         self._pending_change: asyncio.TimerHandle | None = None
         loop.add_reader(fd, self._on_ready)
 
@@ -169,6 +175,10 @@ class WireChangeWatch(WireWatch):
     def notify(self) -> None:
         self.changed.set()
 
+    @property
+    def change_token(self) -> tuple[WireWatch, int]:
+        return self, self._change_revision
+
     def _schedule_changed(self) -> None:
         # Settle one bounded burst from its first relevant change. Moving the
         # deadline on every shared-store write can starve an addressed owner
@@ -180,6 +190,7 @@ class WireChangeWatch(WireWatch):
 
     def _publish_changed(self) -> None:
         self._pending_change = None
+        self._change_revision += 1
         self.changed.set()
 
     def _on_ready(self) -> None:

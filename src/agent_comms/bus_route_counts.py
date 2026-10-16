@@ -641,25 +641,24 @@ class OpenedRouteCounts(BusRouteCounts):
         ))
 
     def _read_deliveries(self, actor: str, seen: frozenset[int]) -> list[UnseenDelivery]:
-        """Visit eligible original sequences, never a future timestamp range."""
+        """List original route rows, excluding seen sequences and expired routes.
+
+        The timestamp root rejects routes wholly before this recipient's
+        birth. Within a surviving route, the entry index seeks the captured
+        source cut rather than decoding every immutable timestamp-tree node.
+        The read ledger supplies the sparse seen set; no read progress is
+        inferred from a maximum sequence.
+        """
         return UnseenDelivery.read(self.connection.execute(
-            f'''WITH RECURSIVE {self._requests}, {self._eligible},
-            listing_nodes(id,node) AS (
-                SELECT id,node FROM eligible WHERE actor=:actor
-                UNION ALL
-                SELECT child.id,child.node
-                FROM listing_nodes AS parent, json_each(parent.node,'$.children') AS edge
-                JOIN "{RouteTimeRow.declared_name}" AS child ON child.id=edge.value
-            ), sequences(seq) AS (
-                SELECT head.value FROM listing_nodes AS leaf,
-                    json_each(leaf.node,'$.heads') AS head
-                UNION ALL
-                SELECT row.previous_at_timestamp FROM sequences AS chain
-                JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=chain.seq
-                WHERE row.previous_at_timestamp IS NOT NULL
-            )
-            SELECT row.seq,row.target FROM sequences AS listed
-            JOIN "{RouteEntryRow.declared_name}" AS row ON row.seq=listed.seq
-            WHERE row.seq NOT IN (SELECT value FROM json_each(:seen)) ORDER BY row.seq''',
+            f'''WITH {self._requests}
+            SELECT row.seq,row.target FROM requests AS request
+            JOIN "{RouteTimeRow.declared_name}" AS root ON root.id=request.root
+                AND json_extract(root.node,'$.maximum')>=request.since
+            CROSS JOIN "{RouteEntryRow.declared_name}" AS row
+            WHERE request.actor=:actor AND row.target=request.target
+                AND row.sender=request.sender AND row.sender_lookup=request.sender_lookup
+                AND row.seq<=:through AND row.timestamp>=request.since
+                AND row.seq NOT IN (SELECT value FROM json_each(:seen))
+            ORDER BY row.seq''',
             self._request_bindings((actor,)) | {"actor": actor, "seen": json.dumps(sorted(seen))},
         ))

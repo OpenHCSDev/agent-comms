@@ -57,6 +57,10 @@ async def test_quiet_native_watch_wakes_when_auth_file_disappears(tmp_path, acti
     waiting = None
     try:
         await watcher.prepare()
+        original_token = watcher.change_token
+        watcher.notify()
+        assert watcher.change_token == original_token
+        await watcher.prepare()
         waiting = asyncio.create_task(watcher.wait())
         # Neither a clock nor an unrelated file removal may wake this observer.
         unrelated = tmp_path / "unrelated"
@@ -69,6 +73,7 @@ async def test_quiet_native_watch_wakes_when_auth_file_disappears(tmp_path, acti
         else:
             auth.rename(tmp_path / "removed.json")
         assert await asyncio.wait_for(waiting, 1) is watcher
+        assert watcher.change_token != original_token
         assert not auth.exists()
     finally:
         if waiting is not None and not waiting.done():

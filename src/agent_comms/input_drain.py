@@ -189,16 +189,19 @@ class InputObservation:
             auth=configuration.native_config / "auth.json",
         )
 
-    def _tick_revision(
-        self, session_id: str, paths: TickRevisionPaths | None = None,
-    ) -> TickRevision:
-        """Stat every declared physical dependency plus process-local inputs."""
-        return (paths or self._tick_paths()).capture((
+    def _tick_local(self, session_id: str) -> tuple:
+        return (
             self.sessions.bindings.get(session_id),
             self.auto_wake,
             self.sessions.runtime_enabled,
             self.effects._private_nk_native_package,
-        ))
+        )
+
+    def _tick_revision(
+        self, session_id: str, paths: TickRevisionPaths | None = None,
+    ) -> TickRevision:
+        """Stat every declared physical dependency plus process-local inputs."""
+        return (paths or self._tick_paths()).capture(self._tick_local(session_id))
 
     def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
         if self.drain_tasks.get(session_id) is task:
@@ -298,10 +301,23 @@ class InputObservation:
 
     async def observe(self, session_id: str) -> None:
         settled: SettledTick | None = None
+        settled_change_token = None
         paths = self._tick_paths()
         async with aclosing(WireWatch.observations(*paths.watch_sources)) as observations:
             async for watcher in observations:
                 self._observation_watchers[session_id] = watcher
+                token = watcher.change_token if watcher is not None else None
+                if (
+                    settled is not None and token is not None
+                    and token == settled_change_token
+                    and self._quiescent(session_id)
+                    and self._tick_local(session_id) == settled.revision.other[1:]
+                ):
+                    # Native watcher reports no file change. Process-local work
+                    # and configuration are unchanged too; even stat calls are
+                    # redundant. Polling and replaced/overflowed watches have
+                    # no matching token and still take the full revision.
+                    continue
                 # A tick whose stores and inputs are unchanged since a settled
                 # tick has nothing new to observe; any change runs it in full.
                 # Another owner's registry or coordination change is not this
@@ -338,6 +354,7 @@ class InputObservation:
                     settled = SettledTick(
                         revision, entry, settled.admission_after_seq, settled.through_seq,
                     )
+                    settled_change_token = token
                     continue
                 if idle and not shared_unchanged:
                     # Only shared stores grew (every publisher's appends change
@@ -351,8 +368,10 @@ class InputObservation:
                     )
                     if outcome is not None:
                         settled = outcome
+                        settled_change_token = token
                         continue
                 settled = None
+                settled_change_token = None
                 thread = self.sessions.require(session_id)
                 if not entry_current:
                     # Read after the revision: the tick observes at least this entry.
@@ -387,6 +406,7 @@ class InputObservation:
                             settled = SettledTick(
                                 revision, entry, marker.admission_after_seq, marker.last_seq,
                             )
+                            settled_change_token = token
                         elif self._repeat_observation_ready(session_id, drained):
                             # The first empty private observation may advance its
                             # own durable cursor. Re-read that transition now;
