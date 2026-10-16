@@ -28,12 +28,16 @@ from agent_comms.threads import Thread
 def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, expected):
     interpreter = Path('/runtime/bin/python')
     original = RestartEnvironment(path=inherited)
-    path = original.path_for(interpreter)
+    configured = original.for_interpreter(interpreter)
+    path = configured.path
     entries = path.split(os.pathsep)
     assert entries[0] == '/runtime/bin'
     assert entries.count('/runtime/bin') == 1
     assert path == expected
-    assert replace(original, path=path).path_for(interpreter) == path
+    assert configured.for_interpreter(interpreter) == configured
+    applied = configured.apply_runtime({'PATH': inherited or '', 'AUTHORED_CREDENTIAL': 'kept'})
+    assert applied['PATH'] == expected
+    assert applied['AUTHORED_CREDENTIAL'] == 'kept'
 
 
 def stopped():

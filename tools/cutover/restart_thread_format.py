@@ -52,8 +52,8 @@ def main():
         environment = dict(os.environ, AGENT_COMMS_ROOT=str(target.root),
                            AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=target.wire_root_id,
                            AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(target.native_package),
-                           VIRTUAL_ENV=str(runtime.parent),
-                           PATH=RestartEnvironment.inherit(os.environ).path_for(Path(sys.executable)))
+                           VIRTUAL_ENV=str(runtime.parent))
+        environment = RestartEnvironment.inherit(environment).for_interpreter(Path(sys.executable)).apply_runtime(environment)
         packet = {'target_python': sys.executable, 'target_binary': str(runtime / 'pi-comms-native'),
                   'target_environment': environment,
                   'runtime': FieldCodec.encode(RestartEnvironment.inherit(environment)),
