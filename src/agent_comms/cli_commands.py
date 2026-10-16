@@ -29,6 +29,7 @@ from .command import Command
 from .field_codec import FieldCodec
 from .comms import Comms
 from .declared_family import DeclaredFamily
+from .read_basis import WatchAcknowledgment, OnReadWatchAcknowledgment
 from .exporting import (
     ChannelScope,
     DmScope,
@@ -678,7 +679,10 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
 
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand):
-    help = "Invoke one declared adapter tool"
+    help = "Invoke one declared adapter tool, as --from THREAD when given"
+    caller: str | None = option(
+        "--from", default=None, help="Calling thread; omit for tools that need no thread"
+    )
     tool: str = option("--tool")
     arguments: dict[str, Any] = option(
         "--arguments",
@@ -693,7 +697,7 @@ class InvokeCliCommand(CliCommand):
 
         from .tool_caller import ToolCaller
 
-        return invoke_tool(ctx, self.tool, self.arguments, caller=ToolCaller.from_environment(os.environ))
+        return invoke_tool(ctx, self.tool, self.arguments, caller=ToolCaller.from_actor(self.caller))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -745,7 +749,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
         import asyncio
 
         from .config_options import ConfigOptions
-        from .owner_launch import RestartEnvironment
+        from .launch_runtime import RestartEnvironment
         from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
 
@@ -921,9 +925,10 @@ class InboxCliCommand(CliCommand):
 class WatchCliCommand(CliCommand, declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
     thread: str = option("--thread")
+    acknowledgment: type[WatchAcknowledgment] = option("--acknowledgment", default=OnReadWatchAcknowledgment)
 
     def apply(self, ctx: Comms) -> AsyncIterator[Message]:
-        return ctx.bus.watch(self.thread)
+        return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
 
     def run(self, ctx: Comms, output: TextIO) -> int:
         import asyncio
@@ -967,6 +972,11 @@ class StatusCliCommand(CliCommand):
     help = "Live activity: what each thread is doing right now"
 
     def apply(self, ctx: Comms) -> Any:
+        snapshot = ctx.registry.snapshot()
+        running = (
+            thread for name, thread in snapshot.threads.items()
+            if snapshot.statuses[name].active
+        )
         return {
             "status": [
                 {
@@ -975,7 +985,9 @@ class StatusCliCommand(CliCommand):
                     "detail": activity.detail,
                     "ts": activity.timestamp,
                 }
-                for thread, activity in sorted(ctx.agents.all_activity().items())
+                for thread, activity in sorted(
+                    ctx.agents.all_activity(running, snapshot=snapshot).items()
+                )
             ]
         }
 
@@ -1348,14 +1360,15 @@ class DeleteCliCommand(CliCommand, declared_name="delete"):
 @dataclass(frozen=True, kw_only=True)
 class RenameSelfCliCommand(CliCommand, declared_name="rename-self"):
     help = "Rename your own running thread"
+    caller: str = option("--from")
     new_name: str = option("--to")
 
     def apply(self, ctx: Comms) -> Any:
         from .tools import CommsRenameSelfTool
-        from .tool_caller import ToolCaller
+        from .tool_caller import ThreadCaller
 
         return CommsRenameSelfTool.invoke(ctx, {"new_name": self.new_name},
-                                         caller=ToolCaller.from_environment(os.environ))
+                                         caller=ThreadCaller(self.caller))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1368,7 +1381,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
-    pi_bin: str = option("--pi-bin", default_factory=NativeArguments.owner_launcher)
+    pi_bin: str = option("--pi-bin", default=NativeArguments.default_binary)
     project: str = option("--project", parser_default_factory=os.getcwd)
     model: str = option("--model", parser_default=NativeThreadDefaults.model)
     thinking_level: type[ThinkingLevel] = option(

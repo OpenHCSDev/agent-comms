@@ -8,9 +8,6 @@ from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_
 
 
 def test_tool_entry_decodes_caller_states_once():
-    assert ToolCaller.from_environment({}) == NoThreadCaller()
-    assert ToolCaller.from_environment({"AGENT_COMMS_THREAD": ""}) == NoThreadCaller()
-    assert ToolCaller.from_environment({"AGENT_COMMS_THREAD": "owner"}) == ThreadCaller("owner")
     assert ToolCaller.from_actor(None) == NoThreadCaller()
     assert ToolCaller.from_actor("owner") == ThreadCaller("owner")
 
@@ -112,7 +109,7 @@ class TestToolCatalog:
             invoke_tool(comms, "comms_threads", {"active_only": "yes"})
 
     def test_threads_query_without_caller_does_not_weaken_actions(self, comms, monkeypatch):
-        from agent_comms.owner_launch import CallingThreadUnavailable
+        from agent_comms.launch_runtime import CallingThreadUnavailable
 
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
         comms.registry.declare(Thread(name="listed", tags=frozenset(), worktree="/wt"))

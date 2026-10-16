@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 import sys
 from abc import ABC, abstractmethod
 from collections import deque
@@ -11,10 +10,11 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
+from .bus_page_index import BusPageIndex
 from .messages import Message
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, DMDisplayBasis, MessageDisplayScope
+from .read_basis import ChannelDisplayScope, DMDisplayBasis, DMDisplayScope, MessageDisplayScope
+from .wire_log import OpenedWireSnapshot
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoryCursor
@@ -81,10 +81,10 @@ class PageTraversal(ABC):
     def for_source(self, current: bool) -> PageTraversal: ...
 
     @abstractmethod
-    def offsets(self, index: BusPageIndex, targets, boundary): ...
+    def offsets(self, index: BusPageIndex, scope, boundary): ...
 
     @abstractmethod
-    def opposite_offsets(self, index: BusPageIndex, targets, boundary): ...
+    def opposite_offsets(self, index: BusPageIndex, scope, boundary): ...
 
     @abstractmethod
     def append(self, window: PageWindow, message: Message, size: int) -> None: ...
@@ -106,17 +106,17 @@ class OlderTraversal(PageTraversal):
     def for_source(self, current):
         return self if current else OlderTraversal()
 
-    def offsets(self, index, targets, boundary):
-        return index.offsets(lower=None, upper=self.cursor, descending=True,
-                             targets=targets, before_offset=boundary)
+    def offsets(self, index, scope, boundary):
+        return scope.offsets(index, lower=None, upper=self.cursor, descending=True,
+                             before_offset=boundary)
 
-    def opposite_offsets(self, index, targets, boundary):
+    def opposite_offsets(self, index, scope, boundary):
         if self.cursor is None:
-            return index.offsets(lower=0, upper=0, descending=True,
-                                 targets=targets, before_offset=boundary)
-        return index.offsets(
-            lower=self.cursor - 1, upper=None, descending=True,
-            targets=targets, before_offset=boundary,
+            return scope.offsets(index, lower=0, upper=0, descending=True,
+                                 before_offset=boundary)
+        return scope.offsets(
+            index, lower=self.cursor - 1, upper=None, descending=True,
+            before_offset=boundary,
         )
 
     def append(self, window, message, size):
@@ -154,13 +154,13 @@ class NewerTraversal(PageTraversal):
     def for_source(self, current):
         return self if current else NewerTraversal(0)
 
-    def offsets(self, index, targets, boundary):
-        return index.offsets(lower=self.cursor, upper=None, descending=False,
-                             targets=targets, before_offset=boundary)
+    def offsets(self, index, scope, boundary):
+        return scope.offsets(index, lower=self.cursor, upper=None, descending=False,
+                             before_offset=boundary)
 
-    def opposite_offsets(self, index, targets, boundary):
-        return index.offsets(lower=None, upper=self.cursor + 1, descending=True,
-                             targets=targets, before_offset=boundary)
+    def opposite_offsets(self, index, scope, boundary):
+        return scope.offsets(index, lower=None, upper=self.cursor + 1, descending=True,
+                             before_offset=boundary)
 
     def append(self, window, message, size):
         window.rows.append((message, size))
@@ -209,10 +209,37 @@ class PageWindow:
 
 
 @dataclass(frozen=True, slots=True)
-class MessagePageRequest:
-    """Captured membership, direction and bounds for both authoritative readers."""
+class MessageReadRequest[T](ABC):
+    """One opened-source/index lifetime for scoped pages and existence queries."""
 
     scope: MessageDisplayScope
+
+    def includes(self, message: Message) -> bool:
+        return self.scope.includes(message)
+
+    @abstractmethod
+    def empty(self) -> T: ...
+
+    @abstractmethod
+    def indexed(self, index, source: OpenedWireSnapshot) -> T: ...
+
+    def read(self, log) -> T:
+        with log._opened_wire_snapshot(need_sequence=False) as source:
+            return self.read_opened(source)
+
+    def read_opened(self, source: OpenedWireSnapshot) -> T:
+        return source.query_page_index(lambda index: self.indexed(index, source), empty=self.empty)
+
+    def indexed_records(self, index, source, rows):
+        for message, size in source.indexed_records(index, rows, before_offset=source.boundary):
+            if self.includes(message):
+                yield message, size
+
+
+@dataclass(frozen=True, slots=True)
+class MessagePageRequest(MessageReadRequest[MessagePage]):
+    """Captured membership, direction and bounds for both authoritative readers."""
+
     traversal: PageTraversal
     limit: int = 100
     max_bytes: int = 256 * 1024
@@ -236,65 +263,46 @@ class MessagePageRequest:
         """
         return cls(scope, NewerTraversal(after), sys.maxsize, sys.maxsize)
 
-    def includes(self, message: Message) -> bool:
-        return self.scope.includes(message)
-
     def collect(self, records: Iterator[tuple[Message, int]]) -> MessagePage:
         return self.traversal.collect(self, records)
 
-    def read(self, log) -> MessagePage:
-        with log.page_snapshot() as (marker, _, source, stream, records):
-            return self.read_opened(log, marker, source, stream, records)
+    def empty(self) -> MessagePage:
+        return self.collect(iter(()))
 
-    def read_opened(self, log, marker, source, stream, records) -> MessagePage:
-        """Both readers consume the exact cut opened before scope capture."""
-        if stream is not None:
-            access = marker.access
-            try:
-                with (
-                    access.open_page_index(log.path) as index,
-                    access.prepare_page_index(index) as ready,
-                ):
-                    if ready:
-                        # The prepared index lifetime pins coverage and offsets.
-                        # The opened wire is already a fixed cut, so neither
-                        # resource borrows current bus custody.
-                        saved = BusPageSource.one(index.connection, singleton=1)
-                        if saved is not None and saved.covers(stream, source):
-                            return self.indexed(index, marker, source, stream)
-            except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
-                # A disposable index cannot replace the original wire cut.
-                pass
-            stream.seek(0)
-        # Full scans borrow that SAME cut after publication custody closes.
-        return self.collect(records)
-
-    def indexed(self, index, marker, source, stream) -> MessagePage:
-        from .wire_log import OpenedWireSnapshot
-
+    def indexed(self, index, source: OpenedWireSnapshot) -> MessagePage:
         window = PageWindow(self.limit, self.max_bytes)
-        targets = self.scope.index_targets
         opposite = more = False
-        with closing(self.traversal.opposite_offsets(index, targets, source.size)) as rows:
-            for row in rows:
-                (message, _), = OpenedWireSnapshot.public_page_records(
-                    *index.record(stream, row, max_bytes=source.size - row.offset), marker
-                )
-                if self.includes(message):
-                    opposite = True
-                    break
-        with closing(self.traversal.offsets(index, targets, source.size)) as rows:
-            for row in rows:
-                (message, size), = OpenedWireSnapshot.public_page_records(
-                    *index.record(stream, row, max_bytes=source.size - row.offset), marker
-                )
-                if not self.includes(message):
-                    continue
+        with closing(self.traversal.opposite_offsets(index, self.scope, source.boundary)) as rows:
+            opposite = any(True for _ in self.indexed_records(index, source, rows))
+        with closing(self.traversal.offsets(index, self.scope, source.boundary)) as rows:
+            for message, size in self.indexed_records(index, source, rows):
                 if window.full_with(size):
                     more = True
                     break
                 self.traversal.append(window, message, size)
         return self.traversal.result(window, more, opposite)
+
+
+@dataclass(frozen=True, slots=True)
+class UnreadBeforeRequest(MessageReadRequest[bool]):
+    """Existence, not a one-item page that searches for a second result."""
+
+    scope: DMDisplayScope
+    before: int
+    seen: frozenset[int]
+
+    def includes(self, message: Message | BusPageRow) -> bool:
+        return self.scope.unread_before(message, self.before, self.seen)
+
+    def empty(self) -> bool:
+        return False
+
+    def indexed(self, index, source: OpenedWireSnapshot) -> bool:
+        with closing(self.scope.offsets(
+            index, lower=None, upper=self.before, descending=True, before_offset=source.boundary
+        )) as rows:
+            candidates = (row for row in rows if self.includes(row))
+            return any(True for _ in self.indexed_records(index, source, candidates))
 
 
 class ConversationMessagePageRequest(MessagePageRequest):

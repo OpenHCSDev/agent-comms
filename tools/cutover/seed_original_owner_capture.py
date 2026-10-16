@@ -1,12 +1,16 @@
 """Report-authoring helper and current-runtime replacement fixture."""
+import asyncio
+from contextlib import AsyncExitStack
 from dataclasses import replace
 import json
 import os
 from pathlib import Path
 import sys
 
+from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import BlockedGoalAction, ModelInvocable, SetGoalAction
+from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.turn_lease import ActiveTurn
 from agent_comms.threads import Thread
 
@@ -22,14 +26,21 @@ def author_model_report(service, name, turn):
     service.registry.register(replace(source, active_turn=None))
 
 
+async def ready(service, owner):
+    async with asyncio.timeout(12), AsyncExitStack() as lifetime:
+        client = CommsAgent(service, auto_wake=False)
+        lifetime.push_async_callback(client.shutdown)
+        proxy = RuntimeProxy(client, owner.name, socket_path(service.root, owner.pid))
+        lifetime.push_async_callback(proxy.close)
+        await proxy.subscribe()
+
+
 def runtime_owners(root, package):
     """Seed real idle source-runtime workers and SDK-authored saved history."""
-    import asyncio
     from agent_comms.fresh_private_session import create_fresh_private_session
     from agent_comms.goal_states import BlockedGoal
     from agent_comms.goals import Goal
     from native_backend_fixture import NativeBackendFixture
-    from seed_thread_retirement_fixture import ready
 
     root.mkdir(mode=0o700)
     service = Comms(root, private_initial_writes=True)
@@ -54,7 +65,7 @@ def runtime_owners(root, package):
             os.environ.update(PI_CODING_AGENT_DIR=str(project / 'config'),
                               BATCH_OWNER_CREDENTIAL='private-'+str(index))
             service.owners.start(name, agent_args=('--offline', '--no-tools') if index == 0 else ())
-            asyncio.run(ready(root, service.registry.require(name)))
+            asyncio.run(ready(service, service.registry.require(name)))
         print(json.dumps({'root_id':root_id, 'names':names}), flush=True)
         # The operator replaces workers while this source fixture retains cleanup.
         sys.stdin.readline()

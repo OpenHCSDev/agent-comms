@@ -29,7 +29,8 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
     from agent_comms.child_process import BoundedRun
     from agent_comms.input_disposition import InputDispositions
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
+    from agent_comms.owner_launch import RetainedOwnerLaunch
+    from agent_comms.launch_runtime import RestartEnvironment
     from native_backend_fixture import native_backend_fixture
     from delivery_owner_fixture import canonical_agent
 
@@ -71,7 +72,7 @@ from agent_comms.comms import Comms
 from agent_comms.threads import Thread
 from agent_comms.goal_actions import SetGoalAction, BlockedGoalAction
 from agent_comms.field_codec import FieldCodec
-from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.launch_runtime import RestartEnvironment
 service = Comms(Path(os.environ['AGENT_COMMS_ROOT']))
 with service.bus.log.locked(): root_id = service.bus.log._private_marker_unlocked().root_id
 service.owners.pin_private_nk_launch(service.root, root_id,
@@ -197,6 +198,42 @@ while True: time.sleep(0.01)
             and current.process_identity != child.identity
         ):
             ObservedProcess(current.process_identity).stop_sync()
+
+
+def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.threads import Thread
+
+    comms = Comms(tmp_path / "wire")
+    declared = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+    generation = comms.registry.snapshot().admission_generations[declared.name]
+    comms.owners.stop(declared.name)
+    snapshot = comms.registry.snapshot()
+    assert snapshot.statuses[declared.name].stopped
+    assert snapshot.threads[declared.name].process_identity is None
+    assert comms.owners.releases.read()[declared.name].current(snapshot, declared, generation)
+
+    waiting = comms.registry.declare(Thread("waiting", frozenset(), str(tmp_path)))
+    before = comms.registry.snapshot().admission_generations[waiting.name]
+    comms.registry.register(
+        replace(waiting, process_identity=ProcessIdentity.capture(os.getpid())),
+        new_owner=True,
+    )
+    with pytest.raises(RelationViolationError, match="Stopping owner process changed"):
+        comms.registry.snapshot().require_stopping_owner(waiting, before)
+
+
+def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
+    comms, child = releasing_owner
+    original = comms.registry.require("worker")
+    child.force()
+    child.reap()
+    assert not original.process_alive
+    comms.owners.stop("worker")
+    snapshot = comms.registry.snapshot()
+    receipt = comms.owners.releases.read()["worker"]
+    assert receipt.current(snapshot, original, receipt.before)
+    assert snapshot.statuses["worker"].stopped
 
 
 @pytest.mark.parametrize("mode", ["restart", "guarded", "stop"])

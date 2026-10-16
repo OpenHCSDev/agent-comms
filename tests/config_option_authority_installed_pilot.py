@@ -8,39 +8,19 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from contextlib import AsyncExitStack
 import hashlib
 import json
 import os
 from pathlib import Path
 import sys
 
+from acp.exceptions import RequestError
+from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
-from agent_comms.runtime import socket_path
-from agent_comms.runtime_requests import SubscribeRuntimeRequest, SetConfigOptionRuntimeRequest
+from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
-
-
-async def exchange(service, name, request):
-    owner = service.registry.require(name)
-    async with asyncio.timeout(15):
-        while not socket_path(service.root, owner.pid).exists():
-            assert owner.process_alive
-            await asyncio.sleep(.02)
-        reader, writer = await asyncio.open_unix_connection(
-            socket_path(service.root, owner.pid), limit=8 * 1024 * 1024
-        )
-        try:
-            writer.write((json.dumps(request.to_wire()) + '\n').encode())
-            await writer.drain()
-            while line := await reader.readline():
-                packet = json.loads(line)
-                if 'ready' in packet or 'result' in packet or 'error' in packet:
-                    return packet
-            raise AssertionError('Owner closed before the requested receipt')
-        finally:
-            writer.close()
-            await writer.wait_closed()
 
 
 def thinking(options):
@@ -147,53 +127,64 @@ async def run(stage, package, models, ui, menu_contention=False):
         )
         owner = service.registry.require(name)
         try:
-            ready = await exchange(service, name, SubscribeRuntimeRequest(thread=name))
-            assert 'ready' in ready, ready
-            advertised = next(option for option in ready['ready']['configOptions']
-                              if option['id'] == 'model')
-            assert len(advertised['options']) > 1, advertised
-            assert model in {choice['value'] for choice in advertised['options']}
-            if menu_contention:
-                visible = await visible_configuration(stage, project, service, name, menu_contention=True)
-                rows.append({'model': model, **visible})
-                continue
-            selected = await exchange(service, name, SetConfigOptionRuntimeRequest(
-                thread=name, config_id='model', value=model,
-            ))
-            assert 'result' in selected, selected
-            assert service.registry.require(name).model == model
-            option = thinking(ready['ready']['configOptions'])
-            assert option['currentValue'] == 'off'
-            assert service.registry.require(name).thinking_level is OffThinkingLevel
-            before = (service.root / 'registry.json').read_bytes()
-            again = await exchange(service, name, SubscribeRuntimeRequest(thread=name))
-            assert thinking(again['ready']['configOptions'])['currentValue'] == 'off'
-            assert (service.root / 'registry.json').read_bytes() == before
-            visible = await visible_configuration(stage, project, service, name) if ui else {}
-            # The view retains a configured selection even when it is no longer
-            # available. That display-only value cannot authorize a new command.
-            refused = await exchange(service, name, SetConfigOptionRuntimeRequest(
-                thread=name, config_id='thinking_level', value='off',
-            ))
-            assert 'rpcError' in refused, refused
-            assert service.registry.require(name).thinking_level is OffThinkingLevel
-            changed = await exchange(service, name, SetConfigOptionRuntimeRequest(
-                thread=name, config_id='thinking_level', value='high',
-            ))
-            assert 'result' in changed, changed
-            assert service.registry.require(name).thinking_level is HighThinkingLevel
-            final = await exchange(service, name, SubscribeRuntimeRequest(thread=name))
-            assert thinking(final['ready']['configOptions'])['currentValue'] == 'high'
-            assert service.registry.require(name).model == model
-            assert service.registry.require(name).active_turn is None
-            assert not list((service.root / 'native-sessions').rglob('*.jsonl'))
-            rows.append({
-                'model': model, 'startup_configured_off_retained': True,
-                'repeat_subscription_registry_sha256': hashlib.sha256(before).hexdigest(),
-                'read_did_not_write': True, 'unsupported_explicit_selection_refused': True,
-                'supported_explicit_high_persisted': True,
-                **visible,
-            })
+            async with AsyncExitStack() as lifetime:
+                client = CommsAgent(service, auto_wake=False)
+                lifetime.push_async_callback(client.shutdown)
+                path = socket_path(service.root, owner.pid)
+                proxy = RuntimeProxy(client, name, path)
+                lifetime.push_async_callback(proxy.close)
+                async with asyncio.timeout(15):
+                    ready = await proxy.subscribe()
+                advertised = next(option for option in ready['configOptions'] if option['id'] == 'model')
+                assert len(advertised['options']) > 1, advertised
+                assert model in {choice['value'] for choice in advertised['options']}
+                if menu_contention:
+                    visible = await visible_configuration(stage, project, service, name, menu_contention=True)
+                    rows.append({'model': model, **visible})
+                    continue
+                async with asyncio.timeout(15):
+                    await proxy.request('set_config_option', config_id='model', value=model)
+                assert service.registry.require(name).model == model
+                option = thinking(ready['configOptions'])
+                assert option['currentValue'] == 'off'
+                assert service.registry.require(name).thinking_level is OffThinkingLevel
+                before = (service.root / 'registry.json').read_bytes()
+                await proxy.close()
+                repeated = RuntimeProxy(client, name, path)
+                lifetime.push_async_callback(repeated.close)
+                async with asyncio.timeout(15):
+                    again = await repeated.subscribe()
+                assert thinking(again['configOptions'])['currentValue'] == 'off'
+                assert (service.root / 'registry.json').read_bytes() == before
+                visible = await visible_configuration(stage, project, service, name) if ui else {}
+                # A display-only configured value cannot authorize a new command.
+                try:
+                    async with asyncio.timeout(15):
+                        await repeated.request('set_config_option', config_id='thinking_level', value='off')
+                except RequestError:
+                    pass
+                else:
+                    raise AssertionError('Unsupported explicit thinking selection was accepted')
+                assert service.registry.require(name).thinking_level is OffThinkingLevel
+                async with asyncio.timeout(15):
+                    await repeated.request('set_config_option', config_id='thinking_level', value='high')
+                assert service.registry.require(name).thinking_level is HighThinkingLevel
+                await repeated.close()
+                refreshed = RuntimeProxy(client, name, path)
+                lifetime.push_async_callback(refreshed.close)
+                async with asyncio.timeout(15):
+                    final = await refreshed.subscribe()
+                assert thinking(final['configOptions'])['currentValue'] == 'high'
+                assert service.registry.require(name).model == model
+                assert service.registry.require(name).active_turn is None
+                assert not list((service.root / 'native-sessions').rglob('*.jsonl'))
+                rows.append({
+                    'model': model, 'startup_configured_off_retained': True,
+                    'repeat_subscription_registry_sha256': hashlib.sha256(before).hexdigest(),
+                    'read_did_not_write': True, 'unsupported_explicit_selection_refused': True,
+                    'supported_explicit_high_persisted': True,
+                    **visible,
+                })
         finally:
             service.owners.stop(name)
         assert not owner.process_alive

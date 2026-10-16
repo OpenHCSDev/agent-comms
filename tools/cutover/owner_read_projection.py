@@ -1,7 +1,7 @@
 """Current-format acquired owner and recorded-source reads.
 
-Retired records are carried once by thread_retirement_cutover, never decoded by
-an alternate shared reader. Both sides of this protocol use the current shape.
+Both sides of this protocol use the current shape. There is no alternate
+shared reader for retired records.
 """
 from __future__ import annotations
 

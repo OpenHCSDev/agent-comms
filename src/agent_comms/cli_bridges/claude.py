@@ -6,14 +6,16 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from agent_comms.private_path import FileRevision
-from .claude_protocol import CLAUDE_RECORD, ClaudeSession
+from .claude_protocol import CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame
 from .shared import (
-    LineMonitorBridge, Options, TranscriptBridge, TranscriptUpdate,
+    LineMonitorBridge, Options, TranscriptUpdate,
     parse_options, run_bridge, shared_parser,
 )
 
 
-class ClaudeBridge(LineMonitorBridge, TranscriptBridge[Options]):
+class ClaudeBridge(LineMonitorBridge):
+    incoming_frame = ClaudeMonitorFrame
+
     async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
         """Follow this Claude file without submitting an input.
 

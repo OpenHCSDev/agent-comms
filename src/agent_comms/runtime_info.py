@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .locked_store import LockedStore
@@ -13,12 +15,35 @@ from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
-    from .acp_extension import ContextUsage
     from .threads import Thread
 
 
+class RuntimeInfo(ABC):
+    """A runtime-info read is observed or explicitly unobserved."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def context_reading(self) -> ContextReading: ...
+
+    @abstractmethod
+    def model_or(self, default: str) -> str: ...
+
+
+class UnobservedRuntimeInfo(RuntimeInfo):
+    """No observation exists; do not invent a model or observation timestamp."""
+
+    __slots__ = ()
+
+    def context_reading(self) -> ContextReading:
+        return UnmeasuredContext()
+
+    def model_or(self, default: str) -> str:
+        return default
+
+
 @dataclass(frozen=True, slots=True)
-class AgentRuntimeInfo:
+class AgentRuntimeInfo(RuntimeInfo):
     """Declares mutable runtime metadata for one registered thread."""
 
     thread: str
@@ -43,17 +68,13 @@ class AgentRuntimeInfo:
             return None
         return self.context_used / self.context_size * 100
 
-    @property
-    def context_usage(self) -> ContextUsage | None:
+    def context_reading(self) -> ContextReading:
         if self.context_used is None or not self.context_size:
-            return None
-        from .acp_extension import ContextUsage
-
+            return UnmeasuredContext()
         return ContextUsage(self.context_used, self.context_size)
 
-    @classmethod
-    def optional_context_usage(cls, info: AgentRuntimeInfo | None) -> ContextUsage | None:
-        return info.context_usage if info is not None else None
+    def model_or(self, default: str) -> str:
+        return self.model or default
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +90,9 @@ class RuntimeInfoStore(ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]
 
     def empty(self) -> dict[str, AgentRuntimeInfo]:
         return {}
+
+    def for_thread(self, thread: str) -> RuntimeInfo:
+        return self.read().get(thread, UnobservedRuntimeInfo())
 
     def observe(self, thread: str, timestamp: float, observation: RuntimeInfoObservation) -> None:
         """Apply only this observation's fields in the original store transaction."""

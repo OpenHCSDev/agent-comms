@@ -12,7 +12,7 @@ from acp import spawn_agent_process
 from acp.schema import TextContentBlock
 from agent_comms.comms import Comms
 from agent_comms.native_package import verify_native_package
-from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
+from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
 from compaction_loopback import LoopbackProvider

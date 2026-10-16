@@ -7,8 +7,8 @@ from agent_comms.comms import wire
 from agent_comms.config_options import InvalidConfigChoice, ModelConfigOption
 from agent_comms.login import run_login
 from agent_comms.native_arguments import NativeArguments
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.native_pi import NativePiUnavailable
-from agent_comms.owner_launch import RestartEnvironment
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 
@@ -75,7 +75,7 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
     tmp_path, monkeypatch, fake_native_catalog
 ):
     revision = [0]
-    monkeypatch.setattr("agent_comms.owner_launch.RestartEnvironment.auth_revision", lambda self: (revision[0], 0))
+    monkeypatch.setattr("agent_comms.launch_runtime.RestartEnvironment.auth_revision", lambda self: (revision[0], 0))
 
     async def discover(*args):
         models = [SessionConfigSelectOption(value="test/base", name="Base")]
@@ -85,7 +85,7 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)
     agent = canonical_agent(
-        wire(tmp_path), agent_bin=NativeArguments.owner_launcher(),
+        wire(tmp_path), agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
         agent_args=["--model", "test/base"],
     )
     # Exercise the explicit refresh path without the background drain racing it.

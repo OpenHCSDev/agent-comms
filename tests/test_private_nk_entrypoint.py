@@ -20,13 +20,14 @@ from agent_comms import (
     private_nk_entrypoint,
     worker,
 )
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.launch_runtime import LaunchRuntime, PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
-from agent_comms.private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
@@ -140,7 +141,7 @@ def test_thread_observation_does_not_admit_an_untrusted_native_owner(tmp_path, m
     with pytest.raises(PublicationActivationBlocked, match="Reviewed package differs"):
         private_nk_entrypoint.private_nk_from_environment()
     with pytest.raises(PublicationActivationBlocked, match="Reviewed package differs"):
-        observed.owners.restart_environment({})
+        observed.owners.restart_environment({}, LaunchRuntime.current())
     assert not (root / "native-sessions").exists()
 
 
@@ -351,17 +352,16 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
-    monkeypatch.setattr(cli, "_emit", lambda _payload: None)
     entered_send = threading.Event()
     release_send = threading.Event()
     exclusive_requested = threading.Event()
     original_send = legacy.messaging.send
     original_flock = active_route.fcntl.flock
 
-    def delayed_send(*args):
+    def delayed_send(*args, **kwargs):
         entered_send.set()
         assert release_send.wait(timeout=5)
-        return original_send(*args)
+        return original_send(*args, **kwargs)
 
     def observed_flock(fd, operation):
         if operation == active_route.fcntl.LOCK_EX:
@@ -514,7 +514,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
 
     monkeypatch.setattr(ParentedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
-        comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
+        comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi", launch_runtime=LaunchRuntime.current())
     assert seen == [str(physical)]
     assert not (other / "registry.json").exists()
 
@@ -540,7 +540,7 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
 
     monkeypatch.setattr(ParentedProcess, "launch", intercept)
     with pytest.raises(StopBeforeSpawnError):
-        comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi")
+        comms.owners._launch_owner_unlocked(Thread("owner", frozenset(), str(tmp_path)), "pi", launch_runtime=LaunchRuntime.current())
     assert seen == [(str(root), root_id, str(tmp_path))]
     assert not (other / "registry.json").exists()
 
@@ -551,7 +551,7 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
     comms.registry.declare(Thread("late-owner", frozenset(), str(tmp_path)))
     late = comms.registry.require("late-owner")
-    lookup = stable_thread_lookup(late.created_at)
+    lookup = RecordedThreadIncarnation("fixture", late.created_at).lookup
     message = comms.messaging.send_initial_cohort("sender", "late-owner", "fresh private task")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         participant = store.participants.get(lookup)
@@ -563,7 +563,7 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     def intercept(_argv, *, env, **_kwargs):
         assert env["AGENT_COMMS_ROOT"] == str(root)
         assert env["AGENT_COMMS_AGENT_BIN"] == str(
-            Path(sys.executable).with_name("pi-comms-native")
+            LaunchRuntime.current().native_entrypoint
         )
         with Coordination(str(root / "coordination.sqlite3")) as store:
             participant = store.participants.get(lookup)

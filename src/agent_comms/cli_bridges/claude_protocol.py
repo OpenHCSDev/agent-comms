@@ -4,7 +4,9 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import ClassVar
+import json
+from typing import ClassVar, Literal
+from xml.etree import ElementTree
 
 from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
@@ -26,7 +28,80 @@ from .shared import (
     TranscriptUpdate,
     TurnEnded,
     TurnStarted,
+    IncomingFrame,
+    MonitorFrame,
+    MonitorPart,
+    MonitorProbe,
+    ForeignMonitorFrame,
+    MonitorObservation,
+    ObservedMonitor,
+    MONITOR_FRAME,
 )
+
+
+class ClaudeMonitorFrame(IncomingFrame):
+    """Claude Monitor caps each encoded stdout event at 500 UTF-16 units."""
+    EVENT_CHARS = 500
+    HEADER = 'Comms in'
+    JSON_TEXT = TypeAdapter(str)
+
+    @classmethod
+    def event_size(cls, text: str) -> int:
+        return len(json.dumps(text, ensure_ascii=False).encode('utf-16-le')) // 2
+
+    def header(self, number: int, total: int) -> str:
+        return (f'{self.HEADER} · {self.message.sender} · '
+                f'{self.message.message_id} · {number}/{total}\n')
+
+    @property
+    def parts(self) -> tuple[str, ...]:
+        # At least one body character fits each part. Using the maximum possible
+        # ordinal width avoids rebuilding the body to discover its final count.
+        upper = len(self.message.body)  # Message already requires a nonempty body.
+        budget = self.EVENT_CHARS - self.event_size(self.header(upper, upper))
+        bodies: list[str] = []
+        current: list[str] = []
+        used = 0
+        for character in self.message.body:
+            size = self.event_size(character) - 2  # JSON quotes belong to the header budget.
+            if size > budget:
+                raise ValueError('Claude Monitor header leaves no room for a body character')
+            if used + size > budget:
+                bodies.append(''.join(current))
+                current, used = [], 0
+            current.append(character)
+            used += size
+        bodies.append(''.join(current))
+        total = len(bodies)
+        return tuple(self.header(number, total) + body
+                     for number, body in enumerate(bodies, 1))
+
+    @classmethod
+    def decode_line(cls, line: str) -> MonitorFrame:
+        if line.startswith(MonitorProbe.wire_prefix):
+            return MONITOR_FRAME.validate_json(line)
+        # Classify the external header before decoding its JSON string. Old or
+        # unrelated monitor text, including truncated text, is a named foreign frame.
+        if not line.startswith('"' + cls.HEADER + ' · '):
+            return ForeignMonitorFrame(text=line)
+        raw_header, separator, _ = line.partition(r'\n')
+        if not separator or not line.endswith('"'):
+            return ForeignMonitorFrame(text=line)
+        columns = raw_header[1:].rsplit(' · ', 2)
+        if len(columns) != 3:
+            return ForeignMonitorFrame(text=line)
+        number, slash, total = columns[-1].partition('/')
+        if not slash or not number.isdecimal() or not total.isdecimal():
+            return ForeignMonitorFrame(text=line)
+        decoded = cls.JSON_TEXT.validate_json(line)
+        header, _, body = decoded.partition('\n')
+        sender, message_id, _ = header.removeprefix(cls.HEADER + ' · ').rsplit(' · ', 2)
+        return MonitorPart(id=message_id, sender=sender, number=int(number),
+                           total=int(total), body=body)
+
+    @classmethod
+    def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:
+        return tuple(cls.decode_line(line) for line in event.splitlines())
 
 
 @dataclass
@@ -68,8 +143,11 @@ class ClaudeHeader(WireHeader):
     def local_command(cls, value: dict) -> dict:
         # Local slash commands (/login, /cost) are written as user records
         # without a prompt; they never reach the model. Decode that shape here.
-        if value.get('type') == 'user' and 'promptId' not in value:
-            return {'type': LocalCommandOutput.wire_tag}
+        if value.get('type') == 'user':
+            if value.get('origin', {}).get('kind') == TaskNotification.wire_tag:
+                return {'type': TaskUserRecord.wire_tag}
+            if 'promptId' not in value:
+                return {'type': LocalCommandOutput.wire_tag}
         return value
 
 
@@ -200,8 +278,9 @@ class HumanPrompt(PromptOrigin):
 
 
 class TaskNotification(PromptOrigin):
-    """Monitor output; bus messages in it already reach Toad through Core."""
+    """Its specialized user record owns task-envelope decoding."""
     wire_tag = 'task-notification'
+    kind: Literal['task-notification']
 
 
 class PeerMessage(PromptOrigin):
@@ -246,6 +325,63 @@ class ContentBlocks(WireModel):
         return [{'type': 'text', 'text': value}] if isinstance(value, str) else value
 
 
+class TaskEnvelope(WireModel, ABC):
+    @classmethod
+    def from_text(cls, text: str) -> TaskEnvelope:
+        if not text.startswith('<task-notification>'):
+            return ForeignTaskNotification(text=text)
+        closing = '</task-notification>'
+        # Claude Code appends sibling blocks (system-reminder) after the envelope in the same record.
+        root = ElementTree.fromstring(text[:text.index(closing) + len(closing)])  # Malformed envelope fails at ingress.
+        event = root.find('event')
+        if event is None:
+            return ForeignTaskNotification(text=text)
+        return MonitorTaskNotification(frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
+
+    @abstractmethod
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
+
+
+class ForeignTaskNotification(TaskEnvelope):
+    text: str
+
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return ()
+
+
+class MonitorTaskNotification(TaskEnvelope):
+    frames: tuple[MonitorFrame, ...]
+
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return tuple(MonitorObservation(frame,
+                                        ObservedMonitor(record.uuid, record.timestamp))
+                     for frame in self.frames)
+
+
+class TaskContent(WireModel):
+    """Both external task-record shapes share envelope decoding and observations."""
+    text: TaskEnvelope
+
+    @field_validator('text', mode='before')
+    @classmethod
+    def envelope(cls, value: str) -> TaskEnvelope:
+        return TaskEnvelope.from_text(value)
+
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return self.text.updates(record)
+
+
+class TaskText(TaskContent):
+    type: Literal['text'] = 'text'
+
+
+class TaskMessage(ContentBlocks):
+    content: list[TaskText]
+
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return tuple(update for block in self.content for update in block.updates(record))
+
+
 class ToolResult(UserBlock, ContentBlocks):
     wire_tag = 'tool_result'
     tool_use_id: str
@@ -277,6 +413,15 @@ class UserRecord(ClaudeRecord, TimedRecord):
         if self.isMeta:
             return ()
         return tuple(update for block in self.message.content for update in block.updates(self, session))
+
+
+class TaskUserRecord(ClaudeRecord, TimedRecord):
+    wire_tag = 'task-user'
+    origin: TaskNotification
+    message: TaskMessage
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return self.message.updates(self)
 
 
 class SubtypeHeader(WireHeader):
@@ -330,6 +475,10 @@ class AgentsKilled(SystemEvent):
     wire_tag = 'agents_killed'
 
 
+class ModelRefusalNoFallback(SystemEvent):
+    wire_tag = 'model_refusal_no_fallback'
+
+
 class SystemRecord(ClaudeRecord):
     wire_tag = 'system'
     subtype: SystemEvent.declared_union()
@@ -349,8 +498,44 @@ class MetadataRecord(ClaudeRecord, ABC):
     pass
 
 
-class Attachment(MetadataRecord):
+class AttachmentHeader(WireHeader):
+    @model_validator(mode='before')
+    @classmethod
+    def task_notification(cls, value: dict) -> dict:
+        if (value.get('type') == QueuedTaskNotification.wire_tag
+                and value.get('origin', {}).get('kind') == TaskNotification.wire_tag):
+            return value
+        return {'type': ForeignAttachment.wire_tag}
+
+
+class AttachmentPayload(TaggedWire, ABC):
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+    header = AttachmentHeader
+
+    @abstractmethod
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
+
+
+class QueuedTaskNotification(TaskContent, AttachmentPayload):
+    wire_tag = 'queued_command'
+    text: TaskEnvelope = Field(alias='prompt')
+    origin: TaskNotification
+
+
+class ForeignAttachment(AttachmentPayload):
+    wire_tag = 'foreign'
+
+    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+        return ()
+
+
+class Attachment(ClaudeRecord, TimedRecord):
     wire_tag = 'attachment'
+    attachment: AttachmentPayload.declared_union()
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return self.attachment.updates(self)
 
 
 class QueueOperation(MetadataRecord):

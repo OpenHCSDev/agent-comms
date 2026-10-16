@@ -106,6 +106,11 @@ class TrackedTerminal(ABC):
 
 
 class PendingTrackedTerminal(TrackedTerminal):
+    def notification(self, parts):
+        # A following bus message cannot answer an already completed request,
+        # but neither can it erase a final answer still owed after a tool round.
+        return self
+
     def require_response(self, parts):
         raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
 

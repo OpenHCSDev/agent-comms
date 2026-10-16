@@ -9,9 +9,8 @@ from dataclasses import dataclass, field, fields, replace
 
 from .agent_backend import AgentBackend
 from .child_process import ProcessIdentity
-from .errors import RelationViolationError, UnregisteredThreadError
+from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .thread_provenance import ThreadProvenance
 from .thread_execution import ThreadExecution, NativeThreadExecution
 from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
 from .goals import (
@@ -19,6 +18,7 @@ from .goals import (
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
 from .thread_identity import (
+    ThreadProvenance,
     ThreadRole,
     TurnId,
     TurnIdentity,
@@ -124,7 +124,7 @@ class Thread(ThreadProvenance):
         from .runtime_requests import ProjectRuntimeRequest
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
-        from .owner_launch import RestartEnvironment
+        from .launch_runtime import RestartEnvironment
 
         return {
             RestartEnvironment.owner_key: self.name,
@@ -475,7 +475,7 @@ class Thread(ThreadProvenance):
 
 def current_thread() -> Thread:
     """Declare the current thread from its owner launch environment."""
-    from .owner_launch import RestartEnvironment
+    from .launch_runtime import RestartEnvironment
 
     name = RestartEnvironment.calling_thread()
     tag_env = os.environ.get("PI_AGENT_TAGS") or os.environ.get("AGENT_COMMS_TAGS", "")
