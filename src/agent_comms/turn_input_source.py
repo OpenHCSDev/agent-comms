@@ -247,7 +247,6 @@ class DeliveredFollowingInput(AcceptedFollowingInput):
     """A pending bus message handed to the recipient's running turn."""
 
     origins: tuple[Message, ...]
-    when_busy: ClassVar[WhenBusy] = WhenBusy.FOLLOW_UP
 
     def continue_response(self, response, parts):
         """Background handling has no automatic reply of its own."""
