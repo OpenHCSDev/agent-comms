@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
 from .external_transcript import ExternalTranscript
-from .native_transcript import NativeTranscript
 from .transcript_events import TurnDigest
 
 if TYPE_CHECKING:
@@ -37,9 +36,8 @@ class TurnDigestRead(ConversationPreparation):
                            self.thread.execution.prepare_conversation(self))
 
     def native(self) -> tuple[TurnDigest, ...]:
-        if self.thread.session_file is None:
-            return ()
-        return NativeTranscript(Path(self.thread.session_file)).turns(self.last)
+        return tuple(turn for transcript in self.thread.native_transcripts
+                     for turn in transcript.turns(self.last))
 
     def external(self) -> tuple[TurnDigest, ...]:
         with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:

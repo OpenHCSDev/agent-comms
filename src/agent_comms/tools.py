@@ -590,8 +590,7 @@ class CommsGoalHistoryTool(ThreadToolRequest):
 class CommsTurnsTool(ToolRequest):
     label = "Recent turns"
     description = "Read a unit's recent turns with ordered original transcript facts."
-    context = "thread"
-    thread: str = tool_field("Thread whose own saved turn records to read", binding=SubjectBinding)
+    thread: str = tool_field("Thread whose own saved turn records to read")
     last: int = tool_field("Number of newest turns", default=TurnDigestRead.last)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
