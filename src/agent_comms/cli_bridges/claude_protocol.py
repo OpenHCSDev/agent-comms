@@ -1,7 +1,7 @@
 """Claude's completed JSONL blocks own transcript items and activity."""
 from __future__ import annotations
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import ClassVar
@@ -64,8 +64,8 @@ class AssistantBlock(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        raise NotImplementedError
+    @abstractmethod
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]: ...
 
 
 class TextContent(WireModel):
@@ -134,8 +134,8 @@ class ResultPart(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
 
-    def result_text(self) -> str:
-        raise NotImplementedError
+    @abstractmethod
+    def result_text(self) -> str: ...
 
 
 class ResultText(TextContent, ResultPart):
@@ -144,6 +144,14 @@ class ResultText(TextContent, ResultPart):
 
 class ResultImage(ImageContent, ResultPart):
     wire_tag = 'image'
+
+
+class ResultToolReference(ResultPart):
+    wire_tag = 'tool_reference'
+    tool_name: str
+
+    def result_text(self) -> str:
+        return f'Tool available: {self.tool_name}'
 
 
 class UserBlock(TaggedWire, ABC):
@@ -167,24 +175,32 @@ class UserImage(UserBlock, ImageContent):
     wire_tag = 'image'
 
 
-class ToolResult(UserBlock):
+class ContentBlocks(WireModel):
+    """Claude's string shorthand is decoded once for both content families."""
+
+    @field_validator('content', mode='before', check_fields=False)
+    @classmethod
+    def blocks(cls, value: str | list) -> list:
+        return [{'type': 'text', 'text': value}] if isinstance(value, str) else value
+
+
+class ToolResult(UserBlock, ContentBlocks):
     wire_tag = 'tool_result'
     tool_use_id: str
-    content: str | list[ResultPart.declared_union()]
+    content: list[ResultPart.declared_union()]
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         call = session.result_for(self.tool_use_id)
         if call is None:
             return ()  # Only an initial window may lack the original tool start.
-        text = self.content if isinstance(self.content, str) else '\n'.join(
-            part.result_text() for part in self.content)
+        text = '\n'.join(part.result_text() for part in self.content)
         return (FinishedItem(session.turn, self.tool_use_id, call.finished(text, not self.is_error)),
                 ActiveItem(session.turn, self.tool_use_id, ActivityState.WORKING, ''))
 
 
-class UserMessage(WireModel):
-    content: str | list[UserBlock.declared_union()]
+class UserMessage(ContentBlocks):
+    content: list[UserBlock.declared_union()]
 
 
 class UserRecord(ClaudeRecord, TimedRecord):
@@ -197,9 +213,7 @@ class UserRecord(ClaudeRecord, TimedRecord):
         session.turn = self.promptId
         if self.isMeta:
             return ()
-        content = self.message.content
-        blocks = (UserText(text=content),) if isinstance(content, str) else content
-        return tuple(update for block in blocks for update in block.updates(self, session))
+        return tuple(update for block in self.message.content for update in block.updates(self, session))
 
 
 class SubtypeHeader(WireHeader):

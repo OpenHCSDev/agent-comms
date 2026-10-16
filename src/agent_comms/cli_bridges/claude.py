@@ -8,7 +8,7 @@ from typing import AsyncIterator
 from agent_comms.private_path import FileRevision
 from .claude_protocol import CLAUDE_RECORD, ClaudeSession
 from .shared import (
-    FinishedItem, LineMonitorBridge, Options, TranscriptBridge, TranscriptUpdate,
+    LineMonitorBridge, Options, TranscriptBridge, TranscriptUpdate,
     parse_options, run_bridge, shared_parser,
 )
 
@@ -53,7 +53,7 @@ class ClaudeBridge(LineMonitorBridge, TranscriptBridge[Options]):
                     for line in lines:
                         record = CLAUDE_RECORD.validate_json(line)
                         for update in record.updates(session):
-                            if session.catching_up and not isinstance(update, FinishedItem):
+                            if session.catching_up and update.is_status:
                                 last_status = update
                             else:
                                 yield update
