@@ -14,7 +14,7 @@ import aiohttp
 from agent_comms.messages import Message
 
 from .shared import (
-    TranscriptBridge, TranscriptUpdate, Options, Outcome, SendResult, parse_options, run_bridge, shared_parser,
+    TranscriptBridge, TranscriptUpdate, Options, Outcome, DeliveredOutcome, SendResult, parse_options, run_bridge, shared_parser,
     Watch, Binding,
 )
 from .opencode_protocol import (
@@ -184,10 +184,10 @@ class OpenCodeBridge(TranscriptBridge[OpenCodeOptions]):
             async for update in connection.transcript():
                 yield update
 
-    async def deliver(self, message: Message) -> Outcome:
+    async def deliver(self, message: Message) -> type[Outcome]:
         async with OpenCodeConnection.open(self.options, self.binding.thread) as connection:
             await connection.deliver(self.incoming_text(message))
-        return Outcome.DELIVERED
+        return DeliveredOutcome
 
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
         async with OpenCodeConnection.open(self.options, self.binding.thread) as connection:
