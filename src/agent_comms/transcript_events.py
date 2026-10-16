@@ -28,6 +28,9 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def tool_calls(self) -> tuple[ToolStartTranscript, ...]:
         return ()
 
+    def with_tool_start(self, original: ToolStartTranscript) -> TranscriptEvent:
+        return self
+
     @property
     def text_size(self) -> int:
         return 0
@@ -214,6 +217,11 @@ class ToolStartTranscript(ToolTranscript):
             tool_call_id=self.tool_call_id, tool_name=self.tool_name,
             timestamp=self.timestamp, text=text, ok=ok, diff=diff,
         ))
+
+    def with_tool_start(self, original):
+        if self.tool_call_id == original.tool_call_id and self.timestamp is None:
+            return replace(self, timestamp=original.timestamp)
+        return self
 
 
 @dataclass(frozen=True, kw_only=True)
