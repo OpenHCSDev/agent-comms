@@ -40,7 +40,7 @@ from .image_inputs import ImageInput
 from .turn_context import InputContributionCoordinates
 from .maintenance_barrier import MaintenanceBarrier
 from .native_attestation import AttestationError
-from .native_custody import PiSessionChild
+from .pi_session_state import PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
@@ -98,7 +98,7 @@ async def _maintenance_send_boundary(
 ) -> AsyncIterator[bool | None]:
     """Acquire shared ingress without blocking the loop needed to release it.
 
-    The original delegate checks and stdin.write consume this same custody
+    The original delegate checks and stdin.write consume this same ownership
     synchronously. Release it before pipe drain, native ACK or any other await.
     """
     async with MaintenanceBarrier(root / "registry.json").admit_ingress_async():
@@ -145,7 +145,7 @@ async def stream_agent_events(
         async with persistent_session.lock:
             try:
                 launch = await Coordination.run_worker(partial(
-                    persistent_session.custody.managed_launch,
+                    persistent_session.native_state.managed_launch,
                     agent_bin,
                     tuple(agent_args),
                     worktree=Path(cwd),
@@ -286,7 +286,7 @@ class TurnSession:
     def record_request_progress(self, progress: RequestProgress) -> None:
         """Record the original sample without borrowing global publication locks.
 
-        The acquired native process supplies custody identity; the configured
+        The acquired native process supplies ownership identity; the configured
         observer binds the original public turn lease. No phase owns a copy of
         the transport clock or request lifecycle.
         """
@@ -403,7 +403,7 @@ class TurnSession:
         )
 
     async def open_transport(self, resources: AsyncExitStack) -> None:
-        """Leaf-owned launch resources enter the original turn's custody."""
+        """Leaf-owned launch resources enter the original turn's ownership."""
 
     @contextmanager
     def native_acquisition(self):
@@ -434,7 +434,7 @@ class TurnSession:
         return native
 
     async def open_native(self, *, reuse: bool) -> PiSessionChild:
-        """Initial acquisition and prepared continuation share the same custody."""
+        """Initial acquisition and prepared continuation share the same ownership."""
         with self.startup.measurements.operation("native_open"):
             return await self.native_session.open(
                 self.launch, reuse=reuse, startup=self.startup, watchdog=self.watchdog,
@@ -498,7 +498,7 @@ class TurnSession:
                     async for event in self.finish_result():
                         yield event
             finally:
-                if not self.native_session.custody.retained:
+                if not self.native_session.native_state.retained:
                     await self.native_session.close()
 
     async def receive_record(self) -> AsyncIterator[events.AgentEvent]:
@@ -663,7 +663,7 @@ class TurnSession:
         ):
             self.native.sensitive_diagnostics = self.output.sensitive
             self.native_session.retain(self.native, identity)
-        if not self.native_session.custody.retained:
+        if not self.native_session.native_state.retained:
             outcome = await self.native.shutdown(graceful=True)
             if isinstance(outcome, TimedOutOutcome):
                 self.output.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
@@ -672,7 +672,7 @@ class TurnSession:
 
     async def finish_diagnostics(self) -> AsyncIterator[events.AgentEvent]:
         self.error_text = (
-            "" if self.native_session.custody.retained else await self.native.stderr_task
+            "" if self.native_session.native_state.retained else await self.native.stderr_task
         )
         self.output.startup_error(self.error_text)
         if False:

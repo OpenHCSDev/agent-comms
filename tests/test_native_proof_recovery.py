@@ -77,7 +77,7 @@ async def test_actual_saved_native_reopens_after_increasing_proof_history(native
         proof = NativeContextProof.read_evidence(owner.session, current_id)
         assert proof.request_generation == generation + 1
         assert owner.session.read_bytes().startswith(history)
-        child = owner.persistent.custody.child.proc
+        child = owner.persistent.native_state.child.proc
         status = Path(f"/proc/{child.pid}/status").read_text()
         high_water = (
             int(next(line for line in status.splitlines() if line.startswith("VmHWM:")).split()[1])
@@ -261,7 +261,7 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
         environment=dict(os.environ),
         session_file=str(owner.session),
     )
-    child = owner.persistent.custody.child
+    child = owner.persistent.native_state.child
 
     async def probe(command):
         future = child.reader.track(command)

@@ -73,7 +73,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         session_id = await self.attach_saved_owner(agent, project=project, session=session)
         original = await Coordination.run_worker(partial(agent._comms.registry.require, session_id))
         await agent.turns.backend_for(session_id, original).prepare(original)
-        child = agent.turns.persistent_backends[session_id].custody.child.proc
+        child = agent.turns.persistent_backends[session_id].native_state.child.proc
         self.children.append(child)
         return session_id
 
@@ -109,9 +109,9 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             async with InitialInput.reserve(
                 agent.inputs, session_id, agent.sessions.require(session_id),
                 text=text, prompt=text, echo=True, images=(), controller=None,
-            ) as (item, _owner, _row, custody):
-                resources.push_async_callback(Coordination.run_worker, custody.pop_all().close)
-            # Native acquisition begins after original wire custody ends, while
+            ) as (item, _owner, _row, reservation):
+                resources.push_async_callback(Coordination.run_worker, reservation.pop_all().close)
+            # Native acquisition begins after the original wire lock ends, while
             # the transferred reservation rollback still belongs to this turn.
             turn = OwnedTurn(
                 agent.turns, session_id, agent.sessions.require(session_id), text,
@@ -124,16 +124,16 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
 
     async def force_reopen(self):
         """Retire this fixture's actual attested child; the next turn opens the saved session."""
-        self.persistent.custody.child.attestation.require_identity()
+        self.persistent.native_state.child.attestation.require_identity()
         await self.persistent.close_idle()
 
     def started(self, public_id, native_id, text):
         self.starts.append((public_id, native_id, text))
         child = backend.TurnSession.active[asyncio.current_task()].native.proc
-        # Custody is already with the saved-session owner at native input start;
+        # The live Pi state belongs to the saved-session owner at input start;
         # there is no later copy from transient TurnSession process fields.
-        assert self.persistent.custody.child.proc is child
-        assert self.persistent.custody.child.reader is not None
+        assert self.persistent.native_state.child.proc is child
+        assert self.persistent.native_state.child.reader is not None
         if child not in self.children:
             self.children.append(child)
         return True

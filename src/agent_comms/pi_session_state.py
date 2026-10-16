@@ -151,7 +151,7 @@ class PiSessionChild:
             raise
 
 
-class NativeCustody(ABC):
+class PiSessionState(ABC):
     """State owns the legal child capabilities, including its retirement successor."""
 
     @property
@@ -171,37 +171,37 @@ class NativeCustody(ABC):
         raise NativePiUnavailable("Selected idle Pi child is unavailable or stale")
 
     async def inspect(self, persistent, prepare, request):
-        """Inspect through this custody's legal acquisition/receiver capability."""
+        """Inspect through this state's legal acquisition/receiver capability."""
         raise NativePiUnavailable("Native context requires an acquired native child")
 
-    def retire(self, successor: NativeCustody | None = None) -> NativeCustody:
+    def retire(self, successor: PiSessionState | None = None) -> PiSessionState:
         return successor if successor is not None else self
 
     @property
-    def settled(self) -> NativeCustody:
+    def settled(self) -> PiSessionState:
         return self
 
     async def closed(self) -> None:
-        """Complete this custody's retirement, if any."""
+        """Complete this state's retirement, if any."""
 
-class EmptyNative(NativeCustody):
+class EmptyNative(PiSessionState):
     available = False
 
     async def inspect(self, persistent, prepare, request):
         # The runtime owner supplies its existing selected-session preparation:
         # real saved launch/idle attestation/retention, never a priming prompt.
         await prepare()
-        acquired = persistent.custody.idle()
+        acquired = persistent.native_state.idle()
         return await acquired.inspect_acquired(persistent, request)
 
 
 @dataclass
-class ChildNative(NativeCustody):
+class ChildNative(PiSessionState):
     child: PiSessionChild
     available = True
 
     @abstractmethod
-    def _shutdown_successor(self) -> NativeCustody: ...
+    def _shutdown_successor(self) -> PiSessionState: ...
 
     def retire(self, successor=None):
         following = self._shutdown_successor() if successor is None else successor
@@ -213,9 +213,9 @@ class ChildNative(NativeCustody):
 
 @dataclass
 class SuccessorNative(ChildNative):
-    successor: NativeCustody
+    successor: PiSessionState
 
-    def _shutdown_successor(self) -> NativeCustody:
+    def _shutdown_successor(self) -> PiSessionState:
         return self.successor
 
 
@@ -229,7 +229,7 @@ class RetiringNative(SuccessorNative):
         return self
 
     @property
-    def settled(self) -> NativeCustody:
+    def settled(self) -> PiSessionState:
         return self.successor if self.child.retired else self
 
 
@@ -263,12 +263,12 @@ class RetainedNative(ChildNative):
         # Reobserve this retained child through the same preparation/AgentInfo
         # owner. An acquired child alone does not publish native usage.
         await prepare()
-        acquired = persistent.custody.idle()
+        acquired = persistent.native_state.idle()
         return await acquired.inspect_acquired(persistent, request)
 
     async def inspect_acquired(self, persistent, request):
         async with persistent.lock:
-            current = persistent.custody.idle()
+            current = persistent.native_state.idle()
             response = await request.exchange(
                 current.child.reader,current.child.proc.stdin
             )
@@ -301,6 +301,6 @@ class RetainedNative(ChildNative):
         return super().managed_launch(command, arguments, worktree=worktree,
             environment=environment, session_file=session_file)
 
-    def _shutdown_successor(self) -> NativeCustody:
+    def _shutdown_successor(self) -> PiSessionState:
         return EmptyNative()
 

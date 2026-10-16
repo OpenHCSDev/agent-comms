@@ -160,7 +160,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
             assert (
                 native.session.read_bytes() == history and read_proof_rows(native.session) == proof
             )
-            child = owner.turns.persistent_backends[sid].custody.child
+            child = owner.turns.persistent_backends[sid].native_state.child
             assert child.attestation.state.thinking_level is OffThinkingLevel
             response = await router(
                 "session/prompt",

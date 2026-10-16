@@ -44,7 +44,7 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
             before = time.time()
             prepared = await agent.turns.backend_for(name, thread).prepare(thread)
             assert prepared.model.display_name == "response-local/fixture"
-            child = agent.turns.persistent_backends[name].custody.child.proc
+            child = agent.turns.persistent_backends[name].native_state.child.proc
             assert child.alive()
             captured = agent._comms.agents.agent_info_of(name)
             assert before <= captured.timestamp <= time.time()

@@ -1,4 +1,4 @@
-"""Check original cleanup ordering and exception custody, without native/provider input."""
+"""Check original cleanup ordering and exception identity, without native/provider input."""
 
 import asyncio
 import time
@@ -25,10 +25,13 @@ async def test_acquisition_retirement_measurement_preserves_cleanup_and_failure(
         callbacks.append((name, time.monotonic_ns()))
         await asyncio.sleep(0)
 
-    async def acquire(self, custody, *, reuse):
+    async def acquire(self, transport, *, reuse):
         assert self is turn and reuse is True
-        custody.push_async_callback(cleanup, "first")
-        custody.push_async_callback(cleanup, "last")
+        # Input transport has a shorter lifetime than the child. Register each
+        # callback with its real owner, not all on the input transport stack.
+        transport.push_async_callback(cleanup, "transport")
+        self.resources.push_async_callback(cleanup, "first")
+        self.resources.push_async_callback(cleanup, "last")
         acquired.set()
         if outcome == "failure":
             raise original
@@ -46,11 +49,11 @@ async def test_acquisition_retirement_measurement_preserves_cleanup_and_failure(
             await task
         assert caught.value is original
 
-    assert [name for name, _ in callbacks] == ["last", "first"]
+    assert [name for name, _ in callbacks] == ["transport", "last", "first"]
     operations = turn.startup.measurements.operations
-    assert set(operations) == {"native_custody_retirement"}
-    retirement = operations["native_custody_retirement"]
+    assert set(operations) == {"pi_session_retirement"}
+    retirement = operations["pi_session_retirement"]
     assert retirement.count == 1
-    assert retirement.maximum_started_ns <= callbacks[0][1]
+    assert callbacks[0][1] <= retirement.maximum_started_ns <= callbacks[1][1]
     assert retirement.maximum_finished_ns >= callbacks[-1][1]
     assert retirement.total_ns == retirement.maximum_ns > 0

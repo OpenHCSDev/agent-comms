@@ -260,7 +260,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                         else PublicationMeasurements())
         # Independent execution acquires a fresh artifact. A selected stage
         # derives from its execution's original pre-claim factory; source/config and
-        # child admission remain fresh. Join the whole construction before custody.
+        # child admission remain fresh. Join construction before transferring resources.
         with measurements.operation("native_launch_selection"):
             launch = await Coordination.run_worker(partial(
                 NativePiRpcLaunch.tracked if launch_owner is None else launch_owner.tracked_launch,
@@ -299,19 +299,19 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         return await turn.complete()
 
     async def complete(self) -> NativeTurnResult:
-        async with AsyncExitStack() as custody:
-            retirement = self.startup.measurements.operation("native_custody_retirement")
+        async with AsyncExitStack() as resources:
+            retirement = self.startup.measurements.operation("pi_session_retirement")
             # Exit this observation after every original resource callback.
-            custody.push(retirement)
+            resources.push(retirement)
             try:
-                self.custody = custody
+                self.resources = resources
                 # Transport resources are the turn's innermost lifetime. Stop
-                # retires them before native-child custody can block, so an
+                # retires them before native-child retirement can block, so an
                 # interrupted selected turn cannot leave its socket path behind.
                 async with AsyncExitStack() as transport:
                     self.native = await self.acquire_native(transport, reuse=True)
-                    custody.push_async_callback(self.retain_or_close)
-                    await custody.enter_async_context(self.native.failures())
+                    resources.push_async_callback(self.retain_or_close)
+                    await resources.enter_async_context(self.native.failures())
                     if self.tool_socket is not None:
                         self.tool_socket.expected_pid = self.native.proc.pid
                     self.watchdog.reading()
@@ -340,10 +340,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             finally:
                 # LIFO starts the measurement immediately before cleanup. No
                 # await or manual close may separate this from stack retirement.
-                custody.callback(retirement.__enter__)
+                resources.callback(retirement.__enter__)
 
     async def retain_or_close(self) -> None:
-        """Keep a settled, proved child idle in the owner's custody; retire anything else."""
+        """Keep a settled, proved child idle in the owner's resources; retire anything else."""
         await self.native.finish_input()
         identity = self.native.attestation.identity
         # An input written but never started may still run in the child; it is not idle.
@@ -352,12 +352,12 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             return
         await self.native_session.close()
 
-    async def open_transport(self, custody: AsyncExitStack) -> None:
+    async def open_transport(self, resources: AsyncExitStack) -> None:
         if self.selected_tool_mode is not None:
             self.tool_socket = self.selected_tool_mode.socket(
                 self.launch.session.directory, os.urandom(32).hex()
             )
-            custody.push_async_callback(self.tool_socket.close)
+            resources.push_async_callback(self.tool_socket.close)
             await self.tool_socket.start()
             self.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(self.tool_socket.address)
             self.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = self.tool_socket.token
@@ -489,7 +489,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
             self.admission = self.admission.start(event)
-            self.evidence = self.custody.enter_context(
+            self.evidence = self.resources.enter_context(
                 NativeEntry.open_input_evidence(self.active_session_file)
             )
             await Coordination.run_worker(self.evidence.observe)
@@ -554,7 +554,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if not self.admission.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
         # The original event consumer serializes observations. Cancellation
-        # joins this read before the acquired evidence/custody can close.
+        # joins this read before the acquired evidence resources can close.
         return await Coordination.run_worker(partial(_verify_context,
             self.active_session_file,
             self.command.input_id,

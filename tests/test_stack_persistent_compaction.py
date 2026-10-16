@@ -247,12 +247,12 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
             await owner.new_session(str(project))
             comms.threads.attach_session(comms.registry.require("worker"), str(session))
             await asyncio.wait_for(InitialInput.run(owner.inputs, "worker", "worker", "WARMUP"), 20)
-            retained = owner.turns.persistent_backends["worker"].custody.idle().child.proc
+            retained = owner.turns.persistent_backends["worker"].native_state.idle().child.proc
             assert retained is not None and retained.returncode is None, json.dumps(
                 updates, indent=2
             )
             await asyncio.wait_for(InitialInput.run(owner.inputs, "worker", "worker", "REUSE"), 20)
-            assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
+            assert owner.turns.persistent_backends["worker"].native_state.idle().child.proc is retained
             assert retained.returncode is None
             assert len(requests) == 2
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[-1]["messages"])
@@ -274,7 +274,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
             assert entered, "Native compaction did not reach localhost summary"
             # Pi's engine runs in the retained child; nothing is written until it places the summary.
             assert retained.returncode is None
-            assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
+            assert owner.turns.persistent_backends["worker"].native_state.idle().child.proc is retained
             assert session.read_bytes() == before
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[2]["messages"])
             assert "TASK_BRIEF_SENTINEL" in json.dumps(requests[2]["messages"])
@@ -310,7 +310,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
             # The child that compacted stays retained and current; nothing reopens it.
             assert retained.returncode is None
             assert owner.turns.persistent_backends["worker"].available
-            assert owner.turns.persistent_backends["worker"].custody.idle().child.proc is retained
+            assert owner.turns.persistent_backends["worker"].native_state.idle().child.proc is retained
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             compactions = [row for row in rows if row.get("type") == "compaction"]
             assert len(compactions) == 1
@@ -319,7 +319,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
             await asyncio.wait_for(
                 InitialInput.run(owner.inputs, "worker", "worker", "AFTER_COMPACT"), 20
             )
-            resumed = owner.turns.persistent_backends["worker"].custody.idle().child.proc
+            resumed = owner.turns.persistent_backends["worker"].native_state.idle().child.proc
             assert resumed is retained and resumed.returncode is None
             assert len(requests) == 4
             context = json.dumps(requests[-1]["messages"])

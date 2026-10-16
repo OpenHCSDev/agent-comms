@@ -27,7 +27,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
 from agent_comms.native_startup import NativeStartupAdmission
-from agent_comms.native_custody import PiSessionChild
+from agent_comms.pi_session_state import PiSessionChild
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.registration import Registration
 from agent_comms.native_source_cursor import NativeSourceCursor
