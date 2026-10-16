@@ -97,8 +97,19 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
             with pytest.raises(sqlite3.OperationalError) as refused:
                 comms.bus.pending_counts_opened(source, basis)
             assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
-        comms.bus.reads.mark_displayed(viewer.name, comms.bus.reads.capture(
-            viewer.name, (channel,), comms.registry.snapshot(), comms.bus.log.path), snapshot=comms.registry.snapshot())
+        def mark_channel():
+            comms.bus.reads.mark_displayed(viewer.name, comms.bus.reads.capture(
+                viewer.name, (channel,), comms.registry.snapshot(), comms.bus.log.path),
+                snapshot=comms.registry.snapshot())
+        if indexed:
+            mark_channel()
+        else:
+            # Optional compaction tolerates transient coordination, not permanent
+            # I/O failure. Refusal must leave durable read progress unchanged.
+            unchanged = comms.bus.reads.read()
+            with pytest.raises(sqlite3.OperationalError):
+                mark_channel()
+            assert comms.bus.reads.read() == unchanged
         comms.messaging.send_message("bob", viewer.name, "later direct")
         comms.registry.rename("bob", "renamed-bob")
         if not indexed:
