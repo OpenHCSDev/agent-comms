@@ -60,6 +60,31 @@ head f969806a6, the same commit as `feat/commanded-todos-integration`) and the t
    than `todos`, so verdict and strike tables need that check to read a declared tuple of tables,
    not a second store file.
 
+## Lessons from running the scripts (claude-code, 2026-10-16)
+
+The Core version must not repeat these:
+
+1. **A done check runs on the delivered commit, not on some checkout's HEAD.** `order.py done`
+   refuses unless a checkout's HEAD equals the sha, so merged work cannot be closed once the
+   unit's worktree moved on, and work merged into a non-main base (P55 via #1011 into #1007's
+   branch) cannot be closed at all. #934's `AcceptanceCheck._check` has the same rule. The check
+   runs in a throwaway detached worktree of the reported commit (`git worktree add --detach`,
+   removed afterwards), and where the commit landed is derived, not reported:
+   `MergedToMain` when `origin/main` contains it, `MergedToBranch(name)` when only another
+   branch does, `NotMerged` otherwise. These are distinct delivery states.
+2. **Plain words must not flag names it quotes.** "lifecycle" inside `toad-close-lifecycle` is a
+   thread name, not prose. `PlainText` treats a word joined to its neighbours by `-`, `_`, `/`,
+   `.` or `:` as an identifier, and skips quoted and backticked spans.
+3. **Firing moves every open order at once.** At the strike limit, one operation lists all the
+   unit's open orders and transfers or releases each with the same stated reason; nobody does
+   it by hand order by order.
+4. **Owners include agents outside Toad.** A Claude Code agent (claude-p60, claude-ui, ...)
+   takes orders by registering a thread (`agent-comms register --name NAME`), which has the
+   ordinary agent role, so it can hold a Goal. No second owner kind is added.
+5. **One order may carry several problems.** Orders batch related problems for one owner. #934
+   binds exactly one Todo to one Goal and refuses a second open Goal per unit, so a batched
+   order is unrepresentable there; the order Goal needs a tuple of `TodoRef`s.
+
 ## What Core owns (extend, do not copy)
 
 - **Problem = `Todo`** (#934 `todos.py`): text, `where` (`SourceTodoWhere` path:line or
@@ -116,14 +141,16 @@ Strike(goal: GoalRef, unit: RecordedThreadIncarnation, cause: type[StrikeCause],
   family (`review`, `install`, `live`, `tristan`) plus who caught it, as `order.py strike --caught`.
 - `MissedDeadline` is recorded when an order is delivered with `Goal.late`; `FalseDone` when
   `AcceptanceCheck` refuses a reported completion.
-- `StrikeLimit` (two) is declared on `CommandedGoalAuthor`: at the limit the order is refused new
-  orders for that unit except by transfer; there is no scattered `>= 2`.
+- `StrikeLimit` (two) is declared on `CommandedGoalAuthor`: at the limit, one `comms_fire`
+  operation transfers or releases every open order of that unit with one stated reason; there is
+  no scattered `>= 2`.
 - The commander is not exempt: a strike on the commander is the same record.
 
 ### Plain words
 
 `PlainText` is a `str` value type for `Verdict.reason` and `Strike.what_happened`. It refuses text
-under ten words and any word of its declared `banned` set outside a quoted span: custody,
+under ten words and any word of its declared `banned` set, except inside quoted or backticked
+spans and inside identifiers (words joined by `-`, `_`, `/`, `.` or `:`): custody,
 admission, admit*, receipt*, checkpoint*, provenance, authority, witness*, lattice, surface,
 disposition*, invariant*, semantic*, ownership, lifecycle, acceptance.
 
