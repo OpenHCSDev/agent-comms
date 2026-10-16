@@ -9,10 +9,10 @@ from typing import ClassVar, Literal
 from xml.etree import ElementTree
 
 from metaclass_registry import RegistryConfig
-from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
+from pydantic import ConfigDict, Field, JsonValue, PrivateAttr, TypeAdapter, field_validator, model_validator
 
 from agent_comms.activity import ActivityState
-from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
+from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireHeader, WireModel
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -206,14 +206,141 @@ class ThinkingBlock(RedactedThinking):
             record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp),)))
 
 
+class ToolInput(WireModel, ABC, metaclass=RegisteredWireMeta):
+    """Claude's input for one declared tool; it names the call's subject, as a native tool's arguments do."""
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute='tool_name', skip_if_no_key=True)
+    model_config = ConfigDict(strict=True, extra='allow')
+    tool_name: ClassVar[str]
+
+    @classmethod
+    def decode(cls, name: str, value: JsonValue) -> ToolInput:
+        member = cls.__registry_config__.registry_dict.get(name, UndeclaredInput)
+        return member.model_validate(value)
+
+    @property
+    @abstractmethod
+    def subject(self) -> str: ...
+
+
+class UndeclaredInput(ToolInput):
+    """A tool Core declares no input for: its row shows the tool name alone."""
+
+    @property
+    def subject(self) -> str:
+        return ''
+
+
+class CommandInput(ToolInput):
+    tool_name = 'Bash'
+    command: str
+
+    @property
+    def subject(self) -> str:
+        return self.command
+
+
+class FileInput(ToolInput, ABC):
+    file_path: str
+
+    @property
+    def subject(self) -> str:
+        return self.file_path
+
+
+class ReadInput(FileInput):
+    tool_name = 'Read'
+
+
+class EditInput(FileInput):
+    tool_name = 'Edit'
+
+
+class WriteInput(FileInput):
+    tool_name = 'Write'
+
+
+class PatternInput(ToolInput, ABC):
+    pattern: str
+
+    @property
+    def subject(self) -> str:
+        return self.pattern
+
+
+class GrepInput(PatternInput):
+    tool_name = 'Grep'
+
+
+class GlobInput(PatternInput):
+    tool_name = 'Glob'
+
+
+class FetchInput(ToolInput):
+    tool_name = 'WebFetch'
+    url: str
+
+    @property
+    def subject(self) -> str:
+        return self.url
+
+
+class QueryInput(ToolInput, ABC):
+    query: str
+
+    @property
+    def subject(self) -> str:
+        return self.query
+
+
+class WebSearchInput(QueryInput):
+    tool_name = 'WebSearch'
+
+
+class ToolSearchInput(QueryInput):
+    tool_name = 'ToolSearch'
+
+
+class DescribedInput(ToolInput, ABC):
+    description: str
+
+    @property
+    def subject(self) -> str:
+        return self.description
+
+
+class AgentInput(DescribedInput):
+    tool_name = 'Agent'
+
+
+class TaskInput(DescribedInput):
+    tool_name = 'Task'
+
+
+class SkillInput(ToolInput):
+    tool_name = 'Skill'
+    skill: str
+
+    @property
+    def subject(self) -> str:
+        return self.skill
+
+
 class ToolUse(AssistantBlock):
     wire_tag = 'tool_use'
     id: str
     name: str
     input: JsonValue
+    _tool_input: ToolInput = PrivateAttr()
+
+    @model_validator(mode='after')
+    def _decode_input(self) -> ToolUse:
+        # The record's own input is decoded once, here at the boundary.
+        self._tool_input = ToolInput.decode(self.name, self.input)
+        return self
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        call = ToolCall(self.id, self.name, self.input)
+        call = ToolCall(self.id, self.name, self.input, self._tool_input.subject)
         session.started(call)
         return (ActiveItem(session.turn, self.id, ActivityState.WORKING, call.title),)
 
