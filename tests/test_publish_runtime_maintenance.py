@@ -38,6 +38,26 @@ def _publisher(tmp_path, monkeypatch, comms, publish, route_read):
     return entry, requests
 
 
+def test_runtime_pointer_replacement_syncs_its_directory(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'tools/cutover'))
+    entry = importlib.import_module('publish_runtime')
+    target = tmp_path / 'runtime'
+    target.mkdir()
+    link = tmp_path / 'current'
+    sync = entry.os.fsync
+    synced = []
+
+    def observe(directory):
+        synced.append(os.fstat(directory).st_ino)
+        return sync(directory)
+
+    with monkeypatch.context() as recorder:
+        recorder.setattr(entry.os, 'fsync', observe)
+        entry.RuntimePublication.replace_link(link, target)
+    assert link.resolve(strict=True) == target
+    assert synced == [tmp_path.stat().st_ino]
+
+
 @pytest.mark.asyncio
 async def test_mid_publication_channel_post_runs_after_clear(tmp_path, monkeypatch):
     comms, agent, _root_id = _session(tmp_path)

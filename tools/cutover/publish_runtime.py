@@ -74,6 +74,14 @@ class RuntimePublication:
         try:
             temporary.symlink_to(target)
             os.replace(temporary, link)
+            # The phase is cleared only after this pointer is durable. An fsync
+            # failure after replacement has UNKNOWN outcome and leaves the
+            # maintenance gate closed for review.
+            directory = os.open(link.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
         finally:
             temporary.unlink(missing_ok=True)
 
