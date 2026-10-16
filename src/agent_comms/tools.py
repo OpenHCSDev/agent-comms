@@ -124,7 +124,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](NativeRequestTools, NativeExe
         return result
 
     @classmethod
-    def invoke(cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller = NoThreadCaller()) -> JsonObject:
+    def invoke(cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller) -> JsonObject:
         if cls.family_discriminator in arguments:
             raise ValueError("Unknown tool argument: tool")
         try:
@@ -1009,7 +1009,7 @@ def context_tool_catalog(context: str) -> list[JsonObject]:
     return [tool.schema() for tool in tools]
 
 
-def invoke_tool(comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller = NoThreadCaller()) -> JsonObject:
+def invoke_tool(comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller) -> JsonObject:
     return ToolRequest.decode(name).invoke(comms, arguments, caller=caller)
 
 
@@ -1018,7 +1018,7 @@ def invoke_context_tool(
     name: str,
     *,
     subject: str,
-    actor: str | None = None,
+    actor: str | None,
     arguments: Mapping[str, object] | None = None,
 ) -> JsonObject:
     tool = ToolRequest.decode(name)
