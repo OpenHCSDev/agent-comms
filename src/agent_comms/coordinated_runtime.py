@@ -141,7 +141,7 @@ class SelectedExecution:
         # Package acquisition belongs to this execution before it can select
         # a claim. Join its blocking verification before that custody advances.
         await Coordination.run_worker(self.validate)
-        comms = Comms(self.root)
+        comms = Comms.for_runtime(self.root)
         with Coordination(str(self.root / "coordination.sqlite3")) as store:
             while True:
                 async with SelectedParticipant.select(

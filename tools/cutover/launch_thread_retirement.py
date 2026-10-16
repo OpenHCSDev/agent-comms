@@ -17,7 +17,7 @@ def main():
     original = ActiveRoute.from_record(packet['original_route'])
     target = ActiveRoute.from_record(packet['target_route'])
     path, receipt = Path(packet['route_path']), Path(packet['receipt'])
-    service = Comms(Path(handoff.root))
+    service = Comms.for_runtime(Path(handoff.root))
     stopped = StoppedOwnerBatch.accept(service.owners, wire_descriptor, handoff)
     # Validate EVERY original process/admission witness before publication.
     snapshot = service.registry.snapshot()

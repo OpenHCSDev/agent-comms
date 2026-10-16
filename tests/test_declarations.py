@@ -32,11 +32,11 @@ def test_private_marker_checks_relative_and_absolute_ancestor_permissions(
     monkeypatch.chdir(unsafe)
     for root in (Path("relative-wire"), unsafe / "absolute-wire"):
         with pytest.raises(RelationViolationError, match="ancestry is not trusted"):
-            Comms(root, private_initial_writes=True).messaging.initialize_private_initial_protocol()
+            Comms.for_runtime(root, private_initial_writes=True).messaging.initialize_private_initial_protocol()
         assert not (root / "bus_meta.json").exists()
         assert not (root / "bus.jsonl").exists()
     monkeypatch.chdir(tmp_path)
-    safe = Comms(Path("safe-relative"), private_initial_writes=True)
+    safe = Comms.for_runtime(Path("safe-relative"), private_initial_writes=True)
     assert len(safe.messaging.initialize_private_initial_protocol()) == 32
 
 
@@ -312,7 +312,7 @@ class TestRegistration:
         assert "turn_epochs" not in leased.to_wire()
 
     def test_comms_begin_turn_cannot_revive_stopped_owner(self, tmp_path: Path) -> None:
-        comms = Comms(tmp_path / "wire")
+        comms = Comms.for_runtime(tmp_path / "wire")
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         comms.registry.unregister("a")
         with pytest.raises(RelationViolationError, match="stopped or unavailable"):
@@ -325,9 +325,9 @@ class TestRegistration:
     def test_private_marker_can_precede_first_registry_snapshot(self, tmp_path: Path) -> None:
         root = tmp_path / "private-fresh"
         root.mkdir(mode=0o700)
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms.for_runtime(root, private_initial_writes=True)
         comms.messaging.initialize_private_initial_protocol()
-        reopened = Comms(root)
+        reopened = Comms.for_runtime(root)
         reopened.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         assert reopened.registry.snapshot().owner_identity("a").generation > 0
 
@@ -337,7 +337,7 @@ class TestRegistration:
     ) -> None:
         root = tmp_path / "private-wire"
         root.mkdir(mode=0o700)
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms.for_runtime(root, private_initial_writes=True)
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         comms.messaging.initialize_private_initial_protocol()
         registry_path = root / "registry.json"
@@ -359,7 +359,7 @@ class TestRegistration:
         from agent_comms import store_files
 
         root = tmp_path / "isolated-private-root"
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms.for_runtime(root, private_initial_writes=True)
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         root_id = comms.messaging.initialize_private_initial_protocol()
         assert len(root_id) == 32
@@ -435,7 +435,7 @@ class TestRegistration:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         root = tmp_path / "new-private"
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms.for_runtime(root, private_initial_writes=True)
         comms.registry.declare(Thread(name="sender", tags=frozenset(), worktree="/wt"))
         original_fsync = os.fsync
         def fsync(fd: int) -> None:
@@ -463,7 +463,7 @@ class TestRegistration:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
     ) -> None:
         root = tmp_path / "private"
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms.for_runtime(root, private_initial_writes=True)
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         comms.messaging.initialize_private_initial_protocol()
         original_pwrite = os.pwrite
@@ -492,7 +492,7 @@ class TestRegistration:
         self, tmp_path: Path, damage: str
     ) -> None:
         root = tmp_path / "guarded"
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms.for_runtime(root, private_initial_writes=True)
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt", process_identity=ProcessIdentity.capture(os.getpid())))
         comms.messaging.initialize_private_initial_protocol()
         cold = Registration(root / "registry.json")
@@ -597,7 +597,7 @@ class TestRegistration:
 
 
 def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tmp_path, monkeypatch):
-    comms = Comms(tmp_path)
+    comms = Comms.for_runtime(tmp_path)
     for name in ("a", "b"):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
     for sender, target in (("missing", "b"), ("a", "missing")):
@@ -610,7 +610,7 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
     ]
     assert [row.seq for row in messages] == [1, 2, 3]
     assert len({row.message_id for row in messages}) == 3
-    reopened = Comms(tmp_path)
+    reopened = Comms.for_runtime(tmp_path)
     assert reopened.views.full_history() == messages
     reopened.registry.rename("a", "renamed")
     monkeypatch.setattr(reopened.bus.log, "full_history", lambda: pytest.fail("full scan"))

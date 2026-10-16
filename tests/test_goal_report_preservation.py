@@ -37,7 +37,7 @@ def files(root):
 
 @pytest.mark.parametrize('disposition', ['reported', 'clear', 'replace', 'edit', 'older_release'])
 def test_current_projection_preserves_reports_without_retirement(tmp_path, disposition):
-    service = Comms(tmp_path / 'current')
+    service = Comms.for_runtime(tmp_path / 'current')
     service.registry.register(Thread('author', frozenset(), str(service.root),
                                     process_identity=ProcessIdentity.capture(os.getpid())),
                               new_owner=True)

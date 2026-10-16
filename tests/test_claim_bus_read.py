@@ -78,7 +78,7 @@ def selected_turn():
         worktree.mkdir(mode=0o700)
         resource = worktree / "module.py"
         resource.write_text("value = 1\n")
-        comms = Comms(root)
+        comms = Comms.for_runtime(root)
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
             comms.registry.declare(Thread(
                 name, frozenset({"team"}), str(worktree),

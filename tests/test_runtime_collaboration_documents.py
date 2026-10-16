@@ -27,7 +27,7 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
     arguments = ["--provider=response-local", "--model=fixture", "--thinking=off", "--offline", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"]
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     agent = canonical_agent(
-        Comms(native.root), auto_wake=False, runtime_enabled=False,
+        Comms.for_runtime(native.root), auto_wake=False, runtime_enabled=False,
         agent_args=arguments,
     )
     child = None

@@ -17,7 +17,7 @@ from pathlib import Path
 
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
-from .comms import wire
+from .comms import Comms
 from .owner_restart import StoppedOwnerFailure
 
 
@@ -35,7 +35,10 @@ class CliArgumentParser(argparse.ArgumentParser):
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from .native_settings import NativeThreadDefaults
+
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
+    NativeThreadDefaults.add_cli_arguments(parser)
     parser.add_argument(
         "--root",
         default=None,
@@ -56,7 +59,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.admit_client())
-            comms = wire(route)
+            from .native_settings import NativeThreadDefaults
+
+            comms = Comms.bound(route, native=NativeThreadDefaults.from_namespace(args))
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130

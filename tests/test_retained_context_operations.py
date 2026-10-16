@@ -111,7 +111,7 @@ def test_original_human_pin_revision_drop_and_atomic_export(comms, capsys):
     # No semantic sidecar is needed for a new Comms instance to read the result.
     from agent_comms.comms import Comms
 
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     restored = reopened.bus.log.retained_context(owner.name, reopened.registry)
     assert restored.text() == comms.bus.log.retained_context(owner.name, comms.registry).text()
 
@@ -217,7 +217,7 @@ def original_input_consumer_journey(tmp_path, command):
     assert snapshot.original_text_source(snapshot.retained.current_authored_sources(
         comms.registry.require("renamed-beta"), comms.registry.snapshot())[0]) == originals[0]
     from agent_comms.comms import Comms
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     assert reopened.bus.log.retained_context("renamed-beta", reopened.registry).text() == (
         comms.bus.log.retained_context("renamed-beta", comms.registry).text())
     assert all(stored_inputs(inputs.root).lookup(row.key) == row and row.unresolved for row in originals)

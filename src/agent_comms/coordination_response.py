@@ -355,7 +355,7 @@ class LiveResponseOwner(RegistryOwner):
         # can close or report cancellation; no input/goal is reconstructed.
         from .comms import Comms
 
-        goals = Comms(bus.log.path.parent).goals
+        goals = Comms.for_runtime(bus.log.path.parent).goals
         for assignment in published.assignments:
             goals.consume_reply_wait(self, assignment.source)
         return published

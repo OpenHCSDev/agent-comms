@@ -48,7 +48,7 @@ pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 def _session(tmp_path, *, package=True):
     root = tmp_path / "wire"
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     comms.registry.declare(
         Thread(
             "sender",
@@ -99,7 +99,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     root = tmp_path / "wire"
     project = tmp_path / "proj"
     project.mkdir()
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     comms.registry.declare(
         Thread(
             "sender",

@@ -35,7 +35,7 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
         worktree.mkdir(mode=0o700)
         resource = worktree / "module.py"
         resource.write_text("value = 1\n")
-        comms = Comms(root)
+        comms = Comms.for_runtime(root)
         people = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
         for name, created_at in people.items():
             comms.registry.declare(

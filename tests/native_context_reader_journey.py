@@ -45,7 +45,7 @@ async def read_original_context(
     before = fixture.session.read_bytes()
     original_inputs = fixture.saved_inputs()
     owner = canonical_agent(
-        Comms(fixture.root), agent_bin="pi",
+        Comms.for_runtime(fixture.root), agent_bin="pi",
         agent_args=["--model", "response-local/fixture", "--offline"],
         auto_wake=False, runtime_enabled=True,
     )

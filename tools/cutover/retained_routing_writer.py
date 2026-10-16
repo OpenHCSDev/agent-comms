@@ -15,7 +15,7 @@ from routing_recovery import retain_originals
 
 def main():
     root, target_python, installer, root_id, receipt, provenance_declaration = sys.argv[1:]
-    service = Comms(Path(root))
+    service = Comms.for_runtime(Path(root))
     environment = dict(os.environ)
     environment.pop('PYTHONPATH', None)
     with (service.bus.log.locked() as custody,

@@ -26,7 +26,7 @@ pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus requires
 def _wire(base: Path) -> tuple[Comms, str]:
     root = base / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     comms.registry.declare(
         Thread(
             "sender", frozenset(), str(base), process_identity=ProcessIdentity.capture(os.getpid())

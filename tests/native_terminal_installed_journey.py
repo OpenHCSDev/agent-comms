@@ -30,7 +30,7 @@ async def main(output, package, launcher, provider, model, thinking):
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = output / 'project'
     project.mkdir(mode=0o700)
-    comms = Comms(output / 'wire')
+    comms = Comms.for_runtime(output / 'wire')
     root_id = comms.messaging.initialize_private_initial_protocol()
     os.environ.update({
         'AGENT_COMMS_ROOT': str(comms.root), ROOT_ID_ENV: root_id,

@@ -114,7 +114,7 @@ def root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def comms(root: Path) -> Comms:
-    return Comms(root)
+    return Comms.for_runtime(root)
 
 
 @pytest.fixture

@@ -158,7 +158,7 @@ def test_restart_recovery_preserves_native_outcome_without_replaying(released_fa
     rows = [json.loads(line) for line in session_file.read_text().splitlines()]
     rows[-1]["message"]["stopReason"] = stop
     session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     owner = comms.registry.require("beta")
     with pytest.raises(OwnerBusyRefusal):
         comms.owners.require_restart_idle(owner)
@@ -249,7 +249,7 @@ def replacement_release(root):
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
 
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     owner = comms.registry.require("beta")
     comms.registry.register(
         replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), new_owner=True

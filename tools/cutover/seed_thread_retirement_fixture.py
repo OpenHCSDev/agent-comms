@@ -119,7 +119,7 @@ def main():
     root, route = map(Path, sys.argv[1:])
     root.mkdir(mode=0o700)
     route.parent.mkdir(mode=0o700)
-    service = Comms(root, private_initial_writes=True)
+    service = Comms.for_runtime(root, private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
     package = Path(os.environ['AC_NATIVE_COPIED_PACKAGE'])
     service.owners.pin_private_nk_launch(root, root_id, package)
@@ -178,7 +178,7 @@ def main():
 
 if __name__ == '__main__':
     if sys.argv[1] == '--historical':
-        service = Comms(Path(sys.argv[2]), private_initial_writes=True)
+        service = Comms.for_runtime(Path(sys.argv[2]), private_initial_writes=True)
         print(json.dumps({'input_id': seed_historical_failure(service, sys.argv[3])}))
     else:
         main()

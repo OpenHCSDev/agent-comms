@@ -22,7 +22,7 @@ from agent_comms.threads import Thread
 
 
 def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_path):
-    comms = Comms(tmp_path / 'wire')
+    comms = Comms.for_runtime(tmp_path / 'wire')
     store = comms.goals.open_goal_store()
     goal = Goal(text='Historical objective; past execution is uncertain', id=uuid4().hex,
                 state=BlockedGoal('Inspect uncertain original work before explicit Retry'))

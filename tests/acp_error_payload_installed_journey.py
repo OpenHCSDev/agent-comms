@@ -25,6 +25,7 @@ import agent_comms
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import RequestFailure, ProviderQuotaFailure
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
@@ -119,7 +120,9 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
         "compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
     }))
-    comms = Comms(root)
+    native = NativeThreadDefaults(binary=NativeThreadDefaults.runtime_binary(), arguments=("--offline", "--no-extensions", "--no-skills",
+                                             "--no-context-files", "--no-tools"))
+    comms = Comms(root, native=native)
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(root, root_id, package)
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)
@@ -129,8 +132,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
                    if not key.startswith(("PI_", "AGENT_COMMS_")) and key != "PYTHONPATH"}
     environment.update(
         PYTHONPATH=str(installed), PI_CODING_AGENT_DIR=str(config),
-        AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), AGENT_COMMS_AGENT_BIN="pi",
-        AGENT_COMMS_AGENT_ARGS="--offline --no-extensions --no-skills --no-context-files --no-tools",
+        AGENT_COMMS_NATIVE_CONFIG_DIR=str(config),
         AGENT_COMMS_AGENT_MODELS="error-local/error-fixture", AGENT_COMMS_ROOT=str(root),
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id, AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
         XDG_CONFIG_HOME=str(evidence / "config"), XDG_DATA_HOME=str(evidence / "data"),
@@ -138,7 +140,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
     )
     @asynccontextmanager
     async def attached(subscriber):
-        async with spawn_agent_process(subscriber, sys.executable, "-m", "agent_comms.acp",
+        async with spawn_agent_process(subscriber, sys.executable, "-m", "agent_comms.acp", *native.cli_arguments,
                                        env=environment, cwd=project) as (client, process):
             await client.initialize(protocol_version=1, client_capabilities={})
             await client.load_session(cwd=str(project), session_id="error-native", mcp_servers=[])

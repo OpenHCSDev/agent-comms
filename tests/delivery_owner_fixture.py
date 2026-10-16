@@ -64,6 +64,6 @@ def drain_diagnostic(comms, thread):
     from agent_comms.comms import Comms
 
     view = next(
-        view for view in Comms(comms.root).views.thread_views() if view.thread.name == thread
+        view for view in Comms.for_runtime(comms.root).views.thread_views() if view.thread.name == thread
     )
     return view.activity.readiness.source_diagnostic()

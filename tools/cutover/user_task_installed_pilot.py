@@ -30,7 +30,7 @@ def main():
     )
     results = []
     for name in names:
-        service = Comms(stage / name)
+        service = Comms.for_runtime(stage / name)
         getattr(controls, name)(service)
         snapshot = service.registry.snapshot()
         assert all(not owner.pid and owner.turn_lease is None

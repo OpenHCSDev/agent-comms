@@ -16,6 +16,7 @@ from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.child_process import AttachedChild
 from agent_comms.field_codec import FieldCodec
 from agent_comms.private_nk_entrypoint import ROOT_ID_ENV
@@ -55,7 +56,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         pytest.skip(
             "Set QUEUE_SOURCE_RUNTIME and QUEUE_SOURCE_PACKAGE to retained reviewed source pins"
         )
-    comms = Comms(fixture.root)
+    comms = Comms.for_runtime(fixture.root)
     comms.owners.pin_private_nk_launch(
         comms.root, os.environ[ROOT_ID_ENV], Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     )
@@ -70,10 +71,9 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         )
     )
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    monkeypatch.setenv(
-        "AGENT_COMMS_AGENT_ARGS",
-        "--offline --no-extensions --no-skills --no-context-files --no-tools",
-    )
+    comms.owners.native_defaults = NativeThreadDefaults(binary=comms.owners.native_defaults.binary, arguments=(
+        "--offline", "--no-extensions", "--no-skills", "--no-context-files", "--no-tools",
+    ))
     start_watcher = queue._start_watcher
     watchers = []
 
@@ -206,13 +206,14 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             replacement.model == original.model
             and replacement.thinking_level == original.thinking_level
         )
-        replacement_env = RetainedOwnerLaunch.capture(
+        replacement_launch = RetainedOwnerLaunch.capture(
             replacement, comms.registry.snapshot(), interpreter=target_interpreter
-        ).environment
+        )
+        replacement_env = replacement_launch.environment
         assert replacement_env["QUEUE_FIXTURE_AUTH_SENTINEL"] == "source-auth-only"
         assert replacement_env["PI_CODING_AGENT_DIR"] == str(fixture.config)
         assert replacement_env[PACKAGE_ENV] == str(target_package)
-        assert replacement_env[NativeArguments.binary_key] == request.target.agent_bin
+        assert replacement_launch.native.binary == request.target.agent_bin
         assert replacement_env.get("PYTHONPATH") == os.environ.get("PYTHONPATH")
         assert replacement_env.get("VIRTUAL_ENV") == os.environ.get("VIRTUAL_ENV")
         assert fixture.session.read_bytes().startswith(before)

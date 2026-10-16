@@ -31,7 +31,7 @@ def main():
     RetiredGoalReportProjection.require_source_runtime()
     root = Path(sys.argv[1])
     root.mkdir(mode=0o700)
-    service = Comms(root)
+    service = Comms.for_runtime(root)
     registry = service.registry
     source = Thread('captured-original', frozenset({'original'}), str(root),
                     process_identity=ProcessIdentity.capture(os.getpid()),
@@ -67,7 +67,7 @@ def runtime_owners(root, package):
     from seed_thread_retirement_fixture import ready
 
     root.mkdir(mode=0o700)
-    service = Comms(root, private_initial_writes=True)
+    service = Comms.for_runtime(root, private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(root, root_id, package)
     os.environ.update(AGENT_COMMS_ROOT=str(root),

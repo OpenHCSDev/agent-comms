@@ -350,7 +350,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             yield from chunks()
 
         monkeypatch.setattr(native.provider, "response_chunks", with_progress)
-    comms = Comms(native.root)
+    comms = Comms.for_runtime(native.root)
     owner = CommsAgent(
         comms,
         agent_bin="pi",
@@ -422,7 +422,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
     settings = json.loads((config / "settings.json").read_text())
     settings["compaction"] = {"enabled": True, "reserveTokens": 128, "keepRecentTokens": 32}
     (config / "settings.json").write_text(json.dumps(settings))
-    comms = Comms(native.root)
+    comms = Comms.for_runtime(native.root)
     owner = CommsAgent(
         comms,
         agent_bin="pi",

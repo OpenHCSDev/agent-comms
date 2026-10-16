@@ -178,7 +178,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     from agent_comms.native_arguments import NativeArguments
 
     arguments = ("--model", "test/model")
-    configured_model = NativeArguments.configured(arguments).model
+    configured_model = NativeArguments.parse(arguments).model
     assert configured_model is not None
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = wire(tmp_path / "wire")

@@ -128,7 +128,7 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
 
     # Real registry, private bus/cohort, slot acquisition and publication; only
     # the native model is fake. A different input must run, never the old one.
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms.for_runtime(root, private_initial_writes=True)
     comms.registry.register(
         replace(
             comms.registry.require("beta"), process_identity=ProcessIdentity.capture(os.getpid())
@@ -222,7 +222,7 @@ def test_missing_admission_cannot_borrow_a_live_successor_release(released_unkno
             is not None
         ):
             return  # Recorded admission already binds to the earlier attested release.
-        comms = Comms(root)
+        comms = Comms.for_runtime(root)
         comms.registry.register(
             replace(
                 comms.registry.require("beta"),

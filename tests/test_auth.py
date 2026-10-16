@@ -7,6 +7,7 @@ from agent_comms.comms import wire
 from agent_comms.config_options import InvalidConfigChoice, ModelConfigOption
 from agent_comms.login import run_login
 from agent_comms.native_arguments import NativeArguments
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.owner_launch import RestartEnvironment
 from agent_comms.threads import Thread
@@ -52,7 +53,7 @@ async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_m
 def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "must-not-be-adopted")
     monkeypatch.setenv("AGENT_COMMS_MANAGED", "1")
-    monkeypatch.setenv("AGENT_COMMS_AGENT_BIN", "pi-custom")
+    native = NativeThreadDefaults(binary="pi-custom")
     captured = {}
 
     def call(args, env):
@@ -60,7 +61,7 @@ def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
         return 0
 
     monkeypatch.setattr("agent_comms.login.subprocess.call", call)
-    assert run_login("openai-codex") == 0
+    assert run_login("openai-codex", settings=native) == 0
     assert captured["args"][0] == "pi-custom"
     assert "--no-session" in captured["args"] and "--no-tools" in captured["args"]
     assert "--mode" not in captured["args"] and "--print" not in captured["args"]
@@ -68,7 +69,7 @@ def test_login_uses_pi_native_ui_without_managed_thread_identity(monkeypatch):
     assert "AGENT_COMMS_THREAD" not in captured["env"]
     assert "AGENT_COMMS_MANAGED" not in captured["env"]
     with pytest.raises(ValueError):
-        run_login("invalid\ncommand")
+        run_login("invalid\ncommand", settings=NativeThreadDefaults.from_runtime())
 
 
 async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
@@ -85,7 +86,7 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)
     agent = canonical_agent(
-        wire(tmp_path), agent_bin=NativeArguments.owner_launcher(),
+        wire(tmp_path), agent_bin=NativeThreadDefaults.runtime_binary(),
         agent_args=["--model", "test/base"],
     )
     # Exercise the explicit refresh path without the background drain racing it.

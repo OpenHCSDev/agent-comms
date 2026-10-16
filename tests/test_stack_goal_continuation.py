@@ -16,6 +16,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
+from agent_comms.native_settings import NativeThreadDefaults
+from native_backend_fixture import native_run_command
 
 
 @pytest.mark.asyncio
@@ -143,8 +145,6 @@ async def test_mounted_goal_continues_without_progress_tool(
             "XDG_DATA_HOME": str(root / "data"),
             "XDG_STATE_HOME": str(root / "state"),
             "AGENT_COMMS_ROOT": str(root / "wire"),
-            "AGENT_COMMS_AGENT_BIN": native,
-            "AGENT_COMMS_AGENT_ARGS": shlex.join(native_args),
             "AGENT_COMMS_AGENT_MODELS": model,
         }.items():
             monkeypatch.setenv(key, value)
@@ -201,7 +201,9 @@ async def test_mounted_goal_continues_without_progress_tool(
                 "name": "Agent Comms",
                 "identity": "goal-continuation-test",
                 "short_name": "goal",
-                "run_command": {"*": f"{sys.executable} -m agent_comms.acp"},
+                "run_command": {
+                    "*": native_run_command(NativeThreadDefaults(binary=native, arguments=tuple(native_args)))
+                },
                 "protocol": "acp",
             },
             project_dir=str(project),

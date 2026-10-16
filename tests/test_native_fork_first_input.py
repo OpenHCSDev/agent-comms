@@ -20,6 +20,7 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_commands import GetSessionStats, GetState
@@ -110,7 +111,7 @@ class ForkOwnerCase(OwnerAdmissionCase):
             saved = comms.relationships.collaborations(owner.name)
             assert len(saved) == 1
             assert saved[0].counterpart(owner) == peer.incarnation
-        reopened = Comms(comms.root)
+        reopened = Comms.for_runtime(comms.root)
         assert reopened.relationships.collaborations(parent.name) == (edge,)
         assert reopened.registry.require(parent.name) == parent
 
@@ -171,14 +172,13 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     await native.persistent.close()
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     monkeypatch.setenv(
-        "AGENT_COMMS_AGENT_ARGS", "--offline --no-extensions --no-skills --no-context-files"
-    )
-    monkeypatch.setenv(
         "PATH", str(Path(os.sys.executable).parent) + os.pathsep + os.environ["PATH"]
     )
     debug_log = native.project / "runtime-debug.log"
     monkeypatch.setenv("AGENT_COMMS_DEBUG_LOG", str(debug_log))
-    comms = Comms(native.root)
+    comms = Comms(native.root, native=NativeThreadDefaults(
+        binary=NativeThreadDefaults.runtime_binary(), arguments=("--offline", "--no-extensions", "--no-skills", "--no-context-files"),
+    ))
     comms.registry.declare(
         Thread(
             "physical-parent",

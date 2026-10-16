@@ -14,7 +14,6 @@ import sys
 import uuid
 from dataclasses import dataclass, field, replace
 from typing import ClassVar
-from collections.abc import Mapping
 
 from .child_process import ProcessIdentity, ParentedProcess
 from .declared_family import DeclaredFamily

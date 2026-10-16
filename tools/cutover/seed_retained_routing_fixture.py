@@ -19,7 +19,7 @@ def main():
     seeded = subprocess.run([sys.executable, str(Path(__file__).with_name('seed_retained_index_fixture.py')),
                              str(root)], check=True, capture_output=True, text=True)
     seed = json.loads(seeded.stdout)
-    service = Comms(root)
+    service = Comms.for_runtime(root)
     original = Message.from_committed_wire(seed['original'])
     prompt = 'Original exact native request'
     script = """

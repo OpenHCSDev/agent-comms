@@ -62,7 +62,7 @@ def test_private_claim_root_keeps_normal_coding_tools(tmp_path, monkeypatch):
 
     root = tmp_path / "claim-wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     root_id = comms.messaging.initialize_private_initial_protocol()
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     selected = PrivateNkLaunch.from_environment(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
@@ -334,7 +334,7 @@ def test_client_custody_explicit_published_root_and_cross_thread_retirement(tmp_
 
 def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
-    legacy = Comms(tmp_path / ".agent-comms")
+    legacy = Comms.for_runtime(tmp_path / ".agent-comms")
     for name in ("sender", "receiver"):
         legacy.registry.declare(
             Thread(
@@ -498,7 +498,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
     other.mkdir()
     link = tmp_path / "public-link"
     link.symlink_to(physical, target_is_directory=True)
-    comms = Comms(link)
+    comms = Comms.for_runtime(link)
     seen = []
 
     class StopBeforeSpawnError(Exception):
@@ -522,7 +522,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
 def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
     other = tmp_path / "other"
     other.mkdir()
@@ -560,9 +560,12 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     class StopBeforeSpawnError(Exception):
         pass
 
-    def intercept(_argv, *, env, **_kwargs):
+    def intercept(argv, *, env, pass_fds, **_kwargs):
+        from agent_comms.native_settings import NativeThreadDefaults
+
         assert env["AGENT_COMMS_ROOT"] == str(root)
-        assert env["AGENT_COMMS_AGENT_BIN"] == str(
+        assert argv[-2:] == (NativeThreadDefaults.descriptor_flag, str(pass_fds[0]))
+        assert NativeThreadDefaults.from_descriptor(pass_fds[0]).binary == str(
             Path(sys.executable).with_name("pi-comms-native")
         )
         with Coordination(str(root / "coordination.sqlite3")) as store:

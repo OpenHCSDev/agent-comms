@@ -1,7 +1,9 @@
 """Launch selection has one grammar, then typed consumers and native validation."""
 
 import ast
+import os
 import re
+import sys
 from pathlib import Path
 
 from native_proof_cases import read_proof_rows
@@ -20,13 +22,46 @@ from agent_comms.pi_vocabulary import OffThinkingLevel
 
 
 def test_unconfigured_launch_has_no_provider_or_model_policy():
-    arguments = NativeArguments.configured(environment={})
+    from agent_comms.native_settings import NativeThreadDefaults
+
+    arguments = NativeArguments.configured(NativeThreadDefaults.from_runtime())
     assert arguments.argv == ()
     assert arguments.model is None
     assert arguments.thinking is None
-    assert NativeArguments.configured(environment={
-        NativeArguments.arguments_key: "--provider user --model selected",
-    }).model == "user/selected"
+    assert NativeArguments.configured(NativeThreadDefaults(
+        binary=NativeThreadDefaults.runtime_binary(),
+        arguments=("--provider", "user", "--model", "selected"),
+    )).model == "user/selected"
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux sealed launch descriptor")
+def test_native_settings_private_descriptor_and_public_cli_share_the_declared_codec():
+    from agent_comms.native_settings import NativeThreadDefaults
+
+    selected = NativeThreadDefaults(binary="/fixture pi", arguments=("--label", "two words"))
+    assert NativeThreadDefaults.from_cli(selected.cli_arguments) == selected
+    with selected.inherited() as (arguments, descriptors):
+        descriptor, = descriptors
+        assert arguments == (selected.descriptor_flag, str(descriptor))
+        assert "two words" not in arguments
+        assert NativeThreadDefaults.from_descriptor(descriptor) == selected
+        assert NativeThreadDefaults.from_process(os.getpid(), arguments) == selected
+        with pytest.raises(OSError):
+            os.pwrite(descriptor, b"changed", 0)
+    with pytest.raises(OSError):
+        os.fstat(descriptor)
+
+
+def test_native_settings_require_explicit_original_selection_and_valid_binary():
+    from agent_comms.native_settings import NativeThreadDefaults
+    from agent_comms.owner_restart import OwnerRestartRequest
+
+    with pytest.raises(ValueError, match="no typed native launch settings"):
+        NativeThreadDefaults.from_process(os.getpid(), ("python", "-m", "agent_comms.worker"))
+    with pytest.raises(ValueError, match="native binary"):
+        NativeThreadDefaults(binary="")
+    with pytest.raises(ValueError, match="native binary"):
+        OwnerRestartRequest(agent_bin="").validate(NativeThreadDefaults.from_runtime())
 
 
 def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments():
@@ -122,7 +157,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
     proof = read_proof_rows(native.session)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     owner = canonical_agent(
-        Comms(native.root),
+        Comms.for_runtime(native.root),
         auto_wake=False,
         agent_args=[
             "--provider=response-local",

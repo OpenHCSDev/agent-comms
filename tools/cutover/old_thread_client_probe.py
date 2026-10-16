@@ -11,7 +11,7 @@ from agent_comms.errors import RelationViolationError
 
 def main():
     root = Path(sys.argv[1])
-    service = Comms(root)
+    service = Comms.for_runtime(root)
     assert all(not thread.process_alive for thread in service.registry.all_threads().values())
     registry = root / 'registry.json'
     before = json.loads(registry.read_text())

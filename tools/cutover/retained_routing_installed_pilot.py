@@ -247,7 +247,7 @@ def main():
         assert 'publications' not in json.loads(display[3])
         assert all(json.loads(row[0])['requests'] == json.loads(display[3])['requests']
                    for row in db.execute('SELECT routing FROM transcript_route'))
-    service = Comms(stage / 'reader')
+    service = Comms.for_runtime(stage / 'reader')
     receipt = json.loads((stage / 'carry-receipt.json').read_text())
     acquired = FieldCodec.decode(HistorySource, receipt['recorded_source'])
     source = service.views.attach_history(root, source_read=acquired)

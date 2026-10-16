@@ -109,7 +109,7 @@ async def test_relevant_write_burst_cannot_postpone_owner_wake(tmp_path):
 
 @pytest.mark.asyncio
 async def test_private_guard_read_does_not_wake_its_own_wire_watcher(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms.for_runtime(tmp_path)
     comms.registry.declare(
         Thread(
             "owner",
