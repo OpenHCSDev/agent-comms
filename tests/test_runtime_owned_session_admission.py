@@ -82,3 +82,32 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
         await client.shutdown()
         await owner.shutdown()
     assert not socket_path(root, os.getpid()).exists()
+
+
+@pytest.mark.parametrize("replacement", ("rename", "remove", "recreate", "new_lease"))
+async def test_shutdown_releases_only_the_acquired_owner(tmp_path, replacement):
+    comms = Comms(tmp_path / "wire")
+    owner = CommsAgent(comms, runtime_enabled=False, auto_wake=False)
+    thread = owner.sessions.declare_thread(str(tmp_path / "original"))
+    await owner.sessions.bind_owned(thread, "original-session")
+    if replacement == "rename":
+        comms.registry.rename(thread.name, "renamed")
+    elif replacement in {"remove", "recreate"}:
+        comms.registry.remove(thread.name)
+        if replacement == "recreate":
+            comms.registry.declare(Thread(
+                thread.name, frozenset(), thread.worktree,
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            ))
+    else:
+        comms.registry.register(thread, new_owner=True)
+    await owner.shutdown()
+    assert not owner.sessions.owned
+    if replacement == "rename":
+        assert not comms.registry.status("renamed").running
+    elif replacement == "remove":
+        assert thread.name not in comms.registry.snapshot().threads
+    else:
+        current = comms.registry.require(thread.name)
+        assert current.require_process() == thread.require_process()
+        assert comms.registry.status(current.name).running

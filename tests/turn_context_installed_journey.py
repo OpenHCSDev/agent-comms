@@ -242,7 +242,7 @@ async def run_configured(options):
             # The original stopped-source owner populates private participant
             # membership before this controller acquires its own process.
             service.threads.restore_stopped(service.registry.snapshot(), (thread.name,))
-            thread = service.owners.acquire_thread(thread.name, owner_pid=os.getpid())
+            thread = service.owners.acquire_thread(thread.name, owner_pid=os.getpid()).thread
         await owner._runtime.start()
         await owner.load_session(str(project), thread.name)
         assert thread.name not in owner.turns.persistent_backends

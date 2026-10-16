@@ -503,7 +503,7 @@ asyncio.run(main())
     original = comms.registry.require(session)
     assert not original.process_alive
     comms.threads.restore_stopped(comms.registry.snapshot(), (session,))
-    thread = comms.owners.acquire_thread(session, owner_pid=os.getpid())
+    thread = comms.owners.acquire_thread(session, owner_pid=os.getpid()).thread
     owner = canonical_agent(comms, auto_wake=False)
     try:
         await owner.sessions.bind_owned(thread, session)
