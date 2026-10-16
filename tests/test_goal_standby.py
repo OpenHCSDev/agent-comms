@@ -7,7 +7,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.goal_actions import (
     EditGoalAction,
     GoalPrecondition,
@@ -24,19 +24,23 @@ from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import canonical_goal_wire
 from agent_comms.goal_waits import RecordedGoalWait, NoGoalWait
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
 async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     tmp_path, monkeypatch, changed
 ):
-    from agent_comms.native_arguments import NativeArguments
+    from agent_comms.native_settings import NativeThreadDefaults
 
-    configured_model = NativeArguments.parse(NativeArguments.default).model
-    assert configured_model is not None
+    configured_model = NativeThreadDefaults.model
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = canonical_goal_wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="pi")
+    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"))
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
     store = comms.goals.open_goal_store()
@@ -359,7 +363,7 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
     monkeypatch.setattr(GoalWaits, "clear", unavailable)
     with pytest.raises(OSError, match="wait-clear failure"):
         comms.goals.recover_closed_goal_wait("alice")
-    reopened = wire(tmp_path)
+    reopened = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     assert reopened.registry.require("alice").goal.state.active
     assert reopened.goals.goal_execution("alice").state is GoalExecutionState.STANDBY
     monkeypatch.setattr(GoalWaits, "clear", original_clear)

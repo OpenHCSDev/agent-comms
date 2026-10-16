@@ -84,7 +84,7 @@ class NativeSendStage(ABC):
         """Triage and terminal full failures have no subsequent attempt."""
 
     async def fail_unknown(self, bus, owner, witness) -> None:
-        await Coordination.run_worker(lambda: owner.require_registry(bus._registry))
+        await Coordination.run_worker(lambda: owner.require_registry(bus.registry))
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
         input_id = secrets.token_hex(16)

@@ -13,18 +13,23 @@ from acp import RequestError
 from agent_comms import agent_events as ae
 from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.queued_input import InputHandoffRefused
-from agent_comms.comms import wire
+
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.input_disposition import InputDispositions
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def owner(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="pi", runtime_enabled=True)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), runtime_enabled=True)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
     updates = []

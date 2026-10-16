@@ -1,5 +1,7 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
+from agent_comms.native_project import UnmanagedNativeProject
+
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
 from pathlib import Path
@@ -8,6 +10,8 @@ import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
@@ -114,7 +118,7 @@ def root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def comms(root: Path) -> Comms:
-    return Comms(root)
+    return Comms(LocalRoute(root), runtime=LaunchRuntime.current())
 
 
 @pytest.fixture
@@ -149,7 +153,7 @@ def native_rpc_fixture(monkeypatch):
     original_retained = NativePiRpcLaunch.retained_managed
 
     def prepare(
-        command, arguments, *, worktree, environment=None, session_file=None
+        command, arguments, *, worktree, session_context, environment=None, session_file=None
     ):
         script = Path(command)
         if not script.is_file():
@@ -157,6 +161,7 @@ def native_rpc_fixture(monkeypatch):
                 command,
                 arguments,
                 worktree=worktree,
+                session_context=session_context,
                 environment=environment,
                 session_file=session_file,
             )
@@ -177,10 +182,10 @@ def native_rpc_fixture(monkeypatch):
             ),
             Path(worktree),
             runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
-        )
+         project=UnmanagedNativeProject())
 
     def retained(
-        launch, command, arguments, *, worktree, environment=None, session_file=None
+        launch, command, arguments, *, worktree, session_context, environment=None, session_file=None
     ):
         if (
             Path(command).is_file()
@@ -196,6 +201,7 @@ def native_rpc_fixture(monkeypatch):
             command,
             arguments,
             worktree=worktree,
+            session_context=session_context,
             environment=environment,
             session_file=session_file,
         )

@@ -11,6 +11,10 @@ import os
 from pathlib import Path
 import sqlite3
 import sys
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def main():
@@ -57,10 +61,10 @@ def main():
                 'PI_PARENT_ID', 'PI_TASK', 'PI_WORKTREE', 'PI_PROMPT'):
         os.environ.pop(key, None)
 
-    from agent_comms.comms import wire
+
     from agent_comms.field_codec import FieldCodec
     from agent_comms.read_ledger import ReadLedger
-    service = wire()
+    service = Comms(resolve_comms_route(), runtime=LaunchRuntime.current())
     root = service.root
 
     def protected():

@@ -16,6 +16,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
+from agent_comms.native_settings import NativeThreadDefaults
+from native_backend_fixture import native_run_command
+from agent_comms.comms import Comms
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
@@ -29,7 +34,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
         pytest.skip("Requires prepared native Pi and mounted Toad pilot dependencies")
     from runtime_fixture import ToadApp
 
-    from agent_comms.comms import wire
+
 
     live = False
     if live and empty_response:
@@ -101,20 +106,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
         worker.start()
         model = "openai-codex/gpt-6-sol" if live else "openrouter/z-ai/glm-5.3-flash"
         provider, model_id = model.split("/", 1)
-        native_args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-            "--provider",
-            provider,
-            "--model",
-            model_id,
-            "--thinking",
-            "off",
-        ]
+        native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', provider, '--model', model_id, '--thinking', 'off']
         if model_origin:
             native_args.remove("--no-tools")
             native_args.extend(
@@ -131,8 +123,6 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
             "XDG_DATA_HOME": str(root / "data"),
             "XDG_STATE_HOME": str(root / "state"),
             "AGENT_COMMS_ROOT": str(root / "wire"),
-            "AGENT_COMMS_AGENT_BIN": native,
-            "AGENT_COMMS_AGENT_ARGS": shlex.join(native_args),
             "AGENT_COMMS_AGENT_MODELS": model,
         }.items():
             monkeypatch.setenv(key, value)
@@ -165,12 +155,14 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                 "name": "Agent Comms",
                 "identity": "goal-continuation-test",
                 "short_name": "goal",
-                "run_command": {"*": f"{sys.executable} -m agent_comms.acp"},
+                "run_command": {
+                    "*": native_run_command(NativeThreadDefaults(binary=native, arguments=tuple(native_args)))
+                },
                 "protocol": "acp",
             },
             project_dir=str(project),
         )
-        comms = wire(root / "wire")
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
 
         async def until(predicate, timeout=45):
             async with asyncio.timeout(timeout):
@@ -243,7 +235,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                     await until(lambda: native_user_starts() >= 2)
                     assert native_user_starts() == 2
                 await view.slash_command("/goal pause")
-                paused = wire(root / "wire").registry.require("project").goal
+                paused = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current()).registry.require("project").goal
                 assert (
                     paused.state.declared_name == "paused"
                     and comms.registry.require("project").goal.state.pause_source.declared_name == "owner"
@@ -259,13 +251,13 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                 )
                 with pytest.raises(ValueError, match="paused by the owner.*Do not resume"):
                     report.invoke(
-                        comms, {"goal_id": paused.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller("project")
+                        comms, {"goal_id": paused.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller(comms.registry.require('project').incarnation)
                     )
                 assert comms.registry.require("project").goal == paused
                 release.set()
                 await until(lambda: not comms.registry.require("project").executing)
                 await asyncio.sleep(0.4)
-                preserved = wire(root / "wire").registry.require("project").goal
+                preserved = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current()).registry.require("project").goal
                 assert preserved == paused
                 assert attempts()[-1][1] == "succeeded"
                 assert len(attempts()) == (1 if model_origin else 2) and len(requests) == 2

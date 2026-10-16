@@ -24,7 +24,8 @@ from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
 from agent_comms.native_admission_epoch import RecordedNativeAdmission
-from agent_comms.native_pi import NativePiTerminalFailure, NativePiUnavailable
+from agent_comms.native_pi import NativePiTerminalFailure
+from agent_comms.native_errors import NativePiUnavailable
 from compaction_loopback import LoopbackProvider
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from test_native_unknown_recovery import input_evidence
@@ -32,6 +33,9 @@ from test_selected_input_lifetime_native import (
     SelectedNativeJourney,
     configured_native_journey,
 )
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def released_native_owner(directory, package, output, exit_allowed):
@@ -115,7 +119,7 @@ async def test_installed_native_epoch_release_unknown_recovery(tmp_path, monkeyp
         exit_allowed.set()
         await asyncio.to_thread(process.join, 5)
         assert process.exitcode == 0
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current(), private_initial_writes=True)
         source = next(
             row
             for row in SelectedNativeJourney(root, root_id, comms, Path(package), True).records()

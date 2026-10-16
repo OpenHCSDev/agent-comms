@@ -8,6 +8,9 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from retained_routing_cutover import RetainedRoutingCutover
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def main():
@@ -22,7 +25,7 @@ def main():
                       **{ROOT_ID_ENV: arguments.root_id, PACKAGE_ENV: str(arguments.native_package)})
     operation = RetainedRoutingCutover(arguments.original_python, arguments.root_id,
                                        arguments.native_package, arguments.receipt)
-    results = Comms(arguments.root).owners.restart_owners(cutover=operation)
+    results = Comms(LocalRoute(arguments.root), runtime=LaunchRuntime.current()).owners.restart_owners(cutover=operation)
     print(json.dumps(FieldCodec.encode(results)), flush=True)
 
 

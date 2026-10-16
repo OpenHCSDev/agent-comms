@@ -1,7 +1,7 @@
 import pytest
 
 from agent_comms import MentionQuery
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
@@ -9,10 +9,13 @@ from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, M
 from agent_comms.routing import ScheduledTurn
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     for name in ("alpha", "beta"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     message = comms.messaging.send_user_message(
@@ -23,7 +26,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
     assert [message.body[item.start : item.end] for item in message.mentions] == ["@alpha", "@beta"]
     assert [item.message_id for item in comms.bus.inbox("alpha")] == [message.message_id]
     assert [item.message_id for item in comms.bus.inbox("beta")] == [message.message_id]
-    assert Comms(tmp_path).views.channel_history("#team")[0].mentions == message.mentions
+    assert Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current()).views.channel_history("#team")[0].mentions == message.mentions
     assert Message.from_wire(message.to_wire()) == message
     scheduled = ScheduledTurn.incoming(message)
     assert scheduled.origin.exact_reply_target == "#team"
@@ -34,7 +37,7 @@ def test_mentions_are_addressees_without_changing_channel_delivery(tmp_path):
 
 
 def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("alpha", frozenset({"team"}), str(tmp_path)))
     comms.registry.rename("alpha", "renamed")
     message = comms.messaging.send_user_message(
@@ -48,7 +51,7 @@ def test_aliases_resolve_but_emails_paths_and_unknown_names_are_plain_text(tmp_p
 
 
 def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collective(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     for name in ("alpha", "beta"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
 
@@ -157,7 +160,7 @@ def test_completion_uses_the_model_syntax_at_the_cursor():
 def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     from agent_comms.messages import AlertKind, InfoKind
 
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     for name in ("sender", "owner"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
     # A notice never wakes its recipient, so failure feedback cannot loop.
@@ -173,7 +176,7 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
     from agent_comms import invoke_tool
     from agent_comms.tool_caller import ThreadCaller
 
-    invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
+    invoke_tool = partial(invoke_tool, caller=ThreadCaller(comms.registry.require('owner').incarnation))
 
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
@@ -227,14 +230,14 @@ def test_inbox_rejects_an_empty_target(tmp_path):
 
     from agent_comms import invoke_tool
 
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("beta", frozenset({"team"}), str(tmp_path)))
     with pytest.raises(ValueError, match="inbox target"):
         invoke_tool(comms, "comms_inbox", {"thread": "beta", "target": ""})
 
 
 def test_committed_channel_mention_follows_recipient_renames_without_expanding_audience(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     for name, tags in [("alpha", {"team"}), ("observer", {"team"}), ("outsider", set())]:
         comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
     message = comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))

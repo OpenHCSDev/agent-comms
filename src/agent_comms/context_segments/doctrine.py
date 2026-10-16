@@ -1,8 +1,4 @@
-"""Maintenance doctrine injected into every comms agent's turn context.
-
-The declared source file owns the results and the confirmed worked cases;
-this segment derives its text from those bytes and owns the injection.
-"""
+"""Maintenance rules in the native session's system layer, never turn history."""
 
 from __future__ import annotations
 

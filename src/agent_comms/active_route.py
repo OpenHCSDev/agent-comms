@@ -22,6 +22,7 @@ from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, PathText
 from .wire_metadata import WireRootIdText
+from .private_nk_entrypoint import PrivateNkLaunch
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerLifecycle
@@ -62,13 +63,7 @@ class LocalRoute(CommsRoute):
     """Explicit/environment roots and the unconfigured historical default."""
 
     def bind_owners(self, owners: OwnerLifecycle) -> None:
-        from .private_nk_entrypoint import PrivateNkLaunch
-
-        launch = PrivateNkLaunch.from_environment(self.root, os.environ)
-        if launch is not None:
-            owners.pin_private_nk_launch(
-                launch.validated_root, launch.wire_root_id, launch.native_package
-            )
+        pass
 
 
 class AbsoluteRoutePathText(PathText):
@@ -92,10 +87,19 @@ class AbsoluteRoutePathText(PathText):
 
 
 @dataclass(frozen=True, slots=True)
-class ActiveRoute(CommsRoute):
+class PinnedRoute(CommsRoute):
+    """One decoded root/package selection, shared by environment and publication."""
+
     root: Annotated[Path, AbsoluteRoutePathText]
     wire_root_id: Annotated[str, WireRootIdText]
     native_package: Annotated[Path, AbsoluteRoutePathText]
+
+    def bind_owners(self, owners: OwnerLifecycle) -> None:
+        owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)
+
+
+@dataclass(frozen=True, slots=True)
+class ActiveRoute(PinnedRoute):
     version: Literal[1] = field(default=1, kw_only=True, metadata={"wire_required": True})
 
     @classmethod
@@ -119,20 +123,20 @@ class ActiveRoute(CommsRoute):
             raise RelationViolationError("private route root ID changed")
         return super(ActiveRoute, self).observe_root()
 
-    def bind_owners(self, owners: OwnerLifecycle) -> None:
-        # Actual service binding retains the bus-locked durable verification.
-        owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)
-
-
 def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRoute:
     """Resolve one current selection without creating stores or reading registry."""
     if isinstance(root, CommsRoute):
         return root
     if root is not None:
-        return LocalRoute(Path(root).expanduser().absolute())
-    if "AGENT_COMMS_ROOT" in os.environ:
-        return LocalRoute(Path(os.environ["AGENT_COMMS_ROOT"]).expanduser().absolute())
-    return read_active_route() or LocalRoute(Path.home() / ".agent-comms")
+        selected = Path(root).expanduser().absolute()
+    elif "AGENT_COMMS_ROOT" in os.environ:
+        selected = Path(os.environ["AGENT_COMMS_ROOT"]).expanduser().absolute()
+    else:
+        return read_active_route() or LocalRoute(Path.home() / ".agent-comms")
+    launch = PrivateNkLaunch.from_environment(selected, os.environ)
+    if launch is None:
+        return LocalRoute(selected)
+    return PinnedRoute(selected, launch.wire_root_id, launch.native_package)
 
 
 class RoutePublicationUnknownError(RelationViolationError):

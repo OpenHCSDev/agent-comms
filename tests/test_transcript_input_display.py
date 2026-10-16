@@ -7,10 +7,14 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
-from agent_comms.comms import wire
+
 from agent_comms.native_entries import TranscriptProjection
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 GOAL_PROMPT = (
     "Persistent goal deadbeef: Read files until stopped.\n"
@@ -32,7 +36,7 @@ def saved_row(native_id, text, *, images=False, role="user"):
 
 @pytest.mark.parametrize("paged", [False, True])
 def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_path, paged):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     # These annotations are committed before sending, before Pi creates its first file.
     comms.transcripts.routes.record_input_display("a" * 32, None)
@@ -53,7 +57,7 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
     ]
     session.write_text("".join(json.dumps(row) + "\n" for row in rows))
     comms.threads.attach_session(comms.registry.require("worker"), str(session))
-    reopened = wire(comms.root)
+    reopened = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
     events = (
         reopened.transcripts.thread_transcript_page("worker").events
         if paged
@@ -74,13 +78,13 @@ def test_saved_goal_prompt_hidden_but_followup_and_images_survive_reopen(tmp_pat
 
 
 def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.transcripts.routes.record_input_display("a" * 32, "first input")
     path = comms.transcripts.routes.database_path
     with sqlite3.connect(path) as connection:
         connection.execute("DROP TABLE transcript_route")
     before = path.read_bytes()
-    reopened = wire(comms.root)
+    reopened = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
     with pytest.raises(ValueError, match="one-shot durable migration"):
         reopened.transcripts.routes.record_input_display("b" * 32, None)
     with pytest.raises(ValueError, match="one-shot durable migration"):
@@ -90,7 +94,7 @@ def test_incomplete_durable_annotation_schema_is_not_repaired(tmp_path):
 
 @pytest.mark.asyncio
 async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     session = tmp_path / "session.jsonl"
     session.write_text(
         "".join(
@@ -105,7 +109,8 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(session)))
     comms.transcripts.routes.record_input_display("a" * 32, None)
     comms.transcripts.routes.record_input_display("b" * 32, "test2")
-    agent = CommsAgent(wire(comms.root))
+    selected_comms = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
+    agent = CommsAgent(selected_comms, native=selected_comms.owners.native_defaults)
     updates = []
 
     class Client:

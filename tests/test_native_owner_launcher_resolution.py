@@ -4,8 +4,9 @@ import pytest
 
 from agent_comms import native_pi, private_nk_entrypoint
 from agent_comms.native_package import NativePackageError
+from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
@@ -56,9 +57,9 @@ def test_running_owner_keeps_its_start_launcher_after_runtime_relink(tmp_path, m
         lambda root, root_id, selected, enabled: native_pi._trusted_package(selected),
     )
     monkeypatch.setattr(native_pi.sys, "executable", str(new.with_name("python")))
-    from agent_comms.native_arguments import NativeArguments
+    from agent_comms.native_settings import NativeThreadDefaults
     monkeypatch.setattr(
-        NativeArguments, "owner_launcher", classmethod(lambda cls, runtime: str(old))
+        LaunchRuntime, "native_entrypoint", property(lambda self: str(old))
     )
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
 

@@ -3,6 +3,10 @@
 Only local provider replies are controlled. The native run, refusal backoff,
 Core event parsing and original session journal are real. No silence timeout.
 """
+from agent_comms.native_settings import NativeThreadDefaults
+
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
 import json
@@ -70,8 +74,7 @@ async def test_actual_native_refusal_after_tool_preserves_saved_history(tmp_path
     # An explicit isolated root suppresses discovery of Tristan's installed route.
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path / "wire"))
     launcher = str(Path(__file__).parents[1] / "stack/bin/pi-native")
-    arguments = ["--provider", "retry-offline", "--model", "fixture", "--thinking", "off",
-                 "--no-extensions", "--no-skills", "--no-context-files"]
+    arguments = ['--provider', 'retry-offline', '--model', 'fixture', '--thinking', 'off', *NativeThreadDefaults.isolation_arguments]
     session = PersistentPiSession()
     saved = None
 
@@ -79,7 +82,8 @@ async def test_actual_native_refusal_after_tool_preserves_saved_history(tmp_path
         return [event async for event in backend.stream_agent_events(
             launcher, arguments, text, str(tmp_path), session_file=saved,
             persistent_session=session, require_input_id=True, model_wait_timeout=240,
-        )]
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())]
 
     try:
         async with asyncio.timeout(240):

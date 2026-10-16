@@ -23,15 +23,18 @@ from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
 from functools import partial
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 # Every case in this module exercises the explicitly declared owner.
-invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
+
 
 
 def _goal(comms, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     comms.registry.declare(Thread(name="owner", tags=frozenset(), worktree="/wt"))
-    return invoke_tool(comms, "comms_set_goal", {"text": "keep working"})["goal"]
+    return invoke_tool(comms, "comms_set_goal", {"text": "keep working"}, caller=ThreadCaller(comms.registry.require('owner').incarnation))["goal"]
 
 
 def test_same_id_resume_from_paused(comms, monkeypatch):
@@ -43,7 +46,7 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 
     result = invoke_tool(
         comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "user resumed"}
-    )["goal"]
+    , caller=ThreadCaller(comms.registry.require('owner').incarnation))["goal"]
 
     assert result["id"] == started["id"]
     assert result["text"] == started["text"]
@@ -62,20 +65,20 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    goal = invoke_tool(comms, "comms_set_goal", {"text": "finish this"})["goal"]
+    goal = invoke_tool(comms, "comms_set_goal", {"text": "finish this"}, caller=ThreadCaller(comms.registry.require('owner').incarnation))["goal"]
     comms.agents.begin_turn("owner", "same-assistant-turn")
 
     first = invoke_tool(
         comms,
         "comms_goal",
         {"goal_id": goal["id"], "status": "active", "progress": "one step"},
-    )
+     caller=ThreadCaller(comms.registry.require('owner').incarnation))
     with pytest.raises(ValueError, match="already reported"):
         invoke_tool(
             comms,
             "comms_goal",
             {"goal_id": goal["id"], "status": "active", "progress": "another step"},
-        )
+         caller=ThreadCaller(comms.registry.require('owner').incarnation))
     assert first["goal"]["progress"] == "one step"
     assert comms.registry.require("owner").goal.progress == "one step"
 
@@ -90,27 +93,27 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    first = invoke_tool(comms, "comms_set_goal", {"text": "first"})["goal"]
+    first = invoke_tool(comms, "comms_set_goal", {"text": "first"}, caller=ThreadCaller(comms.registry.require('owner').incarnation))["goal"]
     comms.agents.begin_turn("owner", "same-assistant-turn")
     invoke_tool(
         comms,
         "comms_goal",
         {"goal_id": first["id"], "status": "active", "progress": "reported"},
-    )
+     caller=ThreadCaller(comms.registry.require('owner').incarnation))
 
-    replacement = invoke_tool(comms, "comms_set_goal", {"text": "replacement"})["goal"]
+    replacement = invoke_tool(comms, "comms_set_goal", {"text": "replacement"}, caller=ThreadCaller(comms.registry.require('owner').incarnation))["goal"]
     with pytest.raises(ValueError, match="already reported"):
         invoke_tool(
             comms,
             "comms_goal",
             {"goal_id": replacement["id"], "status": "active", "progress": "second"},
-        )
+         caller=ThreadCaller(comms.registry.require('owner').incarnation))
 
     comms.goals.update_goal(
         "owner", ClearGoalAction(expect=GoalPrecondition(goal_id=replacement["id"]))
     )
     after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
-    reopened = Comms(comms.root)
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert any(
         entry.reports_turn("same-assistant-turn")
         for entry in reopened.registry.goal_history("owner")
@@ -120,7 +123,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
             reopened,
             "comms_goal",
             {"goal_id": after_clear["id"], "status": "active", "progress": "third"},
-        )
+         caller=ThreadCaller(reopened.registry.require('owner').incarnation))
     assert comms.registry.require("owner").goal.progress == ""
 
 
@@ -144,7 +147,7 @@ def test_model_tool_cannot_resume_blocked_uncertain_goal(comms, monkeypatch):
         BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="uncertain"),
     )
     with pytest.raises(ValueError, match="cannot be resumed"):
-        invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "retry"})
+        invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "retry"}, caller=ThreadCaller(comms.registry.require('owner').incarnation))
     assert comms.registry.require("owner").goal == blocked
 
 
@@ -154,10 +157,10 @@ def test_resume_refuses_completed_or_replaced_goal(comms, monkeypatch):
         "owner", CompletedGoalAction(expect=GoalPrecondition(goal_id=started["id"]))
     )
     with pytest.raises(ValueError, match="cannot be resumed"):
-        invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "no"})
-    replacement = invoke_tool(comms, "comms_set_goal", {"text": "new goal"})["goal"]
+        invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "no"}, caller=ThreadCaller(comms.registry.require('owner').incarnation))
+    replacement = invoke_tool(comms, "comms_set_goal", {"text": "new goal"}, caller=ThreadCaller(comms.registry.require('owner').incarnation))["goal"]
     with pytest.raises(ValueError, match="cannot be resumed"):
-        invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "no"})
+        invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "no"}, caller=ThreadCaller(comms.registry.require('owner').incarnation))
     assert comms.registry.require("owner").goal.id == replacement["id"]
 
 
@@ -228,7 +231,7 @@ def test_resume_does_not_claim_success_after_concurrent_goal_change(comms, monke
             comms,
             "comms_resume_goal",
             {"goal_id": started["id"], "progress": "stale progress"},
-        )
+         caller=ThreadCaller(comms.registry.require('owner').incarnation))
     goal = comms.registry.require("owner").goal
     assert goal.state.declared_name == "paused" and goal.progress == "newer progress"
 
@@ -267,7 +270,7 @@ def test_resume_losing_cas_never_reports_another_activations_success(comms, monk
             comms,
             "comms_resume_goal",
             {"goal_id": started["id"], "progress": requested_progress},
-        )
+         caller=ThreadCaller(comms.registry.require('owner').incarnation))
     current = comms.registry.require("owner").goal
     assert current.state.declared_name == "active" and current.progress == requested_progress
     if race_kind == "replacement":
@@ -285,7 +288,7 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
     saved = comms.registry.require("owner").goal
     assert saved is not None
     real_update = comms.goals.update_goal
-    other = Comms(comms.root)
+    other = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
 
     def race(name, action, **kwargs):
         assert isinstance(action, ActiveGoalAction)
@@ -300,7 +303,7 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
         other.goals.update_goal(
             name, prior(expect=GoalPrecondition(goal_id=saved.id), progress="unchanged")
         )
-        now = Comms(comms.root).registry.require(name).goal
+        now = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).registry.require(name).goal
         assert now is not None
         assert (now.id, now.state.declared_name, now.progress) == (
             saved.id,
@@ -316,7 +319,7 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
                 comms,
                 "comms_resume_goal",
                 {"goal_id": saved.id, "progress": "stale second resume"},
-            )
+             caller=ThreadCaller(comms.registry.require('owner').incarnation))
         else:
             # The model tool cannot resume blocked work. Even a future
             # authenticated human recovery caller must honor this CAS.
@@ -329,7 +332,7 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
                     progress="stale second resume",
                 ),
             )
-    final = Comms(comms.root).registry.require("owner").goal
+    final = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).registry.require("owner").goal
     assert (
         final is not None
         and final.state.declared_name == prior.declared_name
@@ -346,18 +349,18 @@ def test_same_value_goal_transition_bumps_durable_revision(comms, monkeypatch):
         "owner", BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="same")
     )
     assert first is not None
-    second = Comms(comms.root).goals.update_goal(
+    second = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).goals.update_goal(
         "owner", BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="same")
     )
     assert second is not None and second.revision == first.revision + 1
-    assert Comms(comms.root).registry.require("owner").goal == second
+    assert Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).registry.require("owner").goal == second
 
 
 def test_automatic_failure_block_advances_goal_revision(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
     snapshot = comms.registry.require("owner").goal
     assert snapshot is not None
-    newer = Comms(comms.root).goals.update_goal(
+    newer = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).goals.update_goal(
         "owner",
         ActiveGoalAction(
             expect=GoalPrecondition(goal_id=started["id"]), progress="verified newer step"
@@ -373,7 +376,7 @@ def test_automatic_failure_block_advances_goal_revision(comms, monkeypatch):
     assert blocked is not None and blocked.state.declared_name == "blocked"
     assert blocked.revision == newer.revision + 1
     assert blocked.progress.startswith("verified newer step\n\n")
-    assert Comms(comms.root).registry.require("owner").goal == blocked
+    assert Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).registry.require("owner").goal == blocked
 
 
 def test_automatic_failure_block_preserves_existing_goal_progress(comms, monkeypatch):

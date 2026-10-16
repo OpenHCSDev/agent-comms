@@ -13,10 +13,15 @@ import pytest
 
 from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
+
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize(
@@ -90,22 +95,9 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
         }.items():
             monkeypatch.setenv(key, value)
-        args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-            "--provider",
-            "openrouter",
-            "--model",
-            "z-ai/glm-5.3-flash",
-            "--thinking",
-            "off",
-        ]
-        comms = wire(root / "wire")
-        agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
+        agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         project = root / "worker"
@@ -149,9 +141,8 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                 assert warmup_proc is not None and warmup_proc.returncode is not None
             elif case == "reopen":
                 await agent.shutdown()
-                agent = CommsAgent(
-                    wire(comms.root), agent_bin=native, agent_args=args, runtime_enabled=True
-                )
+                selected_comms = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
+                agent = CommsAgent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
                 monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "worker")
                 await agent.inputs.drain_inbox("worker")
@@ -201,7 +192,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
                     assert row.declared_name == "started"
                     assert row.native_id == matched[0]["inputId"]
                     assert origin.body in json.dumps(matched[0])
-                replayed = wire(comms.root).transcripts.thread_transcript_page("worker").events
+                replayed = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).transcripts.thread_transcript_page("worker").events
                 incoming = [
                     event
                     for event in replayed

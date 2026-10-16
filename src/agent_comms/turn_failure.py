@@ -40,7 +40,7 @@ class TurnFailure(DeclaredFamily):
 
     def raise_native(self, proof, provider: str, model: str) -> None:
         """A runtime failure does not prove a completed provider request."""
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
 
         raise NativePiUnavailable(self.text)
 

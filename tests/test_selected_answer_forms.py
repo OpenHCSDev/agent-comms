@@ -26,10 +26,13 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohor
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
 from agent_comms.threads import Thread
 from native_backend_fixture import native_backend_fixture
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
@@ -42,7 +45,7 @@ def alice_batch(*sent: tuple[str, str]):
     with TemporaryDirectory(prefix="ac-answer-", dir="/var/tmp") as dirname:
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
-        comms = Comms(root)
+        comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
         for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
             comms.registry.declare(Thread(
                 name, frozenset({"team"}), dirname,

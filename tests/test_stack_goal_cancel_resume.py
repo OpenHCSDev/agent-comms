@@ -1,5 +1,7 @@
 """Real native Pi and owner socket: cancelled goals need an explicit fresh grant."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -11,14 +13,19 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, ReservedGeneration
 from agent_comms.goals import Goal
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.input_attempt import StartedInput
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -112,29 +119,8 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             "NODE_OPTIONS": f"--require={preload}",
         }.items():
             monkeypatch.setenv(name, value)
-        comms = wire(root / "wire")
-        owner = CommsAgent(
-            comms,
-            agent_bin=native_bin,
-            agent_args=[
-                "--offline",
-                "--no-extensions",
-                "--no-skills",
-                "--no-context-files",
-                "--no-prompt-templates",
-                "--no-tools",
-                "--provider",
-                "openrouter",
-                "--model",
-                "z-ai/glm-5.3-flash",
-                "--thinking",
-                "off",
-            ],
-            runtime_enabled=True,
-            # Explicit prompts drive the two attempts; autonomous scheduling
-            # is disabled so this regression has a strict two-request bound.
-            auto_wake=False,
-        )
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
+        owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native_bin, arguments=tuple(['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off'])), runtime_enabled=True, auto_wake=False)
 
         class Client:
             async def session_update(self, session_id, update):
@@ -149,7 +135,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
         owner.on_connect(Client())
         (root / "project").mkdir()
         session = (await owner.new_session(str(root / "project"))).session_id
-        proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+        proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
         created = await proxy.request("set_goal", text="Continue the owner objective")
         goal_id = created["goal"]["id"]
         store = comms.goals.open_goal_store()

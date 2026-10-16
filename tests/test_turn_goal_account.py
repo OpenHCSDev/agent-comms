@@ -22,6 +22,7 @@ from agent_comms.turn_goal_account import TurnGoalAccount
 from agent_comms.turn_input_source import OriginalTurnInput
 from test_s1_event_behavior import owner_turn as owner_turn
 from stored_inputs import stored_inputs
+import dataclasses
 
 
 def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path):
@@ -81,11 +82,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
     comms, tmp_path, monkeypatch, failure
 ):
     """Inject resource faults while all registry, journal and input owners stay real."""
-    owner = CommsAgent(
-        comms, agent_bin="unused",
-        private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
-        private_nk_native_package=tmp_path,
-    )
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="unused"), private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(), private_nk_native_package=tmp_path)
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     goal = await owner.turns.goals.set_goal(session.session_id, "preserve failed original")
@@ -142,11 +139,7 @@ async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
     comms, tmp_path, monkeypatch, worker_fails,
 ):
     """Cancellation cannot leave a recorded input after suppressing worker delivery."""
-    owner = CommsAgent(
-        comms, agent_bin="unused", auto_wake=False,
-        private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
-        private_nk_native_package=tmp_path,
-    )
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="unused"), auto_wake=False, private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(), private_nk_native_package=tmp_path)
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     execution = OwnedTurn(owner.turns, session.session_id, name, "cancel before native",

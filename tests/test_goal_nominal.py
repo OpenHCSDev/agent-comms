@@ -9,7 +9,7 @@ from agent_comms import tools
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.agent_events import GoalChanged
-from agent_comms.comms import wire
+
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     BlockedGoalAction,
@@ -31,11 +31,15 @@ from agent_comms.goal_states import (
     PauseSource,
 )
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
 def owner(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep the durable objective"))
     return comms, goal
@@ -54,7 +58,7 @@ def test_experiment_a_one_new_pause_source_carries_all_behavior(owner, monkeypat
     edited = comms.goals.update_goal("worker", EditGoalAction(text="Revised objective"))
     assert edited.state.source.declared_name == "spend_cap"
     assert comms.registry.require("worker").goal.state.pause_source.instruction() == SpendCapPause().instruction()
-    assert wire(comms.root).registry.require("worker").goal.state.source == SpendCapPause()
+    assert Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).registry.require("worker").goal.state.source == SpendCapPause()
     failed = comms.goals.block_goal_after_failed_turn(
         "worker", started_goal=goal, expected_worktree=str(comms.root), diagnostic="Backend failed"
     )
@@ -83,9 +87,9 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
         previous = comms.goals.goal_snapshot("worker")
         tool.invoke(
             comms, {"status": "checkpoint", "goal_id": goal.id, "progress": "Evidence recorded"},
-            caller=ThreadCaller("worker")
+            caller=ThreadCaller(comms.registry.require('worker').incarnation)
         )
-        event = wire(comms.root).goals.goal_changed("worker", previous)
+        event = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).goals.goal_changed("worker", previous)
         assert isinstance(event, GoalChanged)
         assert event.goal.progress == "Evidence recorded"
         updates = []
@@ -125,7 +129,7 @@ def test_experiment_c_every_pause_preserving_action_keeps_owner(owner, action):
     assert not (comms.root / "goal_pause_events.json").exists()
     rewritten = replace(changed, progress="new report", revision=changed.revision + 1)
     comms.registry.register(replace(comms.registry.require("worker"), goal=rewritten))
-    assert wire(comms.root).registry.require("worker").goal.state == paused.state
+    assert Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).registry.require("worker").goal.state == paused.state
     assert comms.goals.goal_history("worker")[-1].after.state == paused.state
     assert (
         comms.goals.block_goal_after_failed_turn(
@@ -168,7 +172,8 @@ def test_cas_rejects_aba_and_unknown_payload_without_effects(owner):
 
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
-    from agent_comms.runtime_requests import RuntimeRequest, UpdateGoalRuntimeRequest
+    from agent_comms.runtime_request import RuntimeRequest
+    from agent_comms.runtime_requests import UpdateGoalRuntimeRequest
 
     payload = UpdateGoalRuntimeRequest.proxy_payload("worker", None, {
         "status": PausedGoalAction, "goal_id": "original-goal", "expected_revision": 7,
@@ -216,4 +221,4 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner):
     )
     assert result.returncode == 1, result.stderr
     assert "paused by the owner" in json.loads(result.stdout)["error"]
-    assert wire(comms.root).registry.require("worker").goal == paused
+    assert Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).registry.require("worker").goal == paused

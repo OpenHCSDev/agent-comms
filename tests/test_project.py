@@ -1,5 +1,7 @@
 """Project changes preserve thread/session identity and synchronize executing owners."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -13,13 +15,18 @@ from acp import RequestError
 from agent_comms import agent_events as ae
 from delivery_owner_fixture import canonical_agent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.threads import Thread
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
 from native_backend_fixture import native_backend_fixture
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path, monkeypatch):
@@ -27,7 +34,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     new = tmp_path / "new project"
     old.mkdir()
     new.mkdir()
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             name="worker",
@@ -41,7 +48,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     )
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep this objective"))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    result = invoke_tool(comms, "comms_set_project", {"path": "../new project"}, caller=ThreadCaller("worker"))
+    result = invoke_tool(comms, "comms_set_project", {"path": "../new project"}, caller=ThreadCaller(comms.registry.require('worker').incarnation))
     assert result["current"] == str(new) and result["changed"]
     thread = comms.registry.require("worker")
     assert thread.worktree == str(new)
@@ -57,11 +64,11 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     file.touch()
     with pytest.raises(ValueError, match="not a directory"):
         comms.threads.set_project("worker", str(file))
-    comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
+    comms.threads.rename_self("renamed", caller=comms.registry.require('worker').incarnation)
     comms.threads.attach_session(
         comms.registry.require("worker"), str(old / "session.jsonl")
     )
-    restored = wire(comms.root).registry.require("worker")
+    restored = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).registry.require("worker")
     assert restored.worktree == str(new) and restored.previous_worktrees == (str(old),)
     assert len(comms.registry.all_threads()) == 1
 
@@ -71,8 +78,8 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
     new = tmp_path / "new"
     old.mkdir()
     new.mkdir()
-    comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[])
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])))
     session = (await agent.new_session(str(old))).session_id
     updates = []
 
@@ -89,7 +96,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
         if isinstance(update, CoordinationChangedUpdate)
     ) == str(new)
     await agent.shutdown()
-    resumed = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[])
+    resumed = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])))
     try:
         result = await resumed.load_session(str(old), session)
         assert next(
@@ -106,7 +113,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
 
 async def test_saved_native_identity_changes_publish_one_complete_update(tmp_path):
     """Original saved owner, actual socket publication; no native input/provider."""
-    from agent_comms.runtime import RuntimeProxy, socket_path
+    from agent_comms.runtime import RuntimeProxy
 
     class Client:
         def __init__(self):
@@ -125,9 +132,9 @@ async def test_saved_native_identity_changes_publish_one_complete_update(tmp_pat
             await agent._runtime.start()
             sender, receiver = Client(), Client()
             agent.on_connect(sender)
-            attached = canonical_agent(agent._comms, auto_wake=False)
+            attached = canonical_agent(agent._comms, native=agent._comms.owners.native_defaults, auto_wake=False)
             attached.on_connect(receiver)
-            proxy = RuntimeProxy(attached, session_id, socket_path(native.root, os.getpid()))
+            proxy = RuntimeProxy(attached, session_id, RuntimeSocket.path_for(native.root, os.getpid()))
             try:
                 await proxy.subscribe()
                 sender.updates.clear()
@@ -180,8 +187,8 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
     old, new = tmp_path / "old", tmp_path / "new"
     old.mkdir()
     new.mkdir()
-    comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[])
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])))
     session = (await agent.new_session(str(old))).session_id
     changed = asyncio.Event()
 
@@ -205,13 +212,13 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
 
 @pytest.mark.skipif(os.name == "nt", reason="UNIX runtime subscriptions")
 async def test_project_changes_reach_all_subscribed_clients(tmp_path):
-    from agent_comms.runtime import RuntimeProxy, socket_path
+    from agent_comms.runtime import RuntimeProxy
 
     old, new = tmp_path / "old", tmp_path / "new"
     old.mkdir()
     new.mkdir()
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="/bin/echo", agent_args=[], runtime_enabled=True)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
     session = (await owner.new_session(str(old))).session_id
     proxies, updates = [], [[], []]
 
@@ -224,9 +231,9 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
 
     try:
         for values in updates:
-            client = canonical_agent(comms)
+            client = canonical_agent(comms, native=comms.owners.native_defaults)
             client.on_connect(Client(values))
-            proxy = RuntimeProxy(client, session, socket_path(comms.root, os.getpid()))
+            proxy = RuntimeProxy(client, session, RuntimeSocket.path_for(comms.root, os.getpid()))
             proxies.append(proxy)
             assert next(
                 update.worktree

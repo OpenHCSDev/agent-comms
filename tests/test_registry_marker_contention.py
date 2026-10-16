@@ -9,10 +9,13 @@ import pytest
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _read_registry(root, ready, stop, result):
-    comms = Comms(root)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     failures, reads = [], 0
     ready.put(os.getpid())
     try:
@@ -27,7 +30,7 @@ def _read_registry(root, ready, stop, result):
 
 
 def test_concurrent_canonical_marker_publication_keeps_registry_readable(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     context = mp.get_context("spawn")
@@ -90,7 +93,7 @@ def _redirect(path):
 
 @pytest.mark.parametrize("damage", [_public_mode, _extra_link, _redirect], ids=lambda f: f.__name__)
 def test_marker_ownership_failures_still_block_real_read_and_send(tmp_path, damage):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))

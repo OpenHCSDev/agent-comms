@@ -16,6 +16,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
+from agent_comms.native_settings import NativeThreadDefaults
+from native_backend_fixture import native_run_command
+from agent_comms.comms import Comms
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
@@ -31,7 +36,7 @@ async def test_mounted_goal_continues_without_progress_tool(
         pytest.skip("Requires prepared native Pi and mounted Toad pilot dependencies")
     from runtime_fixture import ToadApp
 
-    from agent_comms.comms import wire
+
 
     live = bool(os.environ.get("AC_GOAL_LIVE_PROVIDER"))
     if live and (empty_response or compact_tools):
@@ -121,20 +126,7 @@ async def test_mounted_goal_continues_without_progress_tool(
         worker.start()
         model = "openai-codex/gpt-6-sol" if live else "openrouter/z-ai/glm-5.3-flash"
         provider, model_id = model.split("/", 1)
-        native_args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-            "--provider",
-            provider,
-            "--model",
-            model_id,
-            "--thinking",
-            "high" if compact_tools else "off",
-        ]
+        native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', provider, '--model', model_id, '--thinking', 'high' if compact_tools else 'off']
         if compact_tools:
             native_args.remove("--no-tools")
             native_args.extend(["--tools", "read"])
@@ -143,8 +135,6 @@ async def test_mounted_goal_continues_without_progress_tool(
             "XDG_DATA_HOME": str(root / "data"),
             "XDG_STATE_HOME": str(root / "state"),
             "AGENT_COMMS_ROOT": str(root / "wire"),
-            "AGENT_COMMS_AGENT_BIN": native,
-            "AGENT_COMMS_AGENT_ARGS": shlex.join(native_args),
             "AGENT_COMMS_AGENT_MODELS": model,
         }.items():
             monkeypatch.setenv(key, value)
@@ -201,12 +191,14 @@ async def test_mounted_goal_continues_without_progress_tool(
                 "name": "Agent Comms",
                 "identity": "goal-continuation-test",
                 "short_name": "goal",
-                "run_command": {"*": f"{sys.executable} -m agent_comms.acp"},
+                "run_command": {
+                    "*": native_run_command(NativeThreadDefaults(binary=native, arguments=tuple(native_args)))
+                },
                 "protocol": "acp",
             },
             project_dir=str(project),
         )
-        comms = wire(root / "wire")
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
 
         async def until(predicate, timeout=45):
             async with asyncio.timeout(timeout):

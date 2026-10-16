@@ -1,5 +1,7 @@
 """A UI goal must acquire owner-private launch authority before it is visible."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 from unittest.mock import AsyncMock
 from dataclasses import replace
 
@@ -7,16 +9,21 @@ import os
 
 import pytest
 
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import Goal
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 from agent_comms.tools import invoke_tool
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="ACP runtime uses Unix domain sockets")
 
@@ -27,22 +34,16 @@ def _models_without_pi_discovery(monkeypatch):
 
 
 async def _owner(tmp_path, monkeypatch):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     private = comms.root / "goal-private"
     private.mkdir(mode=0o700)
     GoalAttemptStore.initialize(private)
-    owner = canonical_agent(
-        comms,
-        agent_bin="pi",
-        agent_args=["--provider", "openrouter", "--model", "fake"],
-        runtime_enabled=True,
-        auto_wake=False,
-    )
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(["--provider", "openrouter", "--model", "fake"])), runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(cwd=str(tmp_path / "project"))).session_id
     wakes = []
     monkeypatch.setattr(owner.turns.goals, "schedule_goal", AsyncMock(side_effect=wakes.append))
-    proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
     return comms, owner, proxy, session, wakes
 
 
@@ -67,7 +68,7 @@ async def test_model_goal_has_authority_before_tool_return_and_ui_retry(tmp_path
 
     monkeypatch.setenv("AGENT_COMMS_THREAD", session)
     try:
-        result = invoke_tool(comms, "comms_set_goal", {"text": "Model-authored objective"}, caller=ThreadCaller(session))
+        result = invoke_tool(comms, "comms_set_goal", {"text": "Model-authored objective"}, caller=ThreadCaller(comms.registry.require(session).incarnation))
         goal = FieldCodec.decode(Goal, result["goal"])
         store = comms.goals.open_goal_store()
         assert store.require_generation(goal.id).lifecycle == ReadyGeneration()

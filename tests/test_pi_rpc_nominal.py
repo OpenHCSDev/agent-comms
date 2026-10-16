@@ -1,6 +1,10 @@
 """S2 declaration extension and real stream-boundary invariants."""
 
 from __future__ import annotations
+
+from agent_comms.native_project import UnmanagedNativeProject
+
+from agent_comms.native_session_files import PrivateEvidenceRead
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
 
@@ -112,7 +116,7 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
 )
 def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
     session = TurnSession(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
+        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({}), project=UnmanagedNativeProject()), "unused",
         native_session=PersistentPiSession(),
     )
     for cls in (left, right, left):
@@ -226,7 +230,7 @@ def test_turn_runner_and_duplicate_pi_decoders_are_retired():
                         decoders.append((name, method.name))
     assert decoders == [("pi_rpc.py", "decode_record")]
 
-    from agent_comms.native_pi import NativePiUnavailable, PrivateEvidenceRead
+    from agent_comms.native_errors import NativePiUnavailable
 
     with pytest.raises(NativePiUnavailable, match="evidence JSON is invalid"):
         PrivateEvidenceRead._decode_row(b'{"type":"session","type":"message"}\n')

@@ -22,7 +22,8 @@ from .declared_family import DeclaredFamily
 from .wire_metadata import WireRootIdText
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .native_pi import NativeContextProof, NativePiUnavailable
+from .native_pi import NativeContextProof
+from .native_errors import NativePiUnavailable
 from .native_prompt_binding import expected_prompt_matches_journal, read_expected_prompt_binding
 from .native_runtime_input import NativeRuntimeInput
 from .native_input_record import NativeInputRecord, NativeInputReference, NativeInputExecution, TriageNativeExecution, FullNativeExecution

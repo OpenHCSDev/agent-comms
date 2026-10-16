@@ -9,6 +9,9 @@ import sys
 from agent_comms.comms import Comms
 from agent_comms.retained_task_facts import RetainedTaskFacts
 from retained_task_source_carry import RetainedTaskSourceCarry
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def digest(path):
@@ -27,7 +30,7 @@ def main():
     (stage / 'seed.log').write_text(seeded.stdout + seeded.stderr)
     seeded.check_returncode()
     seed = json.loads(seeded.stdout)
-    service = Comms(root)
+    service = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     protected = {path.name: digest(path) for path in
                  (root / 'registry.json', root / 'protected-fixture-source.proof')}
     original_bus = (root / 'bus.jsonl').read_bytes()
@@ -79,7 +82,7 @@ def main():
     assert pin in retained.current_authored_sources(beta, service.registry.snapshot())
     assert retained.original_text_source(pin) == subject
     # Reopening both source and registry must derive the same original lineage.
-    reopened = Comms(root)
+    reopened = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     assert reopened.bus.log.full_history()[-1] == pin
     before = (root / 'bus.jsonl').read_bytes()
     try:

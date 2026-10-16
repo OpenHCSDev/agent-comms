@@ -1,5 +1,7 @@
 """Original acquired SDK context reader through the installed owner RPC."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import argparse
 import asyncio
 import json
@@ -13,10 +15,14 @@ from agent_comms.comms import Comms
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_turn_context import NativeContextData
-from agent_comms.runtime import RuntimeConnection, socket_path
+from agent_comms.runtime import RuntimeConnection
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import native_backend_fixture
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def read_original_context(
@@ -45,11 +51,8 @@ async def read_original_context(
         fixture.project = seed_root / 'project'
     before = fixture.session.read_bytes()
     original_inputs = fixture.saved_inputs()
-    owner = canonical_agent(
-        Comms(fixture.root), agent_bin="pi",
-        agent_args=["--model", "response-local/fixture", "--offline"],
-        auto_wake=False, runtime_enabled=True,
-    )
+    selected_comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
+    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "response-local/fixture", "--offline"])), auto_wake=False, runtime_enabled=True)
     # This fixture owns the root; the existing owner launch and RPC reader remain real.
     try:
         await owner._runtime.start()
@@ -66,7 +69,7 @@ async def read_original_context(
                                         thread.name, thread.name, committed=True)
         await owner.load_session(str(fixture.project), thread.name)
         connection = RuntimeConnection(owner._comms, thread.name,
-            socket_path(owner._comms.root, thread.require_process().pid))
+            RuntimeSocket.path_for(owner._comms.root, thread.require_process().pid))
         try:
             async with asyncio.timeout(20):
                 assert thread.name not in owner.turns.persistent_backends

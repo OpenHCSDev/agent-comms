@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import asyncio
 from contextlib import AsyncExitStack, ExitStack
 from dataclasses import replace
@@ -194,9 +196,7 @@ class OwnedTurn:
         self.worktree = (
             self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
         )
-        self.env_extra = self.thread.native_environment(
-            self.runner.comms.root, self.runner.comms.registry.snapshot(), self.worktree
-        )
+        self.env_extra = {"AGENT_COMMS_ROOT": str(self.runner.comms.root)}
         from .turn_context import (
             TurnContext,
             AutomaticTitleSegment,
@@ -215,6 +215,7 @@ class OwnedTurn:
             self.relations,
             tuple(origin.reference for origin in self.origins),
             batch.originals,
+            now=time.time(), senders=tuple(origin.sender for origin in self.origins),
         )
         if self.goal_permit is not None:
             for segment in self.thread.context_goal_segments():

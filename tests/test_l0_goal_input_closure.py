@@ -1,5 +1,7 @@
 """Current goal/input boundaries through durable stores and the real owner socket."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import os
 import sqlite3
 from contextlib import ExitStack
@@ -10,7 +12,7 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     GoalPrecondition,
@@ -19,7 +21,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goal_attempts import GoalAttemptStore, GoalHumanDecision
+from agent_comms.goal_attempts import GoalHumanDecision
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.goal_states import BlockedGoal, GoalState, UnrecordedBlockGoal
@@ -27,10 +29,15 @@ from agent_comms.goal_waits import GoalWait, GoalWaits
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.queued_input import QueuedInput
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def register(comms, name):
@@ -45,7 +52,7 @@ def register(comms, name):
 
 
 def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     register(comms, "owner")
     goal = Goal(
         "Retained objective", "retained", progress="Unrelated progress", state=UnrecordedBlockGoal()
@@ -62,7 +69,7 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
         before = database.execute(
             f"SELECT * FROM {GoalHistoryEntry.declared_name} ORDER BY sequence"
         ).fetchall()
-    reopened = wire(tmp_path)
+    reopened = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     assert reopened.goals.goal_history("owner") == history
     assert not reopened.relationships._goal_contacts(reopened.registry.snapshot())[0]
     with sqlite3.connect(tmp_path / "goal_history.sqlite3") as database:
@@ -82,7 +89,7 @@ def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_p
     "state", [BlockedGoal("Inspect the failed attempt"), UnrecordedBlockGoal()]
 )
 def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, state):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     register(comms, "owner")
     goal = Goal("Objective", "goal", state=state)
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
@@ -178,18 +185,16 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     from agent_comms.native_arguments import NativeArguments
 
     arguments = ("--model", "test/model")
-    configured_model = NativeArguments.configured(arguments).model
+    configured_model = NativeArguments.parse(arguments).model
     assert configured_model is not None
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
-    comms = wire(tmp_path / "wire")
-    owner = CommsAgent(
-        comms, agent_bin="pi", agent_args=arguments, runtime_enabled=True, auto_wake=False
-    )
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(arguments)), runtime_enabled=True, auto_wake=False)
     from goal_owner_fixture import activate_empty_source
 
     activate_empty_source(owner)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
-    proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
     try:
         ledger = owner.inputs.dispositions
         admission = comms.registry.snapshot().admission_generations[session]

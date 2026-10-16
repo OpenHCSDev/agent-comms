@@ -7,10 +7,13 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 
 from __future__ import annotations
 
+from .native_session_files import NativeSessionFiles
+
 import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 from .pi_vocabulary import ThinkingLevel
 from .agent_events import CompactionEvent
@@ -23,19 +26,22 @@ from .coordination_errors import (
 )
 from .coordinator import Coordination
 from .following_inputs import FollowingInputs
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
+from .native_pi import NativePiRpcLaunch
+from .native_errors import NativePiUnavailable
 from .selected_actions import SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
 from .selected_tool_broker import SelectedToolIntent
-from .selected_turn import SelectedConsideration
+from .selected_turn import SelectedAttempt, SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
 
 
 @dataclass(kw_only=True)
 class SelectedExecution:
-    root: Path
+    max_attempts: ClassVar[int] = 3
+
+    comms: Comms
     wire_root_id: str
     owner_name: str
     native_package: Path
@@ -61,15 +67,19 @@ class SelectedExecution:
         init=False, default=None, repr=False, compare=False,
     )
 
-    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
+    @property
+    def root(self) -> Path:
+        return self.comms.root
+
+    def tracked_launch(self, package: Path, *, runtime, **options) -> NativePiRpcLaunch:
         """Consume the original pre-claim acquisition for each stage's launch.
 
         Every stage rebuilds its complete source/configuration through the
         executable factory acquired by validate before selecting a participant;
         no native child, input proof or readiness is borrowed from a prior turn.
         """
-        if package != self.native_package:
-            raise IdentityConflict("Selected launch differs from its execution package")
+        if package != self.native_package or runtime != self.comms.runtime:
+            raise IdentityConflict("Selected launch differs from its execution runtime or package")
         if self._tracked_factory is None:
             raise IdentityConflict("Selected launch precedes its execution package acquisition")
         return self._tracked_factory(**options)
@@ -90,7 +100,7 @@ class SelectedExecution:
             return
         if not self.opt_in:
             raise PublicationActivationBlocked("coordinated runtime requires explicit activation")
-        _private_session_dir(self.root)
+        NativeSessionFiles.require_private_directory(self.root)
         if type(self.fresh_private_enrollment) is not bool:
             raise IdentityConflict("Fresh private enrollment requires an explicit boolean")
         if self.fresh_private_enrollment and self.session_file is not None:
@@ -112,7 +122,7 @@ class SelectedExecution:
             if self.selected_existing_file_write is not None:
                 raise IdentityConflict("selected tool cannot share an operator file plan")
         if self.verified_launcher is None:
-            self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package)
+            self._tracked_factory = NativePiRpcLaunch.acquire_tracked(self.native_package, self.comms.runtime)
             return
         launcher = self.verified_launcher()
         if launcher.args[0] != Path(self.native_package).absolute():
@@ -126,6 +136,11 @@ class SelectedExecution:
             return self.selected_existing_file_write
         return session.default_action()
 
+    async def full(self, participant, session: SelectedSession, snapshot) -> CoordinatedTurn:
+        """Both direct work and a FULL verdict enter the same attempt lifecycle."""
+        attempt = await SelectedAttempt.engage(participant, snapshot)
+        return await attempt.run(self, session, self.action(session), self.write_authority)
+
     async def run(
         self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
         pi_session: PersistentPiSession | None = None,
@@ -137,11 +152,10 @@ class SelectedExecution:
             self.pi_session = pi_session
         if following is not None:
             self.following = following
-        self.root = Path(self.root).absolute()
         # Package acquisition belongs to this execution before it can select
         # a claim. Join its blocking verification before that custody advances.
         await Coordination.run_worker(self.validate)
-        comms = Comms(self.root)
+        comms = self.comms
         with Coordination(str(self.root / "coordination.sqlite3")) as store:
             while True:
                 async with SelectedParticipant.select(

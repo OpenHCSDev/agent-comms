@@ -10,13 +10,19 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_request,
 )
-from agent_comms.comms import wire
+
 from delivery_owner_fixture import canonical_agent
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def make_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/base")
-    agent = canonical_agent(wire(tmp_path), agent_bin="pi", agent_args=["--model", "test/base"])
+    selected_comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
+    agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "test/base"])))
     await agent.new_session(str(tmp_path / "project"))
     return agent
 

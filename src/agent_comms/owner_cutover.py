@@ -11,7 +11,8 @@ from .launch_runtime import LaunchRuntime
 
 if TYPE_CHECKING:
     from .maintenance_barrier import MaintenanceState
-    from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult
+    from .owner_lifecycle import OwnerLifecycle
+    from .owner_restart import OwnerRestartResult
     from .owner_restart import OwnerRestartRequest, StoppedOwnerBatch, StoppedOwnerFailure
     from .registry_document import RegistrySnapshot
     from .threads import Thread

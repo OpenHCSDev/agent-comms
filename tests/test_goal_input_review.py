@@ -5,7 +5,7 @@ import os
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -19,11 +19,15 @@ from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for name in ("worker", "parent", "other"):
         comms.registry.declare(
             Thread(
@@ -62,7 +66,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         "wait_for": ["parent"],
     }
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
-        report.invoke(comms, args, caller=ThreadCaller("worker"))
+        report.invoke(comms, args, caller=ThreadCaller(comms.registry.require('worker').incarnation))
     before = ledger.path.read_bytes()
     messages = comms.bus.inbox("worker")
     comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))
@@ -75,9 +79,9 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     keys = review["reviewed_inputs"]
     for invalid in (["acp:owner-input"], ["bus:999999"]):
         with pytest.raises(ValueError, match="recipient"):
-            report.invoke(comms, {**args, "reviewed_inputs": invalid}, caller=ThreadCaller("worker"))
+            report.invoke(comms, {**args, "reviewed_inputs": invalid}, caller=ThreadCaller(comms.registry.require('worker').incarnation))
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
-        report.invoke(comms, {**args, "reviewed_inputs": keys[1:]}, caller=ThreadCaller("worker"))
+        report.invoke(comms, {**args, "reviewed_inputs": keys[1:]}, caller=ThreadCaller(comms.registry.require('worker').incarnation))
     assert ledger.path.read_bytes() == before  # Failed partial review commits nothing.
     unrelated = comms.messaging.send_message("other", "worker", "Not a declared dependency")
     ledger.record(
@@ -91,9 +95,9 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     scoped = comms.goals.goal_input_review("worker", goal.id, ["parent"])
     assert scoped["reviewed_inputs"] == keys and len(scoped["excluded_inputs"]) == 2
     with pytest.raises(ValueError, match="declared dependencies"):
-        report.invoke(comms, {**args, "reviewed_inputs": [*keys, f"bus:{unrelated.seq}"]}, caller=ThreadCaller("worker"))
+        report.invoke(comms, {**args, "reviewed_inputs": [*keys, f"bus:{unrelated.seq}"]}, caller=ThreadCaller(comms.registry.require('worker').incarnation))
     assert (
-        report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))["goal_execution"]["state"]
+        report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller(comms.registry.require('worker').incarnation))["goal_execution"]["state"]
         == "standby"
     )
     again = comms.goals.goal_input_review("worker", goal.id, ["parent"])
@@ -109,7 +113,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     generation = comms.goals.open_goal_store().snapshot(goal.id)
     assert generation is not None and generation.lifecycle.ready
     assert generation.attempt_id is None
-    reopened = wire(comms.root)
+    reopened = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
     reopened.goals.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
     reopened.goals.update_goal(
         "worker", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",))
@@ -122,13 +126,13 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
     )
     with pytest.raises(ValueError, match="paused by the owner"):
-        report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
+        report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller(comms.registry.require('worker').incarnation))
     assert comms.registry.require("worker").goal.state.declared_name == "paused"
 
 
 @pytest.mark.parametrize("rebound", ["worker", "parent"])
 def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, rebound):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     for name in ("worker", "parent"):
         comms.registry.declare(
             Thread(

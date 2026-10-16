@@ -1,5 +1,7 @@
 """Original-byte custody survives appends and refuses altered proof/source."""
 
+from agent_comms.native_session_files import PrivateEvidenceRead
+
 import asyncio
 import json
 import sqlite3
@@ -9,7 +11,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
-from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.native_pi import NativeContextProof
+from agent_comms.native_errors import NativePiUnavailable
 from native_proof_cases import write_proof_rows
 from test_native_pi import INPUT_ID, _evidence
 

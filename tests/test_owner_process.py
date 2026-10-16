@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import os
 import json
 import sys
@@ -15,13 +17,15 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.child_process import ObservedProcess, ParentedProcess
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.runtime import socket_path
+
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import ActiveTurn
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> None:
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
@@ -33,7 +37,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
     owner = comms.registry.require("worker")
     try:
         deadline = time.monotonic() + 10
-        while not socket_path(tmp_path, first.pid).exists():
+        while not RuntimeSocket.path_for(tmp_path, first.pid).exists():
             assert owner.process_alive, "Actual worker exited before runtime attach"
             assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
             time.sleep(0.02)
@@ -43,7 +47,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         from agent_comms.coordination_errors import PublicationActivationBlocked
         from agent_comms.owner_cutover import StoppedOwnerInstallation
 
-        unpinned = Comms(tmp_path)
+        unpinned = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
         before = comms.registry.snapshot()
         with pytest.raises(PublicationActivationBlocked, match="explicit matching root and package"):
             unpinned.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
@@ -93,7 +97,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
 def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None:
     child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     try:
-        comms = Comms(tmp_path)
+        comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
         comms.registry.declare(
             Thread(
                 "stale",
@@ -118,7 +122,7 @@ def test_restart_preflights_all_owners_before_signalling(tmp_path: Path) -> None
         for _ in range(2)
     ]
     try:
-        comms = Comms(tmp_path)
+        comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
         for index, child in enumerate(children):
             comms.registry.declare(
                 Thread(
@@ -144,7 +148,7 @@ def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> Non
 
     child = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
     try:
-        comms = Comms(tmp_path)
+        comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
         owner = Thread("owner", frozenset(), str(tmp_path))
         peer = Thread(
             "peer",
@@ -173,7 +177,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     """The production detached launch retains a failure before socket creation."""
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", "invalid")
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", "/missing/native")
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("failed-start", frozenset(), str(tmp_path)))
     result = comms.owners.start("failed-start")
     owner = comms.registry.require("failed-start")
@@ -189,7 +193,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
         assert "Traceback (most recent call last)" in trace
         assert "PublicationActivationBlocked" in trace
         assert logs[0].stat().st_mode & 0o777 == 0o600
-        assert not socket_path(tmp_path, result.pid).exists()
+        assert not RuntimeSocket.path_for(tmp_path, result.pid).exists()
         assert owner.session_file is None
     finally:
         if owner.process_alive:
@@ -206,7 +210,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openai-codex/gpt-6.1-sol")
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(tmp_path, root_id, package)
@@ -254,7 +258,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
 
     def ready(owner):
         deadline = time.monotonic() + 10
-        while not socket_path(tmp_path, owner.pid).exists():
+        while not RuntimeSocket.path_for(tmp_path, owner.pid).exists():
             assert owner.process_alive, "Actual batch worker exited before runtime attach"
             assert time.monotonic() < deadline, "Actual batch worker failed to attach"
             time.sleep(.02)
@@ -268,7 +272,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         async def attach():
             async with asyncio.timeout(10):
                 reader, writer = await asyncio.open_unix_connection(
-                    socket_path(tmp_path, owner.pid), limit=8 * 1024 * 1024
+                    RuntimeSocket.path_for(tmp_path, owner.pid), limit=8 * 1024 * 1024
                 )
                 try:
                     writer.write((json.dumps(SubscribeRuntimeRequest(
@@ -323,7 +327,10 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             if path.is_file() and path.suffix == ".jsonl"
         }
         # The operator's model/arguments/credential must never overwrite a source owner.
-        monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", "--thinking high")
+        from agent_comms.native_settings import NativeThreadDefaults
+
+        comms.owners.native_defaults = NativeThreadDefaults(binary=comms.owners.native_defaults.binary,
+                                                           arguments=("--thinking", "high"))
         monkeypatch.setenv("BATCH_OWNER_CREDENTIAL", "operator-only")
         target_binary = tmp_path / "target-pi-comms-native"
         target_binary.symlink_to(LaunchRuntime.current().native_entrypoint)
@@ -336,8 +343,8 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             current = comms.registry.require(receipt.thread)
             ready(current)
             launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
-            assert launch.binary == str(target_binary.resolve())
-            assert launch.arguments == arguments
+            assert launch.native.binary == str(target_binary.resolve())
+            assert launch.native.arguments == arguments
             assert launch.environment["BATCH_OWNER_CREDENTIAL"] == credential
             assert launch.environment["PI_CODING_AGENT_DIR"] == str(tmp_path / (settings[index][0] + "-config"))
             assert launch.environment["AGENT_COMMS_THREAD"] == selected[index]
@@ -415,8 +422,8 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             current = comms.registry.require(receipt.thread)
             ready(current)
             launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
-            assert launch.binary == str(target_binary.resolve())
-            assert launch.arguments == settings[index][1]
+            assert launch.native.binary == str(target_binary.resolve())
+            assert launch.native.arguments == settings[index][1]
             assert launch.environment['BATCH_OWNER_CREDENTIAL'] == settings[index][2]
             assert current.goal == original_goals[current.name]
 
@@ -444,7 +451,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         from agent_comms.active_route import ActiveRoute, active_route_path
         from agent_comms.field_codec import FieldCodec
         from agent_comms.owner_cutover import PreserveOwnerRuntime
-        from agent_comms.owner_lifecycle import OwnerRestartSelection
+        from agent_comms.owner_launch import OwnerRestartSelection
         import publish_retained_summary as publisher
         from runtime_installation import PreserveRuntimeInstallation
 

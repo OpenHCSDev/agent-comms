@@ -19,20 +19,22 @@ from pathlib import Path
 from typing import ClassVar
 
 from .child_process import ParentedProcess, ProcessIdentity
-from .comms import Comms, wire
+from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
 from .owner_cutover import PreserveOwnerRuntime
 from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import LaunchRuntime, RestartEnvironment
-from .owner_lifecycle import OwnerRestartSelection
-from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
+from .owner_launch import OwnerRestartSelection
+from .owner_restart import OwnerRestartRequest, RestartTarget, StoppedOwnerFailure
 from .restart_refusals import RestartRefusal
 from .store_files import _store_lock
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
+from agent_comms.active_route import resolve_comms_route
 
 DIRECTORY = "owner-restart-queue"
 
@@ -75,62 +77,43 @@ class RestartedRestart(RestartState):
     current: ProcessIdentity
 
 
-@dataclass(frozen=True)
-class RestartTarget:
-    interpreter: str
-    runtime: RestartEnvironment
-    agent_bin: str
-
-    @classmethod
-    def capture(cls, comms: Comms, source: Mapping[str, str]):
-        selected = LaunchRuntime.current()
-        runtime = RestartEnvironment.inherit(
-            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), selected)
-        )
-        return cls(
-            str(selected.interpreter),
-            runtime,
-            comms.owners.restart_entrypoint(source[NativeArguments.binary_key], selected),
-        )
-
-    @property
-    def launch_runtime(self) -> LaunchRuntime:
-        return LaunchRuntime(Path(self.interpreter))
-
-    def require_available(self, comms: Comms) -> None:
-        self.launch_runtime.require_available()
-        if self.agent_bin != comms.owners.restart_entrypoint(self.agent_bin, self.launch_runtime):
-            raise ValueError("Target agent entrypoint differs from reviewed launch authority")
-        if Path(self.agent_bin).is_absolute() and not os.access(self.agent_bin, os.X_OK):
-            raise ValueError("Target agent entrypoint is unavailable")
-
-    def require_watcher(self, comms: Comms) -> None:
-        self.require_available(comms)
-        current = RestartEnvironment.inherit(
-            comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), self.launch_runtime)
-        )
-        if self.launch_runtime != LaunchRuntime.running() or self.runtime != current:
-            raise ValueError("Watcher target runtime changed")
 
 
 @dataclass(frozen=True)
 class QueuedRestart:
     id: str
-    selection: OwnerRestartSelection
-    source_interpreter: str
     target: RestartTarget
+    source_interpreter: str
+    launch_runtime: LaunchRuntime
+    runtime: RestartEnvironment
     state: RestartState
 
     @property
     def name(self) -> str:
-        return self.selection.name
+        return self.target.selection.name
+
+    @classmethod
+    def load(cls, path: Path):
+        if path.is_symlink():
+            raise ValueError("Restart queue record must not be a symlink")
+        return FieldCodec.decode(cls, json.loads(path.read_text(encoding="utf-8")))
+
+    def require_available(self, comms: Comms) -> None:
+        self.launch_runtime.require_available()
+
+    def require_watcher(self, comms: Comms) -> None:
+        self.require_available(comms)
+        current = RestartEnvironment.inherit(comms.owners.restart_environment(
+            RestartEnvironment.inherit(os.environ).encode(), self.launch_runtime))
+        if self.launch_runtime != LaunchRuntime.running() or self.runtime != current:
+            raise ValueError("Watcher target runtime changed")
 
     def transition(self, state: RestartState):
         return replace(self, state=state)
 
 
-def _directory(comms: Comms) -> Path:
-    path = comms.root / DIRECTORY
+def _directory(root: Path) -> Path:
+    path = root / DIRECTORY
     path.mkdir(mode=0o700, exist_ok=True)
     if path.is_symlink() or path.stat().st_mode & 0o077:
         raise ValueError("Restart queue directory must be private and not a symlink")
@@ -156,16 +139,14 @@ def _save(path: Path, record: QueuedRestart) -> None:
 
 
 def _records(comms: Comms):
-    for path in sorted(_directory(comms).glob("*.json")):
-        if path.is_symlink():
-            raise ValueError("Restart queue record must not be a symlink")
-        yield path, FieldCodec.decode(QueuedRestart, json.loads(path.read_text(encoding="utf-8")))
+    for path in sorted(_directory(comms.root).glob("*.json")):
+        yield path, QueuedRestart.load(path)
 
 
 def enqueue(comms: Comms, name: str) -> QueuedRestart:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
-    directory = _directory(comms)
+    directory = _directory(comms.root)
     with _store_lock(comms._wire_lock_path):
         snapshot = comms.registry.snapshot()
         owner = comms.registry.require(name)
@@ -173,44 +154,49 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         owner.require_restart_owner(status)
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
-        target = RestartTarget.capture(comms, launch.environment)
-        target.require_available(comms)
+        selected = comms.runtime
+        runtime = RestartEnvironment.inherit(comms.owners.restart_environment(
+            RestartEnvironment.inherit(os.environ).encode(), selected))
+        target = RestartTarget(selection, launch.native)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with _store_lock(directory / "queue"):
             for _, previous in _records(comms):
                 if previous.name == owner.name and previous.state.active:
-                    if previous.selection != selection or previous.target != target:
+                    if (previous.target != target or previous.launch_runtime != selected
+                            or previous.runtime != runtime):
                         raise RelationViolationError("Previous owner restart requires review")
                     result = previous
                     break
             else:
                 result = QueuedRestart(
-                    uuid.uuid4().hex, selection, launch.interpreter, target, PendingRestart()
+                    uuid.uuid4().hex, target, launch.interpreter, selected, runtime, PendingRestart()
                 )
+                result.require_available(comms)
                 _save(directory / f"{result.id}.json", result)
     # A new watcher can safely race an existing watcher: flock permits one runner.
-    _start_watcher(comms.root, target)
+    _start_watcher(comms.root, result)
     return result
 
 
-def _start_watcher(root: Path, target: RestartTarget) -> ParentedProcess:
+def _start_watcher(root: Path, record: QueuedRestart) -> ParentedProcess:
     # The resident watcher inherits only its declared runtime configuration.
     return ParentedProcess.launch(
-        (str(target.launch_runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve())),
-        env=target.runtime.encode(),
+        (str(record.launch_runtime.interpreter), "-m", "agent_comms.restart_queue",
+         str(root.resolve()), record.id),
+        env=record.runtime.encode(),
     )
 
 
 def status(comms: Comms, name: str) -> list[QueuedRestart]:
     canonical = comms.registry.require(name).name
-    with _store_lock(_directory(comms) / "queue"):
+    with _store_lock(_directory(comms.root) / "queue"):
         return [record for _, record in _records(comms) if record.name == canonical]
 
 
 def cancel(comms: Comms, name: str) -> list[QueuedRestart]:
     """Cancel only requests not yet attempted; never claim a signal was undone."""
     canonical = comms.registry.require(name).name
-    directory = _directory(comms)
+    directory = _directory(comms.root)
     changed = []
     with _store_lock(directory / "queue"):
         for path, record in _records(comms):
@@ -222,7 +208,7 @@ def cancel(comms: Comms, name: str) -> list[QueuedRestart]:
 
 
 def step(comms: Comms) -> None:
-    directory = _directory(comms)
+    directory = _directory(comms.root)
     for path, initial in _records(comms):
         if not initial.state.pending:
             continue
@@ -232,7 +218,7 @@ def step(comms: Comms) -> None:
                 continue
             snapshot = comms.registry.snapshot()
             try:
-                owner = record.selection.require_current(snapshot)
+                owner = record.target.selection.require_current(snapshot)
                 comms.owners.require_restart_idle(owner)
             except RestartRefusal as refusal:
                 record = record.transition(refusal.queue_state())
@@ -244,7 +230,7 @@ def step(comms: Comms) -> None:
                     record = record.transition(StaleRestart(reason="Owner process exited"))
                 else:
                     try:
-                        record.target.require_watcher(comms)
+                        record.require_watcher(comms)
                     except ValueError as error:
                         record = record.transition(BlockedRestart(reason=str(error)))
                     else:
@@ -255,12 +241,8 @@ def step(comms: Comms) -> None:
             continue
         try:
             request = OwnerRestartRequest(
-                (owner.name,),
-                expected=record.selection,
-                runtime=record.target.runtime,
-                agent_bin=record.target.agent_bin,
-                source_interpreter=record.source_interpreter,
-                launch_runtime=record.target.launch_runtime,
+                (record.target,), record.launch_runtime,
+                runtime=record.runtime, source_interpreter=record.source_interpreter,
             )
             (receipt,) = PreserveOwnerRuntime().restart(comms.owners, request)
         except RestartRefusal as refusal:
@@ -275,7 +257,7 @@ def step(comms: Comms) -> None:
         else:
             record = record.transition(
                 RestartedRestart(
-                    previous=record.selection.process,
+                    previous=record.target.selection.process,
                     current=ProcessIdentity.capture(receipt.pid),
                 )
             )
@@ -286,7 +268,7 @@ def step(comms: Comms) -> None:
 async def run(comms: Comms) -> None:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
-    directory = _directory(comms)
+    directory = _directory(comms.root)
     lock = os.open(directory / "watcher.lock", os.O_CREAT | os.O_RDWR, 0o600)
     try:
         try:
@@ -318,13 +300,15 @@ async def run(comms: Comms) -> None:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        raise SystemExit("usage: python -m agent_comms.restart_queue ROOT")
-    comms = wire(sys.argv[1])
+    if len(sys.argv) != 3:
+        raise SystemExit("usage: python -m agent_comms.restart_queue ROOT RECORD_ID")
+    route = resolve_comms_route(sys.argv[1])
+    record = QueuedRestart.load(_directory(route.root) / f"{uuid.UUID(sys.argv[2]).hex}.json")
+    comms = Comms(route, runtime=record.launch_runtime)
     try:
         asyncio.run(run(comms))
     except Exception as exc:
-        directory = _directory(comms)
+        directory = _directory(comms.root)
         with _store_lock(directory / "queue"):
             for path, record in _records(comms):
                 if record.state.pending:

@@ -6,12 +6,18 @@ two CLI-registered threads exchange messages, a child forks, the child reads
 its inbox and responds, and the parent acknowledges.
 """
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 REPO = Path(__file__).parents[1]
 SRC = REPO / "src"
@@ -76,11 +82,11 @@ class TestEndToEndLifecycle:
         )
         # A real pi process back-fills its session file into the registry;
         # emulate that here so the parent is forkable.
-        from agent_comms.comms import wire as wire_root
+
         from agent_comms.runtime import socket_path
         from agent_comms.threads import Thread
 
-        comms = wire_root(root)
+        comms = Comms(resolve_comms_route(root), runtime=LaunchRuntime.current())
         parent = comms.registry.require("PR111")
         comms.registry.declare(
             Thread(
@@ -116,7 +122,7 @@ class TestEndToEndLifecycle:
         # fork owner first; the runtime suite exercises its automatic delivery.
         cli(root, "stop", "--name", "kid")
         assert comms.registry.status("kid").declared_name == "stopped"
-        assert not socket_path(root, detail["process_identity"]["pid"]).exists()
+        assert not RuntimeSocket.path_for(root, detail["process_identity"]["pid"]).exists()
 
         # 3. Child registers itself the way a real pi process would.
         run_python(
@@ -190,11 +196,11 @@ class TestEndToEndLifecycle:
         import asyncio
 
         from agent_comms.acp import CommsAgent
-        from agent_comms.comms import wire
+
 
         root = tmp_path / "wire"
-        comms = wire(root)
-        agent = CommsAgent(comms, reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05)
+        comms = Comms(resolve_comms_route(root), runtime=LaunchRuntime.current())
+        agent = CommsAgent(comms, native=comms.owners.native_defaults, reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05)
 
         async def flow() -> None:
             await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -212,5 +218,5 @@ class TestEndToEndLifecycle:
         ]
         # And the CLI side can reply, visible in the thread's DM history.
         cli(root, "send", "--from", "cli-agent", "--to", "proj", "--body", "roger")
-        dm = [m.body for m in wire(root).views.dm_history("cli-agent", "proj")]
+        dm = [m.body for m in Comms(resolve_comms_route(root), runtime=LaunchRuntime.current()).views.dm_history("cli-agent", "proj")]
         assert dm == ["from the cli side", "roger"]

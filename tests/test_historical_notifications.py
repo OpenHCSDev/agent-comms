@@ -19,11 +19,14 @@ from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
 from agent_comms.wake_policy import FullWake
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
 def archived_notification(tmp_path):
-    old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
+    old, live = Comms(LocalRoute(tmp_path / "old"), runtime=LaunchRuntime.current()), Comms(LocalRoute(tmp_path / "live"), runtime=LaunchRuntime.current())
     for comms in (old, live):
         comms.registry.declare(Thread("sender", frozenset(), str(tmp_path), created_at=10.0))
         comms.registry.declare(Thread("reader", frozenset(), str(tmp_path),

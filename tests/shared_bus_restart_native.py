@@ -3,6 +3,9 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 admission, native process, source proof and response publication remain real.
 """
+
+from agent_comms.runtime_socket import RuntimeSocket
+from agent_comms.context_segments.doctrine import DoctrineSegment
 import argparse
 import hashlib
 import shutil
@@ -24,7 +27,7 @@ from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import decode_updates
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_cutover import StoppedOwnerInstallation
-from agent_comms.runtime import socket_path
+
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import ThreadRole
@@ -41,6 +44,10 @@ from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
 from agent_comms.private_sidecar import sidecar_connection
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
@@ -63,7 +70,9 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     # The original owner owns auth/settings/extension selection. Bootstrap is
     # its existing OS-environment decoder, not a second fixture configuration.
     _, environment = NativePiRpcLaunch.bootstrap(
-        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment, retained.configuration, LaunchRuntime(Path(retained.interpreter)))
+        arguments.package/'dist/cli.js', (), Path(configured.worktree), retained.environment,
+        retained.configuration, LaunchRuntime(Path(retained.interpreter)),
+        session_context=(DoctrineSegment.capture(),))
     source_profile = retained.configuration.native_config
     source_hashes = {}
     for filename in ('auth.json', 'models.json', 'settings.json'):
@@ -72,7 +81,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
             source_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     if not continue_existing:
         (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
-    service = Comms(stage/'wire', private_initial_writes=True)
+    service = Comms(LocalRoute(stage/'wire'), private_initial_writes=True, runtime=LaunchRuntime.current())
     if continue_existing:
         with service.bus.log.locked():
             root_id = service.bus.log._private_marker_unlocked().root_id
@@ -83,8 +92,6 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
         AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(arguments.package),
-        AGENT_COMMS_AGENT_BIN=str(binary),
-        AGENT_COMMS_AGENT_ARGS=shlex.join(retained.arguments or ()),
         AGENT_COMMS_RUNTIME_ROOT=str(binary.parent),
         VIRTUAL_ENV=str(binary.parent.parent),
         AGENT_COMMS_DEBUG_LOG=str(stage/'acp.log'),
@@ -102,7 +109,7 @@ async def configured_pure_channel(arguments):
     No mention or direct message forces FULL. Original proofs/UNKNOWNs are never
     copied into the private coordinator or submitted as new inputs.
     """
-    from agent_comms.comms import wire
+
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.selected_triage import FullSelectedTriage
@@ -113,7 +120,7 @@ async def configured_pure_channel(arguments):
     from agent_comms.coordination_cohort import _receipt_matches
     from agent_comms.acp_extension import CursorAdvancedUpdate, VerifiedCursorObservation
 
-    public = wire()
+    public = Comms(resolve_comms_route(), runtime=LaunchRuntime.current())
     original_names = (arguments.configured_owner, *arguments.configured_peers)
     assert arguments.collective and len(original_names) == arguments.owners >= 1
     if arguments.configured_saved_preparation:
@@ -170,8 +177,7 @@ async def configured_pure_channel(arguments):
                 if isinstance(item, CompactionChangedUpdate):
                     compaction_events.append({'elapsed_seconds': time.perf_counter()-begun,
                         'phase': item.event.phase})
-    attachment = CommsClient(service, runtime_enabled=True,
-        private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
+    attachment = CommsClient(service, native=service.owners.native_defaults, runtime_enabled=True, private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
     originals, proof, failure = [], {}, None
     begun = time.perf_counter()
@@ -457,9 +463,8 @@ async def configured_mixed_routes(arguments):
     Only fresh private originals are submitted. The public owner supplies its
     configured model/level, not a saved input or permission to restart it.
     """
-    from agent_comms.comms import wire
+
     from agent_comms.native_input_record import FullNativeExecution
-    from agent_comms.native_package import verify_native_package
     from agent_comms.field_codec import FieldCodec
     from agent_comms.native_entries import NativeEntry
     from agent_comms.pi_payloads import ToolResultMessage
@@ -469,7 +474,7 @@ async def configured_mixed_routes(arguments):
 
     assert arguments.owners == 1 and arguments.collective
     assert not (arguments.saved_source or arguments.contention or arguments.cancel_before_grant)
-    snapshot = wire().registry.snapshot()
+    snapshot = Comms(resolve_comms_route(), runtime=LaunchRuntime.current()).registry.snapshot()
     configured = snapshot.require(arguments.configured_owner)
     assert configured.model, "Configured owner has no selected model"
     stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot)
@@ -490,8 +495,7 @@ async def configured_mixed_routes(arguments):
     class Observation:
         async def session_update(self, **kwargs):
             packets.append(kwargs)
-    attachment = CommsClient(service,runtime_enabled=True,
-        private_nk_native_package=arguments.package,private_nk_wire_root_id=root_id)
+    attachment = CommsClient(service, native=service.owners.native_defaults, runtime_enabled=True, private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
     begun = time.perf_counter()
     failure, late = None, None
@@ -609,11 +613,9 @@ async def retained_owner():
     NativeSourceCursor._advance_proven = observe_advance
     launch = PrivateNkLaunch.from_environment(Path(os.environ['AGENT_COMMS_ROOT']), os.environ)
     launch.validate()
-    service = Comms(launch.validated_root)
+    service = Comms(LocalRoute(launch.validated_root), runtime=LaunchRuntime.current())
     name = os.environ['AGENT_COMMS_THREAD']
-    agent = CommsAgent(service, runtime_enabled=True,
-        private_nk_wire_root_id=launch.wire_root_id,
-        private_nk_native_package=launch.native_package)
+    agent = CommsAgent(service, native=service.owners.native_defaults, runtime_enabled=True, private_nk_wire_root_id=launch.wire_root_id, private_nk_native_package=launch.native_package)
     # This receiving case supplies the original saved-session capability to
     # SelectedExecution. Automatic drains currently omit that argument; their
     # complete restart/triage path is covered separately by the ordinary mode.
@@ -622,7 +624,7 @@ async def retained_owner():
         owner = service.registry.require(name)
         await agent.load_session(owner.worktree, name)
         assert await asyncio.to_thread(sys.stdin.readline) == 'GO\n'
-        execution = SelectedExecution(root=service.root,
+        execution = SelectedExecution(comms=Comms(LocalRoute(service.root), runtime=LaunchRuntime.current()),
             wire_root_id=launch.wire_root_id, owner_name=name,
             native_package=launch.native_package, session_file=Path(owner.session_file))
         result = await agent.turns.run_selected(name, execution)
@@ -669,11 +671,11 @@ class PromptBindingContention(AdmissionContention, declared_name='binding'):
 async def attach(service, name):
     owner = service.registry.require(name)
     async with asyncio.timeout(30):
-        while not socket_path(service.root, owner.pid).exists():
+        while not RuntimeSocket.path_for(service.root, owner.pid).exists():
             assert owner.process_alive
             await asyncio.sleep(.03)
         reader, writer = await asyncio.open_unix_connection(
-            socket_path(service.root, owner.pid), limit=8 * 1024 * 1024)
+            RuntimeSocket.path_for(service.root, owner.pid), limit=8 * 1024 * 1024)
         try:
             writer.write((json.dumps(SubscribeRuntimeRequest(thread=name).to_wire())+'\n').encode())
             await writer.drain()
@@ -808,7 +810,7 @@ async def run(arguments):
         'type': 'api_key', 'key': 'local-only'}}))
     (config/'settings.json').write_text(json.dumps({'compaction':{'enabled':False},
         'retry':{'enabled':False,'maxRetries':0,'provider':{'maxRetries':0}}}))
-    service = Comms(stage/'wire', private_initial_writes=True)
+    service = Comms(LocalRoute(stage/'wire'), runtime=LaunchRuntime.current(), private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
     env = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
@@ -853,8 +855,7 @@ async def run(arguments):
     class Observation:
         async def session_update(self, **kwargs):
             packets.append(kwargs)
-    attachment = CommsClient(service, runtime_enabled=True,
-        private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
+    attachment = CommsClient(service, native=service.owners.native_defaults, runtime_enabled=True, private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
     contention_release = threading.Event()
     contention_held = threading.Event()
@@ -958,8 +959,7 @@ async def run(arguments):
                         await asyncio.sleep(.03)
             else:
                 await asyncio.to_thread(service.owners.start,name,
-                    agent_args=['--offline','--no-extensions','--no-skills',
-                                '--no-context-files','--no-prompt-templates','--no-tools'])
+                    agent_args=['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'])
             await attach(service,name)
         assert provider.posts == 0
         originals = [service.registry.require(name) for name in names]

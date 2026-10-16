@@ -4,38 +4,47 @@ import asyncio
 import argparse
 import os
 import signal
-from functools import partial
 from .coordinator import Coordination
 from contextlib import suppress
 
 from .acp import CommsAgent
-from .comms import wire
-from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
-from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .comms import Comms
+from .active_route import PinnedRoute
+from .private_nk_entrypoint import PrivateNkLaunch
+from .native_settings import NativeThreadDefaults
+from .child_process import ProcessIdentity
+from .launch_runtime import LaunchRuntime
+from .thread_identity import ThreadIncarnation
+from .store_files import _store_lock
 
 
-async def run() -> None:
+async def run(settings: NativeThreadDefaults, incarnation: ThreadIncarnation,
+              runtime: LaunchRuntime) -> None:
     # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
+    incarnation.require_recorded()
     lower_priority()
     private_nk = PrivateNkLaunch.current()
-    # Fail before wire creation/attach; the check verifies the native package once.
-    verified_cli = private_nk.validate() if private_nk is not None else None
-    comms = wire(private_nk.validated_root) if private_nk is not None else wire()
-    if private_nk is not None:
-        comms.owners.pin_private_nk_launch(
-            private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
-        )
-    name = RestartEnvironment.calling_thread()
-    thread = await Coordination.run_worker(partial(comms.registry.require, name))
+    if private_nk is None:
+        raise ValueError("Headless execution requires a configured native route")
+    # Verify the selected package before creating or attaching the bus.
+    verified_cli = private_nk.validate()
+    route = PinnedRoute(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)
+    comms = Comms(route, runtime=runtime, settings=settings)
+    snapshot = await Coordination.run_worker(comms.registry.snapshot)
+    if not incarnation.current(snapshot):
+        raise ValueError("Owner launch does not match the current thread incarnation")
+    thread = snapshot.threads[snapshot.canonical_name(incarnation.name)]
+    name = thread.name
+    if (thread.process_identity is not None and thread.process_identity.alive()
+            and thread.process_identity != ProcessIdentity.capture(os.getpid())):
+        raise ValueError(f"Thread {name!r} already has a live owner")
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
-        private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
-        private_nk_native_package=private_nk.native_package if private_nk else None,
-        private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
+        private_nk_wire_root_id=private_nk.wire_root_id,
+        private_nk_native_package=private_nk.native_package,
+        private_selected_tool_intent=private_nk.selected_tool_intent,
         private_nk_verified_cli=verified_cli,
-        agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
     )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -56,8 +65,6 @@ async def run() -> None:
 
 async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
     """Consume this launch's explicitly admitted input, never scan for retries."""
-    from .store_files import _store_lock
-
     async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
         def capture():
             with _store_lock(agent._comms._wire_lock_path, shared=True):
@@ -99,26 +106,19 @@ def main() -> int:
     before consulting a route or wire so discovery cannot admit an owner.
     Registration belongs to the original thread management operation.
     """
-    argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         prog="agent-comms-agent", description=__doc__,
-        epilog=(
-            f"Select an existing owner with {RestartEnvironment.owner_key}. "
-            "Use agent-comms for commands."
-        ),
-    ).parse_args()
-    name = RestartEnvironment.calling_thread()
-
-    launch = private_nk_from_environment()
-    if launch is None:
-        raise ValueError("Headless execution requires a configured native route")
-    comms = wire(launch.validated_root)
-    thread = comms.registry.require(name)
-    if thread.process_identity is not None and thread.process_identity.alive():
-        raise ValueError(f"Thread {thread.name!r} already has a live owner")
+        epilog="Select an existing owner by its recorded incarnation. Use agent-comms for commands.",
+    )
+    NativeThreadDefaults.add_cli_arguments(parser, required=True, dest="native_settings")
+    ThreadIncarnation.add_cli_arguments(parser, required=True, dest="thread_incarnation")
+    namespace = parser.parse_args()
+    # The parent selected this installation before spawning; never reselect the pointer.
+    runtime = LaunchRuntime.running()
     with suppress(KeyboardInterrupt):
-        asyncio.run(run())
+        asyncio.run(run(namespace.native_settings, namespace.thread_incarnation, runtime))
     return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(run())
+    raise SystemExit(main())

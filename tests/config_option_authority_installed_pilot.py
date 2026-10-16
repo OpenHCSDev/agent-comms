@@ -6,6 +6,8 @@ root, setting, native journal or historical input is changed.
 """
 from __future__ import annotations
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import argparse
 import asyncio
 import hashlib
@@ -16,19 +18,22 @@ import sys
 
 from agent_comms.comms import Comms
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
-from agent_comms.runtime import socket_path
+
 from agent_comms.runtime_requests import SubscribeRuntimeRequest, SetConfigOptionRuntimeRequest
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def exchange(service, name, request):
     owner = service.registry.require(name)
     async with asyncio.timeout(15):
-        while not socket_path(service.root, owner.pid).exists():
+        while not RuntimeSocket.path_for(service.root, owner.pid).exists():
             assert owner.process_alive
             await asyncio.sleep(.02)
         reader, writer = await asyncio.open_unix_connection(
-            socket_path(service.root, owner.pid), limit=8 * 1024 * 1024
+            RuntimeSocket.path_for(service.root, owner.pid), limit=8 * 1024 * 1024
         )
         try:
             writer.write((json.dumps(request.to_wire()) + '\n').encode())
@@ -121,7 +126,7 @@ async def run(stage, package, models, ui, menu_contention=False):
     stage.mkdir(mode=0o700, parents=True, exist_ok=False)
     project = stage / 'project'
     project.mkdir()
-    service = Comms(stage / 'wire')
+    service = Comms(LocalRoute(stage / 'wire'), runtime=LaunchRuntime.current())
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     environment = dict(os.environ)

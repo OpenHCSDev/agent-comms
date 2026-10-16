@@ -10,6 +10,7 @@ from typing import Literal
 
 from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendingAssignment
 from .coordination_tables.assignments import WakeAssignment
+from .coordination_tables.executions import ExecutionOrigin
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, TextRepresentation
@@ -94,19 +95,14 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         pass
 
     async def continue_turn(self, participant, session, input_id, execution, settled):
-        from .coordination_tables.executions import ExecutionOrigin
-        from .selected_turn import SelectedAttempt
-
         await participant.require_current()
         created = participant.store.executions.create_after_triage(
             participant.batch.execution_id, ExecutionOrigin.WIRE,
             participant.lookup, participant.owner.thread.name,
-            SelectedAttempt.max_attempts,
+            execution.max_attempts,
             sources=participant.batch.sources, settled=settled,
         ).value
-        attempt = await SelectedAttempt.engage(participant, created)
-        return await attempt.run(execution, session,
-                                 execution.action(session), execution.write_authority)
+        return await execution.full(participant, session, created)
 
 
 class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):

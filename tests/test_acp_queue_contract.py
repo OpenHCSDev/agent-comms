@@ -33,15 +33,18 @@ from agent_comms.thread_identity import AdmissionIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
-    comms = Comms(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     thread = Thread(
         "beta", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())
     )
     comms.registry.declare(thread)
-    agent = CommsAgent(comms)
+    agent = CommsAgent(comms, native=comms.owners.native_defaults)
     agent.sessions.bindings["beta"] = "beta"
     owner, admission_generation = comms.registry.live_owner_with_admission("beta")
     return comms, agent, owner.created_at, admission_generation

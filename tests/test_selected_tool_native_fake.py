@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from agent_comms.native_project import UnmanagedNativeProject
+from agent_comms.context_segments.doctrine import DoctrineSegment
+
 import sys
 from pathlib import Path
 
-from native_proof_cases import child_writer_imports, read_proof_rows, write_proof_rows
+from native_proof_cases import child_writer_imports
 
 import pytest
 
@@ -111,7 +114,8 @@ send({'type':'agent_settled'})
         session_dir=tmp_path / "sessions",
         selected_tool_mode=SelectedToolMode(owner_action),
         model_wait_timeout=15,
-    )
+        session_context=(DoctrineSegment.capture(),),
+     project=UnmanagedNativeProject())
     if variant == "success":
         result = await operation
         assert result.text == "Done"

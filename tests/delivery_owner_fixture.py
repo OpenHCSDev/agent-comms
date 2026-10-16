@@ -5,6 +5,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from agent_comms.acp import CommsAgent
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def native_model(*, decision="FULL", fail_on=None):
@@ -20,12 +23,7 @@ async def canonical_delivery_owner(root, *, direct=False):
     from test_coordinated_runtime import _root
 
     _path, root_id, comms, initial, people = _root(root, direct=direct)
-    owner = CommsAgent(
-        comms,
-        runtime_enabled=True,
-        private_nk_native_package=root,
-        private_nk_wire_root_id=root_id,
-    )
+    owner = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, private_nk_native_package=root, private_nk_wire_root_id=root_id)
     for person in people[1:]:
         owner.sessions.bindings[person.name] = person.name
         owner.sessions.titles[person.name] = person.name
@@ -37,7 +35,7 @@ async def canonical_delivery_owner(root, *, direct=False):
         await owner.shutdown()
 
 
-def canonical_agent(comms, **options):
+def canonical_agent(comms, native: NativeThreadDefaults, **options):
     """Configure the existing owner against its real canonical root marker."""
     with comms.bus.log.locked():
         metadata = comms.bus.log.read_metadata_unlocked()
@@ -47,7 +45,7 @@ def canonical_agent(comms, **options):
     )
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     return CommsAgent(
-        comms, private_nk_native_package=package,
+        comms, native=native, private_nk_native_package=package,
         private_nk_wire_root_id=root_id, **options,
     )
 
@@ -64,6 +62,6 @@ def drain_diagnostic(comms, thread):
     from agent_comms.comms import Comms
 
     view = next(
-        view for view in Comms(comms.root).views.thread_views() if view.thread.name == thread
+        view for view in Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).views.thread_views() if view.thread.name == thread
     )
     return view.activity.readiness.source_diagnostic()

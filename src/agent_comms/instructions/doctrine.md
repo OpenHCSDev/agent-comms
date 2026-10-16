@@ -7,5 +7,3 @@ Maintenance results; prove each in the code, not as preferences.
 - Crossing capabilities need multiple parents (mixins, C3 MRO).
 - Shared behaviour is factored out with inheritance; split mixed-meaning classes; choose behaviour by polymorphism, never string switches, rosters or lookup tables.
 - No fallbacks, mirrors, second registries, caches or forwarding wrappers.
-
-Confirmed worked cases: a bounded delivery must advance even when a record exceeds the size target. Name omitted optional context on the delivered input. Unread reads belong to the message bus, not a second serializer.

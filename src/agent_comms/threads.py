@@ -12,7 +12,7 @@ from .child_process import ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .thread_execution import ThreadExecution, NativeThreadExecution
-from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
+from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
@@ -118,23 +118,6 @@ class Thread(ThreadProvenance):
         status.require_active()
         if not self.process_alive or self.pid == os.getpid():
             raise RelationViolationError("Restart requires another live owner")
-
-    def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
-        """Project this captured owner through the original native binding."""
-        from .runtime_requests import ProjectRuntimeRequest
-
-        project = ProjectRuntimeRequest.for_native(snapshot, self)
-        from .launch_runtime import RestartEnvironment
-
-        return {
-            RestartEnvironment.owner_key: self.name,
-            "AGENT_COMMS_ROOT": str(root),
-            "PI_PARENT_ID": self.parent or "",
-            "AGENT_COMMS_MANAGED": "1",
-            SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
-            "PI_WORKTREE": worktree,
-            **project.environment(root),
-        }
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
@@ -471,20 +454,3 @@ class Thread(ThreadProvenance):
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
-
-
-def current_thread() -> Thread:
-    """Declare the current thread from its owner launch environment."""
-    from .launch_runtime import RestartEnvironment
-
-    name = RestartEnvironment.calling_thread()
-    tag_env = os.environ.get("PI_AGENT_TAGS") or os.environ.get("AGENT_COMMS_TAGS", "")
-    tags = frozenset(t.strip() for t in tag_env.split(",") if t.strip())
-    return Thread(
-        name=name,
-        tags=tags,
-        worktree=os.environ.get("PI_WORKTREE", os.getcwd()),
-        parent=os.environ.get("PI_PARENT_ID"),
-        task=os.environ.get("PI_TASK"),
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    )

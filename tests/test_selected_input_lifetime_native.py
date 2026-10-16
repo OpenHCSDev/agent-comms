@@ -20,13 +20,18 @@ from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
-from agent_comms.native_pi import NativePiTerminalFailure, NativePiUnavailable
+from agent_comms.native_pi import NativePiTerminalFailure
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from agent_comms.wake_policy import PassiveWake
 from compaction_loopback import LoopbackProvider
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.comms import Comms
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 tmp_path = private_root_fixture
 
@@ -59,7 +64,7 @@ class SelectedNativeJourney:
     def execution(self):
         WakeCandidateIndex(self.comms.bus.log).maintain(rebuild=True)
         return SelectedExecution(
-            root=self.root,
+            comms=Comms(LocalRoute(self.root), runtime=LaunchRuntime.current()),
             wire_root_id=self.root_id,
             owner_name="beta",
             native_package=self.package,
@@ -270,7 +275,7 @@ async def test_actual_fresh_enrollment_retains_coverage_across_triage(journey):
     journey.text('{"decision":"FULL"}')
     journey.text("FRESH_TRIAGE_FULL_COMPLETED")
     result = await SelectedExecution(
-        root=journey.root,
+        comms=Comms(LocalRoute(journey.root), runtime=LaunchRuntime.current()),
         wire_root_id=journey.root_id,
         owner_name="beta",
         native_package=journey.package,
@@ -294,7 +299,7 @@ async def test_actual_fresh_enrollment_retains_coverage_across_triage(journey):
 async def test_actual_selected_first_start_preserves_unreviewed_cli_refusal(journey):
     with pytest.raises(NativePiUnavailable, match="first-source CLI builtins are unreviewed"):
         await SelectedExecution(
-            root=journey.root,
+            comms=Comms(LocalRoute(journey.root), runtime=LaunchRuntime.current()),
             wire_root_id=journey.root_id,
             owner_name="beta",
             native_package=journey.package,

@@ -1,4 +1,5 @@
 """Original sealed messaging survives silent context rows through every projection."""
+import time
 from dataclasses import replace
 import hashlib
 import json
@@ -16,6 +17,9 @@ from agent_comms.wire_record import WireRecord, ObservationWireRecord, RecordedC
 from agent_comms.cli_commands import ContextCliCommand
 from agent_comms.comms import Comms
 from test_private_bus_checkpoint import _root, _page
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def manifest(owner, generation=1):
@@ -29,29 +33,32 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
     from threading import Event
     from agent_comms.context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
 
+    from agent_comms.goal_actions import SetGoalAction
+
     comms, _ = _root(tmp_path)
+    comms.goals.update_goal('Alice', SetGoalAction(text='Work with @sender.'))
     comms.messaging.send_initial_cohort('sender', '#team', '@Alice original question')
     owner = comms.registry.require('Alice')
-    original = comms.bus.awareness_segments(owner, ())
+    original = comms.bus.awareness_segments(owner, comms.relationships.peer_relations(owner.name))
     assert len(original) == 1 and isinstance(original[0], AwarenessSegment)
     before = comms.bus.log.path.read_bytes()
     entered = Event()
 
     def read():
         entered.set()
-        return comms.bus.awareness_segments(owner, (), blocking=True)
+        return comms.bus.awareness_segments(owner, comms.relationships.peer_relations(owner.name), blocking=True)
 
     with ThreadPoolExecutor(max_workers=1) as worker:
         with comms.bus.log.locked():
             # Ordinary input still omits optional awareness immediately.
-            omitted = comms.bus.awareness_segments(owner, ())
+            omitted = comms.bus.awareness_segments(owner, comms.relationships.peer_relations(owner.name))
             assert len(omitted) == 1 and isinstance(omitted[0], UnavailableAwarenessSegment)
             pending = worker.submit(read)
             assert entered.wait(1)
             with pytest.raises(TimeoutError):
                 pending.result(timeout=.05)
         assert pending.result(timeout=2) == original
-    inspection = TurnContext.for_inspection(comms, owner)
+    inspection = TurnContext.for_inspection(comms, owner, now=time.time())
     assert original[0] in inspection.segments
     assert comms.bus.log.path.read_bytes() == before
 
@@ -132,7 +139,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
 
     installed = Path(agent_comms.__file__).resolve()
     assert 'site-packages' in installed.parts, 'This journey requires installed application source'
-    original = Comms(Path(os.environ['CONTEXT_MANIFEST_ORIGINAL_ROOT']))
+    original = Comms(LocalRoute(Path(os.environ['CONTEXT_MANIFEST_ORIGINAL_ROOT'])), runtime=LaunchRuntime.current())
     source_files = (original.root / 'registry.json', original.root / 'bus.jsonl')
     source_hashes = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in source_files}
     source_snapshot = original.registry.snapshot()
@@ -143,7 +150,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
     comms, root_id = _root(tmp_path)
     comms.agents.observe_runtime_info('Bob', AgentInfo(model=observed_owner.model))
     original_message = comms.messaging.send_initial_cohort('sender', '#team', '@Bob recording fixture')
-    owner = CommsAgent(comms, auto_wake=False)
+    owner = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
     turn = OwnedTurn(owner.turns, 'Alice', 'Alice', '')
     turn.registry_owner = comms.agents.begin_turn('Alice', 'owned-context-recording515')
     lease, thread = turn.turn_lease, turn.thread
@@ -250,7 +257,7 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     raw=comms.bus.log.path.read_bytes()
     activity=comms.bus.channel_activity()
     pending=comms.bus.pending_counts_all(['Alice','Bob'])
-    awareness=comms.bus.awareness_segments(comms.registry.require('Alice'), ())
+    awareness=comms.bus.awareness_segments(comms.registry.require('Alice'), comms.relationships.peer_relations('Alice'))
     comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
     assert comms.bus.log.path.read_bytes().startswith(raw)
     assert b'PRIVATE INPUT' not in comms.bus.log.path.read_bytes()[len(raw):]
@@ -260,14 +267,14 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert _page(comms,lookup)[1:]==prior[1:]
     assert comms.bus.channel_activity()==activity
     assert comms.bus.pending_counts_all(['Alice','Bob'])==pending
-    assert comms.bus.awareness_segments(comms.registry.require('Alice'), ())==awareness
+    assert comms.bus.awareness_segments(comms.registry.require('Alice'), comms.relationships.peer_relations('Alice'))==awareness
     assert comms.bus.log.full_history()==[first]
     with comms.bus.log.full_history_snapshot() as (_, messages):
         assert list(messages)==[first]
     second=comms.messaging.send_initial_cohort('sender','#team','@Alice next original message')
     assert second.seq==first.seq+1
     comms.bus.log.record_context(manifest(comms.registry.require('Alice'),2))
-    reopened=Comms(comms.root)
+    reopened=Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert reopened.bus.log.full_history()==[first,second]
     assert len(_page(reopened,lookup)[1])==2
     monkeypatch.setattr(type(reopened.relationships), "RECENT_MESSAGES", 2)
@@ -307,7 +314,7 @@ def test_recorded_context_history_retains_rename_and_original_predecessor(tmp_pa
     future = manifest(renamed, 3)
     comms.bus.log.record_context(future)
     raw = comms.bus.log.path.read_bytes()
-    reopened = Comms(comms.root)
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     history = reopened.bus.log.context_manifests('Alice', reopened.registry)
     assert history == (original, second, same_turn, future)
     assert reopened.bus.log.context_manifests('Renamed-Alice', reopened.registry) == history
@@ -363,7 +370,7 @@ def test_context_pointer_family_rebuilds_and_decodes_only_selected_originals(tmp
         with pytest.raises(RelationViolationError, match='outcome UNKNOWN'):
             comms.bus.log.record_context(replace(selected, counter='original-second-observation'))
     expected = (selected, replace(selected, counter='original-second-observation'))
-    assert Comms(comms.root).bus.log.context_manifests('Alice', comms.registry) == expected
+    assert Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).bus.log.context_manifests('Alice', comms.registry) == expected
     assert comms.bus.log.path.read_bytes().startswith(original)
     assert comms.bus.log.latest_sequence() == 12
     assert len(comms.bus.log.full_history()) == 12
@@ -379,7 +386,7 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
     images = (ImageInput('YQ==', 'image/png'),)
-    context = TurnContext.for_owner(owner, manifest(owner).turn, 'Original unicode task π 🙂', (), ())
+    context = TurnContext.for_owner(owner, manifest(owner).turn, 'Original unicode task π 🙂', (), (), now=time.time())
     rendered = context.render(images=images)
     expected = ''.join(segment.text() for segment in context.segments)
     assert rendered.text == expected
@@ -396,13 +403,13 @@ def test_rendered_contributors_remain_original_bytes_through_prompt_boundary(tmp
 
 
 def test_current_relevance_resource_is_frozen_with_coordination_provenance(tmp_path, monkeypatch):
-    from agent_comms.turn_context import CoordinationSegment, InstructionFile
+    from agent_comms.turn_context import SessionCoordinationSegment, InstructionFile
     from agent_comms.wake_policy import WakePolicy
 
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
     original = WakePolicy.relevance_instruction()
-    captured = CoordinationSegment.capture(owner, (), ())
+    captured = SessionCoordinationSegment.capture(owner)
     assert original.source in captured.provenance
     assert hashlib.sha256(original.content.encode()).hexdigest() == original.source.sha256
 

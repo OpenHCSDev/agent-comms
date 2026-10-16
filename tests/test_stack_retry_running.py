@@ -1,5 +1,7 @@
 """Real saved native owner: Retry defers until the original response retires."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -11,8 +13,7 @@ from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, Paused
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goals import Goal
-from agent_comms.runtime import RuntimeProxy, socket_path
-from test_backend_native_lifecycle import native_backend
+from agent_comms.runtime import RuntimeProxy
 from stored_inputs import stored_inputs
 
 
@@ -46,7 +47,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             target=session, text="Uncertain old native input must never replay",
         )
         original = stored_inputs(owner.inputs.dispositions.root).lookup("acp:old-native-unknown")
-        proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+        proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
         await proxy.subscribe()
         turn = asyncio.create_task(proxy.request(
             "prompt", prompt=[{"type": "text", "text": "Unrelated ordinary native request"}],
