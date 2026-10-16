@@ -226,6 +226,11 @@ class SessionLifecycle:
             raise RelationViolationError(
                 f"Headless owner {os.getpid()} did not acquire {thread.name!r}; it belongs to {thread.pid}"
             )
+        from .attempt_recovery import RecoveryMonitorCapability
+
+        await Coordination.run_worker(partial(
+            RecoveryMonitorCapability.recover_owner, self.comms.root, thread,
+        ))
         await self._bind_loaded(thread, session_id)
         self.effects.inputs.ensure_live_drain(session_id)
 

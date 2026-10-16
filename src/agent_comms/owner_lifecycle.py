@@ -147,6 +147,29 @@ from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
 
 
 class OwnerLifecycle:
+    def require_restart_idle(self, thread: Thread) -> None:
+        """Both the process and its durable execution must have finished."""
+        from .bus_publication import stable_thread_lookup
+        from .coordination_errors import StaleFence
+        from .coordination_session import ReadNativeCoordinationSession
+        from .coordination_tables.executions import CurrentExecutions
+        from .coordinator import Coordination
+        from .restart_refusals import OwnerBusyRefusal
+
+        try:
+            thread.require_idle()
+            path = self.root / "coordination.sqlite3"
+            if path.exists():
+                with Coordination(str(path), session_type=ReadNativeCoordinationSession) as store:
+                    pointer = CurrentExecutions.one(
+                        store.session._connection,
+                        owner_lookup=stable_thread_lookup(thread.created_at),
+                    )
+                    if pointer is not None:
+                        pointer.require_idle()
+        except (RelationViolationError, StaleFence) as error:
+            raise OwnerBusyRefusal() from error
+
     def __init__(self, root: Path, registry: Registration, bus: MessageBus):
         self.root = root
         self.registry = registry

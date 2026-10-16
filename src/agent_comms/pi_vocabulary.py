@@ -15,6 +15,13 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     tracked_failure = "Provider returned an unsuccessful terminal"
 
     @classmethod
+    def unpublished_attempt(cls):
+        from .attempt_states import UnknownOutcomeAttempt
+        from .coordination_tables.attempts import ReplayFact
+
+        return UnknownOutcomeAttempt(), ReplayFact.NONE
+
+    @classmethod
     def from_external(cls, value):
         from .field_codec import FieldCodec
 
@@ -62,7 +69,17 @@ class PendingStopReason(PiStopReason):
     pass
 
 
-class StopStopReason(PiStopReason):
+class FinishedPiStop:
+    @classmethod
+    def unpublished_attempt(cls):
+        from .attempt_states import AttemptFailedAttempt
+        from .coordination_tables.attempts import ReplayFact
+
+        # The native turn finished, but recovery cannot invent a delivered reply.
+        return AttemptFailedAttempt(), ReplayFact.ASSISTANT_OUTPUT
+
+
+class StopStopReason(FinishedPiStop, PiStopReason):
     successful = True
 
     @classmethod
@@ -70,7 +87,7 @@ class StopStopReason(PiStopReason):
         session.accept_final_message(message)
 
 
-class FailedPiStop:
+class FailedPiStop(FinishedPiStop):
     """An explicit failed terminal records the same failure on every live path."""
 
     failed = True

@@ -226,7 +226,7 @@ def step(comms: Comms) -> None:
             snapshot = comms.registry.snapshot()
             try:
                 owner = record.selection.require_current(snapshot)
-                owner.require_idle()
+                comms.owners.require_restart_idle(owner)
             except RestartRefusal as refusal:
                 record = record.transition(refusal.queue_state())
             except RelationViolationError:
@@ -288,6 +288,8 @@ async def run(comms: Comms) -> None:
         async for _ in WireWatch.observations(
             WatchSource.file(comms.registry.store.path),
             WatchSource.file(comms.registry.store.guard_path),
+            WatchSource.file(comms.root / "coordination.sqlite3"),
+            WatchSource.file(comms.root / "coordination.sqlite3-wal"),
             DirectoryWatchSource(directory),
         ):
             await Coordination.run_worker(lambda: step(comms))

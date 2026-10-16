@@ -204,6 +204,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     from agent_comms.owner_cutover import StoppedOwnerInstallation
     from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openai-codex/gpt-6.1-sol")
     comms = Comms(tmp_path)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = comms.messaging.initialize_private_initial_protocol()
@@ -334,7 +335,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             current = comms.registry.require(receipt.thread)
             ready(current)
             launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
-            assert launch.binary == str(target_binary)
+            assert launch.binary == str(target_binary.resolve())
             assert launch.arguments == arguments
             assert launch.environment["BATCH_OWNER_CREDENTIAL"] == credential
             assert launch.environment["PI_CODING_AGENT_DIR"] == str(tmp_path / (settings[index][0] + "-config"))
@@ -346,8 +347,16 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             assert current.model == originals[index].model
             assert current.thinking_level == originals[index].thinking_level
             assert current.goal == original_goals[current.name]
-            # Idle startup/handoff creates no model process and sends no original.
-            assert not Path(f"/proc/{current.pid}/task/{current.pid}/children").read_text().strip()
+            # Subscription may still be retiring metadata-only RPC children.
+            # No child may select or persist a native conversation.
+            children = Path(f"/proc/{current.pid}/task/{current.pid}/children").read_text().split()
+            for child_pid in children:
+                try:
+                    arguments = Path(f"/proc/{child_pid}/cmdline").read_bytes().split(b"\0")
+                except FileNotFoundError:
+                    continue  # The metadata child finished retiring.
+                if arguments != [b""]:  # A reaped child has no command line.
+                    assert b"--no-session" in arguments, arguments
         assert all(path.read_bytes() == content for path, content in source_files.items())
         assert not list(tmp_path.rglob("*.input-proof"))
 
@@ -405,7 +414,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             current = comms.registry.require(receipt.thread)
             ready(current)
             launch = RetainedOwnerLaunch.capture(current, comms.registry.snapshot())
-            assert launch.binary == str(target_binary)
+            assert launch.binary == str(target_binary.resolve())
             assert launch.arguments == settings[index][1]
             assert launch.environment['BATCH_OWNER_CREDENTIAL'] == settings[index][2]
             assert current.goal == original_goals[current.name]
