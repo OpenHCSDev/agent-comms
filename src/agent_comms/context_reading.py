@@ -13,9 +13,6 @@ class ContextReading(DeclaredFamily):
     @abstractmethod
     def status_text(self) -> str: ...
 
-    @abstractmethod
-    def wire_fields(self) -> dict[str, int | float | None]: ...
-
 
 @dataclass(frozen=True)
 class ContextUsage(ContextReading):
@@ -36,10 +33,6 @@ class ContextUsage(ContextReading):
     def status_text(self) -> str:
         return self.label
 
-    def wire_fields(self) -> dict[str, int | float | None]:
-        return {"context_used": self.used, "context_size": self.size,
-                "context_percent": self.context_percent}
-
 
 @dataclass(frozen=True)
 class UnmeasuredContext(ContextReading):
@@ -48,6 +41,3 @@ class UnmeasuredContext(ContextReading):
 
     def status_text(self) -> str:
         return "Native owner has not reported context usage"
-
-    def wire_fields(self) -> dict[str, int | float | None]:
-        return {"context_used": None, "context_size": None, "context_percent": None}
