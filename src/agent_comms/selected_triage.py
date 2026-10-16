@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from dataclasses import dataclass
+from functools import partial
 from typing import Literal
 
 from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendingAssignment
 from .coordination_tables.assignments import WakeAssignment
+from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, TextRepresentation
 from .typed_table import TextStorage
@@ -77,7 +79,7 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
     async def continue_turn(self, participant, session, input_id, execution, settled):
         from .selected_result import CoordinatedTurn
 
-        participant.consume_reply_wait()
+        await Coordination.run_worker(participant.consume_reply_wait)
         return await CoordinatedTurn.capture(participant, session, input_id, IgnoredAssignment)
 
 
@@ -95,14 +97,14 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         from .coordination_tables.executions import ExecutionOrigin
         from .selected_turn import SelectedAttempt
 
-        participant.require_current(participant.store)
+        await participant.require_current()
         created = participant.store.executions.create_after_triage(
             participant.batch.execution_id, ExecutionOrigin.WIRE,
             participant.lookup, participant.owner.thread.name,
             SelectedAttempt.max_attempts,
             sources=participant.batch.sources, settled=settled,
         ).value
-        attempt = SelectedAttempt.engage(participant, created)
+        attempt = await SelectedAttempt.engage(participant, created)
         return await attempt.run(execution, session,
                                  execution.action(session), execution.write_authority)
 
@@ -141,17 +143,17 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     error: InvalidTriageDecision
 
     def settle(self, participant, stage, admission, context):
-        from .selected_result import publish_native_failure
-
-        settled = stage.fail_decision(participant.store, participant.identity,
-                                      admission.input_id, admission.token_digest, context)
-        publish_native_failure(participant, admission.input_id,
-                               "The selected model returned an invalid triage decision.",
-                               source_error=self.error)
-        return settled
+        return stage.fail_decision(participant.store, participant.identity,
+                                   admission.input_id, admission.token_digest, context)
 
     async def continue_turn(self, participant, session, input_id, execution, settled):
-        from .selected_result import CoordinatedTurn
+        from .selected_result import CoordinatedTurn, publish_native_failure
+
+        await Coordination.run_worker(partial(
+            publish_native_failure, participant, input_id,
+            "The selected model returned an invalid triage decision.",
+            source_error=self.error,
+        ))
 
         return await CoordinatedTurn.capture(participant, session, input_id, FailedAssignment)
 

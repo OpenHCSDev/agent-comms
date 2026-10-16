@@ -67,8 +67,8 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
 
     admit = CodingToolOwner.admit
 
-    def observed_admission(owner, round_number, call):
-        admit(owner, round_number, call)
+    async def observed_admission(owner, round_number, call):
+        await admit(owner, round_number, call)
         admissions.append((round_number, call.call_id))
 
     result = TrackedTurnSession.result

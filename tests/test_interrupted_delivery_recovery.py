@@ -15,7 +15,6 @@ from agent_comms.coordination_cohort import pending_sealed_assignments
 from agent_comms.coordinator import Coordination
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.queued_input import DeliveredInput
-from agent_comms.store_files import _async_store_lock
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from stored_inputs import stored_inputs
@@ -44,11 +43,10 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
     # Freeze the original storage operation without placing its live result,
     # representing an owner that died after reservation and before queue handoff.
     reserved = []
-    async with _async_store_lock(comms._wire_lock_path):
-        await Coordination.run_worker(partial(
-            DeliveredInput.reserve_pending, agent.inputs, owner.name, root_id,
-            tuple(zip(deliveries, assignments, strict=True)), (), reserved,
-        ))
+    await Coordination.run_worker(partial(
+        DeliveredInput.reserve_pending, agent.inputs, owner.name, root_id,
+        tuple(zip(deliveries, assignments, strict=True)), (), reserved,
+    ))
     assert len(reserved) == 1
     with Coordination(str(store_path)) as store:
         paused = store.assignments.get(assignments[0].assignment_id)
@@ -108,6 +106,66 @@ async def test_empty_delivery_recovery_opens_no_coordinator(tmp_path, monkeypatc
         await agent.shutdown()
 
 
+async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_path, monkeypatch):
+    from agent_comms.selected_participant import SelectedParticipant
+    from agent_comms.turn_input_source import SelectedOriginalInput
+    from agent_comms.turn_phase import PromptAcceptancePhase
+
+    comms, agent, root_id = _session(tmp_path)
+    original = comms.messaging.send_initial_cohort("sender", "beta", "selected batch")
+    owner = comms.registry.require("beta")
+    path = comms.root / "coordination.sqlite3"
+    lookup = stable_thread_lookup(owner.created_at)
+    await _accept_visible_deliveries(comms.bus, root_id, path, lookup, 0, owner_name="beta")
+    entered, release = asyncio.Event(), threading.Event()
+    loop = asyncio.get_running_loop()
+    capacity = DeliveredInput.remaining_capacity
+
+    def hold_inside_delivery(inputs, sources):
+        loop.call_soon_threadsafe(entered.set)
+        release.wait()
+        return capacity(inputs, sources)
+
+    monkeypatch.setattr(DeliveredInput, "remaining_capacity", staticmethod(hold_inside_delivery))
+    try:
+        with Coordination(str(path)) as store:
+            async with SelectedParticipant.select(comms, store, root_id, "beta", 0) as selected:
+                assert selected is not None
+                leased = selected.owner.thread
+                inbox = agent.inputs.bind_native_turn(
+                    "beta", leased, leased.turn_lease.admission_generation, leased.active_turn.id,
+                )
+                agent.inputs.original_sources["beta"] = SelectedOriginalInput.answering("selected batch")
+                following = await Coordination.run_worker(partial(
+                    comms.messaging.send_initial_cohort, "sender", "beta", "following message",
+                ))
+                await _accept_visible_deliveries(
+                    comms.bus, root_id, path, lookup, original.seq, owner_name="beta",
+                )
+                delivery = asyncio.create_task(DeliveredInput.deliver_pending(
+                    agent.inputs, "beta", leased, comms.bus, root_id, original.seq,
+                ))
+                try:
+                    await asyncio.wait_for(entered.wait(), 5)
+                    # The release must run on this same loop. A synchronous
+                    # phase read here would prevent the holder ever releasing.
+                    timer = loop.call_later(0.05, release.set)
+                    await asyncio.wait_for(asyncio.gather(
+                        selected.transition(PromptAcceptancePhase()), delivery,
+                    ), 5)
+                    timer.cancel()
+                    assert type(comms.registry.require("beta").turn_state.phase) is PromptAcceptancePhase
+                    (placed,) = agent.inputs.queued_inputs["beta"].values()
+                    assert placed.message == following and inbox.qsize() == 1
+                finally:
+                    release.set()
+                    await asyncio.gather(delivery, return_exceptions=True)
+                    await agent.inputs.finish_turn_inputs("beta", inbox)
+    finally:
+        release.set()
+        await agent.shutdown()
+
+
 async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkeypatch):
     from agent_comms.coordination_database import CoordinationStore
 
@@ -122,11 +180,10 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
         with comms.bus.log.certified_read() as source:
             deliveries = tuple(source.references(tuple(row.source for row in assignments)))
     reserved = []
-    async with _async_store_lock(comms._wire_lock_path):
-        await Coordination.run_worker(partial(
-            DeliveredInput.reserve_pending, agent.inputs, "beta", root_id,
-            tuple(zip(deliveries, assignments, strict=True)), (), reserved,
-        ))
+    await Coordination.run_worker(partial(
+        DeliveredInput.reserve_pending, agent.inputs, "beta", root_id,
+        tuple(zip(deliveries, assignments, strict=True)), (), reserved,
+    ))
     (item, _content), = reserved
     with Coordination(str(store_path)) as store:
         store.assignments.restore_unbound_delivery(item.assignment)
