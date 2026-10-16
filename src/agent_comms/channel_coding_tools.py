@@ -26,6 +26,7 @@ from .envelope_claim_transitions import (
 )
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .native_tools import NativeExecutableTool
+from .native_arguments import ExtensionArgument, NativeArguments, ToolsArgument
 from .selected_tool_broker import (
     NativeToolMode,
     OwnerToolSocket,
@@ -143,12 +144,12 @@ class CodingToolOwner:
 class CodingToolMode(NativeToolMode):
     owner: CodingToolOwner
 
-    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+    def launch_arguments(self, package: Path) -> NativeArguments:
         declarations = NativeExecutableTool.members_with(NativeExecutableTool)
         extensions = tuple(dict.fromkeys(tool.native_extension(package) for tool in declarations))
         # Package acquisition verifies each declaration's extension bytes.
-        return ("--tools", ",".join(tool.declared_name for tool in declarations),
-                *(argument for extension in extensions for argument in ("-e", str(extension))))
+        return NativeArguments((ToolsArgument(",".join(tool.declared_name for tool in declarations)),
+                                *(ExtensionArgument(str(extension)) for extension in extensions)))
 
     def socket(self, directory: Path, token: str) -> OwnerToolSocket:
         return CodingToolSocket(directory, token, self.owner)

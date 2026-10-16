@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
 
+from .native_arguments import NativeArguments
+
 from .turn_phase import ShutdownPhase
 
 from .native_turn_context import NativeContextData
@@ -257,7 +259,7 @@ class CatalogQuery(NativeQuery):
 
     @asynccontextmanager
     async def catalog(
-        self, comms: Comms, arguments: Sequence[str], *, worktree: Path | None = None,
+        self, comms: Comms, arguments: NativeArguments, *, worktree: Path | None = None,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .child_process import BoundedRun
@@ -269,7 +271,7 @@ class CatalogQuery(NativeQuery):
             launch = await asyncio.to_thread(
                 NativePiRpcLaunch.catalog,
                 comms.runtime,
-                tuple(arguments),
+                arguments,
                 package=comms.owners.native_package,
                 worktree=Path.cwd() if worktree is None else worktree,
             )
@@ -290,7 +292,7 @@ class CatalogQuery(NativeQuery):
         except (EOFError, ValueError, OSError) as error:
             raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
 
-    async def discover(self, comms: Comms, arguments: Sequence[str]) -> PiResponseData:
+    async def discover(self, comms: Comms, arguments: NativeArguments) -> PiResponseData:
         from .native_errors import NativePiUnavailable
 
         async with self.catalog(comms, arguments) as (channel, writer):
@@ -339,7 +341,7 @@ class SettingCommand(CatalogQuery):
     error_message: ClassVar[str]
 
     async def configure(
-        self, comms: Comms, arguments: Sequence[str], *, worktree: Path,
+        self, comms: Comms, arguments: NativeArguments, *, worktree: Path,
     ) -> StateData:
         """Let native settings own validation/defaults, then observe their result.
 

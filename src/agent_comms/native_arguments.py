@@ -5,9 +5,11 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
+import shlex
 from typing import ClassVar
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, WireValue
 from pathlib import Path
 
 @dataclass(frozen=True)
@@ -183,11 +185,24 @@ class VersionArgument(NamedOption, OneShotArgument):
 
 
 @dataclass(frozen=True)
-class NativeArguments:
-    entries: tuple[NativeArgument, ...]
+class NativeArguments(WireValue):
+    entries: tuple[NativeArgument, ...] = ()
 
     @classmethod
-    def parse(cls, arguments: Sequence[str]) -> NativeArguments:
+    def from_wire(cls, data: object) -> NativeArguments:
+        return cls.parse(FieldCodec.decode(tuple[str, ...], data))
+
+    def to_wire(self) -> tuple[str, ...]:
+        return self.argv
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(tuple[str, ...])
+
+    @classmethod
+    def parse(cls, arguments: Sequence[str] | str) -> NativeArguments:
+        if isinstance(arguments, str):
+            arguments = shlex.split(arguments)
         options = {
             flag: member
             for member in OptionArgument.members_with(OptionArgument)
@@ -251,7 +266,10 @@ class NativeArguments:
                                                        if isinstance(entry, ExtensionArgument))))
         return self.replace(ExtensionArgument, *(ExtensionArgument(value) for value in selected))
 
-    def rpc(self) -> tuple[str, ...]:
+    def extended(self, *entries: NativeArgument) -> NativeArguments:
+        return NativeArguments((*self.entries, *entries))
+
+    def rpc(self) -> NativeArguments:
         for entry in self.entries:
             entry.validate_rpc()
-        return self.replace(ModeArgument, ModeArgument("rpc")).argv
+        return self.replace(ModeArgument, ModeArgument("rpc"))

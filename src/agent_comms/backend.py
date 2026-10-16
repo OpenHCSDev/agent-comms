@@ -25,6 +25,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from .native_arguments import NativeArguments
+
 from .agent_backend import TurnInboxItem
 from .child_process import ProcessIdentity
 from .request_progress import RequestProgress
@@ -112,7 +114,7 @@ async def _maintenance_send_boundary(
 
 async def stream_agent_events(
     comms: Comms,
-    agent_args: Sequence[str],
+    agent_args: NativeArguments,
     task: str,
     cwd: str,
     env_extra: dict[str, str] | None = None,
@@ -153,7 +155,7 @@ async def stream_agent_events(
                 launch = await Coordination.run_worker(partial(
                     persistent_session.custody.managed_launch,
                     comms,
-                    tuple(agent_args),
+                    agent_args,
                     worktree=Path(cwd),
                     environment=env_extra,
                     session_file=session_file,

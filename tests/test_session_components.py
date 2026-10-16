@@ -1,5 +1,6 @@
 """Session ownership, declaration extension and actual ACP boundary contracts."""
 
+from agent_comms.native_arguments import NativeArguments
 import os
 from dataclasses import replace
 
@@ -46,7 +47,7 @@ async def owner(tmp_path, monkeypatch):
     monkeypatch.setattr(ThinkingLevelConfigOption, "discover", levels)
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     selected_comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(["--model", "test/one"]))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=NativeArguments.parse(tuple(["--model", "test/one"])))
     agent = canonical_agent(selected_comms,  auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     try:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import asyncio
@@ -322,7 +323,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             if path.is_file() and path.suffix == ".jsonl"
         }
         # The operator's model/arguments/credential must never overwrite a source owner.
-        comms.settings = NativeThreadDefaults(arguments=("--thinking", declared_options[-1].value))
+        comms.settings = NativeThreadDefaults(arguments=NativeArguments.parse(("--thinking", declared_options[-1].value)))
         monkeypatch.setenv("BATCH_OWNER_CREDENTIAL", "operator-only")
         target_runtime = LaunchRuntime.current()
         prefix = target_runtime.interpreter.parent.parent

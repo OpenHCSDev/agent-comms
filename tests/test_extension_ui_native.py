@@ -1,5 +1,6 @@
 """Actual saved Pi -> native extension UI -> owner ACP socket -> same Pi reply."""
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import json
 from types import SimpleNamespace
@@ -21,7 +22,7 @@ async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_bac
     fixture = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     selected_comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
-    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=NativeArguments.parse(tuple(['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools'])))
     owner = canonical_agent(selected_comms,  runtime_enabled=True, auto_wake=False)
     updates, permissions = [], []
 

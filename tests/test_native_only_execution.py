@@ -127,7 +127,7 @@ async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, mo
     )
     launch = NativePiRpcLaunch.managed(
         "pi",
-        (*NativeThreadDefaults.isolation_arguments, '--session-dir', str(tmp_path / 'sessions')),
+        (*NativeThreadDefaults.isolation_arguments.argv, '--session-dir', str(tmp_path / 'sessions')),
         worktree=tmp_path,
         environment={"PI_CODING_AGENT_DIR": str(tmp_path / "agent-config")},
         session_context=(DoctrineSegment.capture(),),

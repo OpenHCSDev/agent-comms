@@ -1,0 +1,18 @@
+production modules 335 omissions []
+backend.py agent_args: Sequence[str] 1
+backend.py tuple(agent_args) 1
+config_options.py self.comms.settings.parsed_arguments 2
+config_options.py .with_model(thread.model).argv 1
+config_options.py self.comms, arguments.argv, worktree= 1
+native_pi.py arguments: tuple[str, ...] 7
+native_pi.py NativeArguments.parse(arguments).rpc() 3
+native_session_prepare.py agent_args: Sequence[str] 2
+native_session_prepare.py tuple(agent_args) 1
+pi_commands.py arguments: Sequence[str] 3
+pi_commands.py tuple(arguments) 1
+pi_native_backend.py self.comms.settings.parsed_arguments 2
+pi_native_backend.py def arguments(self, thread: Thread) -> tuple[str, ...]: 1
+pi_native_backend.py         ).argv 2
+pi_native_backend.py             ).argv 0
+tracked_turn.py arguments: tuple[str, ...] 1
+LIMITS: fixtures and embedded Python require migration; dynamic binding is not inferred.

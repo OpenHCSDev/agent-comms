@@ -1,5 +1,6 @@
 """Image prompts survive ACP decoding, fresh Pi input and queued steering."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import asyncio
@@ -78,7 +79,7 @@ def test_combined_image_budget():
 async def make_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     selected_comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(["--model", "test/model"]))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=NativeArguments.parse(tuple(["--model", "test/model"])))
     agent = canonical_agent(selected_comms)
     await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     return agent
@@ -151,7 +152,7 @@ async def test_image_steering_and_queue_restoration_keep_attachment_reference(
 async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(["--model", "test/model"]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(["--model", "test/model"])))
     owner = canonical_agent(comms,  runtime_enabled=True)
     client = canonical_agent(comms)
     await owner.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
@@ -267,7 +268,7 @@ async def test_failed_queued_image_child_never_exposes_encoded_attachment(tmp_pa
     assert PNG not in repr(events)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     selected_comms_2 = Comms(resolve_comms_route(tmp_path / "acp-wire"), runtime=LaunchRuntime.current())
-    selected_comms_2.settings = dataclasses.replace(selected_comms_2.settings,  arguments=tuple(["--model", "test/model"]))
+    selected_comms_2.settings = dataclasses.replace(selected_comms_2.settings,  arguments=NativeArguments.parse(tuple(["--model", "test/model"])))
     agent = canonical_agent(selected_comms_2)
     await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
     started = asyncio.Event()

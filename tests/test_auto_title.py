@@ -1,3 +1,4 @@
+from agent_comms.native_arguments import NativeArguments
 import pytest
 
 from agent_comms.acp import CommsAgent
@@ -13,7 +14,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 async def test_new_pi_thread_requests_one_concise_title(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     selected_comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
-    selected_comms.settings = dataclasses.replace(selected_comms.settings, arguments=tuple(["--model", "test/model"]))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings, arguments=NativeArguments.parse(tuple(["--model", "test/model"])))
     agent = CommsAgent(selected_comms)
     await agent.new_session("/tmp/project")
     assert agent._comms.registry.require("project").auto_title_pending

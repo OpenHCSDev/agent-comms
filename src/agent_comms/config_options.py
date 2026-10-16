@@ -157,7 +157,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
 
     async def discover(self, thread: CatalogSelection) -> list[ConfigChoice]:
         data = await GetAvailableThinkingLevels().discover(
-            self.comms, self.comms.settings.parsed_arguments.with_model(thread.model).argv
+            self.comms, self.comms.settings.arguments.with_model(thread.model)
         )
         return [ConfigChoice(value=member.declared_name, name=member.declared_name.title())
                 for member in data.levels]
@@ -192,11 +192,11 @@ class ConfigOptions:
 
     async def configure_thread(self, thread: Thread, command: SettingCommand) -> None:
         """Store the model and thinking level Pi reports for this change."""
-        arguments = self.comms.settings.parsed_arguments.with_model(thread.model).with_thinking(
+        arguments = self.comms.settings.arguments.with_model(thread.model).with_thinking(
             ThinkingLevel.optional_name(thread.thinking_level)
         )
         state = await command.configure(
-            self.comms, arguments.argv, worktree=Path(thread.worktree),
+            self.comms, arguments, worktree=Path(thread.worktree),
         )
         model = state.model.display_name
         level = ThinkingLevel.optional_name(state.thinking_level)

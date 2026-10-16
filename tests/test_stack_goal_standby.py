@@ -1,5 +1,6 @@
 """Real native Pi goal tool, localhost provider, and dependency-triggered owner turn."""
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import json
 import os
@@ -174,9 +175,9 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
         }.items():
             monkeypatch.setenv(key, value)
-        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '--extension', str(Path(__file__).resolve().parents[1] / 'extensions/pi-agent-comms/index.ts')]
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '--extension', str(Path(__file__).resolve().parents[1] / 'extensions/pi-agent-comms/index.ts')]
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(args))
+        comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(args)))
         agent = CommsAgent(comms,  runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
@@ -234,7 +235,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 # rotate only the unused READY grant at the send boundary.
                 await agent.shutdown()
                 comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-                comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(args))
+                comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(args)))
                 agent = CommsAgent(comms,  runtime_enabled=True)
                 monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "parent")

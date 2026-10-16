@@ -18,6 +18,7 @@ from agent_comms import backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from agent_comms.comms import Comms
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.coordinator import Coordination
@@ -99,7 +100,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
     @staticmethod
     def native_arguments(options=("--no-tools",)):
         """One external native argument declaration for saved/ACP consumers."""
-        return ('--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', *options)
+        return NativeArguments.parse(('--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', *options))
 
     @asynccontextmanager
     async def open_owner(self, *, runtime_enabled=False, auto_wake=False,

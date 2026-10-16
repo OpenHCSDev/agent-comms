@@ -34,21 +34,21 @@ from agent_comms.launch_runtime import LaunchRuntime
 
 def test_unconfigured_launch_has_no_provider_or_model_policy():
     defaults = NativeThreadDefaults()
-    arguments = NativeArguments.parse(defaults.arguments)
+    arguments = defaults.arguments
     assert arguments.argv == ()
     assert arguments.model is None
     assert arguments.thinking is None
     selected = NativeThreadDefaults(
-         arguments=("--provider", "user", "--model", "selected"),
+         arguments=NativeArguments.parse(("--provider", "user", "--model", "selected")),
     )
-    assert NativeArguments.parse(selected.arguments).model == "user/selected"
+    assert selected.arguments.model == "user/selected"
     assert selected.model == "user/selected"
 
 
 def test_settings_resolve_explicit_selection_once_at_the_record_boundary():
-    selected = NativeThreadDefaults(arguments=(
+    selected = NativeThreadDefaults(arguments=NativeArguments.parse((
         "--model", "override/selected", "--thinking", "low", "--thinking=off",
-    ))
+    )))
     assert selected.model == "override/selected"
     assert selected.thinking_level is OffThinkingLevel
     assert NativeThreadDefaults.from_arguments(selected.cli_arguments) == selected
@@ -57,14 +57,14 @@ def test_settings_resolve_explicit_selection_once_at_the_record_boundary():
 
 
 def test_offline_record_owns_the_shared_isolation_arguments():
-    selected = NativeThreadDefaults.offline(arguments=("--no-tools",))
-    assert selected.arguments == ("--offline", *NativeThreadDefaults.isolation_arguments, "--no-tools")
+    selected = NativeThreadDefaults.offline(arguments=NativeArguments.parse(("--no-tools",)))
+    assert selected.arguments == ("--offline", *NativeThreadDefaults.isolation_arguments.argv, "--no-tools")
     assert "--no-context-files" in selected.arguments
     assert NativeThreadDefaults.from_arguments(selected.cli_arguments) == selected
 
 
 def test_native_settings_cli_and_original_command_share_the_declared_codec():
-    selected = NativeThreadDefaults( arguments=("--label", "two words"))
+    selected = NativeThreadDefaults( arguments=NativeArguments.parse(("--label", "two words")))
     assert NativeThreadDefaults.from_arguments(selected.cli_arguments, selected) == selected
     assert NativeThreadDefaults.from_arguments(("python", "-m", "agent_comms.worker",
                                                *selected.cli_arguments)) == selected
@@ -78,7 +78,7 @@ def test_native_settings_cli_and_original_command_share_the_declared_codec():
 
 
 @pytest.mark.parametrize("record_type,record", [
-    (NativeThreadDefaults, NativeThreadDefaults( arguments=("two words",))),
+    (NativeThreadDefaults, NativeThreadDefaults( arguments=NativeArguments.parse(("two words",)))),
     (ThreadIncarnation, RecordedThreadIncarnation("fixture-owner", 1.0)),
 ])
 def test_record_flags_share_required_default_and_strict_json_boundary(record_type, record):
@@ -125,7 +125,7 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
     assert arguments.thinking == "high"
     selected = arguments.with_model("response-local/fixture").with_thinking("off")
     assert selected.model == "response-local/fixture" and selected.thinking == "off"
-    assert selected.rpc() == (
+    assert selected.rpc().argv == (
         "--offline",
         "--extension",
         "extension.mjs",
@@ -165,18 +165,18 @@ def test_option_declaration_extends_consumption_rendering_and_mode_validation():
 
     arguments = NativeArguments.parse(("--fixture-value=allowed", "--mode=rpc"))
     assert arguments.value(FixtureValueArgument) == "allowed"
-    assert arguments.rpc() == ("--fixture-value", "allowed", "--mode", "rpc")
+    assert arguments.rpc().argv == ("--fixture-value", "allowed", "--mode", "rpc")
     with pytest.raises(ValueError, match="fixture denied"):
-        NativeArguments.parse(("--fixture-value=denied",)).rpc()
+        NativeArguments.parse(("--fixture-value=denied",)).rpc().argv
     for member in OptionArgument.members_with(OneShotArgument):
         with pytest.raises(ValueError) as declared:
             member().validate_rpc()
         for flag in (value for value in (member.flag(), member.short) if value is not None):
             with pytest.raises(ValueError, match=re.escape(str(declared.value))):
-                NativeArguments.parse((flag,)).rpc()
+                NativeArguments.parse((flag,)).rpc().argv
     for mode in (("--mode", "text"), ("--mode=json",), ("--mode",)):
         with pytest.raises(ValueError):
-            NativeArguments.parse(mode).rpc()
+            NativeArguments.parse(mode).rpc().argv
 
 
 def test_backend_cannot_reintroduce_independent_launch_option_readers():
@@ -214,7 +214,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
     proof = read_proof_rows(native.session)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    selected_comms.settings = dataclasses.replace(selected_comms.settings, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=low', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings, arguments=NativeArguments.parse(tuple(['--provider=response-local', '--model=fixture', '--thinking=low', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools'])))
     owner = canonical_agent(selected_comms,  auto_wake=False)
     router = build_agent_router(owner)
     try:

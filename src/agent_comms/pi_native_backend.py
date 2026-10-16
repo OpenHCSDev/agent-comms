@@ -188,13 +188,13 @@ class PiNativeBackend(
             partial(runner.observe_selected_preparation, session_id),
         )
 
-    def arguments(self, thread: Thread) -> tuple[str, ...]:
+    def arguments(self, thread: Thread) -> NativeArguments:
         """Pi's command-line arguments for this thread's model and thinking level."""
         from .pi_vocabulary import ThinkingLevel
 
-        return self.comms.settings.parsed_arguments.with_model(thread.model).with_thinking(
+        return self.comms.settings.arguments.with_model(thread.model).with_thinking(
             ThinkingLevel.optional_name(thread.thinking_level)
-        ).argv
+        )
 
     # -- lifecycle --------------------------------------------------------
 
@@ -378,9 +378,9 @@ class PiNativeBackend(
         arguments = self.arguments(thread)
         for command in commands:
             state = await command.configure(self.comms, arguments, worktree=Path(thread.worktree))
-            arguments = self.comms.settings.parsed_arguments.with_model(state.model.display_name).with_thinking(
+            arguments = self.comms.settings.arguments.with_model(state.model.display_name).with_thinking(
                 ThinkingLevel.optional_name(state.thinking_level)
-            ).argv
+            )
         selected, level = state.model.display_name, ThinkingLevel.optional_name(state.thinking_level)
         if selected is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")

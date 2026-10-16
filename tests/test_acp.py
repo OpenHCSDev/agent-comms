@@ -4,6 +4,7 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.tool_caller import NoThreadCaller
 
 from agent_comms.runtime_socket import RuntimeSocket
@@ -165,7 +166,7 @@ class TestHandlers:
         monkeypatch.setattr("agent_comms.pi_commands.SettingCommand.configure", configure)
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/one,anthropic/two")
         selected_comms_2 = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-        selected_comms_2.settings = dataclasses.replace(selected_comms_2.settings, arguments=tuple(["--print", "--provider", "openrouter", "--model", "one"]))
+        selected_comms_2.settings = dataclasses.replace(selected_comms_2.settings, arguments=NativeArguments.parse(tuple(["--print", "--provider", "openrouter", "--model", "one"])))
         agent = canonical_agent(selected_comms_2)
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         model_config = response.config_options[0]
@@ -222,7 +223,7 @@ class TestHandlers:
 
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/one")
         selected_comms_4 = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-        selected_comms_4.settings = dataclasses.replace(selected_comms_4.settings, arguments=tuple(["--provider", "openrouter", "--model", "one"]))
+        selected_comms_4.settings = dataclasses.replace(selected_comms_4.settings, arguments=NativeArguments.parse(tuple(["--provider", "openrouter", "--model", "one"])))
         agent = canonical_agent(selected_comms_4)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         with pytest.raises(RequestError):
@@ -547,7 +548,7 @@ class TestAgentTurn:
     )
 
     def _agent_with_events(self, tmp_path: Path, wired) -> CommsAgent:
-        wired.settings = dataclasses.replace(wired.settings,  arguments=tuple([]))
+        wired.settings = dataclasses.replace(wired.settings,  arguments=NativeArguments.parse(tuple([])))
         return canonical_agent(wired,  auto_wake=False)
 
     def _authorize_test_goal(self, agent: CommsAgent, wired, goal) -> None:

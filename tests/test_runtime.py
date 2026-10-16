@@ -1,5 +1,6 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import asyncio
@@ -89,7 +90,7 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
     from acp.exceptions import RequestError
 
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple([])))
     owner = canonical_agent(comms,  runtime_enabled=True)
     client = canonical_agent(comms)
     response = await owner.new_session(str(tmp_path / "project"))
@@ -129,7 +130,7 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime and /bin/echo backend")
 async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, monkeypatch):
     comms = Comms(resolve_comms_route(tmp_path / ("long-wire-" * 16)), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple([])))
     owner = canonical_agent(comms,  runtime_enabled=True)
     client = canonical_agent(comms)
     updates = []
@@ -375,7 +376,7 @@ async def test_request_only_proxy_never_replays_after_request_was_received(
 @pytest.mark.skipif(os.name == "nt", reason="POSIX socket runtime")
 async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple([])))
     owner = canonical_agent(comms,  runtime_enabled=True)
     client = canonical_agent(comms)
     updates = []
@@ -422,7 +423,7 @@ async def test_subscriber_receives_identity_before_transcript_replay(tmp_path):
 async def test_attached_client_receives_owner_model_options(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/one,test/two")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(["--provider", "test", "--model", "one"]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(["--provider", "test", "--model", "one"])))
     owner = canonical_agent(comms,  runtime_enabled=True)
     client = canonical_agent(comms)
     response = await owner.new_session(str(tmp_path / "project"))

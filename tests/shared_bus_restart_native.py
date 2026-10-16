@@ -946,7 +946,7 @@ async def run(arguments):
                         await asyncio.sleep(.03)
             else:
                 await asyncio.to_thread(service.owners.start,name,
-                    agent_args=['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'])
+                    agent_args=['--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools'])
             await attach(service,name)
         assert provider.posts == 0
         originals = [service.registry.require(name) for name in names]

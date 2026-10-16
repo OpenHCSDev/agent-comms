@@ -1,0 +1,62 @@
+............................s.....s...sssssssss......................... [ 91%]
+......F                                                                  [100%]
+=================================== FAILURES ===================================
+_________ test_login_uses_pi_native_ui_without_managed_thread_identity _________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4634/test_login_uses_pi_native_ui_w0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f60f4764a60>
+
+    def test_login_uses_pi_native_ui_without_managed_thread_identity(tmp_path, monkeypatch):
+        package = tmp_path / "native"
+>       comms = Comms(PinnedRoute(tmp_path / "wire", "a" * 32, package),
+                      runtime=LaunchRuntime.running())
+
+tests/test_auth.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:63: in __init__
+    self.route.bind_owners(self.owners)
+src/agent_comms/active_route.py:98: in bind_owners
+    owners.pin_private_nk_launch(self.root, self.wire_root_id, self.native_package)
+src/agent_comms/owner_lifecycle.py:172: in pin_private_nk_launch
+    with self.bus.log.certified_read() as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:304: in certified_read
+    with self._certified_source(lock) as source:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/wire_log.py:347: in _certified_source
+    marker = self._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f60f3f77460>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:472: RelationViolationError
+=========================== short test summary info ============================
+FAILED tests/test_auth.py::test_login_uses_pi_native_ui_without_managed_thread_identity
+1 failed, 67 passed, 11 skipped, 3 deselected in 14.49s

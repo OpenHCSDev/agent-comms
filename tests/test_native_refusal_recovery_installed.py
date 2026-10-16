@@ -74,7 +74,7 @@ async def test_actual_native_refusal_after_tool_preserves_saved_history(tmp_path
     # An explicit isolated root suppresses discovery of Tristan's installed route.
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path / "wire"))
     launcher = str(Path(__file__).parents[1] / "stack/bin/pi-native")
-    arguments = ['--provider', 'retry-offline', '--model', 'fixture', '--thinking', 'off', *NativeThreadDefaults.isolation_arguments]
+    arguments = ['--provider', 'retry-offline', '--model', 'fixture', '--thinking', 'off', *NativeThreadDefaults.isolation_arguments.argv]
     session = PersistentPiSession()
     saved = None
 

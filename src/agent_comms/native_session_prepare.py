@@ -9,6 +9,8 @@ from pathlib import Path
 from functools import partial
 from typing import TYPE_CHECKING
 
+from .native_arguments import NativeArguments
+
 from . import agent_events as events
 from . import backend
 from .native_errors import NativePiUnavailable
@@ -67,7 +69,7 @@ class NativeSessionPreparation(backend.TurnSession):
         cls,
         persistent: PersistentPiSession,
         comms: Comms,
-        agent_args: Sequence[str],
+        agent_args: NativeArguments,
         *,
         worktree: str,
         environment: dict[str, str],
@@ -83,7 +85,7 @@ class NativeSessionPreparation(backend.TurnSession):
 
     @classmethod
     async def open_acquired(
-        cls, persistent: PersistentPiSession, comms: Comms, agent_args: Sequence[str], *,
+        cls, persistent: PersistentPiSession, comms: Comms, agent_args: NativeArguments, *,
         worktree: str, environment: dict[str, str], session_file: str,
         session_context: tuple[ContextSegment, ...],
         project: NativeProject,
@@ -93,7 +95,7 @@ class NativeSessionPreparation(backend.TurnSession):
         owner = asyncio.current_task()
         launch = await Coordination.run_worker(partial(
             persistent.custody.managed_launch,
-            comms, tuple(agent_args), worktree=Path(worktree),
+            comms, agent_args, worktree=Path(worktree),
             environment=environment, session_file=session_file,
             session_context=session_context,
             project=project,

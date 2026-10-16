@@ -593,7 +593,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         hints = get_type_hints(member)
         for declared in fields(member):
             key = declared.metadata.get("wire_name", declared.name)
-            value = getattr(args, key)
+            value = declared.namespace_value(args)
             normalize = declared.metadata["normalize"]
             if normalize is not None:
                 value = normalize(value)
@@ -1336,17 +1336,17 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     project: str = option("--project", parser_default_factory=os.getcwd)
-    model: str = option("--model", setting=lambda settings: settings.model,
+    model: str = option("--model", setting=lambda settings: settings.startup_arguments().model,
                         field_metadata={CatalogConfigOption: ModelConfigOption})
     thinking_level: type[ThinkingLevel] = option(
-        "--thinking-level", setting=lambda settings: settings.thinking_level,
+        "--thinking-level", setting=lambda settings: ThinkingLevel.decode(settings.startup_arguments().thinking),
         field_metadata={CatalogConfigOption: ThinkingLevelConfigOption})
 
     @classmethod
     def project_bindings(cls, comms, project):
-        defaults = comms.settings
-        return (cls(name='', project=project, model=defaults.model,
-                    thinking_level=defaults.thinking_level),)
+        startup = comms.settings.startup_arguments()
+        return (cls(name='', project=project, model=startup.model,
+                    thinking_level=ThinkingLevel.decode(startup.thinking)),)
 
     @classmethod
     def open_targets(cls, result: ThreadCreatedResult) -> tuple[str, ...]:

@@ -27,7 +27,10 @@ from .coordination_errors import IdentityConflict
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .field_codec import FieldCodec
 from .fresh_private_session import FreshPrivateSession
-from .native_arguments import NativeArguments
+from .native_arguments import (
+    ExtensionArgument, ExternalArgument, NativeArguments, NoSessionArgument,
+    NoToolsArgument, SessionArgument, SessionDirArgument,
+)
 from .native_entries import NativeEntry, NativeEvidenceRead, NativeInputEvidenceRead, SessionEntry
 from .native_errors import NativePiUnavailable
 from .native_input_record import NativeInputCommit, NativeInputIdText
@@ -108,7 +111,7 @@ def main() -> int:
     project = ManagedNativeProject.from_entry(launch.validated_root, entry)
     argv, environment = NativePiRpcLaunch.bootstrap(
         cli,
-        tuple(arguments),
+        NativeArguments.parse(arguments),
         Path.cwd(),
         environment,
         RestartEnvironment.inherit(environment),
@@ -433,7 +436,7 @@ class NativePiRpcLaunch:
 
     @classmethod
     def bootstrap(
-        cls, cli, arguments, cwd, environment, configuration: RestartEnvironment,
+        cls, cli, arguments: NativeArguments, cwd, environment, configuration: RestartEnvironment,
         runtime: LaunchRuntime, *, session_context: tuple[ContextSegment, ...],
         project: NativeProject,
     ):
@@ -460,7 +463,7 @@ class NativePiRpcLaunch:
             "--import",
             str(cli.with_name("agent-comms-project-bootstrap.mjs")),
             str(cli),
-            *NativeArguments.parse(arguments).with_extensions(
+            *arguments.with_extensions(
                 NativeRequestTools.native_extension(cli.parent.parent),
                 project.native_extension(cli.parent.parent),
             ).argv,
@@ -498,17 +501,13 @@ class NativePiRpcLaunch:
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        arguments = (
-            "--no-session",
-            "--no-tools",
-            "--no-extensions",
-            "-e",
-            str(package / "dist/pi_login_control.mjs"),
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-themes",
-        )
+        arguments = NativeArguments((
+            NoSessionArgument(), NoToolsArgument(),
+            ExternalArgument(("--no-extensions",)),
+            ExtensionArgument(str(package / "dist/pi_login_control.mjs")),
+            ExternalArgument(("--no-skills", "--no-context-files",
+                              "--no-prompt-templates", "--no-themes")),
+        ))
         return cls._build(
             package / "dist/cli.js",
             arguments,
@@ -526,7 +525,7 @@ class NativePiRpcLaunch:
     def catalog(
         cls,
         runtime: LaunchRuntime,
-        arguments: tuple[str, ...],
+        arguments: NativeArguments,
         *,
         package: Path,
         worktree: Path,
@@ -538,22 +537,23 @@ class NativePiRpcLaunch:
         replace a managed participant's selected source through CLI options.
         """
         try:
-            arguments = NativeArguments.parse(arguments).rpc()
+            arguments = arguments.rpc()
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
         package = cls.package_for_runtime(runtime, package)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        return cls._managed(package, (*arguments, "--no-extensions", "--no-skills",
-            "--no-context-files", "--no-session"), cwd, None, SelectedSession(cwd), runtime,
+        return cls._managed(package, arguments.extended(
+            ExternalArgument(("--no-extensions", "--no-skills", "--no-context-files")),
+            NoSessionArgument()), cwd, None, SelectedSession(cwd), runtime,
             session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
 
     @classmethod
     def managed(
         cls,
         runtime: LaunchRuntime,
-        arguments: tuple[str, ...],
+        arguments: NativeArguments,
         *,
         package: Path,
         worktree: Path,
@@ -564,7 +564,7 @@ class NativePiRpcLaunch:
     ) -> NativePiRpcLaunch:
         """Prepare managed ACP/headless execution from its selected runtime."""
         try:
-            arguments = NativeArguments.parse(arguments).rpc()
+            arguments = arguments.rpc()
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
         package = cls.package_for_runtime(runtime, package)
@@ -589,7 +589,7 @@ class NativePiRpcLaunch:
         env = dict(os.environ)
         env.update(environment or {})
         if session.path is not None:
-            arguments += ("--session", str(session.path))
+            arguments = arguments.extended(SessionArgument(str(session.path)))
         cli = package / "dist" / "cli.js"
         return cls._build(cli, arguments, cwd, env, session, package,
                           RestartEnvironment.inherit(env), runtime, session_context=session_context,
@@ -598,7 +598,7 @@ class NativePiRpcLaunch:
     def retained_managed(
         self,
         runtime: LaunchRuntime,
-        arguments: tuple[str, ...],
+        arguments: NativeArguments,
         *,
         package: Path,
         worktree: Path,
@@ -616,13 +616,13 @@ class NativePiRpcLaunch:
         saved = Path(session_file).absolute() if session_file is not None else None
         if runtime != self.runtime or package != self.package or saved != self.session.path:
             return None
-        return self._managed(self.package, NativeArguments.parse(arguments).rpc(),
+        return self._managed(self.package, arguments.rpc(),
             worktree, environment, self.session, self.runtime, session_context=session_context,
             project=project)
 
     @classmethod
     def acquire_tracked(cls, package: Path, runtime: LaunchRuntime,
-                        arguments: tuple[str, ...]) -> Callable[..., NativePiRpcLaunch]:
+                        arguments: NativeArguments) -> Callable[..., NativePiRpcLaunch]:
         """Acquire one immutable artifact's executable construction behavior.
 
         The returned factory retains the original verified CLI for its owner's
@@ -634,13 +634,13 @@ class NativePiRpcLaunch:
 
     @classmethod
     def verified_launcher(cls, package: Path, cli: Path, runtime: LaunchRuntime,
-                          arguments: tuple[str, ...]) -> Callable[..., NativePiRpcLaunch]:
+                          arguments: NativeArguments) -> Callable[..., NativePiRpcLaunch]:
         """Launcher for a package whose CLI _trusted_package already returned."""
         return partial(cls._tracked, Path(package).absolute(), cli, runtime, arguments)
 
     @classmethod
     def tracked(cls, package: Path, *, runtime: LaunchRuntime,
-                arguments: tuple[str, ...], **options) -> NativePiRpcLaunch:
+                arguments: NativeArguments, **options) -> NativePiRpcLaunch:
         """Acquire a fresh artifact for a standalone tracked execution."""
         return cls.acquire_tracked(package, runtime, arguments)(**options)
 
@@ -650,7 +650,7 @@ class NativePiRpcLaunch:
         package: Path,
         cli: Path,
         runtime: LaunchRuntime,
-        native_arguments: tuple[str, ...],
+        native_arguments: NativeArguments,
         *,
         worktree: Path,
         session: SelectedSession,
@@ -670,8 +670,7 @@ class NativePiRpcLaunch:
         and model-delivery proofs remain separate per-attempt observations.
         """
         session_dir, session_file = session.directory, session.path
-        configured = NativeArguments.parse(native_arguments)
-        configured.rpc()
+        configured = native_arguments.rpc()
         try:
             for value in (provider, model):
                 FieldCodec.decode(str, value)
@@ -697,20 +696,18 @@ class NativePiRpcLaunch:
         tool_arguments = (
             selected_tool_mode.launch_arguments(package)
             if selected_tool_mode is not None
-            else ("--no-tools",)
+            else NativeArguments((NoToolsArgument(),))
         )
-        arguments = [
-            *configured.for_owned_turn().with_model(f"{provider}/{model}").with_thinking(None).rpc(),
-            "--no-approve",
-            *tool_arguments,
-            "--session-dir",
-            str(session_dir),
-        ]
-        arguments.extend(session.launch_arguments(thinking_level))
+        arguments = configured.for_owned_turn().with_model(f"{provider}/{model}").with_thinking(None).rpc().extended(
+            ExternalArgument(("--no-approve",)),
+            *tool_arguments.entries,
+            SessionDirArgument(str(session_dir)),
+            *session.launch_arguments(thinking_level).entries,
+        )
         if session_file is not None:
-            arguments.extend(("--session", str(session_file)))
+            arguments = arguments.extended(SessionArgument(str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
-        return cls._build(cli, tuple(arguments), worktree, env, session, package,
+        return cls._build(cli, arguments, worktree, env, session, package,
                           configuration, runtime, session_context=session_context, project=project)
 
 

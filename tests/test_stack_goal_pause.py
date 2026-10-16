@@ -4,6 +4,7 @@ By default only a localhost SSE provider is allowed. Set AC_GOAL_LIVE_PROVIDER
 to opt into the already configured openai-codex/gpt-6-sol model explicitly.
 """
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import json
 import os
@@ -106,7 +107,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
         worker.start()
         model = "openai-codex/gpt-6-sol" if live else "openrouter/z-ai/glm-5.3-flash"
         provider, model_id = model.split("/", 1)
-        native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', provider, '--model', model_id, '--thinking', 'off']
+        native_args = ['--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools', '--provider', provider, '--model', model_id, '--thinking', 'off']
         if model_origin:
             native_args.remove("--no-tools")
             native_args.extend(
@@ -156,7 +157,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                 "identity": "goal-continuation-test",
                 "short_name": "goal",
                 "run_command": {
-                    "*": native_run_command(NativeThreadDefaults( arguments=tuple(native_args)))
+                    "*": native_run_command(NativeThreadDefaults( arguments=NativeArguments.parse(tuple(native_args))))
                 },
                 "protocol": "acp",
             },

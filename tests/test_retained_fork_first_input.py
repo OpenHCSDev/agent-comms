@@ -1,5 +1,6 @@
 """Opt-in current installed fork check using an actual retained source, localhost only."""
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import json
 import os
@@ -50,7 +51,7 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"])
     runtime = LaunchRuntime.current()
-    native = NativeThreadDefaults.offline( arguments=('--no-prompt-templates', '--no-tools'))
+    native = NativeThreadDefaults.offline( arguments=NativeArguments.parse(('--no-prompt-templates', '--no-tools')))
     comms = Comms(LocalRoute(fixture.root), runtime=runtime)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]

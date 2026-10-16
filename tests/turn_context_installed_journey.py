@@ -1,5 +1,6 @@
 """Run the existing continuous context case without source/conftest substitutes."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import argparse
@@ -235,7 +236,7 @@ async def run_configured(options):
         # explicit fork path owns all native writes; original accounts stay intact.
         os.environ.clear()
         os.environ.update(environment)
-        service.settings = dataclasses.replace(service.settings,  arguments=tuple(list(captured.retained.native.arguments)))
+        service.settings = dataclasses.replace(service.settings,  arguments=NativeArguments.parse(tuple(list(captured.retained.native.arguments))))
         owner = canonical_agent(service,  auto_wake=False, runtime_enabled=True)
         thread = Thread('configured-source', frozenset(), str(project),
             process_identity=ProcessIdentity.capture(os.getpid()),

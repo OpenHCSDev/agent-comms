@@ -3,6 +3,7 @@
 No root, writer, child, native package or process launch is acquired here.
 """
 
+from agent_comms.native_arguments import NativeArguments
 from dataclasses import replace
 import os
 from pathlib import Path
@@ -131,7 +132,7 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
     }
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python", environment,
                                  NativeThreadDefaults(
-                                                      arguments=("--no-tools", "authored value")))
+                                                      arguments=NativeArguments.parse(("--no-tools", "authored value"))))
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch)
     runtime = RestartEnvironment.inherit(environment)
     original = OwnerRestartHandoff("/authored", (owner,), runtime, None, None, LaunchRuntime(Path("/target/bin/python")))

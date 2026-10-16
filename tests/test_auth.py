@@ -1,3 +1,4 @@
+from agent_comms.native_arguments import NativeArguments
 import pytest
 
 from agent_comms import backend
@@ -96,7 +97,7 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
     monkeypatch.setattr(ModelConfigOption, "discover", discover)
     selected_comms_2 = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     selected_comms_2.settings = dataclasses.replace(selected_comms_2.settings,
-         arguments=("--model", "test/base"))
+         arguments=NativeArguments.parse(("--model", "test/base")))
     agent = canonical_agent(selected_comms_2)
     # Exercise the explicit refresh path without the background drain racing it.
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session_id: None)

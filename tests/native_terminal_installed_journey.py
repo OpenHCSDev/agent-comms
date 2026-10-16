@@ -5,6 +5,7 @@ Never imports or replays a prior saved input. The caller supplies an isolated
 copy of provider configuration, including the native models-store.json;
 the original configuration is never written.
 """
+from agent_comms.native_arguments import NativeArguments
 import argparse
 import asyncio
 import json
@@ -40,7 +41,7 @@ async def main(output, package, launcher, provider, model, thinking):
         'AGENT_COMMS_ROOT': str(comms.root), ROOT_ID_ENV: root_id,
         PACKAGE_ENV: str(package),
     })
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(['--provider', provider, '--model', model, '--thinking', thinking, *NativeThreadDefaults.isolation_arguments, '--tools', 'bash']))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(['--provider', provider, '--model', model, '--thinking', thinking, *NativeThreadDefaults.isolation_arguments.argv, '--tools', 'bash'])))
     agent = CommsAgent(comms,  runtime_enabled=True, auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     client = Client()
     agent.on_connect(client)

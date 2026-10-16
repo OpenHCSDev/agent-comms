@@ -13,6 +13,10 @@ from agent_comms.native_entries import NativeEntry
 from agent_comms.native_pi import NativeContextProof, NativePiRpcLaunch
 from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.pi_payloads import TextContent, UnknownContent
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.selected_session import EnrolledSelectedSession, FirstSelectedSession, SavedSelectedSession
 
 
 def test_original_header_preserves_project_and_fork_lineage(tmp_path):
@@ -108,10 +112,10 @@ def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypat
     with pytest.raises(NativePiUnavailable, match="first-start token"):
         NativePiRpcLaunch.tracked(
             tmp_path,
-            worktree=tmp_path,
-            session_dir=fresh.path.parent,
-            session_file=fresh.path,
-            selected_thinking_level="high",
+            runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments,
+            provider="fixture", model="fixture", worktree=tmp_path,
+            session=SavedSelectedSession(fresh.path.parent,
+                identity=NativeSessionIdentity(fresh.session_id, str(fresh.path))),
             session_context=(DoctrineSegment.capture(),),
          project=UnmanagedNativeProject())
     assert not (fresh.path.parent / ".native-pi-agent").exists()
@@ -126,15 +130,16 @@ def test_launch_uses_fresh_owner_and_preserves_exact_saved_marker(tmp_path, monk
     )
     before = fresh.path.read_bytes()
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+    session_type = EnrolledSelectedSession if level is None else FirstSelectedSession
     launch = NativePiRpcLaunch.tracked(
         tmp_path,
-        worktree=tmp_path,
-        session_dir=fresh.path.parent,
-        session_file=fresh.path,
-        selected_thinking_level=level,
+        runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments,
+        provider="fixture", model="fixture", worktree=tmp_path,
+        session=session_type(fresh.path.parent, creation=fresh,
+            identity=NativeSessionIdentity(fresh.session_id, str(fresh.path))),
         session_context=(DoctrineSegment.capture(),),
      project=UnmanagedNativeProject())
-    assert launch.session_file == fresh.path
+    assert launch.session.path == fresh.path
     assert fresh.path.read_bytes() == before
     fresh.verify_prewrite()
     if level is not None:

@@ -1,5 +1,6 @@
 """Real native Pi and owner socket: cancelled goals need an explicit fresh grant."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import asyncio
@@ -120,7 +121,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
         }.items():
             monkeypatch.setenv(name, value)
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']))
+        comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(['--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off'])))
         owner = CommsAgent(comms,  runtime_enabled=True, auto_wake=False)
 
         class Client:

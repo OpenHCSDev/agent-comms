@@ -4,7 +4,8 @@ import pytest
 
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_errors import NativePiUnavailable
-from agent_comms.owner_launch import RestartEnvironment
+from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
+from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.turn_context import (
     ContextSegment, CoordinationSegment, InstructionFile, NextContextTurn,
     SessionCoordinationSegment, TurnContext, UserInputSegment,
@@ -50,12 +51,13 @@ def test_native_launch_takes_required_typed_context_not_environment(tmp_path):
     owner = comms.registry.require("Alice")
     segments = TurnContext.session_segments(owner)
     configuration = RestartEnvironment.inherit({})
-    arguments = (tmp_path / "cli.js", (), tmp_path, {}, configuration)
+    arguments = (tmp_path / "cli.js", (), tmp_path, {}, configuration, LaunchRuntime.running())
+    project = UnmanagedNativeProject()
     with pytest.raises(TypeError, match="session_context"):
-        NativePiRpcLaunch.bootstrap(*arguments)
+        NativePiRpcLaunch.bootstrap(*arguments, project=project)
     with pytest.raises(NativePiUnavailable, match="nonempty session context"):
-        NativePiRpcLaunch.bootstrap(*arguments, session_context=())
-    argv, environment = NativePiRpcLaunch.bootstrap(*arguments, session_context=segments)
+        NativePiRpcLaunch.bootstrap(*arguments, session_context=(), project=project)
+    argv, environment = NativePiRpcLaunch.bootstrap(*arguments, session_context=segments, project=project)
     assert argv.count("--append-system-prompt") == 2
     assert argv[-1] == TurnContext.render_segments(segments).text
     assert "thread 'Alice'" in argv[-1]

@@ -1,5 +1,6 @@
 """Real installed Toad/ACP/native waits with only the localhost provider controlled."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 import argparse
 import asyncio
@@ -98,7 +99,7 @@ async def run(arguments):
     (config / "auth.json").write_text(json.dumps({"wait-local": {"type": "api_key", "key": "local-only"}}))
     (config / "settings.json").write_text(json.dumps({"compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
-    native = NativeThreadDefaults( arguments=('--provider', 'wait-local', '--model', 'fixture', *NativeThreadDefaults.isolation_arguments))
+    native = NativeThreadDefaults( arguments=NativeArguments.parse(('--provider', 'wait-local', '--model', 'fixture', *NativeThreadDefaults.isolation_arguments.argv)))
     service = Comms(LocalRoute(stage / "wire"), private_initial_writes=True, runtime=LaunchRuntime.current())
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)

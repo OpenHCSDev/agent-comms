@@ -1,5 +1,6 @@
 """Goal edits/history use the actual owner socket and persisted backend state."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import asyncio
@@ -27,7 +28,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple([])))
     owner = canonical_agent(comms,  runtime_enabled=True)
     # Keep this non-provider test's goal paused. Edits must preserve that state.
     response = await owner.new_session(str(tmp_path / "project"))

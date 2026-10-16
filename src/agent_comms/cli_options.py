@@ -88,7 +88,7 @@ class CliOption(Field):
               and issubclass(get_args(scalar)[0], DeclaredFamily)):
             options.setdefault("choices", get_args(scalar)[0].names())
         if metadata["setting"] is not MISSING:
-            options["default"] = metadata["setting"](settings)
+            options["default"] = argparse.SUPPRESS
         elif metadata["parser_default"] is not MISSING:
             options["default"] = metadata["parser_default"]
         elif metadata["parser_default_factory"] is not MISSING:
@@ -109,6 +109,14 @@ class CliOption(Field):
         else:
             options.pop("required", None)
         return options
+
+    def namespace_value(self, namespace: argparse.Namespace):
+        """Resolve omitted settings after the original CLI record was decoded."""
+        name = self.metadata.get("wire_name", self.name)
+        supplied = vars(namespace)
+        if name in supplied:
+            return supplied[name]
+        return FieldCodec.encode(self.metadata["setting"](namespace.native_settings))
 
     def attach(self, parser, annotation, settings) -> None:
         options = self.parser_options(annotation, settings)

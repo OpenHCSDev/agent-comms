@@ -1,5 +1,6 @@
 """Native Pi + streaming localhost provider: Send now interrupts, never replays."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
@@ -180,7 +181,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
         first_chunk = asyncio.Event()
         started = asyncio.Event()
 
-        native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
+        native_args = ['--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
         if terminal:
             native_args.remove("--no-tools")
             native_args.extend(["--tools", "bash"])
@@ -283,7 +284,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
 
 
             selected_comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-            selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(native_args))
+            selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=NativeArguments.parse(tuple(native_args)))
             owner = CommsAgent(selected_comms,  runtime_enabled=False, auto_wake=False)
 
             class Client:
@@ -532,7 +533,7 @@ async def _mounted_send_now(
         "identity": "send-now-test",
         "short_name": "send-now",
         "run_command": {
-            "*": native_run_command(NativeThreadDefaults( arguments=tuple(native_args)))
+            "*": native_run_command(NativeThreadDefaults( arguments=NativeArguments.parse(tuple(native_args))))
         },
         "protocol": "acp",
     }

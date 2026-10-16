@@ -194,7 +194,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
             event
             async for event in backend.stream_agent_events(
                 "pi",
-                ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--tools', 'read'],
+                ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--tools', 'read'],
                 "Read owned.txt once and answer",
                 str(native.project),
                 session_file=str(native.session),

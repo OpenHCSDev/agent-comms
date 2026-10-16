@@ -1,5 +1,6 @@
 """Real native Pi must not feed the full UNKNOWN backlog back to its provider."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.queued_input import InitialInput
 import asyncio
 import json
@@ -169,7 +170,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
         }.items():
             monkeypatch.setenv(key, value)
-        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
         from native_event_host import install_event_host
 
         install_event_host(
@@ -187,7 +188,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
 
         monkeypatch.setattr(backend, "stream_agent_events", collect_events)
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(args))
+        comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(args)))
         agent = CommsAgent(comms,  runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:

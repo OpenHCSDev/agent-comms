@@ -1,5 +1,6 @@
 """Actual fork worker held before its socket, with the pinned native model on loopback."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import asyncio
@@ -34,9 +35,9 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
-    arguments = ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']
+    arguments = ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools']
     comms.settings = NativeThreadDefaults(
-                                                       arguments=tuple(arguments))
+                                                       arguments=NativeArguments.parse(tuple(arguments)))
     with comms.bus.log.locked():
         root_id = comms.bus.log.read_metadata_unlocked().root_id
     comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
@@ -61,7 +62,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         return child
 
     monkeypatch.setattr(ParentedProcess, "launch", hold_worker)
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(arguments))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(arguments)))
     client = CommsClient(comms,  auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     updates = []
 

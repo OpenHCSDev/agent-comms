@@ -1,5 +1,6 @@
 """Installed CLI root selection -> detached owner -> stdio ACP -> native reply."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import argparse
@@ -70,7 +71,7 @@ async def main(package, evidence):
             stage.mkdir(mode=0o700)
             project = stage / 'project'
             project.mkdir(mode=0o700)
-            native = NativeThreadDefaults( arguments=('--offline', *NativeThreadDefaults.isolation_arguments, '--no-tools'))
+            native = NativeThreadDefaults( arguments=NativeArguments.parse(('--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-tools')))
             comms = Comms(LocalRoute(stage / 'wire'), runtime=LaunchRuntime.current())
             root_id = comms.messaging.initialize_private_initial_protocol()
             comms.registry.declare(Thread('recipient', frozenset({'team'}), str(project),

@@ -8,6 +8,7 @@ Without that adapter these tests prove the Pi/ACP path, NOT Toad rendering.
 
 from __future__ import annotations
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import importlib.util
 import json
@@ -453,11 +454,11 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
             environment.setattr(os, "environ", env)
             # The unchanged origin guard has its own retained SDK qualification.
             # These four cases exercise MCP/ACP under that committed policy.
-            args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-themes', '--no-builtin-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '-e', str(package)]
+            args = ['--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-themes', '--no-builtin-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '-e', str(package)]
             retirement = AsyncExitStack()
             try:
                 selected_comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-                selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(args))
+                selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=NativeArguments.parse(tuple(args)))
                 owner = canonical_agent(selected_comms,  runtime_enabled=True, auto_wake=False)
                 retirement.push_async_callback(owner.shutdown)
 

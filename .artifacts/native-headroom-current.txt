@@ -1,0 +1,1 @@
+{"free_gib": {"/": 5.1, "/dev/shm": 15.4, "/home": 7.3, "/tmp": 9.1}, "level": "critical", "ram_available_gib": 15.5, "reasons": ["/home free 7.3 GiB", "swap used 17.3 GiB", "/ free 5.1 GiB"], "swap_used_gib": 17.3}

@@ -1,5 +1,6 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.tool_caller import NoThreadCaller
 from stored_inputs import stored_inputs
 
@@ -189,7 +190,7 @@ while True: time.sleep(0.01)
     }
     from agent_comms.native_settings import NativeThreadDefaults
 
-    native = NativeThreadDefaults( arguments=(str(script),))
+    native = NativeThreadDefaults( arguments=NativeArguments.parse((str(script),)))
     child = ParentedProcess.launch((sys.executable, str(script), *native.cli_arguments), env=env)
     comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     try:

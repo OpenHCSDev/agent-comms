@@ -1,5 +1,6 @@
 """A manual /compact runs Pi's own engine in the retained child, which keeps serving."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 from agent_comms.queued_input import InitialInput
@@ -209,14 +210,14 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         session = root / "saved.jsonl"
         _history(session, project)
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([
+        comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple([
                 "--provider",
                 "openrouter",
                 "--model",
                 "z-ai/glm-5.3-flash",
                 "--thinking",
                 "off",
-            ]))
+            ])))
         owner = canonical_agent(comms,  runtime_enabled=True, auto_wake=False)
         monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", owner._private_nk_wire_root_id)
         monkeypatch.setenv(

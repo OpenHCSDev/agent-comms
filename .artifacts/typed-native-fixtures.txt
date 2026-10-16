@@ -1,0 +1,5 @@
+modules 452 omissions []
+OPEN /home/ts/wt/core-native-runtime/tests/native_backend_fixture.py 109 argument binding self.native_arguments(native_options)
+OPEN /home/ts/wt/core-native-runtime/tests/native_backend_fixture.py 263 argument binding NativeBackendFixture.native_arguments()
+{'argv-boundary': 73, 'constant-native-projection': 40, 'deleted-reparse': 5, 'native-render-assertion': 5}
+LIMITS: embedded Python and unknown variable bindings require semantic migration.

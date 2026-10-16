@@ -1,5 +1,6 @@
 """Saved documents, independent snapshots, and disposable activity projection."""
 
+from agent_comms.native_arguments import NativeArguments
 import json
 import time
 from unittest.mock import patch
@@ -28,10 +29,10 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
     from delivery_owner_fixture import canonical_agent
 
     native = native_backend
-    arguments = ['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']
+    arguments = ['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools']
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    selected_comms.settings = dataclasses.replace(selected_comms.settings, arguments=tuple(arguments))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings, arguments=NativeArguments.parse(tuple(arguments)))
     agent = canonical_agent(selected_comms,  auto_wake=False, runtime_enabled=False)
     child = None
     try:

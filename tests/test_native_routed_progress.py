@@ -1,5 +1,6 @@
 """Real Pi RPC publishes committed channel progress before the final turn."""
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import json
 import os
@@ -118,8 +119,8 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
         }.items():
             monkeypatch.setenv(key, value)
-        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '--extension', str(Path(__file__).resolve().parents[1] / 'extensions/pi-agent-comms/index.ts')]
-        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(args))
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '--extension', str(Path(__file__).resolve().parents[1] / 'extensions/pi-agent-comms/index.ts')]
+        comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(args)))
         agent = CommsAgent(comms,  runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:

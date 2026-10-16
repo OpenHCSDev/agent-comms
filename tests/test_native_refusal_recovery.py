@@ -1,5 +1,6 @@
 """Native refusal recovery: Core reports one outcome, never blocks on a retry."""
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import json
 import os
@@ -60,7 +61,7 @@ def _settled_records():
 async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
     wired, tmp_path, monkeypatch
 ):
-    wired.settings = dataclasses.replace(wired.settings,  arguments=tuple([]))
+    wired.settings = dataclasses.replace(wired.settings,  arguments=NativeArguments.parse(tuple([])))
     agent = canonical_agent(wired,  runtime_enabled=True)
     sent: list = []
 

@@ -1,5 +1,6 @@
 """Compiled native recovery owns closure; Core preserves the original failure."""
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import json
 import os
@@ -217,7 +218,7 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
     assert result["noOutput"] == {"answer": "visible answer", "retries": 1}
     print(json.dumps({"refusal": result["proof"], "no_output": result["noOutput"]}, sort_keys=True))
     stub = _stub_with(tmp_path, [*records, *_settled_records()])
-    wired.settings = dataclasses.replace(wired.settings,  arguments=tuple([]))
+    wired.settings = dataclasses.replace(wired.settings,  arguments=NativeArguments.parse(tuple([])))
     agent = canonical_agent(wired,  runtime_enabled=True)
     original_stream = backend.stream_agent_events
 

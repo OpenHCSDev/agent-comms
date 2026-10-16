@@ -1,5 +1,6 @@
 """Current S1 consumer effects and fenced settlement, with real durable owners."""
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import os
 from contextlib import AsyncExitStack
@@ -353,7 +354,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
 
         monkeypatch.setattr(native.provider, "response_chunks", with_progress)
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates']))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates'])))
     owner = CommsAgent(comms,  private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]))
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])

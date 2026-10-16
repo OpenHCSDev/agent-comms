@@ -1,0 +1,227 @@
+..................FF........s.....s...sssssssss.F....F.................. [ 94%]
+.F..                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries[root] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4632/test_failed_new_session_parent0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2269053310>
+failed_parent = 'root'
+
+    @pytest.mark.parametrize("failed_parent", ["root", "nested"])
+    async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries(
+        tmp_path: Path, monkeypatch, failed_parent: str
+    ) -> None:
+        import agent_comms.native_pi as native
+    
+        root = tmp_path / "private"
+        root.mkdir(mode=0o700)
+        nested = root / "nested"
+        sessions = nested / "sessions"
+        target = root if failed_parent == "root" else nested
+        original_fsync = native.os.fsync
+        rejected = False
+        successful_target_syncs = 0
+        launches = 0
+    
+        def fail_once(descriptor):
+            nonlocal rejected, successful_target_syncs
+            info = os.fstat(descriptor)
+            if target.exists():
+                current = target.stat()
+                if (info.st_dev, info.st_ino) == (current.st_dev, current.st_ino):
+                    if not rejected:
+                        rejected = True
+                        raise OSError(errno.EIO, "injected session parent fsync failure")
+                    successful_target_syncs += 1
+            return original_fsync(descriptor)
+    
+        async def launch(*_argv, **_kwargs):
+            nonlocal launches
+            launches += 1
+            raise RuntimeError("reached spawn only after re-synchronizing visible directories")
+    
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(native.os, "fsync", fail_once)
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path,
+                       session=SelectedSession(sessions), pi_session=PersistentPiSession())
+        with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
+>           await TrackedTurnSession.execute(tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: TrackedTurnSession.execute() missing 2 required keyword-only arguments: 'provider' and 'model'
+
+tests/test_native_pi.py:323: TypeError
+_ test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries[nested] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4632/test_failed_new_session_parent1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2267ac2820>
+failed_parent = 'nested'
+
+    @pytest.mark.parametrize("failed_parent", ["root", "nested"])
+    async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries(
+        tmp_path: Path, monkeypatch, failed_parent: str
+    ) -> None:
+        import agent_comms.native_pi as native
+    
+        root = tmp_path / "private"
+        root.mkdir(mode=0o700)
+        nested = root / "nested"
+        sessions = nested / "sessions"
+        target = root if failed_parent == "root" else nested
+        original_fsync = native.os.fsync
+        rejected = False
+        successful_target_syncs = 0
+        launches = 0
+    
+        def fail_once(descriptor):
+            nonlocal rejected, successful_target_syncs
+            info = os.fstat(descriptor)
+            if target.exists():
+                current = target.stat()
+                if (info.st_dev, info.st_ino) == (current.st_dev, current.st_ino):
+                    if not rejected:
+                        rejected = True
+                        raise OSError(errno.EIO, "injected session parent fsync failure")
+                    successful_target_syncs += 1
+            return original_fsync(descriptor)
+    
+        async def launch(*_argv, **_kwargs):
+            nonlocal launches
+            launches += 1
+            raise RuntimeError("reached spawn only after re-synchronizing visible directories")
+    
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        monkeypatch.setattr(native.os, "fsync", fail_once)
+        monkeypatch.setattr(AttachedChild, "start", launch)
+        request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path,
+                       session=SelectedSession(sessions), pi_session=PersistentPiSession())
+        with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
+>           await TrackedTurnSession.execute(tmp_path, runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments, **request, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           TypeError: TrackedTurnSession.execute() missing 2 required keyword-only arguments: 'provider' and 'model'
+
+tests/test_native_pi.py:323: TypeError
+___ test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments ___
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4632/test_native_owner_entrypoint_u0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2266056ac0>
+
+    def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp_path, monkeypatch):
+        from agent_comms import native_pi, private_nk_entrypoint
+        from agent_comms.registration import Registration
+        from agent_comms.threads import Thread
+        from agent_comms.turn_context import TurnContext
+    
+        owner = Thread("owner", frozenset(), str(tmp_path), created_at=1.0)
+        Registration(tmp_path / "registry.json").register(owner)
+        launch = private_nk_entrypoint.PrivateNkLaunch(tmp_path, "a" * 32, tmp_path / "pi", None)
+        monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: launch))
+        verified = []
+        cli = launch.native_package / "dist" / "cli.js"
+    
+        def trusted(package):
+            verified.append(package)
+            return cli
+    
+        monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "validate", lambda self: trusted(self.native_package))
+        monkeypatch.setattr(sys, "argv", ["pi-comms-native", *owner.incarnation.cli_arguments,
+                                          "--mode", "rpc", "--model", "owner/model"])
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "wrong-environment-owner")
+        executed = []
+        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "canonical"))
+        monkeypatch.delenv("AGENT_COMMS_NATIVE_CONFIG_DIR", raising=False)
+        monkeypatch.setenv("NODE_OPTIONS", "--import=/unreviewed.js")
+        monkeypatch.setattr(
+            os, "execvpe", lambda executable, argv, env: executed.append((executable, argv, env))
+        )
+>       assert native_pi.main() == 0
+               ^^^^^^^^^^^^^^^^
+
+tests/test_native_pi.py:1123: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/native_pi.py:108: in main
+    project = ManagedNativeProject.from_entry(launch.validated_root, entry)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_project.py:63: in from_entry
+    process = entry.thread.require_process()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = Thread(name='owner', tags=frozenset(), worktree='/tmp/pytest-of-ts/pytest-4632/test_native_owner_entrypoint_u0', creat...backend.PiNativeBackend'>, active_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+
+    def require_process(self) -> ProcessIdentity:
+        self.role.require_executable()
+        if self.process_identity is None:
+>           raise RelationViolationError(f"Thread {self.name!r} has no owner process")
+E           agent_comms.errors.RelationViolationError: Thread 'owner' has no owner process
+
+src/agent_comms/threads.py:214: RelationViolationError
+_____ test_provider_failure_notice_does_not_broadcast_untrusted_error_body _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4632/test_provider_failure_notice_d0')
+
+    def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_path):
+        from agent_comms.native_pi import NativeContextProof
+        from agent_comms.turn_failure import ModelRequestFailed
+    
+        context = NativeContextProof(
+            INPUT_ID, "session", "entry", 1, DIGEST, 1_791_964_800_001, tmp_path / "session.jsonl"
+        )
+        failed = NativePiTerminalFailure(
+            "SECRET provider response including prompt data", context, "provider", "model",
+            ModelRequestFailed("SECRET provider response including prompt data"),
+        )
+>       assert failed.public_message == "provider/model: provider request failed."
+E       AssertionError: assert 'provider/mod...quest failed.' == 'provider/mod...quest failed.'
+E         
+E         - provider/model: provider request failed.
+E         ?                 ---------
+E         + provider/model: request failed.
+
+tests/test_native_pi.py:1200: AssertionError
+_ test_selection_replaces_all_occurrences_preserving_unowned_native_arguments __
+
+    def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments():
+        arguments = NativeArguments.parse(
+            (
+                "--provider",
+                "original",
+                "--model=old/model",
+                "--thinking",
+                "low",
+                "--thinking=high",
+                "--offline",
+                "-e",
+                "extension.mjs",
+            )
+        )
+        assert arguments.model == "original/old/model"
+        assert arguments.thinking == "high"
+        selected = arguments.with_model("response-local/fixture").with_thinking("off")
+        assert selected.model == "response-local/fixture" and selected.thinking == "off"
+>       assert selected.rpc() == (
+            "--offline",
+            "-e",
+            "extension.mjs",
+            "--provider",
+            "response-local",
+            "--model",
+            "fixture",
+            "--thinking",
+            "off",
+            "--mode",
+            "rpc",
+        )
+E       AssertionError: assert ('--offline',...--model', ...) == ('--offline',...--model', ...)
+E         
+E         At index 1 diff: '--extension' != '-e'
+E         Use -v to get more diff
+
+tests/test_native_arguments.py:116: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_pi.py::test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries[root]
+FAILED tests/test_native_pi.py::test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries[nested]
+FAILED tests/test_native_pi.py::test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments
+FAILED tests/test_native_pi.py::test_provider_failure_notice_does_not_broadcast_untrusted_error_body
+FAILED tests/test_native_arguments.py::test_selection_replaces_all_occurrences_preserving_unowned_native_arguments
+5 failed, 60 passed, 11 skipped, 1 deselected in 13.40s

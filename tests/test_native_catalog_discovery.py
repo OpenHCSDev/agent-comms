@@ -1,5 +1,6 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
@@ -183,7 +184,7 @@ async def catalog_owner(native_backend, monkeypatch):
 
     monkeypatch.setattr(AttachedChild, "start", observe)
     selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(["--model", "response-local/fixture", "--offline"]))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=NativeArguments.parse(tuple(["--model", "response-local/fixture", "--offline"])))
     owner = canonical_agent(selected_comms,  auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     before = native.session.read_bytes()
@@ -297,7 +298,7 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
     _owner, children = catalog_owner
     launch = NativePiRpcLaunch.managed(
         "pi",
-        ('--model', 'response-local/fixture', '--offline', '--no-session', *NativeThreadDefaults.isolation_arguments),
+        ('--model', 'response-local/fixture', '--offline', '--no-session', *NativeThreadDefaults.isolation_arguments.argv),
         worktree=native_backend.project,
         session_context=(DoctrineSegment.capture(),),
      project=UnmanagedNativeProject())
@@ -368,7 +369,7 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
         install_event_host(monkeypatch, command, f"{address.scheme}://{address.netloc}",
                            replacement_probe=events, cancelled_session=cancelled_target)
     launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
-        command, ('--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'),
+        command, ('--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools'),
         worktree=native.project, session_file=created.session_file,
         session_context=(DoctrineSegment.capture(),),
     ))

@@ -1,5 +1,6 @@
 """Original acquired SDK context reader through the installed owner RPC."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import argparse
@@ -52,7 +53,7 @@ async def read_original_context(
     before = fixture.session.read_bytes()
     original_inputs = fixture.saved_inputs()
     selected_comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
-    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(["--model", "response-local/fixture", "--offline"]))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=NativeArguments.parse(tuple(["--model", "response-local/fixture", "--offline"])))
     owner = canonical_agent(selected_comms,  auto_wake=False, runtime_enabled=True)
     # This fixture owns the root; the existing owner launch and RPC reader remain real.
     try:

@@ -1,5 +1,6 @@
 """Retained actual Pi -> comms_send CLI -> original source -> ACP cold replay."""
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import json
 import os
@@ -30,7 +31,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-builtin-tools', '--extension', str(package / 'agent-comms-extensions/global-agent-comms/index.mjs')]))
+    comms.settings = dataclasses.replace(comms.settings, arguments=NativeArguments.parse(tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-builtin-tools', '--extension', str(package / 'agent-comms-extensions/global-agent-comms/index.mjs')])))
     owner = canonical_agent(comms,  auto_wake=False, runtime_enabled=True)
     comms.registry.declare(
         Thread(

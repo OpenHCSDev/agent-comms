@@ -1,5 +1,6 @@
 """Actual native Pi receipts for queued and steered channel requests."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.tool_caller import NoThreadCaller
 
 from agent_comms.queued_input import InitialInput
@@ -97,9 +98,9 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
         }.items():
             monkeypatch.setenv(key, value)
-        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(args))
+        comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(args)))
         agent = CommsAgent(comms,  runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
@@ -145,7 +146,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             elif case == "reopen":
                 await agent.shutdown()
                 selected_comms = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
-                selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(args))
+                selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=NativeArguments.parse(tuple(args)))
                 agent = CommsAgent(selected_comms,  runtime_enabled=True)
                 monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "worker")

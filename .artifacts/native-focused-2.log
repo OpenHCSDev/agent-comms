@@ -1,0 +1,79 @@
+............................s.....s...sssssssss.F....................... [ 94%]
+....                                                                     [100%]
+=================================== FAILURES ===================================
+___ test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments ___
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4633/test_native_owner_entrypoint_u0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc471d56040>
+
+    def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp_path, monkeypatch):
+        from agent_comms import native_pi, private_nk_entrypoint
+        from agent_comms.registration import Registration
+        from agent_comms.threads import Thread
+        from agent_comms.turn_context import TurnContext
+        from agent_comms.child_process import ProcessIdentity
+        from agent_comms.native_project import ManagedNativeProject
+        from agent_comms.native_tools import NativeRequestTools
+        from agent_comms.registry_store import RegistryStore
+    
+        owner = Thread("owner", frozenset(), str(tmp_path), created_at=1.0,
+                       process_identity=ProcessIdentity.capture(os.getpid()))
+        Registration(tmp_path / "registry.json").register(owner)
+        entry = RegistryStore(tmp_path / "registry.json").read_entry(owner.name).entry
+        project = ManagedNativeProject.from_entry(tmp_path, entry)
+        launch = private_nk_entrypoint.PrivateNkLaunch(tmp_path, "a" * 32, tmp_path / "pi", None)
+        monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: launch))
+        verified = []
+        cli = launch.native_package / "dist" / "cli.js"
+    
+        def trusted(package):
+            verified.append(package)
+            return cli
+    
+        monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "validate", lambda self: trusted(self.native_package))
+        monkeypatch.setattr(sys, "argv", ["pi-comms-native", *owner.incarnation.cli_arguments,
+                                          "--mode", "rpc", "--model", "owner/model"])
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "wrong-environment-owner")
+        executed = []
+        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "canonical"))
+        monkeypatch.delenv("AGENT_COMMS_NATIVE_CONFIG_DIR", raising=False)
+        monkeypatch.setenv("NODE_OPTIONS", "--import=/unreviewed.js")
+        monkeypatch.setattr(
+            os, "execvpe", lambda executable, argv, env: executed.append((executable, argv, env))
+        )
+        assert native_pi.main() == 0
+        assert verified == [launch.native_package]
+        executable, argv, environment = executed[0]
+        assert executable == "node"
+>       assert argv == [
+            "node",
+            "--no-global-search-paths",
+            "--import",
+            str(cli.with_name("agent-comms-import-fence.mjs")),
+            "--import",
+            str(cli.with_name("agent-comms-project-bootstrap.mjs")),
+            str(cli),
+            "--extension",
+            str(NativeRequestTools.native_extension(launch.native_package)),
+            "--extension",
+            str(project.native_extension(launch.native_package)),
+            "--mode",
+            "rpc",
+            "--model",
+            "owner/model",
+            "--append-system-prompt",
+            str(native_pi.OWNER_INSTRUCTIONS.resolve()),
+            "--append-system-prompt",
+            TurnContext.render_segments(TurnContext.session_segments(owner)).text,
+            *project.cli_arguments,
+        ]
+E       AssertionError: assert ['node', '--n...rap.mjs', ...] == ['node', '--n...rap.mjs', ...]
+E         
+E         At index 7 diff: '--mode' != '--extension'
+E         Left contains 2 more items, first extra item: '--native-project'
+E         Use -v to get more diff
+
+tests/test_native_pi.py:1135: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_native_pi.py::test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments
+1 failed, 64 passed, 11 skipped, 1 deselected in 15.70s

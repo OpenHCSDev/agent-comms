@@ -1,3 +1,4 @@
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 
 from agent_comms import agent_events as ae
@@ -22,7 +23,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 async def make_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/base")
     selected_comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
-    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(["--model", "test/base"]))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=NativeArguments.parse(tuple(["--model", "test/base"])))
     agent = canonical_agent(selected_comms)
     await agent.new_session(str(tmp_path / "project"))
     return agent

@@ -1,5 +1,6 @@
 """Current goal/input boundaries through durable stores and the real owner socket."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import os
@@ -189,7 +190,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     assert configured_model is not None
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(arguments))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(arguments)))
     owner = CommsAgent(comms,  runtime_enabled=True, auto_wake=False)
     from goal_owner_fixture import activate_empty_source
 

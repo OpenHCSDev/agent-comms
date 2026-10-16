@@ -1,5 +1,6 @@
 """Saved native history -> ACP goal failure -> passive read, without replay."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import asyncio
@@ -63,7 +64,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
     )
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']))
+    comms.settings = dataclasses.replace(comms.settings, arguments=NativeArguments.parse(tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools'])))
     agent = canonical_agent(comms,  auto_wake=False, runtime_enabled=True)
     updates = []
 
@@ -163,7 +164,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
     history = native.session.read_bytes()
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']))
+    comms.settings = dataclasses.replace(comms.settings, arguments=NativeArguments.parse(tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools'])))
     agent = canonical_agent(comms,  auto_wake=False, runtime_enabled=True)
     route = build_agent_router(agent)
     try:

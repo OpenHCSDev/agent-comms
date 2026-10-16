@@ -1,5 +1,6 @@
 """Existing real native/ACP owner; inspect through its original Unix socket."""
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import os
 import json
@@ -72,10 +73,10 @@ async def test_context_manifest_native_acp_and_cli_continuous(
     models.write_text(json.dumps(document))
     original_source = fixture.session.read_bytes()
     selected_comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
-    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(["--model", "response-local/fixture", "--thinking", "off", "--offline",
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=NativeArguments.parse(tuple(["--model", "response-local/fixture", "--thinking", "off", "--offline",
                     "--no-extensions", "--no-skills", "--no-prompt-templates",
                     "--no-builtin-tools", "--extension",
-                    str(package / "agent-comms-extensions/global-agent-comms/index.mjs")]))
+                    str(package / "agent-comms-extensions/global-agent-comms/index.mjs")])))
     owner = canonical_agent(selected_comms,  auto_wake=False, runtime_enabled=True)
     failures, updates = [], []
 

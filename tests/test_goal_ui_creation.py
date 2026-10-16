@@ -1,5 +1,6 @@
 """A UI goal must acquire owner-private launch authority before it is visible."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 from unittest.mock import AsyncMock
@@ -38,7 +39,7 @@ async def _owner(tmp_path, monkeypatch):
     private = comms.root / "goal-private"
     private.mkdir(mode=0o700)
     GoalAttemptStore.initialize(private)
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(["--provider", "openrouter", "--model", "fake"]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(["--provider", "openrouter", "--model", "fake"])))
     owner = canonical_agent(comms,  runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(cwd=str(tmp_path / "project"))).session_id

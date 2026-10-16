@@ -6,6 +6,7 @@ journey. The isolated root is retained on failure, including uncertain inputs.
 
 from __future__ import annotations
 
+from agent_comms.native_arguments import NativeArguments
 import argparse
 import asyncio
 from contextlib import asynccontextmanager
@@ -122,7 +123,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
         "compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
     }))
-    native = NativeThreadDefaults( arguments=('--offline', *NativeThreadDefaults.isolation_arguments, '--no-tools'))
+    native = NativeThreadDefaults( arguments=NativeArguments.parse(('--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-tools')))
     comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(root, root_id, package)

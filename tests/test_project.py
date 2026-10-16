@@ -1,5 +1,6 @@
 """Project changes preserve thread/session identity and synchronize executing owners."""
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.runtime_socket import RuntimeSocket
 
 import asyncio
@@ -79,7 +80,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
     old.mkdir()
     new.mkdir()
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple([])))
     agent = canonical_agent(comms)
     session = (await agent.new_session(str(old))).session_id
     updates = []
@@ -97,7 +98,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
         if isinstance(update, CoordinationChangedUpdate)
     ) == str(new)
     await agent.shutdown()
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple([])))
     resumed = canonical_agent(comms)
     try:
         result = await resumed.load_session(str(old), session)
@@ -190,7 +191,7 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
     old.mkdir()
     new.mkdir()
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple([])))
     agent = canonical_agent(comms)
     session = (await agent.new_session(str(old))).session_id
     changed = asyncio.Event()
@@ -221,7 +222,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
     old.mkdir()
     new.mkdir()
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple([])))
     owner = canonical_agent(comms,  runtime_enabled=True)
     session = (await owner.new_session(str(old))).session_id
     proxies, updates = [], [[], []]

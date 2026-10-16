@@ -48,6 +48,7 @@ from .pi_payloads import PiContent, ToolCallContent
 from .pi_rpc import unique_fields
 from .private_path import PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole
 from .selected_actions import SelectedAction
+from .native_arguments import ExtensionArgument, NativeArguments, NoBuiltinToolsArgument, ToolsArgument
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
 _MAX_CONTENT = 128 * 1024
@@ -91,7 +92,7 @@ class NativeToolMode(ABC):
     """Owner-bound native tool policy shared by selected and normal coding turns."""
 
     @abstractmethod
-    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+    def launch_arguments(self, package: Path) -> NativeArguments:
         """Return the native tool selection and reviewed extension."""
 
     @abstractmethod
@@ -109,14 +110,9 @@ class SelectedToolMode(NativeToolMode):
         if not callable(self.action):
             raise TypeError("Selected tool mode requires an owner callback")
 
-    def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        return (
-            "--no-builtin-tools",
-            "--tools",
-            "selected_claimed_write",
-            "-e",
-            str(selected_extension(package)),
-        )
+    def launch_arguments(self, package: Path) -> NativeArguments:
+        return NativeArguments((NoBuiltinToolsArgument(), ToolsArgument("selected_claimed_write"),
+                                ExtensionArgument(str(selected_extension(package)))))
 
     def socket(self, directory: Path, token: str) -> OwnerToolSocket:
         return SelectedToolSocket(directory, token, self.action)

@@ -1,0 +1,464 @@
+............................s.....s...sssssssss......................... [ 60%]
+.........F.....FFFFFFF..............FF.....F.F..                         [100%]
+=================================== FAILURES ===================================
+____ test_changed_auth_refreshes_catalogue_without_changing_selected_model _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_changed_auth_refreshes_ca0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff7002265f0>
+fake_native_catalog = None
+
+    async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
+        tmp_path, monkeypatch, fake_native_catalog
+    ):
+        revision = [0]
+        monkeypatch.setattr("agent_comms.launch_runtime.RestartEnvironment.auth_revision", lambda self: (revision[0], 0))
+    
+        async def discover(*args):
+            models = [ConfigChoice(value="test/base", name="Base")]
+            if revision[0]:
+                models.append(ConfigChoice(value="openai-codex/test", name="Subscription"))
+            return models
+    
+        monkeypatch.setattr(ModelConfigOption, "discover", discover)
+        selected_comms_2 = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
+        selected_comms_2.settings = dataclasses.replace(selected_comms_2.settings,
+             arguments=("--model", "test/base"))
+>       agent = canonical_agent(selected_comms_2)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_auth.py:100: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:46: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'SHELL': '/bin/zsh', 'COREPACK_ENABLE_AUTO_PIN': '0', 'WINDOWID': '37748742', 'LESSHISTFILE': '-', 'JUPYTER_C...r/z-ai/glm-5.3-flash,openrouter/deepseek/deepseek-v4.1-flash,response-local/fixture,response-local/second,test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_____ test_context_owner_rejects_invalid_lookup_before_reading_files[None] _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_context_owner_rejects_inv0')
+input_id = None
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received NoneType"
+
+tests/test_native_evidence_boundary.py:49: AssertionError
+______ test_context_owner_rejects_invalid_lookup_before_reading_files[1] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_context_owner_rejects_inv1')
+input_id = 1
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received int"
+
+tests/test_native_evidence_boundary.py:49: AssertionError
+_____ test_context_owner_rejects_invalid_lookup_before_reading_files[True] _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_context_owner_rejects_inv2')
+input_id = True
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received bool"
+
+tests/test_native_evidence_boundary.py:49: AssertionError
+_ test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_context_owner_rejects_inv3')
+input_id = b'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received bytes"
+
+tests/test_native_evidence_boundary.py:49: AssertionError
+_______ test_context_owner_rejects_invalid_lookup_before_reading_files[] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_context_owner_rejects_inv4')
+input_id = ''
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: 'Native input requires a 128-bit lowercase hex identity'
+
+tests/test_native_evidence_boundary.py:49: AssertionError
+_ test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_context_owner_rejects_inv5')
+input_id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: 'Native input requires a 128-bit lowercase hex identity'
+
+tests/test_native_evidence_boundary.py:49: AssertionError
+_ test_context_owner_rejects_invalid_lookup_before_reading_files[gggggggggggggggggggggggggggggggg] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_context_owner_rejects_inv6')
+input_id = 'gggggggggggggggggggggggggggggggg'
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: 'Native input requires a 128-bit lowercase hex identity'
+
+tests/test_native_evidence_boundary.py:49: AssertionError
+______ test_launch_uses_fresh_owner_and_preserves_exact_saved_marker[low] ______
+
+self = FreshPrivateSession(path=PosixPath('/tmp/pytest-of-ts/pytest-4636/test_launch_uses_fresh_owner_a1/sessions/enrolled-51...dc5a491e4182039d', bootstrap_size=523, bootstrap_leaf_id='c9c6329c', selected_thinking_level='low', creator_pid=234707)
+
+    def verify_selected_startup(self) -> FileRevision:
+        """Attest exactly Pi's two expected metadata appends, no raw messages.
+    
+        Pinned createAgentSession appends its initial model and thinking entries
+        on a zero-message session, even when explicit launch flags are supplied.
+        This is a file observation, not provider/child/terminal authority.
+        """
+        if not ThinkingLevel.supports_selected(self.selected_thinking_level) or not self.bootstrap_leaf_id:
+            raise NativePiUnavailable("Fresh source lacks explicit selected bootstrap")
+        self.verify_saved_identity()
+        try:
+            info = self.path.lstat()
+            tail_size = info.st_size - self.bootstrap_size
+            if not 0 < tail_size <= _MAX_STARTUP_APPEND:
+>               raise NativePiUnavailable("Selected startup has no exact metadata tail")
+E               agent_comms.native_errors.NativePiUnavailable: Selected startup has no exact metadata tail
+
+src/agent_comms/fresh_private_session.py:394: NativePiUnavailable
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_launch_uses_fresh_owner_a1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff7003e6f20>
+level = 'low'
+
+    @pytest.mark.parametrize("level", [None, "low", "high"])
+    def test_launch_uses_fresh_owner_and_preserves_exact_saved_marker(tmp_path, monkeypatch, level):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level=level
+        )
+        before = fresh.path.read_bytes()
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        session_type = EnrolledSelectedSession if level is None else FirstSelectedSession
+>       launch = NativePiRpcLaunch.tracked(
+            tmp_path,
+            runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments,
+            provider="fixture", model="fixture", worktree=tmp_path,
+            session=session_type(fresh.path.parent, creation=fresh,
+                identity=NativeSessionIdentity(fresh.session_id, str(fresh.path))),
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
+
+tests/test_native_evidence_boundary.py:134: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/native_pi.py:645: in tracked
+    return cls.acquire_tracked(package, runtime, arguments)(**options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:692: in _tracked
+    session.require_launch_header()
+src/agent_comms/selected_session.py:299: in require_launch_header
+    self.creation.verify_selected_startup()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = FreshPrivateSession(path=PosixPath('/tmp/pytest-of-ts/pytest-4636/test_launch_uses_fresh_owner_a1/sessions/enrolled-51...dc5a491e4182039d', bootstrap_size=523, bootstrap_leaf_id='c9c6329c', selected_thinking_level='low', creator_pid=234707)
+
+    def verify_selected_startup(self) -> FileRevision:
+        """Attest exactly Pi's two expected metadata appends, no raw messages.
+    
+        Pinned createAgentSession appends its initial model and thinking entries
+        on a zero-message session, even when explicit launch flags are supplied.
+        This is a file observation, not provider/child/terminal authority.
+        """
+        if not ThinkingLevel.supports_selected(self.selected_thinking_level) or not self.bootstrap_leaf_id:
+            raise NativePiUnavailable("Fresh source lacks explicit selected bootstrap")
+        self.verify_saved_identity()
+        try:
+            info = self.path.lstat()
+            tail_size = info.st_size - self.bootstrap_size
+            if not 0 < tail_size <= _MAX_STARTUP_APPEND:
+                raise NativePiUnavailable("Selected startup has no exact metadata tail")
+            descriptor = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                opened = os.fstat(descriptor)
+                observed = FreshFileCheck(self, info, self.bootstrap_size)
+                StableFreshFileCheck(self, opened, self.bootstrap_size, observed.observed_revision).require_valid(
+                    "Selected startup inode/revision changed"
+                )
+                chunks = bytearray()
+                while len(chunks) < info.st_size:
+                    chunk = os.read(descriptor, info.st_size - len(chunks))
+                    if not chunk:
+                        raise NativePiUnavailable("Selected startup file became incomplete")
+                    chunks.extend(chunk)
+                # Pi's startup appendFileSync alone is not a durable receipt.
+                # Fail closed on uncertain fsync before the raw prompt writer.
+                os.fsync(descriptor)
+                synced = os.fstat(descriptor)
+                StableFreshFileCheck(
+                    self, synced, self.bootstrap_size, FileRevision.from_stat(opened),
+                ).require_valid("Selected startup changed across fsync")
+            finally:
+                os.close(descriptor)
+            data = bytes(chunks)
+            if hashlib.sha256(
+                data[: self.bootstrap_size]
+            ).hexdigest() != self.bootstrap_sha256 or not data.endswith(b"\n"):
+                raise NativePiUnavailable("Selected startup changed its enrolled prefix")
+            lines = data[self.bootstrap_size :].splitlines(keepends=True)
+            if len(lines) != 2 or any(not line.endswith(b"\n") for line in lines):
+                raise NativePiUnavailable("Selected startup has extra or partial entries")
+            model = ModelChangeEntry.read_startup(lines[0])
+            thinking = ThinkingLevelChangeEntry.read_startup(lines[1])
+            SelectedStartupCheck(self, model, thinking).require_valid()
+            after = self.path.lstat()
+            revision = FileRevision.from_stat(info)
+            StableFreshFileCheck(self, after, self.bootstrap_size, revision).require_valid(
+                "Selected startup revision changed after read"
+            )
+            return revision
+        except (OSError, ValueError, TypeError, KeyError, NativePiUnavailable) as error:
+>           raise NativePiUnavailable(f"Selected startup metadata cannot be attested: {error}") from error
+E           agent_comms.native_errors.NativePiUnavailable: Selected startup metadata cannot be attested: Selected startup has no exact metadata tail
+
+src/agent_comms/fresh_private_session.py:435: NativePiUnavailable
+_____ test_launch_uses_fresh_owner_and_preserves_exact_saved_marker[high] ______
+
+self = FreshPrivateSession(path=PosixPath('/tmp/pytest-of-ts/pytest-4636/test_launch_uses_fresh_owner_a2/sessions/enrolled-99...1d9ac29e46bea66', bootstrap_size=525, bootstrap_leaf_id='ade531aa', selected_thinking_level='high', creator_pid=234707)
+
+    def verify_selected_startup(self) -> FileRevision:
+        """Attest exactly Pi's two expected metadata appends, no raw messages.
+    
+        Pinned createAgentSession appends its initial model and thinking entries
+        on a zero-message session, even when explicit launch flags are supplied.
+        This is a file observation, not provider/child/terminal authority.
+        """
+        if not ThinkingLevel.supports_selected(self.selected_thinking_level) or not self.bootstrap_leaf_id:
+            raise NativePiUnavailable("Fresh source lacks explicit selected bootstrap")
+        self.verify_saved_identity()
+        try:
+            info = self.path.lstat()
+            tail_size = info.st_size - self.bootstrap_size
+            if not 0 < tail_size <= _MAX_STARTUP_APPEND:
+>               raise NativePiUnavailable("Selected startup has no exact metadata tail")
+E               agent_comms.native_errors.NativePiUnavailable: Selected startup has no exact metadata tail
+
+src/agent_comms/fresh_private_session.py:394: NativePiUnavailable
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_launch_uses_fresh_owner_a2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff6fe3d0fa0>
+level = 'high'
+
+    @pytest.mark.parametrize("level", [None, "low", "high"])
+    def test_launch_uses_fresh_owner_and_preserves_exact_saved_marker(tmp_path, monkeypatch, level):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level=level
+        )
+        before = fresh.path.read_bytes()
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        session_type = EnrolledSelectedSession if level is None else FirstSelectedSession
+>       launch = NativePiRpcLaunch.tracked(
+            tmp_path,
+            runtime=LaunchRuntime.running(), arguments=NativeThreadDefaults.offline().arguments,
+            provider="fixture", model="fixture", worktree=tmp_path,
+            session=session_type(fresh.path.parent, creation=fresh,
+                identity=NativeSessionIdentity(fresh.session_id, str(fresh.path))),
+            session_context=(DoctrineSegment.capture(),),
+         project=UnmanagedNativeProject())
+
+tests/test_native_evidence_boundary.py:134: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/native_pi.py:645: in tracked
+    return cls.acquire_tracked(package, runtime, arguments)(**options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:692: in _tracked
+    session.require_launch_header()
+src/agent_comms/selected_session.py:299: in require_launch_header
+    self.creation.verify_selected_startup()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = FreshPrivateSession(path=PosixPath('/tmp/pytest-of-ts/pytest-4636/test_launch_uses_fresh_owner_a2/sessions/enrolled-99...1d9ac29e46bea66', bootstrap_size=525, bootstrap_leaf_id='ade531aa', selected_thinking_level='high', creator_pid=234707)
+
+    def verify_selected_startup(self) -> FileRevision:
+        """Attest exactly Pi's two expected metadata appends, no raw messages.
+    
+        Pinned createAgentSession appends its initial model and thinking entries
+        on a zero-message session, even when explicit launch flags are supplied.
+        This is a file observation, not provider/child/terminal authority.
+        """
+        if not ThinkingLevel.supports_selected(self.selected_thinking_level) or not self.bootstrap_leaf_id:
+            raise NativePiUnavailable("Fresh source lacks explicit selected bootstrap")
+        self.verify_saved_identity()
+        try:
+            info = self.path.lstat()
+            tail_size = info.st_size - self.bootstrap_size
+            if not 0 < tail_size <= _MAX_STARTUP_APPEND:
+                raise NativePiUnavailable("Selected startup has no exact metadata tail")
+            descriptor = os.open(self.path, os.O_RDONLY | os.O_NOFOLLOW)
+            try:
+                opened = os.fstat(descriptor)
+                observed = FreshFileCheck(self, info, self.bootstrap_size)
+                StableFreshFileCheck(self, opened, self.bootstrap_size, observed.observed_revision).require_valid(
+                    "Selected startup inode/revision changed"
+                )
+                chunks = bytearray()
+                while len(chunks) < info.st_size:
+                    chunk = os.read(descriptor, info.st_size - len(chunks))
+                    if not chunk:
+                        raise NativePiUnavailable("Selected startup file became incomplete")
+                    chunks.extend(chunk)
+                # Pi's startup appendFileSync alone is not a durable receipt.
+                # Fail closed on uncertain fsync before the raw prompt writer.
+                os.fsync(descriptor)
+                synced = os.fstat(descriptor)
+                StableFreshFileCheck(
+                    self, synced, self.bootstrap_size, FileRevision.from_stat(opened),
+                ).require_valid("Selected startup changed across fsync")
+            finally:
+                os.close(descriptor)
+            data = bytes(chunks)
+            if hashlib.sha256(
+                data[: self.bootstrap_size]
+            ).hexdigest() != self.bootstrap_sha256 or not data.endswith(b"\n"):
+                raise NativePiUnavailable("Selected startup changed its enrolled prefix")
+            lines = data[self.bootstrap_size :].splitlines(keepends=True)
+            if len(lines) != 2 or any(not line.endswith(b"\n") for line in lines):
+                raise NativePiUnavailable("Selected startup has extra or partial entries")
+            model = ModelChangeEntry.read_startup(lines[0])
+            thinking = ThinkingLevelChangeEntry.read_startup(lines[1])
+            SelectedStartupCheck(self, model, thinking).require_valid()
+            after = self.path.lstat()
+            revision = FileRevision.from_stat(info)
+            StableFreshFileCheck(self, after, self.bootstrap_size, revision).require_valid(
+                "Selected startup revision changed after read"
+            )
+            return revision
+        except (OSError, ValueError, TypeError, KeyError, NativePiUnavailable) as error:
+>           raise NativePiUnavailable(f"Selected startup metadata cannot be attested: {error}") from error
+E           agent_comms.native_errors.NativePiUnavailable: Selected startup metadata cannot be attested: Selected startup has no exact metadata tail
+
+src/agent_comms/fresh_private_session.py:435: NativePiUnavailable
+_________ test_configure_refuses_model_outside_catalog_without_writing _________
+
+comms = <agent_comms.comms.Comms object at 0x7ff700011fd0>
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4636/test_configure_refuses_model_o0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff6ffe324a0>
+
+    def test_configure_refuses_model_outside_catalog_without_writing(comms, tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/reasoning")
+        comms.registry.declare(Thread(
+            name="worker", tags=frozenset(), worktree=str(tmp_path),
+            model="fixture/reasoning", thinking_level="high",
+        ))
+        comms.registry.unregister("worker")
+        original = comms.registry.require("worker")
+    
+        with pytest.raises(ValueError, match="Model 'fixture/plain' is unavailable"):
+>           ConfigureCliCommand(name="worker", model="fixture/plain").apply(comms, caller=NoThreadCaller())
+
+tests/test_cli_thinking.py:66: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/cli_commands.py:741: in apply
+    asyncio.run(catalogs.validate(candidate))
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:204: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:191: in validate
+    await option.validate(thread, value)
+src/agent_comms/config_options.py:124: in validate
+    self.require_value(value, await self.choices(thread))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:99: in choices
+    self.catalogs[key] = await self.discover(thread)
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:139: in discover
+    data = await GetAvailableModels().discover(
+src/agent_comms/pi_commands.py:296: in discover
+    async with self.catalog(comms, arguments) as (channel, writer):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/pi_commands.py:273: in catalog
+    package=comms.owners.native_package,
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owner_lifecycle.OwnerLifecycle object at 0x7ff7000125f0>
+
+    @property
+    def native_package(self) -> Path:
+        """The configured SDK artifact, without granting a worker launch."""
+        if self._private_nk_launch is None:
+>           raise PublicationActivationBlocked("Native execution requires a configured package")
+E           agent_comms.coordination_errors.PublicationActivationBlocked: Native execution requires a configured package
+
+src/agent_comms/owner_lifecycle.py:302: PublicationActivationBlocked
+____________ test_native_arguments_configured_uses_typed_selection _____________
+
+    def test_native_arguments_configured_uses_typed_selection():
+>       defaults = NativeThreadDefaults()
+                   ^^^^^^^^^^^^^^^^^^^^
+E       NameError: name 'NativeThreadDefaults' is not defined
+
+tests/test_cli_thinking.py:94: NameError
+=========================== short test summary info ============================
+FAILED tests/test_auth.py::test_changed_auth_refreshes_catalogue_without_changing_selected_model
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[None]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[1]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[True]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[gggggggggggggggggggggggggggggggg]
+FAILED tests/test_native_evidence_boundary.py::test_launch_uses_fresh_owner_and_preserves_exact_saved_marker[low]
+FAILED tests/test_native_evidence_boundary.py::test_launch_uses_fresh_owner_and_preserves_exact_saved_marker[high]
+FAILED tests/test_cli_thinking.py::test_configure_refuses_model_outside_catalog_without_writing
+FAILED tests/test_cli_thinking.py::test_native_arguments_configured_uses_typed_selection
+12 failed, 97 passed, 11 skipped, 1 deselected in 13.93s

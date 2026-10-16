@@ -14,6 +14,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
 
+from .native_arguments import NativeArguments
+
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent, InputRefused
@@ -230,7 +232,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         package: Path,
         *,
         runtime: LaunchRuntime,
-        arguments: tuple[str, ...],
+        arguments: NativeArguments,
         input_id: str,
         prompt: str,
         context_contributions: tuple[InputContributionCoordinates, ...] = (),

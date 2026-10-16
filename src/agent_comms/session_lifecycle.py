@@ -159,12 +159,13 @@ class SessionLifecycle:
 
     def declare_thread(self, cwd: str) -> Thread:
         """Publish the participant before this lifecycle resolves execution custody."""
+        startup = self.comms.settings.startup_arguments()
         thread = self.comms.threads.claim_thread(
             self.thread_name_for(cwd),
             tags=frozenset({"acp"}),
             worktree=cwd,
-            model=self.comms.settings.model,
-            thinking_level=self.comms.settings.thinking_level,
+            model=startup.model,
+            thinking_level=startup.thinking,
             auto_title_pending=True,
         )
         self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))

@@ -14,6 +14,7 @@ from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .maintenance_barrier import MaintenanceBarrier
 from .native_errors import NativePiUnavailable
+from .native_arguments import ExternalArgument, NativeArguments, ThinkingArgument
 from .native_session_reopen import NativeSessionIdentity, SessionIdentityHelper
 from .launch_runtime import RestartEnvironment
 from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAction
@@ -67,8 +68,8 @@ class SelectedSession:
     def default_action(self) -> SelectedAction:
         return CodingSelectedAction()
 
-    def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
-        return ("--thinking", thinking_level) if thinking_level is not None else ()
+    def launch_arguments(self, thinking_level: str | None) -> NativeArguments:
+        return NativeArguments().with_thinking(thinking_level)
 
     def require_launch_tools(self, mode) -> None:
         pass
@@ -280,16 +281,12 @@ class FirstSelectedSession(EnrolledSelectedSession):
             root, self.creation, boundary, measurements=measurements
         )
 
-    def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
-        return (
-            "--thinking",
-            self.creation.selected_thinking_level,
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-themes",
-        )
+    def launch_arguments(self, thinking_level: str | None) -> NativeArguments:
+        return NativeArguments((
+            ThinkingArgument(self.creation.selected_thinking_level),
+            ExternalArgument(("--no-extensions", "--no-skills", "--no-context-files",
+                              "--no-prompt-templates", "--no-themes")),
+        ))
 
     def require_launch_tools(self, mode) -> None:
         if mode is not None:

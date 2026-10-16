@@ -1,5 +1,6 @@
 """Standby liveness preserves goal authority and never replays an input."""
 
+from agent_comms.native_arguments import NativeArguments
 import asyncio
 import os
 import threading
@@ -43,7 +44,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
     native = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools'])))
     agent = canonical_agent(comms,  runtime_enabled=True, auto_wake=False)
     try:
         child = (await agent.new_session(str(native.project))).session_id

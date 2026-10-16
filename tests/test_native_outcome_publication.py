@@ -3,6 +3,7 @@
 The verified native CLI, HTTP provider, Core turn/application, input dispositions
 and saved journal are real. Only HTTP response contents are controlled.
 """
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.native_settings import NativeThreadDefaults
 
 import asyncio
@@ -51,8 +52,8 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
     monkeypatch.setenv("PI_MODEL", "fixture")
     monkeypatch.setenv("PI_REASONING_LEVEL", "off")
     launcher = str(Path(__file__).parents[1] / "stack/bin/pi-native")
-    arguments = ['--provider', 'outcome-offline', '--model', 'fixture', '--thinking', 'off', *NativeThreadDefaults.isolation_arguments]
-    wired.settings = dataclasses.replace(wired.settings,  arguments=tuple(arguments))
+    arguments = ['--provider', 'outcome-offline', '--model', 'fixture', '--thinking', 'off', *NativeThreadDefaults.isolation_arguments.argv]
+    wired.settings = dataclasses.replace(wired.settings,  arguments=NativeArguments.parse(tuple(arguments)))
     agent = canonical_agent(wired,  runtime_enabled=True)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     route = PrivateNkLaunch(Path(agent._comms.root), agent._configured_root_id(), package, None)

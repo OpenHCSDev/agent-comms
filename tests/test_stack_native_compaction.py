@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
@@ -192,7 +193,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                 "throw new Error('BLOCKED_NONLOCAL_NETWORK');"
                 "return original(url,...rest);};"
             )
-            native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'high']
+            native_args = ['--offline', *NativeThreadDefaults.isolation_arguments.argv, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'high']
             if case == "post_compaction_tool_rounds":
                 native_args.remove("--no-tools")
                 native_args.extend(["--tools", "read"])
@@ -304,7 +305,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
     monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
-    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(native_args))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=NativeArguments.parse(tuple(native_args)))
     owner = CommsAgent(comms,  runtime_enabled=True, auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     updates = []
     resumed_activity = []
