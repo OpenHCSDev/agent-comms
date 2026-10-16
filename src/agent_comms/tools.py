@@ -673,12 +673,10 @@ class CommsTodosTool(ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsFleetTool(ToolRequest):
     label = "Fleet"
-    description = "Running threads, goals, deadlines and latest original tool/message activity, newest first."
+    description = "Canonical problems, exact current orders and observed activity."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import FleetCliCommand
-
-        return FleetCliCommand().apply(comms)
+        return {"problems": FieldCodec.encode(TodoStore(comms.root).fleet(comms.registry, comms.agents))}
 
 
 @dataclass(frozen=True, kw_only=True)

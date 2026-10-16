@@ -1196,10 +1196,10 @@ class TodosCliCommand(CliCommand, declared_name="todos"):
 
 @dataclass(frozen=True, kw_only=True)
 class FleetCliCommand(CliCommand):
-    help = "Running threads, original goals and latest activity, newest first"
+    help = "Canonical problems, exact current orders and observed activity"
 
-    def apply(self, ctx: Comms) -> Any:
-        return {"threads": FieldCodec.encode(ctx.views.fleet())}
+    def apply(self, ctx: Comms) -> object:
+        return {"problems": FieldCodec.encode(TodoStore(ctx.root).fleet(ctx.registry, ctx.agents))}
 
 
 @dataclass(frozen=True, kw_only=True)

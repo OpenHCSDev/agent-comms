@@ -9,6 +9,8 @@ import time
 
 import pytest
 
+from agent_comms.activity import ActivityState
+from agent_comms.cli_commands import FleetCliCommand
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import ClearGoalAction, CompletedGoalAction, GoalPrecondition, OwnerInvocable, SetGoalAction
 from agent_comms.goal_progress import GoalReport, ReportedGoalProgress, WorksInApp
@@ -16,8 +18,9 @@ from agent_comms.goals import Deadline, GoalRef
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AcceptanceCheck, Assignment, BlockedTodoState, DoneTodoState, OpenTodoState,
-    SourceTodoWhere, TodoConflict, TodoError, TodoRef, TodoStore, UnassignedTodoAssignment,
+    AcceptanceCheck, AssignedFleetEntry, Assignment, BlockedTodoState, DoneTodoState,
+    FormerOrderFleetEntry, OpenTodoState, SourceTodoWhere, TodoConflict, TodoError,
+    TodoRef, TodoStore, UnassignedFleetEntry, UnassignedTodoAssignment,
 )
 
 
@@ -260,3 +263,27 @@ def test_declared_problem_location_and_reference_validation(todo_comms: Comms):
     assignment = Assignment(GoalRef(todo_comms.registry.require("worker-a").incarnation, "order-a"),
                             todo_comms.registry.require("lead").incarnation)
     assert assignment.owner == assignment.goal.owner and assignment.generation == assignment.goal.goal_id
+
+
+def test_fleet_uses_problem_assignment_and_exact_current_order(todo_comms: Comms):
+    problem = create(todo_comms)
+    store = TodoStore(todo_comms.root)
+    initial, = store.fleet(todo_comms.registry, todo_comms.agents)
+    assert isinstance(initial, UnassignedFleetEntry) and initial.todo == problem
+    assigned = assign(todo_comms)
+    todo_comms.agents.set_activity("worker-a", ActivityState.WORKING, "Inspecting the source")
+    current, = store.fleet(todo_comms.registry, todo_comms.agents)
+    assert isinstance(current, AssignedFleetEntry) and current.todo == assigned
+    assert current.goal == todo_comms.registry.require("worker-a").require_goal()
+    assert current.activity.state is ActivityState.WORKING
+    assert FleetCliCommand().apply(todo_comms)["problems"][0]["todo"]["id"] == problem.id
+
+    todo_comms.registry.rename("worker-a", "unit")
+    renamed, = store.fleet(todo_comms.registry, todo_comms.agents)
+    assert isinstance(renamed, AssignedFleetEntry) and renamed.goal.id == "order-a"
+    old = todo_comms.registry.require("unit")
+    todo_comms.registry.remove(old.name)
+    todo_comms.registry.declare(Thread(old.name, old.tags, old.worktree, created_at=old.created_at + 100))
+    former, = store.fleet(todo_comms.registry, todo_comms.agents)
+    assert isinstance(former, FormerOrderFleetEntry) and former.todo == assigned
+    assert former.todo.assignment.require_assigned(former.todo).goal == assigned.assignment.require_assigned(assigned).goal

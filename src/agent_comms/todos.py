@@ -7,18 +7,21 @@ import re
 import sqlite3
 import time
 from abc import abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from itertools import islice
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .agent_activity import AgentActivity
+from .activity import ObservedActivity
 from .child_process import BoundedRun
 from .command import Command
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .fleet import UnitObservation
 from .message_reference import MessageReference
 from .goal_actions import (
     ClearGoalAction, CompletedGoalAction, GoalActionContext, GoalPrecondition,
@@ -27,6 +30,8 @@ from .goal_actions import (
 from .goal_mentions import bind_goal_mentions
 from .goals import Goal, GoalAuthor, GoalRef
 from .recorded_time import RecordedEventTime
+from .registration import Registration
+from .registry_document import RegistrySnapshot
 from .thread_identity import RecordedThreadIncarnation
 from .typed_table import Column, TypedRow, TypedTable, sql_literal
 
@@ -159,6 +164,10 @@ class Assignment:
 
 
 class TodoAssignment(DeclaredFamily, affix="TodoAssignment"):
+    @abstractmethod
+    def observe(self, problem: Todo, snapshot: RegistrySnapshot,
+                activities: Mapping[str, ObservedActivity], now: float) -> FleetEntry: ...
+
     @property
     @abstractmethod
     def description(self) -> str: ...
@@ -176,6 +185,9 @@ class TodoAssignment(DeclaredFamily, affix="TodoAssignment"):
 
 @dataclass(frozen=True)
 class UnassignedTodoAssignment(TodoAssignment):
+    def observe(self, problem, snapshot, activities, now):
+        return UnassignedFleetEntry(todo=problem)
+
     @property
     def description(self):
         return "unassigned"
@@ -190,6 +202,14 @@ class UnassignedTodoAssignment(TodoAssignment):
 @dataclass(frozen=True)
 class AssignedTodoAssignment(TodoAssignment):
     assignment: Assignment
+
+    def observe(self, problem, snapshot, activities, now):
+        goal = self.assignment.goal.current(snapshot)
+        if goal is None:
+            return FormerOrderFleetEntry(todo=problem)
+        owner = snapshot.require(self.assignment.owner.name)
+        return AssignedFleetEntry(todo=problem, goal=goal,
+                                  activity=activities[owner.name], observed_at=now)
 
     @property
     def description(self):
@@ -385,6 +405,26 @@ class Todo(TypedTable):
                            created_at=self.created_at, assignment=self.assignment,
                            last_change=self.last_change):
             raise TodoConflict(self)
+
+
+@dataclass(frozen=True)
+class FleetEntry(DeclaredFamily, affix="FleetEntry"):
+    """A problem and the order observation selected by its assignment owner."""
+
+    todo: Todo
+
+
+class UnassignedFleetEntry(FleetEntry):
+    pass
+
+
+class FormerOrderFleetEntry(FleetEntry):
+    """The exact assigned order is no longer current; its reference remains on Todo."""
+
+
+@dataclass(frozen=True)
+class AssignedFleetEntry(UnitObservation, FleetEntry):
+    pass
 
 
 @dataclass(frozen=True)
@@ -626,6 +666,13 @@ class TodoStore:
                 return tuple(Todo.select(db, order_by=("created_at", "id")))
             return tuple(Todo.read(db.execute(
                 f"SELECT * FROM {Todo.declared_name} WHERE repo=? ORDER BY rowid", (_repo(repo),))))
+
+    def fleet(self, registry: Registration, agents: AgentActivity) -> tuple[FleetEntry, ...]:
+        snapshot = registry.snapshot()
+        activities = agents.all_activity(snapshot.threads.values(), snapshot=snapshot)
+        now = time.time()
+        return tuple(problem.assignment.observe(problem, snapshot, activities, now)
+                     for problem in self.list())
 
     def create(self, todo_id: str, repo: str, text: str, *, creator: Thread,
                where: TodoWhere, acceptance: AcceptanceCheck, bus: MessageBus) -> Todo:

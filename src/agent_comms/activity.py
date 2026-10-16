@@ -397,7 +397,7 @@ class ActivityLog(ThreadOwnedState):
         with self._writing():
             _append_jsonl(self._path, FieldCodec.encode(activity))
 
-    def update(self, thread: str, transition: Callable[[Activity], Activity | None]) -> tuple[Activity, Activity] | None:
+    def update(self, thread: str, transition: Callable[[Activity], Activity | None]) -> bool:
         """Read and change one thread under the existing activity writer lock.
 
         The activity owner supplies the transition. Returning no event leaves
@@ -407,10 +407,10 @@ class ActivityLog(ThreadOwnedState):
             previous = self._observed(thread, snapshot.latest, active=True, now=time.time())
             event = transition(previous)
             if event is None:
-                return None
+                return False
             event = replace(event, interval=previous.interval.continued(previous, event))
             _append_jsonl(self._path, FieldCodec.encode(event))
-            return previous, event
+            return True
 
     def current(self, thread: str, *, active: bool = False) -> Activity:
         """Latest activity for one thread; idle when stale or unknown."""
