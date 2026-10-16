@@ -573,14 +573,22 @@ class ThreadReading(Observation[ObserveThreads]):
         if previous is not None and previous.current_at(revision):
             return
         presentations, unavailable, busy = {}, {}, set()
-        for name in self.request.names:
+        if self.request.names:
             try:
-                presentations[name] = comms.views.thread_presentation(name)
+                batch = comms.views.thread_presentations(self.request.names)
             except UnreadableHistory.DEFERRED_READS:
-                busy.add(name)
+                busy.update(self.request.names)
             except StoredHistoryUnreadable as error:
-                unavailable[name] = UnreadableHistory.capture(error)
-            yield None
+                unavailable.update(dict.fromkeys(self.request.names, UnreadableHistory.capture(error)))
+            else:
+                for name in self.request.names:
+                    try:
+                        presentations[name] = batch.read(name)
+                    except UnreadableHistory.DEFERRED_READS:
+                        busy.add(name)
+                    except StoredHistoryUnreadable as error:
+                        unavailable[name] = UnreadableHistory.capture(error)
+                    yield None
         observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset())
         self.observed = replace(observed, changed=observed.changed_since(previous))
         if previous is None or self.observed.changed:

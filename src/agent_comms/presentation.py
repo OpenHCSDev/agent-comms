@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
@@ -696,7 +696,9 @@ class ThreadView:
         *,
         show_stopped: bool,
         show_archived: bool,
+        names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
+        selected = None if names is None else {snapshot.canonical_name(name) for name in names}
         runtime = agents.runtime_info.read()
         waits = goal_waits.read()
         return tuple(
@@ -708,7 +710,8 @@ class ThreadView:
                 waits,
             )
             for name, thread in snapshot.threads.items()
-            if cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+            if (selected is None or name in selected)
+            and cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
         )
 
     @property
