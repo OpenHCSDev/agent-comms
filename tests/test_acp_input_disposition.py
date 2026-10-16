@@ -316,7 +316,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
     async def delayed_started(following, input_id):
         started.set()
         await started_release.wait()
-        await original_started(following, input_id)
+        return await original_started(following, input_id)
 
     monkeypatch.setattr(OwnerFollowingInputs, "open", delayed_open)
     monkeypatch.setattr(OwnerFollowingInputs, "started", delayed_started)
