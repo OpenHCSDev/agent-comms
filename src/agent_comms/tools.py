@@ -845,7 +845,10 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
     def apply(self, comms: Comms) -> JsonObject:
         from .cli_commands import ForkCliCommand
 
-        return ForkCliCommand(name=self.name, parent=self.parent, task=self.task,
+        parent = comms.registry.require(self.parent)
+        return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
+                              project=parent.worktree, model=parent.model,
+                              thinking_level=parent.thinking_level,
                               tags=_tag_set(self.tags) if self.tags is not None else None,
                               prompt=self.prompt).apply(comms)
 
