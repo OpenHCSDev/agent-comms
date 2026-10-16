@@ -1,9 +1,10 @@
 # Local agent-comms stack
 
-This uv project installs agent-comms alongside the merged Toad and Textual
-forks at fixed commits. It requires Python 3.14. The three source locations
-are declared in `pyproject.toml`; `uv.lock` records the
-resolved dependency set.
+This uv project installs agent-comms editable from the main checkout alongside
+Toad, Textual and ui-theme from their `main` branches. It requires Python 3.14.
+`pyproject.toml` owns source selection; `uv.lock` records the exact resolved
+commits for reproducible installation. Development belongs in isolated worktrees,
+never in the live installation.
 
 From the repository root:
 
@@ -14,9 +15,11 @@ uv run --project stack --locked toad
 stack/bin/prepare-pi-native
 ```
 
-`stack/bin/toad-comms [THREAD]` opens the pinned Toad UI on an existing
-thread. Link that script into your `PATH` if you want the short command name.
-It attaches to the current owner and does not send a prompt.
+`stack/bin/toad-comms [THREAD]` opens the Toad workspace, where you can create
+a new agent. Supplying a thread attaches to that existing owner without sending
+a prompt. The installed `toad-comms` launcher points to this main checkout.
+Core source pulls apply to new processes without rebuilding a wheel; existing
+processes retain their loaded code.
 
 The managed launcher follows the installed console entry points and active-route
 record. On that active N/K bus, ordinary channel posts notify eligible running
@@ -74,10 +77,21 @@ in [native proof cutover](native-proof-cutover.md). There is no runtime legacy
 reader. The native session JSONL metadata index remains a separate startup cost;
 indexed proof recovery does not claim to remove that history read.
 
-All three packages are installed from immutable Git commits. Toad also pins
-agent-comms in its own manifest, so both agent-comms pins must agree. Update
-their revisions in `pyproject.toml`, run `uv lock --project stack`, and commit
-the manifest and lockfile together.
+When updating the live stack, pull Core main and refresh the UI packages from
+their current mains rather than preserving old local revision overrides:
+
+```sh
+git pull --ff-only
+uv lock --project stack --upgrade-package batrachian-toad --upgrade-package textual --upgrade-package ui-theme
+uv sync --project stack --locked
+```
+
+Commit the refreshed lockfile from an isolated development checkout. The stack's
+source overrides select editable Core and the UI mains even when Toad's own
+manifest pins an older dependency. `uv sync --locked` alone intentionally reuses
+the lockfile; it does not fetch newer branch heads. Preserve active sessions and
+uncertain inputs; new Toad launches load the updated packages without restarting
+running agents.
 
 The coordination wire defaults to `~/.agent-comms`; set `AGENT_COMMS_ROOT` if
 your state lives elsewhere. Installing this project does not launch owners or

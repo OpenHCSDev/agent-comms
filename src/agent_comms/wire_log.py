@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
+from io import DEFAULT_BUFFER_SIZE
 from pathlib import Path
 from typing import BinaryIO
 
@@ -33,6 +34,7 @@ from .envelope_claim_transitions import (
 from .errors import (
     RelationViolationError,
 )
+from .coordination_errors import StaleRevision
 from .field_codec import FieldCodec
 from .messages import Message
 from .private_path import FileRevision
@@ -71,6 +73,34 @@ class OpenedWireSnapshot:
     _append_checkpoints: dict[BusAppendIndex, AppendCheckpoint | None] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
+
+    @property
+    def complete_boundary(self) -> int:
+        """Last complete line inside this fixed physical cut, without reading history."""
+        stream, revision = self.stream, self.revision
+        if stream is None:
+            if revision is not None:
+                raise StaleRevision("Opened wire revision has no stream")
+            return 0
+        if revision is None or not revision.opened_by(stream):
+            raise StaleRevision("Opened wire stream no longer contains its captured revision")
+        position = stream.tell()
+        try:
+            end = revision.size
+            if end:
+                stream.seek(end - 1)
+                if stream.read(1) == b"\n":
+                    return end
+            while end:
+                start = max(0, end - DEFAULT_BUFFER_SIZE)
+                stream.seek(start)
+                newline = stream.read(end - start).rfind(b"\n")
+                if newline >= 0:
+                    return start + newline + 1
+                end = start
+            return 0
+        finally:
+            stream.seek(position)
 
     def require_page_index_coverage(self, index: BusPageIndex) -> None:
         if self.stream is None or self.revision is None:
