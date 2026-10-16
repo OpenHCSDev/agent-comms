@@ -112,7 +112,7 @@ class ChangedSource:
     @classmethod
     def read(cls, repo: Path, base: str, head: str, path: str) -> ChangedSource:
         patch = git(repo, "diff", "--no-renames", "--no-ext-diff", "--no-textconv",
-                    "--no-color", "--unified=0", base, head, "--", path)
+                    "--no-color", "--unified=0", "--inter-hunk-context=0", base, head, "--", path)
         lines: set[int] = set()
         for header in patch.decode().splitlines():
             if header.startswith("@@ "):

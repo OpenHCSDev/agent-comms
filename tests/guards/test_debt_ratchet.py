@@ -533,6 +533,17 @@ def test_unchanged_old_sites_are_not_forced_to_zero(repo, measure, source):
     assert report["introduced"][identity] == 0
 
 
+def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
+    repo.git("config", "diff.interHunkContext", "3")
+    base = repo.commit({"names.py": "first = 1\nold_receipt = 1\nlast = 1\n"})
+    head = repo.commit({"names.py": "first = 2\nold_receipt = 1\nlast = 2\n"})
+    status, report = repo.compare(base, head)
+    identity = f"BannedVocabulary:{repo.root}/names.py"
+    assert status == 0
+    assert report["head"][identity] == 1
+    assert report["introduced"][identity] == 0
+
+
 def test_net_reduction_does_not_pay_for_a_new_identifier(repo):
     base = repo.commit({"names.py": "old_admit = 1\nold_receipt = 2\n"})
     head = repo.commit({"names.py": "new_custody = 3\n"})
