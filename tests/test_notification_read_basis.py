@@ -4,7 +4,7 @@ from agent_comms.presentation import MessageNotification
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 
-def test_reference_windows_share_one_read_document(tmp_path, monkeypatch):
+def test_reference_windows_share_one_read_document(tmp_path, monkeypatch):  # noqa: F811
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     message = initial.message
     comms.bus.reads.replace(comms.bus.reads.empty())

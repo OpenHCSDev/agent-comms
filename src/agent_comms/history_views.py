@@ -17,8 +17,8 @@ from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
-    from .registry_document import RegistrySnapshot
     from .read_ledger import ReadDocument
+    from .registry_document import RegistrySnapshot
     from .wire_log import OpenedWireSnapshot
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
@@ -370,7 +370,10 @@ class HistoryViews:
         )
         reads = self.transcripts.bus.reads
         return ThreadPresentations(
-            snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit,
+            snapshot,
+            {view.thread.name: view for view in views},
+            self.transcripts,
+            sent_source_limit,
             reads.read() if views else reads.empty(),
         )
 

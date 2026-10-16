@@ -158,7 +158,10 @@ class MessageNotification:
     @classmethod
     def read_references(
         cls, log: WireLog, references: Sequence[MessageReference],
-        project: Callable[[Sequence[CommittedDelivery], ReadDocument], dict[tuple[int, str], tuple[MessageNotification, ...]]],
+        project: Callable[
+            [Sequence[CommittedDelivery], ReadDocument],
+            dict[tuple[int, str], tuple[MessageNotification, ...]],
+        ],
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Share bounded deliveries and one read document across live/recorded cuts."""
         result = {}
