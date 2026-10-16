@@ -1,4 +1,4 @@
-"""Session-owned observations, not stdout writes, confirm monitor delivery."""
+"""Session-owned parts, not stdout writes, confirm monitor delivery."""
 from contextlib import closing
 from html import escape
 import json
@@ -6,74 +6,117 @@ import json
 import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.claude_protocol import CLAUDE_RECORD, ClaudeSession
+from agent_comms.cli_bridges.claude_protocol import (
+    CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
+)
 from agent_comms.cli_bridges.shared import (
-    Binding, DeliveryJournal, DeliveryRow, MonitorAttemptRow, MonitorMessage,
-    Options, UnconfirmedOutcome, EmittedOutcome, DeliveredOutcome, ObservedMonitor,
-    NO_MONITOR_ATTEMPT, Watch, monitor_notifications,
+    Binding, DeliveryJournal, DeliveryRow, MonitorAttemptRow, MonitorPartRow,
+    MonitorPart, ForeignMonitorFrame, Options, UnconfirmedOutcome, EmittedOutcome,
+    DeliveredOutcome, ObservedMonitor, MismatchedMonitor, NO_MONITOR_ATTEMPT, Watch,
 )
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 
 
-def notification(frame, session='session'):
+def notification(line, session='session', record_id='notification-record'):
     return CLAUDE_RECORD.validate_python(dict(
-        type='user', uuid='notification-record', timestamp='2026-10-16T16:40:05.123Z',
+        type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
         sessionId=session, promptId='prompt', origin=dict(kind='task-notification'),
-        message=dict(content='<task-notification><event>'+escape(frame.model_dump_json())+
+        message=dict(content='<task-notification><event>'+escape(line)+
                      '</event></task-notification>')))
 
 
 @pytest.mark.asyncio
-async def test_monitor_requires_matching_session_token_and_complete_body_then_reopens(tmp_path, capsys):
+async def test_parts_require_matching_session_and_complete_exact_body_then_reopen(tmp_path, capsys):
     state=tmp_path/'state'
+    acknowledgments=[]
+    class Core:
+        async def acknowledge(self,message):
+            acknowledgments.append(message.reference)
     with closing(DeliveryJournal(state)) as journal:
         binding=Binding(str(tmp_path),'viewer','session')
         journal.bind(binding)
         bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,journal)
-        acknowledgments=[]
-        class Core:
-            async def acknowledge(self,message):
-                acknowledgments.append(message.reference)
         bridge.core=Core()
-        message=Message(sender='peer',target='viewer',type=InfoKind,body='full body',timestamp=1.,seq=1)
+        message=Message(sender='claude-code',target='viewer',type=InfoKind,body='x'*3000,timestamp=1.,seq=1)
         assert journal.begin(message,json.dumps(message.to_wire()),UnconfirmedOutcome)
         assert await bridge.deliver(message) is EmittedOutcome
         journal.finish(message,EmittedOutcome)
-        frame=MonitorMessage.model_validate_json(capsys.readouterr().out)
-        for update in notification(frame,'different-session').updates(ClaudeSession()):
+        lines=capsys.readouterr().out.splitlines()
+        assert len(lines)==7
+        assert all(len(line.encode('utf-16-le'))//2 <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
+        for update in notification(lines[0],'different-session').updates(ClaudeSession()):
             await update.observed(bridge)
-        assert not acknowledgments
-        for update in notification(frame.model_copy(update={'token':'wrong'})).updates(ClaudeSession()):
-            await update.observed(bridge)
-        assert not acknowledgments
-        with pytest.raises(ValueError,match='original message'):
-            for update in notification(frame.model_copy(update={'text':'partial'})).updates(ClaudeSession()):
+        assert MonitorPartRow.select(journal.db)==[]
+        # Out-of-order observations and repeated history must not count twice.
+        for number in (6,1,3,1,5,2):
+            for update in notification(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(bridge)
         assert not acknowledgments
-        for update in notification(frame).updates(ClaudeSession()):
-            await update.observed(bridge)
+        assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
+    with closing(DeliveryJournal(state)) as journal:
+        bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,journal)
+        bridge.core=Core()
+        for number in (0,4):
+            for update in notification(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
+                await update.observed(bridge)
         assert acknowledgments==[message.reference]
-        for update in notification(frame).updates(ClaudeSession()):
-            await update.observed(bridge)
-        assert acknowledgments==[message.reference]  # History overlap is not another delivery.
+        for line in lines:
+            for update in notification(line,record_id='later-overlap').updates(ClaudeSession()):
+                await update.observed(bridge)
+        assert acknowledgments==[message.reference]
     with closing(DeliveryJournal(state)) as reopened:
         assert DeliveryRow.select(reopened.db)[0].outcome is DeliveredOutcome
-        assert MonitorAttemptRow.select(reopened.db)[0].evidence==ObservedMonitor('notification-record',1792168805.123)
+        assert MonitorAttemptRow.select(reopened.db)[0].evidence==ObservedMonitor('record-4',1792168805.123)
+        assert len(MonitorPartRow.select(reopened.db))==7
 
 
-def test_truncated_monitor_notification_cannot_confirm_delivery(capsys):
-    frame=MonitorMessage(session='session',token='token',id='id',text='complete body')
-    assert not monitor_notifications(frame.model_dump_json()[:-5]+'...(truncated)', 'session','record',1.)
-    assert 'delivery remains pending' in capsys.readouterr().err
-    assert not monitor_notifications('ordinary unrelated monitor event', 'session','record',1.)
+@pytest.mark.parametrize('body', ['x'*3000, ('\n"\\😀\t')*500, 'short'])
+def test_frame_cap_and_exact_reconstruction(body):
+    message=Message(sender='claude-code',target='viewer',type=InfoKind,body=body,timestamp=1.,seq=1)
+    frame=ClaudeMonitorFrame(message)
+    decoded=[ClaudeMonitorFrame.decode_line(json.dumps(part,ensure_ascii=False)) for part in frame.parts]
+    assert all(isinstance(part,MonitorPart) for part in decoded)
+    assert ''.join(part.body for part in decoded)==body
+    assert all(frame.event_size(part)<=frame.EVENT_CHARS for part in frame.parts)
+    assert [part.number for part in decoded]==list(range(1,len(decoded)+1))
+
+
+def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails():
+    record=CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
+        sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
+        message=dict(content='Another task producer')))
+    assert isinstance(record.message.content[0].text,ForeignTaskNotification)
+    assert record.updates(ClaudeSession())==()
+    from xml.etree.ElementTree import ParseError
+    with pytest.raises(ParseError):
+        CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
+            sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
+            message=dict(content='<task-notification>')))
+    assert isinstance(ClaudeMonitorFrame.decode_line('ordinary unrelated monitor event'),ForeignMonitorFrame)
+    assert isinstance(ClaudeMonitorFrame.decode_line('"Comms in · old format...(truncated)'),ForeignMonitorFrame)
+
+
+@pytest.mark.asyncio
+async def test_wrong_complete_parts_stay_pending_without_claiming_delivery(tmp_path,capsys):
+    with closing(DeliveryJournal(tmp_path)) as journal:
+        binding=Binding(str(tmp_path),'viewer','session')
+        bridge=ClaudeBridge(Options(Watch(),None,None,None,tmp_path),binding,journal)
+        message=Message(sender='peer',target='viewer',type=InfoKind,body='original',timestamp=1.,seq=1)
+        journal.begin(message,json.dumps(message.to_wire()),EmittedOutcome)
+        journal.emitting(message,1)
+        frame=MonitorPart(id=message.message_id,sender='peer',number=1,total=1,body='different')
+        await frame.confirm(bridge,ObservedMonitor('record',1.))
+        assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
+        assert isinstance(MonitorAttemptRow.select(journal.db)[0].evidence,MismatchedMonitor)
+        assert 'message remains pending' in capsys.readouterr().err
 
 
 def test_old_emission_has_no_invented_evidence_or_replay(tmp_path):
     message=Message(sender='peer',target='viewer',type=InfoKind,body='retained',timestamp=1.,seq=1)
     with closing(DeliveryJournal(tmp_path)) as journal:
         journal.begin(message,json.dumps(message.to_wire()),EmittedOutcome)
-        frame=MonitorMessage(session='session',token='invented',id=message.message_id,text='retained')
+        frame=MonitorPart(id=message.message_id,sender='peer',number=1,total=1,body='retained')
         assert journal.monitor_attempt(frame) is NO_MONITOR_ATTEMPT
         assert not journal.begin(message,'do not replace',UnconfirmedOutcome)
         assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
@@ -91,10 +134,10 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
         try:
             second=wired.messaging.send_message('PR111','fixer','second')
             async with asyncio.timeout(3):
-                taken = await pending
-                while taken.reference == first.reference:
-                    taken = await anext(stream)
-            assert taken.reference == second.reference
+                taken=await pending
+                while taken.reference==first.reference:
+                    taken=await anext(stream)
+            assert taken.reference==second.reference
         finally:
             if not pending.done():
                 pending.cancel()
