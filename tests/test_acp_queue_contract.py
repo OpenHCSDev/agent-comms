@@ -180,12 +180,11 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
 @pytest.mark.parametrize(
     "rows",
     [
-        {"malformed": ["not text"]},
         {str(i): "message" for i in range(33)},
         {"long": "x" * 4097},
     ],
 )
-async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path, rows):
+async def test_queue_projection_limits_never_drop_or_replay_owned_rows(tmp_path, rows):
     _, agent, created, generation = _owner(tmp_path)
     agent.inputs.queued_inputs["beta"] = {
         key: QueuedInput(

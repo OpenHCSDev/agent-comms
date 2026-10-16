@@ -5,7 +5,7 @@ import os
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+from agent_comms.comms import Comms
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -20,10 +20,11 @@ from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from stored_inputs import stored_inputs
 
+pytestmark = pytest.mark.usefixtures("private_comms")
 
-def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path, monkeypatch):
+
+def test_inspected_canonical_dependencies_allow_standby_without_replay(comms, tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    comms = wire(tmp_path / "wire")
     for name in ("worker", "parent", "other"):
         comms.registry.declare(
             Thread(
@@ -109,7 +110,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     generation = comms.goals.open_goal_store().snapshot(goal.id)
     assert generation is not None and generation.lifecycle.ready
     assert generation.attempt_id is None
-    reopened = wire(comms.root)
+    reopened = Comms(comms.root)
     reopened.goals.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
     reopened.goals.update_goal(
         "worker", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",))
@@ -127,8 +128,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
 
 
 @pytest.mark.parametrize("rebound", ["worker", "parent"])
-def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, rebound):
-    comms = wire(tmp_path)
+def test_standby_excludes_retained_rebound_history_but_retains_rename(comms, tmp_path, rebound):
     for name in ("worker", "parent"):
         comms.registry.declare(
             Thread(

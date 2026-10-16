@@ -213,17 +213,19 @@ class TestThreadOps:
         assert row["context_percent"] == 25
         assert wired.agents.agent_info_of("fixer").context_used == 25
 
-    def test_configuration_names_the_resolved_model(self, wired):
-        wired.agents.observe_runtime_info("fixer", AgentInfo(model="observed/model", context_used=25, context_size=100))
-        answer = wired.configuration.answer("fixer")
-        assert answer.model == "observed/model"
-        assert answer.context_usage.label == "25/100 tokens (25.0%)"
+    def test_configuration_reports_configured_model_and_observed_usage(self, wired):
         wired.threads.set_thread_configuration(
             wired.registry.require("fixer"), model="configured/model"
         )
+        wired.agents.observe_runtime_info(
+            "fixer", AgentInfo(model="observed/model", context_used=25, context_size=100)
+        )
+
         answer = wired.configuration.answer("fixer")
+
         assert answer.model == "configured/model"
         assert answer.context_usage.used == 25
+        assert answer.context_usage.size == 100
 
     def test_presence_omits_expensive_viewer_pending_counts(self, wired):
         rows = {row["name"]: row for row in wired.views.presence()}

@@ -17,7 +17,7 @@ from agent_comms.acp_extension import (
     QueueChangedUpdate,
     QueuePromptRequest,
     SteerPromptRequest,
-    TurnStartedUpdate,
+    TurnChangedUpdate,
     decode_updates,
     encode_request,
 )
@@ -271,7 +271,8 @@ async def test_failed_queued_image_child_never_exposes_encoded_attachment(tmp_pa
         async def session_update(self, **kwargs):
             update = kwargs["update"].model_dump(by_alias=True, exclude_none=True)
             updates.append(update)
-            if any(isinstance(f, TurnStartedUpdate) for f in decode_updates(update.get("_meta"))):
+            if any(isinstance(f, TurnChangedUpdate) and f.state.busy
+                   for f in decode_updates(update.get("_meta"))):
                 started.set()
 
     agent.on_connect(Client())
