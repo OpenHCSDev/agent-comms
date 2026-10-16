@@ -99,7 +99,7 @@ class TrackedTerminal(ABC):
         return self.later_input(parts).keep_response()
 
     def keep_response(self) -> TrackedTerminal:
-        return self
+        return UnansweredNotifiedTrackedTerminal()
 
     @abstractmethod
     def require_response(self, parts: list[str]) -> str: ...
@@ -151,17 +151,26 @@ class AnsweredTrackedTerminal(TrackedTerminal):
         return NotifiedTrackedTerminal(self.text)
 
 
-class NotifiedTrackedTerminal(AnsweredTrackedTerminal):
-    """A notice can be handled, but cannot replace the already completed answer."""
+class NotificationTrackedTerminal(TrackedTerminal):
+    """Notice handling cannot answer or revise the original requested task."""
 
     def append(self, text):
         return self
 
-    def later_input(self, parts):
-        return AnsweredTrackedTerminal(self.text)
+    def tool_round(self):
+        return self
 
     def notification(self, parts):
         return self
+
+
+class NotifiedTrackedTerminal(NotificationTrackedTerminal, AnsweredTrackedTerminal):
+    def later_input(self, parts):
+        return AnsweredTrackedTerminal(self.text)
+
+
+class UnansweredNotifiedTrackedTerminal(NotificationTrackedTerminal, PendingTrackedTerminal):
+    pass
 
 
 class AmbiguousTrackedTerminal(PendingTrackedTerminal):

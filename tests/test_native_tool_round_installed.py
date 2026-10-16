@@ -131,7 +131,10 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         }))
 
 
-@pytest.mark.parametrize("following", ["empty_notice", "answered_notice", "steering", "provider_error", "empty_original"])
+@pytest.mark.parametrize("following", [
+    "empty_notice", "answered_notice", "steering", "provider_error", "empty_original",
+    "empty_original_notice", "tool_then_notice",
+])
 async def test_actual_native_requested_answer_and_following_input(native_backend, monkeypatch, following):
     from acp.schema import TextContentBlock
     from agent_comms import pi_commands
@@ -148,10 +151,18 @@ async def test_actual_native_requested_answer_and_following_input(native_backend
     failures, acknowledgments = [], []
 
     def chunks():
-        assert native.provider.posts in (1, 2), "Clean stops must not generate provider retries"
-        text = ("" if following == "empty_original" else "Requested answer") if native.provider.posts == 1 else {
+        assert native.provider.posts <= (3 if following == "tool_then_notice" else 2), "Clean stops must not generate provider retries"
+        if following == "tool_then_notice" and native.provider.posts == 1:
+            yield {"tool_calls": [{"index": 0, "id": "fresh-original-tool", "type": "function",
+                "function": {"name": "bash", "arguments": json.dumps({
+                    "command": "printf 'one-effect\\n' >> fresh-original-effect.txt"})}}]}, None
+            yield {}, "tool_calls"
+            return
+        primary = native.provider.posts == (2 if following == "tool_then_notice" else 1)
+        text = ("" if following in {"empty_original", "empty_original_notice"} else "Requested answer") if primary else {
             "empty_notice": "", "answered_notice": '{"decision":"IGNORE"}',
-            "steering": "Revised requested answer",
+            "steering": "Revised requested answer", "empty_original_notice": '{"decision":"IGNORE"}',
+            "tool_then_notice": '{"decision":"IGNORE"}',
         }[following]
         yield {"content": text}, None
         yield {}, "stop"
@@ -195,7 +206,9 @@ async def test_actual_native_requested_answer_and_following_input(native_backend
         comms.messaging.send_message("verifier", session, "Fresh requested-answer lifecycle verification")
         await owner.inputs.drain_inbox(session)
         await asyncio.wait_for(reply_turn_finished(owner, session), 30)
-        assert native.provider.posts == (1 if following == "empty_original" else 2)
+        assert native.provider.posts == (1 if following == "empty_original" else 3 if following == "tool_then_notice" else 2)
+        if following == "tool_then_notice":
+            assert (native.project / "fresh-original-effect.txt").read_text() == "one-effect\n"
         assert len(acknowledgments) == (0 if following == "empty_original" else 1)
         assert native.session.read_bytes().startswith(original)
         messages = [row["message"] for line in native.session.read_text().splitlines()
@@ -211,7 +224,7 @@ async def test_actual_native_requested_answer_and_following_input(native_backend
             assert isinstance(failures[0], NativePiTerminalFailure)
             assert isinstance(failures[0].failure, ModelRequestFailed)
             assert native.provider.error_message in str(failures[0])
-        elif following == "empty_original":
+        elif following in {"empty_original", "empty_original_notice"}:
             assert not replies and len(failures) == 1
             assert "no unique authoritative completed response" in str(failures[0])
         else:

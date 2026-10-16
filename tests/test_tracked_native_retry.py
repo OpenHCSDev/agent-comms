@@ -1,5 +1,6 @@
 import pytest
 
+from agent_comms.agent_backend import WhenBusy
 from agent_comms.pi_events import NativeRetryEnd
 from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededProviderRetry
 from agent_comms.tracked_turn import CompletedTrackedTerminal, PendingTrackedTerminal, TrackedTurnSession
@@ -77,6 +78,8 @@ def following(kind):
 def test_delivered_notice_preserves_original_but_real_steering_can_revise(text):
     notice = following(DeliveredFollowingInput)
     steering = following(AcceptedFollowingInput)
+    assert notice.when_busy is WhenBusy.FOLLOW_UP
+    assert steering.when_busy is WhenBusy.STEER
     response = notice.continue_response(CompletedTrackedTerminal("Requested answer"), ["Requested answer"])
     response = response.tool_round().append(text)
     assert response.require_response([text]) == "Requested answer"
@@ -86,11 +89,20 @@ def test_delivered_notice_preserves_original_but_real_steering_can_revise(text):
     assert response.require_response(["Revised requested answer"]) == "Revised requested answer"
 
 
-def test_empty_original_still_requires_an_authoritative_answer():
-    response = following(DeliveredFollowingInput).continue_response(CompletedTrackedTerminal(""), [])
-    response = response.append("")
+@pytest.mark.parametrize("response,parts", [
+    (CompletedTrackedTerminal(""), []),
+    (CompletedTrackedTerminal("Unmatched original"), ["Different streamed text"]),
+    (PendingTrackedTerminal(), []),
+])
+@pytest.mark.parametrize("text", ["", '{"decision":"IGNORE"}', "Background answer"])
+def test_notice_cannot_supply_an_unproved_original_answer(response, parts, text):
+    response = following(DeliveredFollowingInput).continue_response(response, parts)
+    response = response.tool_round().append(text)
     with pytest.raises(NativePiUnavailable, match="no unique authoritative completed response"):
-        response.require_response([])
+        response.require_response([text])
+    response = following(AcceptedFollowingInput).continue_response(response, [text])
+    response = response.append("Real user requested this answer")
+    assert response.require_response(["Real user requested this answer"]) == "Real user requested this answer"
 
 
 async def test_successful_provider_recovery_does_not_discard_retained_requested_answer():
