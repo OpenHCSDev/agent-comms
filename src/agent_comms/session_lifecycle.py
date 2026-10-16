@@ -49,13 +49,11 @@ class SessionLifecycle:
     def __init__(
         self,
         comms: Comms,
-        agent_bin: str,
-        agent_args: NativeArguments,
         runtime: RuntimeServer,
         runtime_enabled: bool,
         effects: SessionEffects,
     ):
-        self.comms, self.agent_bin, self.agent_args = comms, agent_bin, agent_args
+        self.comms = comms
         self.runtime, self.runtime_enabled, self.effects = runtime, runtime_enabled, effects
         self.bindings: dict[str, str] = {}
         # A launcher registers this process as the owner before it starts, so
@@ -69,7 +67,7 @@ class SessionLifecycle:
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()
         self.transcript = TranscriptReplay(comms, runtime)
-        self.config = SessionConfigOptions(comms, agent_bin, agent_args, runtime, self, effects)
+        self.config = SessionConfigOptions(comms, runtime, self, effects)
 
     async def initialize(
         self,
@@ -155,8 +153,8 @@ class SessionLifecycle:
             self.thread_name_for(cwd),
             tags=frozenset({"acp"}),
             worktree=cwd,
-            model=self.agent_args.model,
-            thinking_level=self.agent_args.thinking,
+            model=self.comms.settings.parsed_arguments.model,
+            thinking_level=self.comms.settings.parsed_arguments.thinking,
             auto_title_pending=True,
         )
         self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))

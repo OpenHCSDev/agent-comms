@@ -11,10 +11,13 @@ from agent_comms.runtime import UNBOUND_CONTROLLER
 from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread(
             "owner",
@@ -23,7 +26,7 @@ async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private
             process_identity=ProcessIdentity.capture(os.getpid()),
         )
     )
-    agent = CommsAgent(comms, auto_wake=True, runtime_enabled=True)
+    agent = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=True, runtime_enabled=True)
     agent.sessions.bindings["owner"] = "owner"
     inputs = agent.inputs
     controller = object()

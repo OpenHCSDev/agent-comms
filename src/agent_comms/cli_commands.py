@@ -52,6 +52,10 @@ from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
+from .cli_options import option
+from .owner_restart import KeepRecorded, NativeChoice
+from .owner_launch import RetainedOwnerLaunch
+from .owner_launch import OwnerRestartSelection
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .change_report import ChangeReport
 from .message_reference import MessageReference
@@ -103,35 +107,6 @@ def _message_reference(value: str) -> dict[str, object]:
     return {"seq": int(sequence), "message_id": message_id}
 
 
-def option(
-    *flags: str,
-    default: Any = MISSING,
-    default_factory: Any = MISSING,
-    group: str | None = None,
-    normalize: Callable[..., Any] | None = None,
-    wire_name: str | None = None,
-    parser_default: Any = MISSING,
-    parser_default_factory: Any = MISSING,
-    multiline: bool = False,
-    target_bound: bool = False,
-    editor_format: Callable[[Any], str] | None = None,
-    **parser_options: Any,
-) -> Any:
-    """One field owns both its CLI projection and JSON boundary conversion."""
-    metadata = {
-        "multiline": multiline,
-        "target_bound": target_bound,
-        "editor_format": editor_format,
-        "flags": flags,
-        "parser_options": parser_options,
-        "group": group,
-        "normalize": normalize,
-        "parser_default": parser_default,
-        "parser_default_factory": parser_default_factory,
-    }
-    if wire_name is not None:
-        metadata["wire_name"] = wire_name
-    return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
 @dataclass(frozen=True)
@@ -559,58 +534,20 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
     @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
+    def add_parser(cls, subparsers: Any, settings: NativeThreadDefaults) -> Any:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls)
         for declared in fields(cls):
-            metadata = declared.metadata
-            group = metadata["group"]
+            group = declared.metadata["group"]
             owner = parser
             if group is not None:
                 if group not in groups:
                     groups[group] = parser.add_mutually_exclusive_group(required=True)
                 owner = groups[group]
-            options = dict(metadata["parser_options"])
-            annotation = hints[declared.name]
-            scalar = (
-                get_args(annotation)[0] if get_origin(annotation) is types.UnionType else annotation
-            )
-            if scalar is bool:
-                options.setdefault("action", "store_true")
-            elif scalar in (int, float):
-                options.setdefault("type", scalar)
-            elif isinstance(scalar, type) and issubclass(scalar, Enum):
-                options["choices"] = [kind.value for kind in scalar]
-            elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
-                options.setdefault("choices", scalar.names())
-            elif (
-                get_origin(scalar) is type and get_args(scalar)
-                and issubclass(get_args(scalar)[0], DeclaredFamily)
-            ):
-                options.setdefault("choices", get_args(scalar)[0].names())
-            if metadata["parser_default"] is not MISSING:
-                options["default"] = metadata["parser_default"]
-            elif metadata["parser_default_factory"] is not MISSING:
-                options["default"] = metadata["parser_default_factory"]()
-            elif declared.default is not MISSING:
-                options["default"] = declared.default
-            elif declared.default_factory is not MISSING:
-                options["default"] = declared.default_factory()
-            else:
-                options["required"] = True
-            if isinstance(options.get("default"), DeclaredFamily):
-                options["default"] = options["default"].declared_name
-            elif (
-                isinstance(options.get("default"), type)
-                and issubclass(options["default"], DeclaredFamily)
-            ):
-                options["default"] = options["default"].declared_name
-            if any(flag.startswith("-") for flag in metadata["flags"]):
-                options["dest"] = metadata.get("wire_name", declared.name)
-            else:
-                options.pop("required", None)
-            owner.add_argument(*metadata["flags"], **options)
+            declared.attach(owner, hints[declared.name], settings)
+        return parser
+
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
@@ -770,11 +707,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             thinking_level=level,
             service_tier=self.service_tier,
         )
-        catalogs = ConfigOptions(
-            NativeArguments.configured_binary(),
-            NativeArguments.configured(),
-            RestartEnvironment.inherit(os.environ),
-        )
+        catalogs = ConfigOptions(ctx)
         asyncio.run(catalogs.validate(candidate))
         updated = ctx.threads.set_thread_configuration(
             thread,
@@ -1273,6 +1206,8 @@ class StopCliCommand(CliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class RestartCliCommand(CliCommand):
+    native: NativeChoice = option(NativeThreadDefaults.value_flag, default_factory=KeepRecorded,
+        type=NativeChoice.from_json, normalize=FieldCodec.encode)
     help = "Restart process"
     name: str | None = option(
         "--name", help="One running thread (aliases supported)", group="scope", default=None,
@@ -1285,12 +1220,6 @@ class RestartCliCommand(CliCommand):
         default=False,
         wire_name="all",
         target_bound=True,
-    )
-    agent_bin: str | None = option("--agent-bin", default=None)
-    agent_args: list[str] | None = option(
-        "--agent-args",
-        default=None,
-        normalize=_shell_words,
     )
 
     @property
@@ -1311,10 +1240,13 @@ class RestartCliCommand(CliCommand):
         return (cls(name=thread.name),)
 
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
-        results = ctx.owners.restart_owners(
-            None if self.all_ else [self.name], agent_bin=self.agent_bin, agent_args=self.agent_args
-        )
+        snapshot = ctx.registry.snapshot()
+        threads = snapshot.restart_candidates if self.all_ else (snapshot.require_active(self.name),)
+        targets = tuple(self.native.target(OwnerRestartSelection.capture(snapshot, thread.name), snapshot)
+                        for thread in threads)
+        results = ctx.owners.restart_owners(targets, launch_runtime=ctx.runtime)
         return {"restarted": [asdict(result) for result in results]}
+
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1374,15 +1306,14 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
-    pi_bin: str = option("--pi-bin", default=NativeArguments.default_binary)
     project: str = option("--project", parser_default_factory=os.getcwd)
-    model: str = option("--model", parser_default=NativeThreadDefaults.model)
+    model: str = option("--model", setting=lambda settings: settings.model)
     thinking_level: type[ThinkingLevel] = option(
-        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level)
+        "--thinking-level", setting=lambda settings: settings.thinking_level)
 
     @classmethod
     def project_bindings(cls, comms, project):
-        defaults = NativeThreadDefaults()
+        defaults = comms.settings
         return (cls(name='', project=project, model=defaults.model,
                     thinking_level=defaults.thinking_level),)
 
@@ -1393,7 +1324,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> ThreadCreatedResult:
         spec = self.spec_type(**{item.name: getattr(self, item.name)
                                  for item in fields(self.spec_type)})
-        child = ctx.threads.create(spec, pi_bin=self.pi_bin)
+        child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.pid)
 
 
@@ -1587,8 +1518,9 @@ class StartCliCommand(CliCommand):
             return super().reconnect_targets(result)
         return (result.thread,) if result.launched else ()
 
-    def apply(self, ctx: Comms, *, caller: ToolCaller) -> OwnerStartResult:
+    def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
         return ctx.owners.start(self.name)
+
 
 
 @dataclass(frozen=True, kw_only=True)

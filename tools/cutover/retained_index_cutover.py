@@ -36,7 +36,7 @@ class RetainedIndexCutover(StoppedOwnerInstallation):
         return ()
 
     def require_selection(self, snapshot, owners) -> None:
-        audience = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}
+        audience = {thread.name for thread in snapshot.restart_candidates}
         if {thread.name for thread in owners} != audience:
             raise RelationViolationError('Index cutover requires every managed restart owner.')
         self.require_source()

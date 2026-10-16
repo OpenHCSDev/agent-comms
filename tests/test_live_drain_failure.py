@@ -20,6 +20,9 @@ from agent_comms.drain_failures import drain_failures
 from agent_comms.thread_presentation import AttentionThreadPresentationStatus
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 tmp_path = private_root_fixture
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
@@ -33,7 +36,7 @@ async def until(predicate):
 
 def owner_view(comms):
     return next(
-        view for view in Comms(comms.root).views.thread_views() if view.thread.name == "beta"
+        view for view in Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()).views.thread_views() if view.thread.name == "beta"
     )
 
 

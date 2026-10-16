@@ -19,6 +19,9 @@ from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_create_claim_competes_before_file_exists_and_releases_without_creation():
@@ -27,14 +30,14 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         root.mkdir(mode=0o700)
         work = Path(directory) / "work"
         work.mkdir()
-        c = Comms(root)
+        c = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
         for name, created in [("a", 21.0), ("b", 22.0)]:
             c.registry.declare(Thread(name, frozenset({"team"}), str(work), created_at=created))
         c.messaging.initialize_private_initial_protocol()
         resource = WritableFileClaim(Path("new/nested/file.py"))
         committed = c.messaging.send_message("a", "#team", "Claim before create", claims=[resource])
         assert not (work / "new").exists()
-        projection = Comms(root).bus.log.claim_projection()
+        projection = Comms(LocalRoute(root), runtime=LaunchRuntime.current()).bus.log.claim_projection()
         assert projection[str(work / "new/nested/file.py")].seq == committed.seq
         with pytest.raises(ClaimConflict):
             c.messaging.send_message("b", "#team", "Competing create", claims=[resource])

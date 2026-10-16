@@ -20,6 +20,7 @@ from acp.schema import (
 )
 
 from .pi_vocabulary import ThinkingLevel
+from .pi_commands import GetAvailableModels, GetAvailableThinkingLevels, SetModel, SetThinkingLevel
 from .comms import Comms
 from .agent_backend import UseSettings
 from .coordinator import Coordination
@@ -64,8 +65,8 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 class CatalogConfigOption(ConfigOption):
     """A selected option owns its catalog, auth revision and acquisition lock."""
 
-    def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment):
-        self.agent_bin, self.agent_args = agent_bin, agent_args
+    def __init__(self, comms: Comms, configuration: RestartEnvironment):
+        self.comms = comms
         self.configuration = configuration
         self.catalogs: dict[str | None, list[SessionConfigSelectOption]] = {}
         self.auth: tuple[int, int] | None = None
@@ -151,16 +152,10 @@ class ModelConfigOption(CatalogConfigOption):
         return None
 
     async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
-        values = [
-            value.strip()
-            for value in os.environ.get("AGENT_COMMS_AGENT_MODELS", "").split(",")
-            if value.strip()
-        ]
-        if not values:
-            from .pi_commands import GetAvailableModels
-
-            data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
-            values = [model.display_name for model in data.models if model.provider and model.id]
+        data = await GetAvailableModels().discover(
+            self.comms, self.comms.settings.arguments,
+        )
+        values = [model.display_name for model in data.models if model.provider and model.id]
         return [
             SessionConfigSelectOption(value=value, name=value) for value in dict.fromkeys(values)
         ]
@@ -168,8 +163,6 @@ class ModelConfigOption(CatalogConfigOption):
     async def apply(
         self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None:
-        from .pi_commands import SetModel
-
         provider, model = value.split("/", 1)
         await owner.configure_thread(
             thread, SetModel(provider=provider, model_id=model),
@@ -185,10 +178,8 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         return ThinkingLevel.optional_name(thread.thinking_level)
 
     async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
-        from .pi_commands import GetAvailableThinkingLevels
-
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin, self.agent_args.with_model(thread.model).argv
+            self.comms, self.comms.settings.parsed_arguments.with_model(thread.model).argv
         )
         levels = [member.declared_name for member in data.levels]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
@@ -196,8 +187,6 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     async def apply(
         self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None:
-        from .pi_commands import SetThinkingLevel
-
         await owner.configure_thread(
             thread, SetThinkingLevel(level=value),
         )
@@ -206,19 +195,14 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
 class ConfigOptions:
     """Own one launch's declared model and thinking catalogs."""
 
-    def __init__(
-        self,
-        agent_bin: str,
-        agent_args: NativeArguments,
-        configuration: RestartEnvironment,
-    ):
-        self.agent_bin, self.agent_args = agent_bin, agent_args
-        self.configuration = configuration
+    def __init__(self, comms: Comms):
+        self.comms = comms
+        self.configuration = RestartEnvironment.inherit(os.environ)
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
-            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration)
+            self.catalogs[member] = member(self.comms, self.configuration)
         return self.catalogs[member]
 
     async def options(self, thread: Thread) -> list[SessionConfigOptionSelect]:
@@ -243,13 +227,11 @@ class SessionConfigOptions(ConfigOptions):
     def __init__(
         self,
         comms: Comms,
-        agent_bin: str,
-        agent_args: NativeArguments,
         runtime: RuntimeServer,
         sessions: SessionLifecycle,
         effects: SessionEffects,
     ):
-        super().__init__(agent_bin, agent_args, RestartEnvironment.inherit(os.environ))
+        super().__init__(comms)
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
         self.publications: dict[str, ConfigOptionUpdate] = {}
@@ -314,11 +296,11 @@ class SessionConfigOptions(ConfigOptions):
         self, thread: Thread, command: SettingCommand,
     ) -> None:
         """Store the model and thinking level Pi itself reports for this change."""
-        arguments = self.agent_args.with_model(thread.model).with_thinking(
+        arguments = self.comms.settings.parsed_arguments.with_model(thread.model).with_thinking(
             ThinkingLevel.optional_name(thread.thinking_level)
         )
         state = await command.configure(
-            self.agent_bin, arguments.argv, worktree=Path(thread.worktree),
+            self.comms, arguments.argv, worktree=Path(thread.worktree),
         )
         model = state.model.display_name
         level = ThinkingLevel.optional_name(state.thinking_level)

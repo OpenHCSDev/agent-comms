@@ -9,12 +9,16 @@ import pytest
 
 from agent_comms import ImportFormat, ImportLimits
 from agent_comms.cli import main
-from agent_comms.comms import wire
+
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.field_codec import FieldCodec
 from agent_comms.importing import ImportReceipt, ImportedSessionMetadata
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.turn_context import CodexRolloutProvenance
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_codex_instructions_are_authenticated_historical_references_not_current_messages(tmp_path, capsys):
@@ -34,7 +38,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
                    "type": "message", "role": "assistant", "content": "Original answer"}}]
     source.write_text("".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records))
     original = source.read_bytes()
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     receipt = comms.threads.import_thread(source, ImportFormat.CODEX, name="historical")
     assert source.read_bytes() == original
     refs = receipt.historical_instructions
@@ -156,7 +160,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path):
     source = tmp_path / "export.json"
     opencode_export(source, tmp_path)
     before = source.read_bytes()
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     directory = comms.root / "imported_sessions"
     receipt = comms.threads.import_thread(source, ImportFormat.OPENCODE, name="imported")
     thread = comms.registry.require("imported")
@@ -183,7 +187,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path):
 def test_import_refuses_redirected_session_directory(tmp_path):
     source = tmp_path / "export.json"
     opencode_export(source, tmp_path)
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     outside = tmp_path / "outside"
     outside.mkdir(mode=0o755)
     (comms.root / "imported_sessions").symlink_to(outside, target_is_directory=True)

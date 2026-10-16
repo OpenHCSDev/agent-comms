@@ -184,7 +184,7 @@ class SelectedSession:
                 except RelationViolationError as error:
                     raise StaleFence("fresh-session owner changed before enrollment") from error
                 participant.identity.require(resource, participant.lookup)
-                MaintenanceBarrier(participant.bus._registry.store.path).assert_open_unlocked()
+                MaintenanceBarrier(participant.bus.registry.store.path).assert_open_unlocked()
                 creation = create_fresh_private_session(
                     directory,
                     worktree=worktree,

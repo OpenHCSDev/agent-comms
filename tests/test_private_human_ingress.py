@@ -14,7 +14,7 @@ import pytest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_publication import HumanOrigin
 from agent_comms.cohort_schema import install_private_cohort_schema
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_results import Applied
 from agent_comms.coordinator import Coordination
@@ -26,6 +26,10 @@ from agent_comms.errors import (
 from agent_comms.messages import Message, InfoKind
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="private bus requires POSIX owner/directory durability"
@@ -35,7 +39,7 @@ pytestmark = pytest.mark.skipif(
 def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     lookups: dict[str, str] = {}
     for name, created_at in (("alice", 17001.0), ("bob", 17002.0)):
         comms.registry.register(Thread(name, frozenset({"team"}), str(root), created_at=created_at))
@@ -80,7 +84,7 @@ def test_explicit_root_override_preserves_private_user_receipt(
     comms, _, root_id, _ = _root(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path / "other-home"))
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
-    selected = wire()
+    selected = Comms(resolve_comms_route(), runtime=LaunchRuntime.current())
     assert selected.root == comms.root
     sent = selected.messaging.send_user_message("alice", "explicit", worktree=str(tmp_path))
     assert selected.bus.log.read_delivery_cohort(root_id, sent.seq).message == sent
@@ -180,7 +184,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     assert comms.bus.log.full_history() == []
     assert comms.bus.log._private_marker_unlocked().last_seq == 1
     monkeypatch.setattr(os, "open", original_open)
-    second = Comms(comms.root)
+    second = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     user = second.registry.require(captured["from"])
     same = Message(user.name, "alice", "first input", InfoKind, timestamp=captured["ts"])
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
@@ -229,7 +233,7 @@ def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None
 
 def test_cooperating_process_objects_serialize_distinct_user_inputs(tmp_path: Path) -> None:
     comms, _, root_id, _ = _root(tmp_path)
-    roots = [Comms(comms.root), Comms(comms.root)]
+    roots = [Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current()), Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())]
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = [
             pool.submit(wire.messaging.send_user_message, "#team", f"input-{n}", worktree=str(tmp_path))

@@ -34,6 +34,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
 from .following_inputs import FollowingInputs
 from .tracked_turn import TrackedTurnSession
+from .turn_context import TurnContext
 from .turn_context import RenderedInput
 
 if TYPE_CHECKING:
@@ -133,7 +134,7 @@ class PrivateSendAdmission:
             wire_root_id=self.wire_root_id,
             prompt=self.prompt.text,
         )
-        self.owner.require_running_turn(self.bus._registry)
+        self.owner.require_running_turn(self.bus.registry)
 
     async def execute(
         self,
@@ -151,16 +152,15 @@ class PrivateSendAdmission:
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer retains the sole one-use send token after durable admission.
         """
-        from .turn_context import TurnContext
-
         project, session_context = await Coordination.run_worker(lambda: (
-            ManagedNativeProject.capture(self.bus.log.path.parent, self.bus._registry.snapshot(),
+            ManagedNativeProject.capture(self.bus.log.path.parent, self.bus.registry.snapshot(),
                                          self.owner.thread),
             TurnContext.session_segments(self.owner.thread),
         ))
         try:
             result = await TrackedTurnSession.execute(
                 execution.native_package,
+                runtime=execution.comms.runtime,
                 input_id=self.input_id,
                 prompt=self.prompt.text,
                 context_contributions=self.prompt.contributions,
@@ -230,11 +230,11 @@ class PrivateSendAdmission:
                     )
                 with self._measurements.operation("maintenance_ingress"):
                     authority.enter_context(MaintenanceBarrier(
-                        self.bus._registry.store.path
+                        self.bus.registry.store.path
                     ).admit_ingress(blocking=False))
                 with self._measurements.operation("registry_exclusion"):
                     document = authority.enter_context(
-                        self.bus._registry.store.reading(blocking=False)
+                        self.bus.registry.store.reading(blocking=False)
                     )
                 with self._measurements.operation("registry_snapshot"):
                     registry = document.snapshot()

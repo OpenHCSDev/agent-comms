@@ -7,12 +7,16 @@ import pytest
 
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
 from test_private_human_ingress import _root
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def saved_catalog(root):
@@ -47,7 +51,7 @@ def saved_catalog(root):
 
 
 def test_saved_projection_preserves_preferences_history_and_has_no_writable_alias(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
         comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
     original = saved_catalog(tmp_path)
@@ -131,7 +135,7 @@ def test_restoring_same_named_view_keeps_current_predicate_and_original_target_h
     source_root.mkdir()
     saved_catalog(source_root)
     source = ChannelCatalog(source_root / "catalog.json").read()
-    comms = wire(tmp_path / "destination")
+    comms = Comms(resolve_comms_route(tmp_path / "destination"), runtime=LaunchRuntime.current())
     comms.channels.create_tag("api")
     current = SavedView(
         "engineering",

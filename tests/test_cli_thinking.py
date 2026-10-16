@@ -12,6 +12,7 @@ from agent_comms.pi_commands import GetAvailableModels, GetAvailableThinkingLeve
 from agent_comms.pi_payloads import ModelsData, ReportedModel, ThinkingLevelsData
 from agent_comms.pi_vocabulary import HighThinkingLevel, OffThinkingLevel, ServiceTier
 from agent_comms.threads import Thread
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize("change", ["thinking", "model"])
@@ -87,17 +88,18 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     assert configured.service_tier.value == "standard"
 
 
-def test_missing_external_arguments_do_not_invent_native_model_defaults(monkeypatch):
-    monkeypatch.delenv(NativeArguments.arguments_key, raising=False)
-    monkeypatch.delenv(NativeArguments.binary_key, raising=False)
-    assert NativeArguments.configured_binary() == NativeArguments.default_binary
-    assert NativeArguments.configured().argv == ()
-    monkeypatch.setenv(NativeArguments.binary_key, "/fixture/pi")
-    monkeypatch.setenv(NativeArguments.arguments_key, '--model "fixture/model" --thinking off')
-    assert NativeArguments.configured_binary() == "/fixture/pi"
-    assert NativeArguments.configured().model == "fixture/model"
-    assert NativeArguments.configured().thinking == "off"
-    assert NativeArguments.configured([]).argv == ()
+def test_native_arguments_configured_uses_typed_selection():
+    defaults = NativeThreadDefaults.from_runtime(LaunchRuntime.current())
+    assert NativeArguments.parse(defaults.arguments) == NativeArguments(entries=())
+    selected = NativeThreadDefaults(
+        binary="/fixture/pi", arguments=("--model", "fixture/model", "--thinking", "off"),
+    )
+    assert selected.binary == "/fixture/pi"
+    parsed = NativeArguments.parse(selected.arguments)
+    assert parsed.model == "fixture/model"
+    assert parsed.thinking == "off"
+    cleared = NativeThreadDefaults(binary=selected.binary, arguments=())
+    assert NativeArguments.parse(cleared.arguments).argv == ()
 
 
 @pytest.mark.asyncio

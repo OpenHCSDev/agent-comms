@@ -19,6 +19,7 @@ from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 from test_acp import TestAgentTurn as GoalFixture
 from stored_inputs import stored_inputs
+import dataclasses
 
 
 @pytest.mark.parametrize("outcome", ["failed_done", "missing_done"])
@@ -26,7 +27,7 @@ from stored_inputs import stored_inputs
 async def test_failed_attempt_preserves_explicit_owner_pause(
     wired, tmp_path, monkeypatch, outcome, pause_timing
 ):
-    agent = canonical_agent(wired, agent_bin="pi")
+    agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi"))
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
     goal = wired.goals.update_goal("project", SetGoalAction(text="Continue independent work"))

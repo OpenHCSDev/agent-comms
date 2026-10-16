@@ -4,10 +4,14 @@ import pytest
 
 from agent_comms import Registration
 from agent_comms.channel_targets import BuiltinChannel
-from agent_comms.comms import wire
+
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.fixture
@@ -134,7 +138,7 @@ class TestChannelsDerived:
         assert chat.channels.channels() == ["#any", "#none", "#all", "#ci", "#docs"]
 
     def test_channels_empty_wire(self, tmp_path):
-        comms = wire(tmp_path / "fresh")
+        comms = Comms(resolve_comms_route(tmp_path / "fresh"), runtime=LaunchRuntime.current())
         assert comms.channels.channels() == ["#any", "#none", "#all"]
 
 

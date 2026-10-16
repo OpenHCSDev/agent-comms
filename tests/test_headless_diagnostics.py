@@ -8,10 +8,15 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
@@ -47,15 +52,9 @@ def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
 @pytest.mark.asyncio
 async def test_headless_failure_publishes_reference_after_durable_diagnostic(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     root_id = comms.messaging.initialize_private_initial_protocol()
-    owner = CommsAgent(
-        comms,
-        agent_bin="pi",
-        auto_wake=False,
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
-    )
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False, private_nk_native_package=tmp_path, private_nk_wire_root_id=root_id)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path))).session_id
     comms.registry.declare(

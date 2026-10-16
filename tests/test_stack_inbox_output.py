@@ -15,10 +15,15 @@ import pytest
 from agent_comms import agent_events as ae
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from stored_inputs import insert_inputs, stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkeypatch):
@@ -164,19 +169,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
         }.items():
             monkeypatch.setenv(key, value)
-        args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--provider",
-            "openrouter",
-            "--model",
-            "z-ai/glm-5.3-flash",
-            "--thinking",
-            "off",
-        ]
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
         from native_event_host import install_event_host
 
         install_event_host(
@@ -193,8 +186,8 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
                 yield event
 
         monkeypatch.setattr(backend, "stream_agent_events", collect_events)
-        comms = wire(root / "wire")
-        agent = CommsAgent(comms, agent_bin=native, agent_args=args, runtime_enabled=True)
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
+        agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
             project = root / "parent"

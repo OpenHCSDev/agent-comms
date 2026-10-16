@@ -119,10 +119,10 @@ class NativeBoundary(ExitStack):
                 self.bus_lock = self.enter_context(self.bus.log.locked(
                     blocking=self.blocking, contention=self.contention))
             with self.measurements.operation("registry_exclusion"):
-                self.enter_context(_store_lock(self.bus._registry.store.path,
+                self.enter_context(_store_lock(self.bus.registry.store.path,
                                                blocking=self.blocking, contention=self.contention))
             with self.measurements.operation("registry_snapshot"):
-                self.registry = self.bus._registry.store._read_unlocked().snapshot()
+                self.registry = self.bus.registry.store._read_unlocked().snapshot()
             return self
         except BaseException:
             self.close()

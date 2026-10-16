@@ -9,6 +9,10 @@ from agent_comms.comms import Comms
 from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 from native_event_host import install_event_host
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -16,26 +20,8 @@ pytest_plugins = ("test_backend_native_lifecycle",)
 async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_backend, monkeypatch):
     fixture = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    owner = canonical_agent(
-        Comms(fixture.root),
-        agent_bin="pi",
-        agent_args=[
-            "--provider",
-            "response-local",
-            "--model",
-            "fixture",
-            "--thinking",
-            "off",
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-        ],
-        runtime_enabled=True,
-        auto_wake=False,
-    )
+    selected_comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
+    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'])), runtime_enabled=True, auto_wake=False)
     updates, permissions = [], []
 
     class Attachment:

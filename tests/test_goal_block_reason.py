@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -23,10 +23,14 @@ from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _owner(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish selected work"))
     assert goal is not None
@@ -78,7 +82,7 @@ def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monk
     result = tool.invoke(
         comms, {"goal_id": original.id, "status": "blocked", "progress": f"  {reason}  "}, caller=ThreadCaller(comms.registry.require('worker').incarnation)
     )
-    blocked = wire(tmp_path).registry.require("worker").goal
+    blocked = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).registry.require("worker").goal
     assert blocked is not None and blocked.state.declared_name == "blocked"
     assert blocked.state.reason == reason
     assert FieldCodec.decode(Goal, result["goal"]).state.reason == reason
@@ -107,7 +111,7 @@ def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
     assert blocked is not None
     assert blocked.progress == "Verified step\n\nAttempt outcome uncertain; inspect before Retry."
     assert blocked.state.reason == "Attempt outcome uncertain; inspect before Retry."
-    assert wire(tmp_path).goals.goal_execution("worker").block_reason == blocked.state.reason
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).goals.goal_execution("worker").block_reason == blocked.state.reason
 
     comms2, started2 = _owner(tmp_path / "another")
     completed = comms2.goals.update_goal(
@@ -122,7 +126,7 @@ def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
     )
     assert revoked is not None
     assert revoked.state.reason == "Provider turn failed after provisional completion."
-    assert wire(tmp_path / "another").registry.require("worker").goal == revoked
+    assert Comms(resolve_comms_route(tmp_path / "another"), runtime=LaunchRuntime.current()).registry.require("worker").goal == revoked
 
 
 def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_path):
@@ -132,7 +136,7 @@ def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_
         goal.text, goal.id, state=UnrecordedBlockGoal(), progress="Unrelated old progress"
     )
     comms.registry.register(replace(thread, goal=recorded), comms.registry.status("worker"))
-    observed = wire(tmp_path).goals.goal_execution("worker")
+    observed = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).goals.goal_execution("worker")
     assert observed is not None
     assert observed.block_reason is None
     assert observed.presentation("worker").summary == "Blocked · reason unavailable"
@@ -168,7 +172,7 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
             ),
             actor=OwnerInvocable,
         )
-    reloaded = wire(tmp_path).registry.require("worker").goal
+    reloaded = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).registry.require("worker").goal
     assert reloaded is not None and reloaded.state.declared_name == "blocked"
     # Prior progress is retained; the refusal is stored separately as the reason.
     assert reloaded.progress == "Half verified by the owner"

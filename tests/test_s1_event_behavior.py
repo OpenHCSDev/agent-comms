@@ -27,6 +27,10 @@ from test_backend_native_lifecycle import native_backend as native_backend
 from stored_inputs import stored_inputs
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.goal_waits import RecordedGoalWait
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
@@ -143,12 +147,7 @@ class InterruptedCase(EffectCase):
 
 @pytest.fixture
 async def owner_turn(comms, tmp_path):
-    owner = CommsAgent(
-        comms,
-        agent_bin="unused",
-        private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
-        private_nk_native_package=tmp_path,
-    )
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="unused"), private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(), private_nk_native_package=tmp_path)
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     origin = comms.messaging.send_user_message(name, "work", worktree=str(tmp_path))
@@ -352,18 +351,8 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
             yield from chunks()
 
         monkeypatch.setattr(native.provider, "response_chunks", with_progress)
-    comms = Comms(native.root)
-    owner = CommsAgent(
-        comms,
-        agent_bin="pi",
-        agent_args=[
-            "--provider", "response-local", "--model", "fixture", "--thinking", "off",
-            "--offline", "--no-extensions", "--no-skills", "--no-context-files",
-            "--no-prompt-templates",
-        ],
-        private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-        private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
-    )
+    comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates'])), private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]))
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
@@ -424,13 +413,8 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
     settings = json.loads((config / "settings.json").read_text())
     settings["compaction"] = {"enabled": True, "reserveTokens": 128, "keepRecentTokens": 32}
     (config / "settings.json").write_text(json.dumps(settings))
-    comms = Comms(native.root)
-    owner = CommsAgent(
-        comms,
-        agent_bin="pi",
-        private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
-        private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]),
-    )
+    comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]))
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
@@ -513,13 +497,7 @@ async def test_relay_entrypoint_terminal_publication_releases_real_wait(
     from acp.schema import TextContentBlock
 
 
-    owner = CommsAgent(
-        comms,
-        agent_bin="unused",
-        no_reply_window=0,
-        private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
-        private_nk_native_package=tmp_path,
-    )
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="unused"), no_reply_window=0, private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(), private_nk_native_package=tmp_path)
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     events = []

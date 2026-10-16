@@ -17,6 +17,9 @@ from agent_comms.execution_states import FailedExecution
 from agent_comms.obligation_states import FailedResponse
 from agent_comms.owner_fence import OwnerFence
 from test_claim_bus_read import selected_turn
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.parametrize("outcome", ["failure", "unknown"])
@@ -114,7 +117,7 @@ async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_pat
     async with native_backend_fixture(tmp_path) as native:
         target = native.project / "module.py"
         target.write_text("value = 1\n")
-        comms = Comms(native.root)
+        comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
         comms.registry.declare(Thread("worker", frozenset(), str(native.project),
                                       session_file=str(native.session), model="response-local/fixture"))
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))

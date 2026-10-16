@@ -15,6 +15,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
+from agent_comms.native_settings import NativeThreadDefaults
+from native_backend_fixture import native_run_command
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
@@ -22,6 +24,10 @@ from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
@@ -174,20 +180,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
         first_chunk = asyncio.Event()
         started = asyncio.Event()
 
-        native_args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-            "--provider",
-            "openrouter",
-            "--model",
-            "z-ai/glm-5.3-flash",
-            "--thinking",
-            "off",
-        ]
+        native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
         if terminal:
             native_args.remove("--no-tools")
             native_args.extend(["--tools", "bash"])
@@ -287,15 +280,10 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
         owner = None
         if surface.startswith("acp"):
             from agent_comms.acp import CommsAgent
-            from agent_comms.comms import wire
 
-            owner = CommsAgent(
-                wire(root / "wire"),
-                agent_bin=native_bin,
-                agent_args=native_args,
-                runtime_enabled=False,
-                auto_wake=False,
-            )
+
+            selected_comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
+            owner = CommsAgent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary=native_bin, arguments=tuple(native_args)), runtime_enabled=False, auto_wake=False)
 
             class Client:
                 async def session_update(self, session_id, update):
@@ -533,8 +521,6 @@ async def _mounted_send_now(
         "XDG_DATA_HOME": str(root / "data"),
         "XDG_STATE_HOME": str(root / "state"),
         "AGENT_COMMS_ROOT": str(root / "wire"),
-        "AGENT_COMMS_AGENT_BIN": native_bin,
-        "AGENT_COMMS_AGENT_ARGS": shlex.join(native_args),
         "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
     }.items():
         monkeypatch.setenv(key, value)
@@ -544,7 +530,9 @@ async def _mounted_send_now(
         "name": "Agent Comms",
         "identity": "send-now-test",
         "short_name": "send-now",
-        "run_command": {"*": f"{sys.executable} -m agent_comms.acp"},
+        "run_command": {
+            "*": native_run_command(NativeThreadDefaults(binary=native_bin, arguments=tuple(native_args)))
+        },
         "protocol": "acp",
     }
     gate = threading.Event()
@@ -601,9 +589,9 @@ async def _mounted_send_now(
             lambda: any("NEW_FINAL" in block.source for block in view.query(AgentResponse)), 3
         )
         if goal_mode:
-            from agent_comms.comms import wire
 
-            comms = wire(root / "wire")
+
+            comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
             await until(lambda: not view.queued_prompts and len(requests) == 3)
             goal = comms.registry.require("project").goal
             assert goal is not None and goal.state.active, goal

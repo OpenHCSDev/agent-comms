@@ -27,7 +27,7 @@ class RetainedTaskSourceCarry(StoppedOwnerInstallation):
         self.leave_stopped(failure)
 
     def require_selection(self, snapshot, owners):
-        live = {thread.incarnation for thread in OwnerRestartRequest().threads(snapshot)}
+        live = {thread.incarnation for thread in snapshot.restart_candidates}
         if live != {thread.incarnation for thread in owners}:
             raise RelationViolationError('Task carry requires the whole live owner audience.')
         if not self.original_python.is_absolute() or not self.original_python.is_file():

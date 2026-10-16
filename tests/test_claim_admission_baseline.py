@@ -21,6 +21,9 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohor
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="private N/K and claim durability require a real /var/tmp root"
@@ -35,7 +38,7 @@ def test_selected_wake_and_file_claims_have_no_common_admission_receipt() -> Non
         worktree.mkdir(mode=0o700)
         resource = worktree / "module.py"
         resource.write_text("value = 1\n")
-        comms = Comms(root)
+        comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
         people = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
         for name, created_at in people.items():
             comms.registry.declare(

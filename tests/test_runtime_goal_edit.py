@@ -8,20 +8,26 @@ import os
 import pytest
 
 from delivery_owner_fixture import canonical_agent
-from agent_comms.comms import wire
+from agent_comms.child_process import ProcessIdentity
+
 from agent_comms.goal_actions import (
     OwnerInvocable,
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.runtime import RuntimeProxy
+from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="pi", agent_args=[], runtime_enabled=True)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([])), runtime_enabled=True)
     # Keep this non-provider test's goal paused. Edits must preserve that state.
     response = await owner.new_session(str(tmp_path / "project"))
     session = response.session_id
@@ -33,7 +39,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
         async def session_update(self, session_id, update):
             updates.append(update)
 
-    observer = canonical_agent(comms)
+    observer = canonical_agent(comms, native=comms.owners.native_defaults)
     observer.on_connect(Client())
     proxy = RuntimeProxy(observer, session, RuntimeSocket.path_for(comms.root, os.getpid()))
     try:
@@ -46,7 +52,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
             expected_revision=paused.revision,
             text="Review @child's implementation and record the evidence",
         )
-        changed = wire(comms.root).registry.require(session).goal
+        changed = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).registry.require(session).goal
         assert result["goal"]["id"] == goal.id == changed.id
         assert changed.state.declared_name == "paused"
         assert changed.text == result["goal"]["text"]
@@ -67,7 +73,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
             await proxy.request(
                 "edit_goal", goal_id=goal.id, expected_revision=paused.revision, text="stale edit"
             )
-        assert wire(comms.root).registry.require(session).goal == changed
+        assert Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current()).registry.require(session).goal == changed
         assert (await proxy.request("goal_history", goal_id=goal.id))["history"] == history
     finally:
         await proxy.close()

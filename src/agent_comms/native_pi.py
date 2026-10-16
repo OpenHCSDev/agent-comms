@@ -44,6 +44,7 @@ from .private_path import (
 )
 from .registry_store import RegistryStore
 from .native_project import NativeProject, ManagedNativeProject, UnmanagedNativeProject
+from .native_tools import NativeRequestTools
 from .selected_session import SavedSelectedSession, SelectedSession
 from .selected_tool_broker import NativeToolMode
 from .thread_identity import ThreadIncarnation
@@ -104,16 +105,16 @@ def main() -> int:
         raise NativePiUnavailable("Native launch belongs to a different thread incarnation")
     session_context = TurnContext.session_segments(owner)
     environment = dict(os.environ)
+    project = ManagedNativeProject.from_entry(launch.validated_root, entry)
     argv, environment = NativePiRpcLaunch.bootstrap(
         cli,
         tuple(arguments),
         Path.cwd(),
         environment,
         RestartEnvironment.inherit(environment),
-        LaunchRuntime.running(),
-        session_context=session_context,
+        LaunchRuntime.current(),
+        session_context=session_context, project=project,
     )
-    project = ManagedNativeProject.from_entry(launch.validated_root, entry)
     os.execvpe(argv[0], [*argv, *project.cli_arguments], environment)
     return 0
 
@@ -434,8 +435,9 @@ class NativePiRpcLaunch:
     def bootstrap(
         cls, cli, arguments, cwd, environment, configuration: RestartEnvironment,
         runtime: LaunchRuntime, *, session_context: tuple[ContextSegment, ...],
+        project: NativeProject,
     ):
-        """Render required context using the held native launch configuration."""
+        """Load required integration independently of optional user discovery."""
         context_text = TurnContext.render_segments(session_context).text
         if not context_text.strip():
             raise NativePiUnavailable("Native launch requires nonempty session context")
@@ -458,6 +460,8 @@ class NativePiRpcLaunch:
             "--import",
             str(cli.with_name("agent-comms-project-bootstrap.mjs")),
             str(cli),
+            "-e", str(NativeRequestTools.native_extension(cli.parent.parent)),
+            "-e", str(project.native_extension(cli.parent.parent)),
             *arguments,
             *(argument for segment in session_context for argument in segment.native_arguments()),
             "--append-system-prompt",
@@ -472,60 +476,24 @@ class NativePiRpcLaunch:
                runtime: LaunchRuntime, *, session_context: tuple[ContextSegment, ...],
                project: NativeProject):
         argv, env = cls.bootstrap(cli, arguments, cwd, environment, configuration, runtime,
-                                 session_context=session_context)
+                                 session_context=session_context, project=project)
         return cls(argv, cwd, env, session, package, configuration=configuration, runtime=runtime,
                    project=project)
 
     @classmethod
-    def _command_selection(cls, command: str, runtime: LaunchRuntime):
-        """Decode the original launcher selection without acquiring its package.
-
-        Executable names never establish capability. Configured commands must
-        name this installation's entrypoint, its pinned CLI, or the source stack
-        launcher; execution always uses the verified native package.
-        """
-        stack_launcher = MANIFEST.parent / "bin" / "pi-native"
-        executable = (
-            Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
-        )
-        route = PrivateNkLaunch.current()
-        if route is not None:
-            package = route.native_package
-        elif executable is not None and executable == stack_launcher.resolve():
-            build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
-            package = (
-                MANIFEST.parent
-                / f".pi-native-{build}"
-                / "node_modules/@earendil-works/pi-coding-agent"
-            )
-        else:
-            raise NativePiUnavailable("Native owner requires a configured pinned package")
-        allowed = (
-            Path(NativeArguments.owner_launcher(runtime)).resolve(),
-            stack_launcher.resolve(),
-            (package / "dist" / "cli.js").resolve(),
-        )
-        if executable is not None and executable not in allowed:
-            raise NativePiUnavailable("Configured command is not a validated native Pi launcher")
-        return package, route
-
-    @classmethod
-    def package_for_command(cls, command: str, runtime: LaunchRuntime) -> Path:
-        """Acquire the original reviewed artifact before any new native execution."""
-        package, route = cls._command_selection(command, runtime)
-        if route is not None:
-            route.validate()
-        else:
-            _trusted_package(package)
+    def package_for_runtime(cls, runtime: LaunchRuntime, package: Path) -> Path:
+        """Acquire the explicitly selected installation and SDK artifact."""
+        runtime.require_available()
+        package = Path(package).absolute()
+        _trusted_package(package)
         return package
 
     @classmethod
     def login(
-        cls, command: str, *, worktree: Path, environment: dict[str, str]
+        cls, runtime: LaunchRuntime, *, package: Path, worktree: Path, environment: dict[str, str]
     ) -> NativePiRpcLaunch:
         """Explicit provider UI has doctrine, not an invented registered owner."""
-        runtime = LaunchRuntime.running()
-        package = cls.package_for_command(command, runtime)
+        package = cls.package_for_runtime(runtime, package)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
@@ -556,9 +524,10 @@ class NativePiRpcLaunch:
     @classmethod
     def catalog(
         cls,
-        command: str,
+        runtime: LaunchRuntime,
         arguments: tuple[str, ...],
         *,
+        package: Path,
         worktree: Path,
     ) -> NativePiRpcLaunch:
         """Metadata-only RPC owns an in-memory session, never a saved selection.
@@ -571,8 +540,7 @@ class NativePiRpcLaunch:
             arguments = NativeArguments.parse(arguments).rpc()
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
-        runtime = LaunchRuntime.running()
-        package = cls.package_for_command(command, runtime)
+        package = cls.package_for_runtime(runtime, package)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
@@ -583,22 +551,22 @@ class NativePiRpcLaunch:
     @classmethod
     def managed(
         cls,
-        command: str,
+        runtime: LaunchRuntime,
         arguments: tuple[str, ...],
         *,
+        package: Path,
         worktree: Path,
         session_context: tuple[ContextSegment, ...],
         project: NativeProject,
         environment: dict[str, str] | None = None,
         session_file: str | None = None,
     ) -> NativePiRpcLaunch:
-        """Prepare managed ACP/headless execution; native receipts remain separate."""
+        """Prepare managed ACP/headless execution from its selected runtime."""
         try:
             arguments = NativeArguments.parse(arguments).rpc()
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
-        runtime = LaunchRuntime.running()
-        package = cls.package_for_command(command, runtime)
+        package = cls.package_for_runtime(runtime, package)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
@@ -628,9 +596,10 @@ class NativePiRpcLaunch:
 
     def retained_managed(
         self,
-        command: str,
+        runtime: LaunchRuntime,
         arguments: tuple[str, ...],
         *,
+        package: Path,
         worktree: Path,
         environment: dict[str, str] | None,
         session_file: str | None,
@@ -643,16 +612,15 @@ class NativePiRpcLaunch:
         launch/auth key and checking its actual saved-source revision/liveness.
         A different package or selected file needs its own fresh acquisition.
         """
-        package, _ = self._command_selection(command, self.runtime)
         saved = Path(session_file).absolute() if session_file is not None else None
-        if package != self.package or saved != self.session.path:
+        if runtime != self.runtime or package != self.package or saved != self.session.path:
             return None
         return self._managed(self.package, NativeArguments.parse(arguments).rpc(),
             worktree, environment, self.session, self.runtime, session_context=session_context,
             project=project)
 
     @classmethod
-    def acquire_tracked(cls, package: Path) -> Callable[..., NativePiRpcLaunch]:
+    def acquire_tracked(cls, package: Path, runtime: LaunchRuntime) -> Callable[..., NativePiRpcLaunch]:
         """Acquire one immutable artifact's executable construction behavior.
 
         The returned factory retains the original verified CLI for its owner's
@@ -660,17 +628,17 @@ class NativePiRpcLaunch:
         it grants no child readiness, input admission or prior context proof.
         """
         package = Path(package).absolute()
-        return cls.verified_launcher(package, _trusted_package(package))
+        return cls.verified_launcher(package, _trusted_package(package), runtime)
 
     @classmethod
-    def verified_launcher(cls, package: Path, cli: Path) -> Callable[..., NativePiRpcLaunch]:
+    def verified_launcher(cls, package: Path, cli: Path, runtime: LaunchRuntime) -> Callable[..., NativePiRpcLaunch]:
         """Launcher for a package whose CLI _trusted_package already returned."""
-        return partial(cls._tracked, Path(package).absolute(), cli, LaunchRuntime.running())
+        return partial(cls._tracked, Path(package).absolute(), cli, runtime)
 
     @classmethod
-    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+    def tracked(cls, package: Path, *, runtime: LaunchRuntime, **options) -> NativePiRpcLaunch:
         """Acquire a fresh artifact for a standalone tracked execution."""
-        return cls.acquire_tracked(package)(**options)
+        return cls.acquire_tracked(package, runtime)(**options)
 
     @classmethod
     def _tracked(

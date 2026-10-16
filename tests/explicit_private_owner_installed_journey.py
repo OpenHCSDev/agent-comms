@@ -13,11 +13,14 @@ import sys
 from acp import spawn_agent_process
 from acp.schema import TextContentBlock
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.native_package import verify_native_package
 from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 
 from agent_comms.threads import Thread
 from compaction_loopback import LoopbackProvider
+from agent_comms.active_route import LocalRoute
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 class Subscriber:
@@ -34,10 +37,10 @@ class Subscriber:
         raise AssertionError("No permission request belongs to this localhost-only journey")
 
 
-async def cli(environment, stage, root_args, arguments):
+async def cli(environment, stage, root_args, arguments, native):
     child = await asyncio.create_subprocess_exec(
         str(Path(sys.executable).with_name('agent-comms')), *root_args,
-        'invoke', '--tool', 'comms_start', '--arguments', json.dumps(arguments),
+        'start', '--name', arguments['name'], *native.cli_arguments,
         cwd=stage, env=environment, stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -67,16 +70,16 @@ async def main(package, evidence):
             stage.mkdir(mode=0o700)
             project = stage / 'project'
             project.mkdir(mode=0o700)
-            comms = Comms(stage / 'wire')
+            native = NativeThreadDefaults(binary=LaunchRuntime.current().native_entrypoint, arguments=('--offline', *NativeThreadDefaults.isolation_arguments, '--no-tools'))
+            comms = Comms(LocalRoute(stage / 'wire'), runtime=LaunchRuntime.current())
             root_id = comms.messaging.initialize_private_initial_protocol()
             comms.registry.declare(Thread('recipient', frozenset({'team'}), str(project),
                                           model='selected-offline/fixture', thinking_level='off'))
             env = {key: value for key, value in os.environ.items()
                    if not key.startswith(('PI_', 'AGENT_COMMS_')) and key != 'PYTHONPATH'}
             env.update({ROOT_ID_ENV: root_id, PACKAGE_ENV: str(package),
-                        'PI_CODING_AGENT_DIR': str(profile), 'AGENT_COMMS_AGENT_BIN': 'pi',
+                        'PI_CODING_AGENT_DIR': str(profile),
                         'AGENT_COMMS_AGENT_MODELS': 'selected-offline/fixture',
-                        'AGENT_COMMS_AGENT_ARGS': '--offline --no-extensions --no-skills --no-context-files --no-tools',
                         'XDG_CONFIG_HOME': str(stage / 'config'), 'XDG_DATA_HOME': str(stage / 'data'),
                         'XDG_STATE_HOME': str(stage / 'state')})
             # Relative explicit selection must survive the owner's project cwd.
@@ -97,7 +100,7 @@ async def main(package, evidence):
                         invalid[ROOT_ID_ENV] = 'f' * 32
                     else:
                         invalid[PACKAGE_ENV] = str(stage / 'unreviewed-package')
-                    status, reply, stderr = await cli(invalid, stage, root_args, {'name': 'recipient'})
+                    status, reply, stderr = await cli(invalid, stage, root_args, {'name': 'recipient'}, native)
                     owner = comms.registry.require('recipient')
                     denied.append({'case': defect, 'exit': status, 'reply': reply})
                     (stage / 'denials.json').write_text(json.dumps(denied, indent=2))
@@ -106,7 +109,7 @@ async def main(package, evidence):
                     assert not (comms.root / 'diagnostics').exists(), 'Invalid authority reached launch'
                     assert provider.posts == baseline_requests
                 print(mode, 'INVALID_AUTHORITY_DENIED_BEFORE_FORK', flush=True)
-                status, reply, stderr = await cli(env, stage, root_args, {'name': 'recipient'})
+                status, reply, stderr = await cli(env, stage, root_args, {'name': 'recipient'}, native)
                 assert status == 0 and reply['launched'], (reply, stderr)
                 owner = comms.registry.require('recipient')
                 assert owner.pid == reply['pid'] and owner.pid != os.getpid()
@@ -117,7 +120,7 @@ async def main(package, evidence):
                 # ACP is another actual installed subprocess, not an in-process stub.
                 attached_env = dict(env, AGENT_COMMS_ROOT=str(comms.root))
                 subscriber = Subscriber()
-                async with spawn_agent_process(subscriber, sys.executable, '-m', 'agent_comms.acp',
+                async with spawn_agent_process(subscriber, sys.executable, '-m', 'agent_comms.acp', *native.cli_arguments,
                                                env=attached_env, cwd=project) as (connection, process):
                     async with asyncio.timeout(30):
                         await connection.initialize(protocol_version=1)

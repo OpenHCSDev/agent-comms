@@ -21,6 +21,10 @@ from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -57,7 +61,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     ), cwd=native.project)
     session = SavedSelectedSession(created.path.parent,
         identity=NativeSessionIdentity(created.session_id, created.session_file))
-    execution = SelectedExecution(root=native.root,
+    execution = SelectedExecution(comms=Comms(LocalRoute(native.root), runtime=LaunchRuntime.current()),
         wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
         owner_name="launch-custody", native_package=package)
     verifications = []
@@ -178,12 +182,8 @@ async def catalog_owner(native_backend, monkeypatch):
         return child
 
     monkeypatch.setattr(AttachedChild, "start", observe)
-    owner = canonical_agent(
-        Comms(native.root),
-        agent_bin="pi",
-        agent_args=["--model", "response-local/fixture", "--offline"],
-        auto_wake=False,
-    )
+    selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
+    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "response-local/fixture", "--offline"])), auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     before = native.session.read_bytes()
     try:
@@ -296,15 +296,7 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
     _owner, children = catalog_owner
     launch = NativePiRpcLaunch.managed(
         "pi",
-        (
-            "--model",
-            "response-local/fixture",
-            "--offline",
-            "--no-session",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-        ),
+        ('--model', 'response-local/fixture', '--offline', '--no-session', *NativeThreadDefaults.isolation_arguments),
         worktree=native_backend.project,
         session_context=(DoctrineSegment.capture(),),
      project=UnmanagedNativeProject())
@@ -375,9 +367,7 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
         install_event_host(monkeypatch, command, f"{address.scheme}://{address.netloc}",
                            replacement_probe=events, cancelled_session=cancelled_target)
     launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
-        command, ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
-               "--offline", "--no-extensions",
-               "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
+        command, ('--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'),
         worktree=native.project, session_file=created.session_file,
         session_context=(DoctrineSegment.capture(),),
     ))

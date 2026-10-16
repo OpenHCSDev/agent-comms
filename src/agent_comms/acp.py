@@ -20,7 +20,9 @@ from __future__ import annotations
 from .runtime_socket import RuntimeSocket
 
 import asyncio
+import dataclasses
 import json
+import logging
 import os
 import re
 import sys
@@ -56,7 +58,12 @@ from .acp_extension import (
 from .agent_event_updates import AcpEventConsumer
 from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
-from .comms import Comms, wire
+from .comms import Comms
+from .active_route import resolve_comms_route
+from .login import run_login
+from .private_nk_entrypoint import private_nk_from_environment
+from .native_settings import NativeThreadDefaults
+from .launch_runtime import LaunchRuntime
 from .coordination_cohort import next_sealed_assignment
 from .field_codec import FieldCodec
 from .cursor_publication import CursorPublication
@@ -92,8 +99,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     def __init__(
         self,
         comms: Comms,
-        agent_bin: str | None = None,
-        agent_args: list[str] | None = None,
         reply_window: float | None = None,
         no_reply_window: float | None = None,
         reply_quiet: float | None = None,
@@ -122,7 +127,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             from .native_pi import NativePiRpcLaunch
 
             self._verified_native_launcher = NativePiRpcLaunch.verified_launcher(
-                private_nk_native_package, private_nk_verified_cli
+                private_nk_native_package, private_nk_verified_cli, comms.runtime
             )
         self._private_nk_wire_root_id = private_nk_wire_root_id
         self._comms = comms
@@ -139,14 +144,12 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             comms,
             self._runtime,
             self,
-            agent_bin=agent_bin,
-            agent_args=agent_args,
             reply_window=reply_window,
             no_reply_window=no_reply_window,
             reply_quiet=reply_quiet,
         )
         self.sessions = self.session_lifecycle_class(
-            comms, self.turns.agent_bin, self.turns.agent_args, self._runtime, runtime_enabled, self
+            comms, self._runtime, runtime_enabled, self
         )
         self.inputs = InputDrain(comms, self.sessions, self._runtime, self, auto_wake)
         self.turns.bind(self.sessions, self.inputs)
@@ -358,7 +361,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         if self._verified_native_launcher is None:
             self._verified_native_launcher = NativePiRpcLaunch.acquire_tracked(
-                self._private_nk_native_package
+                self._private_nk_native_package, self._comms.runtime
             )
         return self._verified_native_launcher
 
@@ -401,7 +404,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # One execution owns this wake's package acquisition: acceptance of new
         # originals and the selected launch share it instead of verifying twice.
         execution = SelectedExecution(
-            root=self._comms.root,
+            comms=self._comms,
             wire_root_id=wire_root_id,
             owner_name=thread_name,
             native_package=package,
@@ -519,18 +522,11 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    from .active_route import resolve_comms_route
-
+    runtime = LaunchRuntime.current()
+    native = NativeThreadDefaults.from_arguments(sys.argv[1:], NativeThreadDefaults())
     with resolve_comms_route().admit_client():
-        if "--login" in sys.argv[1:]:
-            from .login import run_login
-
-            index = sys.argv.index("--login")
-            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
         debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
         if debug_path:
-            import logging
-
             logging.basicConfig(
                 level=logging.DEBUG,
                 format="%(asctime)s %(name)s %(levelname)s %(message)s",
@@ -539,14 +535,16 @@ def main() -> int:
         # The stdio ACP client only attaches to a separately owned worker. An
         # explicit private launch must be checked before it can create a wire or
         # request an owner; the worker independently repeats the same preflight.
-        from .private_nk_entrypoint import private_nk_from_environment
-
         private_nk = private_nk_from_environment()
-        comms = wire(private_nk.validated_root) if private_nk is not None else wire()
+        comms = Comms(resolve_comms_route(private_nk.validated_root if private_nk is not None else None),
+                            runtime=runtime, settings=native)
         if private_nk is not None:
             comms.owners.pin_private_nk_launch(
                 private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
             )
+        if "--login" in sys.argv[1:]:
+            index = sys.argv.index("--login")
+            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "", comms=comms)
 
         async def run() -> None:
             if os.environ.get("AGENT_COMMS_DEBUG_LOG"):

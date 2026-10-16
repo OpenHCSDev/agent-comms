@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shlex
 import shutil
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -21,6 +20,7 @@ from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .launch_runtime import LaunchRuntime, RestartEnvironment, PACKAGE_ENV, ROOT_ID_ENV
 from .private_nk_entrypoint import PrivateNkLaunch
+from .native_settings import NativeThreadDefaults
 from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .restart_refusals import (
@@ -28,49 +28,18 @@ from .restart_refusals import (
     OwnerSelectionChangedRefusal,
 )
 from .store_files import _store_lock
-from .thread_identity import AdmissionIdentity, OwnerIdentity
+from .thread_identity import AdmissionIdentity, OwnerIdentity, RecordedThreadIncarnation
+from .tool_caller import ToolCaller
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
-from .thread_identity import RecordedThreadIncarnation
-from .tool_caller import ToolCaller
+from .owner_launch import OwnerRestartSelection
+from .owner_restart import OwnerRestartRequest, OwnerRestartResult, RestartTarget
 
 _LOG = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, slots=True)
-class OwnerRestartSelection:
-    identity: OwnerIdentity
-    process: ProcessIdentity
-    admission_generation: int
-
-    @classmethod
-    def capture(cls, snapshot: RegistrySnapshot, name: str):
-        owner = snapshot.require_active(name)
-        return cls(
-            snapshot.owner_identity(owner.name),
-            owner.require_process(),
-            snapshot.admission_generations[owner.name],
-        )
-
-    @property
-    def name(self) -> str:
-        return self.identity.incarnation.name
-
-    def require_current(self, snapshot: RegistrySnapshot) -> Thread:
-        try:
-            snapshot.require_owner_process(self.identity, self.process)
-        except RelationViolationError as error:
-            raise OwnerSelectionChangedRefusal() from error
-        if snapshot.admission_generations[self.name] != self.admission_generation:
-            raise OwnerGenerationChangedRefusal()
-        return snapshot.require_active(self.name)
 
 
-@dataclass(frozen=True, slots=True)
-class OwnerRestartResult:
-    thread: str
-    previous_pid: int
-    pid: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +95,10 @@ class OwnerReleaseReceipt:
 
 
 class OwnerReleaseStore(ThreadOwnedState, LockedStore[dict[str, OwnerReleaseReceipt]]):
+    @classmethod
+    def for_root(cls, root: Path) -> OwnerReleaseStore:
+        return cls(root / "owner_release_receipts.json")
+
     @property
     def record_type(self):
         return dict[str, OwnerReleaseReceipt]
@@ -158,13 +131,14 @@ class OwnerLifecycle:
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
 
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus):
-        self.root = root
-        self.registry = registry
-        self.bus = bus
-        self._wire_lock_path = root / "wire"
-        self.maintenance = MaintenanceBarrier(registry.store.path)
-        self.releases = OwnerReleaseStore(root / "owner_release_receipts.json")
+    def __init__(self, comms):
+        self.comms = comms
+        self.root = comms.root
+        self.registry = comms.registry
+        self.bus = comms.bus
+        self._wire_lock_path = self.root / "wire"
+        self.maintenance = MaintenanceBarrier(self.registry.store.path)
+        self.releases = OwnerReleaseStore.for_root(self.root)
         self._private_nk_launch: PrivateNkLaunch | None = None
 
     @contextmanager
@@ -223,10 +197,7 @@ class OwnerLifecycle:
             self.registry.register(owned, new_owner=True)
             return owned
 
-    def ensure_owner(
-        self, name: str, *, agent_bin: str = NativeArguments.default_binary,
-        agent_args: Sequence[str] | None = None,
-    ) -> Thread:
+    def ensure_owner(self, name: str) -> Thread:
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
@@ -236,13 +207,11 @@ class OwnerLifecycle:
             return (
                 thread
                 if thread.process_alive
-                else self._launch_owner_unlocked(thread, agent_bin, agent_args,
-                                                 launch_runtime=LaunchRuntime.current())
+                else self._launch_owner_unlocked(thread, self.comms.settings,
+                                                 launch_runtime=self.comms.runtime)
             )
 
-    def start(
-        self, name: str, *, agent_bin: str | None = None, agent_args: Sequence[str] | None = None
-    ) -> OwnerStartResult:
+    def start(self, name: str) -> OwnerStartResult:
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
@@ -254,18 +223,10 @@ class OwnerLifecycle:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.pid, False)
-            owner = self._launch_owner_unlocked(
-                thread, NativeArguments.configured_binary(agent_bin), agent_args,
-                launch_runtime=LaunchRuntime.current(),
-            )
+            self.comms.runtime.require_available()
+            owner = self._launch_owner_unlocked(thread, self.comms.settings,
+                                                launch_runtime=self.comms.runtime)
             return OwnerStartResult(owner.name, owner.pid, True)
-
-    def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
-        """Choose this runtime's reviewed native entrypoint for a private handoff."""
-        if self._private_nk_launch is None:
-            return source_binary
-        self._private_nk_launch.validate()
-        return runtime.native_entrypoint
 
     def restart_environment(self, environment: Mapping[str, str], runtime: LaunchRuntime) -> dict[str, str]:
         """Project the retained launch authority into the target runtime policy."""
@@ -277,11 +238,9 @@ class OwnerLifecycle:
 
     def restart_owners(
         self,
-        names: Sequence[str] | None = None,
+        targets: tuple[RestartTarget, ...],
         *,
-        agent_bin: str | None = None,
-        agent_args: Sequence[str] | None = None,
-        expected: OwnerRestartSelection | None = None,
+        launch_runtime: LaunchRuntime,
         runtime: RestartEnvironment | None = None,
         source_interpreter: str | None = None,
         cutover: OwnerCutover = PreserveOwnerRuntime(),
@@ -292,13 +251,8 @@ class OwnerLifecycle:
         original exits and before any replacement launches. It owns its writer
         proof and operation; failure leaves the fenced batch stopped for review.
         """
-        from .owner_restart import OwnerRestartRequest
-
-        request = OwnerRestartRequest(
-            tuple(names) if names is not None else None, agent_bin,
-            tuple(agent_args) if agent_args is not None else None,
-            expected, runtime, source_interpreter,
-        )
+        request = OwnerRestartRequest(targets, launch_runtime, runtime, source_interpreter)
+        request.validate()
         return cutover.restart(self, request)
 
     @contextmanager
@@ -341,6 +295,13 @@ class OwnerLifecycle:
 
         RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
 
+    @property
+    def native_package(self) -> Path:
+        """The configured SDK artifact, without granting a worker launch."""
+        if self._private_nk_launch is None:
+            raise PublicationActivationBlocked("Native execution requires a configured package")
+        return self._private_nk_launch.native_package
+
     def require_launch_authority(self) -> PrivateNkLaunch | None:
         """Check this lifecycle's launch authority without reserving a process.
 
@@ -360,8 +321,7 @@ class OwnerLifecycle:
     def _launch_owner_unlocked(
         self,
         thread: Thread,
-        agent_bin: str,
-        agent_args: Sequence[str] | None = None,
+        native: NativeThreadDefaults,
         *,
         launch_runtime: LaunchRuntime,
         startup_input_key: str | None = None,
@@ -383,15 +343,6 @@ class OwnerLifecycle:
             env.pop(key, None)
         private_launch = self.require_launch_authority()
         if private_launch is not None:
-            if agent_bin == "pi":
-                # The default stock binary cannot attest native input IDs.
-                # Keep the owner on this installation's pinned Pi entrypoint.
-                agent_bin = launch_runtime.native_entrypoint
-            else:
-                # The owner process keeps the launcher selected at its start.
-                # A later PATH or installed-runtime symlink change cannot retarget
-                # drains already owned by this process.
-                agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
             # Explicit launch installs the current runtime before registering
             # this owner. Readers never create or repair runtime schemas.
             from .coordinator import Coordination
@@ -409,7 +360,6 @@ class OwnerLifecycle:
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
-                NativeArguments.binary_key: agent_bin,
             }
         )
         if private_launch is not None:
@@ -423,8 +373,6 @@ class OwnerLifecycle:
             env["PI_TASK"] = thread.task
         if startup_input_key is not None:
             env["AGENT_COMMS_STARTUP_INPUT_KEY"] = startup_input_key
-        if agent_args is not None:
-            env[NativeArguments.arguments_key] = shlex.join(agent_args)
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:
@@ -434,8 +382,8 @@ class OwnerLifecycle:
 
         with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
-                (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
-                 *thread.incarnation.cli_arguments),
+                (*launch_runtime.command("-m", "agent_comms.worker"),
+                 *native.cli_arguments, *thread.incarnation.cli_arguments),
                 env=env,
                 cwd=thread.worktree,
                 output=output,

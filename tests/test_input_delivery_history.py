@@ -8,11 +8,16 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.acp import CommsAgent
-from agent_comms.comms import wire
+
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.runtime import RuntimeProxy
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def seed(comms, name):
@@ -26,7 +31,7 @@ def seed(comms, name):
 
 
 def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path)))
     ledger = seed(comms, "owner")
@@ -56,7 +61,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
         )
         == before
     )
-    reopened = wire(tmp_path)
+    reopened = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     assert reopened.goals.input_delivery("renamed", awaiting_keys=awaiting) == result
     assert reopened.goals.unresolved_inputs("renamed") == [r.public() for r in before]
     assert all(
@@ -75,7 +80,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
 
 
 def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
     ledger = InputDispositions(tmp_path)
     ledger.record("bus:1", seq=1, owner="owner", admission=1, target="owner", text="Hello")
@@ -89,8 +94,8 @@ def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 async def test_actual_owner_rpc_clears_notices_and_broadcasts_invalidation(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), runtime_enabled=True, auto_wake=False)
     from goal_owner_fixture import activate_empty_source
 
     activate_empty_source(owner)

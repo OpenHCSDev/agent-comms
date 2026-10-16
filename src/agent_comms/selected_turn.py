@@ -5,7 +5,6 @@ from __future__ import annotations
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import ClassVar
 
 from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
@@ -74,7 +73,7 @@ class SelectedPrompt:
         )
         projection = OptionalAwarenessProjection.for_selected(
             WakeCandidateIndex(participant.bus.log),
-            registry=participant.bus._registry,
+            registry=participant.bus.registry,
             through_seq=participant.batch.sources[-1].delivery.message.seq,
             generation=participant.identity.generation,
             admission_generation=participant.owner.admission_generation,
@@ -97,8 +96,6 @@ class SelectedPrompt:
 @dataclass(frozen=True)
 class SelectedAttempt:
     """An engaged attempt always has its full native stage and evolving fence."""
-
-    max_attempts: ClassVar[int] = 3
 
     participant: SelectedParticipant
     stage: FullNativeSend
@@ -258,12 +255,10 @@ class SelectedConsideration:
             created = participant.store.executions.create(
                 participant.batch.execution_id, ExecutionOrigin.WIRE,
                 participant.lookup, participant.owner.thread.name,
-                SelectedAttempt.max_attempts,
+                execution.max_attempts,
                 sources=participant.batch.sources,
             ).value
-            attempt = await SelectedAttempt.engage(participant, created)
-            return await attempt.run(execution, session,
-                                     execution.action(session), execution.write_authority)
+            return await execution.full(participant, session, created)
         await participant.transition(
             PreparingPhase(f"Preparing triage for {len(participant.batch.sources)} messages in {participant.batch.target}")
         )

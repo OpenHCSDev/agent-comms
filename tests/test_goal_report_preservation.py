@@ -3,6 +3,9 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 SOURCE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SOURCE / 'tools' / 'cutover'))
@@ -30,7 +33,7 @@ def files(root):
 
 @pytest.mark.parametrize('disposition', ['reported', 'clear', 'replace', 'edit', 'older_release'])
 def test_current_projection_preserves_authored_reports(tmp_path, disposition):
-    service = Comms(tmp_path / 'current')
+    service = Comms(LocalRoute(tmp_path / 'current'), runtime=LaunchRuntime.current())
     service.registry.register(Thread('author', frozenset(), str(service.root),
                                     process_identity=ProcessIdentity.capture(os.getpid())),
                               new_owner=True)

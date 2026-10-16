@@ -13,6 +13,7 @@ import sys
 import time
 
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_package import verify_native_package
@@ -26,6 +27,8 @@ from l0a_native_installed_pilot import until, response_painted
 from runtime_fixture import stop_test_children, stop_test_owners
 from saved_state_user_journey_pilot import submit_editor
 from stored_inputs import stored_inputs
+from agent_comms.active_route import LocalRoute
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 class ObservedApp(ToadApp):
@@ -95,14 +98,14 @@ async def run(arguments):
     (config / "auth.json").write_text(json.dumps({"wait-local": {"type": "api_key", "key": "local-only"}}))
     (config / "settings.json").write_text(json.dumps({"compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
-    service = Comms(stage / "wire", private_initial_writes=True)
+    native = NativeThreadDefaults(binary=LaunchRuntime.current().native_entrypoint, arguments=('--provider', 'wait-local', '--model', 'fixture', *NativeThreadDefaults.isolation_arguments))
+    service = Comms(LocalRoute(stage / "wire"), private_initial_writes=True, runtime=LaunchRuntime.current())
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)
     environment = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id, AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
-        AGENT_COMMS_AGENT_MODELS="wait-local/fixture", AGENT_COMMS_AGENT_BIN="pi",
-        AGENT_COMMS_AGENT_ARGS="--provider wait-local --model fixture --no-extensions --no-skills --no-context-files",
+        AGENT_COMMS_AGENT_MODELS="wait-local/fixture",
         XDG_CONFIG_HOME=str(stage / "config"), XDG_STATE_HOME=str(stage / "state"),
         XDG_DATA_HOME=str(stage / "data"), AGENT_COMMS_DEBUG_LOG=str(stage / "acp.log"),
         AGENT_COMMS_RUNTIME_ROOT=str(Path(sys.executable).parent),
@@ -115,7 +118,7 @@ async def run(arguments):
         model="wait-local/fixture", thinking_level="off"))
     definition = AgentDefinition.decode({"name": "Native request wait", "identity": "wait",
         "short_name": "wait", "protocol": "acp",
-        "run_command": {"*": shlex.join([sys.executable, "-m", "agent_comms.acp"])}})
+        "run_command": {"*": shlex.join([sys.executable, "-m", "agent_comms.acp", *native.cli_arguments])}})
     app = ObservedApp(agent_data=definition, project_dir=str(project), agent_session_id="wait-native")
     slow_writer = None
     observers = []

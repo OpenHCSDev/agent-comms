@@ -87,7 +87,7 @@ class NativeSourceCursor:
 
     @classmethod
     def _refresh_owned(cls, bus, wire_root_id, owner_name, source_reads, store):
-        owner, admission = bus._registry.live_owner_with_admission(owner_name)
+        owner, admission = bus.registry.live_owner_with_admission(owner_name)
         person = store.participants.get(owner.incarnation.lookup)
         return cls._advance_owned(
             bus, wire_root_id, owner, admission, person.participant_generation, None,

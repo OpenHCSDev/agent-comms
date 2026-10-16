@@ -22,6 +22,9 @@ from agent_comms.child_process import (
     ParentedProcess,
     SignaledOutcome,
 )
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
@@ -51,7 +54,7 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
     assert len(names) == 1
     name = names.pop()
     async with native_backend_fixture(tmp_path) as native, AsyncExitStack() as resources:
-        comms = Comms(native.root)
+        comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
         comms.owners.pin_private_nk_launch(native.root,
             os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'],
             Path(os.environ['PI_COMPACTION_TEST_PACKAGE']))
@@ -100,9 +103,9 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         InputDispositions(native.root).replace(original_document)
         async def attach_current():
             current = comms.registry.require(name)
-
-            await asyncio.to_thread(wait_for, RuntimeSocket.path_for(native.root, current.pid))
-            agent = canonical_agent(comms, auto_wake=False)
+            from agent_comms.runtime import socket_path
+            await asyncio.to_thread(wait_for, socket_path(native.root, current.pid))
+            agent = canonical_agent(comms, native=comms.owners.native_defaults, auto_wake=False)
             try:
                 async with asyncio.timeout(20):
                     await agent.load_session(str(native.project), name)
@@ -132,7 +135,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         assert current.goal == original.goal and current.goal.state.declared_name == 'blocked'
         assert current.model == original.model and current.thinking_level == original.thinking_level
         assert current.turn_lease is None and native.provider.posts == 0
-        assert replacement.arguments == launch.arguments
+        assert replacement.native.arguments == launch.native.arguments
         assert RestartEnvironment.inherit(replacement.environment).native_config == RestartEnvironment.inherit(launch.environment).native_config
         assert baseline == {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
         print(json.dumps({'restart': FieldCodec.encode(results),
@@ -142,7 +145,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         assert native.provider.posts == 0
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.owner_lifecycle import OwnerRestartSelection
+from agent_comms.owner_launch import OwnerRestartSelection
 from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
 
 
@@ -181,13 +184,12 @@ while True: time.sleep(0.01)
         "AGENT_COMMS_ROOT": str(root),
         "AGENT_COMMS_THREAD": "worker",
         "PI_WORKTREE": str(tmp_path),
-        # This real source process must declare the command it actually runs.
-        # Restart capture cannot infer extinct launch arguments from its PID.
-        "AGENT_COMMS_AGENT_BIN": sys.executable,
-        "AGENT_COMMS_AGENT_ARGS": shlex.join((str(script),)),
     }
-    child = ParentedProcess.launch((sys.executable, str(script)), env=env)
-    comms = Comms(root)
+    from agent_comms.native_settings import NativeThreadDefaults
+
+    native = NativeThreadDefaults(binary=sys.executable, arguments=(str(script),))
+    child = ParentedProcess.launch((sys.executable, str(script), *native.cli_arguments), env=env)
+    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     try:
         wait_for(root / "ready")
         yield comms, child
@@ -329,13 +331,13 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
     from agent_comms.coordination_errors import PublicationActivationBlocked
     from agent_comms.threads import Thread
 
-    comms = Comms(tmp_path, private_initial_writes=True)
+    comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current(), private_initial_writes=True)
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path),
                                   process_identity=ProcessIdentity.capture(os.getpid())))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     assert comms.registry.status("worker").running
-    agent = CommsAgent(comms, runtime_enabled=True)
+    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True)
     # The 2026-09-29 startup failure: a private wire without a pinned launch.
     with pytest.raises(PublicationActivationBlocked):
         await agent.sessions.start_owner(str(tmp_path), agent._comms.registry.require("worker").incarnation)

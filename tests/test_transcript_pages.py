@@ -4,9 +4,13 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.comms import wire
+
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def transcript(path, count):
@@ -26,7 +30,7 @@ def transcript(path, count):
 def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     path = tmp_path / "session.jsonl"
     transcript(path, 105)
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path), session_file=str(path)))
     page = comms.transcripts.thread_transcript_page("worker", max_messages=10)
     through = page.after
@@ -60,7 +64,7 @@ def test_oversized_message_and_file_identity(tmp_path):
     path.write_text(
         json.dumps({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": text}]}}) + "\n"
     )
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     thread = Thread("worker", frozenset(), str(tmp_path), session_file=str(path))
     comms.registry.declare(thread)
     page = comms.transcripts.thread_transcript_page("worker", max_bytes=100)
@@ -76,7 +80,7 @@ def test_oversized_message_and_file_identity(tmp_path):
 
 
 def test_empty_transcript_and_non_message_records(tmp_path):
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
     page = comms.transcripts.thread_transcript_page("worker")
     assert not page.events and not page.has_older and not page.has_newer
@@ -85,7 +89,7 @@ def test_empty_transcript_and_non_message_records(tmp_path):
 def test_new_fork_projects_parent_history_and_instruction_until_own_session_exists(tmp_path):
     parent_path = tmp_path / "parent.jsonl"
     transcript(parent_path, 3)
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path))
     )
@@ -119,7 +123,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
 def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     parent_path = tmp_path / "parent.jsonl"
     transcript(parent_path, 35)
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     comms.registry.declare(
         Thread("parent", frozenset(), str(tmp_path), session_file=str(parent_path))
     )

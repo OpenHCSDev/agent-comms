@@ -21,10 +21,12 @@ import uuid
 
 from agent_comms.active_route import read_active_route
 from agent_comms.cli_bridges import opencode
-from agent_comms.comms import wire
+
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.restart_queue import enqueue
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 
 
 @dataclass(frozen=True)
@@ -103,8 +105,8 @@ def main() -> None:
     route = read_active_route()
     if route is None:
         raise ValueError('Runtime publication requires the installed route')
-    comms = wire(route)
-    owners = tuple(OwnerRestartRequest().threads(comms.registry.snapshot()))
+    comms = Comms(route, runtime=LaunchRuntime.current())
+    owners = tuple(comms.registry.snapshot().restart_candidates)
     if options.check:
         publication.require_cli(route.root)
         print(f'{publication.runtime}: {len(owners)} native workers would be queued for idle reload')

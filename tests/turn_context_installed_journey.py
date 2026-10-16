@@ -13,6 +13,10 @@ from pathlib import Path
 import agent_comms
 from stored_inputs import stored_inputs
 from agent_comms.goal_waits import NoGoalWait
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 async def configured_terminal(owner, thread, output, receipt, marker):
@@ -31,6 +35,7 @@ async def configured_terminal(owner, thread, output, receipt, marker):
             f'or change files. Reply exactly {marker}, then stop.')
     started = time.monotonic()
     async with spawn_agent_process(subscriber, sys.executable, '-m', 'agent_comms.acp',
+        *service.owners.native_defaults.cli_arguments,
         cwd=thread.worktree, env=dict(os.environ)) as (connection, process):
         receipt['acp_pid'] = process.pid
         await connection.initialize(protocol_version=1)
@@ -209,7 +214,7 @@ async def run_configured(options):
         project = root / 'project'
         project.mkdir(mode=0o700)
         environment = dict(captured.retained.environment)
-        service = Comms(root / 'wire')
+        service = Comms(LocalRoute(root / 'wire'), runtime=LaunchRuntime.current())
         identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
             str(original_file), str(project), str(root / 'native-forks')), cwd=project, env=environment)
         assert Path(identity.session_file).is_relative_to(root)
@@ -220,7 +225,6 @@ async def run_configured(options):
             AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
             AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
             PI_COMPACTION_TEST_PACKAGE=str(package),
-            AGENT_COMMS_AGENT_BIN=str(runtime / 'pi-comms-native'),
             PATH=str(runtime) + os.pathsep + environment.get('PATH', os.defpath),
             XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
             XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_DEBUG_LOG=str(root / 'owner-debug.log'))
@@ -231,9 +235,7 @@ async def run_configured(options):
         # explicit fork path owns all native writes; original accounts stay intact.
         os.environ.clear()
         os.environ.update(environment)
-        owner = canonical_agent(service, agent_bin=str(runtime / 'pi-comms-native'),
-            agent_args=list(captured.retained.arguments or ()), auto_wake=False,
-            runtime_enabled=True)
+        owner = canonical_agent(service, native=dataclasses.replace(service.owners.native_defaults, binary=str(runtime / 'pi-comms-native'), arguments=tuple(list(captured.retained.native.arguments))), auto_wake=False, runtime_enabled=True)
         thread = Thread('configured-source', frozenset(), str(project),
             process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=identity.session_file, model=source.model,
@@ -362,7 +364,7 @@ def complete_goal_controls(root):
     from agent_comms.cli_commands import ContextCliCommand
 
     started = time.monotonic()
-    service = Comms(root / 'wire')
+    service = Comms(LocalRoute(root / 'wire'), runtime=LaunchRuntime.current())
     originals = FieldCodec.decode(tuple[InputAttempt, ...], json.loads(
         (root / 'context-journey' / 'original-inputs.json').read_text()))
     dispositions = InputDispositions(service.root)
@@ -451,7 +453,7 @@ def complete_history_controls(root):
     root.mkdir(mode=0o700)
     wire = root / 'wire'
     wire.mkdir(mode=0o700)
-    service = Comms(wire)
+    service = Comms(LocalRoute(wire), runtime=LaunchRuntime.current())
     owner = Thread('history-original', frozenset(), str(root),
                    process_identity=ProcessIdentity.capture(os.getpid()), created_at=18002.0)
     service.registry.register(owner)
@@ -499,7 +501,7 @@ def complete_history_controls(root):
     assert difference == continuation.changed_since(originals[0])
     assert query('history-original', '--diff') == future.changed_since(continuation)
     assert 'No preceding recorded turn' in query('history-renamed', '--turn', '1', '--diff', accepted=False)['error']
-    reopened = Comms(wire)
+    reopened = Comms(LocalRoute(wire), runtime=LaunchRuntime.current())
     assert reopened.bus.log.context_manifests('history-original', reopened.registry) == expected
     service.registry.unregister('history-renamed')
     service.registry.remove('history-renamed')

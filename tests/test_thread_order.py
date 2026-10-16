@@ -4,14 +4,18 @@
 import os
 
 from agent_comms.activity import Activity, ActivityState
-from agent_comms.comms import wire
+
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeypatch):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread(name="alpha", tags=frozenset(), worktree=str(tmp_path), created_at=100))
     comms.registry.declare(Thread(name="beta", tags=frozenset(), worktree=str(tmp_path), created_at=200))
     comms.agents.activity.emit(Activity(thread="alpha", state=ActivityState.WORKING, timestamp=300))
@@ -38,4 +42,4 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     comms.threads.rename_self("renamed", caller=comms.registry.require('alpha').incarnation)
     assert comms.registry.require("renamed").created_at == 100
     assert comms.views.last_sent_timestamps() == {"renamed": 400, "beta": 500}
-    assert wire(tmp_path).registry.require("alpha").created_at == 100
+    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).registry.require("alpha").created_at == 100

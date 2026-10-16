@@ -5,7 +5,7 @@ import os
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -19,11 +19,15 @@ from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from stored_inputs import stored_inputs
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    comms = wire(tmp_path / "wire")
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for name in ("worker", "parent", "other"):
         comms.registry.declare(
             Thread(
@@ -109,7 +113,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     generation = comms.goals.open_goal_store().snapshot(goal.id)
     assert generation is not None and generation.lifecycle.ready
     assert generation.attempt_id is None
-    reopened = wire(comms.root)
+    reopened = Comms(resolve_comms_route(comms.root), runtime=LaunchRuntime.current())
     reopened.goals.update_goal("worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)))
     reopened.goals.update_goal(
         "worker", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("parent",))
@@ -128,7 +132,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
 
 @pytest.mark.parametrize("rebound", ["worker", "parent"])
 def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, rebound):
-    comms = wire(tmp_path)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
     for name in ("worker", "parent"):
         comms.registry.declare(
             Thread(

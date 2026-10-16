@@ -26,10 +26,15 @@ from agent_comms.acp_extension import (
     encode_request,
 )
 from agent_comms.agent_events import CompactionEnd
-from agent_comms.comms import wire
+
 from agent_comms.pi_vocabulary import ManualCompactionReason
 
 from delivery_owner_fixture import canonical_agent
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _history(session: Path, project: Path) -> None:
@@ -203,21 +208,15 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         project.mkdir()
         session = root / "saved.jsonl"
         _history(session, project)
-        comms = wire(root / "wire")
-        owner = canonical_agent(
-            comms,
-            agent_bin=native,
-            agent_args=[
+        comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
+        owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple([
                 "--provider",
                 "openrouter",
                 "--model",
                 "z-ai/glm-5.3-flash",
                 "--thinking",
                 "off",
-            ],
-            runtime_enabled=True,
-            auto_wake=False,
-        )
+            ])), runtime_enabled=True, auto_wake=False)
         monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", owner._private_nk_wire_root_id)
         monkeypatch.setenv(
             "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(owner._private_nk_native_package)
@@ -229,13 +228,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
 
         owner.on_connect(Client())
-        attachment = CommsClient(
-            comms,
-            agent_bin=native,
-            auto_wake=False,
-            private_nk_native_package=owner._private_nk_native_package,
-            private_nk_wire_root_id=owner._private_nk_wire_root_id,
-        )
+        attachment = CommsClient(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native), auto_wake=False, private_nk_native_package=owner._private_nk_native_package, private_nk_wire_root_id=owner._private_nk_wire_root_id)
         attached_facts = []
 
         class AttachedClient:

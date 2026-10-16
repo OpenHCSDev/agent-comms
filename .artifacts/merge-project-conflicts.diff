@@ -1,0 +1,576 @@
+diff --cc src/agent_comms/cli.py
+index 7f5861dbb,1485b550d..000000000
+--- a/src/agent_comms/cli.py
++++ b/src/agent_comms/cli.py
+@@@ -15,13 -15,12 +15,15 @@@ from collections.abc import Sequenc
+  from contextlib import ExitStack
+  from pathlib import Path
+  
+ +from .active_route import resolve_comms_route
+ +from .native_settings import NativeThreadDefaults
+  from .cli_commands import CliCommand
++ from .tool_caller import ToolCaller
++ from .active_route import resolve_comms_route
+  from .cli_protocol import CoreError
+ -from .comms import wire
+ +from .comms import Comms
+  from .owner_restart import StoppedOwnerFailure
+ +from .launch_runtime import LaunchRuntime
+  
+  
+  def _fail(error: BaseException) -> int:
+@@@ -53,14 -52,17 +55,28 @@@ def build_parser(settings: NativeThread
+  def main(argv: Sequence[str] | None = None) -> int:
+      try:
+          with ExitStack() as route_guard:
+++<<<<<<< HEAD
+ +            runtime = LaunchRuntime.current()
+ +            settings = NativeThreadDefaults.from_runtime(runtime)
+ +            args = build_parser(settings).parse_args(argv)
+ +            command = CliCommand.from_namespace(args)
+ +            route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
+ +            route_guard.enter_context(route.admit_client())
+ +            comms = Comms(route, runtime=runtime)
+ +            return command.run(comms, sys.stdout)
+++=======
++             parser = build_parser()
++             args = argparse.Namespace()
++             remaining = list(sys.argv[1:] if argv is None else argv)
++             caller = ToolCaller.from_arguments(parser, remaining, args)
++             if remaining:
++                 parser.error(f"unrecognized arguments: {' '.join(remaining)}")
++             command = CliCommand.from_namespace(args)
++             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
++             route_guard.enter_context(route.admit_client())
++             comms = wire(route)
++             return command.run(comms, sys.stdout, caller=caller)
+++>>>>>>> origin/fix/895-session-envelope
+      except KeyboardInterrupt:
+          return 130
+      except StoppedOwnerFailure as exc:
+diff --cc src/agent_comms/cli_commands.py
+index 648a6520e,5647d5f3f..000000000
+--- a/src/agent_comms/cli_commands.py
++++ b/src/agent_comms/cli_commands.py
+@@@ -1232,12 -1309,10 +1242,19 @@@ class RestartCliCommand(CliCommand)
+              return ()
+          return (cls(name=thread.name),)
+  
+++<<<<<<< HEAD
+ +    def apply(self, ctx: Comms) -> Any:
+ +        snapshot = ctx.registry.snapshot()
+ +        threads = snapshot.restart_candidates if self.all_ else (snapshot.require_active(self.name),)
+ +        targets = tuple(self.native.target(OwnerRestartSelection.capture(snapshot, thread.name), snapshot)
+ +                        for thread in threads)
+ +        results = ctx.owners.restart_owners(targets, launch_runtime=ctx.runtime)
+++=======
++     def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
++         results = ctx.owners.restart_owners(
++             None if self.all_ else [self.name], agent_bin=self.agent_bin, agent_args=self.agent_args
++         )
+++>>>>>>> origin/fix/895-session-envelope
+          return {"restarted": [asdict(result) for result in results]}
+  
+  
+@@@ -1318,12 -1389,10 +1332,12 @@@ class NewThreadCliCommand(CliCommand, d
+      def open_targets(cls, result: ThreadCreatedResult) -> tuple[str, ...]:
+          return (result.created,)
+  
+-     def apply(self, ctx: Comms) -> ThreadCreatedResult:
++     def apply(self, ctx: Comms, *, caller: ToolCaller) -> ThreadCreatedResult:
+          spec = self.spec_type(**{item.name: getattr(self, item.name)
+                                   for item in fields(self.spec_type)})
+ -        child = ctx.threads.create(spec, pi_bin=self.pi_bin)
+ +        native = replace(ctx.owners.native_defaults, binary=self.pi_bin,
+ +                         model=self.model, thinking_level=self.thinking_level)
+ +        child = ctx.threads.create(spec, native=native, runtime=ctx.runtime)
+          return ThreadCreatedResult(child.name, child.pid)
+  
+  
+@@@ -1520,9 -1586,8 +1534,14 @@@ class StartCliCommand(CliCommand)
+              return super().reconnect_targets(result)
+          return (result.thread,) if result.launched else ()
+  
+++<<<<<<< HEAD
+ +    def apply(self, ctx: Comms) -> Any:
+ +        return ctx.owners.start(self.name, native=self.native, launch_runtime=ctx.runtime)
+ +
+++=======
++     def apply(self, ctx: Comms, *, caller: ToolCaller) -> OwnerStartResult:
++         return ctx.owners.start(self.name)
+++>>>>>>> origin/fix/895-session-envelope
+  
+  
+  @dataclass(frozen=True, kw_only=True)
+diff --cc src/agent_comms/cohort_send.py
+index 51ddd7153,94067af24..000000000
+--- a/src/agent_comms/cohort_send.py
++++ b/src/agent_comms/cohort_send.py
+@@@ -16,9 -18,8 +18,14 @@@ from pathlib import Pat
+  
+  from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
+  
+++<<<<<<< HEAD
+ +from .message_bus import MessageBus
+ +from .messaging import Messaging
+ +from .native_pi import _private_session_dir
+++=======
++ from .comms import Comms
++ 
+++>>>>>>> origin/fix/895-session-envelope
+  
+  
+  def publish_one(
+@@@ -34,13 -35,13 +41,20 @@@
+      root = Path(root).absolute()
+      if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
+          raise PublicationActivationBlocked("cohort sender requires a private /var/tmp root")
+++<<<<<<< HEAD
+ +    _private_session_dir(root)
+ +    bus = MessageBus.for_root(root, private_initial_writes=True)
+ +    with bus.log.locked():
+ +        marker = bus.log._private_marker_unlocked()
+++=======
++     NativeSessionFiles.require_private_directory(root)
++     comms = Comms(root, private_initial_writes=True)
++     with comms.bus.log.locked():
++         marker = comms.bus.log._private_marker_unlocked()
+++>>>>>>> origin/fix/895-session-envelope
+      if marker.root_id != wire_root_id:
+          raise IdentityConflict("private initial wire root changed")
+ -    message = comms.messaging.send_initial_cohort(sender, target, body)
+ +    message = Messaging(root, bus.registry, bus).send_initial_cohort(sender, target, body)
+      return message.seq, message.message_id
+  
+  
+diff --cc src/agent_comms/login.py
+index d3f5b2a50,7d47d75dd..000000000
+--- a/src/agent_comms/login.py
++++ b/src/agent_comms/login.py
+@@@ -6,11 -6,9 +6,14 @@@ import subproces
+  from pathlib import Path
+  
+  from .native_arguments import NativeArguments
+++<<<<<<< HEAD
+ +from .launch_runtime import RestartEnvironment
+ +from .native_settings import NativeThreadDefaults
+++=======
+++>>>>>>> origin/fix/895-session-envelope
+  
+  
+ -def run_login(provider: str = "") -> int:
+ +def run_login(provider: str = "", *, settings: NativeThreadDefaults) -> int:
+      if provider and not re.fullmatch(r"[a-zA-Z0-9_-]+", provider):
+          raise ValueError("Invalid provider identifier")
+      env = os.environ.copy()
+diff --cc src/agent_comms/native_pi.py
+index e1f144f7c,7cb19fe2c..000000000
+--- a/src/agent_comms/native_pi.py
++++ b/src/agent_comms/native_pi.py
+@@@ -18,28 -18,39 +18,46 @@@ from contextlib import ExitStack, closi
+  from dataclasses import dataclass, field, fields
+  from functools import partial
+  from pathlib import Path
+- from typing import TYPE_CHECKING, Any, Literal, Protocol
++ from typing import Any, Literal
+  
++ from . import pi_events as pi
++ from .context_segments.doctrine import DoctrineSegment
+  from .coordination_database import CoordinationStore
+++<<<<<<< HEAD
+ +from .native_arguments import NativeArguments
+ +from .native_settings import NativeThreadDefaults
+ +from .native_session_files import NativeSessionFiles
+ +from .native_package import OWNER_INSTRUCTIONS
+++=======
++ from .coordination_errors import IdentityConflict
+++>>>>>>> origin/fix/895-session-envelope
+  from .launch_runtime import LaunchRuntime, RestartEnvironment
+  from .field_codec import FieldCodec
+- from .pi_rpc import unique_fields
++ from .fresh_private_session import FreshPrivateSession
++ from .native_arguments import NativeArguments
++ from .native_entries import NativeEntry, NativeEvidenceRead, NativeInputEvidenceRead, SessionEntry
++ from .native_errors import NativePiUnavailable
+  from .native_input_record import NativeInputCommit, NativeInputIdText
+- from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole
++ from .native_package import MANIFEST, OWNER_INSTRUCTIONS, NativePackageError, verify_native_package
++ from .native_session_files import NativeSessionFiles
++ from .native_session_reopen import SessionIdentityHelper
++ from .private_nk_entrypoint import PrivateNkLaunch
++ from .private_path import (
++     FileIdentity,
++     FileRevision,
++     PrivateDirectoryRole,
++     PrivateFileRole,
++     TrustedAncestorRole,
++ )
++ from .registry_store import RegistryStore
++ from .native_project import NativeProject, ManagedNativeProject, UnmanagedNativeProject
++ from .selected_session import SavedSelectedSession, SelectedSession
++ from .selected_tool_broker import NativeToolMode
++ from .thread_identity import ThreadIncarnation
++ from .turn_context import ContextSegment, TurnContext
++ from .turn_failure import TurnFailure
+  from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+  
+- if TYPE_CHECKING:
+-     from . import pi_events as pi
+-     from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
+-     from .selected_tool_broker import NativeToolMode
+-     from .fresh_private_session import FreshPrivateSession
+-     from .selected_session import SelectedSession
+-     from .turn_failure import TurnFailure
+- 
+  CAPABILITY = "pi-native-input-v1-live-only"
+  _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
+  
+diff --cc src/agent_comms/nk_foreground.py
+index d711ba1d5,9aba86dd3..000000000
+--- a/src/agent_comms/nk_foreground.py
++++ b/src/agent_comms/nk_foreground.py
+@@@ -101,8 -97,8 +103,13 @@@ def reserve_foreground_owner
+      package = Path(native_package).absolute()
+      _trusted_package(package)  # Reject before touching the recipient registry.
+      worktree = root / "work"
+++<<<<<<< HEAD
+ +    _private_session_dir(worktree)
+ +    comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
+++=======
++     NativeSessionFiles.require_private_directory(worktree)
++     comms = Comms(root)
+++>>>>>>> origin/fix/895-session-envelope
+      with comms.bus.log.certified_read() as source:
+          marker = source.marker
+      if marker.root_id != wire_root_id:
+diff --cc src/agent_comms/owner_launch.py
+index ff2c4a97c,6101eb710..000000000
+--- a/src/agent_comms/owner_launch.py
++++ b/src/agent_comms/owner_launch.py
+@@@ -9,11 -10,10 +9,15 @@@ from pathlib import Pat
+  from .child_process import Platform, ProcessIdentity
+  from .errors import RelationViolationError
+  from . import launch_runtime
+ -from .native_arguments import NativeArguments
+ +from .native_settings import NativeThreadDefaults
+  from .registry_document import RegistrySnapshot
+  from .threads import Thread
+++<<<<<<< HEAD
+ +from .thread_identity import OwnerIdentity
+ +from .restart_refusals import OwnerGenerationChangedRefusal, OwnerSelectionChangedRefusal
+++=======
++ from .thread_identity import ThreadIncarnation
+++>>>>>>> origin/fix/895-session-envelope
+  
+  
+  @dataclass(frozen=True, slots=True)
+@@@ -36,8 -35,7 +40,12 @@@ class RetainedOwnerLaunch
+          process = thread.require_process()
+          platform = Platform.current()
+          platform.require(process)
+++<<<<<<< HEAD
+ +        command = tuple(os.fsdecode(token) for token in
+ +                        Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0") if token)
+++=======
++         command = [os.fsdecode(value) for value in Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0") if value]
+++>>>>>>> origin/fix/895-session-envelope
+          observed_interpreter = command[0] if command else ""
+          if not observed_interpreter or (
+              interpreter is not None and observed_interpreter != interpreter
+@@@ -46,46 -44,24 +54,51 @@@
+          raw = Path(f"/proc/{process.pid}/environ").read_bytes()
+          values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
+          environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
+ +        native = NativeThreadDefaults.from_arguments(command)
+          platform.require(process)
+++<<<<<<< HEAD
+ +        route = environment.get(launch_runtime.RestartEnvironment.owner_key)
+ +        if not route:
+++=======
++         incarnation = ThreadIncarnation.from_arguments(command[1:]).require_recorded()
++         if not environment.get(NativeArguments.binary_key):
+++>>>>>>> origin/fix/895-session-envelope
+              raise RelationViolationError("Owner launch configuration cannot be verified")
+          # A worker's launch name may have been renamed since exec. The original
+          # snapshot owns that relation; a PID or spelling match cannot grant it.
+-         if snapshot.owner_identity(route) != snapshot.owner_identity(thread.name):
++         if not incarnation.current(snapshot) or incarnation.resolved(snapshot) != thread.incarnation:
+              raise RelationViolationError("Owner launch names another registry incarnation")
+          snapshot.require_owner_process(snapshot.owner_identity(thread.name), process)
+ -        result = cls(process, observed_interpreter, environment)
+ -        result.arguments  # Decode/validate malformed shell arguments before any fence.
+ -        return result
+ +        return cls(process, observed_interpreter, environment, native)
+  
+ -    @property
+ -    def binary(self) -> str:
+ -        return self.environment[NativeArguments.binary_key]
+ +
+ +@dataclass(frozen=True, slots=True)
+ +class OwnerRestartSelection:
+ +    identity: OwnerIdentity
+ +    process: ProcessIdentity
+ +    admission_generation: int
+ +
+ +    @classmethod
+ +    def capture(cls, snapshot: RegistrySnapshot, name: str):
+ +        owner = snapshot.require_active(name)
+ +        return cls(
+ +            snapshot.owner_identity(owner.name),
+ +            owner.require_process(),
+ +            snapshot.admission_generations[owner.name],
+ +        )
+ +
+ +    def recorded_native(self, snapshot: RegistrySnapshot) -> NativeThreadDefaults:
+ +        return RetainedOwnerLaunch.capture(self.require_current(snapshot), snapshot).native
+  
+      @property
+ -    def arguments(self) -> tuple[str, ...] | None:
+ -        arguments = self.environment.get(NativeArguments.arguments_key)
+ -        return tuple(shlex.split(arguments)) if arguments is not None else None
+ +    def name(self) -> str:
+ +        return self.identity.incarnation.name
+ +
+ +    def require_current(self, snapshot: RegistrySnapshot) -> Thread:
+ +        try:
+ +            snapshot.require_owner_process(self.identity, self.process)
+ +        except RelationViolationError as error:
+ +            raise OwnerSelectionChangedRefusal() from error
+ +        if snapshot.admission_generations[self.name] != self.admission_generation:
+ +            raise OwnerGenerationChangedRefusal()
+ +        return snapshot.require_active(self.name)
+diff --cc src/agent_comms/owner_lifecycle.py
+index 5bcbc2e09,5c44012e4..000000000
+--- a/src/agent_comms/owner_lifecycle.py
++++ b/src/agent_comms/owner_lifecycle.py
+@@@ -31,8 -31,8 +31,13 @@@ from .store_files import _store_loc
+  from .thread_identity import AdmissionIdentity, OwnerIdentity
+  from .thread_owned_state import ThreadOwnedState
+  from .threads import Thread
+++<<<<<<< HEAD
+ +from .owner_launch import OwnerRestartSelection
+ +from .owner_restart import OwnerRestartRequest, OwnerRestartResult, RestartTarget
+++=======
++ from .thread_identity import RecordedThreadIncarnation
++ from .tool_caller import ToolCaller
+++>>>>>>> origin/fix/895-session-envelope
+  
+  _LOG = logging.getLogger(__name__)
+  
+@@@ -283,11 -320,7 +288,15 @@@ class OwnerLifecycle
+              ):
+                  return
+              if snapshot.statuses[thread.name].active and thread.pid == os.getpid():
+++<<<<<<< HEAD
+ +                if RestartEnvironment.called_by(
+ +                    thread.name,
+ +                    canonicalize=lambda caller: self.registry.require(caller).name,
+ +                    environment=os.environ,
+ +                ):
+++=======
++                 if caller.owns_thread(thread, snapshot):
+++>>>>>>> origin/fix/895-session-envelope
+                      self._release_current_owner_unlocked(thread.name)
+                  else:
+                      self.registry.unregister(thread.name)
+@@@ -398,7 -432,7 +406,11 @@@
+          with owner_process_output(self.root, thread) as output:
+              ParentedProcess.launch(
+                  (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
+++<<<<<<< HEAD
+ +                 *native.cli_arguments, *thread.incarnation.cli_arguments),
+++=======
++                  *thread.incarnation.cli_arguments),
+++>>>>>>> origin/fix/895-session-envelope
+                  env=env,
+                  cwd=thread.worktree,
+                  output=output,
+diff --cc src/agent_comms/private_send_admission.py
+index d81c87f3b,a8114932c..000000000
+--- a/src/agent_comms/private_send_admission.py
++++ b/src/agent_comms/private_send_admission.py
+@@@ -150,7 -151,13 +151,17 @@@ class PrivateSendAdmission
+          follows cleanup; disconnect and unknown outcomes are never committed here.
+          The raw writer retains the sole one-use send token after durable admission.
+          """
+++<<<<<<< HEAD
+ +        registry = await Coordination.run_worker(self.bus.registry.snapshot)
+++=======
++         from .turn_context import TurnContext
++ 
++         project, session_context = await Coordination.run_worker(lambda: (
++             ManagedNativeProject.capture(self.bus.log.path.parent, self.bus._registry.snapshot(),
++                                          self.owner.thread),
++             TurnContext.session_segments(self.owner.thread),
++         ))
+++>>>>>>> origin/fix/895-session-envelope
+          try:
+              result = await TrackedTurnSession.execute(
+                  execution.native_package,
+diff --cc src/agent_comms/thread_identity.py
+index 527546c05,4a8bd158c..000000000
+--- a/src/agent_comms/thread_identity.py
++++ b/src/agent_comms/thread_identity.py
+@@@ -22,21 -22,15 +22,28 @@@ from .field_codec import FieldCodec, Fi
+  if TYPE_CHECKING:
+      from .registry_provenance import RegistryProvenance
+  
+ +T = TypeVar("T")
+ +
+  
+  @dataclass(frozen=True, slots=True)
+++<<<<<<< HEAD
+ +class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
+ +    value_flag: ClassVar[str] = "--thread-incarnation"
+ +    name: str
+ +
+ +    @property
+ +    @abstractmethod
+ +    def wire_birth(self) -> float:
+ +        """Only the external spelling of this member's birth evidence."""
+++=======
++ class ThreadIncarnation(WireValue, JsonFlagRecord, ABC):
++     name: str
++     created_at: float
++     value_flag: ClassVar[str] = "--thread-incarnation"
+++>>>>>>> origin/fix/895-session-envelope
+  
+      def to_wire(self) -> dict[str, str | float]:
+ -        return {"name": self.name, "created_at": self.created_at}
+ +        return {"name": self.name, "created_at": self.wire_birth}
+  
+      @classmethod
+      def schema(cls) -> dict:
+diff --cc src/agent_comms/tools.py
+index 8ad3782a6,9c3aa9ad6..000000000
+--- a/src/agent_comms/tools.py
++++ b/src/agent_comms/tools.py
+@@@ -895,9 -894,9 +894,15 @@@ class CommsStartTool(NativeOwnerCommand
+          return status.allows_owner_start(owner_pid=owner_pid)
+  
+      def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+++<<<<<<< HEAD
+ +        return comms.owners.start(
+ +            self.name, native=comms.owners.native_defaults, launch_runtime=comms.runtime,
+ +        )
+++=======
++         from .cli_commands import StartCliCommand
++ 
++         return StartCliCommand(name=self.name).apply(comms, caller=caller)
+++>>>>>>> origin/fix/895-session-envelope
+  
+  
+  @dataclass(frozen=True, kw_only=True)
+diff --cc src/agent_comms/worker.py
+index 52567bd6e,6fd6730d5..000000000
+--- a/src/agent_comms/worker.py
++++ b/src/agent_comms/worker.py
+@@@ -8,43 -8,48 +8,78 @@@ from .coordinator import Coordinatio
+  from contextlib import suppress
+  
+  from .acp import CommsAgent
+++<<<<<<< HEAD
+ +from .comms import Comms
+ +from .active_route import PinnedRoute
+ +from .private_nk_entrypoint import PrivateNkLaunch
+ +from .native_settings import NativeThreadDefaults
+ +from .child_process import ProcessIdentity
+ +from .launch_runtime import LaunchRuntime
+ +from .thread_identity import ThreadIncarnation
+ +from .store_files import _store_lock
+ +
+ +
+ +async def run(settings: NativeThreadDefaults, incarnation: ThreadIncarnation,
+ +              runtime: LaunchRuntime) -> None:
+++=======
++ from .child_process import ProcessIdentity
++ from .comms import wire
++ from .private_nk_entrypoint import PrivateNkLaunch
++ from .native_arguments import NativeArguments
++ from .launch_runtime import LaunchRuntime
++ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
++ from .store_files import _store_lock
++ 
++ 
++ async def run(incarnation: RecordedThreadIncarnation) -> None:
+++>>>>>>> origin/fix/895-session-envelope
+      # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
+ +    incarnation.require_recorded()
+      lower_priority()
+      private_nk = PrivateNkLaunch.current()
+      if private_nk is None:
+          raise ValueError("Headless execution requires a configured native route")
+++<<<<<<< HEAD
+ +    # Verify the selected package before creating or attaching the bus.
+ +    verified_cli = private_nk.validate()
+ +    route = PinnedRoute(private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package)
+ +    comms = Comms(route, runtime=runtime)
+ +    snapshot = await Coordination.run_worker(comms.registry.snapshot)
+ +    if not incarnation.current(snapshot):
+ +        raise ValueError("Owner launch does not match the current thread incarnation")
+ +    thread = snapshot.threads[snapshot.canonical_name(incarnation.name)]
+ +    name = thread.name
+ +    if (thread.process_identity is not None and thread.process_identity.alive()
+ +            and thread.process_identity != ProcessIdentity.capture(os.getpid())):
+ +        raise ValueError(f"Thread {name!r} already has a live owner")
+++=======
++     # Fail before wire creation/attach; verify this launch's native package once.
++     verified_cli = private_nk.validate()
++     comms = wire(private_nk.validated_root)
++     comms.owners.pin_private_nk_launch(
++         private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
++     )
++     def selected_owner():
++         snapshot = comms.registry.snapshot()
++         if not incarnation.current(snapshot):
++             raise ValueError("Worker launch belongs to a different thread incarnation")
++         thread = snapshot.threads[snapshot.canonical_name(incarnation.name)]
++         if (thread.process_identity is not None
++                 and thread.process_identity != ProcessIdentity.capture(os.getpid())
++                 and thread.process_identity.alive()):
++             raise ValueError(f"Thread {thread.name!r} already has a live owner")
++         return thread
++ 
++     thread = await Coordination.run_worker(selected_owner)
++     name = thread.name
+++>>>>>>> origin/fix/895-session-envelope
+      agent = CommsAgent(
+ -        comms,
+ +        comms, native=settings,
+          runtime_enabled=True,
+-         private_nk_wire_root_id=private_nk.wire_root_id if private_nk else None,
+-         private_nk_native_package=private_nk.native_package if private_nk else None,
+-         private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
++         private_nk_wire_root_id=private_nk.wire_root_id,
++         private_nk_native_package=private_nk.native_package,
++         private_selected_tool_intent=private_nk.selected_tool_intent,
+          private_nk_verified_cli=verified_cli,
+ -        agent_bin=NativeArguments.owner_launcher(LaunchRuntime.running()),
+      )
+      stopped = asyncio.Event()
+      loop = asyncio.get_running_loop()
+@@@ -108,14 -113,13 +143,24 @@@ def main() -> int
+      """
+      parser = argparse.ArgumentParser(
+          prog="agent-comms-agent", description=__doc__,
+++<<<<<<< HEAD
+ +        epilog="Select an existing owner by its recorded incarnation. Use agent-comms for commands.",
+ +    )
+ +    NativeThreadDefaults.add_cli_arguments(parser, required=True, dest="native_settings")
+ +    ThreadIncarnation.add_cli_arguments(parser, required=True, dest="thread_incarnation")
+ +    namespace = parser.parse_args()
+ +    runtime = LaunchRuntime.running()
+ +    with suppress(KeyboardInterrupt):
+ +        asyncio.run(run(namespace.native_settings, namespace.thread_incarnation, runtime))
+++=======
++         epilog="Select an existing owner by recorded identity. Use agent-comms for commands.",
++     )
++     ThreadIncarnation.add_cli_arguments(parser, required=True, dest="incarnation")
++     incarnation = parser.parse_args().incarnation.require_recorded()
++ 
++     with suppress(KeyboardInterrupt):
++         asyncio.run(run(incarnation))
+++>>>>>>> origin/fix/895-session-envelope
+      return 0
+  
+  

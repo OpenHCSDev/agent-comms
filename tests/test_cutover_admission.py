@@ -16,6 +16,9 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from test_private_human_ingress import _root
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 @pytest.mark.asyncio
@@ -39,7 +42,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
         for name, lookup in lookups.items():
             store.participants.register(lookup, name, name, committed=True)
         for _ in range(2):
-            reopened = Comms(comms.root)
+            reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
             WakeCandidateIndex(reopened.bus.log).maintain(rebuild=True)
             assert (
                 await _accept_visible_deliveries(
@@ -90,9 +93,9 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     source, store, _root_id, _lookups = _root(tmp_path)
     store.close()
     sent = source.messaging.send("alice", "bob", "retained message")
-    reader = Comms(tmp_path / "reader")
+    reader = Comms(LocalRoute(tmp_path / "reader"), runtime=LaunchRuntime.current())
     attached = reader.bus.history.attach(source.root)
-    snapshot = Comms(attached.root)
+    snapshot = Comms(LocalRoute(attached.root), runtime=LaunchRuntime.current())
     before = snapshot.bus.log.path.read_bytes()
     assert [message.message_id for message in snapshot.bus.log.full_history()] == [sent]
     with pytest.raises(RelationViolationError, match="read-only"):

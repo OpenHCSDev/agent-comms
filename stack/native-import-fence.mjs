@@ -116,8 +116,8 @@ export function denyPackageSubprocess() {
     throw deny('package subprocess disabled in immutable deployment');
 }
 
-/** SDK loader replacement: exact manifest entry, native import, NO Jiti fallback. */
-export async function loadApprovedExtension(path) {
+/** Resolve source aliases and packaged paths to their one declared extension. */
+export function resolveApprovedExtension(path) {
     // Resource discovery can preserve an outer installation-path alias; authority
     // is the exact canonical entry in the already verified deployment tree.
     const actual = realpathSync(path);
@@ -130,9 +130,14 @@ export async function loadApprovedExtension(path) {
                 createHash('sha256').update(readFileSync(source.path)).digest('hex') !== source.sha256)
                 throw deny(`extension source changed; prepare a new deployment: ${source.path}`);
         }
-        return (await import(pathToFileURL(declaration.entry).href)).default;
+        return declaration.entry;
     }
     const entry = checkedFile(actual);
     if (!entries.has(entry)) throw deny('extension entry not in deployment manifest');
-    return (await import(pathToFileURL(entry).href)).default;
+    return entry;
+}
+
+/** SDK loader replacement: exact manifest entry, native import, NO Jiti fallback. */
+export async function loadApprovedExtension(path) {
+    return (await import(pathToFileURL(resolveApprovedExtension(path)).href)).default;
 }

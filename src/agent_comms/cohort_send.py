@@ -18,8 +18,9 @@ from pathlib import Path
 
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
-from .comms import Comms
-
+from .message_bus import MessageBus
+from .messaging import Messaging
+from .native_session_files import NativeSessionFiles
 
 
 def publish_one(
@@ -36,12 +37,12 @@ def publish_one(
     if not opt_in or root == Path("/var/tmp") or not root.is_relative_to("/var/tmp"):
         raise PublicationActivationBlocked("cohort sender requires a private /var/tmp root")
     NativeSessionFiles.require_private_directory(root)
-    comms = Comms(root, private_initial_writes=True)
-    with comms.bus.log.locked():
-        marker = comms.bus.log._private_marker_unlocked()
+    bus = MessageBus.for_root(root, private_initial_writes=True)
+    with bus.log.locked():
+        marker = bus.log._private_marker_unlocked()
     if marker.root_id != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
-    message = comms.messaging.send_initial_cohort(sender, target, body)
+    message = Messaging(root, bus.registry, bus).send_initial_cohort(sender, target, body)
     return message.seq, message.message_id
 
 

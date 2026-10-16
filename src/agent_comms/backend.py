@@ -57,6 +57,7 @@ from .turn_usage import UsageAccount
 from .turn_watchdog import ProgressWatchdog, TurnWaitExpired
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .pi_native_backend import PersistentPiSession
     from .turn_context import ContextSegment
 
@@ -110,7 +111,7 @@ async def _maintenance_send_boundary(
 
 
 async def stream_agent_events(
-    agent_bin: str,
+    comms: Comms,
     agent_args: Sequence[str],
     task: str,
     cwd: str,
@@ -151,7 +152,7 @@ async def stream_agent_events(
             try:
                 launch = await Coordination.run_worker(partial(
                     persistent_session.custody.managed_launch,
-                    agent_bin,
+                    comms,
                     tuple(agent_args),
                     worktree=Path(cwd),
                     environment=env_extra,

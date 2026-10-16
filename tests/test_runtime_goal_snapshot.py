@@ -12,7 +12,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.acp_extension import TurnChangedUpdate, encode_updates
-from agent_comms.comms import wire
+
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     BlockedGoalAction,
@@ -28,6 +28,11 @@ from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
+from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.active_route import resolve_comms_route
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
@@ -35,8 +40,8 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 @pytest.fixture
 async def goal_owner(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
-    comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))

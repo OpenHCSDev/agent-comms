@@ -27,6 +27,10 @@ from agent_comms.coordinator import Coordination
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.comms import Comms
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 tmp_path = private_root_fixture
 
@@ -53,7 +57,7 @@ async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, di
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", race)
     with pytest.raises(StaleFence):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
         ).run()
     assert calls == []
 
@@ -152,7 +156,7 @@ async def test_actual_raw_writes_follow_committed_admission_without_global_exclu
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     with pytest.raises(StaleFence if revoke else NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
         ).run()
     if revoke:
         assert observed == []
@@ -259,7 +263,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         start = time.monotonic()
         task = asyncio.create_task(
             SelectedExecution(
-                root=root,
+                comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()),
                 wire_root_id=root_id,
                 owner_name=owner.name,
                 native_package=directory,
@@ -284,7 +288,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         if mode not in {"lifecycle", "preflight-drain"}:
             assert (
                 await SelectedExecution(
-                    root=root, wire_root_id=root_id, owner_name=owner.name, native_package=directory
+                    comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name=owner.name, native_package=directory
                 ).run()
                 is None
             )
@@ -398,7 +402,7 @@ async def test_short_admission_contention_sends_once_after_release(
     # admission only, not a native context or successful model response.
     with pytest.raises(StaleFence if revoke else NativePiUnavailable):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
         ).run()
     if revoke:
         assert not received.exists() or not received.read_text()
@@ -593,7 +597,7 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
     # the expected downstream error is NOT a post-write admission failure.
     with pytest.raises(NativePiUnavailable) as caught:
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            comms=Comms(LocalRoute(root), runtime=LaunchRuntime.current()), wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
         ).run()
     assert "post-write" not in str(caught.value)
     assert observations == [

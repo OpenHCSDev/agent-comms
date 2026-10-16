@@ -13,9 +13,13 @@ from pathlib import Path
 from agent_comms.acp import CommsClient
 from agent_comms.child_process import ParentedProcess, Platform
 from agent_comms.comms import Comms
-
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.runtime import socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
+from agent_comms.active_route import LocalRoute
+import dataclasses
+from agent_comms.launch_runtime import LaunchRuntime
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -27,24 +31,12 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     await fixture.run("Parent saved history for cold attachment")
     await fixture.persistent.close()
     fixture.provider.text = "Cold fork first reply received."
-    comms = Comms(fixture.root)
+    comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
-    arguments = [
-        "--provider",
-        "response-local",
-        "--model",
-        "fixture",
-        "--thinking",
-        "off",
-        "--offline",
-        "--no-extensions",
-        "--no-skills",
-        "--no-context-files",
-        "--no-prompt-templates",
-        "--no-tools",
-    ]
-    monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", shlex.join(arguments))
+    arguments = ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']
+    comms.owners.native_defaults = NativeThreadDefaults(binary=comms.owners.native_defaults.binary,
+                                                       arguments=tuple(arguments))
     with comms.bus.log.locked():
         root_id = comms.bus.log.read_metadata_unlocked().root_id
     comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
@@ -69,14 +61,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         return child
 
     monkeypatch.setattr(ParentedProcess, "launch", hold_worker)
-    client = CommsClient(
-        comms,
-        agent_bin=launcher,
-        agent_args=arguments,
-        auto_wake=False,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
-    )
+    client = CommsClient(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=launcher, arguments=tuple(arguments)), auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     updates = []
 
     class View:

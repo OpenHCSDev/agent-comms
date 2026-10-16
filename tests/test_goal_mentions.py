@@ -28,10 +28,13 @@ from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.active_route import LocalRoute
+from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.launch_runtime import LaunchRuntime
 
 
 def _wire(tmp_path: Path) -> Comms:
-    comms = Comms(tmp_path / "wire")
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
     for name, created in (("owner", 17001.0), ("peer", 17002.0), ("other", 17003.0)):
         comms.registry.declare(Thread(name, frozenset(), str(tmp_path), created_at=created))
     comms.registry.declare(
@@ -91,7 +94,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
     assert tool["collaborations"] == []
     assert tool["visible_collaborators"][0]["sources"] == ["goal_mention"]
     assert {item["token"] for item in tool["unresolved_goal_mentions"]} == {"owner", "unknown"}
-    reopened = Comms(comms.root)
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert _rows(reopened, "peer")[0][0].goal_contacts == (contact,)
     assert not comms.relationships.store.path.exists()
     assert comms.views.full_history() == []
@@ -268,7 +271,7 @@ def test_registry_write_failure_never_exposes_uncommitted_contact(
     with pytest.raises(OSError, match="injected registry write failure"):
         comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
     assert comms.registry.store.path.read_bytes() == before
-    fresh = Comms(comms.root)
+    fresh = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert fresh.registry.require("owner").goal is None
     assert _rows(fresh, "peer")[0] == ()
     assert not fresh.relationships.store.path.exists()
@@ -297,7 +300,7 @@ def test_old_writer_text_change_drops_derived_links_without_erasing_goal(tmp_pat
     raw["threads"]["owner"]["goal"]["text"] = "No mention"
     raw["threads"]["owner"]["goal"]["revision"] += 1
     path.write_text(json.dumps(raw))
-    reopened = Comms(comms.root)
+    reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert reopened.registry.require("owner").goal.text == "No mention"
     assert _rows(reopened, "owner")[0] == ()
     assert reopened.relationships.goal_contacts("owner")[0] == ()
