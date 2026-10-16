@@ -26,7 +26,7 @@ from .coordination_errors import IdentityConflict, StaleRevision
 from .input_attempt import ACPInputIdText, InputAttempt, ReservedInput
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
-from .store_files import _async_store_lock
+from .store_files import _store_lock
 from .coordinator import Coordination
 from .coordination_session import ReadNativeCoordinationSession
 from .turn_goal_permission import AcceptedGoalPermission
@@ -158,9 +158,8 @@ class QueuedInput:
         return 32 - sum(not document.all_started(source.keys) for source in sources)
 
     @classmethod
-    def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
+    def require_capacity(cls, inputs: InputDrain, sources: tuple[TurnInputSource, ...]) -> None:
         """Follow-ups cannot exceed the original live awaiting-start allowance."""
-        sources = tuple(inputs.following_sources.get(session_id, {}).values())
         if cls.remaining_capacity(inputs, sources) <= 0:
             raise RequestError.invalid_params(
                 {"reason": "Too many follow-up inputs awaiting their own user start."}
@@ -174,21 +173,23 @@ class QueuedInput:
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> AsyncIterator[tuple[Self, Thread, InputAttempt, ExitStack]]:
-        """Hold original wire custody and join reservation rollback through handoff.
-
-        The consumer transfers this original ExitStack only after binding its
-        live input, or into its existing longer turn-acquisition lifetime.
-        """
+        """Serialize local queue placement; reserve durable input in a worker."""
         async with AsyncExitStack() as rollback:
             custody = ExitStack()
             rollback.push_async_callback(Coordination.run_worker, custody.close)
-            async with _async_store_lock(inputs.comms._wire_lock_path):
-                cls.require_capacity(inputs, session_id)
-                item, owner, row = cls.capture(
-                    inputs, name, text=text, prompt=prompt, echo=echo,
-                    images=images, controller=controller, input_id=input_id,
-                    origin=origin, custody=custody,
-                )
+            async with inputs.queue_lock:
+                sources = tuple(inputs.following_sources.get(session_id, {}).values())
+
+                def capture():
+                    with _store_lock(inputs.comms._wire_lock_path):
+                        cls.require_capacity(inputs, sources)
+                        return cls.capture(
+                            inputs, name, text=text, prompt=prompt, echo=echo,
+                            images=images, controller=controller, input_id=input_id,
+                            origin=origin, custody=custody,
+                        )
+
+                item, owner, row = await Coordination.run_worker(capture)
                 yield item, owner, row, custody
 
     def place(
@@ -225,13 +226,20 @@ class QueuedInput:
         """Transfer this live acceptance under current authority; never recover disk work."""
         inputs = turns.inputs
         try:
-            async with _async_store_lock(inputs.comms._wire_lock_path):
+            async with inputs.queue_lock:
                 self.require_live_source(inputs, session_id)
-                snapshot = inputs.comms.registry.snapshot()
-                canonical = snapshot.canonical_name(name)
-                self.require_handoff(
-                    snapshot, canonical, inputs.dispositions.lookup(self.key), self.input_id,
-                )
+
+                def verify():
+                    with _store_lock(inputs.comms._wire_lock_path):
+                        snapshot = inputs.comms.registry.snapshot()
+                        canonical = snapshot.canonical_name(name)
+                        self.require_handoff(
+                            snapshot, canonical, inputs.dispositions.lookup(self.key), self.input_id,
+                        )
+                        return canonical
+
+                canonical = await Coordination.run_worker(verify)
+                self.require_live_source(inputs, session_id)
         except RelationViolationError as error:
             raise InputHandoffRefused(str(error)) from error
         await turns.run_agent_turn(
@@ -334,47 +342,48 @@ class DeliveredInput(QueuedInput):
         from .routing import ScheduledTurn
         from .turn_context import TurnContext
 
-        accepted = pending[:max(cls.remaining_capacity(inputs, sources), 0)]
-        if not accepted:
-            return
-        snapshot = inputs.comms.registry.snapshot()
-        canonical = snapshot.canonical_name(name)
-        owner = snapshot.threads[canonical]
-        context = QueuedInputContext.capture(owner, snapshot.admission_identity(canonical))
-        document = inputs.dispositions.read(tuple(
-            InputDispositions.bus_key(source.message, owner) for source, _ in accepted
-        ))
-        with Coordination(str(inputs.comms.root / "coordination.sqlite3")) as store:
-            for source, assignment in accepted:
-                message = source.message
-                key = InputDispositions.bus_key(message, owner)
-                if document.lookup(key).exists:
-                    continue
-                rendered = TurnContext.render_segments(
-                    (DeliveredMessageSegment.capture(source, assignment, owner),)
-                )
-                row = ReservedInput(
-                    key, message.seq, canonical, context.admission.admission_generation,
-                    message.target,
-                    ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
-                    origin=WireInputOrigin(root_id, message.reference),
-                )
-                with ExitStack() as custody:
-                    inputs.dispositions.reserve_originals(row, custody=custody)
-                    paused = store.assignments.transition_preengagement(
-                        assignment.assignment_id, DeferredAssignment,
-                        expected_revision=assignment.revision,
-                    ).value
-                    custody.callback(store.assignments.restore_unbound_delivery, paused)
-                    reserved.append((
-                        cls(
-                            text=row.source_text, echo=False, context=context,
-                            input_id=ACPInputIdText.new(), prompt=rendered.text,
-                            bus_key=key, message=message, assignment=paused,
-                        ),
-                        InputContent(text=rendered.text, contributions=rendered.contributions),
-                    ))
-                    custody.pop_all()
+        with _store_lock(inputs.comms._wire_lock_path):
+            accepted = pending[:max(cls.remaining_capacity(inputs, sources), 0)]
+            if not accepted:
+                return
+            snapshot = inputs.comms.registry.snapshot()
+            canonical = snapshot.canonical_name(name)
+            owner = snapshot.threads[canonical]
+            context = QueuedInputContext.capture(owner, snapshot.admission_identity(canonical))
+            document = inputs.dispositions.read(tuple(
+                InputDispositions.bus_key(source.message, owner) for source, _ in accepted
+            ))
+            with Coordination(str(inputs.comms.root / "coordination.sqlite3")) as store:
+                for source, assignment in accepted:
+                    message = source.message
+                    key = InputDispositions.bus_key(message, owner)
+                    if document.lookup(key).exists:
+                        continue
+                    rendered = TurnContext.render_segments(
+                        (DeliveredMessageSegment.capture(source, assignment, owner),)
+                    )
+                    row = ReservedInput(
+                        key, message.seq, canonical, context.admission.admission_generation,
+                        message.target,
+                        ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
+                        origin=WireInputOrigin(root_id, message.reference),
+                    )
+                    with ExitStack() as custody:
+                        inputs.dispositions.reserve_originals(row, custody=custody)
+                        paused = store.assignments.transition_preengagement(
+                            assignment.assignment_id, DeferredAssignment,
+                            expected_revision=assignment.revision,
+                        ).value
+                        custody.callback(store.assignments.restore_unbound_delivery, paused)
+                        reserved.append((
+                            cls(
+                                text=row.source_text, echo=False, context=context,
+                                input_id=ACPInputIdText.new(), prompt=rendered.text,
+                                bus_key=key, message=message, assignment=paused,
+                            ),
+                            InputContent(text=rendered.text, contributions=rendered.contributions),
+                        ))
+                        custody.pop_all()
 
     @staticmethod
     async def _restore_unplaced(
@@ -413,7 +422,7 @@ class DeliveredInput(QueuedInput):
         membership replace that lost object: any send binding or native row
         keeps the assignment deferred and therefore never replayed.
         """
-        async with _async_store_lock(inputs.comms._wire_lock_path):
+        async with inputs.queue_lock:
             name = inputs.sessions.require(session_id)
             live_keys = frozenset(
                 item.key for item in inputs.queued_inputs.get(session_id, {}).values()
@@ -428,34 +437,35 @@ class DeliveredInput(QueuedInput):
         comms: Comms, dispositions: InputDispositions,
         name: str, root_id: str, live_keys: frozenset[str],
     ) -> int:
-        """Own all recovery storage under the caller's joined wire exclusion."""
-        snapshot = comms.registry.snapshot()
-        owner = snapshot.require(name)
-        document = dispositions.unresolved(comms.registry.aliases_for(owner.name))
-        rows = {
-            reference: row
-            for reference, row in document.unbound_wire_inputs(root_id).items()
-            if row.key not in live_keys
-        }
-        if not rows:
-            return 0  # No work admits no SQLite connection, let alone a writer.
-        path = str(comms.root / "coordination.sqlite3")
-        with Coordination(path, session_type=ReadNativeCoordinationSession) as store:
-            assignments = store.assignments.recoverable_unbound_deliveries(
-                stable_thread_lookup(owner.created_at), frozenset(rows),
-            )
-        if not assignments:
-            return 0
-        with Coordination(path) as store:
-            dispositions.settle_unbound(tuple(rows[row.source].key for row in assignments))
-            restored = 0
-            for assignment in assignments:
-                try:
-                    store.assignments.restore_unbound_delivery(assignment)
-                except StaleRevision:
-                    continue
-                restored += 1
-            return restored
+        """Acquire, recover and release entirely inside the joined worker."""
+        with _store_lock(comms._wire_lock_path):
+            snapshot = comms.registry.snapshot()
+            owner = snapshot.require(name)
+            document = dispositions.unresolved(comms.registry.aliases_for(owner.name))
+            rows = {
+                reference: row
+                for reference, row in document.unbound_wire_inputs(root_id).items()
+                if row.key not in live_keys
+            }
+            if not rows:
+                return 0  # No work admits no SQLite connection, let alone a writer.
+            path = str(comms.root / "coordination.sqlite3")
+            with Coordination(path, session_type=ReadNativeCoordinationSession) as store:
+                assignments = store.assignments.recoverable_unbound_deliveries(
+                    stable_thread_lookup(owner.created_at), frozenset(rows),
+                )
+            if not assignments:
+                return 0
+            with Coordination(path) as store:
+                dispositions.settle_unbound(tuple(rows[row.source].key for row in assignments))
+                restored = 0
+                for assignment in assignments:
+                    try:
+                        store.assignments.restore_unbound_delivery(assignment)
+                    except StaleRevision:
+                        continue
+                    restored += 1
+                return restored
 
     @classmethod
     async def deliver_pending(
@@ -492,7 +502,7 @@ class DeliveredInput(QueuedInput):
         reserved: list[tuple[Self, InputContent]] = []
         async with AsyncExitStack() as rollback:
             rollback.push_async_callback(cls._restore_unplaced, inputs, session_id, reserved)
-            async with _async_store_lock(inputs.comms._wire_lock_path):
+            async with inputs.queue_lock:
                 sources = tuple(inputs.following_sources.get(session_id, {}).values())
                 await Coordination.run_worker(partial(
                     cls.reserve_pending, inputs, owner.name, root_id, pending, sources, reserved,
@@ -536,7 +546,7 @@ class DeliveredInput(QueuedInput):
 
 class InitialInput(QueuedInput):
     @classmethod
-    def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
+    def require_capacity(cls, inputs: InputDrain, sources: tuple[TurnInputSource, ...]) -> None:
         """A new original is not a following input in the live native queue."""
 
     @classmethod

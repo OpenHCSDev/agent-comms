@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from asyncio import CancelledError
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from functools import partial
 
 from .coordination_errors import StaleFence
+from .coordinator import Coordination
 from .native_pi import NativePiTerminalFailure, NativePiUnavailable
 from .private_send_admission import PrivateSendAdmission
 from .selected_participant import SelectedParticipant
@@ -20,10 +22,10 @@ class SelectedRequest:
     admission: PrivateSendAdmission
 
     @classmethod
-    def reserve(cls, participant, session, stage, token, prompt: RenderedInput):
+    async def reserve(cls, participant, session, stage, token, prompt: RenderedInput):
         return cls(
             participant,
-            PrivateSendAdmission.reserve(
+            await PrivateSendAdmission.reserve(
                 selected=participant,
                 stage=stage,
                 token=token,
@@ -32,47 +34,49 @@ class SelectedRequest:
             ),
         )
 
-    @contextmanager
-    def native_failures(self):
+    @asynccontextmanager
+    async def native_failures(self):
         try:
             yield
         except NativePiTerminalFailure as error:
             # The existing admission has already corroborated the live failure
             # and settled this stage after raw writer, child and tool cleanup.
-            publish_native_failure(
+            await Coordination.run_worker(partial(publish_native_failure,
                 self.participant, error.context.input_id, error.public_message, source_error=error
-            )
+            ))
             raise
         except NativePiUnavailable as error:
-            self._native_failure(error)
+            await self._native_failure(error)
             raise
         except CancelledError:
             # Native execution has unwound child/tool cleanup before the
             # reserved request sees cancellation of its abandoned result.
-            self._settle_unknown()
+            await self._settle_unknown()
             raise
 
-    def _settle_unknown(self) -> bool:
+    async def _settle_unknown(self) -> bool:
         try:
-            self.admission.stage.fail_unknown(
+            await self.admission.stage.fail_unknown(
                 self.participant.bus,
                 self.participant.owner,
                 self.participant.response_owner,
             )
-            self.participant.owner.require_registry(self.participant.comms.registry)
+            await Coordination.run_worker(partial(
+                self.participant.owner.require_registry, self.participant.comms.registry
+            ))
         except StaleFence:
             # A revoked owner cannot settle/publish for its successor. Recovery
             # retains the original UNKNOWN; this path never reconstructs input.
             return False
         return True
 
-    def _native_failure(self, error):
-        if not self._settle_unknown():
+    async def _native_failure(self, error):
+        if not await self._settle_unknown():
             return
-        publish_native_failure(
+        await Coordination.run_worker(partial(publish_native_failure,
             self.participant,
             self.admission.input_id,
             error.public_failure,
             native_response=error.rejected_response,
             source_error=error,
-        )
+        ))

@@ -16,6 +16,7 @@ from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
 from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_presentation import ThreadPresentationStatus
 from agent_comms.ui_model.changes import KeyedModel
 from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
@@ -43,7 +44,7 @@ class ThreadRowModel:
     title: str
     label: str
     summary: str
-    busy: bool
+    status: ThreadPresentationStatus
     model: str | None
     unread: UnreadPresentation
     active: bool
@@ -58,7 +59,7 @@ class ThreadRowModel:
         presentation = person.presentation
         return cls(
             person.thread.incarnation, presentation.title, presentation.label, presentation.summary,
-            presentation.busy, person.thread.model,
+            presentation.status, person.thread.model,
             (UnobservedUnread() if snapshot is None else
              person.thread.execution.prepare_conversation(PersonUnread(person, snapshot))),
             person.status.active, person.thread.execution,
@@ -177,7 +178,7 @@ class SidebarModel:
     @staticmethod
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
         threads = {person.thread.name: ThreadRowModel.of(person, snapshot) for person in snapshot.threads}
-        busy = frozenset(name for name, row in threads.items() if row.busy)
+        busy = frozenset(name for name, row in threads.items() if row.status.busy)
         channels = {view.channel.name: ChannelRowModel.of(view, snapshot, busy) for view in snapshot.channels}
         return channels, threads
 

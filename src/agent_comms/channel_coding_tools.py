@@ -7,6 +7,7 @@ Shell is not a filesystem sandbox; shell work must respect the injected claims.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass, field, replace
@@ -83,6 +84,7 @@ class CodingToolOwner:
     session_dir: Path
     input_id: str
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
+    check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
 
     def for_original(self, assignment, operation_id) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""
@@ -103,25 +105,31 @@ class CodingToolOwner:
             operation_id=operation_id,
         ))
 
-    def admit(self, round_number: int, call: CodingCall) -> None:
-        verify_sent_full_input(self.store, self.admission, self.owner_name, self.input_id)
-        verify_selected_wake(self.comms, self.store, self.admission, self.owner_name)
-        slot = call.slot(self.input_id, round_number)
-        consume_selected_slot(self.session_dir, slot, slot)
-        resource = call.tool.claim
-        if resource is not None:
-            owner = self.comms.registry.require(self.owner_name)
-            canonical = resource.normalized(Path(owner.worktree))
-            prior = self.claims.get(canonical)
-            claim_admission = (
-                prior.admission
-                if prior is not None
-                else replace(self.admission, operation_id=slot)
-            )
-            claimed = publish_selected_resource_claim(
-                self.comms, self.store, claim_admission, self.owner_name, resource
-            )
-            self.claims[canonical] = claimed
+    async def admit(self, round_number: int, call: CodingCall) -> None:
+        def check(store: Coordination) -> None:
+            verify_sent_full_input(store, self.admission, self.owner_name, self.input_id)
+            verify_selected_wake(self.comms, store, self.admission, self.owner_name)
+            slot = call.slot(self.input_id, round_number)
+            consume_selected_slot(self.session_dir, slot, slot)
+            resource = call.tool.claim
+            if resource is not None:
+                owner = self.comms.registry.require(self.owner_name)
+                canonical = resource.normalized(Path(owner.worktree))
+                prior = self.claims.get(canonical)
+                claim_admission = (
+                    prior.admission
+                    if prior is not None
+                    else replace(self.admission, operation_id=slot)
+                )
+                claimed = publish_selected_resource_claim(
+                    self.comms, store, claim_admission, self.owner_name, resource
+                )
+                self.claims[canonical] = claimed
+
+        # Shared original-input views keep one claim map. Serialize its checks;
+        # the native tools themselves remain free to execute in parallel.
+        async with self.check_lock:
+            await Coordination.run_async(self.store.session.path, check)
 
 
 @dataclass(frozen=True)
@@ -164,8 +172,8 @@ class CodingToolSocket(OwnerToolSocket[CodingCall]):
             raise SelectedToolDenied("Coding request is not authenticated")
         return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
 
-    def admit(self, round_number: int, call: CodingCall) -> None:
-        self.owner.admit(round_number, call)
+    async def admit(self, round_number: int, call: CodingCall) -> None:
+        await self.owner.admit(round_number, call)
 
     def failure_response(self, error: Exception) -> dict[str, object]:
         return {"ok": False, "error": str(error)}
