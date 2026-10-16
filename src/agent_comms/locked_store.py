@@ -9,12 +9,14 @@ import tempfile
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, ClassVar, Generic, TypeVar
+from typing import Any, ClassVar, Generic, TextIO, TypeVar
+from threading import RLock
 
 from .field_codec import FieldCodec
 from .store_files import _store_lock
+from .private_path import FileRevision
 
 T = TypeVar("T")
 
@@ -44,12 +46,15 @@ class JsonDocument(ABC, Generic[T]):
 
     def _read_unlocked(self) -> T:
         try:
-            text = self.path.read_text(encoding="utf-8")
-            return self._decode(json.loads(text))
+            with self.path.open(encoding="utf-8") as stream:
+                return self._read_opened(stream)
         except FileNotFoundError:
             return self.empty()
         except (OSError, ValueError, TypeError) as error:
             return self._unreadable(error)
+
+    def _read_opened(self, stream: TextIO) -> T:
+        return self._decode(json.load(stream))
 
     def _unreadable(self, error: Exception) -> T:
         """Strict by default; optional owners may declare a fail-closed value."""
@@ -149,6 +154,19 @@ class LockedStore(JsonDocument[T]):
     on another descriptor. Distinct outer locks (for example wire) are allowed.
     The append-only wire is not a document and must not use this abstraction.
     """
+
+    _read_values: dict[FileRevision, T] = field(default_factory=dict, init=False, compare=False, repr=False)
+    _read_lock: RLock = field(default_factory=RLock, init=False, compare=False, repr=False)
+
+    def _read_opened(self, stream: TextIO) -> T:
+        """The opened revision and its decoded value stay owned by this store."""
+        with self._read_lock:
+            revision = FileRevision.from_file(stream)
+            if revision not in self._read_values:
+                value = super(LockedStore, self)._read_opened(stream)
+                self._read_values.clear()
+                self._read_values[revision] = value
+            return self._read_values[revision]
 
     @contextmanager
     def locked(self, *, shared: bool = False, blocking: bool = True) -> Iterator[int]:

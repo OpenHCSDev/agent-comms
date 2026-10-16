@@ -14,7 +14,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import BinaryIO, ClassVar
+from typing import BinaryIO, TextIO, ClassVar
 from collections.abc import Iterator
 
 from .declared_family import DeclaredFamily
@@ -53,7 +53,7 @@ class FileRevision:
         )
 
     @classmethod
-    def from_file(cls, stream: BinaryIO) -> FileRevision:
+    def from_file(cls, stream: BinaryIO | TextIO) -> FileRevision:
         return cls.from_stat(os.fstat(stream.fileno()))
 
     @classmethod

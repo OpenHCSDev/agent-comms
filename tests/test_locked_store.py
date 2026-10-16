@@ -110,6 +110,43 @@ def test_current_wait_persistence_and_noop(tmp_path):
     assert store.read() == {}
 
 
+def test_same_opened_revision_reuses_the_decoded_value(tmp_path, monkeypatch):
+    store = GoalWaits(tmp_path / "goal_waits.json")
+    store.record(wait())
+    decode = GoalWaits._decode
+    calls = []
+
+    def observed(owner, data):
+        calls.append(data)
+        return decode(owner, data)
+
+    monkeypatch.setattr(GoalWaits, "_decode", observed)
+    first = store.read()
+    for _ in range(20):
+        assert store.read() is first
+    assert len(calls) == 1
+    GoalWaits(store.path).record(replace(wait(), revision=3))
+    other_writer_calls = len(calls)
+    second = store.read()
+    assert second is not first and second["goal"].revision == 3
+    assert store.read() is second
+    assert len(calls) == other_writer_calls + 1
+
+
+def test_bad_new_revision_never_returns_a_previous_value(tmp_path):
+    store = GoalWaits(tmp_path / "goal_waits.json")
+    store.record(wait())
+    assert store.read()["goal"] == wait()
+    store.path.write_text("{broken")
+    for _ in range(2):
+        with pytest.raises(ValueError):
+            store.read()
+    store.path.unlink()
+    assert store.read() == {}
+    store.record(replace(wait(), revision=3))
+    assert store.read()["goal"].revision == 3
+
+
 def test_mode_preserved_and_new_inode_published(tmp_path):
     store = GoalWaits(tmp_path / "goal_waits.json")
     store.record(wait())
@@ -127,7 +164,7 @@ def test_mode_preserved_and_new_inode_published(tmp_path):
 
 def test_unknown_wait_fields_are_rejected_without_rewriting_saved_data(tmp_path):
     store = GoalWaits(tmp_path / "goal_waits.json")
-    data = FieldCodec.encode({"goal": wait()})
+    data = FieldCodec.encode({"goal": wait()}, store.record_type)
     data["goal"]["future_field"] = {"not_authoritative_here": True}
     store.path.write_text(json.dumps(data))
     before = store.path.read_bytes()
@@ -193,7 +230,7 @@ def test_callback_and_encoding_fail_before_publication(tmp_path):
 
 def test_invalid_boundary_is_not_overwritten(tmp_path):
     store = GoalWaits(tmp_path / "goal_waits.json")
-    data = FieldCodec.encode({"goal": wait()})
+    data = FieldCodec.encode({"goal": wait()}, store.record_type)
     data["goal"]["revision"] = True
     text = json.dumps(data)
     store.path.write_text(text)
