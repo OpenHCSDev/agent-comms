@@ -245,8 +245,9 @@ async def test_cancelled_retirement_joins_exact_child_before_new_borrow(
 
 @pytest.mark.parametrize("failure", [TimeoutError, ChildRetirementCancelled])
 @pytest.mark.parametrize("already_done", [False, True])
+@pytest.mark.parametrize("gateway", [False, True])
 async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
-    tmp_path, failure, already_done
+    tmp_path, failure, already_done, gateway
 ):
     from native_backend_fixture import native_backend_fixture
     from agent_comms.native_custody import RetiringNative
@@ -260,7 +261,10 @@ async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
             def failed_resources():
                 calls.append("release")
                 raise original_error
-            child.resources.callback(failed_resources)
+            if gateway:
+                child.transport.callback(failed_resources)
+            else:
+                child.resources.callback(failed_resources)
             with pytest.raises(failure) as caught:
                 if already_done:
                     retiring = owner.persistent.custody.retire()
