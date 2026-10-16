@@ -65,15 +65,11 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         snapshot = comms.registry.snapshot()
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
-        target = queue.RestartTarget.capture(comms, launch.environment)
+        target = queue.RestartTarget.capture(comms, launch.environment, LaunchRuntime.current())
         old_runtime = LaunchRuntime.running()
-        old_target = queue.RestartTarget(
-            str(old_runtime.interpreter),
-            RestartEnvironment.inherit(comms.owners.restart_environment(
-                RestartEnvironment.inherit(os.environ).encode(), old_runtime
-            )),
-            comms.owners.restart_entrypoint(launch.binary, old_runtime),
-        )
+        old_target = queue.RestartTarget.capture(comms, launch.environment, old_runtime)
+        assert old_target.launch_runtime == old_runtime
+        assert old_target.agent_bin == comms.owners.restart_entrypoint(launch.binary, old_runtime)
         assert old_target != target
         old = queue.QueuedRestart(
             uuid.uuid4().hex, selection, launch.interpreter, old_target, queue.PendingRestart()
@@ -91,7 +87,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
             return read(self, path)
 
         monkeypatch.setattr(queue.RestartQueue, 'read', counted_read)
-        request = queue.enqueue(comms, owner.name)
+        request = queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.current())
         assert len(reads) == 1
         assert request.state.pending and request.id != old.id
         await asyncio.wait_for(queue.run(comms), 5)
@@ -101,7 +97,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         assert old.target.interpreter in states[old.id].reason
         assert isinstance(states[request.id], queue.PendingRestart)
         assert len(list(store.active_directory.glob('*.json'))) == 1
-        assert queue.enqueue(comms, owner.name) == request
+        assert queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.current()) == request
 
         # A changed selection, not just a changed target, is superseded too.
         changed = replace(request, selection=replace(
@@ -109,7 +105,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         ))
         with store.locked():
             store.save(changed)
-        replacement = queue.enqueue(comms, owner.name)
+        replacement = queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.current())
         assert replacement.id != request.id and replacement.state.pending
         assert isinstance(store.read(store.settled_path(changed)).state, queue.StaleRestart)
 
@@ -118,7 +114,7 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
             store.save(attempting)
         started = len(watchers)
         with pytest.raises(queue.RestartAlreadyAttemptingError):
-            queue.enqueue(comms, owner.name)
+            queue.enqueue(comms, owner.name, launch_runtime=LaunchRuntime.current())
         assert len(watchers) == started
         assert queue.cancel(comms, owner.name) == []
         assert store.read(store.active_path(owner.incarnation.require_recorded())) == attempting
@@ -259,7 +255,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         )
         try:
             await asyncio.wait_for(entered.wait(), 15)
-            request = queue.enqueue(comms, "worker")
+            request = queue.enqueue(comms, "worker", launch_runtime=LaunchRuntime.running())
             assert request.state.pending and request.selection.process == original.process_identity
             assert request.source_interpreter == str(source_runtime / "bin/python")
             assert request.target.interpreter == target_interpreter
@@ -328,7 +324,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         # The remaining controls exercise actual queue transitions and owner
         # signals synchronously, with no unattended background watcher race.
         monkeypatch.setattr(queue, "_start_watcher", lambda root, environment: None)
-        wrong_target = queue.enqueue(comms, "worker")
+        wrong_target = queue.enqueue(comms, "worker", launch_runtime=LaunchRuntime.running())
         wrong_target = replace(
             wrong_target,
             target=replace(
@@ -343,12 +339,12 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             queue.BlockedRestart,
         )
         assert comms.registry.require("worker").process_identity == replacement.process_identity
-        cancelled = queue.enqueue(comms, "worker")
+        cancelled = queue.enqueue(comms, "worker", launch_runtime=LaunchRuntime.running())
         (cancelled,) = queue.cancel(comms, "worker")
         assert isinstance(cancelled.state, queue.CancelledRestart)
         await asyncio.to_thread(queue.step, comms)
         assert comms.registry.require("worker").process_identity == replacement.process_identity
-        stale = queue.enqueue(comms, "worker")
+        stale = queue.enqueue(comms, "worker", launch_runtime=LaunchRuntime.running())
         await asyncio.to_thread(comms.owners.restart_owners, ["worker"], expected=stale.selection)
         changed = comms.registry.require("worker")
         owners.append(changed.process_identity)
@@ -359,7 +355,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             queue.StaleRestart,
         )
         assert comms.registry.require("worker").process_identity == changed.process_identity
-        uncertain = queue.enqueue(comms, "worker")
+        uncertain = queue.enqueue(comms, "worker", launch_runtime=LaunchRuntime.running())
         before_uncertain = fixture.session.read_bytes()
 
         def fail_after_retirement(*args, **kwargs):

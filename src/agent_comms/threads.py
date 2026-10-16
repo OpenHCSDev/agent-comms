@@ -194,13 +194,17 @@ class Thread(ThreadProvenance):
             service_tier=self.service_tier if service_tier is None else service_tier,
         )
 
+    def needs_model_observation(self) -> bool:
+        """Only an unset declaration needs a saved or live model observation."""
+        return self.model is None
+
     def initialized_native_configuration(
         self, *, model: str | None, thinking_level: str | None,
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
             self,
-            model=self.model if self.model is not None else model,
+            model=model if self.needs_model_observation() else self.model,
             thinking_level=(
                 self.thinking_level if self.thinking_level is not None else thinking_level
             ),
@@ -236,14 +240,19 @@ class Thread(ThreadProvenance):
             raise ValueError("Canonical saved session required")
         return self.session_file
 
-    def imported_sources(self):
-        """Absent native selection has no imported historical instruction sources."""
+    @property
+    def native_transcripts(self):
+        """The saved native session's records; a thread without one has none yet."""
         from pathlib import Path
         from .native_transcript import NativeTranscript
 
         if self.session_file is None:
             return ()
-        return NativeTranscript(Path(self.session_file)).imported_sources()
+        return (NativeTranscript(Path(self.session_file)),)
+
+    def imported_sources(self):
+        return tuple(source for transcript in self.native_transcripts
+                     for source in transcript.imported_sources())
 
     def require_idle(self) -> None:
         if self.active_turn is not None:

@@ -27,7 +27,7 @@ from .declared_family import DeclaredFamily
 from .audience_manifest import FrozenRecipient
 from .errors import RelationViolationError
 from .routing import TurnRouting
-from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
+from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
@@ -287,5 +287,5 @@ class AgentActivity:
             canonical = self.registry.require(thread).name
             self.runtime_info.observe(canonical, time.time(), observation)
 
-    def agent_info_of(self, thread: str) -> AgentRuntimeInfo | None:
-        return self.runtime_info.read().get(self.registry.require(thread).name)
+    def agent_info_of(self, thread: str) -> RuntimeInfo:
+        return self.runtime_info.for_thread(self.registry.require(thread).name)
