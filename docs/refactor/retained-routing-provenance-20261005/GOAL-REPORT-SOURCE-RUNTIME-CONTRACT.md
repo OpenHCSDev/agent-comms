@@ -16,8 +16,8 @@ observations remain in Git, not an executable compatibility path.
 RecordedOwnerRead separately owns current recorded acquisition and typed
 FileRevision proofs. It encodes RegistryDocument through that owner's declaration;
 there are no copied thread/alias grammars. Only codec-produced provenance is a
-JSON value. JsonValue handling remains with FieldCodec's existing JSON owner;
-#950's unresolved capability is not worked around in these tools.
+JSON value. JsonValue handling belongs to FieldCodec's existing JSON owner,
+integrated from main #979; these tools add no workaround or second validator.
 
 ## Durable old records
 
