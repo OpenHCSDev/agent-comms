@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 from .errors import RelationViolationError, UnregisteredThreadError
 from .thread_identity import ThreadIncarnation
 from .thread_provenance import ThreadProvenance
-
 
 Member = TypeVar("Member", bound=ThreadProvenance, covariant=True)
 
@@ -40,6 +39,12 @@ class RegistryNames(Generic[Member]):
     def canonical_name(self, name: str) -> str:
         """Resolve this namespace without requiring current membership."""
         return self.aliases.get(name, name)
+
+    def named_members(self) -> Iterator[tuple[str, Member]]:
+        """Original declarations under their canonical and retained alias names."""
+        yield from self.threads.items()
+        for alias in self.aliases:
+            yield alias, self.require(alias)
 
     def retired(self, name: str) -> bool:
         """Whether this namespace records that canonical ``name`` was declared and removed.
@@ -89,6 +94,8 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
     @staticmethod
     def capture(snapshot: RegistryProvenance) -> RegistryProvenance:
         return RegistryProvenance(
-            threads={name: ThreadProvenance.capture(thread) for name, thread in snapshot.threads.items()},
+            threads={
+                name: ThreadProvenance.capture(thread) for name, thread in snapshot.threads.items()
+            },
             aliases=dict(snapshot.aliases),
         )

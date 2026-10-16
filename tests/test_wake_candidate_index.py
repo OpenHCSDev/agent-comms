@@ -23,12 +23,14 @@ from agent_comms.coordination_tables.publications import canonical_publication_k
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
-from agent_comms.wake_policy import FullWake
+from agent_comms.typed_table import TypedTable
 from agent_comms.wake_candidate_index import (
+    CandidateTable,
     ProjectionRebuildRequiredError,
     ProjectionUnavailableError,
     WakeCandidateIndex,
 )
+from agent_comms.wake_policy import FullWake
 
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="private N/K bus requires POSIX")
 
@@ -343,7 +345,11 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
     index = WakeCandidateIndex(comms.bus.log)
     with pytest.raises(ProjectionUnavailableError) as failure:
         index.maintain(rebuild=True)
-    assert expected in str(failure.value.__cause__)
+    assert isinstance(failure.value.__cause__, RelationViolationError)
+    # The source owner refuses the rewritten cut before candidate decoding.
+    # Exercise the candidate decoder's separate record invariant directly.
+    with pytest.raises(ValueError, match=expected):
+        index._parse_row(rows[1], root_id, messages[0].seq)
     with pytest.raises(ProjectionUnavailableError):
         index.page(
             root_id=root_id,
@@ -361,6 +367,10 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
 def test_duplicate_private_response_key_rejected_by_unique_constraint(
     tmp_path: Path, first_batch_rows: int
 ) -> None:
+    """Exercise decoder/transaction invariants, not certify a rewritten bus."""
+    from agent_comms.private_path import FileRevision
+    from agent_comms.wire_log import OpenedWireSnapshot
+
     comms, root_id, lookup = _private(tmp_path)
     messages = [
         comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
@@ -370,53 +380,117 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
     rows[1:3] = [_as_response(row, root_id, "duplicate-execution") for row in rows[1:3]]
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus.log)
-    if first_batch_rows == 4:
-        with pytest.raises(
-            ProjectionUnavailableError, match="duplicate private response publication key"
-        ):
-            index.maintain(rebuild=True, max_rows=first_batch_rows)
-        with pytest.raises(ProjectionUnavailableError):
-            index.page(
-                root_id=root_id,
-                recipient_lookup=lookup["Alice"],
-                after_seq=0,
-                required_through_seq=messages[3].seq,
-            )
-        return
-    assert not index.maintain(rebuild=True, max_rows=first_batch_rows)
-    first = index.page(
-        root_id=root_id,
-        recipient_lookup=lookup["Alice"],
-        after_seq=0,
-        required_through_seq=messages[1].seq,
-    )
-    assert [candidate.source_seq for candidate in first.entries] == [m.seq for m in messages[:2]]
-    with sqlite3.connect(index.path) as db:
-        checkpoint = db.execute("SELECT * FROM candidate_checkpoint").fetchall()
-        recipients = db.execute("SELECT * FROM candidate").fetchall()
-        keys = db.execute("SELECT * FROM candidate_response_key").fetchall()
-    with pytest.raises(
-        ProjectionUnavailableError, match="duplicate private response publication key"
-    ):
-        index.maintain(max_rows=2)
-    with sqlite3.connect(index.path) as db:
-        assert db.execute("SELECT * FROM candidate_checkpoint").fetchall() == checkpoint
-        assert db.execute("SELECT * FROM candidate").fetchall() == recipients
-        assert db.execute("SELECT * FROM candidate_response_key").fetchall() == keys
-    with pytest.raises(ProjectionUnavailableError, match="stale"):
-        index.page(
-            root_id=root_id,
-            recipient_lookup=lookup["Alice"],
-            after_seq=0,
-            required_through_seq=messages[3].seq,
+    with comms.bus.log.path.open("rb") as stream, index._connect(index.path, readonly=False) as db:
+        source = OpenedWireSnapshot(
+            comms.bus.log._private_marker_unlocked(), 0, stream, FileRevision.from_file(stream)
         )
-    with pytest.raises(
-        RelationViolationError, match="Private bus checkpoint (root/inode/size|prefix tail) changed"
-    ):
+        stat = os.fstat(stream.fileno())
+        index._schema(db, create=True)
+        first_batch = index._replay_prefix(
+            source, 0, 0, max_rows=first_batch_rows, max_bytes=256 * 1024
+        )
+        if first_batch_rows == 4:
+            with (
+                pytest.raises(ProjectionUnavailableError,
+                              match="duplicate private response publication key"),
+                db,
+            ):
+                index._commit_batch(
+                    db, first_batch, stat, root_id,
+                    index._source_end(stream, first_batch.next_offset), rebuild=True,
+                )
+            assert db.execute("SELECT count(*) FROM candidate").fetchone()[0] == 0
+        else:
+            with db:
+                index._commit_batch(
+                    db, first_batch, stat, root_id,
+                    index._source_end(stream, first_batch.next_offset), rebuild=True,
+                )
+            first = index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
+                               after_seq=0, required_through_seq=messages[1].seq)
+            assert [candidate.source_seq for candidate in first.entries] == [
+                m.seq for m in messages[:2]
+            ]
+            saved = {
+                owner.declared_name: db.execute(f'SELECT * FROM "{owner.declared_name}"').fetchall()
+                for owner in TypedTable.members_with(CandidateTable)
+            }
+            second_batch = index._replay_prefix(
+                source, first_batch.next_offset, first_batch.last_seq,
+                max_rows=2, max_bytes=256 * 1024,
+            )
+            with (
+                pytest.raises(ProjectionUnavailableError,
+                              match="duplicate private response publication key"),
+                db,
+            ):
+                index._commit_batch(
+                    db, second_batch, stat, root_id,
+                    index._source_end(stream, second_batch.next_offset), rebuild=False,
+                )
+            assert all(db.execute(f'SELECT * FROM "{table}"').fetchall() == values
+                       for table, values in saved.items())
+    with pytest.raises(ProjectionUnavailableError):
+        index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
+                   after_seq=0, required_through_seq=messages[3].seq)
+    # Even explicit index rebuilding cannot authorize this rewritten source.
+    with pytest.raises(ProjectionUnavailableError):
+        index.maintain(rebuild=True)
+    with pytest.raises(RelationViolationError):
         comms.bus.log.read_delivery_cohort(root_id, messages[3].seq)
 
 
-def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) -> None:
+def test_candidate_decode_releases_writer_and_discards_a_losing_batch(tmp_path, monkeypatch):
+    comms, root_id, lookup = _private(tmp_path)
+    messages = [comms.messaging.send_initial_cohort("sender", "Alice", body)
+                for body in ("first", "second")]
+    index = WakeCandidateIndex(comms.bus.log)
+    replay = WakeCandidateIndex._replay_prefix
+    races = []
+
+    def another_writer(cls, source, *args, **kwargs):
+        if not races:
+            races.append(True)
+            # This is a real second SQL writer, admitted while the outer
+            # operation decodes. Its committed checkpoint must win intact.
+            assert not index.maintain(bootstrap_new=True, max_rows=1)
+        return replay(source, *args, **kwargs)
+
+    monkeypatch.setattr(WakeCandidateIndex, "_replay_prefix", classmethod(another_writer))
+    assert not index.maintain(rebuild=True)
+    assert index._verified_checkpoint(root_id).last_seq == messages[0].seq
+    first = index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
+                       after_seq=0, required_through_seq=messages[0].seq)
+    assert [entry.source_seq for entry in first.entries] == [messages[0].seq]
+    assert index.maintain()
+    completed = index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
+                           after_seq=0, required_through_seq=messages[-1].seq)
+    assert [entry.source_seq for entry in completed.entries] == [m.seq for m in messages]
+
+
+def test_maintenance_replays_its_captured_cut_not_a_later_partial_append(tmp_path, monkeypatch):
+    comms, root_id, lookup = _private(tmp_path)
+    message = comms.messaging.send_initial_cohort("sender", "Alice", "committed prefix")
+    index = WakeCandidateIndex(comms.bus.log)
+    replay = WakeCandidateIndex._replay_prefix
+    cuts = []
+
+    def interrupted_append(cls, source, *args, **kwargs):
+        cuts.append(source.boundary)
+        with comms.bus.log.path.open("ab") as output:
+            output.write(b'{"pending":')
+        return replay(source, *args, **kwargs)
+
+    monkeypatch.setattr(WakeCandidateIndex, "_replay_prefix", classmethod(interrupted_append))
+    assert index.maintain(rebuild=True)
+    assert index._verified_checkpoint(root_id).byte_offset == cuts[0]
+    assert [entry.source_seq for entry in index.page(
+        root_id=root_id, recipient_lookup=lookup["Alice"], after_seq=0,
+        required_through_seq=message.seq,
+    ).entries] == [message.seq]
+
+
+def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
     message = comms.messaging.send_initial_cohort("sender", "Alice", "first")
     index = WakeCandidateIndex(comms.bus.log)
@@ -424,14 +498,17 @@ def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) ->
     source = comms.bus.log.path
     with source.open("ab") as output:
         output.write(b'{"partial":')
-    with pytest.raises(ProjectionUnavailableError, match="incomplete tail"):
-        index.page(
-            root_id=root_id,
-            recipient_lookup=lookup["Alice"],
-            after_seq=0,
-            required_through_seq=message.seq,
-        )
-    with pytest.raises(ProjectionUnavailableError, match="incomplete"):
+    page = index.page(
+        root_id=root_id,
+        recipient_lookup=lookup["Alice"],
+        after_seq=0,
+        required_through_seq=message.seq,
+    )
+    assert [entry.source_seq for entry in page.entries] == [message.seq]
+    assert index._verified_checkpoint(root_id).last_seq == message.seq
+    # New preparation needs a committed source cut, unlike the saved-prefix
+    # page above. The original source owner refuses this uncommitted tail.
+    with pytest.raises(ProjectionUnavailableError):
         index.maintain()
     source.write_bytes(source.read_bytes().split(b"\n")[0] + b"\n")
     source.chmod(0o600)
@@ -446,25 +523,15 @@ def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) ->
             after_seq=0,
             required_through_seq=message.seq,
         )
-    with pytest.raises(ProjectionRebuildRequiredError):
-        index.maintain()
-    assert index.maintain(rebuild=True)
-    assert (
-        len(
-            index.page(
-                root_id=root_id,
-                recipient_lookup=lookup["Alice"],
-                after_seq=0,
-                required_through_seq=message.seq,
-            ).entries
-        )
-        == 1
-    )
+    for rebuild in (False, True):
+        with pytest.raises(ProjectionUnavailableError):
+            index.maintain(rebuild=rebuild)
+    # Rebuilding a disposable index cannot certify a replaced canonical bus.
 
 
 def _as_response(row, root_id, execution_id):
     """Build current declared response shape for raw-writer corruption tests."""
-    from agent_comms.bus_publication import initial_sideband, CommittedDelivery
+    from agent_comms.bus_publication import CommittedDelivery, initial_sideband
     from agent_comms.delivery_policy import KeyedResponseReceipt, ResponseDeliveryPolicy
     from agent_comms.field_codec import FieldCodec
     from agent_comms.wake import ControlClassification
