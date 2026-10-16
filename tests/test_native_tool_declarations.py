@@ -115,7 +115,9 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
         call = CodingCall.decode("isolated-call", request.declared_name, arguments)
         assert call.tool is request and call.arguments == arguments
         assert call.tool.claim is None
-    assert isinstance(ToolRequest.from_payload({"tool": "comms_send", "from": "source",
+    from agent_comms.field_codec import FieldCodec
+
+    assert isinstance(FieldCodec.decode(ToolRequest, {"tool": "comms_send", "from": "source",
         "to": "destination", "body": "decode-only"}), CommsSendTool)
     with pytest.raises(ValueError):
         ToolRequest.decode("read")

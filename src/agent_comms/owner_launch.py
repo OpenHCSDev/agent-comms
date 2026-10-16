@@ -75,12 +75,8 @@ class RestartEnvironment:
     owner_key: ClassVar[str] = "AGENT_COMMS_THREAD"
 
     @classmethod
-    def find_calling_thread(cls, environment: Mapping[str, str] = os.environ) -> str | None:
-        return environment.get(cls.owner_key) or None
-
-    @classmethod
     def calling_thread(cls, environment: Mapping[str, str] = os.environ) -> str:
-        caller = cls.find_calling_thread(environment)
+        caller = environment.get(cls.owner_key)
         if not caller:
             raise CallingThreadUnavailable(
                 f"Calling thread requires {cls.owner_key}."
@@ -95,7 +91,7 @@ class RestartEnvironment:
         *,
         environment: Mapping[str, str] = os.environ,
     ) -> bool:
-        caller = cls.find_calling_thread(environment)
+        caller = environment.get(cls.owner_key)
         return caller is not None and canonicalize(caller) == name
 
     def __post_init__(self) -> None:
@@ -178,7 +174,7 @@ class RetainedOwnerLaunch:
         values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
         platform.require(process)
-        route = RestartEnvironment.find_calling_thread(environment)
+        route = environment.get(RestartEnvironment.owner_key)
         if not route or not environment.get(NativeArguments.binary_key):
             raise RelationViolationError("Owner launch configuration cannot be verified")
         # A worker's launch name may have been renamed since exec. The original

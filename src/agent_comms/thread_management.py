@@ -22,7 +22,7 @@ from .registration import Registration
 from .thread_status import StoppedThreadStatus
 
 if TYPE_CHECKING:
-    pass
+    from .tool_caller import ThreadCaller
 from .agent_activity import AgentActivity
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
@@ -247,20 +247,16 @@ class ThreadManagement:
             )
             return self.registry._claim_unlocked(thread)
 
-    def rename_self(self, new_name: str) -> RenameThreadResult:
-        """Rename the caller's own running thread, retaining its old aliases."""
-        caller = RestartEnvironment.calling_thread()
+    def rename_self(self, new_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
+        """Rename the bound caller's own thread, retaining its old aliases."""
         with _store_lock(self._wire_lock_path):
-            if self.registry.require(caller).auto_title_pending and (
+            if self.registry.require(caller.name).auto_title_pending and (
                 len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
             ):
                 raise ValueError("Choose a concise topic title: at most 6 words and 48 characters.")
             return self._rename_thread_unlocked(
-                caller, new_name, title=new_name.replace("-", " ").replace("_", " ")
+                caller.name, new_name, title=new_name.replace("-", " ").replace("_", " ")
             )
-
-    def set_project_self(self, path: str) -> ProjectChangeResult:
-        return self.set_project(RestartEnvironment.calling_thread(), path)
 
     def set_project(self, name: str, path: str) -> ProjectChangeResult:
         """Move one thread's project, preserving its owner and conversation."""

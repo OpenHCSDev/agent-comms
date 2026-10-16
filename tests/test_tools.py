@@ -3,7 +3,16 @@ import re
 import pytest
 
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import ThreadCaller, NoThreadCaller, ToolCaller
 from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
+
+
+def test_tool_entry_decodes_caller_states_once():
+    assert ToolCaller.from_environment({}) == NoThreadCaller()
+    assert ToolCaller.from_environment({"AGENT_COMMS_THREAD": ""}) == NoThreadCaller()
+    assert ToolCaller.from_environment({"AGENT_COMMS_THREAD": "owner"}) == ThreadCaller("owner")
+    assert ToolCaller.from_actor(None) == NoThreadCaller()
+    assert ToolCaller.from_actor("owner") == ThreadCaller("owner")
 
 
 class TestToolCatalog:
@@ -12,37 +21,37 @@ class TestToolCatalog:
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
         before = comms.registry.snapshot()
-        result = invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b"})
+        result = invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b"}, caller=ThreadCaller("a"))
         assert result["collaboration"]["owner"] == "a"
         assert result["collaboration"]["note"] == ""
-        assert invoke_tool(comms, "comms_collaborations", {})["collaborations"] == [
+        assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"] == [
             result["collaboration"]
         ]
         monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
-        mirrored = invoke_tool(comms, "comms_collaborations", {})["collaborations"]
+        mirrored = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("b"))["collaborations"]
         assert len(mirrored) == 1
         assert (mirrored[0]["owner"], mirrored[0]["peer"]) == ("b", "a")
         invoke_tool(
-            comms, "comms_collaboration", {"action": "update", "peer": "a", "note": "Shared work"}
+            comms, "comms_collaboration", {"action": "update", "peer": "a", "note": "Shared work"}, caller=ThreadCaller("b")
         )
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        collaborations = invoke_tool(comms, "comms_collaborations", {})["collaborations"]
+        collaborations = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"]
         assert collaborations[0]["note"] == "Shared work"
         monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
-        invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "a"})
+        invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "a"}, caller=ThreadCaller("b"))
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        assert invoke_tool(comms, "comms_collaborations", {}) == {"collaborations": []}
+        assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a")) == {"collaborations": []}
         monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
-        invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "a"})
+        invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "a"}, caller=ThreadCaller("b"))
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
-        assert invoke_tool(comms, "comms_collaborations", {})["collaborations"][0]["peer"] == "b"
-        invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "b"})
+        assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("a"))["collaborations"][0]["peer"] == "b"
+        invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "b"}, caller=ThreadCaller("a"))
         assert comms.registry.snapshot() == before
         assert not comms.views.full_history()
 
     def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms, monkeypatch):
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
-        with pytest.raises(ValueError, match="AGENT_COMMS_THREAD"):
+        with pytest.raises(ValueError, match="thread caller"):
             invoke_tool(comms, "comms_collaborations", {})
         with pytest.raises(
             ValueError,
@@ -114,7 +123,8 @@ class TestToolCatalog:
             invoke_tool(comms, "comms_set_goal", {"text": "not authorized"})
 
     def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "sender")
+        # A tool consumes its bound caller, never a subsequently changed environment.
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "not-the-invoker")
         comms.registry.declare(Thread(name="sender", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="recipient", tags=frozenset(), worktree="/wt"))
         sent = comms.messaging.send_message("sender", "recipient", "track me")
@@ -125,7 +135,7 @@ class TestToolCatalog:
         assert all(row.message.reference != sent.reference for row in presentation.notifications)
         assert [row.message.reference for row in presentation.sent_notifications] == [sent.reference]
 
-        result = invoke_tool(comms, "comms_threads", {})
+        result = invoke_tool(comms, "comms_threads", {}, caller=ThreadCaller("sender"))
         assert [
             (
                 row["message"]["seq"],
@@ -172,7 +182,7 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
         viewer: str = tool_field("Viewing thread")
         include_body: bool = tool_field("Include message bodies", default=False)
 
-        def apply(self, comms):
+        def apply(self, comms, caller: ToolCaller):
             messages = comms.bus.inbox(self.viewer, self.target)
             return {
                 "count": len(messages),
