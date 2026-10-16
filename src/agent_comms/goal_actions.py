@@ -163,6 +163,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             return goal
         self.before_publish(goal, ctx)
         goal = ctx.goals.write_goal(ctx.thread, goal, ctx.completed)
+        self.after_publish(goal, ctx)
         if not self.preserve_wait and ctx.thread.goal is not None:
             ctx.goals.waits.clear(ctx.thread.goal.id)
         return goal
@@ -171,6 +172,9 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
     def change(self, ctx: GoalActionContext) -> Goal | None: ...
 
     def before_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
+        pass
+
+    def after_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
         pass
 
 
@@ -365,6 +369,9 @@ class CompletedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, 
 
     def next_state(self, ctx: GoalActionContext) -> GoalState:
         return CompletedGoal()
+
+    def after_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
+        goal.author.complete_problem(ctx.goals, GoalRef(ctx.thread.incarnation, goal.id))
 
 
 @dataclass(frozen=True, kw_only=True)

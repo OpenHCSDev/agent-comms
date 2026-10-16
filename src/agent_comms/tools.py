@@ -623,7 +623,7 @@ class CommsTodoAssignTool(ThreadToolRequest):
         todo = TodoStore(comms.root).assign(self.id, expected_revision=self.expected_revision,
             owner=comms.registry.require(self.owner), parent=comms.registry.require(caller.name),
             generation=self.generation, deadline=Deadline(self.deadline), goals=comms.goals)
-        return {"todo": FieldCodec.encode(todo)}
+        return todo.order_result(comms.goals)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -642,7 +642,7 @@ class CommsTodoTransferTool(ThreadToolRequest):
             previous=self.previous, owner=comms.registry.require(self.owner),
             parent=comms.registry.require(caller.name), generation=self.generation,
             deadline=Deadline(self.deadline), goals=comms.goals)
-        return {"todo": FieldCodec.encode(todo)}
+        return todo.order_result(comms.goals)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -657,7 +657,7 @@ class CommsTodoCompleteTool(ThreadToolRequest):
         todo = TodoStore(comms.root).complete(self.id, expected_revision=self.expected_revision,
             actor=comms.registry.require(caller.name), progress=self.progress, goals=comms.goals,
             actor_kind=ModelInvocable)
-        return {"todo": FieldCodec.encode(todo)}
+        return todo.order_result(comms.goals)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -993,10 +993,8 @@ class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
         return status.allows_owner_start(owner_pid=owner_pid)
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import StartCliCommand
-
-        return StartCliCommand(name=self.name).apply(comms)
+    def apply(self, comms: Comms, caller: ToolCaller) -> object:
+        return comms.owners.start(self.name)
 
 
 @dataclass(frozen=True, kw_only=True)

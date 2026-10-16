@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from math import isfinite
 from pathlib import Path
+import logging
 from typing import Literal
 from abc import abstractmethod
 
 from .declared_family import DeclaredFamily
+from .coordination_errors import PublicationUncertain
 from .thread_identity import ThreadIncarnation
 
 from .field_codec import FieldCodec
@@ -16,6 +18,8 @@ from .goal_states import ActiveGoal, GoalState
 from .goal_progress import GoalProgress, TextGoalProgress
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .message_reference import MessageReference
+
+_LOG = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +30,12 @@ class GoalRef:
     def __post_init__(self):
         self.owner.require_recorded()
         GoalRevision(self.goal_id, 0)
+
+    def require_current(self, registry) -> Goal:
+        thread = registry.require(self.owner.name)
+        if thread.incarnation != self.owner:
+            raise ValueError("Goal reference owner incarnation changed.")
+        return thread.require_goal(self.goal_id)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -146,6 +156,9 @@ class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
         raise ValueError("This goal is not a problem-bound order.")
 
     @abstractmethod
+    def complete_problem(self, goals, reference: GoalRef) -> None: ...
+
+    @abstractmethod
     def require_self_direction(self) -> None: ...
 
     @abstractmethod
@@ -159,7 +172,9 @@ class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
     def revision_count(self) -> int: ...
 
     @abstractmethod
-    def notification_targets(self, registry) -> tuple[ThreadIncarnation, ...]: ...
+    def notification_targets(
+        self, registry, root: Path, *, new_order: bool
+    ) -> tuple[ThreadIncarnation, ...]: ...
 
     @property
     @abstractmethod
@@ -181,6 +196,9 @@ class SelfDirectedGoalAuthor(GoalAuthor):
     def require_current_order(self, root, goal):
         pass
 
+    def complete_problem(self, goals, reference):
+        pass
+
     def require_self_direction(self):
         pass
 
@@ -194,7 +212,7 @@ class SelfDirectedGoalAuthor(GoalAuthor):
     def revision_count(self):
         return 0
 
-    def notification_targets(self, registry):
+    def notification_targets(self, registry, root, *, new_order):
         return ()
 
     @property
@@ -315,16 +333,21 @@ class Deadline(GoalDeadline):
 
 
 class GoalNotice(DeclaredFamily, affix="GoalNotice"):
+    @classmethod
+    def publish(cls, bus, message, target: ThreadIncarnation) -> GoalNotice:
+        try:
+            # Core publication must not implicitly answer the unit's input.
+            published = bus.publisher.publish_ordinary(message)
+            return SentGoalNotice(published.reference)
+        except PublicationUncertain as error:
+            # Only the publisher's explicit uncertainty becomes this result;
+            # programming errors and invalid requests must remain visible.
+            _LOG.exception("Order saved; notification unconfirmed; no automatic resend")
+            return UnconfirmedGoalNotice(target, f"{type(error).__name__}: {error}")
+
     @property
     @abstractmethod
     def summary(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class NoGoalNotice(GoalNotice):
-    @property
-    def summary(self):
-        return "No commander notice recorded"
 
 
 @dataclass(frozen=True)
@@ -369,8 +392,7 @@ class Goal:
     delivery_time: EventTime = field(
         default_factory=UnrecordedEventTime, metadata={"wire_omit_default": True}
     )
-    notice: GoalNotice = field(default_factory=NoGoalNotice,
-                               metadata={"wire_omit_default": True})
+    notices: tuple[GoalNotice, ...] = field(default=(), metadata={"wire_omit_default": True})
 
     def with_text(self, text, owner, registry, *, author: GoalAuthor):
         from .goal_mentions import bind_goal_mentions
@@ -388,6 +410,16 @@ class Goal:
         if self.mention_source is None:
             raise ValueError("This goal has no recorded author; it cannot be treated as self-directed.")
         return self.mention_source.author
+
+    def notification_targets(
+        self, registry, root: Path, *, previous: Goal | None
+    ) -> tuple[ThreadIncarnation, ...]:
+        source = self.mention_source
+        return () if source is None else source.author.notification_targets(
+            registry, root, new_order=not self.same_order_as(previous))
+
+    def same_order_as(self, other: Goal | None) -> bool:
+        return other is not None and self.id == other.id
 
     def after_failed_turn(self, diagnostic: str) -> Goal:
         return self._failure_projection(

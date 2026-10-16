@@ -1141,7 +1141,7 @@ class TodoAssignCliCommand(CliCommand, declared_name="todo-assign"):
         todo = TodoStore(ctx.root).assign(self.id, expected_revision=self.expected_revision,
             owner=ctx.registry.require(self.owner), parent=ctx.registry.require(self.parent),
             generation=self.generation, deadline=Deadline(self.deadline), goals=ctx.goals)
-        return {"todo": FieldCodec.encode(todo)}
+        return todo.order_result(ctx.goals)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1160,7 +1160,7 @@ class TodoTransferCliCommand(CliCommand, declared_name="todo-transfer"):
             previous=self.previous, owner=ctx.registry.require(self.owner),
             parent=ctx.registry.require(self.parent), generation=self.generation,
             deadline=Deadline(self.deadline), goals=ctx.goals)
-        return {"todo": FieldCodec.encode(todo)}
+        return todo.order_result(ctx.goals)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1175,7 +1175,7 @@ class TodoCompleteCliCommand(CliCommand, declared_name="todo-complete"):
         todo = TodoStore(ctx.root).complete(self.id, expected_revision=self.expected_revision,
             actor=ctx.registry.require(self.actor), progress=self.progress, goals=ctx.goals,
             actor_kind=OwnerInvocable)
-        return {"todo": FieldCodec.encode(todo)}
+        return todo.order_result(ctx.goals)
 
 
 @dataclass(frozen=True, kw_only=True)

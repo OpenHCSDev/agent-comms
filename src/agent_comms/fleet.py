@@ -103,6 +103,7 @@ class UnitProgress(DeclaredFamily, affix="UnitProgress"):
 
 class DoneUnitProgress(UnitProgress):
     priority = 0
+    notifies_commander = True
     summary = "Works in app"
 
     @classmethod

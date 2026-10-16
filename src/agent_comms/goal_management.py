@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from .goal_actions import GoalAction, RuntimeInvocable
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
-from .coordination_errors import StaleFence, PublicationUncertain
+from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
@@ -26,7 +26,11 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
 from .goal_presentation import GoalExecution, GoalWaitTarget
-from .goals import Goal
+from .goals import Goal, GoalNotice
+from .activity import ObservedActivity
+from .fleet import UnitObservation
+from .messages import Message, AlertKind
+from .recorded_time import RecordedEventTime
 from .message_bus import MessageBus
 from .store_files import _store_lock
 from .threads import Thread
@@ -53,8 +57,6 @@ class Goals:
                 yield completed
 
     def _observation(self, snapshot, thread, event, at):
-        from .fleet import UnitObservation
-
         owner = snapshot.owner_identity(thread.name)
         return UnitObservation(thread, self.agents._observed(thread, owner, event),
                                thread.execution.latest_tool(self.root, thread), at)
@@ -65,15 +67,12 @@ class Goals:
 
     def write_goal(self, thread, goal, completed):
         """The work-goal writer; callers hold writing() custody."""
-        from .recorded_time import RecordedEventTime
-
         if goal is not None:
             goal = replace(goal, work_time=RecordedEventTime(time.time()))
         snapshot = self.registry.snapshot()
         event = self.agents.activity.current(thread.name, active=True)
         self.registry.register(replace(thread, goal=goal), self.registry.status(thread.name))
-        if (goal is not None and goal.mention_source is not None
-                and goal.author.notification_targets(snapshot)):
+        if goal is not None and goal.notification_targets(snapshot, self.root, previous=thread.goal):
             before = self._observation(snapshot, thread, event,
                                        self._previous_at(thread.goal, event)
                                        if thread.goal is not None else event.timestamp)
@@ -88,11 +87,8 @@ class Goals:
         before_event, after_event = change
         thread = snapshot.threads[after_event.thread]
         goal = thread.goal
-        if (goal is None or goal.mention_source is None
-                or not goal.author.notification_targets(snapshot)):
+        if goal is None or not goal.notification_targets(snapshot, self.root, previous=goal):
             return
-        from .fleet import UnitObservation
-        from .activity import ObservedActivity
 
         # The original event owns the previous phase. Projecting it through
         # the just-finished native lease would rewrite busy history as idle.
@@ -104,11 +100,10 @@ class Goals:
         self._notify_transition(before, after)
 
     def _notify_transition(self, before, after):
-        from .goals import SentGoalNotice, UnconfirmedGoalNotice
-        from .messages import Message, AlertKind
-
         progress = after.progress
-        if not progress.notifies_commander or type(before.progress) is type(progress):
+        goal = after.thread.require_goal()
+        same_order = goal.same_order_as(before.thread.goal)
+        if same_order and (not progress.notifies_commander or before.progress == progress):
             return
         original = after.thread.incarnation
         with _store_lock(self._wire_lock_path):
@@ -116,26 +111,24 @@ class Goals:
             if not original.current(snapshot):
                 return
             unit = snapshot.require(original.name)
-            for target in after.goal.author.notification_targets(snapshot):
-                commander = snapshot.require(target.name)
+            results = []
+            summary = progress.summary if same_order else "Order assigned"
+            for target in goal.notification_targets(snapshot, self.root, previous=before.thread.goal):
                 message = Message(
-                    sender=unit.name, target=commander.name, type=AlertKind,
+                    sender=unit.name, target=target.name, type=AlertKind,
                     timestamp=after.observed_at,
-                    body=f"{unit.name}: {progress.summary}. Goal {after.goal.id}: {after.goal.text}",
+                    body=f"{unit.name}: {summary}. Goal {goal.id}: {goal.text}",
                 )
-                try:
-                    # A Core notice must not implicitly answer the unit's input.
-                    published = self.bus.publisher.publish_ordinary(message)
-                    result = SentGoalNotice(published.reference)
-                except PublicationUncertain as error:
-                    result = UnconfirmedGoalNotice(target, f"{type(error).__name__}: {error}")
-                    _LOG.exception("State saved; commander notice unconfirmed; no automatic resend")
-                current = self.registry.require(unit.name)
-                if current.goal is not None and current.goal.id == after.goal.id:
-                    # Communication receipts do not reset the work clock.
-                    self.registry.register(replace(current, goal=replace(
-                        current.goal, notice=result, revision=current.goal.revision + 1,
-                    )), self.registry.status(current.name))
+                results.append(GoalNotice.publish(self.bus, message, target))
+            current = self.registry.require(unit.name)
+            current_goal = current.goal
+            if goal.same_order_as(current_goal):
+                # Keep every recipient's result, including UNKNOWN; the last
+                # successful send must not erase an earlier uncertain send.
+                # Communication results do not reset the work clock.
+                self.registry.register(replace(current, goal=replace(
+                    current_goal, notices=tuple(results), revision=current_goal.revision + 1,
+                )), self.registry.status(current.name))
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
