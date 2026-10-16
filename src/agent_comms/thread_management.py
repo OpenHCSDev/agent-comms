@@ -627,17 +627,10 @@ class ThreadManagement:
 
 
     def create(self, spec: NewThreadSpec) -> Thread:
-<<<<<<< HEAD
         """The selected Comms runtime prepares the copy and starts the child."""
         runtime = self.comms.runtime
         runtime.require_available()
         with spec.prepared(self) as child:
-=======
-        """Prepare the session, then register and launch the thread with its task as first input."""
-        resolved_bin = NativeArguments.configured_binary()
-        runtime = LaunchRuntime.current()
-        with spec.prepared(self, resolved_bin, runtime) as child:
->>>>>>> origin/main
             # A new incarnation's inbox already starts at its creation time
             # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
             child = self.registry._declare_unlocked(child)
@@ -645,12 +638,8 @@ class ThreadManagement:
             key = f"acp:{uuid4().hex}" if spec.task else None
             try:
                 owned = self.owners._launch_owner_unlocked(
-<<<<<<< HEAD
                     replace(child, model=self.resolve_thread_model(child.name)),
                     self.comms.settings, startup_input_key=key, launch_runtime=runtime,
-=======
-                    child, resolved_bin, startup_input_key=key, launch_runtime=runtime,
->>>>>>> origin/main
                 )
                 if key is not None:
                     InputDispositions(self.root).record(

@@ -27,13 +27,8 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     session.write_text('{"type":"session","id":"fixture"}\n')
     attached = comms.threads.attach_session(owner, str(session))
     assert attached.process_identity == identity
-<<<<<<< HEAD
-    assert Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current()).registry.require(owner.name) == attached
-    unbound = comms.threads.attach_session(owner.name, str(session), pid=0)
-=======
-    assert wire(tmp_path).registry.require(owner.name) == attached
+    assert Comms(comms.route, runtime=comms.runtime).registry.require(owner.name) == attached
     unbound = comms.threads.attach_session(attached, str(session), pid=0)
->>>>>>> origin/main
     assert unbound.process_identity is None and unbound.pid == 0
     rebound = comms.threads.attach_session(unbound, str(session), pid=os.getpid())
     assert rebound.process_identity == identity

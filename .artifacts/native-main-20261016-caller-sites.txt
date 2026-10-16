@@ -1,0 +1,8 @@
+src/agent_comms/tools.py:126:    def invoke(cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller = NoThreadCaller()) -> JsonObject:
+src/agent_comms/tools.py:1002:def invoke_tool(comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller = NoThreadCaller()) -> JsonObject:
+src/agent_comms/tools.py:1021:    return tool.invoke(comms, bound, caller=ToolCaller.from_actor(comms, actor))
+src/agent_comms/runtime_requests/__init__.py:383:        corrected = await Coordination.run_worker(partial(request.apply, ctx.server.agent._comms, caller=NoThreadCaller()))
+src/agent_comms/tool_caller.py:49:        namespace.caller = NoThreadCaller()
+src/agent_comms/tool_caller.py:63:        return ThreadCaller(comms.registry.require(actor).incarnation) if actor else NoThreadCaller()
+src/agent_comms/tool_caller.py:88:class NoThreadCaller(ToolCaller):
+src/agent_comms/tool_caller.py:121:class ThreadCaller(JsonFlagRecord, ToolCaller):

@@ -11,7 +11,6 @@ from .runtime_socket import RuntimeSocket
 import argparse
 import asyncio
 import json
-import asyncio
 import os
 import re
 import shlex
@@ -36,11 +35,7 @@ from .tools import invoke_tool, tool_catalog
 from .field_codec import FieldCodec
 from .comms import Comms
 from .config_options import (
-<<<<<<< HEAD
     CatalogConfigOption, CatalogSelection, ConfigChoice, ConfigOptions,
-=======
-    CatalogConfigOption, CatalogSelection, ConfigOptions,
->>>>>>> origin/main
     ModelConfigOption, ThinkingLevelConfigOption,
 )
 from .declared_family import DeclaredFamily
@@ -120,43 +115,6 @@ def _message_reference(value: str) -> dict[str, object]:
     return {"seq": int(sequence), "message_id": message_id}
 
 
-<<<<<<< HEAD
-=======
-def option(
-    *flags: str,
-    default: Any = MISSING,
-    default_factory: Any = MISSING,
-    group: str | None = None,
-    normalize: Callable[..., Any] | None = None,
-    wire_name: str | None = None,
-    parser_default: Any = MISSING,
-    parser_default_factory: Any = MISSING,
-    multiline: bool = False,
-    target_bound: bool = False,
-    editor_format: Callable[[Any], str] | None = None,
-    catalog: type[CatalogConfigOption] | None = None,
-    **parser_options: Any,
-) -> Any:
-    """One field owns both its CLI projection and JSON boundary conversion."""
-    metadata = {
-        "multiline": multiline,
-        "target_bound": target_bound,
-        "editor_format": editor_format,
-        "flags": flags,
-        "parser_options": parser_options,
-        "group": group,
-        "normalize": normalize,
-        "parser_default": parser_default,
-        "parser_default_factory": parser_default_factory,
-    }
-    if wire_name is not None:
-        metadata["wire_name"] = wire_name
-    if catalog is not None:
-        metadata[CatalogConfigOption] = catalog
-    return field(default=default, default_factory=default_factory, metadata=metadata)
-
-
->>>>>>> origin/main
 @dataclass(frozen=True)
 class TargetField:
     """The original command field owns parsing, editor hints and requiredness."""
@@ -223,11 +181,7 @@ class TargetField:
 @dataclass(frozen=True)
 class CatalogTargetField(TargetField):
     """A form projects the choices supplied by its declared configuration owner."""
-<<<<<<< HEAD
     options: tuple[ConfigChoice, ...]
-=======
-    options: tuple[SessionConfigSelectOption, ...]
->>>>>>> origin/main
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
@@ -249,13 +203,8 @@ class TargetAction:
     def editable_fields(self) -> tuple[TargetField, ...]:
         return self.bound[0].editable_fields
 
-<<<<<<< HEAD
     async def prepare_fields(self, comms: Comms) -> tuple[TargetField, ...]:
         return await self.bound[0].prepare_fields(comms)
-=======
-    async def prepare_fields(self) -> tuple[TargetField, ...]:
-        return await self.bound[0].prepare_fields()
->>>>>>> origin/main
 
     @property
     def label(self) -> str:
@@ -491,19 +440,11 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return tuple(TargetField(item, hints[item.name], getattr(self, item.name))
                      for item in fields(self) if not item.metadata['target_bound'])
 
-<<<<<<< HEAD
     async def prepare_fields(self, comms: Comms) -> tuple[TargetField, ...]:
         declared = self.editable_fields
         if not any(item.catalog is not None for item in declared):
             return declared
         catalogs = ConfigOptions(comms)
-=======
-    async def prepare_fields(self) -> tuple[TargetField, ...]:
-        declared = self.editable_fields
-        if not any(item.catalog is not None for item in declared):
-            return declared
-        catalogs = ConfigOptions.configured()
->>>>>>> origin/main
         return tuple([await item.prepare(catalogs, self) for item in declared])
 
     def describe(self, comms: Comms, target: CommandTarget | str, project: str) -> TargetAction:
@@ -730,9 +671,6 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
-    caller: str | None = option(
-        "--from", default=None, help="Calling thread; omit for tools that need no thread"
-    )
     tool: str = option("--tool")
     arguments: dict[str, Any] = option(
         "--arguments",
@@ -742,17 +680,8 @@ class InvokeCliCommand(CliCommand):
         normalize=_json_object,
     )
 
-<<<<<<< HEAD
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
         return invoke_tool(ctx, self.tool, self.arguments, caller=caller)
-=======
-    def apply(self, ctx: Comms) -> Any:
-        from .tools import invoke_tool
-
-        from .tool_caller import ToolCaller
-
-        return invoke_tool(ctx, self.tool, self.arguments, caller=ToolCaller.from_actor(self.caller))
->>>>>>> origin/main
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -800,14 +729,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
     thinking: str | None = option("--thinking", default=None)
     service_tier: ServiceTier | None = option("--service-tier", default=None)
 
-<<<<<<< HEAD
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
-=======
-    def apply(self, ctx: Comms) -> Any:
-        from .pi_vocabulary import ThinkingLevel
-        from .errors import RelationViolationError
-
->>>>>>> origin/main
         thread = ctx.registry.require(self.name)
         if ctx.registry.status(thread.name).active:
             raise RelationViolationError(
@@ -818,12 +740,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             thinking_level=level,
             service_tier=self.service_tier,
         )
-<<<<<<< HEAD
-        catalogs = ConfigOptions(ctx)
-        asyncio.run(catalogs.validate(candidate))
-=======
-        asyncio.run(ConfigOptions.configured().validate(candidate))
->>>>>>> origin/main
+        asyncio.run(ConfigOptions(ctx).validate(candidate))
         updated = ctx.threads.set_thread_configuration(
             thread,
             model=candidate.model,
@@ -985,12 +902,7 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> AsyncIterator[Message]:
         return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment)
 
-<<<<<<< HEAD
     def run(self, ctx: Comms, output: TextIO, *, caller: ToolCaller) -> int:
-        import asyncio
-=======
-    def run(self, ctx: Comms, output: TextIO) -> int:
->>>>>>> origin/main
         from contextlib import aclosing
 
         async def stream() -> None:
@@ -1408,21 +1320,11 @@ class DeleteCliCommand(CliCommand, declared_name="delete"):
 @dataclass(frozen=True, kw_only=True)
 class RenameSelfCliCommand(CliCommand, declared_name="rename-self"):
     help = "Rename your own running thread"
-    caller: str = option("--from")
     new_name: str = option("--to")
 
-<<<<<<< HEAD
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
         return invoke_tool(ctx, "comms_rename_self", {"new_name": self.new_name},
                            caller=caller)
-=======
-    def apply(self, ctx: Comms) -> Any:
-        from .tools import CommsRenameSelfTool
-        from .tool_caller import ThreadCaller
-
-        return CommsRenameSelfTool.invoke(ctx, {"new_name": self.new_name},
-                                         caller=ThreadCaller(self.caller))
->>>>>>> origin/main
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1435,19 +1337,11 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     project: str = option("--project", parser_default_factory=os.getcwd)
-<<<<<<< HEAD
     model: str = option("--model", setting=lambda settings: settings.startup_arguments().model,
                         field_metadata={CatalogConfigOption: ModelConfigOption})
     thinking_level: type[ThinkingLevel] = option(
         "--thinking-level", setting=lambda settings: ThinkingLevel.decode(settings.startup_arguments().thinking),
         field_metadata={CatalogConfigOption: ThinkingLevelConfigOption})
-=======
-    model: str = option("--model", parser_default=NativeThreadDefaults.model,
-                        catalog=ModelConfigOption)
-    thinking_level: type[ThinkingLevel] = option(
-        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level,
-        catalog=ThinkingLevelConfigOption)
->>>>>>> origin/main
 
     @classmethod
     def project_bindings(cls, comms, project):
@@ -1462,11 +1356,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> ThreadCreatedResult:
         spec = self.spec_type(**{item.name: getattr(self, item.name)
                                  for item in fields(self.spec_type)})
-<<<<<<< HEAD
         asyncio.run(ConfigOptions(ctx).validate(self))
-=======
-        asyncio.run(ConfigOptions.configured().validate(self))
->>>>>>> origin/main
         child = ctx.threads.create(spec)
         return ThreadCreatedResult(child.name, child.pid)
 

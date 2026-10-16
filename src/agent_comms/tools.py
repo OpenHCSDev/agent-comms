@@ -15,7 +15,7 @@ from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .launch_runtime import LaunchRuntime
+from . import restart_queue
 from .goal_actions import (
     ActiveGoalAction,
     EditGoalAction,
@@ -33,11 +33,7 @@ from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
-<<<<<<< HEAD
-=======
-from .thread_identity import TurnId
 from .turn_digests import TurnDigestRead
->>>>>>> origin/main
 from .relationships import RelationshipEdit
 from .thread_status import ThreadStatus
 from .work_branches import WorkBranches
@@ -884,11 +880,7 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
         return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
                               project=parent.worktree, model=parent.model,
                               thinking_level=parent.thinking_level,
-<<<<<<< HEAD
                               tags=_tag_set(self.tags) if self.tags is not None else None).apply(comms, caller=caller)
-=======
-                              tags=_tag_set(self.tags) if self.tags is not None else None).apply(comms)
->>>>>>> origin/main
 
 
 class OwnerLifecycleControl:
@@ -949,10 +941,7 @@ class CommsQueueRestartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolReque
     name: str = tool_field("Live agent thread", binding=SubjectBinding)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .restart_queue import enqueue as enqueue_restart
-
-        return {"restart": FieldCodec.encode(enqueue_restart(
-            comms, self.name, launch_runtime=LaunchRuntime.current()))}
+        return {"restart": FieldCodec.encode(restart_queue.enqueue(comms, self.name))}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -962,10 +951,8 @@ class CommsRestartQueueTool(ToolRequest):
     name: str = tool_field("Agent thread")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .restart_queue import status as restart_status
-
         return {
-            "restarts": [FieldCodec.encode(record) for record in restart_status(comms, self.name)]
+            "restarts": [FieldCodec.encode(record) for record in restart_queue.status(comms, self.name)]
         }
 
 
@@ -976,10 +963,8 @@ class CommsCancelRestartTool(ToolRequest):
     name: str = tool_field("Agent thread")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .restart_queue import cancel as cancel_restart
-
         return {
-            "cancelled": [FieldCodec.encode(record) for record in cancel_restart(comms, self.name)]
+            "cancelled": [FieldCodec.encode(record) for record in restart_queue.cancel(comms, self.name)]
         }
 
 

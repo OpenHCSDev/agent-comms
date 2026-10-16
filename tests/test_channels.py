@@ -488,10 +488,6 @@ def test_thread_presentation_owns_lifecycle_precedence(tmp_path):
 
 
 def test_none_membership_and_independent_channel_order(tmp_path):
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/main
     comms = setup_wire(tmp_path)
     comms.messaging.send("a", "#none", "for untagged agents")
     assert [message.body for message in comms.bus.inbox("other")] == ["for untagged agents"]

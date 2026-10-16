@@ -280,10 +280,6 @@ class TestThreadOps:
         assert attached.session_file == str(session_file.resolve())
         assert wired.registry.status("fixer").declared_name == "running"
 
-<<<<<<< HEAD
-    def test_release_only_allows_the_original_calling_thread(self, wired):
-        caller = wired.registry.require("fixer").incarnation
-=======
     def test_attached_session_model_is_registered_once_not_rescanned_for_answers(
         self, wired, tmp_path, monkeypatch
     ):
@@ -305,10 +301,8 @@ class TestThreadOps:
         assert wired.configuration.answer("fixer").model == "test/saved"
         assert wired.threads.resolve_thread_model("PR111", "default/model") == "default/model"
 
-    def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
-
->>>>>>> origin/main
+    def test_release_only_allows_the_original_calling_thread(self, wired):
+        caller = wired.registry.require("fixer").incarnation
         with pytest.raises(RelationViolationError, match="cannot release"):
             wired.owners.release("PR111", caller=caller)
 

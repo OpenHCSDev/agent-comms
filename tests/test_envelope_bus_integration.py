@@ -433,13 +433,8 @@ def test_saved_colliding_creation_id_blocks_claim_write_before_append(tmp_path: 
         threads = edit.document.threads
         threads["bob"] = replace(threads["bob"], created_at=threads["alice"].created_at)
         edit.commit()
-<<<<<<< HEAD
-    comms = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
-    with pytest.raises(RelationViolationError, match="creation identities collide"):
-=======
-    comms = Comms(comms.root)
+    comms = Comms(comms.route, runtime=comms.runtime)
     with pytest.raises(RelationViolationError, match="Snapshot lookup index differs from its threads"):
->>>>>>> origin/main
         comms.messaging.send_message(
             "bob", "alice", "Cannot release under duplicate ID", releases=["a.py"]
         )
