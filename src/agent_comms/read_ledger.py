@@ -16,11 +16,13 @@ from typing import TYPE_CHECKING
 from .locked_store import LockedStore
 from .private_path import FileIdentity, FileRevision
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
+from .registry_document import RetiredRecipient
 from .sealed import Sealed
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
+    from .bus_publication import CommittedDelivery
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
@@ -160,21 +162,21 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         revision = FileRevision.capture(self.path.with_name("bus.jsonl"))
         return document.seen_sequences(viewer, snapshot, revision.identity if revision else None)
 
-    def displayed_recipient(self, message, recipient, snapshot: RegistrySnapshot, *, document=None):
+    def displayed_recipient(
+        self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None
+    ):
         """Return recorded human display evidence for this exact frozen recipient.
 
         Processing, assignment acceptance and a reply cannot grant this fact.
         A reused name with a different creation identity cannot inherit it.
         """
-        try:
-            thread = snapshot.thread_for_recipient(
-                recipient.recipient_lookup, recipient.canonical_thread
-            )
-        except KeyError:
-            return ()  # A retired lookup has no current human paint witness.
+        selected = snapshot.recipient(recipient, original)
+        if isinstance(selected, RetiredRecipient):
+            return ()
+        thread = selected.thread
         if not self.human(thread.role):
             return ()
-        return self._displayed_recipient(message, thread, snapshot, document=document)
+        return self._displayed_recipient(original.message, thread, snapshot, document=document)
 
     def historical_displayed_recipient(
         self, message, recipient, snapshot: RegistryProvenance, *, document=None

@@ -177,7 +177,7 @@ class MessageNotification:
             return {}
         snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
-            (recipient for source in sources for recipient in source.audience.recipients
+            ((source, recipient) for source in sources for recipient in source.audience.recipients
              if cls.includes_recipient(source, recipient, owner_lookup)),
             snapshot=snapshot,
         )
@@ -273,7 +273,7 @@ class MessageNotification:
             return None
         recipient = FrozenRecipient(target.incarnation.lookup, target.name)
         displayed_to = reads.displayed_recipient(
-            message, recipient, snapshot, document=document
+            source, recipient, snapshot, document=document
         )
         if not displayed_to:
             return None

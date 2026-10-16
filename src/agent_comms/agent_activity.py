@@ -14,6 +14,7 @@ from .native_input_owner import RegistryOwner
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
+    from .bus_publication import CommittedDelivery
     from .notification_assignment import AssignmentProgress
     from .presentation import MessageNotification
 from .activity import (
@@ -22,7 +23,7 @@ from .activity import (
 from .declared_family import DeclaredFamily
 from .audience_manifest import FrozenRecipient
 from .errors import RelationViolationError
-from .registry_document import RegistrySnapshot
+from .registry_document import RegisteredRecipient, RegistrySnapshot
 from .routing import TurnRouting
 from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock
@@ -45,7 +46,7 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
 
     def displayed_recipient(self, notification, source, reads, document, snapshot):
         return reads.displayed_recipient(
-            source.message, notification.recipient_identity, snapshot, document=document
+            source, notification.recipient_identity, snapshot, document=document
         )
 
     def selected_response(
@@ -140,17 +141,20 @@ class AgentActivity:
             for name, thread in requested.items()
         }
 
-    def observe_recipients(self, recipients: Iterable[FrozenRecipient], *, snapshot: RegistrySnapshot) -> Mapping[str, RecipientActivity]:
-        """Acquire one bounded window's recipients from the original source snapshot."""
+    def observe_recipients(
+        self, recipients: Iterable[tuple[CommittedDelivery, FrozenRecipient]], *,
+        snapshot: RegistrySnapshot,
+    ) -> Mapping[str, RecipientActivity]:
+        """Acquire one bounded window's recipients from the original sends."""
         observations: dict[str, RecipientActivity] = {}
-        for recipient in recipients:
+        for original, recipient in recipients:
             lookup = recipient.recipient_lookup
             if lookup in observations:
                 continue
-            thread = snapshot.by_lookup.get(lookup)
+            selected = snapshot.recipient(recipient, original)
             observations[lookup] = (
-                thread.execution.observe_recipient(self, snapshot, thread)
-                if thread is not None else UnavailableRecipientActivity()
+                selected.thread.execution.observe_recipient(self, snapshot, selected.thread)
+                if isinstance(selected, RegisteredRecipient) else UnavailableRecipientActivity()
             )
         return observations
 

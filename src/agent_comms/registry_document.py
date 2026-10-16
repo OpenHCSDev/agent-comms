@@ -37,6 +37,8 @@ from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
 
 if TYPE_CHECKING:
+    from .audience_manifest import FrozenRecipient
+    from .bus_publication import CommittedDelivery
     from .native_input_owner import RegistryOwner
 
 
@@ -530,6 +532,16 @@ class RegistryEntry:
 
 
 @dataclass(frozen=True, slots=True)
+class RegisteredRecipient:
+    thread: Thread
+
+
+@dataclass(frozen=True, slots=True)
+class RetiredRecipient:
+    lookup: str
+
+
+@dataclass(frozen=True, slots=True)
 class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     threads: Mapping[str, Thread]
     statuses: Mapping[str, ThreadStatus]
@@ -553,12 +565,19 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             indexed[lookup] = thread
         object.__setattr__(self, "by_lookup", MappingProxyType(indexed))
 
-    def thread_for_recipient(self, lookup: str, name: str) -> Thread:
-        """Resolve a recorded recipient by its unique creation identity."""
-        thread = self.by_lookup[lookup]
-        if thread.name != self.canonical_name(name):
-            raise RelationViolationError("Frozen recipient name does not match its lookup.")
-        return thread
+    def recipient(
+        self, recipient: FrozenRecipient, original: CommittedDelivery
+    ) -> RegisteredRecipient | RetiredRecipient:
+        """A missing live thread was retired only if the original send names it."""
+        lookup = recipient.recipient_lookup
+        thread = self.by_lookup.get(lookup)
+        if thread is not None:
+            if thread.name != self.canonical_name(recipient.canonical_thread):
+                raise RelationViolationError("Frozen recipient name does not match its lookup.")
+            return RegisteredRecipient(thread)
+        if recipient not in original.audience.recipients:
+            raise UnregisteredThreadError("Recipient lookup is not in the original message.")
+        return RetiredRecipient(lookup)
 
     def retired(self, name: str) -> bool:
         """Removal keeps the name's generations; they are the deletion record."""

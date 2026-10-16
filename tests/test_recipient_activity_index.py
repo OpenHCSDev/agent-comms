@@ -11,10 +11,13 @@ from agent_comms.activity import Activity, ActivityLog, ActivityState
 from agent_comms.agent_activity import UnavailableRecipientActivity
 from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.comms import Comms
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalWaitTarget
+from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.presentation import MessageNotification
 from agent_comms.read_ledger import ReadLedger
+from agent_comms.registry_document import RegisteredRecipient, RetiredRecipient
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.thread_identity import (
     DeletedThreadIncarnation,
@@ -23,33 +26,52 @@ from agent_comms.thread_identity import (
     UnrecordedThreadIncarnation,
 )
 from agent_comms.threads import Thread
+from goal_owner_fixture import canonical_goal_wire
 
 
 def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
-    comms = Comms(tmp_path / "bus")
+    comms = canonical_goal_wire(tmp_path / "bus")
     for index in range(12):
         comms.registry.declare(Thread(f"peer-{index}", frozenset(), str(tmp_path), created_at=1_700_000_000.0 + index))
+    sent = comms.messaging.send_user_message("peer-7", "original recipient", worktree=str(tmp_path))
+    with comms.bus.log.certified_read() as source:
+        original = source.delivery(sent.seq)
     snapshot = comms.registry.snapshot()
     assert FieldCodec.encode(snapshot)["threads"]
     wanted = snapshot.threads["peer-7"]
     lookup = wanted.incarnation.lookup
+    recipient = FrozenRecipient(lookup, wanted.name)
+    assert recipient in original.audience.recipients
     assert snapshot.by_lookup[lookup] is wanted
-    assert snapshot.thread_for_recipient(lookup, wanted.name) is wanted
-    with pytest.raises(KeyError):
-        snapshot.thread_for_recipient("not-a-recipient", wanted.name)
+    assert snapshot.recipient(recipient, original) == RegisteredRecipient(wanted)
+    with pytest.raises(UnregisteredThreadError, match="not in the original message"):
+        snapshot.recipient(FrozenRecipient("not-a-recipient", "gone"), original)
     with pytest.raises(RelationViolationError, match="recipient name"):
-        snapshot.thread_for_recipient(lookup, "peer-8")
-    assert snapshot.by_lookup.get("not-a-recipient") is None
+        snapshot.recipient(FrozenRecipient(lookup, "peer-8"), original)
     with patch.object(RecordedThreadIncarnation, "lookup", property(
         lambda self: (_ for _ in ()).throw(AssertionError("rehashing unrelated registry"))
     )):
         observations = comms.agents.observe_recipients(
-            (FrozenRecipient("not-a-recipient", "gone"),
-             FrozenRecipient(lookup, wanted.name), FrozenRecipient(lookup, wanted.name)),
-            snapshot=snapshot,
+            ((original, recipient), (original, recipient)), snapshot=snapshot,
         )
-    assert set(observations) == {"not-a-recipient", lookup}
-    assert isinstance(observations["not-a-recipient"], UnavailableRecipientActivity)
+    assert set(observations) == {lookup}
+    comms.registry.unregister(wanted.name)
+    comms.registry.remove(wanted.name)
+    retired_snapshot = comms.registry.snapshot()
+    assert retired_snapshot.recipient(recipient, original) == RetiredRecipient(lookup)
+    retired = comms.agents.observe_recipients(
+        ((original, recipient),), snapshot=retired_snapshot,
+    )
+    assert isinstance(retired[lookup], UnavailableRecipientActivity)
+    assert ReadLedger(tmp_path / "reads.json").displayed_recipient(
+        original, recipient, retired_snapshot
+    ) == ()
+    window = MessageNotification.delivery_window(
+        comms.root, comms.registry, (original,),
+        NotificationAssignment.read(comms.root, (original,)),
+    )
+    assert (sent.seq, sent.message_id) in window
+    assert all(not item.displayed_to for item in window[(sent.seq, sent.message_id)])
 
 
 def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path):
