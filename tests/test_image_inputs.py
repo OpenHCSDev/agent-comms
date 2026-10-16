@@ -27,6 +27,7 @@ from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
+from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.usefixtures("native_rpc_fixture")
 PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDqkAAAAASUVORK5CYII="
@@ -175,7 +176,7 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
         )
         pending = owner.inputs.queued_inputs["project"][input_id]
         assert pending.text == reference and pending.images == (ImageInput(PNG, "image/png"),)
-        assert owner.inputs.dispositions.read().rows["acp:" + input_id].declared_name == "reserved"
+        assert stored_inputs(owner.inputs.dispositions.root).rows["acp:" + input_id].declared_name == "reserved"
         await client.prompt(
             "project",
             [{"type": "text", "text": "What is this?"}, IMAGE],

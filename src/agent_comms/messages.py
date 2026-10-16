@@ -161,6 +161,9 @@ class Message:
     report: ChangeReport | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_order": 13}
     )
+    answers: tuple[MessageReference, ...] = field(
+        default=(), metadata={"wire_omit_default": True, "wire_order": 14}
+    )
 
     @property
     def publication_snapshot(self) -> Message:

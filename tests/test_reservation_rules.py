@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import pytest
 
+from stored_inputs import stored_inputs
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.reservation_rules import ReservationRule, ReservationViolationError, RuleCheck
@@ -79,14 +80,14 @@ def test_new_rule_declaration_is_the_entire_dispatch_extension(monkeypatch):
 
 def test_plural_originals_preserve_order_and_bind_without_partial_transition(tmp_path):
     owner = "project"
-    inputs = InputDispositions(tmp_path / InputDispositions.filename)
+    inputs = InputDispositions(tmp_path)
     keys = ("acp:first", "acp:second")
     for key, text in zip(keys, ("first", "second"), strict=True):
         inputs.record(key, seq=None, owner=owner, admission=1, target=owner, text=text)
-    assert tuple(row.source_text for row in inputs.read().originals(keys)) == ("first", "second")
+    assert tuple(row.source_text for row in stored_inputs(inputs.root).originals(keys)) == ("first", "second")
     assert inputs.bind(keys[1], admission=1, turn_id="other", native_id="a" * 32, text="second")
-    before = inputs.read()
+    before = stored_inputs(inputs.root)
     assert not inputs.bind_originals(keys, admission=1, turn_id="turn", native_id="b" * 32,
                                      text="first\n\nsecond")
-    assert inputs.read() == before
-    assert inputs.read().lookup(keys[0]).accepts_reservation
+    assert stored_inputs(inputs.root) == before
+    assert stored_inputs(inputs.root).lookup(keys[0]).accepts_reservation

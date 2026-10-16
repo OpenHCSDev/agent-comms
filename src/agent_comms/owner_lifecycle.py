@@ -184,8 +184,8 @@ class OwnerLifecycle:
             or not native_package.is_absolute()
         ):
             raise ValueError("private owner launch requires the validated absolute root/package")
-        with self.bus.log.locked():
-            marker = self.bus.log._private_marker_unlocked()
+        with self.bus.log.certified_read() as source:
+            marker = source.marker
             if marker.root_id != wire_root_id:
                 raise RelationViolationError("private owner launch root ID changed")
         self._private_nk_launch = PrivateNkLaunch(
@@ -309,8 +309,10 @@ class OwnerLifecycle:
             if not snapshot.statuses[thread.name].active:
                 return
             if thread.pid == os.getpid():
-                caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-                if caller and self.registry.require(caller).name == thread.name:
+                if RestartEnvironment.called_by(
+                    thread.name,
+                    canonicalize=lambda caller: self.registry.require(caller).name,
+                ):
                     self._release_current_owner_unlocked(thread.name)
                 else:
                     self.registry.unregister(thread.name)
@@ -336,11 +338,10 @@ class OwnerLifecycle:
         """
         private_launch = self._private_nk_launch
         if private_launch is None:
-            with self.bus.log.locked():
-                if self.bus.log.read_metadata_unlocked().private:
-                    raise PublicationActivationBlocked(
-                        "private owner launch requires explicit matching root and package"
-                    )
+            if self.bus.log.read_metadata_unlocked().private:
+                raise PublicationActivationBlocked(
+                    "private owner launch requires explicit matching root and package"
+                )
         else:
             private_launch.validate()
         return private_launch
@@ -392,8 +393,7 @@ class OwnerLifecycle:
                 )
         env.update(
             {
-                "PI_AGENT_ID": thread.name,
-                "AGENT_COMMS_THREAD": thread.name,
+                RestartEnvironment.owner_key: thread.name,
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
@@ -465,11 +465,7 @@ class OwnerLifecycle:
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
-        caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-        if not caller:
-            raise RelationViolationError(
-                "Voluntary release requires PI_AGENT_ID or AGENT_COMMS_THREAD."
-            )
+        caller = RestartEnvironment.calling_thread()
         with _store_lock(self._wire_lock_path):
             canonical = self.registry.require(name).name
             if self.registry.require(caller).name != canonical:

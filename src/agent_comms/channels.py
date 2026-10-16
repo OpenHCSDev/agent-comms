@@ -9,7 +9,7 @@ from enum import StrEnum
 
 from .channel_targets import _TAG_CHARS, BuiltinChannel, Tag
 from .declared_family import DeclaredFamily
-from .display_order import ThreadSort
+from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 
@@ -24,7 +24,7 @@ class Channel:
 
     name: str
     tags: frozenset[str] = frozenset()
-    order: ThreadSort = field(default_factory=lambda: ThreadSort.CREATED)
+    order: type[ThreadSort] = CreatedThreadSort
     created_at: float = 0
     pinned: bool = False
     parent: str | None = None
@@ -38,7 +38,7 @@ class Channel:
         if self.parent is not None:
             parent = self.parent if self.parent.startswith("#") else f"#{self.parent}"
             object.__setattr__(self, "parent", parent)
-        if not isinstance(self.order, ThreadSort):
+        if not isinstance(self.order, type) or self.order not in ThreadSort.members_with(ThreadSort):
             raise ValueError("Channel ordering must be a declared ThreadSort.")
         if not isinstance(self.archived, bool) or not isinstance(self.any_mode, bool):
             raise ValueError("Channel presentation flags must be boolean.")

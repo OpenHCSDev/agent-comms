@@ -15,10 +15,13 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 from agent_comms.tool_output import MAX_INLINE_OUTPUT_BYTES, materialize_oversized_output
 from agent_comms.tools import invoke_tool
+from agent_comms.field_codec import FieldCodec
+from agent_comms.text_digest import TextDigest
+from stored_inputs import insert_inputs, stored_inputs
 
 
 def seed_unknown(comms, count, text):
-    dispositions = InputDispositions(comms.root / InputDispositions.filename)
+    dispositions = InputDispositions(comms.root)
     rows = {
         f"bus:{index}": {
             "key": f"bus:{index}",
@@ -29,12 +32,12 @@ def seed_unknown(comms, count, text):
             "source_text": f"{index}: {text}",
             "turn_id": "private-turn",
             "native_id": "f" * 32,
-            "sent_text": "private-native-prompt",
+            "sent_digest": FieldCodec.encode(TextDigest.of("private-native-prompt")),
             "kind": "bound_unknown",
         }
         for index in range(1, count + 1)
     }
-    dispositions.path.write_text(json.dumps({"version": 1, "rows": rows}))
+    insert_inputs(comms.root, rows)
     return dispositions
 
 
@@ -142,7 +145,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     inbox_comms, monkeypatch, large_body
 ):
     comms = inbox_comms
-    monkeypatch.setenv("PI_AGENT_ID", "b")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
     goal = comms.goals.update_goal(
         "b", SetGoalAction(text="Wait for a after reviewing its replies")
     )
@@ -150,7 +153,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
         comms.messaging.send_message("a", "b", body)
         for body in (large_body, "Previously reviewed reply")
     ]
-    dispositions = InputDispositions(comms.root / InputDispositions.filename)
+    dispositions = InputDispositions(comms.root)
     for message in messages:
         dispositions.record(
             f"bus:{message.seq}",
@@ -176,7 +179,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
         turn_id="earlier-review",
     )
     review = comms.goals.goal_input_review("b", goal.id, ["a"])
-    before = dispositions.path.read_bytes()
+    before = stored_inputs(dispositions.root)
     result = invoke_tool(
         comms,
         "comms_inbox",
@@ -187,7 +190,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
         "counts": {"messages": 1, "already_reviewed_inputs": 1, "excluded_inputs": 1},
     }
     assert result["ackDeferred"] is False
-    assert dispositions.path.read_bytes() == before
+    assert stored_inputs(dispositions.root) == before
     report = {
         "goal_id": goal.id,
         "status": "standby",
@@ -196,7 +199,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     }
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
         invoke_tool(comms, "comms_goal", report)
-    assert dispositions.path.read_bytes() == before
+    assert stored_inputs(dispositions.root) == before
     full_review = json.loads(Path(result["result_file"]).read_text())["standby_review"]
     assert full_review == review
     assert full_review["messages"][0]["text"] == messages[0].body
@@ -207,11 +210,11 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": full_review["reviewed_inputs"]})
     assert comms.goals.goal_wait("b") is not None
     assert all(
-        dispositions.read().rows[f"bus:{message.seq}"].declared_name == "reserved"
+        stored_inputs(dispositions.root).rows[f"bus:{message.seq}"].declared_name == "reserved"
         for message in messages
     )
-    assert dispositions.read().rows["acp:owner-input"].declared_name == "reserved"
-    assert not dispositions.read().rows.get("acp:owner-input").goal_reviews
+    assert stored_inputs(dispositions.root).rows["acp:owner-input"].declared_name == "reserved"
+    assert not stored_inputs(dispositions.root).rows.get("acp:owner-input").goal_reviews
 
 
 def test_materialization_measures_escaped_transport_bytes(tmp_path):
@@ -241,7 +244,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     inbox_comms, monkeypatch
 ):
     comms = inbox_comms
-    monkeypatch.setenv("PI_AGENT_ID", "b")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "b")
     # The reviewed standby liveness gate refuses a declared dependency with
     # no active turn. Give "a" a live in-process turn for this fixture only.
     comms.registry.declare(
@@ -249,7 +252,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     )
     comms.agents.begin_turn("a", "a-review-in-flight")
     goal = comms.goals.update_goal("b", SetGoalAction(text="Review a and wait for its next reply"))
-    dispositions = InputDispositions(comms.root / InputDispositions.filename)
+    dispositions = InputDispositions(comms.root)
     for index in range(930):
         dispositions.record(
             f"acp:owner-{index}",
@@ -279,7 +282,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
         goal_revision=goal.revision,
         turn_id="previous-review",
     )
-    before = dispositions.path.read_bytes()
+    before = stored_inputs(dispositions.root)
     result = invoke_tool(
         comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}
     )
@@ -297,7 +300,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     assert len(json.dumps(result, indent=2).encode()) <= MAX_INLINE_OUTPUT_BYTES
     assert result["complete"] is False and result["ackDeferred"] is True
     assert result["acknowledged"] == 0 and comms.bus.pending_count("b") == 2
-    assert dispositions.path.read_bytes() == before
+    assert stored_inputs(dispositions.root) == before
     full = json.loads(Path(result["result_file"]).read_text())
     assert full["standby_review"] == comms.goals.goal_input_review("b", goal.id, ["a"])
     assert len(full["standby_review"]["excluded_inputs"]) == 930
@@ -310,21 +313,21 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     }
     with pytest.raises(ValueError, match="recipient"):
         invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": ["acp:owner-0"]})
-    assert dispositions.path.read_bytes() == before
+    assert stored_inputs(dispositions.root) == before
     # A reply arriving after this snapshot still blocks standby atomically.
     late = comms.messaging.send_message("a", "b", "New evidence after inbox inspection")
     dispositions.record(
         f"bus:{late.seq}", seq=late.seq, owner="b", admission=1, target="b", text=late.body
     )
-    after_arrival = dispositions.path.read_bytes()
+    after_arrival = stored_inputs(dispositions.root)
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
         invoke_tool(comms, "comms_goal", report)
-    assert dispositions.path.read_bytes() == after_arrival
+    assert stored_inputs(dispositions.root) == after_arrival
     fresh = invoke_tool(
         comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}
     )["standby_review"]
     assert fresh["reviewed_inputs"] == [f"bus:{messages[1].seq}", f"bus:{late.seq}"]
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]})
     assert comms.goals.goal_wait("b") is not None
-    assert dispositions.read().rows[f"bus:{messages[1].seq}"].declared_name == "reserved"
-    assert not dispositions.read().rows.get("acp:owner-0").goal_reviews
+    assert stored_inputs(dispositions.root).rows[f"bus:{messages[1].seq}"].declared_name == "reserved"
+    assert not stored_inputs(dispositions.root).rows.get("acp:owner-0").goal_reviews

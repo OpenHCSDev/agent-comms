@@ -24,6 +24,7 @@ from .delivery_policy import KeyedResponseReceipt
 from .bus_source_page import CandidateQuery
 from .bus_projection import AppendCheckpoint
 from .checkpoint_seals import PrefixSource
+from .coordination_database import CoordinationStore, StoreBusy
 from .field_codec import FieldCodec
 from .wire_metadata import WireRootIdText
 from .errors import RelationViolationError
@@ -33,8 +34,6 @@ from .wake import NoWakeDecision, WakeDecision
 from .wake_policy import WakePolicy
 
 _MAX_ROW = 8 * 1024 * 1024
-_TIMEOUT = 0.05  # Read-only projection queries must not stall a wake for seconds.
-_MAINTENANCE_BUSY_MS = 1_000  # One bounded replay transaction may hold the writer.
 
 
 class ProjectionUnavailableError(RuntimeError):
@@ -163,17 +162,15 @@ class WakeCandidateIndex:
     @staticmethod
     def _connect(path: Path, *, readonly: bool) -> sqlite3.Connection:
         if readonly:
-            db = sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, timeout=_TIMEOUT)
-            db.execute("PRAGMA query_only=ON")
+            db = CoordinationStore.read_snapshot(path, StoreBusy())
         else:
-            db = sqlite3.connect(path, timeout=_MAINTENANCE_BUSY_MS / 1_000)
+            db = CoordinationStore.writer(path)
             if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode=WAL")) != [
                 SQLiteJournalMode("wal")
             ]:
                 db.close()
                 raise ProjectionUnavailableError("candidate index requires WAL")
             db.execute("PRAGMA synchronous=FULL")
-        db.execute(f"PRAGMA busy_timeout={_TIMEOUT * 1_000 if readonly else _MAINTENANCE_BUSY_MS:g}")
         return db
 
     @staticmethod
@@ -417,7 +414,6 @@ class WakeCandidateIndex:
                 raise ProjectionRebuildRequiredError("candidate private root changed")
             with closing(self._connect(self.path, readonly=True)) as db:
                 self._schema(db, create=False)
-                db.execute("BEGIN")
                 with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
                     checkpoint = self._checkpoint_start(db, stream, stat, root_id, rebuild=False)
@@ -518,7 +514,6 @@ class WakeCandidateIndex:
         try:
             with closing(self._connect(self.path, readonly=True)) as db:
                 self._schema(db, create=False)
-                db.execute("BEGIN")
                 checkpoint = CandidateCheckpoint.one(db, singleton=1)
                 if (
                     checkpoint is None

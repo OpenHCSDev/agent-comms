@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Literal, TypeVar
 from uuid import uuid4
 
+from .coordination_database import CoordinationStore
 from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
@@ -562,7 +563,7 @@ class GoalAttemptStore:
         else:
             os.close(fd)
         try:
-            with closing(sqlite3.connect(path, timeout=5, isolation_level=None)) as conn:
+            with closing(CoordinationStore.writer(path, isolation_level=None)) as conn:
                 conn.execute("PRAGMA journal_mode=DELETE")
                 conn.execute("PRAGMA synchronous=EXTRA")
                 conn.execute("PRAGMA foreign_keys=ON")
@@ -591,7 +592,7 @@ class GoalAttemptStore:
     def _connect(self) -> sqlite3.Connection:
         self._require_root()
         try:
-            conn = sqlite3.connect(self.path, timeout=5, isolation_level=None)
+            conn = CoordinationStore.writer(self.path, isolation_level=None)
             conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA synchronous=EXTRA")
             modes = SQLiteJournalMode.read(conn.execute("PRAGMA journal_mode"))

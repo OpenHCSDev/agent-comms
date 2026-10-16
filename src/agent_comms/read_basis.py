@@ -8,7 +8,7 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Collection, Mapping
+from collections.abc import Collection
 from dataclasses import astuple, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -39,19 +39,19 @@ class Conversation:
 
     def to_wire(self) -> dict:
         """Encode the persisted participant pair format."""
-        data = FieldCodec.encode(self)
-        data["participants"] = [list(astuple(participant)) for participant in self.participants]
+        data = FieldCodec.encode(replace(self, participants=()))
+        data["participants"] = FieldCodec.encode(tuple(astuple(p) for p in self.participants))
         return data
 
     @classmethod
     def from_wire(cls, raw: dict) -> Conversation:
         """Decode participant pairs once at the persisted-key boundary."""
         data = dict(raw)
-        data["participants"] = [
-            FieldCodec.encode(ThreadIncarnation(*FieldCodec.decode(tuple[str, float], item)))
-            for item in data["participants"]
-        ]
-        return FieldCodec.decode(cls, data)
+        pairs = FieldCodec.decode(tuple[tuple[str, float], ...], data.pop("participants"))
+        return replace(
+            FieldCodec.decode(cls, data),
+            participants=tuple(ThreadIncarnation(*pair) for pair in pairs),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,12 +383,11 @@ class ChannelDisplayScope(MessageDisplayScope):
     targets: frozenset[str] | None
     any_mode: bool = False
     participant_names: frozenset[str] = frozenset()
-    seen_sequences: frozenset[int] = frozenset()
     displayed: DisplayBasis | None = field(default=None, compare=False)
 
     @classmethod
     def capture(
-        cls, channel: Channel, snapshot: RegistryProvenance, *, seen: frozenset[int] = frozenset()
+        cls, channel: Channel, snapshot: RegistryProvenance
     ) -> ChannelDisplayScope:
         members = frozenset(
             name
@@ -399,7 +398,7 @@ class ChannelDisplayScope(MessageDisplayScope):
             alias for alias, owner in snapshot.aliases.items() if owner in members
         )
         targets = channel.history_targets
-        return cls(channel.name, targets, channel.any_mode, participant_names, seen)
+        return cls(channel.name, targets, channel.any_mode, participant_names)
 
     @property
     def index_targets(self) -> frozenset[str] | None:
@@ -412,15 +411,6 @@ class ChannelDisplayScope(MessageDisplayScope):
             raise ValueError("Channel display scope missing; refresh the displayed page.")
         return self.displayed
 
-    def same_projection(self, other: ChannelDisplayScope) -> bool:
-        """Read progress and unrelated store revisions do not change inclusion."""
-        return (
-            self.channel == other.channel
-            and self.targets == other.targets
-            and self.any_mode == other.any_mode
-            and self.participant_names == other.participant_names
-        )
-
     def includes(self, message: Message) -> bool:
         if self.targets is None or message.target in self.targets:
             return True
@@ -431,14 +421,3 @@ class ChannelDisplayScope(MessageDisplayScope):
             or (not is_channel_target(message.target) and message.target in self.participant_names)
             or any(mention.thread in self.participant_names for mention in message.mentions)
         )
-
-    def unread(self, message: Message) -> bool:
-        return self.includes(message) and message.seq not in self.seen_sequences
-
-
-@dataclass(frozen=True, slots=True)
-class ViewUnread:
-    revision: tuple | None
-    scopes: tuple[ChannelDisplayScope, ...]
-    counts: Mapping[str, int]
-    verified_display_boundary: bool = False

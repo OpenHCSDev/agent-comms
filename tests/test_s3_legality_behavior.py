@@ -14,7 +14,7 @@ from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFa
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
-    PublicationReceipt,
+    PublicationReceipts,
     canonical_publication_key,
 )
 from agent_comms.execution_states import (
@@ -320,27 +320,14 @@ def published_snapshot(pending):
     )
     intent = PublicationIntents(
         "exec",
-        "worker",
         "owner",
-        message.type,
-        False,
-        1.0,
-        "done",
-        hashlib.sha256(b"done").hexdigest(),
+        message,
         canonical_publication_key("exec", "owner"),
         message.message_id,
     )
-    receipt = PublicationReceipt(
-        "exec",
-        intent.publication_key,
-        1,
-        message.message_id,
-        "worker",
-        "owner",
-        message.type,
-        False,
-        1.0,
-        intent.payload_digest,
+    receipt = PublicationReceipts(
+        execution_id="exec", exact_target="owner", seq=1,
+        message_id=message.message_id, received_at_ms=0,
     )
     return replace(
         pending,

@@ -90,14 +90,6 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
                                                 newer_namespace, document=document) == ()
 
 
-def test_context_evidence_rejects_mixed_sql_columns():
-    from agent_comms.notification_assignment import AssignmentContextEvidence
-
-    for values in (("session.jsonl", None), (None, "entry-id")):
-        with pytest.raises(ValueError, match="model-context location is incomplete"):
-            AssignmentContextEvidence.from_columns(*values)
-
-
 def test_response_evidence_rejects_mixed_sql_columns():
     from agent_comms.notification_assignment import AssignmentResponse
 
@@ -117,10 +109,10 @@ def test_unshown_assignment_resolves_running_turn_as_timed_queue():
 
     pending = AssignmentActivityEvidence(
         False, None, NotShownContextEvidence(), UnansweredResponse()
-    ).resolve({}, pending_at_ms=1_000)
+    ).resolve(pending_at_ms=1_000)
     queued = AssignmentActivityEvidence(
         False, "running-execution", NotShownContextEvidence(), UnansweredResponse()
-    ).resolve({}, pending_at_ms=1_000)
+    ).resolve(pending_at_ms=1_000)
 
     assert pending.progress == SentProgress(1_000)
     assert queued.progress == QueuedProgress(1_000)
@@ -185,7 +177,6 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         AnsweredResponse,
         AssignmentActivity,
         QueuedProgress,
-        RemovedContextProgress,
         SentProgress,
         ShownToModelProgress,
         UnansweredResponse,
@@ -245,24 +236,6 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         ),
         updated_at_ms=2_000,
     )
-    removed_activity = replace(read_activity, context_progress=RemovedContextProgress())
-    removed = engagement.notification(
-        recipient,
-        observation=RecordedRecipientActivity(),
-        activity=removed_activity,
-        updated_at_ms=1_000,
-    )
-    removed_answer = CompletedAssignment.build(
-        FullWake(), "durable-execution", "sender"
-    ).notification(
-        recipient,
-        observation=RecordedRecipientActivity(),
-        activity=replace(
-            removed_activity,
-            response=AnsweredResponse(MessageReference(99, "durable-reply"), 3_000),
-        ),
-        updated_at_ms=3_000,
-    )
 
     assert sent.state.startswith("Sent ") and sent.read_at_ms is None
     assert queued.state.startswith("Queued ") and queued.read_at_ms is None
@@ -270,17 +243,11 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     assert answered.state.startswith("Answered ") and answered.answered_at_ms == 3_000
     assert delivered.state.startswith("Read ") and delivered.read_at_ms == 2_000
     assert delivered_answer.state.startswith("Answered ")
-    assert delivered_answer.reply_reference == MessageReference(99, "durable-reply")
-    assert removed.state == "Removed"
-    assert removed.detail == "Recipient session removed"
-    assert removed_answer.state.startswith("Answered ")
-    assert removed_answer.detail == "Recipient session removed"
+    assert delivered_answer.answer == MessageReference(99, "durable-reply")
     assert sent.recipient_identity == read.recipient_identity == answered.recipient_identity
 
 
-def test_delivered_assignment_uses_its_recorded_conversation_response(
-    archived_notification,
-):
+def test_delivered_assignment_uses_its_recorded_conversation_response(archived_notification):
     from agent_comms.assignment_states import DeferredAssignment
     from agent_comms.coordination_cohort import accept_delivery_cohort
     from agent_comms.coordinator import Coordination
@@ -301,14 +268,61 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(
             DeliveredAssignment,
             expected_revision=paused.revision,
         )
+    unrelated = old.messaging.send_message("agent", "sender", "unrelated later message")
+    notification, = old.views.message_notifications_for_references(
+        (original.reference,)
+    )[original.seq, original.message_id]
+    assert unrelated.answers == ()
+    assert notification.state.startswith("Read ")
+    assert notification.answer is None
+
+    import os
+    from uuid import uuid4
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.input_origin import WireInputOrigin
+
+    owner = old.registry.require("agent")
+    old.registry.register(
+        replace(owner, process_identity=ProcessIdentity.capture(os.getpid()))
+    )
+    owner, generation = old.registry.live_owner_with_admission("agent")
+    owner, _ = old.registry.lease_live_turn_with_admission(
+        owner, "reply-turn", expected_generation=generation
+    )
+    lease = owner.require_turn_lease()
+    inputs = InputDispositions(old.root)
+    key = inputs.bus_key(original, owner)
+    source_text = "delivered original"
+    assert inputs.record(
+        key,
+        seq=original.seq,
+        owner=owner.name,
+        admission=lease.admission_generation,
+        target=original.target,
+        text=source_text,
+        origin=WireInputOrigin(root_id, original.reference),
+    )
+    native_id = uuid4().hex
+    assert inputs.bind(
+        key,
+        admission=lease.admission_generation,
+        turn_id=lease.turn_id,
+        native_id=native_id,
+        text=source_text,
+    )
+    assert inputs.started(
+        key, turn_id=lease.turn_id, native_id=native_id, text=source_text
+    )
     response = old.messaging.send_message("agent", "sender", "recorded reply")
 
     notification, = old.views.message_notifications_for_references(
         (original.reference,)
     )[original.seq, original.message_id]
 
+    assert response.answers == (original.reference,)
     assert notification.state.startswith("Answered ")
-    assert notification.reply_reference == response.reference
+    assert notification.answer == response.reference
     assert notification.answered_at_ms == int(response.timestamp * 1000)
 
 

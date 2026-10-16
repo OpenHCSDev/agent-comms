@@ -14,6 +14,7 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
 
+from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
 from .command import Command
 from .declared_family import DeclaredFamily
@@ -408,7 +409,7 @@ class TodoStore:
             db.execute("COMMIT")
 
     def _connect(self) -> sqlite3.Connection:
-        db = sqlite3.connect(self.path, timeout=5.0, isolation_level=None)
+        db = CoordinationStore.writer(self.path, isolation_level=None)
         db.execute("PRAGMA busy_timeout=5000")
         db.execute("PRAGMA synchronous=FULL")
         return db

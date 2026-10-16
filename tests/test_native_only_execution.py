@@ -21,8 +21,6 @@ def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, c
     root = tmp_path / 'must-remain-absent'
     environment = dict(os.environ, AGENT_COMMS_ROOT=str(root))
     environment.pop('AGENT_COMMS_THREAD', None)
-    # An ambient Pi identity is not permission to launch a persistent owner.
-    environment['PI_AGENT_ID'] = 'ambient-model-child'
     result = subprocess.run(
         (sys.executable, '-c', 'from agent_comms.worker import main; raise SystemExit(main())', *arguments),
         env=environment, capture_output=True, timeout=3,
@@ -177,7 +175,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             PYTHONPATH=str(Path(events.__file__).parent.parent),
             AGENT_COMMS_AGENT_MODELS="openrouter/z-ai/glm-5.3-flash",
         )
-        for key in ("PI_PROMPT", "PI_PARENT_ID", "PI_AGENT_ID"):
+        for key in ("PI_PROMPT", "PI_PARENT_ID"):
             env.pop(key, None)
         async with BoundedRun.session(
             (sys.executable, "-c", "from agent_comms.worker import main; raise SystemExit(main())"),

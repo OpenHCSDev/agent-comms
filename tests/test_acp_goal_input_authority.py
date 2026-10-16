@@ -25,6 +25,7 @@ from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.transcript_events import ContextTranscript
 from delivery_owner_fixture import canonical_agent
+from stored_inputs import stored_inputs
 
 
 async def owner(tmp_path, monkeypatch):
@@ -145,7 +146,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         state = comms.goals.open_goal_store().snapshot(observed["goal"].id)
         assert state.lifecycle == ReadyGeneration() and state.number == 2
         key = "acp:" + observed["public_id"]
-        row = InputDispositions(comms.root / InputDispositions.filename).read().lookup(key)
+        row = stored_inputs(comms.root).lookup(key)
         assert row.declared_name == ("reserved" if queued_before_activation else "started")
         if queued_before_activation:
             assert not row.has_native_binding
@@ -205,7 +206,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
             "project", "project", "Continue working toward the active goal.", autonomous_goal=True
         )
         key = "acp:" + observed["public_id"]
-        row = InputDispositions(comms.root / InputDispositions.filename).read().lookup(key)
+        row = stored_inputs(comms.root).lookup(key)
         assert row.declared_name == ("started" if change is None else "reserved")
         if change is not None:
             assert not row.has_native_binding

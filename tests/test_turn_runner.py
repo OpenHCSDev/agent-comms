@@ -13,6 +13,7 @@ from agent_comms.acp_failure import RequestFailure
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.turn_runner import TurnRunner
 from test_backend_native_lifecycle import native_backend as native_backend
+from stored_inputs import stored_inputs
 
 
 @pytest.fixture
@@ -213,7 +214,7 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
 
     # The original tracked input, rather than the historical SDK content's
     # string/array shape, owns the exact current native message.
-    (original,) = owner.inputs.dispositions.read().rows.values()
+    (original,) = stored_inputs(owner.inputs.dispositions.root).rows.values()
     _, entries = NativeEntry.read_evidence(native.session)
     tracked = NativeEntry.tracked_users(entries)
     assert tuple(tracked) == (original.native_id,)

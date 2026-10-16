@@ -10,11 +10,12 @@ from agent_comms.comms import wire
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 def seed(comms, name):
     owners = frozenset({name})
-    ledger = InputDispositions(comms.root / InputDispositions.filename)
+    ledger = InputDispositions(comms.root)
     for key, seq in [("bus:1", 1), ("bus:2", 2), ("bus:7", 7), ("bus:8", 8), ("acp:ui", None)]:
         ledger.record(key, seq=seq, owner=name, admission=1, target=name, text=f"Text {key}")
     ledger.bind("bus:2", admission=1, turn_id="t", native_id="a" * 32, text="Text bus:2")
@@ -29,7 +30,7 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     ledger = seed(comms, "owner")
     awaiting = frozenset({"bus:2", "bus:8", "acp:ui"})
     ledger.record("bus:3", seq=3, owner="peer", admission=1, target="peer", text="Peer")
-    before = ledger.read().unknown(frozenset({"owner"}))
+    before = stored_inputs(ledger.root).unknown(frozenset({"owner"}))
     files = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     overview = comms.goals.input_delivery("owner", awaiting_keys=awaiting)
     assert [row["inputId"] for row in overview["inputs"]] == ["bus:2", "bus:8", "ui"]
@@ -45,11 +46,11 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     result = comms.goals.dismiss_historical_inputs("renamed", awaiting_keys=awaiting)
     assert result["historicalCount"] == 0 and result["dismissedHistoricalCount"] == 2
     assert result["inputs"] == overview["inputs"]
-    assert not ledger.read().rows["bus:3"].notice_dismissed
+    assert not stored_inputs(ledger.root).rows["bus:3"].notice_dismissed
     assert (
         tuple(
             replace(row, notice_dismissed=False)
-            for row in ledger.read().unknown(frozenset({"owner"}))
+            for row in stored_inputs(ledger.root).unknown(frozenset({"owner"}))
         )
         == before
     )
@@ -68,13 +69,13 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
         r["inputId"]
         for r in reopened.goals.input_delivery("renamed", awaiting_keys=awaiting)["inputs"]
     ]
-    assert ledger.read().rows["bus:7"].native_id == "b" * 32
+    assert stored_inputs(ledger.root).rows["bus:7"].native_id == "b" * 32
 
 
 def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread("owner", frozenset(), str(tmp_path)))
-    ledger = InputDispositions(tmp_path / InputDispositions.filename)
+    ledger = InputDispositions(tmp_path)
     ledger.record("bus:1", seq=1, owner="owner", admission=1, target="owner", text="Hello")
     before = ledger.path.read_bytes()
     assert comms.goals.dismiss_historical_inputs("owner")["historicalCount"] == 0

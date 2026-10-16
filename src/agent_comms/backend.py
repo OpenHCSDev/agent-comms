@@ -52,7 +52,7 @@ from .turn_output import TurnOutput
 from .turn_phase import ShutdownPhase, TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
-from .turn_watchdog import ProgressWatchdog
+from .turn_watchdog import ProgressWatchdog, TurnWaitExpired
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
@@ -404,11 +404,8 @@ class TurnSession:
         if self.native.proc.returncode is None:
             await self.native.proc.stop()
 
-    def context_info(self) -> events.AgentInfo:
-        return events.AgentInfo(
-            model=self.model_name,
-            session_name=self.session_name,
-            session_file=self.active_session_file,
+    def context_info(self) -> events.ContextInfo:
+        return events.ContextInfo(
             context_used=self.usage.used,
             context_size=self.usage.size,
         )
@@ -517,8 +514,8 @@ class TurnSession:
         self.rejected_signal.clear()
         try:
             self.line = await self.watchdog.read(self)
-        except TimeoutError:
-            async for event in self.watchdog.expire(self):
+        except TurnWaitExpired as expired:
+            async for event in expired.wait.expire(self):
                 yield event
             return
         if not self.line:

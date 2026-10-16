@@ -7,6 +7,7 @@ from contextlib import closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .private_path import FileRevision
 from .routing import TurnRouting
@@ -70,10 +71,7 @@ class _SessionRoutes:
     """One indexed read snapshot; decode only entries used by the page."""
 
     def __init__(self, path: Path | None, session_file: str):
-        self._connection = sqlite3.connect(path, timeout=30) if path else None
-        if self._connection is not None:
-            # Keep all annotations on one page at one committed revision.
-            self._connection.execute("BEGIN")
+        self._connection = CoordinationStore.read_snapshot(path) if path else None
         self._session_file = session_file
         self._cache: dict[str, TurnRouting | None] = {}
         self._input_cache: dict[str, InputDisplay | None] = {}
@@ -112,6 +110,15 @@ class TranscriptRouteRevision:
     database: FileRevision | None
     journal: FileRevision | None
 
+    @classmethod
+    def capture(cls, database: Path) -> TranscriptRouteRevision:
+        """Capture committed route storage; an empty WAL carries no route change."""
+        journal = FileRevision.capture(database.with_name(database.name + "-wal"))
+        return cls(
+            FileRevision.capture(database),
+            journal if journal is not None and journal.size else None,
+        )
+
 
 class TranscriptRoutes:
     filename = "transcript_routes.sqlite3"
@@ -122,10 +129,7 @@ class TranscriptRoutes:
 
     def revision(self) -> TranscriptRouteRevision:
         """SQLite owns its committed data in the database or its WAL file."""
-        return TranscriptRouteRevision(
-            FileRevision.capture(self.database_path),
-            FileRevision.capture(self.database_path.with_name(self.database_path.name + "-wal")),
-        )
+        return TranscriptRouteRevision.capture(self.database_path)
 
     def snapshot(self, destination: Path) -> None:
         """Retain a consistent current annotation store for attached history."""
@@ -135,10 +139,8 @@ class TranscriptRoutes:
         descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
         os.close(descriptor)
         with (
-            closing(
-                sqlite3.connect(self.database_path.resolve().as_uri() + "?mode=ro", uri=True)
-            ) as source,
-            closing(sqlite3.connect(target)) as output,
+            closing(CoordinationStore.read_snapshot(self.database_path)) as source,
+            closing(CoordinationStore.writer(target)) as output,
         ):
             _assert_schema(source)
             source.backup(output)
@@ -152,7 +154,7 @@ class TranscriptRoutes:
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
         with (
             _store_lock(self.database_path),
-            closing(sqlite3.connect(self.database_path, timeout=30)) as connection,
+            closing(CoordinationStore.writer(self.database_path)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
@@ -172,9 +174,7 @@ class TranscriptRoutes:
         """Read typed owner bindings without creating or upgrading a database."""
         if not self.database_path.exists():
             return {}
-        with closing(
-            sqlite3.connect(self.database_path.resolve().as_uri() + "?mode=ro", uri=True)
-        ) as connection:
+        with closing(CoordinationStore.read_snapshot(self.database_path)) as connection:
             _assert_schema(connection)
             return {
                 row.native_id: row
@@ -187,7 +187,7 @@ class TranscriptRoutes:
         self._ensure_database(create=True)
         with (
             _store_lock(self.database_path),
-            closing(sqlite3.connect(self.database_path, timeout=30)) as connection,
+            closing(CoordinationStore.writer(self.database_path)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
@@ -224,9 +224,9 @@ class TranscriptRoutes:
         except (ValueError, TypeError) as error:
             raise RelationViolationError("Native publication evidence is invalid") from error
         ids = routing.annotation_ids(reader, checkpoint, str(path), final.end)
-        inputs = InputDispositions(log.path.parent / InputDispositions.filename)
+        inputs = InputDispositions(log.path.parent)
         lookup = stable_thread_lookup(incarnation.created_at)
-        with log.certified_read() as source, registry.store.reading() as document, inputs.reading() as attempts:
+        with log.certified_read() as source, registry.store.reading() as document:
             snapshot = document.snapshot()
             incarnation = lease.identity.incarnation.resolved(snapshot)
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread
@@ -234,7 +234,8 @@ class TranscriptRoutes:
                 raise RelationViolationError("Native publication turn lease changed")
             if current.session_file != str(path) or FileRevision.capture(path) != revision:
                 raise RelationViolationError("Native publication session changed")
-            if not attempts.started_for_native(lease, user.input_id, user.message.text, snapshot=snapshot):
+            if not inputs.in_turn(lease.turn_id).started_for_native(
+                    lease, user.input_id, user.message.text, snapshot=snapshot):
                 raise RelationViolationError("Native publication has no original STARTED input")
             references = tuple(dict.fromkeys((*routing.requests, *published)))
             marks = ",".join("?" for _ in references)
@@ -251,7 +252,9 @@ class TranscriptRoutes:
 
     def _record_publication(self, session_file, entry_ids, final_id, routing, published):
         self._ensure_database(create=True)
-        with _store_lock(self.database_path), closing(sqlite3.connect(self.database_path, timeout=30)) as connection:
+        with _store_lock(self.database_path), closing(
+            CoordinationStore.writer(self.database_path)
+        ) as connection:
             connection.execute("PRAGMA synchronous=FULL")
             with connection:
                 final_routing = replace(routing, publications=published)
@@ -281,7 +284,7 @@ class TranscriptRoutes:
         self._ensure_database(create=True)
         with (
             _store_lock(self.database_path),
-            closing(sqlite3.connect(self.database_path, timeout=30)) as connection,
+            closing(CoordinationStore.writer(self.database_path)) as connection,
         ):
             connection.execute("PRAGMA synchronous=FULL")
             with connection:

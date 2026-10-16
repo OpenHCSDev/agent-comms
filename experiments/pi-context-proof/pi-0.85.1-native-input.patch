@@ -116,14 +116,14 @@
 +        if (tracked.length === 0) return;
 +        const digest = createHash("sha256")
 +            .update(`pi-assembled-context-v1\n${JSON.stringify(llmContext)}`).digest("hex");
-+        const generation = new NativeProofJournal(this._nativeProofPath(), this.sessionId)
++        const records = new NativeProofJournal(this._nativeProofPath(), this.sessionId)
 +            .commit(tracked, digest);
-+        for (const { inputId, sessionEntryId } of tracked) {
++        const generation = records[0].requestGeneration;
++        for (const record of records) {
++            const { inputId, sessionEntryId } = record;
 +            this._nativeInputClaims.delete(inputId);
 +            this._awaitingNativeInputIds.delete(inputId);
-+            this._emit({ type: "context_committed", sessionId: this.sessionId,
-+                inputId, sessionEntryId, requestGeneration: generation,
-+                llmContextDigest: digest });
++            this._emit(record);
 +        }
 +    }
      get modelRuntime() {
@@ -845,7 +845,7 @@
      const response = await streamFunction(config.model, llmContext, {
 --- a/dist/core/agent-session.d.ts
 +++ b/dist/core/agent-session.d.ts
-@@ -45,6 +45,18 @@
+@@ -45,6 +45,19 @@
      willRetry: boolean;
  } | {
      type: "agent_settled";
@@ -861,10 +861,11 @@
 +    sessionEntryId: string;
 +    requestGeneration: number;
 +    llmContextDigest: string;
++    committedAtMs: number;
  } | {
      type: "queue_update";
      steering: readonly string[];
-@@ -155,6 +167,8 @@
+@@ -155,6 +168,8 @@
      streamingBehavior?: "steer" | "followUp";
      /** Source of input for extension input event handlers. Defaults to "interactive". */
      source?: InputSource;

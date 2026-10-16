@@ -15,11 +15,12 @@ from agent_comms.routing import ScheduledTurn
 from agent_comms.threads import Thread
 from agent_comms.turn_context import UserInputSegment
 from native_backend_fixture import native_backend_fixture
+from stored_inputs import stored_inputs
 
 
 def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
     owner = Thread("owner", frozenset(), str(tmp_path))
-    ledger = InputDispositions(tmp_path / InputDispositions.filename)
+    ledger = InputDispositions(tmp_path)
     origins = tuple(
         Message("peer", "#comms", f"text {seq}", InfoKind, seq=seq) for seq in (1, 2)
     )
@@ -34,7 +35,7 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path):
             text=message.body,
         )
     prompt = "text 1\n\ntext 2"
-    document = ledger.read()
+    document = stored_inputs(ledger.root)
     assert InputBatch.capture(origins, keys, prompt, owner, document).admits_multiple
     for messages, input_keys, text in (
         (origins[:1], keys[:1], "text 1"),
@@ -107,7 +108,7 @@ async def test_captured_originals_reach_context_reservation_and_unbound_retireme
                 assert not any(isinstance(item, InputProvenance) for item in segment.provenance)
                 assert turn.original.batch.prompt == turn.context.render().text
 
-            originals = agent.inputs.dispositions.read().originals(
+            originals = stored_inputs(agent.inputs.dispositions.root).originals(
                 (*direct_keys, *channel_keys, *scheduled_keys)
             )
             assert all(isinstance(row, NotSentInput) and not row.has_native_binding

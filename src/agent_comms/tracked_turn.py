@@ -27,7 +27,6 @@ from .native_pi import (
     NativeContextProof,
     NativePiPromptRejected,
     NativePiRpcLaunch,
-    NativePiTerminalFailure,
     NativePiUnavailable,
     NativeTurnResult,
     _verify_context,
@@ -45,7 +44,6 @@ from .pi_rpc import PiRpcChannel
 from .selected_tool_broker import NativeToolMode, OwnerToolSocket
 from .selected_session import SelectedSession
 from .turn_context import InputContributionCoordinates
-from .turn_failure import TurnFailure
 
 
 if TYPE_CHECKING:
@@ -61,8 +59,6 @@ T = TypeVar("T")
 
 class NativeCommitObservation(ABC, Generic[T]):
     """Observed original native receipts, without granting admission or replay."""
-
-    observed = False
 
     @abstractmethod
     def require(self) -> T: ...
@@ -82,32 +78,22 @@ class PendingNativeCommit(NativeCommitObservation[T]):
 @dataclass(frozen=True)
 class ObservedNativeCommit(NativeCommitObservation[T]):
     event: T
-    observed = True
 
     def require(self) -> T:
         return self.event
 
 
 class TrackedTerminal(ABC):
-    """Terminal data owns failure, missing, unique and ambiguous observations."""
+    """Relate completed assistant responses to their streamed text."""
 
     def append(self, text: str) -> TrackedTerminal:
         return CompletedTrackedTerminal(text)
-
-    def fail(self, text: str) -> TrackedTerminal:
-        return FailedTrackedTerminal(text)
 
     def tool_round(self) -> TrackedTerminal:
         return PendingTrackedTerminal()
 
     def later_input(self, parts: list[str]) -> TrackedTerminal:
         return PendingTrackedTerminal()
-
-    def raise_if_failed(self, proof, provider, model, output) -> None:
-        return None
-
-    def require_failed(self) -> None:
-        raise ValueError("Saved assistant message did not end its turn as a failure")
 
     @abstractmethod
     def require_response(self, parts: list[str]) -> str: ...
@@ -159,62 +145,6 @@ class AnsweredTrackedTerminal(TrackedTerminal):
 class AmbiguousTrackedTerminal(PendingTrackedTerminal):
     def append(self, text):
         return self
-
-
-@dataclass(frozen=True)
-class FailedTrackedTerminal(TrackedTerminal):
-    text: str
-
-    def append(self, text):
-        return self
-
-    def tool_round(self):
-        return self
-
-    def raise_if_failed(self, proof, provider, model, output) -> None:
-        self.raise_failure(proof, provider, model, output.declared_failure)
-
-    def raise_failure(
-        self, proof, provider, model, failure: TurnFailure
-    ) -> None:
-        raise NativePiTerminalFailure(self.text, proof, provider, model, failure)
-
-    def later_input(self, parts):
-        return self
-
-    def require_failed(self) -> None:
-        return None
-
-    def require_response(self, parts):
-        raise NativePiUnavailable("Native Pi has no unique authoritative completed response")
-
-
-class SavedTurnEnd:
-    """Apply the live turn-end decision to a saved assistant message.
-
-    A live turn and recovery share one definition of a failed turn: the stop
-    reason's ``tracked`` decision. A saved tool round cannot show whether the
-    live owner accepted it, so it never proves a failure.
-    """
-
-    def __init__(self) -> None:
-        self.terminal: TrackedTerminal = PendingTrackedTerminal()
-
-    def fail_terminal(self, text: str) -> None:
-        self.terminal = self.terminal.fail(text)
-
-    def accept_final_message(self, message) -> None:
-        self.terminal = self.terminal.append(message.authoritative_text)
-
-    def accept_tool_round(self, message) -> bool:
-        self.terminal = self.terminal.tool_round()
-        return True
-
-    @classmethod
-    def require_failed(cls, message) -> None:
-        ended = cls()
-        message.tracked_end(ended)
-        ended.terminal.require_failed()
 
 
 class TrackedTurnSession(TurnSession, MroDispatch):
@@ -272,8 +202,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
         worktree: Path,
         session: SelectedSession,
-        provider: str = "openrouter",
-        model: str = "z-ai/glm-5.3-flash",
+        provider: str,
+        model: str,
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
@@ -403,10 +333,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             self.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = self.tool_socket.token
 
     @property
-    def started_input(self):
-        return self.input_commit.observed
-
-    @property
     def active_tools(self):
         return self.tool_socket.active_tools if self.tool_socket is not None else set()
 
@@ -453,9 +379,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 ) from error
         else:
             self.write(command, payload)
-        await asyncio.wait_for(
-            self.native.proc.stdin.drain(), timeout=self.watchdog.read_timeout(self)
-        )
+        wait = self.watchdog.wait_for(self)
+        with wait.charge(self.watchdog.clock):
+            await asyncio.wait_for(self.native.proc.stdin.drain(), timeout=wait.timeout())
 
     async def attest(self) -> None:
         self.native.attestation = self.launch.session.tracked_attestation(
@@ -532,6 +458,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     async def committed_input(self, event: pi.InputCommitted) -> None:
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
+            self.admission = self.admission.start(event)
             self.evidence = self.custody.enter_context(
                 NativeEntry.open_input_evidence(self.active_session_file)
             )
@@ -589,12 +516,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             self.tool_socket.assert_complete()
         self.terminal = self.terminal.append(message.authoritative_text)
 
-    def fail_terminal(self, text: str):
-        self.terminal = self.terminal.fail(text)
-
     @handles(pi.NativeRetryEnd)
     async def native_retry_finished(self, event: pi.NativeRetryEnd) -> None:
-        event.outcome.finish_tracked(self)
+        event.outcome.finish_request(self)
 
     def request_retried(self) -> None:
         super().request_retried()
@@ -638,9 +562,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         with self.startup.measurements.operation("native_terminal_result"):
             with self.startup.measurements.operation("native_terminal_proof"):
                 proof = await self.context_proof()
-            self.terminal.raise_if_failed(
-                proof, self.provider, self.model, self.output
-            )
+            self.output.raise_if_failed(proof, self.provider, self.model)
             if self.tool_socket is not None:
                 self.tool_socket.assert_complete()
             response = self.terminal.require_response(self.text_parts)

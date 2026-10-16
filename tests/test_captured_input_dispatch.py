@@ -11,6 +11,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.queued_input import InputHandoffRefused
 from agent_comms.input_attempt import NotSentInput
 from test_acp_queue_contract import _owner
+from stored_inputs import stored_inputs
 
 
 async def test_initial_capture_rejects_owner_readmission_during_acceptance_notice(
@@ -39,7 +40,7 @@ async def test_initial_capture_rejects_owner_readmission_during_acceptance_notic
         with pytest.raises(InputHandoffRefused, match="context changed"):
             await InitialInput.run(agent.inputs, "beta", "beta", "Fresh captured input")
         assert len(admitted) == 1 and not dispatched
-        row = agent.inputs.dispositions.read().lookup("acp:" + admitted[0])
+        row = stored_inputs(agent.inputs.dispositions.root).lookup("acp:" + admitted[0])
         assert isinstance(row, NotSentInput) and not row.has_native_binding
         assert row.source_text == "Fresh captured input"
         assert not agent.inputs.queued_inputs["beta"]
@@ -63,7 +64,7 @@ async def test_postdispatch_failure_is_not_reclassified_as_admission_refusal(tmp
             await InitialInput.run(agent.inputs, "beta", "beta", "One explicit request")
         assert caught.value is failure and not isinstance(caught.value, InputHandoffRefused)
         assert len(entered) == 1
-        assert len(agent.inputs.dispositions.read().rows) == 1
+        assert len(stored_inputs(agent.inputs.dispositions.root).rows) == 1
     finally:
         await agent.shutdown()
 
@@ -84,9 +85,7 @@ async def test_initial_transfer_cancellation_retires_original_before_dispatch(tm
     try:
         with pytest.raises(asyncio.CancelledError):
             await InitialInput.run(agent.inputs, "beta", "beta", "Never dispatched")
-        rows = comms.root / "input_dispositions.json"
-        assert rows.is_file()
-        document = agent.inputs.dispositions.read()
+        document = stored_inputs(agent.inputs.dispositions.root)
         assert len(document.rows) == 1
         row = next(iter(document.rows.values()))
         assert isinstance(row, NotSentInput) and row.source_text == "Never dispatched"

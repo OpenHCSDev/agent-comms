@@ -240,11 +240,8 @@ def accept_delivery_cohort(
     """
     if type(bus) is not MessageBus or type(store) is not Coordination:
         raise TypeError("cohort acceptance requires the actual bus and coordinator stores")
-    # Selected acceptance is a read of the original source followed by its
-    # coordination rows. Keep shared source custody through that one SQL
-    # transaction: readers do not serialize behind other readers, while the
-    # canonical bus -> coordination lock order still fences publication.
-    with bus.log.certified_claim_read() as source, store.session.transaction() as db:
+    # Keep the original certified source current throughout its SQL effect.
+    with bus.log.certified_read() as source, store.session.transaction() as db:
         marker = source.marker
         if marker.root_id != wire_root_id:
             raise IdentityConflict("cohort admission wire root changed")

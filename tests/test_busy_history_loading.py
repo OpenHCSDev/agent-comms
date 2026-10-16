@@ -55,7 +55,7 @@ def held_source(comms):
 async def test_busy_source_keeps_original_waiter_and_other_reads_move(tmp_path):
     comms, session = saved_history(tmp_path)
     original = session.read_bytes()
-    with ObservationProcess.awaited(comms.root) as process:
+    with ObservationProcess.awaited(comms.route) as process:
         with held_source(comms):
             answer = ReadTranscript(str(comms.root), "saved", request_id=19).answer(comms)
             assert isinstance(answer, ReadBusy)
@@ -119,7 +119,7 @@ async def test_startup_replay_uses_retained_read_not_delivery_error(tmp_path):
 
 async def test_cancelled_busy_read_is_removed_without_resubmission(tmp_path):
     comms, _session = saved_history(tmp_path)
-    with ObservationProcess.awaited(comms.root) as process:
+    with ObservationProcess.awaited(comms.route) as process:
         with held_source(comms):
             waiting = asyncio.create_task(process.read(ReadTranscript(str(comms.root), "saved")))
             await asyncio.sleep(0.15)

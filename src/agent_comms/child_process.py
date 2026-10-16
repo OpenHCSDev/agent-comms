@@ -871,9 +871,13 @@ class ChildProcess(Sealed, ABC):
                     self.platform.force_group(self.identity)
                 break
             yield 0.02
+        # A killed process exits once the kernel releases it (swapped memory,
+        # pending disk IO), which has no deadline. Kill again each round so a
+        # member forked during the first kill retires too.
         while self.platform.group_members(self.identity):
-            if time.monotonic() >= deadline + STOP_GRACE_SECONDS:
-                raise RuntimeError("Child process group did not retire")
+            if stage is ForcedStopOutcome:
+                with guard():
+                    self.platform.force_group(self.identity)
             yield 0.02
         return stage
 

@@ -30,6 +30,7 @@ from agent_comms.queued_input import QueuedInput
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 def register(comms, name):
@@ -118,7 +119,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     comms.agents.begin_turn("peer", "peer-turn")
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for the peer"))
     message = comms.messaging.send_message("peer", "owner", "Review this uncertain reply")
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions(tmp_path)
     admission = comms.registry.snapshot().admission_generations["owner"]
     key = f"bus:{message.seq}"
     store.record(
@@ -132,7 +133,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     review = comms.goals.goal_input_review("owner", goal.id, ["peer"])
     assert review["reviewed_inputs"] == [key]
     comms.goals.update_goal("owner", replace(action, reviewed_inputs=(key,)))
-    row = store.read().rows[key]
+    row = stored_inputs(store.root).rows[key]
     assert row.accepts_reservation and row.reviewed_for_goal(goal.id)
     assert not (tmp_path / "acp_delivery_cursors.json").exists()
     # A later native-started reply is already handled, regardless of display reads.
@@ -205,14 +206,14 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
             native_id="b" * 32,
             text="uncertain",
         )
-        before = ledger.read().rows
+        before = stored_inputs(ledger.root).rows
         current = await proxy.request("input_dispositions")
         assert [row["inputId"] for row in current["inputs"]] == [queued.input_id]
         assert current["historicalCount"] == 1
         cleared = await proxy.request("dismiss_historical_inputs")
         assert cleared["dismissedHistoricalCount"] == 1 and cleared["inputs"] == current["inputs"]
         assert {
-            key: replace(row, notice_dismissed=False) for key, row in ledger.read().rows.items()
+            key: replace(row, notice_dismissed=False) for key, row in stored_inputs(ledger.root).rows.items()
         } == before
         assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
         goal = Goal(

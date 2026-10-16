@@ -42,8 +42,12 @@ class ThreadIncarnation:
         if not math.isfinite(FieldCodec.decode(float, self.created_at)):
             raise ValueError("Thread incarnation requires a finite birth")
 
+    @property
+    def has_recorded_birth(self) -> bool:
+        return self.created_at > 0
+
     def require_recorded(self) -> None:
-        if self.created_at <= 0:
+        if not self.has_recorded_birth:
             raise ValueError("Thread incarnation requires a positive recorded birth")
 
     def resolved(self, snapshot: RegistryProvenance) -> ThreadIncarnation:

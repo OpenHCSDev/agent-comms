@@ -9,8 +9,13 @@ from contextlib import ExitStack, contextmanager, nullcontext
 from functools import cached_property
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.coordination_database import (
+    DEFAULT_STORE_CONTENTION,
+    CoordinationStore,
+    StoreContention,
+)
 from agent_comms.coordination_errors import (
+    CoordinationReadUnavailable,
     IntegrityViolationError,
 )
 
@@ -20,9 +25,10 @@ if TYPE_CHECKING:
 
 class CoordinationSession(CoordinationStore):
     def __init__(
-        self, path: str, *, clock_ms: Callable[[], int] | None = None, lock_timeout: float = 5.0
+        self, path: str, *, clock_ms: Callable[[], int] | None = None,
+        contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> None:
-        super().__init__(path, lock_timeout=lock_timeout)
+        super().__init__(path, contention)
         self._clock_ms = clock_ms or (lambda: time.time_ns() // 1_000_000)
 
     def now(self, floor: int = 0) -> int:
@@ -33,8 +39,16 @@ class CoordinationSession(CoordinationStore):
 
     @contextmanager
     def transaction(self) -> Iterator[sqlite3.Connection]:
+        """Admit a rollback-journal writer only after existing readers retire.
+
+        ``BEGIN IMMEDIATE`` lets new work proceed before old readers release,
+        then makes those readers a fallible dependency of ``COMMIT``.  Every
+        coordinator write instead acquires the exclusive rollback-journal lock
+        before changing state, so contention remains an admission outcome and
+        a successfully admitted transaction owns its complete commit lifetime.
+        """
         with self._transaction_lifetime() as db:
-            db.execute("BEGIN IMMEDIATE")
+            db.execute("BEGIN EXCLUSIVE")
             yield db
 
     @contextmanager
@@ -45,20 +59,8 @@ class CoordinationSession(CoordinationStore):
         with self.transaction():
             yield None
 
-    def release_resources(self, snapshot, boundary: NativeBoundary | None) -> None:
+    def release_resources(self, snapshot, outcome, boundary: NativeBoundary | None) -> None:
         """Standalone attempts cannot acquire native file claims."""
-
-    @contextmanager
-    def irreversible_admission(self) -> Iterator[sqlite3.Connection]:
-        """Exclude readers before external effects, never upgrade after sending.
-
-        In rollback-journal mode BEGIN IMMEDIATE admits readers that can block
-        COMMIT. The raw native writer must acquire the exclusive lock before any
-        prompt byte; with its zero timeout, contention remains pre-admission.
-        """
-        with self._transaction_lifetime() as db:
-            db.execute("BEGIN EXCLUSIVE")
-            yield db
 
     @contextmanager
     def _transaction_lifetime(self) -> Iterator[sqlite3.Connection]:
@@ -81,12 +83,15 @@ class CoordinationSession(CoordinationStore):
         if db.in_transaction:
             yield
             return
-        db.execute("BEGIN")
         try:
-            yield
-        finally:
-            if db.in_transaction:
-                db.execute("ROLLBACK")
+            try:
+                self.begin_snapshot(db)
+                yield
+            finally:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+        except sqlite3.OperationalError as error:
+            CoordinationReadUnavailable.raise_from(error)
 
 
 class NativeBoundary(ExitStack):
@@ -156,7 +161,26 @@ class NativeCoordinationSession(CoordinationSession):
             with self.transaction():
                 yield acquired
 
-    def release_resources(self, snapshot, boundary: NativeBoundary | None) -> None:
+    def release_resources(self, snapshot, outcome, boundary: NativeBoundary | None) -> None:
         if not isinstance(boundary, NativeBoundary):
             raise IntegrityViolationError("native release requires an acquired boundary")
-        snapshot.release_resources(boundary)
+        snapshot.release_resources(boundary, outcome)
+
+
+class ReadNativeCoordinationSession(NativeCoordinationSession):
+    """Read-only native coordination through the complete session constructor."""
+
+    def _prepare_private_file(self) -> None:
+        self._private_file()
+
+    def _open_connection(self, contention: StoreContention) -> sqlite3.Connection:
+        return self._open_reader(self.path, contention)
+
+    def _configure_connection(self) -> None:
+        pass  # _open_reader configured query-only behavior before publication.
+
+    def _initialize_schema(self) -> None:
+        pass  # Consumers validate exactly the typed tables they read.
+
+    def _enforce_private_modes(self) -> None:
+        pass  # A reader observes private storage and never repairs it.

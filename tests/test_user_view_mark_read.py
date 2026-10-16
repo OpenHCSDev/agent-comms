@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
+from native_unread_fixture import completed_snapshot
 
 
 def answer(path, text):
@@ -28,7 +29,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     comms.messaging.send("sender", viewer, "Human DM")
     comms.messaging.send("sender", "#ci", "Channel message")
 
-    before = comms.views.viewer_snapshot(str(tmp_path))
+    before = completed_snapshot(comms, str(tmp_path))
     assert before.thread_unread["sender"] == before.unread["sender"] == 1
     assert before.channel_unread["#ci"] == 1
     assert comms.bus.pending_count("receiver", "sender") == 1
@@ -57,7 +58,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     assert comms.views.viewer_snapshot(str(tmp_path)).unread.get("receiver", 0) == 0
 
     answer(source, "New reply after manual read")
-    assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread["sender"] == 1
+    assert completed_snapshot(comms, str(tmp_path)).thread_unread["sender"] == 1
     with pytest.raises(ValueError, match="registered"):
         comms.views.mark_user_view_read("missing", worktree=str(tmp_path))
 

@@ -63,8 +63,8 @@ def _preflight(root: Path, wire_root_id: str, native_package: Path, opt_in: bool
     cli = _trusted_package(native_package)
     comms = Comms(root)
     bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
-    with bus.log.locked():
-        marker = bus.log._private_marker_unlocked()
+    with bus.log.certified_read() as source:
+        marker = source.marker
     if marker.root_id != wire_root_id:
         raise IdentityConflict("private initial wire root changed")
     return cli
@@ -87,7 +87,7 @@ async def _accept_visible_deliveries(
     infer a cohort from an ordinary public message or its body.
     """
     def accept(resource: Coordination) -> int:
-        with bus.log.certified_claim_read() as source:
+        with bus.log.certified_read() as source:
             _require_no_private_owner_rename(bus.log.path.parent)
             marker = bus.log._private_marker_unlocked()
             if marker.root_id != root_id:
@@ -182,8 +182,8 @@ async def run_foreground_once(
         if action is not None:
             # Refuse an uninitialized claim protocol or permanently invalid
             # resource before owner registration or an irreversible native send.
-            with comms.bus.log.locked():
-                marker = comms.bus.log._private_marker_unlocked()
+            with comms.bus.log.certified_read() as source:
+                marker = source.marker
             if not marker.claims:
                 raise PublicationActivationBlocked("selected file write needs a private claim protocol")
             action = action.prepare(thread)
@@ -228,6 +228,21 @@ async def run_foreground_once(
                 return result
             remaining = deadline - time.monotonic()
             if remaining <= 0:
+                # Linearize the timeout against one final certified source cut.
+                # A delivery appended after the prior empty scan but before the
+                # deadline decision still owns its selected execution.
+                final_cursor = await _accept_visible_deliveries(
+                    bus,
+                    wire_root_id,
+                    root / "coordination.sqlite3",
+                    lookup,
+                    cursor,
+                    owner_name=thread.name,
+                )
+                if final_cursor > cursor:
+                    cursor = final_cursor
+                    continue
+
                 def read_observers(store):
                     with store.session.read():
                         observers = CohortDeliveryReceipts.read(
@@ -242,7 +257,9 @@ async def run_foreground_once(
                             )
                         )
                     return observers
-                observers = await Coordination.run_async(root / "coordination.sqlite3", read_observers)
+                observers = await Coordination.run_read_async(
+                    root / "coordination.sqlite3", read_observers
+                )
                 return NoWakeReceipt(observers[0].wire_seq) if observers else None
             await asyncio.sleep(min(0.1, remaining))
 

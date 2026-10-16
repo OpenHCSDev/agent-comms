@@ -8,13 +8,16 @@ fresh store, and readers accept exactly the declared columns and field types.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import types
 from abc import abstractmethod
-from collections.abc import Generator, Mapping
+from collections.abc import Callable, Generator, Iterator, Mapping
+from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
 from dataclasses import dataclass, fields
 from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
+from pathlib import Path
 from typing import (
     Annotated,
     ClassVar,
@@ -28,7 +31,8 @@ from typing import (
 )
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .errors import RelationViolationError
+from .field_codec import FieldCodec, ValueDecoder, compile_decoder
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -285,17 +289,17 @@ class _Field:
     nullable: bool
     storage: type[SqlStorage]
     column: Column
+    # The annotation's compiled decoder, resolved with the column.
+    value: ValueDecoder
 
     def encode(self, value: object) -> object:
         # Validate before SQLite can coerce a wrong Python value into its affinity.
         encoded = FieldCodec.encode(value, self.annotation)
-        FieldCodec.decode(self.annotation, encoded)
+        self.value.decode(encoded)
         return None if encoded is None else self.storage.to_sql(encoded)
 
     def decode(self, value: object) -> object:
-        return FieldCodec.decode(
-            self.annotation, None if value is None else self.storage.from_sql(value)
-        )
+        return self.value.decode(None if value is None else self.storage.from_sql(value))
 
 
 def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
@@ -321,6 +325,7 @@ class TypedRow:
                 _base_type(hints[item.name])[1] or item.metadata.get("sql", Column()).nullable,
                 item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
                 item.metadata.get("sql", Column()),
+                compile_decoder(hints[item.name]),
             )
             for item in fields(cls)
         )
@@ -347,7 +352,9 @@ class TypedRow:
         return {name: index for index, name in enumerate(names)}
 
     @classmethod
-    def _decode_row(cls, row: sqlite3.Row | tuple[object, ...], positions: Mapping[str, int]) -> Self:
+    def _decode_row(
+        cls, row: sqlite3.Row | tuple[object, ...], positions: Mapping[str, int]
+    ) -> Self:
         values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
         instance = cls(**{item.name: values[item.name] for item in cls._fields() if item.init})
         for item in cls._fields():
@@ -366,7 +373,9 @@ class TypedRow:
             cursor.close()
 
     @classmethod
-    def joined(cls, cursor: sqlite3.Cursor, related: type[RelatedRow]) -> list[tuple[Self, RelatedRow]]:
+    def joined(
+        cls, cursor: sqlite3.Cursor, related: type[RelatedRow]
+    ) -> list[tuple[Self, RelatedRow]]:
         """Decode disjoint joined declarations once without another partial row schema.
 
         All actual columns must belong to exactly these declarations; duplicate,
@@ -438,6 +447,17 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     checks: ClassVar[tuple[str, ...]] = ()
     indexes: ClassVar[tuple[Index, ...]] = ()
     without_rowid: ClassVar[bool] = False
+
+    @classmethod
+    def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
+        """Enumerate the schema owner's already imported row declarations.
+
+        Schema owners load their row modules before querying capabilities. A
+        checkpoint read must not import unrelated application modules while
+        holding its bus lock. External table-name decoding still uses the
+        registry's complete lazy discovery through DeclaredFamily.decode.
+        """
+        return tuple(dict.values(cls.__registry__))
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
@@ -518,6 +538,26 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             db.execute(statement)
 
     @classmethod
+    def _query(
+        cls, db: sqlite3.Connection, where: str, parameters: tuple,
+        order_by: tuple[str, ...], descending: bool, key: dict[str, object]
+    ) -> sqlite3.Cursor:
+        selected = cls._fields_named(tuple(key))
+        if selected:
+            where = "(" + where + ") AND " + " AND ".join(
+                f"{_identifier(item.name)} IS ?" for item in selected)
+            parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
+        cls._fields_named(order_by)
+        direction = " DESC" if descending else ""
+        return db.execute(
+            f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
+            f"WHERE {where}"
+            + (" ORDER BY " + ", ".join(_identifier(name) + direction for name in order_by)
+               if order_by else ""),
+            parameters,
+        )
+
+    @classmethod
     def select(
         cls,
         db: sqlite3.Connection,
@@ -525,20 +565,24 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         where: str = "1",
         parameters: tuple = (),
         order_by: tuple[str, ...] = (),
+        descending: bool = False,
         **key: object,
     ) -> list[Self]:
-        selected = cls._fields_named(tuple(key))
-        if selected:
-            where = "(" + where + ") AND " + " AND ".join(
-                f"{_identifier(item.name)} IS ?" for item in selected)
-            parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
-        return cls.read(
-            db.execute(
-                f"SELECT {cls._column_list(cls.columns())} FROM {_identifier(cls.declared_name)} "
-                f"WHERE {where}" + (f" ORDER BY {cls._column_list(order_by)}" if order_by else ""),
-                parameters,
-            )
-        )
+        return cls.read(cls._query(db, where, parameters, order_by, descending, key))
+
+    @classmethod
+    def stream(
+        cls,
+        db: sqlite3.Connection,
+        *,
+        where: str = "1",
+        parameters: tuple = (),
+        order_by: tuple[str, ...] = (),
+        descending: bool = False,
+        **key: object,
+    ) -> Generator[Self, None, None]:
+        """Rows decoded as the caller consumes them; close it to release the query."""
+        return cls.iterate(cls._query(db, where, parameters, order_by, descending, key))
 
     @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
@@ -597,3 +641,113 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             + f" WHERE {where}",
             tuple(item.encode(changes[item.name]) for item in selected) + parameters,
         )
+
+
+class TypedStore:
+    """One owner-only SQLite file whose schema its TypedTable rows declare.
+
+    Members name the file and their rows. A transaction installs an absent
+    store, so members answer reads of an absent store without opening one; a
+    store whose schema differs from its declaration raises.
+    """
+
+    filename: ClassVar[str]
+    rows: ClassVar[tuple[type[TypedTable], ...]]
+    synchronous: ClassVar[str] = "FULL"
+    root: Path
+
+    @property
+    def path(self) -> Path:
+        return self.root / self.filename
+
+    @classmethod
+    def declared_schema(cls) -> dict[str, str]:
+        return {name: sql for row in cls.rows for name, sql in row.schema_objects().items()}
+
+    @staticmethod
+    def _schema(connection: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+        return SQLiteSchemaObject.read(connection.execute(
+            "SELECT name,sql FROM sqlite_master "
+            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
+
+    @contextmanager
+    def _attached(
+        self, opening: Callable[[], AbstractContextManager[sqlite3.Connection]],
+    ) -> Iterator[sqlite3.Connection]:
+        """Serialize WAL attachment and retirement, not admitted SQL work.
+
+        Even a read-only cold attachment initializes the WAL index. Another
+        attachment or last-connection cleanup can make that initialization
+        return BUSY before any query competes with a data writer. The same
+        physical owner serializes these connection boundaries; readers and
+        writers retain SQLite's parallel WAL transactions between them.
+        """
+        from .store_files import _store_lock
+
+        with ExitStack() as lifetime:
+            with _store_lock(self.path):
+                resource = opening()
+                connection = resource.__enter__()
+
+            def retire(*error):
+                with _store_lock(self.path):
+                    return resource.__exit__(*error)
+
+            lifetime.push(retire)
+            yield connection
+
+    def _open_writer(self) -> sqlite3.Connection:
+        """Attach and install an absent store under the connection boundary."""
+        from .coordination_database import CoordinationStore
+
+        # Never open/close an extra descriptor for an existing SQLite inode:
+        # doing so can release another connection's process-wide fcntl locks.
+        try:
+            descriptor = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
+        except FileExistsError:
+            pass
+        else:
+            os.close(descriptor)
+        connection = CoordinationStore.writer(self.path, isolation_level=None)
+        try:
+            connection.execute(f"PRAGMA synchronous={self.synchronous}")
+            # This query attaches an existing WAL before releasing the boundary.
+            if not self._schema(connection):
+                connection.execute("BEGIN IMMEDIATE")
+                if not self._schema(connection):
+                    for row in self.rows:
+                        row.create(connection)
+                connection.execute("COMMIT")
+                connection.execute("PRAGMA journal_mode=WAL")
+            return connection
+        except BaseException:
+            connection.close()
+            raise
+
+    @contextmanager
+    def snapshot(self) -> Iterator[sqlite3.Connection]:
+        """Read an existing committed store without taking its SQL writer lock."""
+        from .coordination_database import CoordinationStore, StoreBusy
+
+        with self._attached(
+            lambda: CoordinationStore.observing(self.path, StoreBusy())
+        ) as connection:
+            self.require_schema(self._schema(connection))
+            yield connection
+
+    def require_schema(self, actual: list[SQLiteSchemaObject]) -> None:
+        if SQLiteSchemaObject.differences(actual, self.declared_schema()):
+            raise RelationViolationError(f"{self.filename} differs from its declaration")
+
+    @contextmanager
+    def writing(self) -> Iterator[sqlite3.Connection]:
+        with self._attached(lambda: closing(self._open_writer())) as connection:
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                self.require_schema(self._schema(connection))
+                yield connection
+                connection.execute("COMMIT")
+            except BaseException:
+                if connection.in_transaction:
+                    connection.execute("ROLLBACK")
+                raise

@@ -40,7 +40,6 @@ from .message_page import MessagePage
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
-from .notification_assignment import NotificationAssignment
 from .presentation import (
     ChannelView,
     CoordinationSnapshot,
@@ -264,7 +263,7 @@ class HistoryViews:
         """Export one fixed, non-mutating snapshot of authoritative wire rows."""
         started_at = time.time() if export_started_at is None else export_started_at
         with ExitStack() as stack:
-            with _store_lock(self._wire_lock_path):
+            with _store_lock(self._wire_lock_path, shared=True):
                 resolved = scope.resolve(self.channels.catalog, self.registry)
                 through, messages = stack.enter_context(self.bus.log.full_history_snapshot())
 
@@ -344,18 +343,7 @@ class HistoryViews:
         owner = captured.read.identity.thread
         if not owner.incarnation.current(snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
-        assignment_read = NotificationAssignment.read_window(
-            self.root, (*captured.sources, *captured.sent_sources))
-        return replace(
-            view.presentation,
-            notifications=MessageNotification.for_sources(
-                self.root, self.registry, owner, captured.sources,
-                assignment_read=assignment_read),
-            sent_notifications=MessageNotification.for_sources(
-                self.root, self.registry, owner, captured.sent_sources,
-                assignment_read=assignment_read),
-            read_identity=captured.read.identity,
-        )
+        return view.presentation.with_sources(captured)
 
     def coordination_snapshot(
         self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False
@@ -387,23 +375,20 @@ class HistoryViews:
         """Local presentation scope, independent of agent delivery cursors."""
         viewer = self.messaging.user_identity(worktree).name
         with self.presentation.snapshot(viewer=viewer) as (basis, source):
-            scopes = basis.scopes
-            captured_viewer = basis.viewer
-            assert captured_viewer is not None
-            display_activity, display_unread = self.presentation.display_view_metrics(
-                source, scopes, scopes, captured_viewer, basis.viewer_names
-            )
+            captured_viewer = basis.require_viewer()
+            display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(source=source, registry=basis.registry), display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
                 show_stopped=show_stopped, show_archived=show_archived,
-                read_marker_notice=basis.notice,
+                read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
         unread = self.transcript_reads.counts(
             captured_viewer,
             {view.thread.name: view.thread.session_file or "" for view in snapshot.threads},
+            document=basis.document,
         )
         return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 
@@ -465,6 +450,7 @@ class HistoryViews:
 
     def revision_paths(self) -> dict[str, Path | tuple[Path, ...]]:
         """The stores a view derives from, by WireRevision part: what to stat and to watch."""
+        from .external_transcript import ExternalTranscript
         from .notification_assignment import NotificationAssignment
         from .relationships import RelationshipStore
 
@@ -476,9 +462,11 @@ class HistoryViews:
             "activity": self.agents.activity._path,
             "runtime_info": self.agents.runtime_info.path,
             "reads": self.bus.reads.path,
+            "native_unread": self.transcript_reads.index_path,
             "goal_waits": self.root / GoalWaits.filename,
             "relationships": self.root / RelationshipStore.filename,
             "notifications": tuple(NotificationAssignment.source_paths(self.root)),
+            "external_transcripts": ExternalTranscript.source_paths(self.root),
         }
 
     def latest_sequence(self) -> int:

@@ -29,6 +29,7 @@ from delivery_owner_fixture import (
     reply_turn_finished,
 )
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from stored_inputs import stored_inputs
 
 tmp_path = private_root_fixture
 
@@ -93,7 +94,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
             assert beta_first[1].execution.published_replies(
                 store.session._connection, beta_lookup
             )
-        assert owner.inputs.dispositions.read().rows == {}
+        assert stored_inputs(owner.inputs.dispositions.root).rows == {}
         assert owner.inputs.pending_turns == {}
         before = len(alpha_calls), len(beta_calls)
         assert await owner.inputs.drain_inbox("alpha") == 0

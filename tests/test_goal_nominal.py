@@ -78,7 +78,7 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
             if t.declared_name == "comms_goal"
         )
         assert "checkpoint" in tool.schema()["parameters"]["properties"]["status"]["enum"]
-        monkeypatch.setenv("PI_AGENT_ID", "worker")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
         previous = comms.goals.goal_snapshot("worker")
         tool.invoke(
             comms, {"status": "checkpoint", "goal_id": goal.id, "progress": "Evidence recorded"}
@@ -187,7 +187,7 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner):
 
     comms, goal = owner
     paused = comms.goals.update_goal("worker", PausedGoalAction(), actor=OwnerInvocable)
-    environment = {**os.environ, "PI_AGENT_ID": "worker"}
+    environment = {**os.environ, "AGENT_COMMS_THREAD": "worker"}
     result = subprocess.run(
         [
             sys.executable,

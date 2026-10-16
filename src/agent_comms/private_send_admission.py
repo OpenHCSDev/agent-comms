@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
+from .coordination_database import StoreBusy
 from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_acquisition_progress, record_request_progress
@@ -209,7 +210,9 @@ class PrivateSendAdmission:
         with ExitStack() as authority:
             try:
                 with self._measurements.operation("coordinator_open"):
-                    store = authority.enter_context(Coordination(str(self.store_path), lock_timeout=0))
+                    store = authority.enter_context(
+                        Coordination(str(self.store_path), contention=StoreBusy())
+                    )
                 with self._measurements.operation("maintenance_ingress"):
                     authority.enter_context(MaintenanceBarrier(
                         self.bus._registry.store.path
@@ -226,7 +229,7 @@ class PrivateSendAdmission:
                         self.prompt.text, blocking=False,
                     ))
                 with self._measurements.operation("coordinator_exclusive"):
-                    db = authority.enter_context(store.session.irreversible_admission())
+                    db = authority.enter_context(store.session.transaction())
                 with self._measurements.operation("selected_source_admission"):
                     self.session.admit(identity, selected_runtime_revision)
             except BlockingIOError as error:

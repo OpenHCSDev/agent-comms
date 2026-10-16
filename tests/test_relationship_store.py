@@ -6,9 +6,9 @@ import stat
 
 import pytest
 
-from agent_comms.relationships import RelationshipEdit
+from agent_comms.relationships import ChildrenRelationshipGroup, RelationshipEdit
 from agent_comms.comms import Comms
-from agent_comms.display_order import ThreadSort
+from agent_comms.display_order import CreatedThreadSort
 from agent_comms.locked_store import LockedStore
 from agent_comms.relationships import RelationshipDocument, RelationshipStore
 from agent_comms.store_files import _store_lock
@@ -32,7 +32,7 @@ def test_golden_relationship_document_and_noop(tmp_path, monkeypatch):
     monkeypatch.setattr("agent_comms.relationships.time.time", lambda: 123.0)
     first, peer = comms.registry.require("owner"), comms.registry.require("peer")
     service.edit("owner", RelationshipEdit.decode("add"), "peer", "Review")
-    service.set_order("owner", "children", ThreadSort.CREATED)
+    service.set_order("owner", ChildrenRelationshipGroup, CreatedThreadSort)
     expected = {
         "collaborations": [
             {

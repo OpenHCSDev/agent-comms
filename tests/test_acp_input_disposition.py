@@ -71,7 +71,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
         assert "preflight" in str(caught.value.__cause__)
         failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
         assert failure.notification_published and failure.failure.input_state.public_status == "not_sent"
-        rows = owner.inputs.dispositions.read().unknown(frozenset({session}))
+        rows = stored_inputs(owner.inputs.dispositions.root).unknown(frozenset({session}))
         assert len(rows) == 1 and not rows[0].has_native_binding
         assert rows[0].public_status == "not_sent"
         assert not owner.inputs.pending_turns and not owner.turns.turn_state(session).busy
@@ -124,7 +124,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             assert any(isinstance(fact, InputDeliveryChangedUpdate)
                        for update in updates.rows for fact in decode_updates(update.get("_meta")))
             assert [row["inputId"] for row in pending["inputs"]] == [public_id]
-            unknown = owner.inputs.dispositions.read().lookup(key)
+            unknown = stored_inputs(owner.inputs.dispositions.root).lookup(key)
             assert unknown.unresolved and unknown.has_native_binding
             assert not unknown.has_started  # Original RPC ACK is not native STARTED.
             assert len(native.saved_inputs()) == 2 and native.provider.posts == 1
@@ -141,24 +141,24 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
                     await asyncio.wait_for(turn, 30)
                 failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
                 assert failure.notification_published
-            final = InputDispositions(owner.inputs.dispositions.path).read().rows
+            final = stored_inputs(owner.inputs.dispositions.root).rows
             assert len(final) == 2
             assert final[key].unresolved is (not second_start)
             assert final[key].has_started is second_start
             assert len({row.native_id for row in final.values()}) == 2
-            assert final[key].sent_text.endswith("followup")
+            assert sent_text(native, final[key]).endswith("followup")
             assert len(native.saved_inputs()) == (3 if second_start else 2)
             overview = await proxy.request("input_dispositions", include_history=True)
             assert overview["inputs"] == []
             assert overview["historicalCount"] == (0 if second_start else 1)
             cleared = await proxy.request("dismiss_historical_inputs")
             assert cleared["dismissedHistoricalCount"] == (0 if second_start else 1)
-            reopened = InputDispositions(owner.inputs.dispositions.path).read().rows
+            reopened = stored_inputs(owner.inputs.dispositions.root).rows
             assert {k: replace(v, notice_dismissed=False) for k, v in reopened.items()} == final
             before = (native.session.read_bytes(), native.provider.posts)
             assert await owner.inputs.drain_inbox(session) == 0
             assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
-            assert owner.inputs.dispositions.read().rows == reopened
+            assert stored_inputs(owner.inputs.dispositions.root).rows == reopened
             assert (native.session.read_bytes(), native.provider.posts) == before
             assert native.session.read_bytes().startswith(saved)
             assert not owner.turns.turn_state(session).busy and not owner.inputs.backend_inboxes
@@ -197,9 +197,9 @@ async def test_native_steer_keeps_original_input_and_turn_custody(native_backend
             (receipt,) = decode_updates(accepted["_meta"])
             assert isinstance(receipt, InputDeliveryChangedUpdate)
             assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
-            rows = owner.inputs.dispositions.read().rows
+            rows = stored_inputs(owner.inputs.dispositions.root).rows
             assert len(rows) == 2 and all(row.has_started for row in rows.values())
-            assert rows["acp:" + receipt.input_id].sent_text.endswith("steer now")
+            assert sent_text(native, rows["acp:" + receipt.input_id]).endswith("steer now")
             assert {row.turn_id for row in rows.values()} == {lease.turn_id}
             assert len({row.native_id for row in rows.values()}) == 2
             assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
@@ -251,7 +251,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
             ))
             native.provider.response_gate = None
             # The owner's own observation hands the message to the turn.
-            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == 2)
+            await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 2)
             held.set()
             assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
 
@@ -283,7 +283,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
             taken = native.saved_inputs()[-1]
             assert "are you still on the parser?" in json.dumps(taken)
             assert "a message arrived while you work" in json.dumps(taken)
-            rows = owner.inputs.dispositions.read().rows
+            rows = stored_inputs(owner.inputs.dispositions.root).rows
             assert len(rows) == 2 and all(row.has_started for row in rows.values())
             assert len({row.turn_id for row in rows.values()}) == 1
             # Nothing is left to wake for once the turn ends.
@@ -365,8 +365,9 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             # Opening is the retry trigger; no second bus append or observation
             # tick is needed to reserve the waiting input.
             await wait_for(lambda: any(
-                "deliver as soon as following input opens" in (row.sent_text or "")
-                for row in owner.inputs.dispositions.read().rows.values()
+                "deliver as soon as following input opens" in sent_text(native, row)
+                for row in stored_inputs(owner.inputs.dispositions.root).rows.values()
+                if row.has_native_binding
             ))
             await wait_for(lambda: not owner.turns.turn_state(session).busy)
 
@@ -436,7 +437,7 @@ async def test_waiting_messages_and_a_model_change_reach_the_next_model_call_tog
             await owner.set_config_option(
                 FieldCodec.encode(ModelConfigOption), session, "response-local/fixture-second"
             )
-            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == 3)
+            await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 3)
             held.set()
             assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
             # One further model call took both messages, on the new model.
@@ -447,7 +448,7 @@ async def test_waiting_messages_and_a_model_change_reach_the_next_model_call_tog
                 body in json.dumps(request["messages"])
                 for body in ("first question", "second question")
             )
-            rows = owner.inputs.dispositions.read().rows
+            rows = stored_inputs(owner.inputs.dispositions.root).rows
             assert all(row.has_started for row in rows.values())
         finally:
             held.set()
@@ -466,6 +467,7 @@ from delivery_owner_fixture import canonical_agent
 from native_backend_fixture import NativeBackendFixture
 from agent_comms.comms import Comms
 from agent_comms.queued_input import InitialInput
+from stored_inputs import sent_text, stored_inputs
 async def main():
     owner = canonical_agent(Comms(Path(sys.argv[1])), auto_wake=False,
                             agent_args=['--provider','response-local','--model','fixture','--thinking','off'])
@@ -485,9 +487,9 @@ asyncio.run(main())
     assert result.outcome == ExitedOutcome(17), result.stderr.decode()
     comms = Comms(native.root)
     session = native.project.name
-    ledger = InputDispositions(native.root / InputDispositions.filename)
+    ledger = InputDispositions(native.root)
     before = ledger.path.read_bytes()
-    rows = ledger.read().unknown(frozenset({session}))
+    rows = stored_inputs(ledger.root).unknown(frozenset({session}))
     assert len(rows) == 1 and rows[0].source_text == "Retain exact crash input"
     assert not rows[0].has_native_binding and not rows[0].has_started
     original = comms.registry.require(session)
@@ -542,7 +544,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             await owner.inputs.drain_inbox(session)
             await wait_for(lambda: native.provider.posts == 1)
             reply_turn = owner.inputs.wake_tasks[session]
-            known = len(owner.inputs.dispositions.read().rows)
+            known = len(stored_inputs(owner.inputs.dispositions.root).rows)
             assert native.provider.requests[0]["model"] == "fixture"
             elsewhere = Comms(native.root, private_initial_writes=True)
 
@@ -558,7 +560,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             native.provider.response_gate = None
             # One observer feeds settings and accepted messages through the running-turn inbox.
             await wait_for(
-                lambda: len(owner.inputs.dispositions.read().rows) == known + 1
+                lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == known + 1
                 and owner.sessions.config.settings_in_use[session].model
                 == "response-local/fixture-second"
             )
@@ -580,7 +582,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             assert native.provider.requests[1]["model"] == "fixture-second"
             assert "the yaml one, I mean" in json.dumps(native.provider.requests[1]["messages"])
             assert "the yaml one, I mean" not in json.dumps(native.provider.requests[0]["messages"])
-            assert len({row.turn_id for row in owner.inputs.dispositions.read().rows.values()}) == 1
+            assert len({row.turn_id for row in stored_inputs(owner.inputs.dispositions.root).rows.values()}) == 1
             # Nothing is left to start another turn for, and the sender got one answer.
             await wait_for(lambda: session not in owner.inputs.wake_tasks)
             assert native.provider.posts == 2
@@ -624,7 +626,7 @@ async def test_model_change_stored_by_another_process_reaches_the_running_turn(n
                 elsewhere.messaging.send_message, "sender", session, "still there?"
             ))
             native.provider.response_gate = None
-            await wait_for(lambda: len(owner.inputs.dispositions.read().rows) == 2)
+            await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 2)
             held.set()
             assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
             assert native.provider.posts == 2

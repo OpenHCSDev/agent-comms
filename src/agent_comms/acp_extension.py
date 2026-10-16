@@ -29,6 +29,7 @@ from .thread_identity import AdmissionIdentity, ThreadIncarnation
 from .turn_lease import TurnState
 from .wire_metadata import WireRootIdText
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
+from .external_transcript import ExternalDraftRow
 from .turn_context import ContextManifest
 from .working_memory_labels import ModelLabel
 
@@ -467,6 +468,14 @@ class CoordinationChangedUpdate(AgentCommsUpdate):
     context_usage: ContextUsage | None
 
     @property
+    def source_identity(self):
+        from .transcript_receipts import AssignedSourceIdentity
+
+        if self.thread.has_recorded_birth:
+            return AssignedSourceIdentity(self.wire_root, self.thread)
+        return None
+
+    @property
     def persistence(self) -> str:
         return "shared on-disk wire"
 
@@ -494,15 +503,29 @@ class CompactionCommittedUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
+class TranscriptDraftUpdate(AgentCommsUpdate):
+    """Current draft beside an unchanged, already published transcript page."""
+
+    identity: TranscriptReadIdentity
+    draft: ExternalDraftRow | None
+
+
+@dataclass(frozen=True)
 class TranscriptSnapshotUpdate(AgentCommsUpdate):
     page: TranscriptPage
     identity: TranscriptReadIdentity
+    draft: ExternalDraftRow | None = None
+
+    @classmethod
+    def from_read(cls, read):
+        page, draft = read.read_snapshot()
+        return cls(page, read.identity, draft)
 
     @classmethod
     def capture(cls, transcripts, name, *, historical_source=None):
         """Publish the page together with the source witness that read it."""
         read = transcripts.capture_page_read(name, historical_source=historical_source)
-        return cls(read.read(), read.identity)
+        return cls.from_read(read)
 
 
 @dataclass(frozen=True)

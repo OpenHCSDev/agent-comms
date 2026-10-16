@@ -43,7 +43,7 @@ class NativeTool(DeclaredFamily, affix="Tool"):
             except (TypeError, ValueError):
                 text = str(detail)
             text = text.strip()
-            action += " " + text[:120] + ("…" if len(text) > 120 else "")
+            action += " " + text
         return ToolStart(call_id, name, action, arguments, declaration.acp_kind)
 
     @classmethod

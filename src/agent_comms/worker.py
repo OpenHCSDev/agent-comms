@@ -12,6 +12,7 @@ from .acp import CommsAgent
 from .comms import wire
 from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
 from .native_arguments import NativeArguments
+from .owner_launch import RestartEnvironment
 
 
 async def run() -> None:
@@ -25,7 +26,7 @@ async def run() -> None:
         comms.owners.pin_private_nk_launch(
             private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
         )
-    name = os.environ["AGENT_COMMS_THREAD"]
+    name = RestartEnvironment.calling_thread()
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(
         comms,
@@ -59,10 +60,10 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
 
     async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
         def capture():
-            with _store_lock(agent._comms._wire_lock_path):
+            with _store_lock(agent._comms._wire_lock_path, shared=True):
                 snapshot = agent._comms.registry.snapshot()
                 owner = snapshot.threads[name]
-                row = agent.inputs.dispositions.read().rows[key]
+                row = agent.inputs.dispositions.lookup(key)
                 if not row.queued_for(
                     owner.incarnation, snapshot.admission_generations[name], row.source_text
                 ):
@@ -100,11 +101,12 @@ def main() -> int:
     """
     argparse.ArgumentParser(
         prog="agent-comms-agent", description=__doc__,
-        epilog="Select an existing owner with AGENT_COMMS_THREAD. Use agent-comms for commands.",
+        epilog=(
+            f"Select an existing owner with {RestartEnvironment.owner_key}. "
+            "Use agent-comms for commands."
+        ),
     ).parse_args()
-    name = os.environ.get("AGENT_COMMS_THREAD")
-    if not name:
-        raise ValueError("Headless execution requires an explicit AGENT_COMMS_THREAD")
+    name = RestartEnvironment.calling_thread()
 
     launch = private_nk_from_environment()
     if launch is None:

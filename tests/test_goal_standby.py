@@ -383,4 +383,4 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, ackn
         )
     assert comms.goals.goal_wait("parent") is None
     assert comms.registry.require("parent").goal == goal
-    assert not (tmp_path / "input_dispositions.json").exists()
+    assert not (tmp_path / "input_dispositions.sqlite3").exists()

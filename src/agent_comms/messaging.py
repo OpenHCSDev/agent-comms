@@ -75,8 +75,14 @@ class Messaging:
                     "Human messages require the explicit user-message operation."
                 )
             message = Message(
-                sender=owner.name, target=target, body=body, type=type,
-                notice=notice, task=task, report=report,
+                sender=owner.name,
+                target=target,
+                body=body,
+                type=type,
+                notice=notice,
+                task=task,
+                report=report,
+                answers=self._answered_by(owner, target),
             )
             if claims or releases:
                 committed = self.bus.publisher.publish_claim_envelope(
@@ -89,6 +95,17 @@ class Messaging:
             else:
                 committed = self.bus.publisher.publish_ordinary(message)
         return committed
+
+    def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
+        """What this owner's message to target answers among its running turn's inputs."""
+        lease = owner.turn_lease
+        if lease is None:
+            return ()
+        from .input_disposition import InputDispositions
+
+        inputs = InputDispositions(self.root).in_turn(lease.turn_id)
+        with self.bus.log.certified_read() as source:
+            return inputs.answered_by(lease, source, self.registry.snapshot(), target)
 
     def initialize_private_initial_protocol(self) -> str:
         """Initialize the private protocol on a fresh owner-only root."""
