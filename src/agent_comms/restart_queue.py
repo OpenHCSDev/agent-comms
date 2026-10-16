@@ -29,6 +29,7 @@ from pathlib import Path
 import fcntl
 
 from .comms import Comms, wire
+from .coordinator import Coordination
 from .errors import RelationViolationError
 from .store_files import _store_lock
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
@@ -289,13 +290,18 @@ async def run(comms: Comms) -> None:
             WatchSource.file(comms.registry.store.guard_path),
             DirectoryWatchSource(directory),
         ):
-            step(comms)
+            await Coordination.run_worker(lambda: step(comms))
             # Check emptiness and release under enqueue's lock, so a new
             # request cannot slip between the empty check and release.
-            with _store_lock(directory / "queue"):
-                if not any(record.state.pending for _, record in _records(comms)):
+            def release_if_empty():
+                with _store_lock(directory / "queue"):
+                    if any(record.state.pending for _, record in _records(comms)):
+                        return False
                     fcntl.flock(lock, fcntl.LOCK_UN)
-                    return
+                    return True
+
+            if await Coordination.run_worker(release_if_empty):
+                return
     finally:
         os.close(lock)
 

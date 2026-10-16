@@ -83,7 +83,7 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
         input_id = secrets.token_hex(16)
         calls = []
 
-        def admit(self, round_number, call):
+        async def admit(self, round_number, call):
             self.calls.append(call)
 
     owner = Owner()
@@ -135,7 +135,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog)
     class Owner:
         input_id = secrets.token_hex(16)
 
-        def admit(self, round_number, call):
+        async def admit(self, round_number, call):
             answered.set()
 
     tmp_path.chmod(0o700)
@@ -170,7 +170,7 @@ async def test_tool_call_pi_never_started_is_refused_with_its_reason(tmp_path):
     class Owner:
         input_id = secrets.token_hex(16)
 
-        def admit(self, round_number, call):
+        async def admit(self, round_number, call):
             raise AssertionError("an unstarted call was checked")
 
     tmp_path.chmod(0o700)

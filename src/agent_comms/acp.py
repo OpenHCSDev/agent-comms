@@ -24,6 +24,7 @@ import re
 import sys
 import time
 from contextlib import AsyncExitStack
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -236,13 +237,13 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise RequestError.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
             )
-        receipt = SelectedWritePlans(self._comms, root_id).submit(
+        receipt = await Coordination.run_worker(partial(SelectedWritePlans(self._comms, root_id).submit,
             owner_name=owner,
             source_seq=request.source_seq,
             source_message_id=request.source_message_id,
             resource=request.resource,
             contents=request.contents,
-        )
+        ))
         attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
         self._selected_write_controllers[(owner, request.source_seq)] = (
             receipt.operation_id,
