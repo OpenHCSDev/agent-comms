@@ -20,7 +20,7 @@ from pydantic import (
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -729,8 +729,10 @@ class ItemEntry(WireModel):
 
     @staticmethod
     def _decode_start(milliseconds: int | None) -> EventTime:
-        return (UnrecordedEventTime() if milliseconds is None
-                else EventTime.capture(milliseconds / 1000))
+        return (
+            UnrecordedEventTime() if milliseconds is None
+            else EventTime.capture(milliseconds / 1000)
+        )
 
     started_at: Annotated[EventTime, ValidateAs(int | None, _decode_start)] = Field(
         alias='startedAtMs', default_factory=UnrecordedEventTime,

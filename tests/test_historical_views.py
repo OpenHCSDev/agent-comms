@@ -8,9 +8,27 @@ import pytest
 
 from agent_comms import HistoricalMessage, HistoryCursor
 from agent_comms.comms import Comms
+from agent_comms.historical_views import HistoryArchive
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
+
+
+@pytest.mark.parametrize('exists', [False, True])
+def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
+    archive = HistoryArchive(tmp_path / 'bus.jsonl')
+    if exists:
+        archive.path.write_text('[]')
+    with pytest.raises(ValueError, match='catalogue changed'):
+        with archive.read_sources() as sources:
+            assert sources == ()
+            archive.path.write_text('[ ]')
+
+
+def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
+    archive = HistoryArchive(tmp_path / 'bus.jsonl')
+    assert archive.sources() == ()
+    assert not archive.path.exists()
 
 
 def setup(root, count=5):
