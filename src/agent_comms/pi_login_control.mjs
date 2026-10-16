@@ -1,9 +1,7 @@
 /** Login-only control adapter. Pi's existing /login UI owns all authentication. */
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-
-export default function (pi: ExtensionAPI) {
+export default function (pi) {
   const provider = process.env.AGENT_COMMS_LOGIN_PROVIDER || "";
-  let timer: ReturnType<typeof setInterval> | undefined;
+  let timer;
   pi.on("session_start", (_event, ctx) => {
     ctx.ui.setEditorText(`/login${provider ? ` ${provider}` : ""}`);
     ctx.ui.notify("Press Enter to sign in using Pi. Ctrl+D closes this login session.", "info");

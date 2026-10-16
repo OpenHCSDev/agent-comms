@@ -11,6 +11,9 @@
       "entry": "dist/channel_coding_tools.mjs"
     },
     {
+      "entry": "dist/pi_login_control.mjs"
+    },
+    {
       "entry": "agent-comms-extensions/global-agent-comms/index.mjs",
       "sources": [
         {

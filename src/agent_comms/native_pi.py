@@ -112,7 +112,7 @@ def main() -> int:
         Path.cwd(),
         environment,
         RestartEnvironment.inherit(environment),
-        LaunchRuntime.current(),
+        LaunchRuntime.running(),
         session_context=session_context, project=project,
     )
     os.execvpe(argv[0], [*argv, *project.cli_arguments], environment)
@@ -460,9 +460,10 @@ class NativePiRpcLaunch:
             "--import",
             str(cli.with_name("agent-comms-project-bootstrap.mjs")),
             str(cli),
-            "-e", str(NativeRequestTools.native_extension(cli.parent.parent)),
-            "-e", str(project.native_extension(cli.parent.parent)),
-            *arguments,
+            *NativeArguments.parse(arguments).with_extensions(
+                NativeRequestTools.native_extension(cli.parent.parent),
+                project.native_extension(cli.parent.parent),
+            ).argv,
             *(argument for segment in session_context for argument in segment.native_arguments()),
             "--append-system-prompt",
             str(instructions),
@@ -502,7 +503,7 @@ class NativePiRpcLaunch:
             "--no-tools",
             "--no-extensions",
             "-e",
-            str(Path(__file__).with_name("pi_login_control.ts")),
+            str(package / "dist/pi_login_control.mjs"),
             "--no-skills",
             "--no-context-files",
             "--no-prompt-templates",
@@ -620,7 +621,8 @@ class NativePiRpcLaunch:
             project=project)
 
     @classmethod
-    def acquire_tracked(cls, package: Path, runtime: LaunchRuntime) -> Callable[..., NativePiRpcLaunch]:
+    def acquire_tracked(cls, package: Path, runtime: LaunchRuntime,
+                        arguments: tuple[str, ...]) -> Callable[..., NativePiRpcLaunch]:
         """Acquire one immutable artifact's executable construction behavior.
 
         The returned factory retains the original verified CLI for its owner's
@@ -628,17 +630,19 @@ class NativePiRpcLaunch:
         it grants no child readiness, input admission or prior context proof.
         """
         package = Path(package).absolute()
-        return cls.verified_launcher(package, _trusted_package(package), runtime)
+        return cls.verified_launcher(package, _trusted_package(package), runtime, arguments)
 
     @classmethod
-    def verified_launcher(cls, package: Path, cli: Path, runtime: LaunchRuntime) -> Callable[..., NativePiRpcLaunch]:
+    def verified_launcher(cls, package: Path, cli: Path, runtime: LaunchRuntime,
+                          arguments: tuple[str, ...]) -> Callable[..., NativePiRpcLaunch]:
         """Launcher for a package whose CLI _trusted_package already returned."""
-        return partial(cls._tracked, Path(package).absolute(), cli, runtime)
+        return partial(cls._tracked, Path(package).absolute(), cli, runtime, arguments)
 
     @classmethod
-    def tracked(cls, package: Path, *, runtime: LaunchRuntime, **options) -> NativePiRpcLaunch:
+    def tracked(cls, package: Path, *, runtime: LaunchRuntime,
+                arguments: tuple[str, ...], **options) -> NativePiRpcLaunch:
         """Acquire a fresh artifact for a standalone tracked execution."""
-        return cls.acquire_tracked(package, runtime)(**options)
+        return cls.acquire_tracked(package, runtime, arguments)(**options)
 
     @classmethod
     def _tracked(
@@ -646,6 +650,7 @@ class NativePiRpcLaunch:
         package: Path,
         cli: Path,
         runtime: LaunchRuntime,
+        native_arguments: tuple[str, ...],
         *,
         worktree: Path,
         session: SelectedSession,
@@ -665,6 +670,8 @@ class NativePiRpcLaunch:
         and model-delivery proofs remain separate per-attempt observations.
         """
         session_dir, session_file = session.directory, session.path
+        configured = NativeArguments.parse(native_arguments)
+        configured.rpc()
         try:
             for value in (provider, model):
                 FieldCodec.decode(str, value)
@@ -693,16 +700,11 @@ class NativePiRpcLaunch:
             else ("--no-tools",)
         )
         arguments = [
-            "--mode",
-            "rpc",
+            *configured.for_owned_turn().with_model(f"{provider}/{model}").with_thinking(None).rpc(),
             "--no-approve",
             *tool_arguments,
             "--session-dir",
             str(session_dir),
-            "--provider",
-            provider,
-            "--model",
-            model,
         ]
         arguments.extend(session.launch_arguments(thinking_level))
         if session_file is not None:

@@ -38,7 +38,8 @@ async def _owner(tmp_path, monkeypatch):
     private = comms.root / "goal-private"
     private.mkdir(mode=0o700)
     GoalAttemptStore.initialize(private)
-    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(["--provider", "openrouter", "--model", "fake"])), runtime_enabled=True, auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(["--provider", "openrouter", "--model", "fake"]))
+    owner = canonical_agent(comms,  runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(cwd=str(tmp_path / "project"))).session_id
     wakes = []

@@ -152,7 +152,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
     comms, root_id = _root(tmp_path)
     comms.agents.observe_runtime_info('Bob', AgentInfo(model=observed_owner.model))
     original_message = comms.messaging.send_initial_cohort('sender', '#team', '@Bob recording fixture')
-    owner = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
+    owner = CommsAgent(comms,  auto_wake=False)
     turn = OwnedTurn(owner.turns, 'Alice', 'Alice', '')
     turn.registry_owner = comms.agents.begin_turn('Alice', 'owned-context-recording515')
     lease, thread = turn.turn_lease, turn.thread

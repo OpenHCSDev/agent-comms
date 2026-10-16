@@ -46,7 +46,8 @@ async def owner(tmp_path, monkeypatch):
     monkeypatch.setattr(ThinkingLevelConfigOption, "discover", levels)
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     selected_comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "test/one"])), auto_wake=False)
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(["--model", "test/one"]))
+    agent = canonical_agent(selected_comms,  auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     try:
         yield agent
@@ -56,7 +57,8 @@ async def owner(tmp_path, monkeypatch):
 
 async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owner, tmp_path):
     selected_comms_2 = Comms(LocalRoute(tmp_path / "other"), runtime=LaunchRuntime.current())
-    other = CommsClient(selected_comms_2, native=dataclasses.replace(selected_comms_2.owners.native_defaults, binary="pi"))
+    selected_comms_2.settings = dataclasses.replace(selected_comms_2.settings)
+    other = CommsClient(selected_comms_2)
     assert type(owner.sessions) is SessionLifecycle
     assert type(other.sessions) is AttachedSessionLifecycle
     await owner.initialize(1, {})
@@ -83,7 +85,8 @@ async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owne
 
 
 async def test_attached_declaration_publishes_membership_without_acquiring_executor(owner, tmp_path):
-    attachment = CommsClient(owner._comms, native=dataclasses.replace(owner._comms.owners.native_defaults, binary="pi"), auto_wake=False)
+    owner._comms.settings = dataclasses.replace(owner._comms.settings)
+    attachment = CommsClient(owner._comms,  auto_wake=False)
     try:
         thread = await Coordination.run_worker(
             lambda: attachment.sessions.declare_thread(str(tmp_path / "attached"))

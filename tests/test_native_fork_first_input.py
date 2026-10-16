@@ -181,7 +181,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     debug_log = native.project / "runtime-debug.log"
     monkeypatch.setenv("AGENT_COMMS_DEBUG_LOG", str(debug_log))
     runtime = LaunchRuntime.current()
-    launch_native = NativeThreadDefaults.offline(runtime)
+    launch_native = NativeThreadDefaults.offline()
     comms = Comms(LocalRoute(native.root), runtime=runtime)
     comms.registry.declare(
         Thread(
@@ -196,7 +196,8 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
-    attachment = CommsClient(comms, native=launch_native, runtime_enabled=True, private_nk_native_package=package, private_nk_wire_root_id=root_id)
+    comms.settings = launch_native
+    attachment = CommsClient(comms,  runtime_enabled=True, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     facts = []
 
     class Client:

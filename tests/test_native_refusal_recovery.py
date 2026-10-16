@@ -60,7 +60,8 @@ def _settled_records():
 async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
     wired, tmp_path, monkeypatch
 ):
-    agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi", arguments=tuple([])), runtime_enabled=True)
+    wired.settings = dataclasses.replace(wired.settings,  arguments=tuple([]))
+    agent = canonical_agent(wired,  runtime_enabled=True)
     sent: list = []
 
     class FakeClient:

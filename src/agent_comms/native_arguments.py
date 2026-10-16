@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from .declared_family import DeclaredFamily
-from .launch_runtime import LaunchRuntime
+from pathlib import Path
 
 @dataclass(frozen=True)
 class NativeArgument(DeclaredFamily, affix="Argument"):
@@ -18,6 +18,9 @@ class NativeArgument(DeclaredFamily, affix="Argument"):
 
     def validate_rpc(self) -> None:
         pass
+
+    def owned_turn(self) -> tuple[NativeArgument, ...]:
+        return (self,)
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,10 @@ class ThinkingArgument(NamedOption, ValueArgument):
     pass
 
 
+class ExtensionArgument(NamedOption, ValueArgument):
+    short = "-e"
+
+
 class SessionSelectionArgument:
     """Managed RPC source selection belongs to the captured SelectedSession.
 
@@ -111,17 +118,44 @@ class ModeArgument(NamedOption, ValueArgument):
             raise ValueError("Managed Pi requires RPC mode")
 
 
-class OneShotArgument(OptionArgument):
+class FlagArgument(OptionArgument):
     @classmethod
-    def consume(cls, inline: str | None, arguments: Iterator[str]) -> OneShotArgument:
+    def consume(cls, inline: str | None, arguments: Iterator[str]) -> FlagArgument:
+        if inline is not None:
+            raise ValueError(f"{cls.flag()} does not accept a value")
         return cls()
 
     @property
     def argv(self) -> tuple[str, ...]:
         return (self.flag(),)
 
+
+class OneShotArgument(FlagArgument):
     def validate_rpc(self) -> None:
         raise ValueError("Managed Pi cannot run a one-shot CLI command")
+
+
+class TurnToolArgument:
+    """The bound turn mode replaces startup tool choices, not discovery settings."""
+
+    def owned_turn(self) -> tuple[NativeArgument, ...]:
+        return ()
+
+
+class ToolsArgument(TurnToolArgument, NamedOption, ValueArgument):
+    short = "-t"
+
+
+class ExcludeToolsArgument(TurnToolArgument, NamedOption, ValueArgument):
+    short = "-xt"
+
+
+class NoToolsArgument(TurnToolArgument, NamedOption, FlagArgument):
+    short = "-nt"
+
+
+class NoBuiltinToolsArgument(TurnToolArgument, NamedOption, FlagArgument):
+    short = "-nbt"
 
 
 class ContinueArgument(SessionSelectionArgument, NamedOption, OneShotArgument):
@@ -207,6 +241,15 @@ class NativeArguments:
 
     def with_thinking(self, selected: str | None) -> NativeArguments:
         return self.replace(ThinkingArgument, *((ThinkingArgument(selected),) if selected else ()))
+
+    def for_owned_turn(self) -> NativeArguments:
+        return NativeArguments(tuple(selected for entry in self.entries for selected in entry.owned_turn()))
+
+    def with_extensions(self, *required: Path) -> NativeArguments:
+        """Required integration loads first; each explicit entry is supplied once."""
+        selected = dict.fromkeys((*map(str, required), *(entry.value for entry in self.entries
+                                                       if isinstance(entry, ExtensionArgument))))
+        return self.replace(ExtensionArgument, *(ExtensionArgument(value) for value in selected))
 
     def rpc(self) -> tuple[str, ...]:
         for entry in self.entries:

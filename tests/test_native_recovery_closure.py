@@ -217,7 +217,8 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
     assert result["noOutput"] == {"answer": "visible answer", "retries": 1}
     print(json.dumps({"refusal": result["proof"], "no_output": result["noOutput"]}, sort_keys=True))
     stub = _stub_with(tmp_path, [*records, *_settled_records()])
-    agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary="pi", arguments=tuple([])), runtime_enabled=True)
+    wired.settings = dataclasses.replace(wired.settings,  arguments=tuple([]))
+    agent = canonical_agent(wired,  runtime_enabled=True)
     original_stream = backend.stream_agent_events
 
     async def recorded(agent_bin, agent_args, task, cwd, *args, **kwargs):

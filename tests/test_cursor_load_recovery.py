@@ -55,7 +55,7 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, owner.name, owner.name, committed=True
         )
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False, private_nk_wire_root_id=root_id, private_nk_native_package=tmp_path / "unused-native-package")
+    agent = CommsAgent(comms,  auto_wake=False, private_nk_wire_root_id=root_id, private_nk_native_package=tmp_path / "unused-native-package")
     agent.sessions.bindings[owner.name] = owner.name
     attached = asyncio.get_running_loop().create_future()
 

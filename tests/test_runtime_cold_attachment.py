@@ -35,7 +35,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
     arguments = ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']
-    comms.owners.native_defaults = NativeThreadDefaults(binary=comms.owners.native_defaults.binary,
+    comms.settings = NativeThreadDefaults(
                                                        arguments=tuple(arguments))
     with comms.bus.log.locked():
         root_id = comms.bus.log.read_metadata_unlocked().root_id
@@ -61,7 +61,8 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         return child
 
     monkeypatch.setattr(ParentedProcess, "launch", hold_worker)
-    client = CommsClient(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=launcher, arguments=tuple(arguments)), auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(arguments))
+    client = CommsClient(comms,  auto_wake=False, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     updates = []
 
     class View:

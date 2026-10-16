@@ -59,8 +59,8 @@ def test_required_parser_attachment_uses_the_declared_flag_and_destination(selec
 
 def test_settings_schema_still_comes_only_from_its_declared_data_fields():
     assert FieldCodec.encode(NativeThreadDefaults()) == {
-        "model": "openai-codex/gpt-6.1-sol", "thinking_level": "high",
+        "arguments": [], "model": "openai-codex/gpt-6.1-sol", "thinking_level": "high",
     }
     assert set(FieldCodec.record_schema(NativeThreadDefaults)["properties"]) == {
-        "model", "thinking_level",
+        "arguments", "model", "thinking_level",
     }

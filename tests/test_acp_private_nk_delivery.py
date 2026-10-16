@@ -73,7 +73,7 @@ def _session(tmp_path, *, package=True):
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, private_nk_native_package=tmp_path if package else None, private_nk_wire_root_id=root_id if package else None)
+    agent = CommsAgent(comms,  runtime_enabled=True, private_nk_native_package=tmp_path if package else None, private_nk_wire_root_id=root_id if package else None)
     agent.sessions.bindings["beta"] = "beta"
     agent.sessions.titles["beta"] = "beta"
     agent.sessions.worktrees["beta"] = str(tmp_path)
@@ -107,7 +107,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
         )
     )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, private_nk_native_package=tmp_path, private_nk_wire_root_id=root_id)
+    agent = CommsAgent(comms,  runtime_enabled=True, private_nk_native_package=tmp_path, private_nk_wire_root_id=root_id)
 
     async def noop(*args, **kwargs):
         return None
@@ -751,7 +751,7 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
 
 async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
     comms, first, root_id = _session(tmp_path)
-    second = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, private_nk_native_package=tmp_path, private_nk_wire_root_id=root_id)
+    second = CommsAgent(comms,  runtime_enabled=True, private_nk_native_package=tmp_path, private_nk_wire_root_id=root_id)
     second.sessions.bindings["beta"] = "beta"
     second.sessions.titles["beta"] = "beta"
     second.sessions.worktrees["beta"] = str(tmp_path)

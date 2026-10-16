@@ -21,7 +21,8 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
 ):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings)
+    agent = canonical_agent(comms,  auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
 
@@ -61,7 +62,8 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
 async def test_compaction_eof_still_finishes_activity(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings)
+    agent = canonical_agent(comms,  auto_wake=False)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "project"))
 

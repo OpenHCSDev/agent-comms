@@ -84,7 +84,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
         private_nk_native_package=package,
         private_nk_wire_root_id=root_id,
     )
-    first, second, third = (CommsClient(comms, native=comms.owners.native_defaults, **options) for _ in range(3))
+    first, second, third = (CommsClient(comms,  **options) for _ in range(3))
 
     class Client:
         async def session_update(self, session_id, update):

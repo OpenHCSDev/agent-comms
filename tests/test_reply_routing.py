@@ -26,7 +26,8 @@ def test_incoming_route_distinguishes_channel_and_direct_delivery():
 async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([])), runtime_enabled=True, auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    agent = canonical_agent(comms,  runtime_enabled=True, auto_wake=False)
     await agent.new_session(str(tmp_path / "worker"))
     comms.channels.update_tags("worker", add=frozenset({"test"}))
     session = tmp_path / "session.jsonl"
@@ -115,7 +116,8 @@ async def test_native_user_dm_reply_ignores_earlier_channel_route(
     project = tmp_path / "worker"
     project.mkdir()
     comms = wired
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([])), runtime_enabled=True, auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    agent = canonical_agent(comms,  runtime_enabled=True, auto_wake=False)
     session = await agent.new_session(str(project))
 
     class Client:
@@ -178,7 +180,8 @@ async def test_native_user_dm_reply_ignores_earlier_channel_route(
 
 async def test_coordination_context_does_not_override_scheduled_response_policy(tmp_path):
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    agent = canonical_agent(comms,  runtime_enabled=True)
     await agent.new_session(str(tmp_path / "worker"))
     seen: dict = {}
 

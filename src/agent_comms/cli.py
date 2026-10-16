@@ -57,7 +57,7 @@ def build_parser(settings: NativeThreadDefaults) -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         with ExitStack() as route_guard:
-            runtime = LaunchRuntime.current()
+            runtime = LaunchRuntime.running()
             settings = NativeThreadDefaults()
             parser = build_parser(settings)
             args = argparse.Namespace()

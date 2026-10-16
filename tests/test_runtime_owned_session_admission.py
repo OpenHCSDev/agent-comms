@@ -29,8 +29,8 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
     project = tmp_path / "project"
     project.mkdir()
     comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
-    owner = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, auto_wake=False)
-    client = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
+    owner = CommsAgent(comms,  runtime_enabled=True, auto_wake=False)
+    client = CommsAgent(comms,  auto_wake=False)
     registered = await asyncio.to_thread(
         subprocess.run,
         [sys.executable, "-m", "agent_comms.cli", "--root", str(root),

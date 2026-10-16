@@ -40,7 +40,8 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     configured_model = NativeThreadDefaults.model
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = canonical_goal_wire(tmp_path / "wire")
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"))
+    comms.settings = dataclasses.replace(comms.settings)
+    agent = canonical_agent(comms)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
     store = comms.goals.open_goal_store()

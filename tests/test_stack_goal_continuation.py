@@ -192,7 +192,7 @@ async def test_mounted_goal_continues_without_progress_tool(
                 "identity": "goal-continuation-test",
                 "short_name": "goal",
                 "run_command": {
-                    "*": native_run_command(NativeThreadDefaults(binary=native, arguments=tuple(native_args)))
+                    "*": native_run_command(NativeThreadDefaults( arguments=tuple(native_args)))
                 },
                 "protocol": "acp",
             },

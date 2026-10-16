@@ -107,7 +107,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
     monkeypatch.setattr(PiRpcChannel, "decode_record", staticmethod(observed_response))
     async with native.open_owner(runtime_enabled=True) as (owner, session):
         turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
-        attachment = canonical_agent(owner._comms, native=owner._comms.owners.native_defaults, auto_wake=False)
+        attachment = canonical_agent(owner._comms,  auto_wake=False)
         updates = Updates()
         attachment.on_connect(updates)
         proxy = RuntimeProxy(attachment, session, RuntimeSocket.path_for(native.root, os.getpid()))
@@ -186,7 +186,7 @@ async def test_native_steer_keeps_original_input_and_turn_custody(native_backend
     native.provider.response_gate = original_response
     async with native.open_owner(runtime_enabled=True) as (owner, session):
         turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
-        attachment = canonical_agent(owner._comms, native=owner._comms.owners.native_defaults, auto_wake=False)
+        attachment = canonical_agent(owner._comms,  auto_wake=False)
         attachment.on_connect(Updates())
         proxy = RuntimeProxy(attachment, session, RuntimeSocket.path_for(native.root, os.getpid()))
         try:

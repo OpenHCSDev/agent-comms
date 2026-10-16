@@ -22,7 +22,8 @@ from agent_comms.launch_runtime import LaunchRuntime
 async def make_agent(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/base")
     selected_comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.current())
-    agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(["--model", "test/base"])))
+    selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(["--model", "test/base"]))
+    agent = canonical_agent(selected_comms)
     await agent.new_session(str(tmp_path / "project"))
     return agent
 

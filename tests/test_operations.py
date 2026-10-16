@@ -557,8 +557,9 @@ class TestPollAndWire:
         monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
 
 
+        runtime = LaunchRuntime.current()
         monkeypatch.setattr("os.path.expanduser", lambda p: str(tmp_path / str(p).lstrip("~")))
-        comms = Comms(resolve_comms_route(None), runtime=LaunchRuntime.current())
+        comms = Comms(resolve_comms_route(None), runtime=runtime)
         assert comms.root == tmp_path / ".agent-comms"
 
     def test_wire_env_root(self, monkeypatch, tmp_path):

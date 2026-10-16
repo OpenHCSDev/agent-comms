@@ -283,7 +283,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
 
 
             selected_comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-            owner = CommsAgent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary=native_bin, arguments=tuple(native_args)), runtime_enabled=False, auto_wake=False)
+            selected_comms.settings = dataclasses.replace(selected_comms.settings,  arguments=tuple(native_args))
+            owner = CommsAgent(selected_comms,  runtime_enabled=False, auto_wake=False)
 
             class Client:
                 async def session_update(self, session_id, update):
@@ -531,7 +532,7 @@ async def _mounted_send_now(
         "identity": "send-now-test",
         "short_name": "send-now",
         "run_command": {
-            "*": native_run_command(NativeThreadDefaults(binary=native_bin, arguments=tuple(native_args)))
+            "*": native_run_command(NativeThreadDefaults( arguments=tuple(native_args)))
         },
         "protocol": "acp",
     }

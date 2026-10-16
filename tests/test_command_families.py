@@ -31,7 +31,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
     monkeypatch.setenv("COLUMNS", "80")
     monkeypatch.setenv("NO_COLOR", "1")
-    parser = build_parser(NativeThreadDefaults.from_runtime(LaunchRuntime.current()))
+    parser = build_parser(NativeThreadDefaults())
     sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
     actual = {
         "help": parser.format_help(),
@@ -42,7 +42,7 @@ def test_all_cli_help_and_flags_match_current_commands(monkeypatch):
 
 
 def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
-    parser = build_parser(NativeThreadDefaults.from_runtime(LaunchRuntime.current()))
+    parser = build_parser(NativeThreadDefaults())
 
     def parse(args):
         return CliCommand.from_namespace(parser.parse_args(args))
@@ -64,7 +64,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     explicit = parse(["restart", "--all", "--agent-bin", "/a pi", "--agent-args", '--label "two words"'])
     assert explicit.agent_bin == "/a pi"
     assert explicit.agent_args == ["--label", "two words"]
-    assert build_parser(NativeThreadDefaults.from_runtime(LaunchRuntime.current())).parse_args(["restart", "--all"]).agent_bin is None
+    assert build_parser(NativeThreadDefaults()).parse_args(["restart", "--all"]).agent_bin is None
 
 
 def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, capsys, monkeypatch):

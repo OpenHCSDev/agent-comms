@@ -103,7 +103,7 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
             await writer.wait_closed()
 
     server = await asyncio.start_unix_server(subscribe, path=path)
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
+    agent = CommsAgent(comms,  auto_wake=False)
     loading = asyncio.create_task(agent.sessions.attach_owner(thread, "owner"))
     try:
         async with asyncio.timeout(3):

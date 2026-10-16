@@ -120,7 +120,8 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
         }.items():
             monkeypatch.setenv(name, value)
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-        owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native_bin, arguments=tuple(['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off'])), runtime_enabled=True, auto_wake=False)
+        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']))
+        owner = CommsAgent(comms,  runtime_enabled=True, auto_wake=False)
 
         class Client:
             async def session_update(self, session_id, update):

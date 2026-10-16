@@ -41,7 +41,8 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 async def goal_owner(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), runtime_enabled=True, auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings)
+    owner = canonical_agent(comms,  runtime_enabled=True, auto_wake=False)
     monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
     session = (await owner.new_session(str(tmp_path / "project"))).session_id
     proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))

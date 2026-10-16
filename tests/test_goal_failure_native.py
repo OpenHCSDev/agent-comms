@@ -63,7 +63,8 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
     )
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'])), auto_wake=False, runtime_enabled=True)
+    comms.settings = dataclasses.replace(comms.settings, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']))
+    agent = canonical_agent(comms,  auto_wake=False, runtime_enabled=True)
     updates = []
 
     class Client:
@@ -162,7 +163,8 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
     history = native.session.read_bytes()
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'])), auto_wake=False, runtime_enabled=True)
+    comms.settings = dataclasses.replace(comms.settings, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']))
+    agent = canonical_agent(comms,  auto_wake=False, runtime_enabled=True)
     route = build_agent_router(agent)
     try:
         async with asyncio.timeout(30):

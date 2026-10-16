@@ -33,7 +33,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     comms.ledger.merge({"saved": {"worker": ["work remains", 23]}}, "worker")
     metadata = comms.agents.runtime_info.path.read_bytes()
     collaboration = comms.ledger.path.read_bytes()
-    owner = comms.owners.ensure_owner("worker", native=comms.owners.native_defaults)
+    owner = comms.owners.ensure_owner("worker", native=comms.settings)
 
     async def ready(pid):
         async with asyncio.timeout(10):

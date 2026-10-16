@@ -177,7 +177,7 @@ async def configured_pure_channel(arguments):
                 if isinstance(item, CompactionChangedUpdate):
                     compaction_events.append({'elapsed_seconds': time.perf_counter()-begun,
                         'phase': item.event.phase})
-    attachment = CommsClient(service, native=service.owners.native_defaults, runtime_enabled=True, private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
+    attachment = CommsClient(service,  runtime_enabled=True, private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
     originals, proof, failure = [], {}, None
     begun = time.perf_counter()
@@ -495,7 +495,7 @@ async def configured_mixed_routes(arguments):
     class Observation:
         async def session_update(self, **kwargs):
             packets.append(kwargs)
-    attachment = CommsClient(service, native=service.owners.native_defaults, runtime_enabled=True, private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
+    attachment = CommsClient(service,  runtime_enabled=True, private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
     begun = time.perf_counter()
     failure, late = None, None
@@ -614,7 +614,7 @@ async def retained_owner():
     launch.validate()
     service = Comms(LocalRoute(launch.validated_root), runtime=LaunchRuntime.current())
     name = os.environ['AGENT_COMMS_THREAD']
-    agent = CommsAgent(service, native=service.owners.native_defaults, runtime_enabled=True, private_nk_wire_root_id=launch.wire_root_id, private_nk_native_package=launch.native_package)
+    agent = CommsAgent(service,  runtime_enabled=True, private_nk_wire_root_id=launch.wire_root_id, private_nk_native_package=launch.native_package)
     # This receiving case supplies the original saved-session capability to
     # SelectedExecution. Automatic drains currently omit that argument; their
     # complete restart/triage path is covered separately by the ordinary mode.
@@ -842,7 +842,7 @@ async def run(arguments):
     class Observation:
         async def session_update(self, **kwargs):
             packets.append(kwargs)
-    attachment = CommsClient(service, native=service.owners.native_defaults, runtime_enabled=True, private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
+    attachment = CommsClient(service,  runtime_enabled=True, private_nk_native_package=arguments.package, private_nk_wire_root_id=root_id)
     attachment.on_connect(Observation())
     contention_release = threading.Event()
     contention_held = threading.Event()

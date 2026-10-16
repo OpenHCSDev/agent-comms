@@ -183,7 +183,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         for key in ("PI_PROMPT", "PI_PARENT_ID"):
             env.pop(key, None)
         async with BoundedRun.session(
-            (sys.executable, "-c", "from agent_comms.worker import main; raise SystemExit(main())", *comms.owners.native_defaults.cli_arguments),
+            (sys.executable, "-c", "from agent_comms.worker import main; raise SystemExit(main())", *comms.settings.cli_arguments),
             cwd=caller_project,
             env=env,
             timeout=20,
@@ -196,7 +196,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             registered = comms.registry.require("headless")
             assert registered.pid == child.pid
             assert registered.worktree == str(project)
-            client = CommsClient(comms, native=comms.owners.native_defaults, private_nk_wire_root_id=root_id, private_nk_native_package=Path(package))
+            client = CommsClient(comms,  private_nk_wire_root_id=root_id, private_nk_native_package=Path(package))
             try:
                 loaded = await client.load_session(str(project), "headless")
                 assert loaded.field_meta["agentComms"]["imagePrompts"]

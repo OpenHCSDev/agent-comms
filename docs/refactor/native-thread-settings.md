@@ -17,11 +17,11 @@ Shepherd owns the separately published caller/acquisition/shutdown changes.
 | Required integration | NativeRequestTools and NativeProject declarations | NativePiRpcLaunch loads their immutable entries even with discovery disabled. Tool restriction remains the selected mode's existing native arguments. |
 | Extension identity | Native import-fence declarations | Source aliases and packaged entries resolve to one entry. The SDK loader uses its existing loaded-extension collection to avoid initializing one extension twice. No second startup catalog subprocess or new cache. |
 
-A worker identifies the installation already selected by its parent using
-`LaunchRuntime.running()`. It must not follow a changed current pointer. Parent
-exec gates/watchers identify their own installation for a different reason;
-those identities are not merged with the selected native child's identity.
-`running()` identifies `sys.prefix`, not `sys.executable`.
+CLI/ACP/native entrypoints and workers identify their already selected
+installation using LaunchRuntime.running (sys.prefix, not sys.executable).
+They do not reselect a changed current pointer. Library callers supply their
+target through Comms.runtime. Parent gates/watchers identify their own runtime;
+that identity is not merged with the selected native child's identity.
 
 Settings JSON belongs to the existing JsonFlagRecord/FieldCodec implementation.
 The CLI constructs Comms with its settings at the boundary; Start does not
@@ -47,8 +47,12 @@ switch, binary override or nullable native constructor argument replaces it.
   declared by NativeRequestTools and NativeProject respectively.
 
 Adding a declared executable tool still changes its declaration, not another
-FULL/TRIAGE tool roster. A new native binding supplies its own behavior through
-the existing NativeProject family. Python and Node helper transports share the
+FULL/TRIAGE tool roster. A new native binding supplies its behavior through NativeProject.
+NativeArguments supplies each required extension once, before optional entries.
+Tracked factories preserve Comms's arguments; the turn mode replaces startup
+tool choices. Login's existing adapter is a declared immutable native entry,
+not a mutable TypeScript path. Native direct-module copying is derived from
+the existing manifest. Python and Node helper transports share the
 existing bounded exchange and result decoder rather than copying it.
 
 ## Remaining acceptance

@@ -105,7 +105,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
             current = comms.registry.require(name)
             from agent_comms.runtime import socket_path
             await asyncio.to_thread(wait_for, socket_path(native.root, current.pid))
-            agent = canonical_agent(comms, native=comms.owners.native_defaults, auto_wake=False)
+            agent = canonical_agent(comms,  auto_wake=False)
             try:
                 async with asyncio.timeout(20):
                     await agent.load_session(str(native.project), name)
@@ -187,7 +187,7 @@ while True: time.sleep(0.01)
     }
     from agent_comms.native_settings import NativeThreadDefaults
 
-    native = NativeThreadDefaults(binary=sys.executable, arguments=(str(script),))
+    native = NativeThreadDefaults( arguments=(str(script),))
     child = ParentedProcess.launch((sys.executable, str(script), *native.cli_arguments), env=env)
     comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     try:
@@ -337,7 +337,7 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
                                   process_identity=ProcessIdentity.capture(os.getpid())))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     assert comms.registry.status("worker").running
-    agent = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True)
+    agent = CommsAgent(comms,  runtime_enabled=True)
     # The 2026-09-29 startup failure: a private wire without a pinned launch.
     with pytest.raises(PublicationActivationBlocked):
         await agent.sessions.start_owner(str(tmp_path), agent._comms.registry.require("worker").incarnation)

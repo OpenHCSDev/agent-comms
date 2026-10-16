@@ -26,7 +26,8 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path) -> None:
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
     assert isinstance(comms, Comms)
     comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
-    agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="nonexistent-pi"), runtime_enabled=False, auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings)
+    agent = CommsAgent(comms,  runtime_enabled=False, auto_wake=False)
 
     session = NewSessionResponse(
         session_id="worker", field_meta=(await agent.sessions.metadata("worker"))

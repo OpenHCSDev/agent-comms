@@ -200,7 +200,7 @@ class TestEndToEndLifecycle:
 
         root = tmp_path / "wire"
         comms = Comms(resolve_comms_route(root), runtime=LaunchRuntime.current())
-        agent = CommsAgent(comms, native=comms.owners.native_defaults, reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05)
+        agent = CommsAgent(comms,  reply_window=0.2, no_reply_window=0.1, reply_quiet=0.05)
 
         async def flow() -> None:
             await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])

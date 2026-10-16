@@ -89,16 +89,16 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
 
 
 def test_native_arguments_configured_uses_typed_selection():
-    defaults = NativeThreadDefaults.from_runtime(LaunchRuntime.current())
+    defaults = NativeThreadDefaults()
     assert NativeArguments.parse(defaults.arguments) == NativeArguments(entries=())
     selected = NativeThreadDefaults(
-        binary="/fixture/pi", arguments=("--model", "fixture/model", "--thinking", "off"),
+         arguments=("--model", "fixture/model", "--thinking", "off"),
     )
     assert selected.binary == "/fixture/pi"
     parsed = NativeArguments.parse(selected.arguments)
     assert parsed.model == "fixture/model"
     assert parsed.thinking == "off"
-    cleared = NativeThreadDefaults(binary=selected.binary, arguments=())
+    cleared = NativeThreadDefaults( arguments=())
     assert NativeArguments.parse(cleared.arguments).argv == ()
 
 

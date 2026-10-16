@@ -31,7 +31,8 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
     arguments = ['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, arguments=tuple(arguments)), auto_wake=False, runtime_enabled=False)
+    selected_comms.settings = dataclasses.replace(selected_comms.settings, arguments=tuple(arguments))
+    agent = canonical_agent(selected_comms,  auto_wake=False, runtime_enabled=False)
     child = None
     try:
         async with asyncio.timeout(15):

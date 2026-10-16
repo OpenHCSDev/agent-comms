@@ -79,7 +79,8 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
     old.mkdir()
     new.mkdir()
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    agent = canonical_agent(comms)
     session = (await agent.new_session(str(old))).session_id
     updates = []
 
@@ -96,7 +97,8 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
         if isinstance(update, CoordinationChangedUpdate)
     ) == str(new)
     await agent.shutdown()
-    resumed = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    resumed = canonical_agent(comms)
     try:
         result = await resumed.load_session(str(old), session)
         assert next(
@@ -132,7 +134,7 @@ async def test_saved_native_identity_changes_publish_one_complete_update(tmp_pat
             await agent._runtime.start()
             sender, receiver = Client(), Client()
             agent.on_connect(sender)
-            attached = canonical_agent(agent._comms, native=agent._comms.owners.native_defaults, auto_wake=False)
+            attached = canonical_agent(agent._comms,  auto_wake=False)
             attached.on_connect(receiver)
             proxy = RuntimeProxy(attached, session_id, RuntimeSocket.path_for(native.root, os.getpid()))
             try:
@@ -188,7 +190,8 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
     old.mkdir()
     new.mkdir()
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])))
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    agent = canonical_agent(comms)
     session = (await agent.new_session(str(old))).session_id
     changed = asyncio.Event()
 
@@ -218,7 +221,8 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
     old.mkdir()
     new.mkdir()
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="/bin/echo", arguments=tuple([])), runtime_enabled=True)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple([]))
+    owner = canonical_agent(comms,  runtime_enabled=True)
     session = (await owner.new_session(str(old))).session_id
     proxies, updates = [], [[], []]
 
@@ -231,7 +235,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
 
     try:
         for values in updates:
-            client = canonical_agent(comms, native=comms.owners.native_defaults)
+            client = canonical_agent(comms)
             client.on_connect(Client(values))
             proxy = RuntimeProxy(client, session, RuntimeSocket.path_for(comms.root, os.getpid()))
             proxies.append(proxy)

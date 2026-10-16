@@ -106,7 +106,7 @@ async def test_actual_native_saved_clocks_survive_acp_snapshot_and_rebuild(
     from delivery_owner_fixture import canonical_agent
 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    owner = canonical_agent(comms, native=comms.owners.native_defaults, auto_wake=False)
+    owner = canonical_agent(comms,  auto_wake=False)
     snapshots = asyncio.Queue()
 
     class Client(acp.Client):

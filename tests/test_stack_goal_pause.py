@@ -156,7 +156,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                 "identity": "goal-continuation-test",
                 "short_name": "goal",
                 "run_command": {
-                    "*": native_run_command(NativeThreadDefaults(binary=native, arguments=tuple(native_args)))
+                    "*": native_run_command(NativeThreadDefaults( arguments=tuple(native_args)))
                 },
                 "protocol": "acp",
             },

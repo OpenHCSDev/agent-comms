@@ -26,8 +26,8 @@ pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 
 async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplog):
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    owner = CommsAgent(comms, native=comms.owners.native_defaults, runtime_enabled=True, auto_wake=False)
-    client = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
+    owner = CommsAgent(comms,  runtime_enabled=True, auto_wake=False)
+    client = CommsAgent(comms,  auto_wake=False)
     session_file = tmp_path / "owner.jsonl"
     session_file.write_text(json.dumps({
         "type": "session", "version": 3, "id": "owner-session",
@@ -119,7 +119,7 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, to
             await writer.wait_closed()
 
     server = await asyncio.start_unix_server(reply, path=path)
-    client = CommsAgent(comms, native=comms.owners.native_defaults, auto_wake=False)
+    client = CommsAgent(comms,  auto_wake=False)
     proxy = RuntimeProxy(client, "owner", path)
     try:
         async with asyncio.timeout(3):

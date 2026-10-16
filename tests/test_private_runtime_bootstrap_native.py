@@ -103,7 +103,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     for name in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(name, raising=False)
     runtime = LaunchRuntime.current()
-    native = NativeThreadDefaults.offline(runtime)
+    native = NativeThreadDefaults.offline()
     comms = Comms(LocalRoute(tmp_path / "wire"), runtime=runtime)
     for name in ("sender", "recipient"):
         comms.registry.declare(

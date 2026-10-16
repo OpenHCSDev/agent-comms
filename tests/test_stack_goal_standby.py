@@ -176,7 +176,8 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             monkeypatch.setenv(key, value)
         args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '--extension', str(Path(__file__).resolve().parents[1] / 'extensions/pi-agent-comms/index.ts')]
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-        agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
+        comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(args))
+        agent = CommsAgent(comms,  runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:
             project = root / "parent"
@@ -233,7 +234,8 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
                 # rotate only the unused READY grant at the send boundary.
                 await agent.shutdown()
                 comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
-                agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
+                comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(args))
+                agent = CommsAgent(comms,  runtime_enabled=True)
                 monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
                 await agent.load_session(str(project), "parent")
                 await agent.turns.goals.schedule_goal("parent")

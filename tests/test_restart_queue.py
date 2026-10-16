@@ -159,7 +159,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         )
     )
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    comms.owners.native_defaults = NativeThreadDefaults(binary=comms.owners.native_defaults.binary, arguments=('--offline', *NativeThreadDefaults.isolation_arguments, '--no-tools'))
+    comms.settings = NativeThreadDefaults( arguments=('--offline', *NativeThreadDefaults.isolation_arguments, '--no-tools'))
     start_watcher = queue._start_watcher
     watchers = []
 

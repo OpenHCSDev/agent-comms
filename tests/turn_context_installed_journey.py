@@ -35,7 +35,7 @@ async def configured_terminal(owner, thread, output, receipt, marker):
             f'or change files. Reply exactly {marker}, then stop.')
     started = time.monotonic()
     async with spawn_agent_process(subscriber, sys.executable, '-m', 'agent_comms.acp',
-        *service.owners.native_defaults.cli_arguments,
+        *service.settings.cli_arguments,
         cwd=thread.worktree, env=dict(os.environ)) as (connection, process):
         receipt['acp_pid'] = process.pid
         await connection.initialize(protocol_version=1)
@@ -235,7 +235,8 @@ async def run_configured(options):
         # explicit fork path owns all native writes; original accounts stay intact.
         os.environ.clear()
         os.environ.update(environment)
-        owner = canonical_agent(service, native=dataclasses.replace(service.owners.native_defaults, binary=str(runtime / 'pi-comms-native'), arguments=tuple(list(captured.retained.native.arguments))), auto_wake=False, runtime_enabled=True)
+        service.settings = dataclasses.replace(service.settings,  arguments=tuple(list(captured.retained.native.arguments)))
+        owner = canonical_agent(service,  auto_wake=False, runtime_enabled=True)
         thread = Thread('configured-source', frozenset(), str(project),
             process_identity=ProcessIdentity.capture(os.getpid()),
             session_file=identity.session_file, model=source.model,

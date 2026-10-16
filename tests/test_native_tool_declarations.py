@@ -231,7 +231,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
 @pytest.fixture
 async def acp_tools(tmp_path):
     selected_comms = Comms(LocalRoute(tmp_path / "sdk-wire"), runtime=LaunchRuntime.current())
-    owner = canonical_agent(selected_comms, native=selected_comms.owners.native_defaults, auto_wake=False)
+    owner = canonical_agent(selected_comms,  auto_wake=False)
     received = asyncio.Queue()
 
     class Client(acp.Client):

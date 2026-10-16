@@ -138,7 +138,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
     monkeypatch.setattr(AttachedChild, "start", observe_child)
     # The declared live owner must have its actual project-request endpoint,
     # not just a PID in the registry. Keep the whole attempt under basetemp.
-    agent = canonical_agent(comms, native=comms.owners.native_defaults, auto_wake=False)
+    agent = canonical_agent(comms,  auto_wake=False)
     agent.on_connect(None)
     agent.sessions.bindings["beta"] = "beta"
     await agent._runtime.start()

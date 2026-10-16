@@ -116,7 +116,7 @@ async def run(stage, package):
                                 agent_bin=str(binary), agent_args=launch.native.arguments)
         await attach(service, child.name)
         async with acp.spawn_agent_process(Observation(), sys.executable, '-m', 'agent_comms.acp',
-                                           *service.owners.native_defaults.cli_arguments,
+                                           *service.settings.cli_arguments,
                                            env=environment, cwd=source.worktree) as (client, process):
             await client.initialize(protocol_version=1)
             await client.load_session(cwd=source.worktree, session_id=child.name, mcp_servers=[])

@@ -296,7 +296,7 @@ class TestSelectedTargetActions:
         assert explicit.agent_bin == '/operator/native'
         assert explicit.agent_args == ['--no-extensions']
         from agent_comms.cli import build_parser
-        parsed = CliCommand.from_namespace(build_parser(NativeThreadDefaults.from_runtime(LaunchRuntime.current())).parse_args([
+        parsed = CliCommand.from_namespace(build_parser(NativeThreadDefaults()).parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
             '--agent-args=--no-extensions']))
         assert parsed == explicit

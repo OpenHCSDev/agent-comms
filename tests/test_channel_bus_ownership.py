@@ -98,7 +98,8 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
     from agent_comms.goal_actions import SetGoalAction
 
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
-    agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi"), auto_wake=False, private_nk_wire_root_id=root_id, private_nk_native_package=Path(package))
+    comms.settings = dataclasses.replace(comms.settings)
+    agent = CommsAgent(comms,  auto_wake=False, private_nk_wire_root_id=root_id, private_nk_native_package=Path(package))
     turn = OwnedTurn(agent.turns, "alpha", "alpha", "Independently authorized task")
     try:
         async with AsyncExitStack() as resources:

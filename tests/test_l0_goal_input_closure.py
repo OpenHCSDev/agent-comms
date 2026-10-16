@@ -189,7 +189,8 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     assert configured_model is not None
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())
-    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(arguments)), runtime_enabled=True, auto_wake=False)
+    comms.settings = dataclasses.replace(comms.settings,  arguments=tuple(arguments))
+    owner = CommsAgent(comms,  runtime_enabled=True, auto_wake=False)
     from goal_owner_fixture import activate_empty_source
 
     activate_empty_source(owner)
