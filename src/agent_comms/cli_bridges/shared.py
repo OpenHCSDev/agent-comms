@@ -1,31 +1,32 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 import argparse
-from contextlib import aclosing, suppress
 import asyncio
-from dataclasses import dataclass
-from enum import Enum
 import fcntl
 import json
 import os
-from pathlib import Path
 import signal
 import sqlite3
 import sys
+from abc import ABC, abstractmethod
+from contextlib import aclosing, suppress
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
 from typing import AsyncIterator, ClassVar, Generic, TypeVar
 
 from pydantic import JsonValue, TypeAdapter
-from agent_comms.cli_protocol import CORE_ERROR, CoreError, WireModel
-from agent_comms.messages import Message, MessageKind
-from agent_comms.thread_identity import ThreadRole
+
 from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
+from agent_comms.cli_protocol import CORE_ERROR, CoreError, WireModel
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.messages import Message, MessageKind
 from agent_comms.native_tools import NativeTool
+from agent_comms.thread_identity import ThreadRole
 from agent_comms.tool_results import ToolDiff
-from agent_comms.transcript_events import TranscriptEvent, ToolStartTranscript, ToolEndTranscript
+from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript, TranscriptEvent
 
 
 class SendResult(WireModel):

@@ -2,14 +2,15 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import ClassVar, Literal, TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from metaclass_registry import RegistryConfig
 from pydantic import JsonValue, TypeAdapter
 
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
-from .shared import TranscriptUpdate, TurnStarted, TurnEnded
+
 from .opencode_parts import MessageInfo, Part, SavedMessage, UserMessage
+from .shared import TranscriptUpdate, TurnEnded, TurnStarted
 
 if TYPE_CHECKING:
     from .opencode import OpenCodeConnection

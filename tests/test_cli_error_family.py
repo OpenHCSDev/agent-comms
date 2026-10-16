@@ -3,19 +3,23 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
+from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.cli import _fail, main
 from agent_comms.cli_bridges.shared import (
-    Binding, DeliveryJournal, Inbox, LineMonitorBridge, Options, Outcome,
+    Binding,
+    DeliveryJournal,
+    Inbox,
+    LineMonitorBridge,
+    Options,
+    Outcome,
 )
-from agent_comms.cli_protocol import CORE_ERROR, CoreError, FailedCoreError, UnavailableCoreError
-from agent_comms.bus_route_counts import RouteIndexRebuilding
+from agent_comms.cli_protocol import CORE_ERROR, FailedCoreError, UnavailableCoreError
 from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.messages import Message
+from agent_comms.messages import InfoKind, Message
 
 
 @pytest.mark.parametrize('error,expected', [
@@ -66,7 +70,8 @@ async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys
     journal = DeliveryJournal(tmp_path)
     binding = Binding(str(tmp_path), 'viewer', 'external-session')
     bridge = LineMonitorBridge(Options(Inbox(), None, None, None, tmp_path), binding, journal)
-    message = Message(sender='peer', target='viewer', body='one delivery', timestamp=1.0, seq=1)
+    message = Message(sender='peer', target='viewer', type=InfoKind,
+                      body='one delivery', timestamp=1.0, seq=1)
     delivered = asyncio.get_running_loop().create_future()
     subscriptions = []
     closed = []
@@ -77,6 +82,7 @@ async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys
             subscriptions.append(state)
             try:
                 if len(subscriptions) == 1:
+                    yield message, json.dumps(message.to_wire())
                     yield UnavailableCoreError(error='Route index covers 1 of 100 bytes')
                 else:
                     yield message, json.dumps(message.to_wire())

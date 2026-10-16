@@ -5,29 +5,39 @@ consumers neither inspect JSON fields nor rediscover what kind of item it is.
 """
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from dataclasses import replace
 from difflib import unified_diff
-import json
 from typing import ClassVar, Generic, Literal, TypeVar
 
 from metaclass_registry import RegistryConfig
 from pydantic import (
-    Field, JsonValue, TypeAdapter,
+    Field,
+    JsonValue,
+    TypeAdapter,
 )
 
-from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
 from agent_comms.activity import ActivityState
+from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
-    AssistantTranscript, ThinkingTranscript, ToolEndTranscript,
-    TranscriptEvent, UserTranscript, NoticeTranscript,
+    AssistantTranscript,
+    NoticeTranscript,
+    ThinkingTranscript,
+    ToolEndTranscript,
+    TranscriptEvent,
+    UserTranscript,
 )
 
-
 from .shared import (
-    ActiveItem, DraftItem, FinishedItem, TranscriptUpdate,
-    TurnEnded, TurnStarted, ToolCall,
+    ActiveItem,
+    DraftItem,
+    FinishedItem,
+    ToolCall,
+    TranscriptUpdate,
+    TurnEnded,
+    TurnStarted,
 )
 
 
