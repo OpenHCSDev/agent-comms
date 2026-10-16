@@ -11,6 +11,7 @@ from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
+    from .message_reference import MessageReference
     from .presentation import MessageNotification
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
 
@@ -172,6 +173,8 @@ class ThreadPresentation:
     sent_notifications: tuple[MessageNotification, ...] = ()
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
     read_identity: TranscriptReadIdentity | None = None
+    incoming_references: tuple[MessageReference, ...] = ()
+    sent_references: tuple[MessageReference, ...] = ()
 
     def same_observation(self, other: ThreadPresentation | None) -> bool:
         """Equal view and turn evidence, not merely equal global store revisions.
@@ -206,8 +209,12 @@ class ThreadPresentation:
                   for notification in projected[source.message.seq, source.message.message_id])
             for selected in (window.sources, window.sent_sources)
         )
-        return replace(self, notifications=incoming, sent_notifications=sent,
-                       read_identity=window.read.identity)
+        return replace(
+            self, notifications=incoming, sent_notifications=sent,
+            read_identity=window.read.identity,
+            incoming_references=tuple(source.message.reference for source in window.sources),
+            sent_references=tuple(source.message.reference for source in window.sent_sources),
+        )
 
     @property
     def label(self) -> str:

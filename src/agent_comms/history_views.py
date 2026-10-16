@@ -45,6 +45,7 @@ from .presentation import (
     CoordinationSnapshot,
     MessageNotification,
     ThreadView,
+    ThreadViewSources,
     WireRevision,
 )
 from .read_basis import ChannelDisplayScope, DMDisplayBasis
@@ -327,14 +328,9 @@ class HistoryViews:
         self, *, show_stopped: bool = True, show_archived: bool = False
     ) -> tuple[ThreadView, ...]:
         snapshot = self.registry.snapshot()
-        return ThreadView.roster(
-            snapshot,
-            self.agents,
-            None,
-            GoalWaits(self.root / GoalWaits.filename),
-            show_stopped=show_stopped,
-            show_archived=show_archived,
-        )
+        return ThreadViewSources.capture(
+            snapshot, self.agents, None, GoalWaits(self.root / GoalWaits.filename),
+        ).roster(show_stopped=show_stopped, show_archived=show_archived)
 
     def retired_views(self, threads: Iterable[ThreadIncarnation], channels: Iterable[str]) -> RetiredViews:
         """Which of these thread incarnations and channel views no longer exist.
@@ -356,21 +352,14 @@ class HistoryViews:
         return self.thread_presentations((name,), sent_source_limit=sent_source_limit).read(name)
 
     def thread_presentations(
-        self, names: Iterable[str], *, sent_source_limit: int = 5
+        self, names: Iterable[str], *, sent_source_limit: int = 5,
+        revision: WireRevision | None = None,
     ) -> ThreadPresentations:
-        """Acquire status documents once, with no document lock held while building rows."""
-        snapshot = self.registry.snapshot()
-        views = ThreadView.roster(
-            snapshot,
-            self.agents,
-            None,
-            GoalWaits(self.root / GoalWaits.filename),
-            names=names,
-            show_stopped=True,
-            show_archived=False,
-        )
+        """Selected rows use the same acquired metadata as their revision attribution."""
+        sources = (revision or self.revision()).thread_sources
+        views = sources.roster(names=names, show_stopped=True, show_archived=False)
         return ThreadPresentations(
-            snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
+            sources.registry, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
         )
 
     def require_thread_presentation(self, name: str) -> ThreadPresentation:

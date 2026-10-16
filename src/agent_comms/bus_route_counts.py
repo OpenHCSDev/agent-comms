@@ -513,6 +513,27 @@ class OpenedRouteCounts(BusRouteCounts):
             target, {direct} if direct in self.deliveries else set()
         )
 
+    def changed_participants(self, after_seq: int, through_seq: int) -> frozenset[str]:
+        """Attribute the acquired sequence interval through the existing route projection."""
+        changed = set()
+
+        def include(sender, target, lookup, timestamp):
+            changed.update((sender, self.registry.canonical_name(sender)))
+            for actor in self._recipients(target):
+                since = self.deliveries[actor].minimum_timestamp(sender, target, lookup, self.registry)
+                if since is not None and timestamp >= since:
+                    changed.add(actor)
+
+        for row in RouteEntryRow.select(
+            self.connection, where="seq>? AND seq<=?", parameters=(after_seq, through_seq),
+        ):
+            include(row.sender, row.target, row.sender_lookup, row.timestamp)
+        for delivery in self._appended:
+            message = delivery.message
+            if after_seq < message.seq <= through_seq:
+                include(message.sender, message.target, delivery.sender_lookup, message.timestamp)
+        return frozenset(changed)
+
     def unseen_counts(self, seen: Mapping[str, frozenset[int]]) -> dict[str, dict[str, int]]:
         counts: dict[str, dict[str, int]] = {actor: {} for actor in self.deliveries}
 

@@ -6,13 +6,19 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
+from functools import cached_property
 from itertools import zip_longest
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .activity import ActivityState, ObservedActivity
+from .agent_activity import AgentActivity
+from .coordination_errors import StaleRevision
+from .registration import Registration
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
+from .bus_route_counts import OpenedRouteCounts
+from .catalog_store import ChannelCatalog
 from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import is_channel_target
 from .channels import Channel
@@ -29,9 +35,11 @@ from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDeli
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
+from .routing import DeliveryScope
 from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
-from .store_files import _store_lock
+from .store_files import _store_lock, _store_read_lock
+from .wire_log import WireLog
 from .thread_identity import ThreadIncarnation
 from .display_references import DisplayReferences
 from .thread_presentation import (
@@ -43,20 +51,18 @@ from .thread_status import ThreadStatus
 from .threads import Thread
 
 if TYPE_CHECKING:
-    from .agent_activity import AgentActivity, RecipientActivity
+    from .agent_activity import RecipientActivity
     from .bus_publication import CommittedDelivery
     from .catalog_document import CatalogDocument
-    from .catalog_store import ChannelCatalog
     from .goal_waits import GoalWait
     from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .messages import Message
     from .notification_assignment import NotificationAssignmentRead
     from .read_ledger import ReadDocument, ReadLedger
-    from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
-    from .wire_log import OpenedWireSnapshot, WireLog
+    from .wire_log import OpenedWireSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -702,35 +708,6 @@ class ThreadView:
             snapshot.owner_binding(thread.name),
         )
 
-    @classmethod
-    def roster(
-        cls,
-        snapshot: RegistrySnapshot,
-        agents: AgentActivity,
-        activities: Mapping[str, ObservedActivity] | None,
-        goal_waits: GoalWaits,
-        *,
-        show_stopped: bool,
-        show_archived: bool,
-        names: Iterable[str] | None = None,
-    ) -> tuple[ThreadView, ...]:
-        selected = None if names is None else {snapshot.canonical_name(name) for name in names}
-        threads = tuple(
-            thread for thread in cls.visible_threads(
-                snapshot, show_stopped=show_stopped, show_archived=show_archived
-            ) if selected is None or thread.name in selected
-        )
-        if not threads:
-            return ()
-        runtime = agents.runtime_info.read()
-        waits = goal_waits.read()
-        if activities is None:
-            activities = agents.all_activity(threads, snapshot=snapshot)
-        return tuple(
-            cls.capture(thread, snapshot, activities[thread.name], runtime.get(thread.name), waits)
-            for thread in threads
-        )
-
     @property
     def presentation(self) -> ThreadPresentation:
         """One declaration-owned interpretation for every thread view."""
@@ -772,6 +749,52 @@ class ThreadView:
 
 
 @dataclass(frozen=True, slots=True)
+class ThreadViewSources:
+    """One acquired metadata cut, shared by attribution and selected row construction."""
+
+    registry: RegistrySnapshot
+    activities: Mapping[str, ObservedActivity]
+    runtime: Mapping[str, AgentRuntimeInfo]
+    waits: Mapping[str, GoalWait]
+
+    @classmethod
+    def capture(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
+                activities: Mapping[str, ObservedActivity] | None, goal_waits: GoalWaits):
+        if activities is None:
+            activities = agents.all_activity(
+                (thread for thread in snapshot.threads.values() if thread.role.executable),
+                snapshot=snapshot,
+            )
+        return cls(snapshot, activities, agents.runtime_info.read(), goal_waits.read())
+
+    def changed_names(self, previous: ThreadViewSources) -> frozenset[str]:
+        changed = set()
+        for current, before in ((self.activities, previous.activities),
+                                (self.runtime, previous.runtime)):
+            changed.update(name for name in current.keys() | before.keys()
+                           if current.get(name) != before.get(name))
+        if self.registry is not previous.registry or self.waits != previous.waits:
+            for name in self.registry.threads.keys() | previous.registry.threads.keys():
+                current, before = self.registry.threads.get(name), previous.registry.threads.get(name)
+                if GoalWaits.execution(current.goal if current else None, self.waits, self.registry) != (
+                    GoalWaits.execution(before.goal if before else None, previous.waits, previous.registry)
+                ):
+                    changed.add(name)
+        return frozenset(changed)
+
+    def roster(self, *, show_stopped: bool, show_archived: bool,
+               names: Iterable[str] | None = None) -> tuple[ThreadView, ...]:
+        selected = None if names is None else {self.registry.canonical_name(name) for name in names}
+        return tuple(
+            ThreadView.capture(thread, self.registry, self.activities[thread.name],
+                               self.runtime.get(thread.name), self.waits)
+            for thread in ThreadView.visible_threads(
+                self.registry, show_stopped=show_stopped, show_archived=show_archived
+            ) if selected is None or thread.name in selected
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class CoordinationSnapshot:
     threads: tuple[ThreadView, ...]
     channels: tuple[ChannelView, ...]
@@ -805,10 +828,9 @@ class CoordinationSnapshot:
                 activities, sent, messages,
                 show_stopped=show_stopped, show_archived=show_archived,
             ),
-            threads=ThreadView.roster(
+            threads=ThreadViewSources.capture(
                 registry, agents, activities, GoalWaits(root / GoalWaits.filename),
-                show_stopped=show_stopped, show_archived=show_archived,
-            ),
+            ).roster(show_stopped=show_stopped, show_archived=show_archived),
             unread=unread, last_sent=sent, channel_unread=channel_unread,
             references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, show_stopped=show_stopped,
@@ -841,7 +863,7 @@ class CoordinationSnapshot:
         )
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class WireRevision:
     """One observation of every Comms store a view derives from, by name."""
 
@@ -876,12 +898,14 @@ class WireRevision:
         "paths": lambda views: (views.root / RelationshipStore.filename,),
     })
     notifications: tuple[FileRevision, ...] = field(metadata={
-        "paths": lambda views: NotificationAssignment.source_paths(views.root),
+        "paths": lambda views: NotificationAssignment.handling_paths(views.root),
     })
     external_transcripts: tuple[FileRevision, ...] = field(metadata={
         "paths": lambda views: ExternalTranscript.source_paths(views.root),
     })
     expiry_tick: int
+    through_seq: int
+    paths: Mapping[str, tuple[Path, ...]] = field(compare=False, repr=False)
 
     expiry_seconds: ClassVar[int] = 30
 
@@ -894,12 +918,77 @@ class WireRevision:
     @classmethod
     def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
         """Every source is a group; missing files contribute no revision."""
-        captured = {
-            name: tuple(revision for path in group
+        paths = cls.source_paths(views)
+        with _store_read_lock(views.bus.log.path) as source:
+            through_seq = views.bus.log._committed_sequence_unlocked(source)
+            captured = {
+                name: tuple(revision for path in group
+                            if (revision := FileRevision.capture(path)) is not None)
+                for name, group in paths.items()
+            }
+        return cls(**captured, expiry_tick=expiry_tick, through_seq=through_seq, paths=paths)
+
+    def __reduce__(self):
+        # Backend metadata snapshots stay with this revision, not on the UI pipe.
+        return type(self), tuple(getattr(self, source.name) for source in fields(self))
+
+    def require_source(self, name: str) -> None:
+        current = tuple(revision for path in self.paths[name]
                         if (revision := FileRevision.capture(path)) is not None)
-            for name, group in cls.source_paths(views).items()
-        }
-        return cls(**captured, expiry_tick=expiry_tick)
+        if current != getattr(self, name):
+            raise StaleRevision(f"Observed {name} source changed during preparation")
+
+    @cached_property
+    def registration(self):
+        self.require_source("registry")
+        path, = self.paths["registry"]
+        revision = Registration(path).store.revision()
+        self.require_source("registry")
+        return revision
+
+    @cached_property
+    def thread_sources(self) -> ThreadViewSources:
+        for name in ("registry", "activity", "runtime_info", "goal_waits"):
+            self.require_source(name)
+        path, = self.paths["registry"]
+        waits, = self.paths["goal_waits"]
+        sources = ThreadViewSources.capture(
+            self.registration.snapshot, AgentActivity(path.parent, Registration(path)),
+            None, GoalWaits(waits),
+        )
+        for name in ("registry", "activity", "runtime_info", "goal_waits"):
+            self.require_source(name)
+        return sources
+
+    def changed_threads(self, earlier: WireRevision) -> frozenset[str]:
+        changed = set(self.registration.changed_names(earlier.registration))
+        changed.update(self.thread_sources.changed_names(earlier.thread_sources))
+        if (self.catalog, self.history) != (earlier.catalog, earlier.history):
+            # These replace the source namespace used by every conversation.
+            changed.update(self.registration.document.threads)
+            changed.update(earlier.registration.document.threads)
+        if self.through_seq < earlier.through_seq or (
+            earlier.through_seq and self.bus_source_changed_since(earlier)
+        ):
+            changed.update(self.registration.document.threads)
+            changed.update(earlier.registration.document.threads)
+        elif self.through_seq > earlier.through_seq:
+            self.require_source("catalog")
+            catalog_path, = self.paths["catalog"]
+            catalog = ChannelCatalog(catalog_path).read()
+            snapshot = self.registration.snapshot
+            deliveries = {name: DeliveryScope.capture(name, snapshot, catalog)
+                          for name in snapshot.threads}
+            bus_path, = self.paths["bus_log"]
+            with WireLog(bus_path)._opened_wire_snapshot() as source:
+                if (source.revision,) != self.bus_log:
+                    raise StaleRevision("Wire source changed before route attribution")
+                with OpenedRouteCounts(bus_path, source, snapshot, deliveries) as routes:
+                    changed.update(routes.changed_participants(earlier.through_seq, self.through_seq))
+            self.require_source("catalog")
+        for document in (self.registration.document, earlier.registration.document):
+            changed.update(alias for alias, target in document.aliases.items() if target in changed)
+        return frozenset(changed)
 
     def bus_source_changed_since(self, earlier: WireRevision) -> bool:
         return any(FileRevision.source_changed(before, current)
@@ -939,7 +1028,7 @@ class WireRevision:
     def notifications_changed_since(self, earlier: WireRevision) -> bool:
         """Recipient state depends on assignments, presence, bus replies and read marks."""
         return replace(
-            self, catalog=earlier.catalog, history=earlier.history,
+            self, catalog=earlier.catalog, history=earlier.history, bus_log=earlier.bus_log,
             native_unread=earlier.native_unread, goal_waits=earlier.goal_waits,
             relationships=earlier.relationships, external_transcripts=earlier.external_transcripts,
             expiry_tick=earlier.expiry_tick,

@@ -9,6 +9,7 @@ import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
@@ -17,19 +18,38 @@ from .field_codec import FieldCodec
 from .locked_store import LockedStore
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
-from .registry_document import RegistryDocument, RegistryEntry
+from .registry_document import RegistryDocument, RegistryEntry, RegistrySnapshot
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class RegistryRevision:
     """A registry file revision: its document and the raw rows it was decoded from.
 
     The raw rows let the next revision decode only the threads that changed.
     """
 
-    revision: FileRevision
+    revision: FileRevision | None
     document: RegistryDocument
     raw: dict
+
+    @cached_property
+    def snapshot(self) -> RegistrySnapshot:
+        return self.document.snapshot()
+
+    def changed_names(self, previous: RegistryRevision) -> frozenset[str]:
+        if self is previous:
+            return frozenset()
+        current, before = self.document, previous.document
+        changed = set(current.threads.keys() ^ before.threads.keys())
+        changed.update(name for name in current.threads.keys() & before.threads.keys()
+                       if current.entry(name) != before.entry(name))
+        for alias in current.aliases.keys() | before.aliases.keys():
+            if current.aliases.get(alias) != before.aliases.get(alias):
+                changed.add(alias)
+                changed.update(target for target in
+                               (current.aliases.get(alias), before.aliases.get(alias))
+                               if target is not None)
+        return frozenset(changed)
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +132,20 @@ class RegistryStore(LockedStore[RegistryDocument]):
             self.cache.entry = RegistryRevision(revision, document, raw)
             return document
 
+    def revision(self) -> RegistryRevision:
+        """Retain the already-decoded document and its exact source version."""
+        with self.reading() as document:
+            entry = self.cache.entry
+            if entry is not None and entry.document is document:
+                return entry
+            return RegistryRevision(None, document, {})
+
+    def snapshot(self) -> RegistrySnapshot:
+        """The decoded file revision also owns its prepared read-only namespace."""
+        revision = self.revision()
+        with self.cache.decoding:
+            return revision.snapshot
+
     @property
     def guard_path(self) -> Path:
         return self.path.parent / ".registry-owner-guard"
@@ -179,8 +213,6 @@ class RegistryStore(LockedStore[RegistryDocument]):
         without its committed guard (or a guard without a marker) is an
         uncertain migration, never an invitation to bootstrap old metadata.
         """
-        from .private_registry_guard import PrivateRegistryGuard
-
         marker_path = self.path.parent / "bus_meta.json"
         guard_path = self.guard_path
         key = (
