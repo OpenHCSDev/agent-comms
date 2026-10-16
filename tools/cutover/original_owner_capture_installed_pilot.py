@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 import subprocess
 
+from seed_original_owner_capture import ready
+
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -33,7 +35,6 @@ async def profile_runtime_attachment():
     import agent_comms
     from agent_comms.comms import Comms
     from agent_comms.child_process import ProcessIdentity
-    from seed_thread_retirement_fixture import ready
 
     output = Path(os.environ['AC_ATTACHMENT_PROFILE_OUTPUT'])
     output.mkdir(mode=0o700)
@@ -97,7 +98,6 @@ async def runtime_replacement():
     import publish_retained_summary as publication
     import publish_openhcs_recovery as original_publication
     from runtime_installation import PreserveRuntimeInstallation
-    from seed_thread_retirement_fixture import ready
 
     output = Path(os.environ['AC_REPLACEMENT_OUTPUT'])
     output.mkdir(mode=0o700)
