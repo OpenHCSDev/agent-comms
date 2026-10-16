@@ -173,6 +173,12 @@ class SettledTick:
     entry: RegistryEntry
     admission_after_seq: int | None = None
     through_seq: int = 0
+    change_token: tuple[WireWatch, int] | None = None
+
+    def unchanged_native(self, watcher: WireWatch | None, local: tuple) -> bool:
+        if watcher is None or watcher.change_token is None:
+            return False
+        return self.change_token == watcher.change_token and local == self.revision.other[1:]
 
 
 class InputObservation:
@@ -301,18 +307,13 @@ class InputObservation:
 
     async def observe(self, session_id: str) -> None:
         settled: SettledTick | None = None
-        settled_change_token = None
         paths = self._tick_paths()
         async with aclosing(WireWatch.observations(*paths.watch_sources)) as observations:
             async for watcher in observations:
                 self._observation_watchers[session_id] = watcher
                 token = watcher.change_token if watcher is not None else None
-                if (
-                    settled is not None and token is not None
-                    and token == settled_change_token
-                    and self._quiescent(session_id)
-                    and self._tick_local(session_id) == settled.revision.other[1:]
-                ):
+                if (settled is not None and self._quiescent(session_id)
+                        and settled.unchanged_native(watcher, self._tick_local(session_id))):
                     # Native watcher reports no file change. Process-local work
                     # and configuration are unchanged too; even stat calls are
                     # redundant. Polling and replaced/overflowed watches have
@@ -352,9 +353,8 @@ class InputObservation:
                 )
                 if idle and shared_unchanged:
                     settled = SettledTick(
-                        revision, entry, settled.admission_after_seq, settled.through_seq,
+                        revision, entry, settled.admission_after_seq, settled.through_seq, token,
                     )
-                    settled_change_token = token
                     continue
                 if idle and not shared_unchanged:
                     # Only shared stores grew (every publisher's appends change
@@ -367,11 +367,9 @@ class InputObservation:
                         session_id, settled, revision, entry,
                     )
                     if outcome is not None:
-                        settled = outcome
-                        settled_change_token = token
+                        settled = replace(outcome, change_token=token)
                         continue
                 settled = None
-                settled_change_token = None
                 thread = self.sessions.require(session_id)
                 if not entry_current:
                     # Read after the revision: the tick observes at least this entry.
@@ -404,9 +402,8 @@ class InputObservation:
                         if not current.executing and self._quiescent(session_id):
                             marker = await Coordination.run_worker(self._bus_marker)
                             settled = SettledTick(
-                                revision, entry, marker.admission_after_seq, marker.last_seq,
+                                revision, entry, marker.admission_after_seq, marker.last_seq, token,
                             )
-                            settled_change_token = token
                         elif self._repeat_observation_ready(session_id, drained):
                             # The first empty private observation may advance its
                             # own durable cursor. Re-read that transition now;
