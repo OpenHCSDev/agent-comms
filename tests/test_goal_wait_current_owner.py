@@ -6,9 +6,10 @@ import pytest
 
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_presentation import GoalWaitTarget
-from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.goal_waits import GoalWaits
 from agent_comms.threads import Thread
 from goal_owner_fixture import canonical_goal_wire
+from agent_comms.goal_waits import RecordedGoalWait
 
 
 @pytest.mark.parametrize("change", ["same", "later_goal", "future_wait", "replacement", "foreign_goal"])
@@ -20,7 +21,7 @@ def test_graph_uses_only_wait_for_original_owner_goal(tmp_path, change):
     peer = comms.registry.require("peer")
     leaf = comms.registry.require("leaf")
     goal = peer.active_goal
-    wait = GoalWait(
+    wait = RecordedGoalWait(
         goal.id, "original-wait", goal.revision, 0,
         (GoalWaitTarget(leaf.name, leaf.created_at),), peer.created_at,
         (None,), None, None,

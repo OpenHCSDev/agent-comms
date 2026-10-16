@@ -29,7 +29,7 @@ from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy, ResponsePolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
-from .thread_provenance import ThreadProvenance
+from .thread_identity import ThreadProvenance
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
@@ -393,7 +393,9 @@ class HistoryArchive:
     @staticmethod
     @contextmanager
     def acquire_current(root: Path) -> Iterator[RegistryProvenance]:
-        yield RegistryProvenance.capture(Registration(root / "registry.json").snapshot())
+        with Registration(root / "registry.json").store.reading() as original:
+            provenance = RegistryProvenance.capture(original)
+        yield provenance
 
     def _attach(
         self, source_root: Path,

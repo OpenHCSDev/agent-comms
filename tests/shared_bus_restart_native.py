@@ -18,6 +18,7 @@ import subprocess
 import threading
 
 from compaction_loopback import LoopbackProvider
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import Comms
 from agent_comms.acp import CommsClient
 from agent_comms.acp_extension import decode_updates
@@ -27,7 +28,7 @@ from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import ThreadRole
-from agent_comms.bus_publication import HumanOrigin, stable_thread_lookup
+from agent_comms.bus_publication import HumanOrigin
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.native_runtime_input import NativeRuntimeInput, CurrentNativeCursor
 from agent_comms.native_input_record import TriageNativeExecution
@@ -40,7 +41,6 @@ from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
 from agent_comms.private_sidecar import sidecar_connection
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.bus_publication import stable_thread_lookup
 
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
@@ -541,7 +541,7 @@ async def configured_mixed_routes(arguments):
                             parameters=(late_assignment.lifecycle.execution_id,))
                         assert len(late_receipts) == 1 and late_receipts[0].exact_target == 'human'
                         assert '23' in service.bus.log.message_by_id(late_receipts[0].message_id).body
-                        lookup = stable_thread_lookup(service.registry.require(name).created_at)
+                        lookup = RecordedThreadIncarnation("fixture", service.registry.require(name).created_at).lookup
                         for original in (*originals,late):
                             history = read_historical_native_inputs(store,wire_root_id=root_id,
                                 recipient_lookup=lookup,source_seq=original.seq)
@@ -833,7 +833,7 @@ async def run(arguments):
     if arguments.saved_source:
         for name in names:
             owner = service.registry.require(name)
-            directory = service.root/'native-sessions'/stable_thread_lookup(owner.created_at)
+            directory = service.root/'native-sessions'/RecordedThreadIncarnation("fixture", owner.created_at).lookup
             directory.mkdir(mode=0o700, parents=True)
             saved = directory/'retained.jsonl'
             shutil.copyfile(arguments.saved_source, saved); saved.chmod(0o600)
@@ -1024,7 +1024,10 @@ async def run(arguments):
         async with asyncio.timeout(90 if arguments.saved_source else 45):
             while True:
                 diagnostics = list((service.root/'diagnostics').glob('*.json'))
-                for activity in service.agents.all_activity().values():
+                snapshot = service.registry.snapshot()
+                for activity in service.agents.all_activity(
+                    snapshot.threads.values(), snapshot=snapshot
+                ).values():
                     activity.readiness.require_available()
                 if diagnostics:
                     observed = json.loads(diagnostics[0].read_text())
@@ -1104,7 +1107,7 @@ async def run(arguments):
                 f'10+{index}={10+index}' for index in range(arguments.wave_size)) + '.'
             assert replies[1].body == 'Separate late-wave answer: 20+3=23.'
             assert provider.posts == 4
-            lookup = stable_thread_lookup(service.registry.require(names[0]).created_at)
+            lookup = RecordedThreadIncarnation("fixture", service.registry.require(names[0]).created_at).lookup
             with Coordination(str(service.root/'coordination.sqlite3')) as store:
                 inputs = NativeRuntimeInput.select(store.session._connection)
                 assert len(inputs) == 4

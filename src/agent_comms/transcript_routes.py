@@ -201,7 +201,6 @@ class TranscriptRoutes:
         registry and input owners remain held until durable annotations commit.
         A partial successful send subset remains published if a later send fails.
         """
-        from .bus_publication import stable_thread_lookup
         from .input_disposition import InputDispositions
         from .native_transcript import NativeTranscript
         from .native_input_owner import RegistryOwner
@@ -225,7 +224,7 @@ class TranscriptRoutes:
             raise RelationViolationError("Native publication evidence is invalid") from error
         ids = routing.annotation_ids(reader, checkpoint, str(path), final.end)
         inputs = InputDispositions(log.path.parent)
-        lookup = stable_thread_lookup(incarnation.created_at)
+        lookup = incarnation.lookup
         with log.certified_read() as source, registry.store.reading() as document:
             snapshot = document.snapshot()
             incarnation = lease.identity.incarnation.resolved(snapshot)

@@ -20,7 +20,6 @@ from .bus_publication import (
     CommittedDelivery,
     HumanOrigin,
     initial_sideband,
-    stable_thread_lookup,
 )
 from .channel_targets import BuiltinChannel, is_channel_target
 from .envelope_claim_transitions import (
@@ -257,7 +256,6 @@ class Publisher:
                 if _locked_registry_snapshot is None
                 else _locked_registry_snapshot
             )
-            snapshot.require_unambiguous_ownership()
             sender, target = self._validate_publish_request(message, registry_snapshot=snapshot)
             with bus_lock.current_source(self.log, metadata) as source:
                 # The checkpoint high-water also covers a prior visible append;
@@ -351,7 +349,6 @@ class Publisher:
             )
             before_revisions = tuple(FileRevision.capture(path) for path in source_paths)
             snapshot = self._registry.snapshot()
-            snapshot.require_unambiguous_ownership()
             catalog = self._channels.read()
             sender, target = self._validate_publish_request(
                 message, registry_snapshot=snapshot, catalog=catalog)
@@ -394,12 +391,8 @@ class Publisher:
                     and channel.matches(thread.tags)
                 ]
             selected = [snapshot.threads[name] for name in names]
-            lookups = [stable_thread_lookup(thread.created_at) for thread in selected]
-            if len(set(lookups)) != len(lookups):
-                raise RelationViolationError("Recipient creation identities collide.")
-            sender_lookup = stable_thread_lookup(snapshot.threads[sender].created_at)
-            if sender_lookup in lookups:
-                raise RelationViolationError("Sender creation identity collides with recipient.")
+            lookups = [thread.incarnation.lookup for thread in selected]
+            sender_lookup = snapshot.threads[sender].incarnation.lookup
             stored = self._prepare_message_unlocked(
                 message,
                 sender=sender,

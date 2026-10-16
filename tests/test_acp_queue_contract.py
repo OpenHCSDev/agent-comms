@@ -29,7 +29,8 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.comms import Comms
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
-from agent_comms.thread_identity import AdmissionIdentity, ThreadIncarnation
+from agent_comms.thread_identity import AdmissionIdentity
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 
@@ -53,7 +54,7 @@ async def test_queue_exact_ids_restore_snapshot_and_admission_change(tmp_path, m
         key: QueuedInput(
             "same text",
             True,
-            QueuedInputContext(AdmissionIdentity(ThreadIncarnation("beta", created), generation)),
+            QueuedInputContext(AdmissionIdentity(RecordedThreadIncarnation("beta", created), generation)),
             key,
             "same text",
         )
@@ -190,7 +191,7 @@ async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path
         key: QueuedInput(
             text,
             True,
-            QueuedInputContext(AdmissionIdentity(ThreadIncarnation("beta", created), generation)),
+            QueuedInputContext(AdmissionIdentity(RecordedThreadIncarnation("beta", created), generation)),
             key,
             text,
         )
@@ -214,7 +215,7 @@ async def test_alias_maps_only_attachment_session_id(tmp_path):
 
 def test_attachment_routing_rename_preserves_exact_executor_fences():
     from dataclasses import replace
-    original = AdmissionIdentity(ThreadIncarnation("old-route", 1000.0), 7)
+    original = AdmissionIdentity(RecordedThreadIncarnation("old-route", 1000.0), 7)
     renamed = replace(original, incarnation=replace(original.incarnation, name="new-route"))
     scopes = (QueueScope("official-acp-id", original, 123),
               CursorScope("official-acp-id", "a" * 32, original, 123))

@@ -167,13 +167,12 @@ class NativeTranscript(TranscriptSource):
         return SessionCut(FileRevision.capture(self.path))
 
     def publication_revision(self, root: Path, thread):
-        from .bus_publication import stable_thread_lookup
         from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 
         if not self.path.is_file():
             return PublishedReplyRevision(0, 0)
         return NativeRuntimeInput.publication_revision(
-            root, self, stable_thread_lookup(thread.created_at))
+            root, self, thread.incarnation.lookup)
 
     @contextmanager
     def projection(self, receipts, routes):

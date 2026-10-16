@@ -18,7 +18,7 @@ from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
 from .command import Command
 from .declared_family import DeclaredFamily
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, TypedRow, TypedTable, sql_literal
 
@@ -52,7 +52,7 @@ class GoalRef:
 
     @property
     def incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.owner, self.owner_created)
+        return RecordedThreadIncarnation(self.owner, self.owner_created)
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,11 +75,11 @@ class Assignment:
 
     @property
     def owner_identity(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.owner, self.owner_created)
+        return RecordedThreadIncarnation(self.owner, self.owner_created)
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.parent, self.parent_created)
+        return RecordedThreadIncarnation(self.parent, self.parent_created)
 
     def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
@@ -307,7 +307,7 @@ class Todo(TypedTable):
 
     @property
     def creator_identity(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.creator, self.creator_created)
+        return RecordedThreadIncarnation(self.creator, self.creator_created)
 
     def require_result(self, result: Todo) -> None:
         if self != result:

@@ -18,11 +18,12 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_attempts import GoalAttemptStore, StaleAttemptError
 from agent_comms.goal_presentation import GoalExecutionState, GoalWaitTarget
-from agent_comms.goal_waits import GoalWait, GoalWaits
+from agent_comms.goal_waits import GoalWaits
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import canonical_goal_wire
+from agent_comms.goal_waits import RecordedGoalWait, NoGoalWait
 
 
 @pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
@@ -109,8 +110,8 @@ def test_standby_rejects_closed_wait_cycle_while_both_turns_are_active(tmp_path)
             "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
         )
 
-    assert comms.goals.goal_wait("alice") is not None
-    assert comms.goals.goal_wait("bob") is None
+    assert isinstance(comms.goals.goal_wait("alice"), RecordedGoalWait)
+    assert isinstance(comms.goals.goal_wait("bob"), NoGoalWait)
     assert comms.registry.require("bob").goal == bob
 
 
@@ -138,8 +139,8 @@ def test_standby_allows_independent_alternative_to_wait_cycle(tmp_path):
         "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
     )
 
-    assert comms.goals.goal_wait("alice") is not None
-    assert comms.goals.goal_wait("bob") is not None
+    assert isinstance(comms.goals.goal_wait("alice"), RecordedGoalWait)
+    assert isinstance(comms.goals.goal_wait("bob"), RecordedGoalWait)
 
 
 def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
@@ -169,7 +170,7 @@ def test_idle_active_goal_does_not_make_wait_cycle_runnable(tmp_path):
             "bob", StandbyGoalAction(expect=GoalPrecondition(goal_id=bob.id), wait_for=("alice",))
         )
 
-    assert comms.goals.goal_wait("bob") is None
+    assert isinstance(comms.goals.goal_wait("bob"), NoGoalWait)
     assert comms.registry.require("bob").goal == bob
 
 
@@ -243,7 +244,7 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     owner = comms.registry.require("bob")
     peer = comms.registry.require("alice")
     GoalWaits(tmp_path / "goal_waits.json").record(
-        GoalWait(
+        RecordedGoalWait(
             bob.id,
             "bob-wait",
             bob.revision,
@@ -261,11 +262,11 @@ def test_liveness_check_releases_preexisting_closed_wait_group(tmp_path, pending
     if pending_reply:
         comms.messaging.send_message("bob", "alice", "The work is finished")
         assert comms.goals.recover_closed_goal_wait("alice") == ()
-        assert comms.goals.goal_wait("alice") is not None
+        assert isinstance(comms.goals.goal_wait("alice"), RecordedGoalWait)
         return
 
     assert comms.goals.recover_closed_goal_wait("alice") == ("alice", "bob")
-    assert comms.goals.goal_wait("alice") is None
+    assert isinstance(comms.goals.goal_wait("alice"), NoGoalWait)
     assert comms.goals.goal_execution("alice").state is GoalExecutionState.RUNNABLE
     assert "Standby was released" in comms.registry.require("alice").goal.progress
     assert comms.goals.recover_closed_goal_wait("alice") == ()
@@ -293,7 +294,7 @@ def test_new_live_dependency_turn_keeps_old_wait_group_open(tmp_path, bound_old_
     owner = comms.registry.require("bob")
     peer = comms.registry.require("alice")
     GoalWaits(tmp_path / "goal_waits.json").record(
-        GoalWait(
+        RecordedGoalWait(
             bob.id,
             "bob-wait",
             bob.revision,
@@ -336,7 +337,7 @@ def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeyp
         "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
     )
     GoalWaits(tmp_path / "goal_waits.json").record(
-        GoalWait(
+        RecordedGoalWait(
             bob.id,
             "bob-wait",
             bob.revision,
@@ -381,6 +382,6 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, ackn
             "parent",
             StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",)),
         )
-    assert comms.goals.goal_wait("parent") is None
+    assert isinstance(comms.goals.goal_wait("parent"), NoGoalWait)
     assert comms.registry.require("parent").goal == goal
     assert not (tmp_path / "input_dispositions.sqlite3").exists()

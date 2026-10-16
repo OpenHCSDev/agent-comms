@@ -59,9 +59,18 @@ def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
     viewer = c.messaging.user_identity(str(tmp_path)).name
     original = c.messaging.send_message('sender', viewer, 'assigned source')
     with c.bus.snapshot(viewer=viewer) as (basis, source):
-        threads = dict(basis.registry.threads)
-        threads['sender'] = replace(threads['sender'], created_at=0.0)
-        recorded = replace(basis.registry, threads=threads)
+        from agent_comms.registry_provenance import RegistryProvenance
+        from agent_comms.thread_identity import UnrecordedThreadProvenance
+
+        recorded = RegistryProvenance.capture(basis.registry)
+        threads = dict(recorded.threads)
+        original_sender = threads['sender']
+        threads['sender'] = UnrecordedThreadProvenance(
+            name=original_sender.name, tags=original_sender.tags,
+            worktree=original_sender.worktree, created_at=0.0,
+            session_file=original_sender.session_file, title=original_sender.title,
+        )
+        recorded = replace(recorded, threads=threads)
         scope = DeliveryScope.capture(viewer, recorded, basis.catalog)
         # The existing public-record owner supplies the unstamped saved format;
         # a current send always has an assigned stamp, even publish_ordinary.

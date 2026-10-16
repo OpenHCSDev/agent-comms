@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from .channel_targets import BuiltinChannel, HistoryTargets, Tag
 from .channels import Channel, SavedView, ViewPredicate
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
-from .thread_provenance import ThreadProvenance
+from .thread_identity import ThreadProvenance
 
 
 @dataclass(frozen=True, slots=True)

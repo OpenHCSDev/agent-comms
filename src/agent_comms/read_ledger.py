@@ -19,10 +19,11 @@ from .locked_store import LockedStore
 from .private_path import FileIdentity, FileRevision
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
 from .sealed import Sealed
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
+    from .bus_publication import CommittedDelivery
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
@@ -203,19 +204,21 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         revision = FileRevision.capture(self.path.with_name("bus.jsonl"))
         return document.seen_sequences(viewer, snapshot, revision.identity if revision else None)
 
-    def displayed_recipient(self, message, recipient, snapshot, *, document=None):
+    def displayed_recipient(
+        self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None
+    ):
         """Return recorded human display evidence for this exact frozen recipient.
 
         Processing, assignment acceptance and a reply cannot grant this fact.
         A reused name with a different creation identity cannot inherit it.
         """
-        return self._displayed_recipient(
-            message, recipient, snapshot,
-            (thread for thread in snapshot.threads.values() if self.human(thread.role)),
-            document=document,
+        return snapshot.recipient(recipient, original).read_effect(
+            self, original.message, snapshot, document=document
         )
 
-    def historical_displayed_recipient(self, message, recipient, snapshot, *, document=None):
+    def historical_displayed_recipient(
+        self, message, recipient, snapshot: RegistryProvenance, *, document=None
+    ):
         """Read this archive's human paint ledger, never an original CLI ACK.
 
         HistoryArchive does not copy the source's read ledger. Its new ledger
@@ -223,20 +226,15 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         viewer's incarnation. A same-name destination reader cannot attest a
         different frozen recipient or replace the recorded namespace.
         """
-        return self._displayed_recipient(
-            message, recipient, snapshot, snapshot.threads.values(), document=document
+        # Archive selection binds both the original name and birth. A live
+        # lookup index would conflate different names with the same birth.
+        return snapshot.historical_recipient(recipient).read_effect(
+            self, message, snapshot, document=document
         )
 
-    def _displayed_recipient(self, message, recipient, snapshot, threads, *, document):
-        from .bus_publication import stable_thread_lookup
-
-        for thread in threads:
-            if (
-                stable_thread_lookup(thread.created_at) == recipient.recipient_lookup
-                and snapshot.canonical_name(recipient.canonical_thread) == thread.name
-                and message.seq in self.seen_sequences(thread.name, snapshot, document=document)
-            ):
-                return (thread.incarnation,)
+    def _displayed_recipient(self, message, thread, snapshot, *, document):
+        if message.seq in self.seen_sequences(thread.name, snapshot, document=document):
+            return (thread.incarnation,)
         return ()
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
@@ -253,7 +251,7 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
         def retained_message(key: str) -> bool:
             name, created, _ = json.loads(key)
-            return ThreadIncarnation(name, created) not in viewers
+            return RecordedThreadIncarnation(name, created) not in viewers
 
         def retained_transcript(key: str) -> bool:
             name, source, _ = json.loads(key)
