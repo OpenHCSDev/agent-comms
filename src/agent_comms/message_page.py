@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .bus_page_index import BusPageIndex
+from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import (
@@ -295,6 +296,30 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
                     break
                 self.traversal.append(window, message, size)
         return self.traversal.result(window, more, opposite)
+
+
+@dataclass(frozen=True, slots=True)
+class ReferencedMessagesRequest(MessageReadRequest[tuple[Message, ...]]):
+    """Exactly the named messages of a scope, found by sequence in the page index."""
+
+    references: frozenset[MessageReference]
+
+    def includes(self, message: Message) -> bool:
+        return message.reference in self.references and self.scope.includes(message)
+
+    def empty(self) -> tuple[Message, ...]:
+        return ()
+
+    def indexed(self, index, source: OpenedWireSnapshot) -> tuple[Message, ...]:
+        if not self.references:
+            return ()
+        sequences = frozenset(reference.seq for reference in self.references)
+        with closing(self.scope.offsets(
+            index, lower=min(sequences) - 1, upper=max(sequences) + 1,
+            descending=False, before_offset=source.boundary,
+        )) as rows:
+            named = (row for row in rows if row.seq in sequences)
+            return tuple(message for message, _ in self.indexed_records(index, source, named))
 
 
 @dataclass(frozen=True, slots=True)

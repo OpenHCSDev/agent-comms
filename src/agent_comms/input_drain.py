@@ -659,10 +659,6 @@ class InputDrain(InputObservation):
             update=InputDeliveryChangedUpdate(input_id).acp_chunk(),
         )
 
-    async def replay_unknown_inputs(self, session_id: str, client: Any = None) -> None:
-        """Refresh the producer-owned delivery ledger; this never replays an input."""
-        await self.emit_input_delivery_changed(session_id, client=client)
-
     def input_keys(self, session_id: str) -> frozenset[str]:
         """Live captured source membership, never rebuilt from durable notices."""
         original = self.original_sources.get(session_id)

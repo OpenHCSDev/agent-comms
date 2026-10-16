@@ -391,8 +391,7 @@ class ThreadManagement:
             # Validate every deterministic registry/SQL name refusal *before*
             # advancing a committed private owner's generation. The wire lock
             # excludes cooperating sends until both authorities agree.
-            if not self.registry.status(before.name).running:
-                raise RelationViolationError("Only a running thread can rename itself.")
+            self.registry.status(before.name).require_self_rename()
             if (
                 self.registry.name_reserved(new_name)
                 and self.registry.canonical_name(new_name) != before.name
