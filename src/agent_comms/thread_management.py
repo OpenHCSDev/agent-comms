@@ -644,7 +644,6 @@ class ThreadManagement:
     def _create_unlocked(self, spec: NewThreadSpec, pi_bin: str, child: Thread) -> Thread:
         """Register and launch the thread, removing its declaration if launch fails."""
         runtime = LaunchRuntime.current()
-        runtime.require_available()
         # A new incarnation's inbox already starts at its creation time
         # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
         child = self.registry._declare_unlocked(child)

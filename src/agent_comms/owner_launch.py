@@ -36,7 +36,9 @@ class LaunchRuntime:
     @classmethod
     def current(cls) -> LaunchRuntime:
         # Resolve the directory, not Python's symlink into the shared interpreter.
-        return cls(cls.current_pointer().resolve(strict=True) / "bin/python")
+        selected = cls(cls.current_pointer().resolve(strict=True) / "bin/python")
+        selected.require_available()
+        return selected
 
     @staticmethod
     def current_pointer() -> Path:
