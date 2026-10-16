@@ -1,11 +1,13 @@
 """Human read authority: typed conversation identities and compact exact progress."""
 from __future__ import annotations
 
-from agent_comms.coordination_errors import CoordinationReadBusy
+
+from .coordination_errors import CoordinationReadBusy, CoordinationReadUnavailable
 
 from collections.abc import Callable, Iterable, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -429,6 +431,12 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
             yield connection
 
     @contextmanager
+    def writing(self):
+        with CoordinationReadUnavailable.checking():
+            with super().writing() as connection:
+                yield connection
+
+    @contextmanager
     def reading(self, viewers: ReadViewers):
         with self.snapshot() as connection:
             yield self._document(connection, viewers)
@@ -505,16 +513,21 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
                     ReadMessageRow(key, marked).upsert(connection)
 
         log = WireLog(bus_path)
-        try:
-            with log._opened_wire_snapshot(need_sequence=False) as source:
-                prepared = OpenedRouteCounts(bus_path, source, snapshot, {})
-                prepared.sync(source.stream, source.revision, prepared._decode, blocking=False)
-            with BusRouteCounts(bus_path) as index:
-                advance(lambda conversation, state:
-                    index.read_prefix(conversation, state, snapshot, displayed.bus_identity))
-        except CoordinationReadBusy:
-            # Preserve exact paint even when compaction's disposable index is busy.
-            advance(lambda conversation, state: PrefixUnavailable())
+        with ExitStack() as opened:
+            try:
+                with log._opened_wire_snapshot(need_sequence=False) as source:
+                    prepared = OpenedRouteCounts(bus_path, source, snapshot, {})
+                    prepared.sync(source.stream, source.revision, prepared._decode, blocking=False)
+                index = opened.enter_context(BusRouteCounts(bus_path))
+            except CoordinationReadBusy:
+                # No prefix proof is available; exact displayed sequences still apply.
+                def prefix(conversation, state):
+                    return PrefixUnavailable()
+            else:
+                prefix = partial(index.read_prefix, snapshot=snapshot,
+                                 bus_identity=displayed.bus_identity)
+            # A busy ledger is not a busy optional index. It must reach the reader.
+            advance(prefix)
 
     def take_notice(self, shown: ReadMarkerNotice) -> ReadNotice:
         with self.writing() as connection:

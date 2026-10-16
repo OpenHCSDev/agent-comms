@@ -17,7 +17,6 @@ import logging
 import os
 import re
 import socket
-import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
@@ -33,7 +32,6 @@ from agent_comms.coordinator import Coordination
 from .claim_admission import publish_selected_resource_claim, write_selected_claimed_file
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import ExistingFileClaim, WakeAdmission
 from .field_codec import FieldCodec
@@ -309,11 +307,8 @@ def verify_sent_full_input(
     try:
         with Coordination(str(store.session.path)) as scoped, scoped.session.read():
             _require_sent_full_input(scoped, admission, owner_name, input_id)
-    except sqlite3.DatabaseError as error:
-        try:
-            CoordinationReadUnavailable.raise_from(error)
-        except CoordinationReadBusy as unavailable:
-            raise CoordinationBusy() from unavailable
+    except CoordinationReadBusy as unavailable:
+        raise CoordinationBusy() from unavailable
 
 
 def _require_sent_full_input(

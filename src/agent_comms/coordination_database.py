@@ -62,10 +62,7 @@ class StoreBusy(StoreContention):
     """Do not wait when optional presentation or admission cannot acquire SQLite custody."""
 
     def reader(self, uri: str) -> sqlite3.Connection:
-        try:
-            return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=0)
-        except sqlite3.DatabaseError as error:
-            CoordinationReadUnavailable.raise_from(error)
+        return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=0)
 
     def writer(
         self, path: str | os.PathLike[str], options: dict[str, object]
@@ -89,27 +86,29 @@ class ReadSnapshot:
     def open(
         self, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> sqlite3.Connection:
-        connection = self._connection(path, contention)
-        try:
-            connection.row_factory = sqlite3.Row
-            connection.execute("PRAGMA foreign_keys=ON")
-            self.bind(connection)
-            connection.execute("PRAGMA query_only=ON")
-            return connection
-        except BaseException:
-            connection.close()
-            raise
+        with CoordinationReadUnavailable.checking():
+            connection = self._connection(path, contention)
+            try:
+                connection.row_factory = sqlite3.Row
+                connection.execute("PRAGMA foreign_keys=ON")
+                self.bind(connection)
+                connection.execute("PRAGMA query_only=ON")
+                return connection
+            except BaseException:
+                connection.close()
+                raise
 
     def acquire(
         self, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> sqlite3.Connection:
-        connection = self.open(path, contention)
-        try:
-            CoordinationStore.begin_snapshot(connection)
-            return connection
-        except BaseException:
-            connection.close()
-            raise
+        with CoordinationReadUnavailable.checking():
+            connection = self.open(path, contention)
+            try:
+                CoordinationStore.begin_snapshot(connection)
+                return connection
+            except BaseException:
+                connection.close()
+                raise
 
 
 class RecoveringReadSnapshot(ReadSnapshot):
@@ -161,11 +160,9 @@ class CoordinationStore:
         path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
     ):
         """Own a configured read connection whose consumers bound each snapshot."""
-        try:
+        with CoordinationReadUnavailable.checking():
             with closing(ReadSnapshot().open(path, contention)) as db:
                 yield db
-        except sqlite3.DatabaseError as error:
-            CoordinationReadUnavailable.raise_from(error)
 
     @staticmethod
     @contextmanager
@@ -174,18 +171,16 @@ class CoordinationStore:
     ):
         """Own an existing committed read, never initialization or write admission."""
         try:
-            with closing(CoordinationStore.read_snapshot(path, contention)) as db:
-                try:
-                    yield db
-                finally:
-                    if db.in_transaction:
-                        db.execute("ROLLBACK")
-        except sqlite3.DatabaseError as error:
-            error.add_note(
-                f"SQLite observation store: {path}; "
-                f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
-            )
-            CoordinationReadUnavailable.raise_from(error)
+            with CoordinationReadUnavailable.checking():
+                with closing(CoordinationStore.read_snapshot(path, contention)) as db:
+                    try:
+                        yield db
+                    finally:
+                        if db.in_transaction:
+                            db.execute("ROLLBACK")
+        except CoordinationReadUnavailable as error:
+            error.add_note(f"SQLite observation store: {path}")
+            raise
 
     def __init__(
         self, path: str | os.PathLike[str],

@@ -2,6 +2,8 @@
 
 import sqlite3
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
 from typing import Never
 
 
@@ -37,10 +39,20 @@ class CoordinationReadUnavailable(CoordinationError, ReadErrorBehavior):
     @classmethod
     def raise_from(cls, error: sqlite3.DatabaseError) -> Never:
         """Decode SQLite's result code once, never its error wording."""
+        error.add_note(f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})")
         member = (CoordinationReadBusy
                   if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
                   else CoordinationReadFailed)
         raise member(str(error)) from error
+
+    @classmethod
+    @contextmanager
+    def checking(cls) -> Iterator[None]:
+        """Decode errors from the whole SQLite operation, including opening it."""
+        try:
+            yield
+        except sqlite3.DatabaseError as error:
+            cls.raise_from(error)
 
     def raise_failure(self, operation: str) -> Never:
         raise self

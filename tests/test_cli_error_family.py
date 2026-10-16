@@ -1,7 +1,7 @@
 """Core's error declaration controls encoding and read-watch recovery."""
 from __future__ import annotations
 
-from agent_comms.coordination_errors import CoordinationReadBusy
+from agent_comms.coordination_errors import CoordinationReadBusy, CoordinationReadFailed
 
 import asyncio
 import json
@@ -24,8 +24,8 @@ from agent_comms.cli_bridges.shared import (
     Options,
     UnconfirmedOutcome, DeliveredOutcome,
 )
-from agent_comms.cli_protocol import CORE_ERROR, FailedCoreError, UnavailableCoreError
-from agent_comms.coordination_database import CoordinationStore
+from agent_comms.cli_protocol import CORE_ERROR, CoreError, FailedCoreError, UnavailableCoreError
+from agent_comms.coordination_database import CoordinationStore, StoreBusy
 from agent_comms.messages import InfoKind, Message
 
 
@@ -33,6 +33,7 @@ from agent_comms.messages import InfoKind, Message
     (CoordinationReadBusy('wording does not decide recovery'), UnavailableCoreError),
     (RouteIndexRebuilding(12, 4096), UnavailableCoreError),
     (RuntimeError('database is locked'), FailedCoreError),
+    (CoordinationReadFailed('database is locked'), FailedCoreError),
     (ValueError('first\nsecond'), FailedCoreError),
 ])
 def test_exception_declaration_encodes_one_line(error, expected, capsys):
@@ -55,6 +56,30 @@ def test_error_keeps_cause_without_using_cause_text_as_policy(capsys):
     decoded = CORE_ERROR.validate_json(capsys.readouterr().out)
     assert isinstance(decoded, UnavailableCoreError)
     assert 'ValueError: bad\ninput' in decoded.error
+
+
+def test_sqlite_result_code_owns_busy_or_failed(tmp_path):
+    path = tmp_path / 'reader.sqlite3'
+    with closing(sqlite3.connect(path)) as writer:
+        writer.execute('CREATE TABLE original (value INTEGER)')
+        writer.commit()
+        writer.execute('BEGIN EXCLUSIVE')
+        with pytest.raises(CoordinationReadBusy) as caught:
+            with CoordinationStore.observing(path, StoreBusy()):
+                pass
+        assert caught.value.watch_delay() == 0.25
+        assert isinstance(CoreError.from_exception(caught.value), UnavailableCoreError)
+        writer.rollback()
+    with pytest.raises(CoordinationReadFailed) as caught:
+        with CoordinationStore.observing(tmp_path / 'missing.sqlite3', StoreBusy()):
+            pass
+    with pytest.raises(CoordinationReadFailed) as raised:
+        caught.value.watch_delay()
+    assert raised.value is caught.value
+    failure = CoreError.from_exception(caught.value)
+    assert isinstance(failure, FailedCoreError)
+    with pytest.raises(RuntimeError):
+        failure.watch_delay()
 
 
 def test_unknown_error_kind_is_not_a_retry():

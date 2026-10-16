@@ -336,10 +336,8 @@ class BusRouteCounts(ReadSnapshot):
         WAL reset, recovery after the last connection closed); it waits them
         out through SQLite's busy handler instead of failing the read.
         """
-        try:
+        with CoordinationReadUnavailable.checking():
             return self._acquire()
-        except sqlite3.DatabaseError as error:
-            CoordinationReadUnavailable.raise_from(error)
 
     def _acquire(self) -> BusRouteCounts:
         self._initialize()
@@ -362,7 +360,7 @@ class BusRouteCounts(ReadSnapshot):
             return PrefixUnavailable()
         self.connection.create_function('in_read_conversation', 2,
                                         conversation.route_matcher(snapshot), deterministic=True)
-        try:
+        with CoordinationReadUnavailable.checking():
             prefix = self.connection.execute(f'''
                 SELECT COALESCE((
                     SELECT seq-1 FROM "{RouteEntryRow.declared_name}"
@@ -376,8 +374,6 @@ class BusRouteCounts(ReadSnapshot):
                     'through': progress.read_through, 'maximum': maximum,
                     'sparse': json.dumps(sorted(progress.sparse)),
                 }).fetchone()
-        except sqlite3.DatabaseError as error:
-            CoordinationReadUnavailable.raise_from(error)
         return ReadPrefix(*prefix)
 
     def changed_reads(self, previous, current):
@@ -417,28 +413,30 @@ class BusRouteCounts(ReadSnapshot):
 
     def _initialize(self) -> None:
         """The writer alone creates the WAL store; no source bytes are decoded here."""
-        if self.path.exists():
-            with closing(CoordinationStore.read_snapshot(self.path)) as current:
-                if (RouteSourceRow.present(current)
-                        and SQLiteJournalMode.read(current.execute("PRAGMA journal_mode"))[0].journal_mode == "wal"):
-                    return
-        with _store_lock(self.path), closing(CoordinationStore.writer(self.path)) as connection:
-            connection.execute("PRAGMA journal_mode=WAL")
-            connection.execute("PRAGMA synchronous=FULL")
-            connection.execute("BEGIN IMMEDIATE")
-            if not RouteSourceRow.present(connection):
-                for owner in TypedTable.members_with(RouteTable):
-                    owner.create(connection)
-            connection.commit()
+        with CoordinationReadUnavailable.checking():
+            if self.path.exists():
+                with closing(CoordinationStore.read_snapshot(self.path)) as current:
+                    if (RouteSourceRow.present(current)
+                            and SQLiteJournalMode.read(current.execute("PRAGMA journal_mode"))[0].journal_mode == "wal"):
+                        return
+            with _store_lock(self.path), closing(CoordinationStore.writer(self.path)) as connection:
+                connection.execute("PRAGMA journal_mode=WAL")
+                connection.execute("PRAGMA synchronous=FULL")
+                connection.execute("BEGIN IMMEDIATE")
+                if not RouteSourceRow.present(connection):
+                    for owner in TypedTable.members_with(RouteTable):
+                        owner.create(connection)
+                connection.commit()
 
     def prepare(self) -> None:
         """Create the writer-owned WAL store after its publication lock releases."""
         self._initialize()
 
     def _recorded(self) -> RouteSourceRow | None:
-        with closing(self._open()) as connection:
-            rows = RouteSourceRow.select(connection)
-            return rows[0] if rows else None
+        with CoordinationReadUnavailable.checking():
+            with closing(self._open()) as connection:
+                rows = RouteSourceRow.select(connection)
+                return rows[0] if rows else None
 
     def sync(
         self, source: BinaryIO | None, revision: FileRevision | None,
