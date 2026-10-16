@@ -1,4 +1,8 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
+
+from agent_comms.native_project import UnmanagedNativeProject
+
+from agent_comms.runtime_socket import RuntimeSocket
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
@@ -43,7 +47,7 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
     forged.write_text("#!/bin/sh\necho not-native\n")
     forged.chmod(0o755)
     with pytest.raises(NativePiUnavailable, match="validated native"):
-        NativePiRpcLaunch.managed(str(forged), (), worktree=tmp_path, session_context=(DoctrineSegment.capture(),))
+        NativePiRpcLaunch.managed(str(forged), (), worktree=tmp_path, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert verified == []
     launch = NativePiRpcLaunch.managed(
         "pi",
@@ -51,7 +55,7 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
         worktree=tmp_path,
         environment={"NODE_OPTIONS": "--import=/untrusted.js", "PI_WORKTREE": "/wrong"},
         session_context=(DoctrineSegment.capture(),),
-    )
+     project=UnmanagedNativeProject())
     assert verified == [package]
     assert launch.package == package
     assert "NODE_OPTIONS" not in launch.env
@@ -68,7 +72,7 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
         ("--version",),
     ):
         with pytest.raises(NativePiUnavailable):
-            NativePiRpcLaunch.managed("pi", arguments, worktree=tmp_path, session_context=(DoctrineSegment.capture(),))
+            NativePiRpcLaunch.managed("pi", arguments, worktree=tmp_path, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
 
 
 async def test_unvalidated_configuration_refuses_before_child(tmp_path, monkeypatch):
@@ -130,7 +134,7 @@ async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, mo
         worktree=tmp_path,
         environment={"PI_CODING_AGENT_DIR": str(tmp_path / "agent-config")},
         session_context=(DoctrineSegment.capture(),),
-    )
+     project=UnmanagedNativeProject())
     async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=12) as child:
         channel = PiRpcChannel(child.stdout)
         child.stdin.write(channel.encode(GetState(id="preflight")))
@@ -147,7 +151,7 @@ async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, mo
 async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, monkeypatch):
     from agent_comms.acp import CommsClient
     from agent_comms.comms import Comms
-    from agent_comms.runtime import socket_path
+
     from agent_comms.threads import Thread
 
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
@@ -188,7 +192,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             timeout=20,
         ) as child:
             async with asyncio.timeout(12):
-                while not socket_path(comms.root, child.pid).exists():
+                while not RuntimeSocket.path_for(comms.root, child.pid).exists():
                     if child.returncode is not None:
                         raise AssertionError((await child.stderr.read()).decode())
                     await asyncio.sleep(0.05)

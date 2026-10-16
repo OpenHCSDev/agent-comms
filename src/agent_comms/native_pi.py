@@ -40,11 +40,10 @@ from .private_path import (
     FileRevision,
     PrivateDirectoryRole,
     PrivateFileRole,
-    PrivateSocketRole,
     TrustedAncestorRole,
 )
 from .registry_store import RegistryStore
-from .runtime_requests import ProjectRuntimeRequest
+from .native_project import NativeProject, ManagedNativeProject, UnmanagedNativeProject
 from .selected_session import SavedSelectedSession, SelectedSession
 from .selected_tool_broker import NativeToolMode
 from .thread_identity import ThreadIncarnation
@@ -97,13 +96,10 @@ def main() -> int:
     parser = argparse.ArgumentParser(add_help=False)
     ThreadIncarnation.add_cli_arguments(parser, required=True, dest="thread_incarnation")
     selection, arguments = parser.parse_known_args(sys.argv[1:])
-    incarnation = selection.thread_incarnation
+    incarnation = selection.thread_incarnation.require_recorded()
     incarnation.require_recorded()
-    owner = (
-        RegistryStore(launch.validated_root / "registry.json")
-        .read_entry(incarnation.name)
-        .entry.thread
-    )
+    entry = RegistryStore(launch.validated_root / "registry.json").read_entry(incarnation.name).entry
+    owner = entry.thread
     if owner.created_at != incarnation.created_at:
         raise NativePiUnavailable("Native launch belongs to a different thread incarnation")
     session_context = TurnContext.session_segments(owner)
@@ -117,7 +113,8 @@ def main() -> int:
         LaunchRuntime.running(),
         session_context=session_context,
     )
-    os.execvpe(argv[0], list(argv), environment)
+    project = ManagedNativeProject.from_entry(launch.validated_root, entry)
+    os.execvpe(argv[0], [*argv, *project.cli_arguments], environment)
     return 0
 
 
@@ -425,17 +422,13 @@ class NativePiRpcLaunch:
 
     configuration: RestartEnvironment = field(kw_only=True)
     runtime: LaunchRuntime = field(kw_only=True)
+    project: NativeProject = field(kw_only=True)
 
     @contextmanager
     def bound_arguments(self):
         """Keep the original socket directory borrowed for this child lifetime."""
-        try:
-            position = self.argv.index(ProjectRuntimeRequest.socket_flag) + 1
-        except ValueError:
-            yield self.argv
-            return
-        with PrivateSocketRole.address(Path(self.argv[position])) as address:
-            yield (*self.argv[:position], str(address), *self.argv[position + 1:])
+        with self.project.bound_arguments() as arguments:
+            yield (*self.argv, *arguments)
 
     @classmethod
     def bootstrap(
@@ -467,7 +460,6 @@ class NativePiRpcLaunch:
             str(cli),
             *arguments,
             *(argument for segment in session_context for argument in segment.native_arguments()),
-            *ProjectRuntimeRequest.take_native_arguments(env),
             "--append-system-prompt",
             str(instructions),
             "--append-system-prompt",
@@ -477,10 +469,12 @@ class NativePiRpcLaunch:
 
     @classmethod
     def _build(cls, cli, arguments, cwd, environment, session, package, configuration,
-               runtime: LaunchRuntime, *, session_context: tuple[ContextSegment, ...]):
+               runtime: LaunchRuntime, *, session_context: tuple[ContextSegment, ...],
+               project: NativeProject):
         argv, env = cls.bootstrap(cli, arguments, cwd, environment, configuration, runtime,
                                  session_context=session_context)
-        return cls(argv, cwd, env, session, package, configuration=configuration, runtime=runtime)
+        return cls(argv, cwd, env, session, package, configuration=configuration, runtime=runtime,
+                   project=project)
 
     @classmethod
     def _command_selection(cls, command: str, runtime: LaunchRuntime):
@@ -556,6 +550,7 @@ class NativePiRpcLaunch:
             RestartEnvironment.inherit(environment),
             runtime,
             session_context=(DoctrineSegment.capture(),),
+            project=UnmanagedNativeProject(),
         )
 
     @classmethod
@@ -583,7 +578,7 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         return cls._managed(package, (*arguments, "--no-extensions", "--no-skills",
             "--no-context-files", "--no-session"), cwd, None, SelectedSession(cwd), runtime,
-            session_context=(DoctrineSegment.capture(),))
+            session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
 
     @classmethod
     def managed(
@@ -593,6 +588,7 @@ class NativePiRpcLaunch:
         *,
         worktree: Path,
         session_context: tuple[ContextSegment, ...],
+        project: NativeProject,
         environment: dict[str, str] | None = None,
         session_file: str | None = None,
     ) -> NativePiRpcLaunch:
@@ -612,11 +608,11 @@ class NativePiRpcLaunch:
             identity=SessionIdentityHelper.locate(package, str(saved)))
             if saved is not None else SelectedSession(directory))
         return cls._managed(package, arguments, cwd, environment, session, runtime,
-                            session_context=session_context)
+                            session_context=session_context, project=project)
 
     @classmethod
     def _managed(cls, package, arguments, cwd, environment, session, runtime: LaunchRuntime,
-                 *, session_context: tuple[ContextSegment, ...]):
+                 *, session_context: tuple[ContextSegment, ...], project: NativeProject):
         """Assemble the entire key from one acquired package and selected source."""
         cwd = Path(cwd).resolve(strict=True)
         if not cwd.is_dir():
@@ -627,7 +623,8 @@ class NativePiRpcLaunch:
             arguments += ("--session", str(session.path))
         cli = package / "dist" / "cli.js"
         return cls._build(cli, arguments, cwd, env, session, package,
-                          RestartEnvironment.inherit(env), runtime, session_context=session_context)
+                          RestartEnvironment.inherit(env), runtime, session_context=session_context,
+                          project=project)
 
     def retained_managed(
         self,
@@ -638,6 +635,7 @@ class NativePiRpcLaunch:
         environment: dict[str, str] | None,
         session_file: str | None,
         session_context: tuple[ContextSegment, ...],
+        project: NativeProject,
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
 
@@ -650,7 +648,8 @@ class NativePiRpcLaunch:
         if package != self.package or saved != self.session.path:
             return None
         return self._managed(self.package, NativeArguments.parse(arguments).rpc(),
-            worktree, environment, self.session, self.runtime, session_context=session_context)
+            worktree, environment, self.session, self.runtime, session_context=session_context,
+            project=project)
 
     @classmethod
     def acquire_tracked(cls, package: Path) -> Callable[..., NativePiRpcLaunch]:
@@ -685,6 +684,7 @@ class NativePiRpcLaunch:
         provider: str,
         model: str,
         session_context: tuple[ContextSegment, ...],
+        project: NativeProject,
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode | None = None,
@@ -741,7 +741,7 @@ class NativePiRpcLaunch:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
         return cls._build(cli, tuple(arguments), worktree, env, session, package,
-                          configuration, runtime, session_context=session_context)
+                          configuration, runtime, session_context=session_context, project=project)
 
 
 def _trusted_package(package: Path) -> Path:

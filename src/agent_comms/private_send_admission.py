@@ -24,6 +24,7 @@ from .diagnostics import PublicationMeasurements, record_acquisition_progress, r
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
+from .native_project import ManagedNativeProject
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptAdmissionBusy
@@ -152,8 +153,10 @@ class PrivateSendAdmission:
         """
         from .turn_context import TurnContext
 
-        registry, session_context = await Coordination.run_worker(lambda: (
-            self.bus._registry.snapshot(), TurnContext.session_segments(self.owner.thread),
+        project, session_context = await Coordination.run_worker(lambda: (
+            ManagedNativeProject.capture(self.bus.log.path.parent, self.bus._registry.snapshot(),
+                                         self.owner.thread),
+            TurnContext.session_segments(self.owner.thread),
         ))
         try:
             result = await TrackedTurnSession.execute(
@@ -167,10 +170,8 @@ class PrivateSendAdmission:
                 model=model,
                 thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level),
                 session_context=session_context,
-                environment=self.owner.thread.native_environment(
-                    self.bus.log.path.parent, registry,
-                    self.owner.thread.worktree,
-                ),
+                environment={"AGENT_COMMS_ROOT": str(self.bus.log.path.parent)},
+                project=project,
                 maintenance_root=self.bus.log.path.parent,
                 selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event,

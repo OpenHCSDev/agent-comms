@@ -1,6 +1,8 @@
 """One installed ACP/native journey; localhost replies, real retained sessions."""
 from __future__ import annotations
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import argparse
 import asyncio
 import json
@@ -126,7 +128,7 @@ async def detached(root: Path):
     from acp import spawn_agent_process
     from agent_comms.acp_extension import CompactRequest, encode_request
     from agent_comms.comms import Comms
-    from agent_comms.runtime import socket_path
+
     from contextlib import aclosing
     from explicit_private_owner_installed_journey import cli
 
@@ -165,7 +167,7 @@ async def detached(root: Path):
                     assert owner.pid == reply['pid'] and owner.pid != os.getpid()
                     result['worker_pids'].append(owner.pid)
                     async with asyncio.timeout(20):
-                        while not socket_path(comms.root, owner.pid).exists():
+                        while not RuntimeSocket.path_for(comms.root, owner.pid).exists():
                             assert owner.process_alive
                             await asyncio.sleep(.05)
                     subscriber = Subscriber()

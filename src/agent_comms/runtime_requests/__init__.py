@@ -1,6 +1,6 @@
 """Declaration-owned commands for the existing local owner socket protocol.
 
-Only the socket boundary translates the external ``action`` tag. Request
+FieldCodec owns the protocol's declared ``action`` tag. Request
 parameters use A2; membership and dispatch use A1; execution uses A5. These
 commands do not own coordination, backend or identity lifecycles.
 """
@@ -9,143 +9,31 @@ from __future__ import annotations
 
 import time
 
-import asyncio
 import json
-import os
 from abc import abstractmethod
 from functools import partial
-from .coordinator import Coordination
+from ..coordinator import Coordination
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Self, ClassVar
+from typing import Any
 
-from .command import Command
-from .tool_caller import NoThreadCaller
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
-from .private_bus_checkpoint import ContextManifestReference
-from .goal_actions import GoalAction
-from .thread_presentation import LiveThreadOwnerBinding
-from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
-from .thread_identity import ThreadIncarnation
-from .working_memory_labels import ClassifierVersion, ModelLabel
-from .working_memory_questions import SpanAnswer
-
-if TYPE_CHECKING:
-    from .runtime import RuntimeServer, SocketClient
+from ..runtime_request import RuntimeRequest, ResultRuntimeRequest, RuntimeRequestContext
+from ..tool_caller import NoThreadCaller
+from ..field_codec import FieldCodec
+from ..private_bus_checkpoint import ContextManifestReference
+from ..goal_actions import GoalAction
+from ..turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
+from ..thread_identity import ThreadIncarnation
+from ..working_memory_labels import ClassifierVersion, ModelLabel
+from ..working_memory_questions import SpanAnswer
 
 
-@dataclass(frozen=True)
-class RuntimeRequestContext:
-    server: RuntimeServer
-    reader: asyncio.StreamReader
-    client: SocketClient
-    session_id: str
-    name: str
-
-    async def send(self, payload: dict[str, Any]) -> None:
-        await self.client.send(payload)
 
 
-@dataclass(frozen=True, kw_only=True)
-class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
-    thread: str
-
-    @classmethod
-    def from_wire(cls, payload: object) -> Self:
-        if not isinstance(payload, dict):
-            raise ValueError("Expected a runtime request object.")
-        if "kind" in payload:
-            raise ValueError("Unknown runtime request field: kind")
-        values = dict(payload)
-        values["kind"] = values.pop("action", None)
-        return cls.from_payload(values)
-
-    def to_wire(self) -> dict[str, Any]:
-        payload = FieldCodec.encode(self)
-        return {"action": payload.pop("kind"), **payload}
-
-    @classmethod
-    def proxy_payload(
-        cls, thread: str, controller_token: str | None, parameters: dict[str, Any]
-    ) -> dict[str, Any]:
-        # The owner decodes once; proxies preserve the owner's error envelope.
-        return {"action": FieldCodec.encode(cls), "thread": thread,
-                **FieldCodec.encode(parameters)}
-
-    def require_owner(self, snapshot):
-        owner = snapshot.require(self.thread)
-        if owner.pid != os.getpid() or not snapshot.status(owner.name).running:
-            raise RuntimeError("This process no longer owns the thread.")
-        return owner
-
-    async def bind(
-        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient
-    ) -> RuntimeRequestContext:
-        snapshot = await Coordination.run_worker(server.agent._comms.registry.snapshot)
-        owner = self.require_owner(snapshot)
-        session_id = server.agent.sessions.require_owned_session(owner, snapshot)
-        return RuntimeRequestContext(server, reader, client, session_id, owner.name)
 
 
-class ResultRuntimeRequest(RuntimeRequest):
-    async def apply(self, ctx: RuntimeRequestContext) -> None:
-        await ctx.send({"result": await self.result(ctx)})
-
-    @abstractmethod
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]: ...
 
 
-@dataclass(frozen=True, kw_only=True)
-class ProjectRuntimeRequest(ResultRuntimeRequest):
-    """Current project observation through the original native launch binding.
 
-    This command grants no input or tool execution. A retained native process
-    must still observe its original registry lease before each project check.
-    """
-    binding: LiveThreadOwnerBinding
-    socket_flag: ClassVar[str] = "--agent-comms-project-socket"
-    request_flag: ClassVar[str] = "--agent-comms-project-request"
-
-    @classmethod
-    def take_native_arguments(cls, environment: dict[str, str]) -> tuple[str, ...]:
-        """Consume the original captured binding at the native CLI boundary."""
-        socket = environment.pop("AGENT_COMMS_PROJECT_SOCKET", None)
-        request = environment.pop("AGENT_COMMS_PROJECT_REQUEST", None)
-        if socket is None and request is None:
-            return ()
-        if socket is None or request is None:
-            raise ValueError("Native project binding is incomplete")
-        return cls.socket_flag, socket, cls.request_flag, request
-
-    @classmethod
-    def for_native(cls, snapshot, thread):
-        process = thread.require_process()
-        owner = snapshot.owner_identity(thread.name)
-        snapshot.require_owner_process(owner, process)
-        return cls(thread=thread.name, binding=LiveThreadOwnerBinding(owner, process))
-
-    def environment(self, root):
-        from .runtime import socket_path
-
-        return {
-            "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),
-            "AGENT_COMMS_PROJECT_REQUEST": json.dumps(self.to_wire()),
-        }
-
-    def require_original(self, snapshot):
-        if not self.binding.owner.incarnation.matches_recorded_name(self.thread, snapshot):
-            raise ValueError("Project request names another original thread")
-        snapshot.require_owner_process(self.binding.owner, self.binding.process)
-        return snapshot.require_active(self.binding.owner.incarnation.name)
-
-    def require_owner(self, snapshot):
-        self.require_original(snapshot)
-        return super().require_owner(snapshot)
-
-    async def result(self, ctx):
-        snapshot = await Coordination.run_worker(ctx.server.agent._comms.registry.snapshot)
-        current = self.require_original(snapshot)
-        return {"worktree": current.worktree}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -243,7 +131,7 @@ class CompactRuntimeRequest(ResultRuntimeRequest):
     instructions: str | None = None
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        from .manual_compaction_bridge import compact_context
+        from ..manual_compaction_bridge import compact_context
 
         return FieldCodec.encode(
             await compact_context(ctx.server.agent.turns, ctx.session_id, self.instructions)
@@ -288,7 +176,7 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
     async def change(self, ctx: RuntimeRequestContext) -> None: ...
 
     async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        from .acp_extension import TurnChangedUpdate, encode_updates
+        from ..acp_extension import TurnChangedUpdate, encode_updates
         await self.change(ctx)
         goal, execution = await Coordination.run_worker(partial(
             ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
@@ -469,7 +357,7 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
     classifier: ClassifierVersion
 
     async def result(self, ctx):
-        from .working_memory_annotations import WorkingMemoryAnnotations
+        from ..working_memory_annotations import WorkingMemoryAnnotations
 
         segment = await self.selected_segment(ctx)
         labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
@@ -485,7 +373,7 @@ class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeReq
     worktree: str
 
     async def result(self, ctx):
-        from .cli_commands import CorrectAnnotationCliCommand
+        from ..cli_commands import CorrectAnnotationCliCommand
 
         segment = await self.selected_segment(ctx)
         if not segment.contains_span(self.label.span):

@@ -1,4 +1,6 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
+
+from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
@@ -154,7 +156,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 native_start=self.started,
                 **options,
                 session_context=(DoctrineSegment.capture(),),
-            ):
+             project=UnmanagedNativeProject()):
                 result.append(event)
                 self.observed.append(event)
                 if followup is not None and isinstance(event, events.InputStarted):

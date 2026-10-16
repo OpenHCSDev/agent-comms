@@ -1,4 +1,6 @@
 """A late native settlement cannot terminate a started dependency reply."""
+
+from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
@@ -92,7 +94,7 @@ for line in sys.stdin:
             persistent_session=persistent,
             native_start=lambda public_id, native_id, text: starts.append(text) or True,
             session_context=(DoctrineSegment.capture(),),
-        ):
+         project=UnmanagedNativeProject()):
             events.append(event)
             inject = (
                 isinstance(event, ae.ContextInfo) and event.context_used == 2

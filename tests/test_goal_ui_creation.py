@@ -1,5 +1,7 @@
 """A UI goal must acquire owner-private launch authority before it is visible."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 from unittest.mock import AsyncMock
 from dataclasses import replace
 
@@ -14,7 +16,7 @@ from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import Goal
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 from agent_comms.tools import invoke_tool
 
@@ -42,7 +44,7 @@ async def _owner(tmp_path, monkeypatch):
     session = (await owner.new_session(cwd=str(tmp_path / "project"))).session_id
     wakes = []
     monkeypatch.setattr(owner.turns.goals, "schedule_goal", AsyncMock(side_effect=wakes.append))
-    proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(owner, session, RuntimeSocket.path_for(comms.root, os.getpid()))
     return comms, owner, proxy, session, wakes
 
 

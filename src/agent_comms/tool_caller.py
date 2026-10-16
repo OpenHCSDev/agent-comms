@@ -3,12 +3,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import argparse
+from collections.abc import Sequence
 from typing import ClassVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NoReturn
 
 from .launch_runtime import CallingThreadUnavailable
 from .cli_options import JsonFlagRecord
+from .native_project import NativeProject, UnmanagedNativeProject
 from .declared_family import DeclaredFamily
 from .pi_vocabulary import ServiceTier
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -20,9 +22,10 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class CallerRecord(DeclaredFamily, affix="CallerRecord"):
     """Native adapters consume the codec's declared caller variants."""
+    arguments: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,9 @@ class ToolCaller(ABC):
         selected, remaining = parser.parse_known_args(arguments, namespace=namespace)
         arguments[:] = remaining
         return selected.caller
+
+    @abstractmethod
+    def native_project(self, arguments: Sequence[str], comms: Comms) -> NativeProject: ...
 
     @property
     @abstractmethod
@@ -81,12 +87,15 @@ class ToolCaller(ABC):
 
 @dataclass(frozen=True)
 class NoThreadCaller(ToolCaller):
+    def native_project(self, arguments: Sequence[str], comms: Comms) -> NativeProject:
+        return NativeProject.from_arguments(arguments, default=UnmanagedNativeProject()).require_unmanaged()
+
     @property
     def cli_arguments(self) -> tuple[str, ...]:
         return ()
 
     def native_metadata(self, comms: Comms) -> OperatorCallerRecord:
-        return OperatorCallerRecord()
+        return OperatorCallerRecord(arguments=())
 
     def require_thread(self) -> NoReturn:
         raise CallingThreadUnavailable("This operation requires an explicit recorded thread caller.")
@@ -121,6 +130,14 @@ class ThreadCaller(JsonFlagRecord, ToolCaller):
     def __post_init__(self) -> None:
         self.incarnation.require_recorded()
 
+    def native_project(self, arguments: Sequence[str], comms: Comms) -> NativeProject:
+        project = NativeProject.from_arguments(arguments).require_managed()
+        snapshot = comms.registry.snapshot()
+        original = project.request.require_original(snapshot)
+        if self.incarnation.resolved(snapshot) != original.incarnation:
+            raise ValueError("Native project and caller name different original owners")
+        return project
+
     def to_json(self) -> str:
         return self.incarnation.to_json()
 
@@ -137,7 +154,8 @@ class ThreadCaller(JsonFlagRecord, ToolCaller):
         if not self.incarnation.current(snapshot):
             raise CallingThreadUnavailable("The original caller is no longer current.")
         thread = snapshot.threads[snapshot.canonical_name(self.name)]
-        return ThreadCallerRecord(thread.name, thread.parent, thread.task, thread.service_tier)
+        return ThreadCallerRecord(thread.name, thread.parent, thread.task, thread.service_tier,
+                                  arguments=self.cli_arguments)
 
     def require_thread(self) -> RecordedThreadIncarnation:
         return self.incarnation

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.native_project import UnmanagedNativeProject
+
 from contextlib import aclosing
 
 from agent_comms import backend
@@ -15,7 +17,7 @@ async def one_turn_events(*args, **kwargs):
     try:
         async with aclosing(
             backend.stream_agent_events(*args, persistent_session=session,
-                session_context=(DoctrineSegment.capture(),), **kwargs)
+                session_context=(DoctrineSegment.capture(),), **kwargs, project=UnmanagedNativeProject())
         ) as stream:
             async for event in stream:
                 yield event

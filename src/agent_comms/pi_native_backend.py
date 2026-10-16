@@ -18,6 +18,7 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
+from .native_project import ManagedNativeProject
 from .agent_backend import (
     AgentBackend,
     Compacts,
@@ -208,10 +209,8 @@ class PiNativeBackend(
             raise ValueError("Native preparation requires a saved session")
         if open_native is None:
             open_native = NativeSessionPreparation.open
-        environment, session_context = await Coordination.run_worker(lambda: (
-            thread.native_environment(
-                self.comms.root, self.comms.registry.snapshot(), thread.worktree,
-            ),
+        project, session_context = await Coordination.run_worker(lambda: (
+            ManagedNativeProject.capture(self.comms.root, self.comms.registry.snapshot(), thread),
             TurnContext.session_segments(thread),
         ))
         return await open_native(
@@ -219,8 +218,9 @@ class PiNativeBackend(
             self.agent_bin,
             self.arguments(thread),
             worktree=thread.worktree,
-            environment=environment,
+            environment={"AGENT_COMMS_ROOT": str(self.comms.root)},
             session_file=thread.session_file,
+            project=project,
             session_context=session_context,
             observe=partial(self.observe, thread),
         )
@@ -238,7 +238,10 @@ class PiNativeBackend(
         from .coordinator import Coordination
         from .turn_context import TurnContext
 
-        session_context = await Coordination.run_worker(partial(TurnContext.session_segments, thread))
+        project, session_context = await Coordination.run_worker(lambda: (
+            ManagedNativeProject.capture(self.comms.root, self.comms.registry.snapshot(), thread),
+            TurnContext.session_segments(thread),
+        ))
         images = {"images": content.images} if content.images else {}
         async for event in backend.stream_agent_events(
             self.agent_bin,
@@ -257,6 +260,7 @@ class PiNativeBackend(
             request_observer=delivery.request_progress,
             persistent_session=self,
             session_context=session_context,
+            project=project,
             ui_request=delivery.ui_request,
         ):
             yield event

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from . import agent_events as events
 from . import backend
 from .native_errors import NativePiUnavailable
+from .native_project import NativeProject
 from .coordinator import Coordination
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence
@@ -71,18 +72,20 @@ class NativeSessionPreparation(backend.TurnSession):
         environment: dict[str, str],
         session_file: str,
         session_context: tuple[ContextSegment, ...],
+        project: NativeProject,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         async with persistent.lock:
             return await cls.open_acquired(persistent, agent_bin, agent_args,
                 worktree=worktree, environment=environment, session_file=session_file,
-                session_context=session_context, observe=observe)
+                session_context=session_context, project=project, observe=observe)
 
     @classmethod
     async def open_acquired(
         cls, persistent: PersistentPiSession, agent_bin: str, agent_args: Sequence[str], *,
         worktree: str, environment: dict[str, str], session_file: str,
         session_context: tuple[ContextSegment, ...],
+        project: NativeProject,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         """Borrow existing child custody through launch, observation and retention."""
@@ -92,6 +95,7 @@ class NativeSessionPreparation(backend.TurnSession):
             agent_bin, tuple(agent_args), worktree=Path(worktree),
             environment=environment, session_file=session_file,
             session_context=session_context,
+            project=project,
         ))
         preparation = cls(launch, "", persistent_session=persistent)
         async with session_writer_fence(launch.session.session_file):

@@ -1,5 +1,7 @@
 """Actual fork worker held before its socket, with the pinned native model on loopback."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -11,7 +13,7 @@ from pathlib import Path
 from agent_comms.acp import CommsClient
 from agent_comms.child_process import ParentedProcess, Platform
 from agent_comms.comms import Comms
-from agent_comms.runtime import socket_path
+
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 
@@ -90,7 +92,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
                      model="response-local/fixture", thinking_level="off", task="One new cold fork diagnostic input"),
             launcher,
         )
-        endpoint = socket_path(fixture.root, child.pid)
+        endpoint = RuntimeSocket.path_for(fixture.root, child.pid)
         assert len(launched) == 1 and not endpoint.exists()
         loading = asyncio.create_task(client.load_session(str(fixture.project), child.name))
         await asyncio.sleep(5.4)

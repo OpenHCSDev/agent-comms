@@ -196,9 +196,7 @@ class OwnedTurn:
         self.worktree = (
             self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
         )
-        self.env_extra = self.thread.native_environment(
-            self.runner.comms.root, self.runner.comms.registry.snapshot(), self.worktree
-        )
+        self.env_extra = {"AGENT_COMMS_ROOT": str(self.runner.comms.root)}
         from .turn_context import (
             TurnContext,
             AutomaticTitleSegment,

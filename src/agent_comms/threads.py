@@ -12,7 +12,7 @@ from .child_process import ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .thread_execution import ThreadExecution, NativeThreadExecution
-from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
+from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
@@ -118,20 +118,6 @@ class Thread(ThreadProvenance):
         status.require_active()
         if not self.process_alive or self.pid == os.getpid():
             raise RelationViolationError("Restart requires another live owner")
-
-    def native_environment(self, root, snapshot, worktree: str) -> dict[str, str]:
-        """Project this captured owner through the original native binding."""
-        from .runtime_requests import ProjectRuntimeRequest
-
-        project = ProjectRuntimeRequest.for_native(snapshot, self)
-        return {
-            "AGENT_COMMS_ROOT": str(root),
-            "PI_PARENT_ID": self.parent or "",
-            "AGENT_COMMS_MANAGED": "1",
-            SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
-            "PI_WORKTREE": worktree,
-            **project.environment(root),
-        }
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)

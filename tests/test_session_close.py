@@ -1,5 +1,7 @@
 """Scoped attachment retirement through original stores, sockets and ACP routing."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import os
 
@@ -10,7 +12,7 @@ from acp.schema import SessionInfoUpdate
 
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.comms import wire
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.threads import Thread
 from agent_comms.child_process import ProcessIdentity
 
@@ -103,7 +105,7 @@ async def test_close_joins_unsent_request_and_capability_requires_admission(tmp_
     comms.registry.declare(Thread("cold", frozenset(), str(tmp_path),
                                  process_identity=ProcessIdentity.capture(os.getpid())))
     client = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)
-    proxy = RuntimeProxy(client, "cold", socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(client, "cold", RuntimeSocket.path_for(comms.root, os.getpid()))
     client.sessions.proxies["cold"] = proxy
     request = asyncio.create_task(proxy.request("clear_queue"))
     try:

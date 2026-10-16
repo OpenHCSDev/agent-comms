@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import os
 import json
 import sys
@@ -15,7 +17,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.child_process import ObservedProcess, ParentedProcess
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.runtime import socket_path
+
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import ActiveTurn
 
@@ -33,7 +35,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
     owner = comms.registry.require("worker")
     try:
         deadline = time.monotonic() + 10
-        while not socket_path(tmp_path, first.pid).exists():
+        while not RuntimeSocket.path_for(tmp_path, first.pid).exists():
             assert owner.process_alive, "Actual worker exited before runtime attach"
             assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
             time.sleep(0.02)
@@ -189,7 +191,7 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
         assert "Traceback (most recent call last)" in trace
         assert "PublicationActivationBlocked" in trace
         assert logs[0].stat().st_mode & 0o777 == 0o600
-        assert not socket_path(tmp_path, result.pid).exists()
+        assert not RuntimeSocket.path_for(tmp_path, result.pid).exists()
         assert owner.session_file is None
     finally:
         if owner.process_alive:
@@ -254,7 +256,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
 
     def ready(owner):
         deadline = time.monotonic() + 10
-        while not socket_path(tmp_path, owner.pid).exists():
+        while not RuntimeSocket.path_for(tmp_path, owner.pid).exists():
             assert owner.process_alive, "Actual batch worker exited before runtime attach"
             assert time.monotonic() < deadline, "Actual batch worker failed to attach"
             time.sleep(.02)
@@ -268,7 +270,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         async def attach():
             async with asyncio.timeout(10):
                 reader, writer = await asyncio.open_unix_connection(
-                    socket_path(tmp_path, owner.pid), limit=8 * 1024 * 1024
+                    RuntimeSocket.path_for(tmp_path, owner.pid), limit=8 * 1024 * 1024
                 )
                 try:
                     writer.write((json.dumps(SubscribeRuntimeRequest(

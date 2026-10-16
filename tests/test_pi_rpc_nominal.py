@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.native_project import UnmanagedNativeProject
+
 from agent_comms.native_session_files import PrivateEvidenceRead
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
@@ -114,7 +116,7 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
 )
 def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
     session = TurnSession(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
+        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({}), project=UnmanagedNativeProject()), "unused",
         native_session=PersistentPiSession(),
     )
     for cls in (left, right, left):

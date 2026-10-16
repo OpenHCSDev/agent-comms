@@ -16,8 +16,12 @@ const SERVICE_TIER_CAPABLE_APIS = new Set([
 ]);
 
 export type CallerRecord =
-	| { kind: "operator"; label: string }
-	| { kind: "thread"; name: string; parent: string | null; task: string | null; service_tier: "standard" | "priority" };
+	| { kind: "operator"; label: string; arguments: string[] }
+	| { kind: "thread"; name: string; parent: string | null; task: string | null; service_tier: "standard" | "priority"; arguments: string[] };
+
+export type NativeProject =
+	| { kind: "unmanaged" }
+	| { kind: "managed"; socket: { path: string }; request: Record<string, unknown> };
 
 interface ToolDeclaration {
 	name: string;
@@ -55,24 +59,28 @@ function runCli(args: string[], timeout = 30_000, callerArguments: string[] = []
 }
 
 export default function (pi: ExtensionAPI) {
-	const flagName = "thread-incarnation";
-	pi.registerFlag(flagName, { description: "Recorded comms caller identity", type: "string" });
-	const payload = pi.getFlag(flagName);
-	if (payload !== undefined && typeof payload !== "string") {
-		throw new Error("Comms caller identity must be typed JSON");
-	}
-	const callerArguments = payload === undefined ? [] : [`--${flagName}`, payload];
-	const run = (args: string[], timeout = 30_000) => runCli(args, timeout, callerArguments);
-	const catalog = runCli(["tools"], 30_000, callerArguments);
+	const catalog = runCli(["tools", "--native-arguments", JSON.stringify(process.argv)]);
 	const caller = catalog.caller as CallerRecord;
-	const native = caller.kind === "thread" ? caller : undefined;
+	if (!Array.isArray(catalog.native_flags) || !catalog.native_flags.every((flag) => typeof flag === "string" && flag.startsWith("--"))) {
+		throw new Error("Core did not declare its native JSON flags");
+	}
+	for (const flag of catalog.native_flags as string[]) {
+		pi.registerFlag(flag.slice(2), { description: "Core native launch record", type: "string" });
+	}
+	let native: Extract<CallerRecord, { kind: "thread" }> | undefined;
+	switch (caller.kind) {
+		case "thread": native = caller; break;
+		case "operator": break;
+		default: throw new Error("Core returned an unknown caller record");
+	}
+	const run = (args: string[], timeout = 30_000) => runCli(args, timeout, caller.arguments);
 	const currentThread = native?.name;
 	const forkThread = native?.parent ? native.name : undefined;
 	const task = native?.task ?? "";
 	const managed = native !== undefined;
 	pi.events.on("agent-comms:caller", (consume: unknown) => {
 		if (typeof consume !== "function") throw new TypeError("Caller consumer must be a function");
-		consume(caller);
+		consume(caller, catalog.project as NativeProject);
 	});
 	let serviceTier = native?.service_tier;
 	if (serviceTier !== undefined && serviceTier !== "standard" && serviceTier !== "priority") {

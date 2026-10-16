@@ -1,4 +1,6 @@
 """Real Pi: old settlement cannot terminate an identified late follow-up."""
+
+from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
@@ -158,7 +160,7 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
                     finish_event=finish_event,
                     native_start=lambda *_: True,
                     session_context=(DoctrineSegment.capture(),),
-                ):
+                 project=UnmanagedNativeProject()):
                     events.append(event)
                     if isinstance(event, ae.StreamSettled):
                         finish_event.set()

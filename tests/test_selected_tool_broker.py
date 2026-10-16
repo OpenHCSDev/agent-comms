@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.native_project import UnmanagedNativeProject
+
 from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
@@ -120,7 +122,7 @@ def test_default_off_and_packaged_extension_selection(
     tmp_path.chmod(0o700)
     sessions = tmp_path / "sessions"
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
-    default = native_pi.NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session_dir=sessions, session_context=(DoctrineSegment.capture(),))
+    default = native_pi.NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session_dir=sessions, session_context=(DoctrineSegment.capture(),), project=UnmanagedNativeProject())
     assert "--no-tools" in default.argv and "--no-builtin-tools" not in default.argv
     assert "-e" not in default.argv
     mode = broker.SelectedToolMode(lambda _: None)
@@ -130,7 +132,7 @@ def test_default_off_and_packaged_extension_selection(
     selected = native_pi.NativePiRpcLaunch.tracked(
         tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode,
         session_context=(DoctrineSegment.capture(),),
-    )
+     project=UnmanagedNativeProject())
     assert "--no-tools" not in selected.argv
     assert "--no-builtin-tools" in selected.argv
     assert selected.argv[selected.argv.index("--tools") + 1] == "selected_claimed_write"
@@ -142,7 +144,7 @@ def test_default_off_and_packaged_extension_selection(
         native_pi.NativePiRpcLaunch.tracked(
             tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode,
             session_context=(DoctrineSegment.capture(),),
-        )
+         project=UnmanagedNativeProject())
     with pytest.raises(NativePiUnavailable, match="nominal"):
         native_pi.NativePiRpcLaunch.tracked(
             tmp_path,
@@ -150,7 +152,7 @@ def test_default_off_and_packaged_extension_selection(
             session_dir=sessions,
             selected_tool_mode=object(),  # type: ignore[arg-type]
             session_context=(DoctrineSegment.capture(),),
-        )
+         project=UnmanagedNativeProject())
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")

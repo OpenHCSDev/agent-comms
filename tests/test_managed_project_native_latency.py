@@ -20,7 +20,7 @@ from agent_comms.comms import Comms
 from agent_comms.input_drain import InputDrain
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.runtime_requests import ProjectRuntimeRequest
+from agent_comms.project_runtime import ProjectRuntimeRequest
 from agent_comms.pi_native_backend import PiNativeBackend
 import agent_comms.native_package as native_package
 from delivery_owner_fixture import canonical_agent

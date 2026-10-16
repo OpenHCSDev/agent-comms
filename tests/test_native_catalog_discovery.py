@@ -1,4 +1,6 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
+
+from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
@@ -305,7 +307,7 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
         ),
         worktree=native_backend.project,
         session_context=(DoctrineSegment.capture(),),
-    )
+     project=UnmanagedNativeProject())
     # The command result owner needs a session; this probe never opens its child.
     session = backend.TurnSession(launch, "", native_session=PersistentPiSession())
     observed = []

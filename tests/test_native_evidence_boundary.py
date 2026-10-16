@@ -1,4 +1,6 @@
 """Evidence preserves opaque content without granting plain-text or launch authority."""
+
+from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import json
@@ -111,7 +113,7 @@ def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypat
             session_file=fresh.path,
             selected_thinking_level="high",
             session_context=(DoctrineSegment.capture(),),
-        )
+         project=UnmanagedNativeProject())
     assert not (fresh.path.parent / ".native-pi-agent").exists()
 
 
@@ -131,7 +133,7 @@ def test_launch_uses_fresh_owner_and_preserves_exact_saved_marker(tmp_path, monk
         session_file=fresh.path,
         selected_thinking_level=level,
         session_context=(DoctrineSegment.capture(),),
-    )
+     project=UnmanagedNativeProject())
     assert launch.session_file == fresh.path
     assert fresh.path.read_bytes() == before
     fresh.verify_prewrite()

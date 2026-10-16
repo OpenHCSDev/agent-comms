@@ -1,5 +1,7 @@
 """A manual /compact runs Pi's own engine in the retained child, which keeps serving."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 from agent_comms.queued_input import InitialInput
 import asyncio
 import json
@@ -26,7 +28,7 @@ from agent_comms.acp_extension import (
 from agent_comms.agent_events import CompactionEnd
 from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import ManualCompactionReason
-from agent_comms.runtime import socket_path
+
 from delivery_owner_fixture import canonical_agent
 
 
@@ -257,7 +259,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
             assert len(requests) == 2
             assert "LEGACY_DISCARDED_HISTORY" in json.dumps(requests[-1]["messages"])
             before = session.read_bytes()
-            runtime_path = socket_path(comms.root, os.getpid())
+            runtime_path = RuntimeSocket.path_for(comms.root, os.getpid())
             assert runtime_path.exists()
             await attachment.load_session(cwd=str(project), session_id="worker")
             assert attachment.sessions.proxies["worker"].path == runtime_path

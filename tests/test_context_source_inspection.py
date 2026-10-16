@@ -1,4 +1,6 @@
 """Source membership, public-only capture, and selected recorded values."""
+
+from agent_comms.runtime_socket import RuntimeSocket
 import time
 
 from dataclasses import replace
@@ -10,14 +12,13 @@ import pytest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
-from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegmentRuntimeRequest,
-    ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
+from agent_comms.runtime_request import RuntimeRequest
+from agent_comms.runtime_requests import ContextRecordedSegmentRuntimeRequest, ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.turn_context import (
     ContextManifest, ContextSourceText, FileProvenance, JournalProvenance,
-    NativeProvenance, PreviewProvenance, RecordedContextTurn, SegmentManifest,
-    SystemLayerSegment, TranscriptSegment, TurnContext,
+    NativeProvenance, PreviewProvenance, RecordedContextTurn, SystemLayerSegment, TranscriptSegment, TurnContext,
 )
 from test_private_bus_checkpoint import _root
 
@@ -95,13 +96,13 @@ def test_current_core_context_is_independent_and_source_selection_is_current(tmp
 @pytest.mark.asyncio
 async def test_core_context_socket_reads_without_native_session_or_preview(tmp_path):
     from delivery_owner_fixture import canonical_delivery_owner
-    from agent_comms.runtime import RuntimeConnection, socket_path
+    from agent_comms.runtime import RuntimeConnection
 
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
         owner = comms.registry.require("alpha")
         assert owner.session_file is None
         connection = RuntimeConnection(comms, owner.name,
-                                       socket_path(comms.root, owner.require_process().pid))
+                                       RuntimeSocket.path_for(comms.root, owner.require_process().pid))
         try:
             context = FieldCodec.decode(TurnContext, await connection.request("context_core"))
             assert context.thread == owner.incarnation

@@ -1,6 +1,8 @@
 """Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
+
+from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
 from agent_comms.queued_input import InitialInput
@@ -23,7 +25,6 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CompactionChangedUpdate, decode_updates
 from agent_comms.activity import ActivityState
 from agent_comms.comms import wire
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
 from stored_inputs import stored_inputs
@@ -215,7 +216,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                         require_input_id=True, native_start=lambda *_: True,
                         persistent_session=pi_session,
                         session_context=(DoctrineSegment.capture(),),
-                    ):
+                     project=UnmanagedNativeProject()):
                         events.append(event)
             finally:
                 await pi_session.close()

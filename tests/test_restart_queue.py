@@ -1,5 +1,7 @@
 """Actual queued owner handoff retains history and accepts a fresh native input."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -13,16 +15,15 @@ from acp.schema import TextContentBlock
 
 from agent_comms import restart_queue as queue
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.launch_runtime import RestartEnvironment, PACKAGE_ENV, ROOT_ID_ENV
+from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.comms import Comms
 from agent_comms.child_process import AttachedChild
 from agent_comms.field_codec import FieldCodec
-from agent_comms.runtime import socket_path
+
 from agent_comms.threads import Thread
 from agent_comms.wire_watch import DirectoryWatchSource, WatchSource, open_wire_watcher
 from explicit_private_owner_installed_journey import Subscriber
-from test_backend_native_lifecycle import native_backend
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux watcher")
@@ -149,7 +150,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
 
     async def ready():
         async with asyncio.timeout(15):
-            while not socket_path(comms.root, comms.registry.require("worker").pid).exists():
+            while not RuntimeSocket.path_for(comms.root, comms.registry.require("worker").pid).exists():
                 assert comms.registry.require("worker").process_alive
                 await asyncio.sleep(0.02)
 

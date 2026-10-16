@@ -1,4 +1,6 @@
 """Report-authoring helper and current-runtime replacement fixture."""
+
+from agent_comms.runtime_socket import RuntimeSocket
 import asyncio
 from dataclasses import replace
 import json
@@ -8,7 +10,7 @@ import sys
 
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import BlockedGoalAction, ModelInvocable, SetGoalAction
-from agent_comms.runtime import socket_path
+
 from agent_comms.runtime_requests import SubscribeRuntimeRequest
 from agent_comms.turn_lease import ActiveTurn
 from agent_comms.threads import Thread
@@ -27,10 +29,10 @@ def author_model_report(service, name, turn):
 
 async def ready(root, owner):
     async with asyncio.timeout(12):
-        while not socket_path(root, owner.pid).exists():
+        while not RuntimeSocket.path_for(root, owner.pid).exists():
             assert owner.process_alive
             await asyncio.sleep(.02)
-        reader, writer = await asyncio.open_unix_connection(socket_path(root, owner.pid), limit=8*1024*1024)
+        reader, writer = await asyncio.open_unix_connection(RuntimeSocket.path_for(root, owner.pid), limit=8*1024*1024)
         try:
             writer.write((json.dumps(SubscribeRuntimeRequest(thread=owner.name).to_wire())+'\n').encode())
             await writer.drain()

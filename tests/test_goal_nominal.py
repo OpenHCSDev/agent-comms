@@ -168,7 +168,8 @@ def test_cas_rejects_aba_and_unknown_payload_without_effects(owner):
 
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
-    from agent_comms.runtime_requests import RuntimeRequest, UpdateGoalRuntimeRequest
+    from agent_comms.runtime_request import RuntimeRequest
+    from agent_comms.runtime_requests import UpdateGoalRuntimeRequest
 
     payload = UpdateGoalRuntimeRequest.proxy_payload("worker", None, {
         "status": PausedGoalAction, "goal_id": "original-goal", "expected_revision": 7,

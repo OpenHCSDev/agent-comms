@@ -1,5 +1,7 @@
 """Saved native history -> ACP goal failure -> passive read, without replay."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -21,7 +23,7 @@ from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoa
 from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
 from agent_comms.goal_failure_observation import read_failed_turn_projection
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend as native_backend
 from stored_inputs import sent_text, stored_inputs
@@ -269,7 +271,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             native.provider.status = 200
             agent.inputs.auto_wake = True
             blocked = comms.registry.require(sid).goal
-            proxy = RuntimeProxy(agent, sid, socket_path(comms.root, os.getpid()))
+            proxy = RuntimeProxy(agent, sid, RuntimeSocket.path_for(comms.root, os.getpid()))
             try:
                 await proxy.request("retry_goal", goal_id=goal.id, expected_revision=blocked.revision)
                 await agent.inputs.wake_tasks[sid]

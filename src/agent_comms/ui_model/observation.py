@@ -15,6 +15,8 @@ rows, and no longer competes with that work for its interpreter lock.
 
 from __future__ import annotations
 
+from .runtime_socket import RuntimeSocket
+
 import asyncio
 import itertools
 import multiprocessing
@@ -206,12 +208,12 @@ class OwnerRead(AwaitedRead):
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
-        from agent_comms.runtime import OwnerReplyConnection, socket_path
+        from agent_comms.runtime import OwnerReplyConnection
 
         owner = comms.registry.require(self.owner.name)
         if owner.incarnation != self.owner:
             raise ValueError("The owner incarnation changed while preparing the request.")
-        return OwnerReplyConnection(comms, owner.name, socket_path(comms.root, owner.pid))
+        return OwnerReplyConnection(comms, owner.name, RuntimeSocket.path_for(comms.root, owner.pid))
 
     async def ask(self, comms: Comms) -> object:
         connection = await asyncio.to_thread(self.connect, comms)

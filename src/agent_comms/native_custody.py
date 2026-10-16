@@ -19,6 +19,7 @@ from .pi_rpc import PiRpcChannel
 if TYPE_CHECKING:
     from .session_revision import SessionRevision
     from .turn_context import ContextSegment
+    from .native_project import NativeProject
 
 
 @dataclass
@@ -156,9 +157,10 @@ class NativeCustody(ABC):
     retained = False
 
     def managed_launch(self, command, arguments, *, worktree, environment, session_file,
-                       session_context: tuple[ContextSegment, ...]):
+                       session_context: tuple[ContextSegment, ...], project: NativeProject):
         return NativePiRpcLaunch.managed(command, arguments, worktree=worktree,
-            environment=environment, session_file=session_file, session_context=session_context)
+            environment=environment, session_file=session_file, session_context=session_context,
+            project=project)
 
     def reuse(self, key) -> PiSessionChild | None:
         return None
@@ -286,18 +288,19 @@ class RetainedNative(ChildNative):
         return None
 
     def managed_launch(self, command, arguments, *, worktree, environment, session_file,
-                       session_context: tuple[ContextSegment, ...]):
+                       session_context: tuple[ContextSegment, ...], project: NativeProject):
         if self.current:
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
                 worktree=worktree, environment=environment, session_file=session_file,
-                session_context=session_context)
+                session_context=session_context, project=project)
             if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
                 original, authentication
             ):
                 return original
         return super().managed_launch(command, arguments, worktree=worktree,
-            environment=environment, session_file=session_file, session_context=session_context)
+            environment=environment, session_file=session_file, session_context=session_context,
+            project=project)
 
     def _shutdown_successor(self) -> NativeCustody:
         return EmptyNative()

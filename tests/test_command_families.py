@@ -17,10 +17,7 @@ from agent_comms.messages import InfoKind
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
-from agent_comms.runtime_requests import (
-    ResultRuntimeRequest,
-    RuntimeRequest,
-)
+from agent_comms.runtime_request import ResultRuntimeRequest, RuntimeRequest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 

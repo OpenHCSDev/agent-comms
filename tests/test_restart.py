@@ -1,3 +1,5 @@
+
+from agent_comms.runtime_socket import RuntimeSocket
 import asyncio
 import sys
 import os
@@ -12,7 +14,7 @@ from agent_comms.threads import Thread
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner process fixture")
 async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monkeypatch):
-    from agent_comms.runtime import socket_path
+
 
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
     session = tmp_path / "session.jsonl"
@@ -31,7 +33,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
 
     async def ready(pid):
         async with asyncio.timeout(10):
-            while not socket_path(comms.root, pid).exists():
+            while not RuntimeSocket.path_for(comms.root, pid).exists():
                 assert comms.registry.require("worker").process_alive
                 await asyncio.sleep(0.05)
 

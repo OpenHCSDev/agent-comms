@@ -6,6 +6,8 @@ command catalog. Existing CLI spellings belong to the store_files.
 
 from __future__ import annotations
 
+from .runtime_socket import RuntimeSocket
+
 import argparse
 import json
 import os
@@ -27,7 +29,7 @@ from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
 from .tool_caller import ToolCaller
-from .thread_identity import ThreadIncarnation
+from .native_project import NativeProject, UnmanagedNativeProject
 from .tools import invoke_tool, tool_catalog
 from .field_codec import FieldCodec
 from .comms import Comms
@@ -632,10 +634,20 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
 @dataclass(frozen=True, kw_only=True)
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
+    native_arguments: tuple[str, ...] = option("--native-arguments", default_factory=tuple,
+        parser_default="[]", normalize=json.loads)
 
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
-        return {"tools": tool_catalog(), "caller_flag": ThreadIncarnation.value_flag,
-                "caller": caller.native_metadata(ctx)}
+        project: NativeProject = UnmanagedNativeProject()
+        if self.native_arguments:
+            parser = argparse.ArgumentParser(add_help=False, exit_on_error=False)
+            remaining = list(self.native_arguments)
+            caller = ToolCaller.from_arguments(parser, remaining, argparse.Namespace())
+            project = caller.native_project(remaining, ctx)
+        metadata = caller.native_metadata(ctx)
+        flags = (*metadata.arguments[::2], NativeProject.value_flag)
+        return {"tools": tool_catalog(), "caller": metadata, "project": project,
+                "native_flags": flags}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1469,12 +1481,12 @@ class ContextCliCommand(CliCommand):
         import asyncio
         from .field_codec import FieldCodec
         from .native_turn_context import NativeContextData
-        from .runtime import RuntimeConnection, socket_path
+        from .runtime import RuntimeConnection
         from .turn_context import NextContextTurn, TurnContext
         from acp.exceptions import RequestError
 
         owner = ctx.registry.require(self.thread)
-        connection = RuntimeConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
+        connection = RuntimeConnection(ctx, owner.name, RuntimeSocket.path_for(ctx.root, owner.require_process().pid))
 
         async def inspect():
             try:

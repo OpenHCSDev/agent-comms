@@ -1,5 +1,7 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import os
 import signal
 import shlex
@@ -95,8 +97,8 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         InputDispositions(native.root).replace(original_document)
         async def attach_current():
             current = comms.registry.require(name)
-            from agent_comms.runtime import socket_path
-            await asyncio.to_thread(wait_for, socket_path(native.root, current.pid))
+
+            await asyncio.to_thread(wait_for, RuntimeSocket.path_for(native.root, current.pid))
             agent = canonical_agent(comms, auto_wake=False)
             try:
                 async with asyncio.timeout(20):

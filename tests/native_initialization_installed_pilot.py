@@ -5,6 +5,8 @@ This observes initialization only; it grants no input retry authority.
 """
 
 from __future__ import annotations
+
+from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import argparse
@@ -36,7 +38,7 @@ async def run(root: Path, package: Path) -> dict:
         model="z-ai/glm-5.3-flash",
         thinking_level="off",
         session_context=(DoctrineSegment.capture(),),
-    )
+     project=UnmanagedNativeProject())
     admission = NativeStartupAdmission(root)
     started = time.monotonic()
     await admission.acquire()

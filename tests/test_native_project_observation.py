@@ -4,9 +4,10 @@ from dataclasses import replace
 import json
 import time
 
-import pytest
 
-from agent_comms.runtime_requests import ProjectRuntimeRequest, RuntimeRequest
+from agent_comms.runtime_request import RuntimeRequest
+from agent_comms.project_runtime import ProjectRuntimeRequest
+from agent_comms.native_project import ManagedNativeProject
 from agent_comms.thread_presentation import LiveThreadOwnerBinding
 from native_backend_fixture import native_backend_fixture
 from agent_comms.coordinator import Coordination
@@ -34,13 +35,14 @@ async def test_current_project_observation_keeps_original_binding_across_rename_
             thread = comms.registry.require(session)
             request = ProjectRuntimeRequest.for_native(comms.registry.snapshot(), thread)
             assert RuntimeRequest.from_wire(request.to_wire()) == request
-            environment = thread.native_environment(comms.root, comms.registry.snapshot(), str(first))
-            assert json.loads(environment['AGENT_COMMS_PROJECT_REQUEST']) == request.to_wire()
+            project = ManagedNativeProject.capture(comms.root, comms.registry.snapshot(), thread)
+            assert project.request == request
             durations = []
 
             async def query(command=request):
                 started = time.perf_counter_ns()
-                reader, writer = await asyncio.open_unix_connection(environment['AGENT_COMMS_PROJECT_SOCKET'])
+                with project.socket.bound() as socket:
+                    reader, writer = await asyncio.open_unix_connection(socket.path)
                 try:
                     writer.write((json.dumps(command.to_wire()) + '\n').encode())
                     await writer.drain()

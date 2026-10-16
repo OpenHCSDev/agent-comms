@@ -1,5 +1,7 @@
 """Project changes preserve thread/session identity and synchronize executing owners."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import json
 import os
@@ -106,7 +108,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
 
 async def test_saved_native_identity_changes_publish_one_complete_update(tmp_path):
     """Original saved owner, actual socket publication; no native input/provider."""
-    from agent_comms.runtime import RuntimeProxy, socket_path
+    from agent_comms.runtime import RuntimeProxy
 
     class Client:
         def __init__(self):
@@ -127,7 +129,7 @@ async def test_saved_native_identity_changes_publish_one_complete_update(tmp_pat
             agent.on_connect(sender)
             attached = canonical_agent(agent._comms, auto_wake=False)
             attached.on_connect(receiver)
-            proxy = RuntimeProxy(attached, session_id, socket_path(native.root, os.getpid()))
+            proxy = RuntimeProxy(attached, session_id, RuntimeSocket.path_for(native.root, os.getpid()))
             try:
                 await proxy.subscribe()
                 sender.updates.clear()
@@ -205,7 +207,7 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
 
 @pytest.mark.skipif(os.name == "nt", reason="UNIX runtime subscriptions")
 async def test_project_changes_reach_all_subscribed_clients(tmp_path):
-    from agent_comms.runtime import RuntimeProxy, socket_path
+    from agent_comms.runtime import RuntimeProxy
 
     old, new = tmp_path / "old", tmp_path / "new"
     old.mkdir()
@@ -226,7 +228,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path):
         for values in updates:
             client = canonical_agent(comms)
             client.on_connect(Client(values))
-            proxy = RuntimeProxy(client, session, socket_path(comms.root, os.getpid()))
+            proxy = RuntimeProxy(client, session, RuntimeSocket.path_for(comms.root, os.getpid()))
             proxies.append(proxy)
             assert next(
                 update.worktree

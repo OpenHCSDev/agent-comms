@@ -1,19 +1,20 @@
 """Goal edits/history use the actual owner socket and persisted backend state."""
 
+from agent_comms.runtime_socket import RuntimeSocket
+
 import asyncio
 import os
 
 import pytest
 
 from delivery_owner_fixture import canonical_agent
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     OwnerInvocable,
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import RuntimeProxy
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -34,7 +35,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch):
 
     observer = canonical_agent(comms)
     observer.on_connect(Client())
-    proxy = RuntimeProxy(observer, session, socket_path(comms.root, os.getpid()))
+    proxy = RuntimeProxy(observer, session, RuntimeSocket.path_for(comms.root, os.getpid()))
     try:
         metadata = await proxy.subscribe()
         assert metadata["agentComms"]["goal"]["revision"] == paused.revision
