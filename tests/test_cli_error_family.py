@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import sqlite3
 import sys
+from contextlib import closing
 
 import pytest
 from pydantic import ValidationError
@@ -20,6 +22,7 @@ from agent_comms.cli_bridges.shared import (
     Outcome,
 )
 from agent_comms.cli_protocol import CORE_ERROR, FailedCoreError, UnavailableCoreError
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.messages import InfoKind, Message
 
@@ -134,6 +137,86 @@ print('opened', flush=True)
             DeliveryRow(message.message_id, 'original payload', Outcome.UNCONFIRMED)]
     finally:
         journal.close()
+
+
+@pytest.mark.parametrize('conflicting', [False, True])
+def test_concurrent_initial_binding_preserves_one_identity_and_pending_delivery(tmp_path, conflicting):
+    from journal_binding_cases import concurrent_bindings
+
+    first = Binding(str(tmp_path), 'viewer', 'external-session')
+    other = Binding(str(tmp_path), 'other-viewer', 'external-session')
+    message = Message(sender='peer', target='viewer', type=InfoKind,
+                      body='retained delivery', timestamp=1.0, seq=1)
+    journal = DeliveryJournal(tmp_path)
+    try:
+        assert journal.begin(message, 'original payload', Outcome.UNCONFIRMED)
+    finally:
+        journal.close()
+    results = concurrent_bindings(tmp_path, (first, other if conflicting else first))
+    assert sum(kind == 'bound' for kind, _ in results) == (1 if conflicting else 2)
+    assert sum(kind == 'rejected' for kind, _ in results) == int(conflicting)
+    journal = DeliveryJournal(tmp_path)
+    try:
+        rows = Binding.select(journal.db)
+        assert len(rows) == 1
+        winner, = rows
+        assert winner in (first, other)
+        assert journal.bind(None) == journal.bind(winner) == winner
+        loser = other if winner == first else first
+        with pytest.raises(ValueError, match='another Core/CLI conversation'):
+            journal.bind(loser)
+        assert not journal.begin(message, 'must not replace', Outcome.DELIVERED)
+        assert DeliveryRow.select(journal.db) == [
+            DeliveryRow(message.message_id, 'original payload', Outcome.UNCONFIRMED)]
+        assert Binding.select(journal.db) == [winner]
+    finally:
+        journal.close()
+
+
+def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path):
+    binding = Binding(str(tmp_path), 'viewer', 'external-session')
+    journal = DeliveryJournal(tmp_path)
+    try:
+        assert journal.bind(binding) == binding
+        statements = []
+        journal.db.set_trace_callback(statements.append)
+        with closing(CoordinationStore.writer(journal.path)) as writer:
+            writer.execute('BEGIN IMMEDIATE')
+            assert journal.bind(None) == binding
+            assert writer.in_transaction
+        assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
+    finally:
+        journal.close()
+
+
+def test_legacy_journal_reopen_preserves_schema_binding_and_delivery(tmp_path):
+    binding = Binding(str(tmp_path), 'viewer', 'external-session')
+    pending = DeliveryRow('pending-id', 'original payload', Outcome.UNCONFIRMED)
+    with closing(CoordinationStore.writer(tmp_path / 'delivery.sqlite3')) as db:
+        db.execute('CREATE TABLE binding (root TEXT, bus TEXT, thread TEXT)')
+        db.execute('CREATE TABLE delivery (id TEXT PRIMARY KEY, payload TEXT NOT NULL, outcome TEXT NOT NULL)')
+        binding.insert(db)
+        pending.insert(db)
+        db.commit()
+        schema = db.execute('SELECT name, sql FROM sqlite_master ORDER BY name').fetchall()
+    journal = DeliveryJournal(tmp_path)
+    try:
+        assert journal.bind(binding) == journal.bind(None) == binding
+        assert DeliveryRow.select(journal.db) == [pending]
+        assert journal.db.execute('SELECT name, sql FROM sqlite_master ORDER BY name').fetchall() == schema
+    finally:
+        journal.close()
+
+
+def test_journal_initialization_failure_closes_owned_connection(tmp_path, monkeypatch):
+    path = tmp_path / 'delivery.sqlite3'
+    path.write_bytes(b'not a SQLite database')
+    connection = CoordinationStore.writer(path)
+    monkeypatch.setattr(CoordinationStore, 'writer', lambda *_args, **_options: connection)
+    with pytest.raises(sqlite3.DatabaseError):
+        DeliveryJournal(tmp_path)
+    with pytest.raises(sqlite3.ProgrammingError, match='closed'):
+        connection.execute('SELECT 1')
 
 
 @pytest.mark.asyncio
