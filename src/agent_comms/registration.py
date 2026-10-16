@@ -10,7 +10,7 @@ from pathlib import Path
 from .catalog_store import ChannelCatalog
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
-from .goal_history import GoalHistoryEntry, GoalHistoryStore
+from .goal_history import GoalHistoryRead, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
@@ -320,17 +320,12 @@ class Registration:
                 }
             )
 
-    def goal_history(
-        self, name: str, *, goal_id: str | None = None
-    ) -> tuple[GoalHistoryEntry, ...]:
-        """Read this owner's recorded transitions, reconciling crash cuts first."""
-
+    def goal_history(self, name: str) -> GoalHistoryRead:
+        """Capture this incarnation's committed cursor; read its rows after unlock."""
         with self.store.locked():
             document = self.store._read_unlocked()
             thread = document.require(name)
-            return GoalHistoryStore(self.store.path).history(
-                thread.created_at, thread.goal, goal_id=goal_id
-            )
+            return GoalHistoryStore(self.store.path).observe(thread.created_at, thread.goal)
 
     def name_reserved(self, name: str) -> bool:
         """Return whether a canonical name or permanent alias occupies text."""

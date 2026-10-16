@@ -14,14 +14,14 @@ import stat
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
 from .goals import Goal
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, ExpressionIndex, Index, SQLiteSchemaObject, TypedTable, _identifier
 
 
 class GoalHistoryError(RuntimeError):
@@ -42,7 +42,26 @@ class GoalHistoryEntry(TypedTable):
     state: Literal["pending", "committed", "aborted", "uncertain"] = field(
         kw_only=True, metadata={"history_exclude": True}
     )
-    indexes = (Index(("owner_created_at", "sequence")),)
+    BEFORE_GOAL_ID: ClassVar[str] = 'json_extract("before", \'$.id\')'
+    AFTER_GOAL_ID: ClassVar[str] = 'json_extract("after", \'$.id\')'
+    REPORTED_TURN: ClassVar[str] = 'json_extract("after", \'$.reported_turn\')'
+    indexes = (
+        Index(("owner_created_at", "sequence")),
+        Index(("owner_created_at", "state", "sequence")),
+        *(ExpressionIndex(("owner_created_at", "state", expression, "sequence"))
+          for expression in (BEFORE_GOAL_ID, AFTER_GOAL_ID, REPORTED_TURN)),
+        Index(("owner_created_at",), unique=True, where="state='pending'"),
+    )
+
+    @classmethod
+    def missing_indexes(cls, actual: list[SQLiteSchemaObject]) -> dict[str, str]:
+        """One row format; physical indexes may be absent in an original capture."""
+        present = {item.name for item in actual}
+        missing = {name: sql for name, sql in cls.index_schema().items() if name not in present}
+        expected = {name: sql for name, sql in cls.schema_objects().items() if name not in missing}
+        if SQLiteSchemaObject.differences(actual, expected):
+            raise GoalHistoryError("Goal history differs beyond missing declared indexes.")
+        return missing
 
     def reports_turn(self, turn_id: str) -> bool:
         """A committed goal revision records its original model reporting turn."""
@@ -55,6 +74,86 @@ class GoalHistoryEntry(TypedTable):
             for item in fields(self)
             if not item.metadata.get("history_exclude")
         }
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalHistoryQuery:
+    """One bounded newest-first page, shared by tool and runtime requests."""
+
+    MAX_ROWS: ClassVar[int] = 100
+    goal_id: str | None = field(default=None, metadata={"description": "Optional goal ID"})
+    before_sequence: int | None = field(
+        default=None, metadata={"description": "Read older entries before this sequence"},
+    )
+    limit: int = field(default=MAX_ROWS, metadata={"description": "Maximum entries in this page"})
+
+    def __post_init__(self) -> None:
+        if not 0 < self.limit <= self.MAX_ROWS:
+            raise ValueError(f"Goal history limit must be between 1 and {self.MAX_ROWS}.")
+        if self.before_sequence is not None and self.before_sequence <= 0:
+            raise ValueError("Goal history before_sequence must be positive.")
+        if self.goal_id is not None:
+            object.__setattr__(self, "goal_id", self.goal_id.strip() or None)
+
+    def read(self, connection: sqlite3.Connection, owner_created_at: float,
+             through_sequence: int) -> tuple[GoalHistoryEntry, ...]:
+        upper = through_sequence
+        if self.before_sequence is not None:
+            upper = min(upper, self.before_sequence - 1)
+        table = _identifier(GoalHistoryEntry.declared_name)
+        columns = GoalHistoryEntry._column_list(GoalHistoryEntry.columns())
+        basis = "owner_created_at=? AND state='committed' AND sequence<=?"
+        parameters = (owner_created_at, upper)
+        if self.goal_id is None:
+            statement = f"SELECT {columns} FROM {table} WHERE {basis} ORDER BY sequence DESC LIMIT ?"
+            parameters = (*parameters, self.limit)
+        else:
+            # Limit each indexed endpoint before merging. A goal replacement belongs
+            # to both goals; UNION removes that duplicate without scanning either past.
+            matches = " UNION ".join(
+                f"SELECT sequence FROM (SELECT sequence FROM {table} WHERE {basis} "
+                f"AND {endpoint}=? ORDER BY sequence DESC LIMIT ?)"
+                for endpoint in (GoalHistoryEntry.BEFORE_GOAL_ID, GoalHistoryEntry.AFTER_GOAL_ID)
+            )
+            statement = (
+                f"SELECT {columns} FROM {table} WHERE sequence IN ({matches}) "
+                "ORDER BY sequence DESC LIMIT ?"
+            )
+            parameters = (*(parameters + (self.goal_id, self.limit)) * 2, self.limit)
+        return tuple(GoalHistoryEntry.read(connection.execute(statement, parameters)))
+
+
+@dataclass(frozen=True)
+class GoalHistoryRead:
+    """The captured incarnation and committed cursor, not another current goal."""
+
+    path: Path
+    owner_created_at: float
+    through_sequence: int | None
+
+    def entries(self, query: GoalHistoryQuery = GoalHistoryQuery()) -> tuple[GoalHistoryEntry, ...]:
+        if self.through_sequence is None:
+            return ()
+        try:
+            with closing(CoordinationStore.read_snapshot(self.path)) as connection:
+                return query.read(connection, self.owner_created_at, self.through_sequence)
+        except (OSError, sqlite3.Error, ValueError, TypeError) as error:
+            raise GoalHistoryError("Cannot read goal history.") from error
+
+    def reports_turn(self, turn_id: str) -> bool:
+        """Semantic report deduplication is exact, never a bounded display scan."""
+        if self.through_sequence is None:
+            return False
+        try:
+            with closing(CoordinationStore.read_snapshot(self.path)) as connection:
+                return connection.execute(
+                    f"SELECT 1 FROM {_identifier(GoalHistoryEntry.declared_name)} "
+                    "WHERE owner_created_at=? AND state='committed' "
+                    f"AND {GoalHistoryEntry.REPORTED_TURN}=? AND sequence<=? LIMIT 1",
+                    (self.owner_created_at, turn_id, self.through_sequence),
+                ).fetchone() is not None
+        except (OSError, sqlite3.Error) as error:
+            raise GoalHistoryError("Cannot read goal report history.") from error
 
 
 class GoalHistoryStore:
@@ -84,8 +183,7 @@ class GoalHistoryStore:
                     "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL "
                     "AND name NOT LIKE 'sqlite_%'"
                 ))
-                if SQLiteSchemaObject.differences(actual, GoalHistoryEntry.schema_objects()):
-                    raise GoalHistoryError("Original goal history declaration differs.")
+                GoalHistoryEntry.missing_indexes(actual)
                 rows = tuple(GoalHistoryEntry.select(connection, order_by=("sequence",)))
             after = path.lstat()
             if ((before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
@@ -149,8 +247,8 @@ class GoalHistoryStore:
                 )
                 if not actual:
                     GoalHistoryEntry.create(connection)
-                elif SQLiteSchemaObject.differences(actual, GoalHistoryEntry.schema_objects()):
-                    raise GoalHistoryError("Goal history requires the one-shot durable migration.")
+                elif GoalHistoryEntry.missing_indexes(actual):
+                    raise GoalHistoryError("Goal history requires the one-shot index installation.")
                 connection.commit()
             self._sync()
         except (OSError, sqlite3.Error) as error:
@@ -216,40 +314,49 @@ class GoalHistoryStore:
         except OSError as error:
             raise GoalHistoryError("Cannot sync visible goal authority.") from error
 
-    def _rows(self, owner_created_at: float) -> list[GoalHistoryEntry]:
+    def _latest(self, owner_created_at: float, *, state: str | None = None) -> GoalHistoryEntry | None:
         try:
             with closing(self._connect()) as connection:
-                return GoalHistoryEntry.select(
-                    connection,
-                    where="owner_created_at=?",
-                    parameters=(owner_created_at,),
-                    order_by=("sequence",),
-                )
+                where, parameters = "owner_created_at=?", (owner_created_at,)
+                if state is not None:
+                    where += " AND state=?"
+                    parameters += (state,)
+                rows = GoalHistoryEntry.read(connection.execute(
+                    f"SELECT {GoalHistoryEntry._column_list(GoalHistoryEntry.columns())} "
+                    f"FROM {_identifier(GoalHistoryEntry.declared_name)} "
+                    f"WHERE {where} ORDER BY sequence DESC LIMIT 1", parameters,
+                ))
+                return next(iter(rows), None)
         except (sqlite3.Error, ValueError, TypeError) as error:
-            raise GoalHistoryError("Cannot read goal history.") from error
+            raise GoalHistoryError("Cannot read goal history tail.") from error
 
-    def observe(self, owner_created_at: float, current: Goal | None) -> None:
-        """Reconcile uncertain writes and label unjournaled changes truthfully."""
-        for row in self._rows(owner_created_at):
-            if row.state != "pending":
-                continue
-            if current == row.after:
+    def observe(self, owner_created_at: float, current: Goal | None) -> GoalHistoryRead:
+        """Reconcile the sole unfinished tail and capture a committed read cursor.
+
+        begin() settles the previous tail before appending another intent while
+        its caller holds the registry lock. No earlier entry can remain pending.
+        """
+        last = self._latest(owner_created_at)
+        if last is not None and last.state == "pending":
+            if current == last.after:
                 self._sync_visible_registry()
-                self._set_state(row.sequence, "committed")
-            elif current == row.before:
-                self._set_state(row.sequence, "aborted")
+                state = "committed"
+            elif current == last.before:
+                state = "aborted"
             else:
-                # A changed registry is not evidence that this intent committed.
-                self._set_state(row.sequence, "uncertain")
-        committed = [row for row in self._rows(owner_created_at) if row.state == "committed"]
-        if not committed:
+                state = "uncertain"
+            self._set_state(last.sequence, state)
+            last = replace(last, state=state)
+        if last is not None and last.state != "committed":
+            last = self._latest(owner_created_at, state="committed")
+        sequence = last.sequence if last is not None else None
+        if last is None:
             if current is not None:
-                self._insert(owner_created_at, "baseline", "committed", None, current)
-            return
-        last = committed[-1].after
-        if last != current:
+                sequence = self._insert(owner_created_at, "baseline", "committed", None, current)
+        elif last.after != current:
             # Known endpoints do not manufacture unobserved revisions or timing.
-            self._insert(owner_created_at, "observed_gap", "committed", last, current)
+            sequence = self._insert(owner_created_at, "observed_gap", "committed", last.after, current)
+        return GoalHistoryRead(self.path, owner_created_at, sequence)
 
     def begin(self, owner_created_at: float, before: Goal | None, after: Goal | None) -> int:
         self.observe(owner_created_at, before)
@@ -257,21 +364,3 @@ class GoalHistoryStore:
 
     def commit(self, sequence: int) -> None:
         self._set_state(sequence, "committed")
-
-    def history(
-        self, owner_created_at: float, current: Goal | None, goal_id: str | None = None
-    ) -> tuple[GoalHistoryEntry, ...]:
-        self.observe(owner_created_at, current)
-        return tuple(
-            row
-            for row in self._rows(owner_created_at)
-            if row.state == "committed"
-            and (
-                goal_id is None
-                or goal_id
-                in {
-                    row.before.id if row.before is not None else None,
-                    row.after.id if row.after is not None else None,
-                }
-            )
-        )

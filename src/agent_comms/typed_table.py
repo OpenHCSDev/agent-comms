@@ -254,9 +254,26 @@ class Column:
 
 @dataclass(frozen=True)
 class Index:
-    columns: tuple[str, ...]
+    terms: tuple[str, ...]
     unique: bool = False
     where: str | None = None
+
+    def terms_sql(self, owner: type[TypedTable]) -> str:
+        return owner._column_list(self.terms)
+
+    def sql(self, owner: type[TypedTable], name: str) -> str:
+        return (
+            f"CREATE {'UNIQUE ' if self.unique else ''}INDEX {_identifier(name)} "
+            f"ON {_identifier(owner.declared_name)} ({self.terms_sql(owner)})"
+            + (f" WHERE {self.where}" if self.where else "")
+        )
+
+
+class ExpressionIndex(Index):
+    """Trusted declaration-owned SQL expressions, not external column names."""
+
+    def terms_sql(self, owner: type[TypedTable]) -> str:
+        return ", ".join(self.terms)
 
 
 @dataclass(frozen=True)
@@ -510,19 +527,20 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             cls.declared_name: f"CREATE TABLE {table} ({', '.join(definitions)}) STRICT"
             + (", WITHOUT ROWID" if cls.without_rowid else "")
         }
+        statements.update(cls.index_schema())
+        statements.update(cls.triggers())
+        return statements
+
+    @classmethod
+    def index_schema(cls) -> dict[str, str]:
         indexes = cls.indexes + tuple(
             Index((item.name,)) for item in cls._fields() if item.column.index
         )
-        for ordinal, index in enumerate(indexes):
-            index_name = f"{cls.declared_name}_{ordinal}_idx"
-            statements[index_name] = (
-                f"CREATE {'UNIQUE ' if index.unique else ''}INDEX "
-                f"{_identifier(index_name)} ON {table} "
-                f"({cls._column_list(index.columns)})"
-                + (f" WHERE {index.where}" if index.where else "")
-            )
-        statements.update(cls.triggers())
-        return statements
+        return {
+            name: index.sql(cls, name)
+            for ordinal, index in enumerate(indexes)
+            for name in (f"{cls.declared_name}_{ordinal}_idx",)
+        }
 
     @classmethod
     def triggers(cls) -> dict[str, str]:
