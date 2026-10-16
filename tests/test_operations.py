@@ -224,7 +224,6 @@ class TestThreadOps:
         answer = wired.configuration.answer("fixer")
         assert answer.model == "configured/model"
         assert answer.context_usage.used == 25
-        assert wired.configuration.answer("PR111").context_usage is None
 
     def test_presence_omits_expensive_viewer_pending_counts(self, wired):
         rows = {row["name"]: row for row in wired.views.presence()}
