@@ -7,6 +7,7 @@ does not create a new historical thread; a new turn does not change its owner.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
@@ -26,6 +27,15 @@ if TYPE_CHECKING:
 class ThreadIncarnation(WireValue, ABC):
     name: str
     created_at: float
+    value_flag: ClassVar[str] = "--thread-incarnation"
+
+    @classmethod
+    def from_json(cls, payload: str) -> RecordedThreadIncarnation:
+        return FieldCodec.decode(cls, json.loads(payload)).require_recorded()
+
+    @property
+    def cli_arguments(self) -> tuple[str, str]:
+        return (self.value_flag, json.dumps(FieldCodec.encode(self.require_recorded()), separators=(",", ":")))
 
     def to_wire(self) -> dict[str, str | float]:
         return {"name": self.name, "created_at": self.created_at}
