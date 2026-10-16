@@ -940,6 +940,8 @@ class LineMonitorBridge(TranscriptBridge[Options]):
 
     async def prepare_delivery(self) -> None:
         print(self.probe.model_dump_json(), flush=True)
+        print('Waiting for this session to observe the monitor probe; inbox remains unread.',
+              file=sys.stderr, flush=True)
         # The harness owns notification scheduling. Missing proof never opens
         # the inbox; the watch's existing cancellation owns this wait's lifetime.
         await self.monitor_ready.wait()
