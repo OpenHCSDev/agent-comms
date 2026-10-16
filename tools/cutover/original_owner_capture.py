@@ -10,7 +10,6 @@ import json
 import os
 from pathlib import Path
 import subprocess
-from typing import ClassVar
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
@@ -21,7 +20,7 @@ from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.historical_views import HistorySource
 from agent_comms.threads import Thread
 from owner_read_projection import (
-    CurrentThreadProjection, LiveOwnerReadProjection, RetiredGoalReportProjection,
+    CurrentThreadProjection, LiveOwnerReadProjection,
     RecordedRegistryProjection,
 )
 
@@ -38,7 +37,7 @@ class OriginalOwnerRead:
 class OriginalTypedCapture:
     root: Path
     original_python: Path
-    projection: ClassVar[type[LiveOwnerReadProjection]] = RetiredGoalReportProjection
+    projection: type[LiveOwnerReadProjection]
 
     def _acquire(self, projection, name, request):
         environment = dict(os.environ)
@@ -74,10 +73,11 @@ class OriginalTypedCapture:
         return captured
 
 
+@dataclass(frozen=True)
 class CurrentTypedCapture(OriginalTypedCapture):
     """Same proof and launch custody for an authenticated current producer."""
 
-    projection = CurrentThreadProjection
+    projection: type[LiveOwnerReadProjection] = field(default=CurrentThreadProjection, init=False)
 
 
 @dataclass(frozen=True)

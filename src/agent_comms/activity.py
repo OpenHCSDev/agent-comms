@@ -59,19 +59,14 @@ class ActivityState(Enum):
 
     @property
     def busy(self) -> bool:
-        return self.presentation_status.busy
+        return bool(self.presentation_status.working_members(self))
 
     @property
     def retires_thread(self) -> bool:
         return self is self.DELETED
 
     def presentation(self, title: str, detail: str) -> ThreadPresentation:
-        if not self.busy:
-            return ThreadPresentation(title, "✓", "Ready", status=self.presentation_status)
-        summary = self.value.title()
-        if detail := " ".join(detail.split()):
-            summary += f" · {detail}"
-        return ThreadPresentation(title, "⌛", summary, status=self.presentation_status)
+        return self.presentation_status.activity_presentation(title, self.value, detail)
 
 
 @dataclass(frozen=True)
@@ -183,7 +178,7 @@ class NativeInputDrainReadiness(DiagnosticDrainReadiness, ReadyDrainReadiness):
     """Retain the failed request warning; new messages keep ordinary availability."""
 
     def presentation(self, ordinary):
-        return ordinary if ordinary.status.busy else super().presentation(ordinary)
+        return ordinary.status.when_idle(ordinary, super().presentation)
 
     def preparing_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return replace(activity, readiness=FailedPreparingDrainReadiness(self.diagnostic))
@@ -237,8 +232,7 @@ class ActivityData:
     def __post_init__(self) -> None:
         if not self.thread:
             raise RelationViolationError("Activity thread cannot be empty.")
-        if self.detail and not self.state.busy:
-            raise RelationViolationError("Idle activity cannot carry a detail.")
+        self.state.presentation_status.require_activity_detail(self.detail)
         if len(self.detail) > self.detail_limit:
             raise ValueError(f"Activity detail cannot exceed {self.detail_limit} characters.")
 

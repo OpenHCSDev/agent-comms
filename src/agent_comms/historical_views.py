@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -190,30 +192,27 @@ class HistorySource:
             raise ValueError("Recorded provenance lost original wire custody")
 
     @classmethod
-    def require(cls, archive: HistoryArchive, key: str) -> HistorySource:
-        source = next((item for item in archive.sources() if item.key == key), None)
+    def require(cls, sources: tuple[HistorySource, ...], key: str) -> HistorySource:
+        source = next((item for item in sources if item.key == key), None)
         if source is None:
             raise ValueError("Historical source detached; refresh history")
         source.validate()
         return source
 
-    def notification_references(self, archive: HistoryArchive, references):
-        """Borrow this attached namespace's frozen deliveries and durable receipts."""
+    def notification_references(self, sources: tuple[HistorySource, ...], references):
+        """Read this namespace within its archive's current catalogue read."""
         from functools import partial
 
         from .presentation import MessageNotification
 
-        def require_selected():
-            if self.require(archive, self.key) != self:
-                raise ValueError("Historical source changed; refresh history")
-
-        require_selected()
+        if self.require(sources, self.key) != self:
+            raise ValueError("Historical source changed; refresh history")
         root = Path(self.root)
         result = MessageNotification.read_references(
             WireLog(root / "bus.jsonl"), references,
             partial(MessageNotification.recorded_delivery_window, root, self.provenance),
         )
-        require_selected()
+        self.validate()
         return result
 
 
@@ -337,6 +336,19 @@ class HistoryArchive:
             return ()
         return FieldCodec.decode(tuple[HistorySource, ...], raw)
 
+    @contextmanager
+    def read_sources(self) -> Iterator[tuple[HistorySource, ...]]:
+        """Decode one read's catalogue; reject changes without decoding it again."""
+        revision = FileRevision.capture(self.path)
+        sources = self.sources()
+        self._require_revision(revision)
+        yield sources
+        self._require_revision(revision)
+
+    def _require_revision(self, revision: FileRevision | None) -> None:
+        if FileRevision.capture(self.path) != revision:
+            raise ValueError("Historical source catalogue changed; refresh history")
+
     def attach(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Snapshot a preserved source, then publish it for ordinary display.
 
@@ -381,33 +393,33 @@ class HistoryArchive:
                 else:
                     source_read.require_original(source_root)
                     provenance = source_read.provenance
-                for path in paths:
-                    if path.exists():
-                        shutil.copy2(path, stage / path.name)
-                TranscriptRoutes(source_root).snapshot(stage)
-                if revisions != tuple(FileRevision.capture(path) for path in paths):
-                    raise ValueError("Historical source changed during snapshot; retry")
-                if source_read is not None:
-                    source_read.require_original(source_root)
-                bus_info = paths[0].stat() if paths[0].exists() else None
-                if bus_info is None:
-                    (stage / "bus.jsonl").touch()
-                # One current marker format; snapshots retain source identity
-                # and explicitly prohibit publication or historical admission.
                 archived = WireLog(stage / "bus.jsonl")
-                marker = archived.read_metadata_unlocked(required=True)
-                marker.admission_after_seq = marker.last_seq
-                marker.access = ArchivedAccess()
-                marker.checkpoint_version = None
-                marker.checkpoint_seal = None
-                guard = PrivateRegistryGuard(stage / "registry.json", marker.root_id)
-                guard.create_pending()
-                archived.write_metadata_unlocked(marker)
-                guard.commit_initial()
-                # The original snapshot remains a certified source for native/wire
-                # composition as well as public paging. This existing installer
-                # changes destination metadata/index only, never original bytes.
-                install_private_bus_checkpoint(archived)
+                # Lock the empty stage before copying its marker. Once marked,
+                # ordinary reads correctly require the not-yet-built index.
+                with archived.locked():
+                    for path in paths:
+                        if path.exists():
+                            shutil.copy2(path, stage / path.name)
+                    TranscriptRoutes(source_root).snapshot(stage)
+                    if revisions != tuple(FileRevision.capture(path) for path in paths):
+                        raise ValueError("Historical source changed during snapshot; retry")
+                    if source_read is not None:
+                        source_read.require_original(source_root)
+                    bus_info = paths[0].stat() if paths[0].exists() else None
+                    if bus_info is None:
+                        archived.path.touch()
+                    marker = archived.read_metadata_unlocked(required=True)
+                    marker.admission_after_seq = marker.last_seq
+                    marker.access = ArchivedAccess()
+                    marker.checkpoint_version = None
+                    marker.checkpoint_seal = None
+                    guard = PrivateRegistryGuard(stage / "registry.json", marker.root_id)
+                    guard.create_pending()
+                    archived.write_metadata_unlocked(marker)
+                    # The installer borrows this real stage lock; it never opens
+                    # the incomplete archive through the ordinary read barrier.
+                    install_private_bus_checkpoint(archived, _bus_locked=True)
+                    guard.commit_initial()
                 # This still-private stage owns creation of its disposable
                 # offsets. Published archives only read them; later runtimes
                 # never rewrite either the index or the original certificate.

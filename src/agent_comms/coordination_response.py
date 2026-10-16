@@ -56,6 +56,7 @@ from agent_comms.typed_table import (
     SQLiteForeignKeys,
     SQLiteSchemaObject,
     TypedRow,
+    SqlValue,
     TypedTable,
     ForeignKey,
 )
@@ -66,10 +67,9 @@ class ResponseTable:
     """Frozen declaration-owned response admission and append evidence."""
 
     @classmethod
-    def triggers(cls) -> dict[str, str]:
+    def trigger_bodies(cls) -> dict[str, str]:
         return {
-            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_"
-            f"{operation.lower()}_guard "
+            f"{cls.declared_name}_{operation.lower()}_guard": " "
             f"BEFORE {operation} ON {cls.declared_name} "
             "BEGIN SELECT RAISE(ABORT,'response evidence is frozen'); END"
             for operation in ("UPDATE", "DELETE")
@@ -284,9 +284,8 @@ class LiveResponseOwner(RegistryOwner):
             )
             wire_root_id = bus.log._private_marker_unlocked().root_id
             with store.session.read():
-                execution_ids = tuple(
-                    row[0]
-                    for row in store.session._connection.execute(
+                execution_ids = tuple(SqlValue.for_annotation(str).read(
+                    store.session._connection.execute(
                         "SELECT DISTINCT i.execution_id FROM publication_intents i "
                         "JOIN executions e ON e.execution_id=i.execution_id "
                         "WHERE e.owner_lookup=? AND NOT EXISTS "
@@ -295,7 +294,7 @@ class LiveResponseOwner(RegistryOwner):
                         "AND r.exact_target=i.exact_target) ORDER BY i.execution_id",
                         (self.recipient_lookup,),
                     )
-                )
+                ))
             for execution_id in execution_ids:
                 snapshot = store.snapshots.get(execution_id)
                 if snapshot.execution.owner_thread != self.thread.name:

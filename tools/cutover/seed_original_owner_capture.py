@@ -26,6 +26,9 @@ def author_model_report(service, name, turn):
 
 
 def main():
+    from owner_read_projection import RetiredGoalReportProjection
+
+    RetiredGoalReportProjection.require_source_runtime()
     root = Path(sys.argv[1])
     root.mkdir(mode=0o700)
     service = Comms(root)

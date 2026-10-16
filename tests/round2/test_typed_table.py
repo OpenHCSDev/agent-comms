@@ -14,6 +14,7 @@ from agent_comms.typed_table import (
     Index,
     IntegerStorage,
     SqlStorage,
+    SqlValue,
     TypedRow,
     TypedTable,
 )
@@ -90,6 +91,36 @@ def test_declared_table_family(tmp_path):
         assert TableChildRow.select(db)[0].weight is None
 
 
+def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation():
+    from agent_comms.native_pi import NativeContextJournal
+    from agent_comms.typed_table import SQLiteSchemaObject
+
+    with sqlite3.connect(':memory:') as db:
+        NativeContextJournal.create(db, if_not_exists=True)
+        NativeContextJournal.create(db, if_not_exists=True)
+        actual = SQLiteSchemaObject.read(db.execute(
+            "SELECT name, sql FROM sqlite_master WHERE sql IS NOT NULL"))
+        assert SQLiteSchemaObject.differences(actual, NativeContextJournal.schema_objects()) == ()
+        with pytest.raises(sqlite3.OperationalError, match='already exists'):
+            NativeContextJournal.create(db)
+
+
+def test_index_owns_unique_partial_creation():
+    with sqlite3.connect(':memory:') as db:
+        TableParentRow.create(db)
+        index = Index(('count',), unique=True, where='count > 0')
+        statement = index.sql(TableParentRow, 'positive_counts', if_not_exists=True)
+        db.execute(statement)
+        db.execute(statement)
+        TableParentRow('first', 1).insert(db)
+        with pytest.raises(sqlite3.IntegrityError):
+            TableParentRow('duplicate', 1).insert(db)
+        TableParentRow('zero-one', 0).insert(db)
+        TableParentRow('zero-two', 0).insert(db)
+        with pytest.raises(sqlite3.OperationalError, match='already exists'):
+            db.execute(index.sql(TableParentRow, 'positive_counts'))
+
+
 def test_new_row_declaration_needs_no_other_edit():
     @dataclass(frozen=True)
     class AddedTableRow(TypedTable):
@@ -123,6 +154,9 @@ def test_new_row_declaration_needs_no_other_edit():
         stored = AddedTableRow.one(db, label="new")
         assert stored.ordinal == 1 and stored.label_size == 3
         assert stored.representation is IntegerStorage and stored.event is InfoKind
+        assert AddedTableRow.column_values(db, "exact") == [7]
+        with pytest.raises(ValueError, match="Generated columns"):
+            AddedTableRow.insertion_statement(("label_size",))
         with pytest.raises(ValueError, match="Generated columns"):
             AddedTableRow.update(db, where="label=?", parameters=("new",), label_size=4)
         with pytest.raises(sqlite3.IntegrityError):
@@ -142,6 +176,31 @@ def test_new_row_declaration_needs_no_other_edit():
             Projection.read(db.execute("SELECT 'a' AS label, 'b' AS label"))
         with pytest.raises(TypeError):
             AddedTableRow.update(db, where="1", child={"kind": "table_child"})
+
+
+def test_declared_values_and_partial_insertions_share_the_sqlite_boundary():
+    with sqlite3.connect(":memory:") as db:
+        assert not TableParentRow.present(db)
+        TableParentRow.create(db)
+        assert TableParentRow.present(db)
+        assert not TableParentRow.exists(db)
+        TableParentRow.insert_values(db, key="parent", count=3)
+        assert TableParentRow.exists(db, where="key=?", parameters=("parent",))
+        assert TableParentRow("parent", 4).insert_if_absent(db).rowcount == 0
+        assert TableParentRow.one(db, key="parent").count == 3
+        assert SqlValue.for_annotation(int).read(db.execute("SELECT count(*) FROM table_parent")) == [1]
+        assert SqlValue.for_annotation(int | None).read(db.execute("SELECT NULL")) == [None]
+        assert SqlValue.for_annotation(int).read(db.execute("SELECT 1 WHERE 0")) == []
+        assert SqlValue.for_annotation(bool).read(db.execute("SELECT 1")) == [True]
+        cursor = db.execute("SELECT 2")
+        with pytest.raises(ValueError):
+            SqlValue.for_annotation(bool).read(cursor)
+        with pytest.raises(sqlite3.ProgrammingError, match="closed cursor"):
+            cursor.fetchone()
+        with pytest.raises(ValueError, match="exactly one"):
+            SqlValue.for_annotation(int).read(db.execute("SELECT 1, 2"))
+        with pytest.raises(ValueError, match="Unknown fields"):
+            TableParentRow.insert_values(db, invented="field")
 
 
 def test_streamed_query_decodes_only_consumed_rows_and_releases_cursor():

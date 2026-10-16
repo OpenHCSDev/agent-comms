@@ -22,7 +22,7 @@ from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent
 from .transcript_receipts import TranscriptSource
-from .typed_table import Column, TypedStore, TypedTable
+from .typed_table import Column, TypedRow, TypedStore, TypedTable
 
 
 @dataclass(frozen=True)
@@ -71,7 +71,7 @@ class ExternalRecord:
 
 
 @dataclass(frozen=True)
-class ExternalCut(RecordsCut):
+class ExternalCut(RecordsCut, TypedRow):
     """The thread's newest finished item sequence when read."""
 
     offset: int
@@ -189,9 +189,9 @@ class ExternalTranscript(TranscriptSource, TypedStore):
             yield ExternalTranscriptRead(self, connection)
 
     def _cut(self, connection) -> ExternalCut:
-        return ExternalCut(*connection.execute(
-            f'SELECT coalesce(max(seq), 0) FROM "{ExternalItemRow.declared_name}" '
-            'WHERE thread = ?', (self.lookup,)).fetchone())
+        return ExternalCut.read(connection.execute(
+            f'SELECT coalesce(max(seq), 0) AS offset FROM "{ExternalItemRow.declared_name}" '
+            'WHERE thread = ?', (self.lookup,)))[0]
 
     def current_draft(self) -> ExternalDraftRow | None:
         with self.reading() as records:

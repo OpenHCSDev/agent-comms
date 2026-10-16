@@ -228,9 +228,9 @@ def test_original_recorded_projection_is_strict_and_attaches_before_destination_
 
     old, live = setup(tmp_path / "old", 0), setup(tmp_path / "live", 0)
     original = (old.root / "registry.json").read_bytes()
-    packet = json.loads(json.dumps(RecordedRegistryProjection.read(
+    packet = json.loads(json.dumps(FieldCodec.encode(RecordedRegistryProjection.read(
         old.registry, old.root, "", FieldCodec.record_schema(RegistryProvenance)
-    )))
+    ))))
     observed = FieldCodec.decode(HistorySource, packet)
     assert observed.provenance == RegistryProvenance.capture(old.registry.snapshot())
     observed.require_original(old.root)

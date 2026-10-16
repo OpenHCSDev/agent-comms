@@ -7,14 +7,14 @@ import fcntl
 import json
 import os
 import signal
-import sqlite3
 import sys
 from abc import ABC, abstractmethod
 from contextlib import aclosing, suppress
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import AsyncIterator, ClassVar, Generic, TypeVar
+from typing import AsyncIterator, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue, TypeAdapter
 
@@ -22,12 +22,15 @@ from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import CORE_ERROR, CoreError, WireModel
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.messages import Message, MessageKind
+from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
-from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript, TranscriptEvent
+from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent
+from agent_comms.typed_table import Column, TypedTable
 
 
 class SendResult(WireModel):
@@ -53,10 +56,73 @@ class ToolCall:
 
 
 @dataclass(frozen=True)
-class Binding:
+class Binding(TypedTable):
     root: str
     bus: str
     thread: str
+
+
+@dataclass
+class DraftAccumulator:
+    """One subscription's item prefix; the shared output owns its lifetime."""
+
+    started_at: EventTime
+
+    def restarted(self, replacement: DraftAccumulator) -> DraftAccumulator:
+        return replacement
+
+    def started(self, update: StartedItem) -> tuple[TranscriptUpdate, ...]:
+        return (*self.activity(ActiveItem(update.turn_id, update.item_id, update.state, update.detail)),
+                *self.snapshot(update.turn_id, update.item_id))
+
+    def activity(self, update: ActiveItem) -> tuple[TranscriptUpdate, ...]:
+        return (update,)
+
+    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+        return ()
+
+    def append(self, text: str, section: int) -> None:
+        raise ValueError('Received a text delta for a non-text item')
+
+
+@dataclass
+class TextDraft(DraftAccumulator):
+    event_type: type[TextTranscript]
+    sections: dict[int, list[str]]
+    separator: ClassVar[str] = ''
+
+    @classmethod
+    def from_parts(cls, event_type: type[TextTranscript], parts: Iterable[str], started_at: EventTime) -> Self:
+        return cls(started_at, event_type, {index: [text] for index, text in enumerate(parts)})
+
+    def append(self, text: str, section: int) -> None:
+        self.sections.setdefault(section, []).append(text)
+
+    @property
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        text = self.separator.join(text for index in sorted(self.sections)
+                                   if (text := ''.join(self.sections[index])))
+        return (self.started_at.stamp(self.event_type(text)),) if text else ()
+
+    def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
+        return (DraftItem(turn_id, item_id, self),)
+
+
+class ParagraphDraft(TextDraft):
+    separator = '\n\n'
+
+
+class ClosedDraft(DraftAccumulator):
+    """Completed snapshots reject overlapping older starts and late suffixes."""
+
+    def restarted(self, replacement: DraftAccumulator) -> DraftAccumulator:
+        return self
+
+    def activity(self, update: ActiveItem) -> tuple[TranscriptUpdate, ...]:
+        return ()
+
+    def append(self, text: str, section: int) -> None:
+        pass
 
 
 @dataclass(frozen=True)
@@ -64,6 +130,47 @@ class ThreadOutput:
     """Where a CLI's output lands in Core: finished items and current activity."""
     transcript: ExternalTranscript
     agents: AgentActivity
+    drafts: dict[tuple[str, str], DraftAccumulator] = field(default_factory=dict)
+
+    def publish_batch(self, updates: list[TranscriptUpdate]) -> None:
+        assembled = [part for update in updates for part in update.accumulate(self)]
+        for update in TranscriptUpdate.coalesced(assembled):
+            update.publish(self)
+
+    def start_item(self, update: StartedItem) -> tuple[TranscriptUpdate, ...]:
+        key = update.turn_id, update.item_id
+        previous = self.drafts.get(key)
+        current = update.accumulator if previous is None else previous.restarted(update.accumulator)
+        self.drafts[key] = current
+        return current.started(update)
+
+    def active_item(self, update: ActiveItem) -> tuple[TranscriptUpdate, ...]:
+        current = self.drafts.get((update.turn_id, update.item_id))
+        return (update,) if current is None else current.activity(update)
+
+    def append_item(self, update: AppendDraftItem) -> tuple[TranscriptUpdate, ...]:
+        current = self.drafts.get((update.turn_id, update.item_id))
+        if current is None:
+            # No observed prefix: a suffix cannot reconstruct the whole item.
+            return ()
+        current.append(update.text, update.section)
+        return current.snapshot(update.turn_id, update.item_id)
+
+    def finish_item(self, update: CompletedItem) -> FinishedItem:
+        key = update.turn_id, update.item_id
+        current = self.drafts.get(key)
+        started_at = current.started_at if current is not None else UnrecordedEventTime()
+        self.drafts[key] = ClosedDraft(started_at)
+        events = tuple(started_at.stamp(event) for event in update.events)
+        return FinishedItem(update.turn_id, update.item_id, events)
+
+    def end_turn(self, turn_id: str) -> None:
+        for key in tuple(self.drafts):
+            if key[0] == turn_id:
+                del self.drafts[key]
+
+    def end_all_turns(self) -> None:
+        self.drafts.clear()
 
     def status(self, state: ActivityState, detail: str = '') -> None:
         detail = ' '.join(detail.split())
@@ -77,6 +184,9 @@ class TranscriptUpdate(ABC):
 
     @abstractmethod
     def publish(self, output: ThreadOutput) -> None: ...
+
+    def accumulate(self, output: ThreadOutput) -> tuple[TranscriptUpdate, ...]:
+        return (self,)
 
     def retain_before(self, later: set[tuple[str, str]]) -> bool:
         """Whether this update still needs publication before later updates."""
@@ -119,6 +229,9 @@ class ActiveItem(TranscriptUpdate):
     def publish(self, output: ThreadOutput) -> None:
         output.status(self.state, self.detail)
 
+    def accumulate(self, output: ThreadOutput) -> tuple[TranscriptUpdate, ...]:
+        return output.active_item(self)
+
 
 @dataclass(frozen=True)
 class FinishedItem(TranscriptUpdate):
@@ -137,10 +250,14 @@ class FinishedItem(TranscriptUpdate):
 
 @dataclass(frozen=True)
 class DraftItem(TranscriptUpdate):
-    """Current text, superseded by a newer draft or the same item's completion."""
+    """A pending view; build its text only if this preview survives coalescing."""
     turn_id: str
     item_id: str
-    events: tuple[TranscriptEvent, ...]
+    accumulator: TextDraft
+
+    @property
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return self.accumulator.events
 
     def publish(self, output: ThreadOutput) -> None:
         output.transcript.draft(turn_id=self.turn_id, item_id=self.item_id, events=self.events)
@@ -150,6 +267,58 @@ class DraftItem(TranscriptUpdate):
         keep = key not in later
         later.add(key)
         return keep
+
+
+class DraftUpdate(TranscriptUpdate):
+    """Part decoding enters the same accumulation path even for direct publication."""
+
+    @abstractmethod
+    def accumulate(self, output: ThreadOutput) -> tuple[TranscriptUpdate, ...]: ...
+
+    def publish(self, output: ThreadOutput) -> None:
+        output.publish_batch([self])
+
+
+@dataclass(frozen=True)
+class CompletedItem(DraftUpdate, FinishedItem):
+    def accumulate(self, output: ThreadOutput) -> tuple[TranscriptUpdate, ...]:
+        return (output.finish_item(self),)
+
+
+@dataclass(frozen=True)
+class StartedItem(DraftUpdate, ActiveItem):
+    accumulator: DraftAccumulator
+
+    def accumulate(self, output: ThreadOutput) -> tuple[TranscriptUpdate, ...]:
+        return output.start_item(self)
+
+
+@dataclass(frozen=True)
+class AppendDraftItem(DraftUpdate):
+    turn_id: str
+    item_id: str
+    text: str
+    section: int = 0
+
+    def accumulate(self, output: ThreadOutput) -> tuple[TranscriptUpdate, ...]:
+        return output.append_item(self)
+
+
+@dataclass(frozen=True)
+class FinishedTurn(DraftUpdate, TurnEnded):
+    turn_id: str
+
+    def accumulate(self, output: ThreadOutput) -> tuple[TranscriptUpdate, ...]:
+        output.end_turn(self.turn_id)
+        return (TurnEnded(),)
+
+
+@dataclass(frozen=True)
+class AllTurnsEnded(DraftUpdate, TurnEnded):
+    def accumulate(self, output: ThreadOutput) -> tuple[TranscriptUpdate, ...]:
+        output.end_all_turns()
+        return (TurnEnded(),)
+
 
 @dataclass
 class Options:
@@ -165,48 +334,59 @@ class Outcome(Enum):
     DELIVERED = 'delivered'
     EMITTED = 'emitted'
 
+@dataclass(frozen=True)
+class DeliveryRow(TypedTable):
+    id: str = field(metadata={"sql": Column(primary_key=True)})
+    payload: str
+    outcome: Outcome
+
+
 class DeliveryJournal:
     """Transport outcomes only. Core still owns messages and inbox routing."""
 
     def __init__(self, state: Path) -> None:
         self.path = state / 'delivery.sqlite3'
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
-        self.db = sqlite3.connect(self.path)
-        self.db.execute('PRAGMA synchronous=FULL')
-        self.db.execute('CREATE TABLE IF NOT EXISTS binding (root TEXT, bus TEXT, thread TEXT)')
-        self.db.execute('''CREATE TABLE IF NOT EXISTS delivery (
-            id TEXT PRIMARY KEY, payload TEXT NOT NULL, outcome TEXT NOT NULL)''')
-        self.db.commit()
+        self.db = CoordinationStore.writer(self.path)
+        try:
+            self.db.execute('PRAGMA synchronous=FULL')
+            for row in (Binding, DeliveryRow):
+                row.create(self.db, if_not_exists=True)
+            self.db.commit()
+        except BaseException:
+            self.db.close()
+            raise
 
     def bind(self, requested: Binding | None) -> Binding:
-        rows = self.db.execute('SELECT root,bus,thread FROM binding').fetchall()
-        if not rows and requested is not None:
-            with self.db:
-                self.db.execute('INSERT INTO binding VALUES (?,?,?)',
-                                (requested.root, requested.bus, requested.thread))
-            return requested
-        if len(rows) != 1:
-            raise ValueError('Supply one complete Core/CLI binding for this state directory')
-        current = Binding(*rows[0])
-        if requested is not None and requested != current:
-            raise ValueError('This state directory belongs to another Core/CLI conversation')
-        return current
+        with self.db:
+            if requested is not None:
+                # Bind before the later watch lock, including non-watch callers.
+                # SQLite must serialize the decision as well as its insertion.
+                self.db.execute('BEGIN IMMEDIATE')
+            rows = Binding.select(self.db)
+            if not rows and requested is not None:
+                requested.insert(self.db)
+                return requested
+            if len(rows) != 1:
+                raise ValueError('Supply one complete Core/CLI binding for this state directory')
+            current = rows[0]
+            if requested is not None and requested != current:
+                raise ValueError('This state directory belongs to another Core/CLI conversation')
+            return current
 
     def begin(self, message: Message, payload: str, outcome: Outcome) -> bool:
         with self.db:
-            return self.db.execute('INSERT OR IGNORE INTO delivery VALUES (?,?,?)',
-                                   (message.message_id, payload, outcome.value)).rowcount == 1
+            return DeliveryRow(message.message_id, payload, outcome).insert_if_absent(self.db).rowcount == 1
 
     def finish(self, message: Message, outcome: Outcome) -> None:
         with self.db:
-            self.db.execute('UPDATE delivery SET outcome=? WHERE id=?',
-                            (outcome.value, message.message_id))
+            DeliveryRow.update(self.db, where="id=?", parameters=(message.message_id,), outcome=outcome)
 
     def report_unconfirmed(self) -> None:
-        rows = self.db.execute('SELECT id FROM delivery WHERE outcome=?',
-                               (Outcome.UNCONFIRMED.value,)).fetchall()
+        rows = DeliveryRow.column_values(self.db, "id", where="outcome=?",
+                                         parameters=(Outcome.UNCONFIRMED.value,))
         if rows:
-            print(f'Unconfirmed messages retained without replay: {[row[0] for row in rows]}',
+            print(f'Unconfirmed messages retained without replay: {rows}',
                   file=sys.stderr, flush=True)
 
     def close(self) -> None:
@@ -463,8 +643,7 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
                     pending.append(queue.get_nowait())
                 ended = pending[-1] is None
                 updates = pending[:-1] if ended else pending
-                for update in TranscriptUpdate.coalesced(updates):
-                    await asyncio.to_thread(update.publish, output)
+                await asyncio.to_thread(output.publish_batch, updates)
 
 class LineMonitorBridge(CliBridge[Options]):
     """Harnesses whose monitor injects each stdout line as a notification."""
