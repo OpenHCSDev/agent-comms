@@ -219,7 +219,10 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     assert native.read_bytes() == original_native
 
 
-def test_original_recorded_projection_is_strict_and_attaches_before_destination_decode(tmp_path):
+def test_original_recorded_projection_is_strict_and_attaches_before_destination_decode(
+    tmp_path, monkeypatch,
+):
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / 'tools' / 'cutover'))
     from agent_comms.field_codec import FieldCodec
     from agent_comms.historical_views import HistorySource
     from agent_comms.registry_provenance import RegistryProvenance
