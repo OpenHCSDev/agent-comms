@@ -5,6 +5,7 @@ separately. Every ordinary send uses the canonical publication protocol.
 """
 
 from __future__ import annotations
+from agent_comms.tool_caller import NoThreadCaller
 
 import json
 import os
@@ -80,7 +81,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
         recipient.append(beta)
         comms.threads.set_thread_configuration(comms.registry.require(beta.name), model='openai-codex/gpt-6-sol')
         # The ordinary public API, not send_initial_cohort or a candidate bridge.
-        receipt = invoke_tool(comms, "comms_send", {"from": "sender", "to": target, "body": body})
+        receipt = invoke_tool(comms, "comms_send", {"from": "sender", "to": target, "body": body}, caller=NoThreadCaller())
         original.append(comms.bus.log.message_by_id(receipt["id"]))
 
     result = await cohort_foreground.run_foreground_once(

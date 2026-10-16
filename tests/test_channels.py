@@ -5,7 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms import invoke_tool
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.channels import AllOfMatch, AnyOfMatch, Channel, SavedView, ViewKind, ViewPredicate
 from agent_comms.child_process import ProcessIdentity
@@ -376,7 +376,7 @@ def test_channel_metadata_and_saved_views_have_typed_tool_surfaces(tmp_path):
     channel = invoke_tool(
         comms,
         "comms_set_channel_metadata",
-        {"name": "api", "parent": "#ui", "archived": True},
+        {"name": "api", "parent": "#ui", "archived": True}, caller=NoThreadCaller(),
     )
     assert channel["parent"] == "#ui" and channel["archived"] is True
 
@@ -388,20 +388,20 @@ def test_channel_metadata_and_saved_views_have_typed_tool_surfaces(tmp_path):
             "kind": "participants",
             "match": "all_of",
             "tags": "api,ui",
-        },
+        }, caller=NoThreadCaller(),
     )
     assert view["predicate"] == {"match": "all_of", "tags": ["api", "ui"]}
-    listed = invoke_tool(comms, "comms_channels", {})
+    listed = invoke_tool(comms, "comms_channels", {}, caller=NoThreadCaller())
     assert [item["name"] for item in listed["views"]] == ["cross-team"]
-    invoke_tool(comms, "comms_delete_view", {"name": "cross-team"})
-    assert not invoke_tool(comms, "comms_channels", {})["views"]
+    invoke_tool(comms, "comms_delete_view", {"name": "cross-team"}, caller=NoThreadCaller())
+    assert not invoke_tool(comms, "comms_channels", {}, caller=NoThreadCaller())["views"]
 
 
 def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatch):
     comms = setup_wire(tmp_path)
     original = comms.registry.require("other")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "other")
-    invoke_tool(comms, "comms_tags", {"action": "create", "name": "new"})
+    invoke_tool(comms, "comms_tags", {"action": "create", "name": "new"}, caller=NoThreadCaller())
     assert "#new" in comms.channels.channels()
     invoke_tool(comms, "comms_thread_tags", {"add": "new,api", "remove": "ui"}, caller=ThreadCaller("other"))
     assert comms.registry.require("other") == replace(
@@ -410,19 +410,19 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     invoke_tool(
         comms,
         "comms_set_view",
-        {"name": "team", "kind": "participants", "match": "any_of", "tags": "api,ui"},
+        {"name": "team", "kind": "participants", "match": "any_of", "tags": "api,ui"}, caller=NoThreadCaller(),
     )
-    invoke_tool(comms, "comms_tags", {"action": "rename", "name": "api", "new_name": "backend"})
+    invoke_tool(comms, "comms_tags", {"action": "rename", "name": "api", "new_name": "backend"}, caller=NoThreadCaller())
     assert "backend" in comms.registry.require("a").tags
     assert wire(tmp_path).channels.catalog.read().resolve("#team").tags == frozenset(
         {"backend", "ui"}
     )
-    invoke_tool(comms, "comms_delete_view", {"name": "team"})
-    invoke_tool(comms, "comms_tags", {"action": "delete", "name": "backend"})
+    invoke_tool(comms, "comms_delete_view", {"name": "team"}, caller=NoThreadCaller())
+    invoke_tool(comms, "comms_tags", {"action": "delete", "name": "backend"}, caller=NoThreadCaller())
     assert not comms.registry.require("a").tags
     assert "#ui" in comms.channels.channels()
     assert "#team" not in comms.channels.channels()
-    assert invoke_tool(comms, "comms_channels", {})["channels"]
+    assert invoke_tool(comms, "comms_channels", {}, caller=NoThreadCaller())["channels"]
     comms.registry.archive("a")
     assert "a" not in next(
         view.members for view in comms.views.channel_views() if view.channel.name == "#any"
@@ -528,7 +528,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     assert set(names(comms)[:2]) == {"#ui", "#zeta"}
     comms.messaging.send_user_message("#alpha", "Human input", worktree=str(tmp_path))
     comms.messaging.send("b", "#zeta", "Later agent output")
-    invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"})
+    invoke_tool(comms, "comms_sort_channels", {"order": "last_user_input"}, caller=NoThreadCaller())
     assert names(wire(tmp_path))[0] == "#alpha"
     assert [view.channel.name for view in comms.views.coordination_snapshot("a").channels] == [
         view.channel.name for view in wire(tmp_path).views.coordination_snapshot("b").channels
@@ -582,7 +582,7 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
     observer = wire(tmp_path)
     observer.views.channel_views()  # Populate the observer cache before the external writes.
     for channel in ("#ui", "#none"):
-        result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True})
+        result = invoke_tool(comms, "comms_pin_channel", {"name": channel, "pinned": True}, caller=NoThreadCaller())
         assert result["pinned"]
     views = observer.views.coordination_snapshot().channels
     assert [view.channel.name for view in views] == (
@@ -607,7 +607,7 @@ def test_member_pins_are_persistent_channel_scoped_and_preserve_sort(tmp_path, o
     comms.channels.set_channel_sort("#team", order)
     original = {view.channel.name: view.members for view in comms.views.channel_views()}
     result = invoke_tool(
-        comms, "comms_pin_thread", {"channel": "team", "name": "a", "pinned": True}
+        comms, "comms_pin_thread", {"channel": "team", "name": "a", "pinned": True}, caller=NoThreadCaller()
     )
     assert result["pinned_members"] == ["a"]
     observer = wire(tmp_path)
@@ -675,5 +675,5 @@ def test_invalid_pins_do_not_mutate_catalog(tmp_path):
     with pytest.raises(ValueError, match="not a member"):
         comms.channels.set_thread_pinned("api", "b", True)
     with pytest.raises(ValueError, match="Expected.*bool"):
-        invoke_tool(comms, "comms_pin_channel", {"name": "api", "pinned": "false"})
+        invoke_tool(comms, "comms_pin_channel", {"name": "api", "pinned": "false"}, caller=NoThreadCaller())
     assert comms.channels.catalog.path.read_text() == before
