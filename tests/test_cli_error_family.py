@@ -228,7 +228,7 @@ class AcceptedBridge(CliBridge):
     async def deliver(self, message):
         for part in self.incoming_frame(message).parts:
             print(part)
-        return await self.finish_delivery(message, DeliveredOutcome)
+        return DeliveredOutcome
 
     async def show_sent(self, result, target, body):
         pass

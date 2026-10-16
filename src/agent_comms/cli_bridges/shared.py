@@ -359,7 +359,7 @@ class Outcome(DeclaredFamily, affix='Outcome'):
         """Pending transport outcomes cannot advance Core's read state."""
 
     @classmethod
-    async def observe_monitor(cls, bridge: TranscriptBridge, message: Message,
+    async def observe_monitor(cls, bridge: LineMonitorBridge, message: Message,
                               record: ObservedMonitor) -> None:
         await bridge.finish_delivery(message, DeliveredOutcome, record)
 
@@ -376,7 +376,7 @@ class UnconfirmedOutcome(Outcome):
 
 class DeliveredOutcome(FilteredOutcome):
     @classmethod
-    async def observe_monitor(cls, bridge: TranscriptBridge, message: Message,
+    async def observe_monitor(cls, bridge: LineMonitorBridge, message: Message,
                               record: ObservedMonitor) -> None:
         """Reopened history preserves the first confirmation record and time."""
 
@@ -401,7 +401,7 @@ class MonitorEvidence(DeclaredFamily):
     def accepted(self, total: int) -> MonitorEvidence:
         return ReceivingMonitor(total - 1)
 
-    async def confirm(self, bridge: TranscriptBridge, attempt: MonitorAttemptRow,
+    async def confirm(self, bridge: LineMonitorBridge, attempt: MonitorAttemptRow,
                       record: ObservedMonitor) -> None:
         """Only a complete set of observed parts can confirm delivery."""
 
@@ -423,7 +423,7 @@ class ReceivingMonitor(StoredMonitorEvidence, MonitorEvidence):
     def accepted(self, total: int) -> MonitorEvidence:
         return ReceivingMonitor(self.remaining - 1)
 
-    async def confirm(self, bridge: TranscriptBridge, attempt: MonitorAttemptRow,
+    async def confirm(self, bridge: LineMonitorBridge, attempt: MonitorAttemptRow,
                       record: ObservedMonitor) -> None:
         if self.remaining:
             return
@@ -468,12 +468,12 @@ class MonitorPartRow(TypedTable):
 
 class MonitorAttempt(ABC):
     @abstractmethod
-    async def confirm(self, bridge: TranscriptBridge, notification: MonitorPart,
+    async def confirm(self, bridge: LineMonitorBridge, notification: MonitorPart,
                       record: ObservedMonitor) -> None: ...
 
 
 class NoMonitorAttempt(MonitorAttempt):
-    async def confirm(self, bridge: TranscriptBridge, notification: MonitorPart,
+    async def confirm(self, bridge: LineMonitorBridge, notification: MonitorPart,
                       record: ObservedMonitor) -> None:
         """Historical or unrelated emissions have no matching new attempt."""
 
@@ -487,7 +487,7 @@ class MonitorAttemptRow(TypedTable, MonitorAttempt):
     parts: int
     evidence: MonitorEvidence = field(default_factory=UnrecordedMonitor)
 
-    async def confirm(self, bridge: TranscriptBridge, notification: MonitorPart,
+    async def confirm(self, bridge: LineMonitorBridge, notification: MonitorPart,
                       record: ObservedMonitor) -> None:
         observed = MonitorPartRow(self.id, notification.number, notification.sender,
                                   notification.body, record.record_id, record.timestamp)
@@ -760,7 +760,7 @@ class CliBridge(ABC, Generic[BridgeOptions]):
 
     @abstractmethod
     async def deliver(self, message: Message) -> type[Outcome]:
-        """Record through finish_delivery only on harness evidence, never on a pipe write."""
+        """Return harness evidence; the shared watch owns completion."""
 
     @abstractmethod
     async def show_sent(self, result: SendResult, target: str, body: str) -> None:
@@ -777,17 +777,13 @@ class CliBridge(ABC, Generic[BridgeOptions]):
     async def prepare_delivery(self) -> None:
         """API transports already bind the intended harness on each request."""
 
-    def confirm_probe(self, probe: MonitorProbe) -> None:
-        """API transports do not use a line monitor."""
-
-    def part_observed(self, message_id: str, number: int) -> None:
-        """API transports do not await monitor part notifications."""
+    async def settle(self, message: Message, result: type[Outcome]) -> None:
+        await self.finish_delivery(message, result)
 
     async def finish_delivery(self, message: Message, outcome: type[Outcome],
-                              evidence: MonitorEvidence = UnrecordedMonitor()) -> type[Outcome]:
+                              evidence: MonitorEvidence = UnrecordedMonitor()) -> None:
         self.journal.finish(message, outcome, evidence)
         await outcome.acknowledge(self.core, message)
-        return outcome
 
     async def watch(self) -> None:
         await self.prepare_delivery()
@@ -812,6 +808,7 @@ class CliBridge(ABC, Generic[BridgeOptions]):
                         await self.finish_delivery(message, outcome)
                         continue
                     result = await self.deliver(message)
+                    await self.settle(message, result)
                     print(f'{result.declared_name}: {message.message_id} from {message.sender}',
                           file=sys.stderr, flush=True)
 
@@ -872,7 +869,7 @@ class MonitorFrame(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     @abstractmethod
-    async def confirm(self, bridge: TranscriptBridge, record: ObservedMonitor) -> None: ...
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None: ...
 
 
 class MonitorProbe(MonitorFrame):
@@ -882,7 +879,7 @@ class MonitorProbe(MonitorFrame):
     session: str
     token: str
 
-    async def confirm(self, bridge: TranscriptBridge, record: ObservedMonitor) -> None:
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
         bridge.confirm_probe(self)
 
 
@@ -900,7 +897,7 @@ class MonitorPart(MonitorFrame):
             raise ValueError('Monitor part number exceeds total')
         return self
 
-    async def confirm(self, bridge: TranscriptBridge, record: ObservedMonitor) -> None:
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
         await bridge.journal.monitor_attempt(self).confirm(bridge, self, record)
 
 
@@ -908,7 +905,7 @@ class ForeignMonitorFrame(MonitorFrame):
     wire_tag = 'foreign'
     text: str
 
-    async def confirm(self, bridge: TranscriptBridge, record: ObservedMonitor) -> None:
+    async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
         """Another monitor's output is not comms delivery evidence."""
 
 
@@ -921,7 +918,7 @@ class MonitorObservation(TranscriptUpdate):
     source_session: str
     record: ObservedMonitor
 
-    async def observed(self, bridge: TranscriptBridge) -> None:
+    async def observed(self, bridge: LineMonitorBridge) -> None:
         if self.source_session == bridge.binding.thread:
             await self.frame.confirm(bridge, self.record)
 
@@ -950,12 +947,13 @@ class LineMonitorBridge(TranscriptBridge[Options]):
         if probe == self.probe:
             self.monitor_ready.set()
 
+    async def settle(self, message: Message, result: type[Outcome]) -> None:
+        return  # The session evidence already completed delivery.
+
     def part_observed(self, message_id: str, number: int) -> None:
-        # Watch admits one message at a time. Unknown/startup observations retain
-        # no waiters; there is no mirrored delivery state here, only wake signals.
-        for key, event in self.part_events.items():
-            if key == (message_id, number):
-                event.set()
+        # An observation with no waiter is a startup replay of a finished part.
+        if event := self.part_events.get((message_id, number)):
+            event.set()
 
     @staticmethod
     def emit(text: str) -> None:
