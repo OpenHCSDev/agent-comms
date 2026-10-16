@@ -146,10 +146,7 @@ class MessageBus:
                 frozenset(row.seq for row in unread),
                 frozenset(row.target for row in unread),
             )
-            page = MessagePageRequest.every(listed, after=min(listed.sequences) - 1).read_opened(
-                self.log, source.metadata, source.revision, source.stream,
-                source.public_records(),
-            )
+            page = MessagePageRequest.every(listed, after=min(listed.sequences) - 1).read_opened(source)
             return list(page.messages)
 
     async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment]) -> AsyncIterator[Message]:
@@ -298,7 +295,7 @@ class MessageBus:
         if not rows:
             return ()
         selected = {
-            relation.peer.require_recorded().lookup: relation.relevance.grants(Prioritized)
+            relation.peer.recorded_or(lambda peer: peer.lookup, lambda: None): relation.relevance.grants(Prioritized)
             for relation in relations
         }
         rows = tuple(sorted((row for row in rows if row.sender_lookup in selected),

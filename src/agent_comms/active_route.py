@@ -10,6 +10,7 @@ import fcntl
 import json
 import os
 import stat
+import sys
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
@@ -273,19 +274,21 @@ def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
 
 
 def acquire_exclusive_route_lock(directory: int) -> None:
-    """Fail with named holders instead of silently retrying or killing clients."""
+    """Name current readers, then wait for the kernel to release their locks."""
     try:
         fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError as error:
+    except BlockingIOError:
         try:
             holders = route_lock_holders(directory)
             detail = '; '.join(f'PID {holder.pid}: {holder.command}' for holder in holders)
         except OSError as diagnosis:
             detail = f'holder inspection failed: {diagnosis}'
-        raise RelationViolationError(
-            f'Default route lock busy; wait for borrowers to retire. '
-            f'Holders at inspection: {detail or "unknown (lock changed during inspection)"}'
-        ) from error
+        print(
+            f'Waiting for default-route readers: '
+            f'{detail or "unknown (lock changed during inspection)"}',
+            file=sys.stderr, flush=True,
+        )
+        fcntl.flock(directory, fcntl.LOCK_EX)
 
 
 def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
@@ -305,7 +308,7 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        fcntl.flock(directory, fcntl.LOCK_EX)
+        acquire_exclusive_route_lock(directory)
         _publish_active_route_locked(route, path, directory)
     finally:
         os.close(directory)
