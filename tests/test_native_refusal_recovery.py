@@ -167,8 +167,8 @@ async def test_failed_native_retry_end_without_assistant_still_declares_failure(
 
 
 @pytest.mark.asyncio
-async def test_exhausted_empty_responses_become_typed_provider_failure():
-    reason = "Provider returned no authoritative response"
+async def test_exhausted_provider_retries_become_typed_provider_failure():
+    reason = "503 overloaded after native provider retries"
     from agent_comms.turn_output import TurnOutput
 
     from agent_comms.turn_failure import ModelRequestFailed

@@ -129,3 +129,98 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
             "effect_lines": 1, "failure_reason": str(terminal_failures[0].code),
             "original_fixture_history_preserved": True,
         }))
+
+
+@pytest.mark.parametrize("following", ["empty_notice", "answered_notice", "steering", "provider_error", "empty_original"])
+async def test_actual_native_requested_answer_and_following_input(native_backend, monkeypatch, following):
+    from acp.schema import TextContentBlock
+    from agent_comms import pi_commands
+    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.wire_record import WireRecord
+
+    native = native_backend
+    await native.author_history()
+    original = native.session.read_bytes()
+    gate = asyncio.Event()
+    native.provider.response_gate = None if following == "empty_original" else gate
+    native.provider.error_type = "invalid_request_error"
+    native.provider.error_message = "controlled genuine following provider failure"
+    failures, acknowledgments = [], []
+
+    def chunks():
+        assert native.provider.posts in (1, 2), "Clean stops must not generate provider retries"
+        text = ("" if following == "empty_original" else "Requested answer") if native.provider.posts == 1 else {
+            "empty_notice": "", "answered_notice": '{"decision":"IGNORE"}',
+            "steering": "Revised requested answer",
+        }[following]
+        yield {"content": text}, None
+        yield {}, "stop"
+        if following == "provider_error":
+            native.provider.status = 400
+
+    committed_input = TrackedTurnSession.committed_input
+    response = TrackedTurnSession.response
+    result = TrackedTurnSession.result
+
+    async def original_committed(turn, event):
+        await committed_input(turn, event)
+        if event.input_id != turn.command.input_id or following == "empty_original":
+            return
+        if following == "steering":
+            await owner.prompt(session, [TextContentBlock(type="text", text="Fresh real user correction")])
+        else:
+            comms.messaging.send_message("verifier", session, "Fresh background notice; no automatic reply requested")
+            await owner.inputs.drain_inbox(session)
+
+    async def acknowledged(turn, event):
+        await response(turn, event)
+        if event.success and event.command is pi_commands.Prompt and event.id != turn.command.id:
+            acknowledgments.append(event.id)
+            gate.set()  # The real native RPC has queued the following input before the answer completes.
+
+    async def terminal(turn):
+        try:
+            return await result(turn)
+        except NativePiUnavailable as error:
+            failures.append(error)
+            raise
+
+    monkeypatch.setattr(native.provider, "response_chunks", chunks)
+    monkeypatch.setattr(TrackedTurnSession, "committed_input", original_committed)
+    monkeypatch.setattr(TrackedTurnSession, "response", acknowledged)
+    monkeypatch.setattr(TrackedTurnSession, "result", terminal)
+    async with native.open_owner(runtime_enabled=True, auto_wake=True, native_options=()) as (owner, session):
+        comms = owner._comms
+        comms.threads.claim_thread("verifier", tags=frozenset(), worktree=str(native.project))
+        comms.messaging.send_message("verifier", session, "Fresh requested-answer lifecycle verification")
+        await owner.inputs.drain_inbox(session)
+        await asyncio.wait_for(reply_turn_finished(owner, session), 30)
+        assert native.provider.posts == (1 if following == "empty_original" else 2)
+        assert len(acknowledgments) == (0 if following == "empty_original" else 1)
+        assert native.session.read_bytes().startswith(original)
+        messages = [row["message"] for line in native.session.read_text().splitlines()
+                    if (row := json.loads(line)).get("type") == "message"]
+        users = [message for message in messages if message.get("inputId")]
+        assert len(users) == (1 if following == "empty_original" else 2)
+        assert len({message["inputId"] for message in users}) == len(users)
+        replies = [message for line in comms.bus.log.path.read_text().splitlines()
+                   for message in WireRecord.public_from_wire(json.loads(line)).messages()
+                   if message.sender == session]
+        if following == "provider_error":
+            assert not replies and len(failures) == 1
+            assert isinstance(failures[0], NativePiTerminalFailure)
+            assert isinstance(failures[0].failure, ModelRequestFailed)
+            assert native.provider.error_message in str(failures[0])
+        elif following == "empty_original":
+            assert not replies and len(failures) == 1
+            assert "no unique authoritative completed response" in str(failures[0])
+        else:
+            assert not failures
+            assert [message.body for message in replies] == [
+                "Revised requested answer" if following == "steering" else "Requested answer"]
+        print("installed_native_following_result=" + json.dumps({
+            "following": following, "provider_requests": native.provider.posts,
+            "new_inputs": len(users), "routed_replies": [message.body for message in replies],
+            "original_fixture_history_preserved": True,
+            "installed_module": str(Path(__import__("agent_comms").__file__).resolve()),
+        }))

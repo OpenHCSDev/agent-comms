@@ -13,7 +13,7 @@ class NativeRunState {
     constructor(owner, attempt = 1) { this.owner = owner; this.attempt = attempt; }
     get retrying() { return false; }
     refusal() { return undefined; }
-    started() { return this; }
+    started() { return new NothingProduced(this.owner); }
     produced() { return this; }
     finished() { return this; }
     close() {}
@@ -21,6 +21,7 @@ class NativeRunState {
 }
 
 class NothingProduced extends NativeRunState {
+    started() { return this; }
     produced() { return new OutputProduced(this.owner, this.attempt); }
     terminal() { return new ClosedNothingProduced(this.owner, this.attempt); }
     finished(message) {
@@ -53,10 +54,8 @@ class RecoveringNothingProduced extends NothingProduced {
     close() { this.owner.state = this.terminal(); }
 }
 
-/** A completed request does not make later provider requests unsafe to retry. */
-class OutputProduced extends NativeRunState {
-    started() { return new NothingProduced(this.owner); }
-}
+/** Both completed states use the next request's own production and retry window. */
+class OutputProduced extends NativeRunState {}
 class ClosedNothingProduced extends NativeRunState {}
 
 class RefusedNothingProduced extends RecoveringNothingProduced {
