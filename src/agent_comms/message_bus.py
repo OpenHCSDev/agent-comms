@@ -12,7 +12,7 @@ from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
-from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
+from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest, UnreadBeforeRequest
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
@@ -377,6 +377,12 @@ class MessageBus:
         return ConversationMessagePageRequest.capture(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         ).read(self.log)
+
+    def conversation_older_unread(
+        self, scope: DMDisplayScope, *, before: int, seen: frozenset[int]
+    ) -> bool:
+        """Ask the scoped offset reader, newest first, stopping at the first unread."""
+        return UnreadBeforeRequest(scope, before, seen).read(self.log)
 
     def last_sent_timestamps(self, *, source: OpenedWireSnapshot | None = None) -> Mapping[str, float]:
         """Reuse the same verified activity source; no second projection or body cache."""
