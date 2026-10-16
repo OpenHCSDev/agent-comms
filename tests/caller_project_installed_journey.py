@@ -6,7 +6,6 @@ PI_COMPACTION_TEST_PACKAGE contract. The provider is localhost, never paid.
 import argparse
 import asyncio
 import json
-import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -42,15 +41,15 @@ async def run(output: Path) -> None:
             await fixture.author_history()
             (fixture.project / "owned.txt").write_text("Original project-sync installed acceptance.\n")
             fixture.provider.tool_call = ("read", {"path": "owned.txt"})
-            package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
-            options = ("--tools", "read", "--extension", str(package / "agent-comms-extensions/global-agent-comms/index.mjs"),
-                       "--extension", str(package / "agent-comms-extensions/global-project-sync/index.mjs"))
+            options = ("--tools", "read")
             async with fixture.open_owner(runtime_enabled=True, native_options=options) as (owner, session):
                 child = fixture.children[-1]
                 argv = birth_argv[child.pid]
                 (output / "child-cmdline.json").write_text(json.dumps(argv, indent=2) + "\n")
                 later = Path(f"/proc/{child.pid}/cmdline").read_bytes().rstrip(b"\0").decode().split("\0")
                 (output / "attested-cmdline.json").write_text(json.dumps(later) + "\n")
+                assert "--no-extensions" in argv, "User discovery was not disabled"
+                assert argv.count("--extension") == 2, "Core must supply its two required entries once"
                 project = NativeProject.from_arguments(argv).require_managed()
                 identity = ThreadIncarnation.from_arguments(argv).require_recorded()
                 registered = owner._comms.registry.require(session)
@@ -67,7 +66,8 @@ async def run(output: Path) -> None:
                 assert project.socket.path.parent.exists(), "Socket address lost while child was retained"
                 report = {"core_module": agent_comms.__file__, "child_pid": child.pid,
                     "identity_argv": list(identity.cli_arguments), "project_argv": list(project.cli_arguments),
-                    "saved_history_opened": True, "localhost_posts": fixture.provider.posts,
+                    "saved_history_opened": True, "required_extensions_under_disabled_discovery": True,
+                    "localhost_posts": fixture.provider.posts,
                     "project_queries": queries, "paid_calls": 0, "response": response.stop_reason}
     assert not project.socket.path.parent.exists(), "Original borrowed directory survived retirement"
     report.update(children_retired=True, socket_directory_retired=True)

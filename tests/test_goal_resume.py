@@ -22,9 +22,7 @@ from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
-from functools import partial
 from agent_comms.active_route import LocalRoute
-from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.launch_runtime import LaunchRuntime
 
 # Every case in this module exercises the explicitly declared owner.
@@ -112,7 +110,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
     comms.goals.update_goal(
         "owner", ClearGoalAction(expect=GoalPrecondition(goal_id=replacement["id"]))
     )
-    after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
+    after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"}, caller=ThreadCaller(comms.registry.require('owner').incarnation))["goal"]
     reopened = Comms(LocalRoute(comms.root), runtime=LaunchRuntime.current())
     assert any(
         entry.reports_turn("same-assistant-turn")
