@@ -22,10 +22,19 @@ source member through dataclasses.fields before acquiring a journal. Old read,
 restart and fixture entrypoints reject a current producer before root access or
 writes. Selection is explicit, never discovered from missing record values.
 
-RecordedRegistryProjection uses the producer's public FieldCodec.encode rather
-than a deleted private codec API. Its target declaration chooses the provenance
-keys. The read_original_owner stdio boundary encodes remaining typed file-revision
-proofs with that same codec before JSON; callers must not bypass that boundary.
+OriginalOwnerRead owns the live response declaration at the producer and target.
+RetiredOwnerRead uses a declared registry-to-document wire alias for the converted
+postimage, but keeps selection/history typed. Neither response imports recorded
+acquisition's FileRevision dependency: genuine P does not provide that module.
+
+RecordedOwnerRead owns recorded acquisition and its revision proofs in a separate
+module, selected only by RecordedRegistryProjection. It encodes the producer's
+RegistryDocument through that document's declaration; it does not copy the thread
+or alias container grammars. Its target declaration chooses provenance keys.
+Only already-encoded postimages use a JSON-value grammar. RoutingCarryPlan keeps
+the typed response rather than an untyped packet mirror. The read_original_owner
+stdio boundary encodes these records with the producer's public codec before
+JSON; callers must not bypass that boundary.
 
 Verified on the configured installed interpreter and actual saved live root:
 current owner selection and recorded-source acquisition strictly decode, and

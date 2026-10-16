@@ -3,23 +3,22 @@
 The release owner selects the authentic producer runtime and its format. Neither
 member discovers formats from missing fields or offers a fallback reader.
 """
+from __future__ import annotations
+
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
+
+from pydantic import JsonValue
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.goal_history import GoalHistoryEntry
 from agent_comms.owner_lifecycle import OwnerReleaseReceipt, OwnerReleaseStore, OwnerRestartSelection
-from agent_comms.private_path import FileRevision
-from agent_comms.wire_log import WireLog
-
-
-# This declaration is only for JSON already produced by the source codec, not
-# permission to put undeclared domain values in an output packet.
-EncodedRecord = dict[str, Any]
+if TYPE_CHECKING:
+    from recorded_owner_read import RecordedOwnerRead
 
 
 @dataclass(frozen=True)
@@ -36,24 +35,10 @@ class OriginalOwnerRead:
 class RetiredOwnerRead:
     """Only codec-produced target postimages are opaque JSON, never live values."""
 
-    document: EncodedRecord
+    registry: dict[str, JsonValue] = field(metadata={'wire_name': 'document'})
     selection: OwnerRestartSelection
-    releases: dict[str, EncodedRecord]
+    releases: dict[str, dict[str, JsonValue]]
     goal_history: tuple[GoalHistoryEntry, ...]
-
-
-@dataclass(frozen=True)
-class RecordedOwnerRead:
-    """Producer proofs stay typed; provenance is the requested encoded postimage."""
-
-    root: str
-    original_root: str
-    wire_root_id: str
-    bus_identity: tuple[int, int]
-    size: int
-    snapshot_bus_revision: FileRevision
-    snapshot_registry_revision: FileRevision
-    provenance: EncodedRecord
 
 
 class OwnerReadProjection(DeclaredFamily, affix='Projection'):
@@ -104,8 +89,8 @@ class RetiredGoalReportProjection(LiveOwnerReadProjection):
             acquired = GoalReportMemberRetirement.acquire(
                 registry_path, document, releases._read_unlocked())
             projected = acquired.project()
-        return RetiredOwnerRead(projected['registry'], selection,
-                                projected['releases'], acquired.history)
+        projected.update(goal_history=acquired.history)
+        return RetiredOwnerRead(selection=selection, **projected)
 
 
 class CurrentThreadProjection(LiveOwnerReadProjection):
@@ -119,37 +104,9 @@ class RecordedRegistryProjection(OwnerReadProjection):
     """Original typed values projected by the target's recorded declaration."""
 
     @classmethod
-    def project(cls, document: RegistryDocument, declaration) -> EncodedRecord:
-        requested = declaration['properties']['threads']['additionalProperties']['properties']
-        encoded = FieldCodec.encode(document)
-        return {
-            'threads': {name: {key: thread[key] for key in requested}
-                        for name, thread in encoded['threads'].items()},
-            'aliases': encoded['aliases'],
-        }
-
-    @classmethod
     def read(cls, registry, root: Path, name: str, request) -> RecordedOwnerRead:
-        """Recorded evidence has no live selection/process admission."""
-        with registry.store.reading() as document:
-            return cls.capture(root, registry.store.path, document, request)
+        """Only this selected capability imports the recorded-source SDK."""
+        from recorded_owner_read import RecordedOwnerRead
 
-    @classmethod
-    def capture(cls, root: Path, registry_path: Path, document, declaration) -> RecordedOwnerRead:
-        """Project while the original read/writer owns the decoded document."""
-        root = root.resolve()
-        log = WireLog(root / 'bus.jsonl')
-        bus_revision = FileRevision.capture(log.path)
-        registry_revision = FileRevision.capture(registry_path)
-        marker = log.read_metadata_unlocked(required=True)
-        provenance = cls.project(document, declaration)
-        info = log.path.stat()
-        if (
-            bus_revision != FileRevision.capture(log.path)
-            or registry_revision != FileRevision.capture(registry_path)
-        ):
-            raise ValueError('Original recorded source changed during acquisition')
-        return RecordedOwnerRead(
-            str(root), str(root), marker.root_id, (info.st_dev, info.st_ino),
-            info.st_size, bus_revision, registry_revision, provenance,
-        )
+        with registry.store.reading() as document:
+            return RecordedOwnerRead.capture(root, registry.store.path, document, request)

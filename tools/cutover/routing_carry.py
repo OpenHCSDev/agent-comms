@@ -16,7 +16,7 @@ from typing import Any
 from agent_comms.field_codec import FieldCodec
 from agent_comms.transcript_routes import RouteAnnotationTable, _assert_schema, _schema
 from agent_comms.typed_table import Column, TypedTable
-from owner_read_projection import RecordedOwnerRead
+from recorded_owner_read import RecordedOwnerRead
 
 
 def digest_bytes(value: bytes) -> str:
@@ -165,13 +165,12 @@ def prepare_original(service, marker, provenance_declaration) -> RoutingCarryPla
     from agent_comms.bus_publication import unique_wire_object
     from agent_comms.routing import TurnRouting
     from agent_comms.messages import Message
-    from owner_read_projection import RecordedRegistryProjection
 
     root = service.root
     database = root / 'transcript_routes.sqlite3'
     registry_bytes = (root / 'registry.json').read_bytes()
     document = json.loads(registry_bytes, object_pairs_hook=unique_wire_object)
-    recorded = RecordedRegistryProjection.capture(
+    recorded = RecordedOwnerRead.capture(
         root, service.registry.store.path, service.registry.store._read_unlocked(),
         provenance_declaration,
     )
