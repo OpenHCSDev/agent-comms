@@ -2,20 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import json
 import sys
 import time
+from contextlib import AsyncExitStack
 from dataclasses import replace
 from pathlib import Path
 
 import pytest
 
+from agent_comms.acp import CommsAgent
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.child_process import ObservedProcess, ParentedProcess
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.runtime import socket_path
+from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import ActiveTurn
 
@@ -253,36 +256,13 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     cutover = RebuildFixtureCheckpoint()
 
     def ready(owner):
-        deadline = time.monotonic() + 10
-        while not socket_path(tmp_path, owner.pid).exists():
-            assert owner.process_alive, "Actual batch worker exited before runtime attach"
-            assert time.monotonic() < deadline, "Actual batch worker failed to attach"
-            time.sleep(.02)
-        # Socket creation precedes the owner's saved-history replay. Wait for
-        # the existing protocol's complete attachment, so rename cannot race
-        # the original startup read and silently turn the batch into one owner.
-        import asyncio
-        import json
-        from agent_comms.runtime_requests import SubscribeRuntimeRequest
-
         async def attach():
-            async with asyncio.timeout(10):
-                reader, writer = await asyncio.open_unix_connection(
-                    socket_path(tmp_path, owner.pid), limit=8 * 1024 * 1024
-                )
-                try:
-                    writer.write((json.dumps(SubscribeRuntimeRequest(
-                        thread=owner.name).to_wire()) + "\n").encode())
-                    await writer.drain()
-                    while line := await reader.readline():
-                        response = json.loads(line)
-                        assert "error" not in response, response
-                        if "ready" in response:
-                            return
-                    raise AssertionError("Actual worker closed before complete attachment")
-                finally:
-                    writer.close()
-                    await writer.wait_closed()
+            async with asyncio.timeout(10), AsyncExitStack() as lifetime:
+                client = CommsAgent(comms, auto_wake=False)
+                lifetime.push_async_callback(client.shutdown)
+                proxy = RuntimeProxy(client, owner.name, socket_path(tmp_path, owner.pid))
+                lifetime.push_async_callback(proxy.close)
+                await proxy.subscribe()
 
         asyncio.run(attach())
 
