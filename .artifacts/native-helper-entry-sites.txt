@@ -1,0 +1,33 @@
+tests/test_native_catalog_discovery.py:47:    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+tests/test_native_catalog_discovery.py:59:    created = await ForkSessionHelper.run(ForkSessionRequest(
+tests/test_native_catalog_discovery.py:347:    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+tests/test_native_catalog_discovery.py:356:    created = await ForkSessionHelper.run(ForkSessionRequest(
+tests/test_native_context_inspection.py:55:    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+tests/test_native_context_inspection.py:97:    c_identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
+tests/reply_relevance_installed_journey.py:18:from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+tests/reply_relevance_installed_journey.py:64:    fork = await ForkSessionHelper.run(
+tests/reply_relevance_installed_journey.py:65:        ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
+tests/turn_context_installed_journey.py:186:    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+tests/turn_context_installed_journey.py:219:        identity = await ForkSessionHelper.run(ForkSessionRequest(str(package),
+src/agent_comms/native_fork.py:17:from .pi_helper import PiHelper, PiHelperFailed, RuntimeHelper, SessionHelperRequest
+src/agent_comms/native_fork.py:24:class ForkSessionRequest(SessionHelperRequest):
+src/agent_comms/native_fork.py:29:class ForkSessionHelper(PiHelper):
+src/agent_comms/native_fork.py:40:    request = ForkSessionRequest
+src/agent_comms/native_fork.py:45:    def timeout_for(cls, request: ForkSessionRequest) -> float:
+src/agent_comms/native_fork.py:49:    def failure(cls, request: ForkSessionRequest, result: ChildResult) -> PiHelperFailed:
+src/agent_comms/native_fork.py:66:class RuntimeForkRequest:
+src/agent_comms/native_fork.py:75:        return await ForkSessionHelper.run(
+src/agent_comms/native_fork.py:76:            ForkSessionRequest(str(self.package), self.file, self.cwd, self.directory),
+src/agent_comms/native_fork.py:81:class RuntimeForkHelper(RuntimeHelper, ForkSessionHelper):
+src/agent_comms/native_fork.py:84:    module = "agent_comms.native_fork"
+src/agent_comms/native_fork.py:85:    request = RuntimeForkRequest
+src/agent_comms/native_fork.py:88:async def fork_native_session(
+src/agent_comms/native_fork.py:96:    request = RuntimeForkRequest(file, worktree, comms.runtime, comms.owners.native_package)
+src/agent_comms/native_fork.py:97:    return await RuntimeForkHelper.run(request, cwd=Path(worktree))
+src/agent_comms/native_fork.py:101:    request = FieldCodec.decode(RuntimeForkRequest, json.load(sys.stdin))
+src/agent_comms/pi_helper.py:48:class RuntimeHelper:
+src/agent_comms/pi_native_backend.py:22:from .native_fork import fork_native_session
+src/agent_comms/pi_native_backend.py:340:        identity = await fork_native_session(parent.require_saved_session(), parent.worktree, comms)
+tests/shared_bus_restart_native.py:113:    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+tests/shared_bus_restart_native.py:144:        fork = await ForkSessionHelper.run(
+tests/shared_bus_restart_native.py:145:            ForkSessionRequest(str(arguments.package), str(original), source.worktree, str(stage / 'forks')),

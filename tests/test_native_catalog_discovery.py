@@ -1,6 +1,7 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
 
 from agent_comms.native_arguments import NativeArguments
+from agent_comms.native_session_fork import ForkSessionHelper, ForkSessionRequest
 from agent_comms.native_project import UnmanagedNativeProject
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
@@ -44,7 +45,6 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     from agent_comms.coordination_errors import IdentityConflict
     from agent_comms.coordinator import Coordination
     from agent_comms.native_custody import PiSessionChild
-    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_entries import NativeEntry
     from agent_comms.native_session_reopen import NativeSessionIdentity
     from agent_comms.selected_session import SavedSelectedSession
@@ -344,7 +344,6 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
     import os
     from pathlib import Path
 
-    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.pi_commands import GetState, UnknownCommand
 
     native = native_backend

@@ -5,6 +5,7 @@ admission, native process, source proof and response publication remain real.
 """
 
 from agent_comms.runtime_socket import RuntimeSocket
+from agent_comms.native_session_fork import ForkSessionHelper, ForkSessionRequest
 
 from agent_comms.context_segments.doctrine import DoctrineSegment
 import argparse
@@ -110,7 +111,6 @@ async def configured_pure_channel(arguments):
     copied into the private coordinator or submitted as new inputs.
     """
 
-    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_input_record import FullNativeExecution
     from agent_comms.selected_triage import FullSelectedTriage
     from agent_comms.coordination_tables.publications import PublicationReceipts

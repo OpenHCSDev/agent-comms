@@ -1,0 +1,122 @@
+{
+  "complete": false,
+  "phase": "runtime-fork-default",
+  "core_revision": "cb6ea3eb6",
+  "core_module": "/home/ts/wt/core-native-runtime/.native-acceptance/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "wheel_sha256": "535b0bd6b8ec49d491a714d929622b611917f1a5ae8c55a07aea1106c0ad7a4d",
+  "installed_files_matched": 373,
+  "runtime": "/home/ts/wt/core-native-runtime/.native-acceptance/bin/python",
+  "package": "/home/ts/wt/core-envelope-895/.native-login-acceptance/node_modules/@earendil-works/pi-coding-agent",
+  "tool_supply": [
+    {
+      "input_id": "a1b20630d80ae17d519c9d14dc01cd12",
+      "mode": "NoneType",
+      "pid": 967921,
+      "tools": []
+    },
+    {
+      "input_id": "867d8cafc257e0e1dd3777b7620d8c20",
+      "mode": "CodingToolMode",
+      "pid": 968386,
+      "tools": [
+        "read",
+        "bash",
+        "edit",
+        "write",
+        "comms_pin_channel",
+        "comms_pin_thread",
+        "comms_model",
+        "comms_sort_channels",
+        "comms_tags",
+        "comms_thread_tags",
+        "comms_channels",
+        "comms_set_channel_metadata",
+        "comms_set_view",
+        "comms_delete_view",
+        "comms_sort_channel",
+        "comms_set_project",
+        "comms_set_goal",
+        "comms_goal",
+        "comms_resume_goal",
+        "comms_edit_goal",
+        "comms_goal_history",
+        "comms_turns",
+        "comms_threads",
+        "comms_work_branches",
+        "comms_collaboration",
+        "comms_collaborations",
+        "comms_rename_self",
+        "comms_send",
+        "comms_decision",
+        "comms_constraint",
+        "comms_subtask",
+        "comms_inbox",
+        "comms_fork",
+        "comms_stop",
+        "comms_start",
+        "comms_queue_restart",
+        "comms_restart_queue",
+        "comms_cancel_restart",
+        "comms_archive"
+      ]
+    }
+  ],
+  "fork_rows": [],
+  "model": "openai-codex/gpt-6.1-sol",
+  "tools": [
+    {
+      "name": "read",
+      "error": false
+    },
+    {
+      "name": "bash",
+      "error": false
+    }
+  ],
+  "replies": [
+    "Now: Native verification succeeded.\nUncommitted: Created fresh-effect.txt with one append.\nNext: Return the verification result.\nNATIVE_FULL_OK"
+  ],
+  "triage_full": false,
+  "fork_cli": [
+    {
+      "name": "runtime-fork-default",
+      "status": 1,
+      "output": "{\"error\":\"runtime_fork ended ExitedOutcome(code=1); stderr: <frozen runpy>:128: RuntimeWarning: 'agent_comms.native_fork' found in sys.modules after import of package 'agent_comms', but prior to execution of 'agent_comms.native_fork'; this may result in unpredictable behaviour\\nTraceback (most recent call last):\\n  File \\\"<frozen runpy>\\\", line 198, in _run_module_as_main\\n  File \\\"<frozen runpy>\\\", line 88, in _run_code\\n  File \\\"/home/ts/wt/core-native-runtime/.native-acceptance/lib/python3.14/site-packages/agent_comms/native_fork.py\\\", line 29, in <module>\\n    class ForkSessionHelper(PiHelper):\\n    ...<32 lines>...\\n            )\\n  File \\\"/home/ts/wt/core-native-runtime/.native-acceptance/lib/python3.14/site-packages/agent_comms/declared_family.py\\\", line 70, in __new__\\n    cls: Any = super().__new__(mcs, name, bases, namespace, registry_config=config)\\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File \\\"/home/ts/wt/core-goal-retry/.venv/lib/python3.14/site-packages/metaclass_registry/core.py\\\", line 806, in __new__\\n    superseded = mcs._register_class(\\n        new_class,\\n    ...<2 lines>...\\n        replaces=replaces,\\n    )\\n  File \\\"/home/ts/wt/core-goal-retry/.venv/lib/python3.14/site-packages/metaclass_registry/core.py\\\", line 1034, in _register_class\\n    superseded: type | None = register_once(\\n                              ~~~~~~~~~~~~~^\\n        config.registry_dict,\\n        ^^^^^^^^^^^^^^^^^^^^^\\n    ...<3 lines>...\\n        replaces=replaces,\\n        ^^^^^^^^^^^^^^^^^^\\n    )\\n    ^\\n  File \\\"/home/ts/wt/core-goal-retry/.venv/lib/python3.14/site-packages/metaclass_registry/core.py\\\", line 168, in register_once\\n    raise DuplicateRegistryKeyError(\\n    ...<4 lines>...\\n    )\\nmetaclass_registry.exceptions.DuplicateRegistryKeyError: plugin key 'fork_session' is already registered to agent_comms.native_fork.ForkSessionHelper; __main__.ForkSessionHelper cannot register under the same key. Give it its own key, or declare __replaces_registered__ = ForkSessionHelper in its class body if it is meant to take the key over.\",\"type\":\"failed\"}\n",
+      "argv": [
+        "--native-settings",
+        "{\"arguments\": [\"--offline\", \"--no-extensions\", \"--no-skills\", \"--no-context-files\", \"--no-prompt-templates\"], \"model\": \"openai-codex/gpt-6.1-sol\", \"thinking_level\": \"high\"}",
+        "--root",
+        "/home/ts/.cache/agent-scratch/core-native-runtime/p62-cb6ea3-20261016T1843/wire",
+        "fork",
+        "--name",
+        "runtime-fork-default",
+        "--parent",
+        "project",
+        "--project",
+        "/home/ts/.cache/agent-scratch/core-native-runtime/p62-cb6ea3-20261016T1843/project"
+      ]
+    }
+  ],
+  "failure": "AssertionError('{\"error\":\"runtime_fork ended ExitedOutcome(code=1); stderr: <frozen runpy>:128: RuntimeWarning: \\'agent_comms.native_fork\\' found in sys.modules after import of package \\'agent_comms\\', but prior to execution of \\'agent_comms.native_fork\\'; this may result in unpredictable behaviour\\\\nTraceback (most recent call last):\\\\n  File \\\\\"<frozen runpy>\\\\\", line 198, in _run_module_as_main\\\\n  File \\\\\"<frozen runpy>\\\\\", line 88, in _run_code\\\\n  File \\\\\"/home/ts/wt/core-native-runtime/.native-acceptance/lib/python3.14/site-packages/agent_comms/native_fork.py\\\\\", line 29, in <module>\\\\n    class ForkSessionHelper(PiHelper):\\\\n    ...<32 lines>...\\\\n            )\\\\n  File \\\\\"/home/ts/wt/core-native-runtime/.native-acceptance/lib/python3.14/site-packages/agent_comms/declared_family.py\\\\\", line 70, in __new__\\\\n    cls: Any = super().__new__(mcs, name, bases, namespace, registry_config=config)\\\\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\\\n  File \\\\\"/home/ts/wt/core-goal-retry/.venv/lib/python3.14/site-packages/metaclass_registry/core.py\\\\\", line 806, in __new__\\\\n    superseded = mcs._register_class(\\\\n        new_class,\\\\n    ...<2 lines>...\\\\n        replaces=replaces,\\\\n    )\\\\n  File \\\\\"/home/ts/wt/core-goal-retry/.venv/lib/python3.14/site-packages/metaclass_registry/core.py\\\\\", line 1034, in _register_class\\\\n    superseded: type | None = register_once(\\\\n                              ~~~~~~~~~~~~~^\\\\n        config.registry_dict,\\\\n        ^^^^^^^^^^^^^^^^^^^^^\\\\n    ...<3 lines>...\\\\n        replaces=replaces,\\\\n        ^^^^^^^^^^^^^^^^^^\\\\n    )\\\\n    ^\\\\n  File \\\\\"/home/ts/wt/core-goal-retry/.venv/lib/python3.14/site-packages/metaclass_registry/core.py\\\\\", line 168, in register_once\\\\n    raise DuplicateRegistryKeyError(\\\\n    ...<4 lines>...\\\\n    )\\\\nmetaclass_registry.exceptions.DuplicateRegistryKeyError: plugin key \\'fork_session\\' is already registered to agent_comms.native_fork.ForkSessionHelper; __main__.ForkSessionHelper cannot register under the same key. Give it its own key, or declare __replaces_registered__ = ForkSessionHelper in its class body if it is meant to take the key over.\",\"type\":\"failed\"}\\n')",
+  "children_retired": true,
+  "cleanup_errors": [],
+  "parent_unchanged": true
+}
+Traceback (most recent call last):
+  File "/home/ts/wt/core-native-runtime/.artifacts/native-installed-journey.py", line 240, in <module>
+    asyncio.run(main(args.output, args.package, args.wheel, args.core_revision))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-native-runtime/.artifacts/native-installed-journey.py", line 161, in main
+    assert code == 0, text
+           ^^^^^^^^^
+AssertionError: {"error":"runtime_fork ended ExitedOutcome(code=1); stderr: <frozen runpy>:128: RuntimeWarning: 'agent_comms.native_fork' found in sys.modules after import of package 'agent_comms', but prior to execution of 'agent_comms.native_fork'; this may result in unpredictable behaviour\nTraceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"/home/ts/wt/core-native-runtime/.native-acceptance/lib/python3.14/site-packages/agent_comms/native_fork.py\", line 29, in <module>\n    class ForkSessionHelper(PiHelper):\n    ...<32 lines>...\n            )\n  File \"/home/ts/wt/core-native-runtime/.native-acceptance/lib/python3.14/site-packages/agent_comms/declared_family.py\", line 70, in __new__\n    cls: Any = super().__new__(mcs, name, bases, namespace, registry_config=config)\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ts/wt/core-goal-retry/.venv/lib/python3.14/site-packages/metaclass_registry/core.py\", line 806, in __new__\n    superseded = mcs._register_class(\n        new_class,\n    ...<2 lines>...\n        replaces=replaces,\n    )\n  File \"/home/ts/wt/core-goal-retry/.venv/lib/python3.14/site-packages/metaclass_registry/core.py\", line 1034, in _register_class\n    superseded: type | None = register_once(\n                              ~~~~~~~~~~~~~^\n        config.registry_dict,\n        ^^^^^^^^^^^^^^^^^^^^^\n    ...<3 lines>...\n        replaces=replaces,\n        ^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/home/ts/wt/core-goal-retry/.venv/lib/python3.14/site-packages/metaclass_registry/core.py\", line 168, in register_once\n    raise DuplicateRegistryKeyError(\n    ...<4 lines>...\n    )\nmetaclass_registry.exceptions.DuplicateRegistryKeyError: plugin key 'fork_session' is already registered to agent_comms.native_fork.ForkSessionHelper; __main__.ForkSessionHelper cannot register under the same key. Give it its own key, or declare __replaces_registered__ = ForkSessionHelper in its class body if it is meant to take the key over.","type":"failed"}
+

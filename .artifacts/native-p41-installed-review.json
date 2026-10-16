@@ -1,0 +1,16 @@
+{
+  "run": "/home/ts/.cache/agent-scratch/core-native-runtime/p62-cb6ea3-20261016T1843",
+  "core_revision": "cb6ea3eb6",
+  "installed_files_matched": 373,
+  "checks": {
+    "triage_empty": true,
+    "full_coding_catalog": true,
+    "required_core_tools": true,
+    "read_bash_succeeded": true,
+    "one_effect": true,
+    "nonempty_reply": true,
+    "retired": true
+  },
+  "p41_verified": true,
+  "remaining": "Fork helper duplicate class registration; no fork rows or first replies yet. Original run/result retained unchanged."
+}

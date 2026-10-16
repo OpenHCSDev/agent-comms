@@ -15,7 +15,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import PublicationReceipts
 from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
+from agent_comms.native_session_fork import ForkSessionHelper, ForkSessionRequest
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
 from agent_comms.native_package import verify_native_package
 from agent_comms.native_runtime_input import NativeRuntimeInput

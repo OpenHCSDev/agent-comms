@@ -1,6 +1,7 @@
 """Run the existing continuous context case without source/conftest substitutes."""
 
 from agent_comms.native_arguments import NativeArguments
+from agent_comms.native_session_fork import ForkSessionHelper, ForkSessionRequest
 from agent_comms.runtime_socket import RuntimeSocket
 
 import argparse
@@ -183,7 +184,6 @@ async def run_configured(options):
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
     from agent_comms.field_codec import FieldCodec
-    from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
     from agent_comms.native_entries import NativeEntry
     from agent_comms.native_package import verify_native_package
     from agent_comms.threads import Thread

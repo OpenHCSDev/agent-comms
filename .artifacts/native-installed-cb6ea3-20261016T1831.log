@@ -1,0 +1,32 @@
+{
+  "complete": false,
+  "phase": "triage-full",
+  "core_revision": "cb6ea3eb6",
+  "core_module": "/home/ts/wt/core-native-runtime/.native-acceptance/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "wheel_sha256": "535b0bd6b8ec49d491a714d929622b611917f1a5ae8c55a07aea1106c0ad7a4d",
+  "installed_files_matched": 373,
+  "runtime": "/home/ts/wt/core-native-runtime/.native-acceptance/bin/python",
+  "package": "/home/ts/wt/core-envelope-895/.native-login-acceptance/node_modules/@earendil-works/pi-coding-agent",
+  "tool_supply": [],
+  "fork_rows": [],
+  "failure": "AssertionError('No reply turn scheduled')",
+  "children_retired": true,
+  "cleanup_errors": []
+}
+Traceback (most recent call last):
+  File "/home/ts/wt/core-native-runtime/.artifacts/native-installed-journey.py", line 237, in <module>
+    asyncio.run(main(args.output, args.package, args.wheel, args.core_revision))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-native-runtime/.artifacts/native-installed-journey.py", line 133, in main
+    assert task is not None, 'No reply turn scheduled'
+           ^^^^^^^^^^^^^^^^
+AssertionError: No reply turn scheduled

@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .native_project import ManagedNativeProject
-from .native_fork import fork_native_session
+from .native_session_fork import RuntimeForkHelper
 from .agent_backend import (
     AgentBackend,
     Compacts,
@@ -337,7 +337,7 @@ class PiNativeBackend(
     @classmethod
     async def fork(cls, parent: Thread, comms: Comms) -> PiSessionFile:
         """The selected child installation copies the saved session with its SDK."""
-        identity = await fork_native_session(parent.require_saved_session(), parent.worktree, comms)
+        identity = await RuntimeForkHelper.fork(parent, comms)
         return PiSessionFile(identity.session_file)
 
     # -- RecoversAfterCrash -----------------------------------------------
