@@ -1,9 +1,11 @@
 """Stopped-thread configuration uses the session's model-specific catalog."""
 
+import os
+
 import pytest
 
 from agent_comms.cli_commands import ConfigureCliCommand
-from agent_comms.config_options import ThinkingLevelConfigOption
+from agent_comms.config_options import InvalidConfigChoice, ThinkingLevelConfigOption
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.pi_commands import GetAvailableModels, GetAvailableThinkingLevels
@@ -102,24 +104,20 @@ def test_native_arguments_configured_uses_typed_selection():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("overridden", [False, True])
-async def test_session_description_and_change_share_refusal(tmp_path, monkeypatch, overridden):
-    import os
-    from agent_comms.native_errors import NativePiUnavailable
-    from acp import RequestError
+async def test_session_description_and_change_share_refusal(comms, tmp_path, monkeypatch, overridden):
 
     if overridden:
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "fixture/plain")
     else:
         monkeypatch.delenv("AGENT_COMMS_AGENT_MODELS", raising=False)
     thread = Thread(name="worker", tags=frozenset(), worktree=str(tmp_path), model="fixture/plain", thinking_level="high")
-    option = ThinkingLevelConfigOption("unused", NativeArguments.parse([]), RestartEnvironment.inherit(os.environ))
+    option = ThinkingLevelConfigOption(comms, RestartEnvironment.inherit(os.environ))
 
     async def discover(self, binary, arguments):
         return ThinkingLevelsData(levels=(OffThinkingLevel,))
 
     monkeypatch.setattr(GetAvailableThinkingLevels, "discover", discover)
-    with pytest.raises(NativePiUnavailable, match="choose one of: off"):
+    with pytest.raises(InvalidConfigChoice, match="choose one of: off"):
         await option.describe(thread)
-    with pytest.raises(RequestError) as refused:
+    with pytest.raises(InvalidConfigChoice, match="choose one of: off"):
         await option.change(None, thread, "high")
-    assert "choose one of: off" in refused.value.data["reason"]

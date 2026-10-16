@@ -5,7 +5,6 @@ from dataclasses import replace
 
 import pytest
 from acp.agent.router import build_agent_router
-from acp.schema import SessionConfigSelectOption
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp import CommsClient
@@ -15,6 +14,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.config_options import (
     CatalogConfigOption,
+    ConfigChoice,
     ConfigOption,
     ModelConfigOption,
     ThinkingLevelConfigOption,
@@ -33,13 +33,13 @@ from agent_comms.launch_runtime import LaunchRuntime
 async def owner(tmp_path, monkeypatch):
     async def models(*args):
         return [
-            SessionConfigSelectOption(value="test/one", name="One"),
-            SessionConfigSelectOption(value="test/two", name="Two"),
+            ConfigChoice(value="test/one", name="One"),
+            ConfigChoice(value="test/two", name="Two"),
         ]
 
     async def levels(*args):
         return [
-            SessionConfigSelectOption(value=v, name=v.title()) for v in ("low", "medium", "high")
+            ConfigChoice(value=v, name=v.title()) for v in ("low", "medium", "high")
         ]
 
     monkeypatch.setattr(ModelConfigOption, "discover", models)
@@ -159,7 +159,7 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
 
         async def discover(self, thread):
             return [
-                SessionConfigSelectOption(value=value, name=value.title())
+                ConfigChoice(value=value, name=value.title())
                 for value in ("medium", "high")
             ]
 

@@ -462,7 +462,8 @@ class SessionConfigOptions(ConfigOptions):
     @staticmethod
     def advertisement(description: CatalogDescription) -> SessionConfigOptionSelect:
         declaration = description.declaration
-        choices = [SessionConfigSelectOption(value=choice.value, name=choice.label)
+        choices = [SessionConfigSelectOption(value=choice.value, name=choice.name,
+                                             description=choice.description)
                    for choice in description.choices]
         selected = description.current_value
         if selected is None:

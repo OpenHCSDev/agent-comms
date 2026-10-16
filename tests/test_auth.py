@@ -1,16 +1,13 @@
 import pytest
-from acp.schema import SessionConfigSelectOption
 
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
 
-from agent_comms.config_options import InvalidConfigChoice, ModelConfigOption
+from agent_comms.config_options import ConfigChoice, InvalidConfigChoice, ModelConfigOption
+from agent_comms.session_lifecycle import SessionConfigOptions
 from agent_comms.login import run_login
-from agent_comms.native_arguments import NativeArguments
-from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.native_settings import NativeThreadDefaults
-from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import Comms
@@ -36,21 +33,22 @@ async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_m
         return []
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)
+    comms = Comms(resolve_comms_route(tmp_path), runtime=LaunchRuntime.running())
     option = ModelConfigOption(
-        "pi", NativeArguments.parse(()),
-        RestartEnvironment(native_config=tmp_path, agent_directory=tmp_path),
+        comms, RestartEnvironment(native_config=tmp_path, agent_directory=tmp_path),
     )
     thread = Thread(name="setup", tags=frozenset(), worktree=str(tmp_path))
-    advertised = await option.describe(thread)
+    description = await option.describe(thread)
+    assert description.current_value is None
+    assert description.choices == ()
+    advertised = SessionConfigOptions.advertisement(description)
     assert advertised.current_value == ""
     assert [choice.value for choice in advertised.options] == [""]
     with pytest.raises(InvalidConfigChoice):
         await option.validate(thread, "")
 
-    from dataclasses import replace
-
-    selected = replace(thread, model="saved/model")
-    with pytest.raises(NativePiUnavailable, match="saved/model"):
+    selected = dataclasses.replace(thread, model="saved/model")
+    with pytest.raises(InvalidConfigChoice, match="saved/model"):
         await option.describe(selected)
     assert selected.model == "saved/model"
 
@@ -84,9 +82,9 @@ async def test_changed_auth_refreshes_catalogue_without_changing_selected_model(
     monkeypatch.setattr("agent_comms.launch_runtime.RestartEnvironment.auth_revision", lambda self: (revision[0], 0))
 
     async def discover(*args):
-        models = [SessionConfigSelectOption(value="test/base", name="Base")]
+        models = [ConfigChoice(value="test/base", name="Base")]
         if revision[0]:
-            models.append(SessionConfigSelectOption(value="openai-codex/test", name="Subscription"))
+            models.append(ConfigChoice(value="openai-codex/test", name="Subscription"))
         return models
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)

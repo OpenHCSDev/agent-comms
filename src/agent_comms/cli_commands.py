@@ -182,7 +182,7 @@ class CatalogTargetField(TargetField):
 
     @property
     def choices(self) -> tuple[tuple[str, str], ...]:
-        return tuple((choice.label, choice.value) for choice in self.options)
+        return tuple((choice.name, choice.value) for choice in self.options)
 
 
 @dataclass(frozen=True)
