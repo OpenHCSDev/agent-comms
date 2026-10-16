@@ -21,7 +21,6 @@ from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goals import Goal
-from .recovery_projection import _preflight
 from .thread_identity import AdmissionIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnIdentity
 from .thread_status import ThreadStatus
 from .threads import Thread
@@ -215,7 +214,7 @@ def read_failed_turn_projection(
         return unavailable(str(error))
     if type(admission) is not int or admission <= 0:
         return unavailable("owner_or_goal_changed")
-    if failure := _preflight(path):
+    if failure := CoordinationStore.observation_failure(path):
         return unavailable(failure)
     try:
         with CoordinationStore.observing(path) as conn:

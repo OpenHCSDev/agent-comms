@@ -21,124 +21,26 @@ import pytest
 def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_path):  # noqa: F811
     import sqlite3
     from agent_comms.coordination_errors import CoordinationReadUnavailable
-    from agent_comms.recovery_gateway import _snapshot
-    from agent_comms.recovery_projection import (
-        UnavailableRecoveryProjection, read_recovery_projection,
-    )
 
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
-    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     original = NotificationAssignment.read(root, (initial,)).resolve(root)
     wire_before = comms.bus.log.path.read_bytes()
     assert original
     with Coordination(str(database)) as writer:
         with writer.session.transaction():
-            for read in (
-                lambda: NotificationAssignment.read(root, (initial,)),
-                lambda: _snapshot(root, database, "beta"),
-            ):
-                with pytest.raises(CoordinationReadUnavailable) as unavailable:
-                    read()
-                assert unavailable.value.__cause__.sqlite_errorcode & 0xFF in (
-                    sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED,
-                )
+            with pytest.raises(CoordinationReadUnavailable) as unavailable:
+                NotificationAssignment.read(root, (initial,))
+            assert unavailable.value.__cause__.sqlite_errorcode & 0xFF in (
+                sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED,
+            )
             with pytest.raises(CoordinationReadUnavailable):
                 with TranscriptRead.publication_source(root):
                     pytest.fail("Busy acquisition reached the native schema decoder")
-            assert read_recovery_projection(
-                database, owner_lookup=lookup, owner_thread="beta"
-            ) == UnavailableRecoveryProjection("busy")
     assert NotificationAssignment.read(root, (initial,)).resolve(root) == original
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
     assert comms.bus.log.path.read_bytes() == wire_before
-
-
-def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypatch):  # noqa: F811
-    import json
-    import threading
-    import time
-    from contextlib import contextmanager
-    from agent_comms.coordination_database import CoordinationStore
-    from agent_comms.recovery_gateway import _snapshot
-    from agent_comms.recovery_projection import RecoverySelection
-    from agent_comms.field_codec import FieldCodec
-
-    root, _root_id, comms, _initial, _people = _root(tmp_path)
-    database = root / "coordination.sqlite3"
-    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
-    commit_requested = threading.Event()
-    committed = threading.Event()
-    errors, statements = [], []
-    project = RecoverySelection.project
-    observe = CoordinationStore.observing
-    encode = FieldCodec.encode
-    captured, timings = [], {}
-
-    # Instrument the original resource and callback, without substituting SQL,
-    # schema, identities, projection results, or transaction ownership.
-    @contextmanager
-    def traced_read(*args, **kwargs):
-        with observe(*args, **kwargs) as db:
-            timings["read_started"] = time.monotonic()
-            db.set_trace_callback(statements.append)
-            yield db
-        timings["read_released"] = time.monotonic()
-
-    def writer():
-        try:
-            with Coordination(str(database)) as store:
-                store.session._connection.set_trace_callback(
-                    lambda sql: commit_requested.set() if sql == "COMMIT" else None
-                )
-                store.participants.advance_generation(
-                    lookup, "renamed", expected_generation=1
-                )
-            timings["writer_committed"] = time.monotonic()
-            committed.set()
-        except BaseException as error:
-            errors.append(error)
-
-    changing = threading.Thread(target=writer)
-
-    def during_commit(db, owner_lookup, owner_thread):
-        changing.start()
-        assert commit_requested.wait(2), errors
-        assert not committed.is_set()
-        result = project(db, owner_lookup, owner_thread)
-        captured.append(result)
-        return result
-
-    def after_release(value, annotation=None):
-        if captured and value is captured[0]:
-            # The real writer must finish while the captured projection still
-            # names beta. Encoding cannot need the old SQLite read lock.
-            assert "read_released" in timings
-            assert committed.wait(2)
-            timings["encoding_started"] = time.monotonic()
-        return encode(value, annotation)
-
-    monkeypatch.setattr(CoordinationStore, "observing", staticmethod(traced_read))
-    monkeypatch.setattr(RecoverySelection, "project", staticmethod(during_commit))
-    monkeypatch.setattr(FieldCodec, "encode", staticmethod(after_release))
-    try:
-        original = json.loads(_snapshot(root, database, "beta"))
-    finally:
-        changing.join(3)
-    assert not changing.is_alive() and not errors
-    assert committed.is_set()
-    assert original["availability"] == "available" and original["owner"] == "beta"
-    assert sum("PRAGMA user_version" in sql for sql in statements) == 1
-    assert sum("schema_meta" in sql and sql.startswith("SELECT") for sql in statements) == 1
-    print("Original private recovery read:", json.dumps({
-        "snapshot_seconds": timings["read_released"] - timings["read_started"],
-        "encoding_started_after_writer_commit": committed.is_set(),
-        "writer_release_seconds": timings["writer_committed"] - timings["read_released"],
-    }))
-    monkeypatch.setattr(RecoverySelection, "project", project)
-    current = json.loads(_snapshot(root, database, "renamed"))
-    assert current["availability"] == "available" and current["owner"] == "renamed"
 
 
 @pytest.mark.parametrize('direct', [False, True])

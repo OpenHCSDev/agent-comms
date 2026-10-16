@@ -6,7 +6,7 @@ import pytest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_source_page import AddressedPage
 
-from agent_comms.cohort_foreground import _accept_visible_deliveries
+from agent_comms.acp import _accept_visible_deliveries
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_response import prepare_fenced_response, publish_fenced_response
 from agent_comms.private_bus_checkpoint import addressed_source_pointers_unlocked

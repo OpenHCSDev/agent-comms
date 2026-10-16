@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import acp, cohort_foreground, coordinated_runtime, native_pi
+from agent_comms import acp, coordinated_runtime, native_pi, private_nk_entrypoint
 from agent_comms import agent_events as events
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinator import Coordination
@@ -229,7 +229,7 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
 
     monkeypatch.setattr(acp, "_accept_visible_deliveries", accepted)
     monkeypatch.setattr(NativeSourceCursor, "advance", covered)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", no_package)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", no_package)
     monkeypatch.setattr(native_pi, "_trusted_package", no_package)
     assert await agent.inputs.drain_inbox("beta") == 0
     # Advancing the durable cursor changes the first before/after observation.
@@ -524,7 +524,7 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
     second = comms.messaging.send_initial_cohort("sender", "beta", "new pending input")
     assert first.seq < second.seq
     with Coordination(comms.root / "coordination.sqlite3") as store:
-        await cohort_foreground._accept_visible_deliveries(
+        await acp._accept_visible_deliveries(
             comms.bus, _root_id, store.session.path, RecordedThreadIncarnation("fixture", beta.created_at).lookup, 0,
             owner_name=beta.name,
         )
@@ -566,13 +566,13 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
     root, root_id, comms, original, people = _root(tmp_path, direct=True)
     lookup = RecordedThreadIncarnation("fixture", people[2].created_at).lookup
     accepted = []
-    accept = cohort_foreground.accept_delivery_cohort
+    accept = acp.accept_delivery_cohort
 
     def observed(bus, root_id, sequence, store):
         accepted.append(sequence)
         return accept(bus, root_id, sequence, store)
 
-    monkeypatch.setattr(cohort_foreground, "accept_delivery_cohort", observed)
+    monkeypatch.setattr(acp, "accept_delivery_cohort", observed)
     statements = []
     original_init = Coordination.__init__
 
@@ -584,7 +584,7 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
     monkeypatch.setattr(Coordination, "__init__", traced_init)
     with Coordination(root / "coordination.sqlite3") as store:
         assert (
-            await cohort_foreground._accept_visible_deliveries(
+            await acp._accept_visible_deliveries(
                 comms.bus, root_id, store.session.path, lookup, 0, owner_name="beta"
             )
             == original.message.seq
@@ -592,12 +592,12 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
         assert not accepted
         assert not any("BEGIN IMMEDIATE" in sql for sql in statements)
         message = comms.messaging.send_initial_cohort("sender", "beta", "unaccepted source")
-        await cohort_foreground._accept_visible_deliveries(
+        await acp._accept_visible_deliveries(
             comms.bus, root_id, store.session.path, lookup, 0, owner_name="beta"
         )
         assert accepted == [message.seq]
         statements.clear()
-        await cohort_foreground._accept_visible_deliveries(
+        await acp._accept_visible_deliveries(
             comms.bus, root_id, store.session.path, lookup, 0, owner_name="beta"
         )
         assert accepted == [message.seq]

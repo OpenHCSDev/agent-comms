@@ -19,8 +19,7 @@ def launcher(tmp_path, monkeypatch, route):
     monkeypatch.setattr(native_pi.sys, "executable", str(executable.with_name("python")))
     monkeypatch.setenv("PATH", str(executable.parent))
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    from agent_comms import cohort_foreground
-    monkeypatch.setattr(cohort_foreground, "_preflight", lambda root, root_id, package, enabled: native_pi._trusted_package(package))
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
     return executable
 
 
@@ -49,12 +48,7 @@ def test_running_owner_keeps_its_start_launcher_after_runtime_relink(tmp_path, m
     current.symlink_to(old)
     route = PrivateNkLaunch(tmp_path, "f" * 32, package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    from agent_comms import cohort_foreground
-    monkeypatch.setattr(
-        cohort_foreground,
-        "_preflight",
-        lambda root, root_id, selected, enabled: native_pi._trusted_package(selected),
-    )
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
     monkeypatch.setattr(native_pi.sys, "executable", str(new.with_name("python")))
     from agent_comms.native_arguments import NativeArguments
     monkeypatch.setattr(
@@ -90,8 +84,7 @@ def test_direct_pinned_cli_uses_same_package_authority(tmp_path, monkeypatch):
     cli.parent.mkdir(parents=True)
     cli.touch()
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: PrivateNkLaunch(tmp_path, "f" * 32, package, None)))
-    from agent_comms import cohort_foreground
-    monkeypatch.setattr(cohort_foreground, "_preflight", lambda root, root_id, selected, enabled: native_pi._trusted_package(selected))
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
     verified = []
     monkeypatch.setattr(native_pi, "_trusted_package", verified.append)
     assert NativePiRpcLaunch.package_for_command(str(cli), LaunchRuntime.running()) == package

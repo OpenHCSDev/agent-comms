@@ -13,9 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.coordination_errors import PublicationActivationBlocked
+from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
 from . import launch_runtime
+from .native_pi import _private_session_dir, _trusted_package
 from .wire_metadata import WireRootIdText
 
 if TYPE_CHECKING:
@@ -75,10 +76,25 @@ class PrivateNkLaunch:
         return cls.from_environment(root, environment)
 
     def validate(self) -> Path:
-        """Recheck this authority before a new owner process can be reserved."""
-        from .cohort_foreground import _preflight
+        """Recheck this authority before a new owner process can be reserved.
 
-        return _preflight(self.validated_root, self.wire_root_id, self.native_package, True)
+        Creates no root, registry, SQLite database or provider opportunity when
+        the owner-only directory or the reviewed copied Pi is absent.
+        """
+        from .comms import Comms
+        from .message_bus import MessageBus
+
+        _private_session_dir(self.validated_root)
+        cli = _trusted_package(self.native_package)
+        comms = Comms(self.validated_root)
+        bus = MessageBus(
+            self.validated_root / "bus.jsonl", comms.registry, private_response_writes=True
+        )
+        with bus.log.certified_read() as source:
+            marker = source.marker
+        if marker.root_id != self.wire_root_id:
+            raise IdentityConflict("private initial wire root changed")
+        return cli
 
     def apply_environment(self, environment: dict[str, str]) -> None:
         """Derive the child handoff solely from this retained launch authority."""

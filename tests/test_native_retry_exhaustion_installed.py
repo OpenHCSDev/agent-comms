@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from acp import RequestError
 
-from agent_comms import cohort_foreground, native_pi
+from agent_comms import native_pi
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import (
     NativeMessageFailureSource,
@@ -83,8 +83,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     route = PrivateNkLaunch(Path(agent._comms.root), agent._configured_root_id(), package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(cohort_foreground, "_preflight",
-                        lambda root, root_id, pkg, enabled: native_pi._trusted_package(pkg))
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
     updates = []
 
     class Client:
