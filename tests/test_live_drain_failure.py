@@ -59,7 +59,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         failed = owner_view(comms)
         diagnostic = failed.activity.readiness.source_diagnostic()
         assert isinstance(diagnostic, UnavailableDrainDiagnostic)
-        assert failed.presentation.attention and not failed.presentation.busy
+        assert failed.presentation.status.attention and not failed.presentation.status.busy
         assert "Inbox unavailable" in failed.presentation.summary
         assert diagnostic.error_type in failed.presentation.summary
         assert "Ready" not in failed.presentation.summary
@@ -86,17 +86,17 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         comms.agents.activity.emit(
             replace(failed.activity.source_event(), timestamp=time.time() - 1000)
         )
-        assert owner_view(comms).presentation.attention
+        assert owner_view(comms).presentation.status.attention
         lease = comms.agents.begin_turn("beta", "ordinary-unrelated-turn").turn_lease
         comms.agents.finish_turn(lease)
-        assert owner_view(comms).presentation.attention
+        assert owner_view(comms).presentation.status.attention
         # An explicit operator restores the actual current schema; readers do no repair.
         os.replace(saved, path)
         await until(
             lambda: owner_view(comms).activity.readiness.source_diagnostic() is None
         )
         assert owner_view(comms).presentation.summary == "Ready"
-        assert not owner_view(comms).presentation.attention
+        assert not owner_view(comms).presentation.status.attention
         recovered = log.read_bytes()
         await asyncio.sleep(1.3)
         assert log.read_bytes() == recovered
@@ -120,7 +120,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
         current = owner_view(comms)
         assert current.activity.readiness.source_diagnostic() is None
         assert current.thread.executing
-        assert current.presentation.busy and not current.presentation.attention
+        assert current.presentation.status.busy and not current.presentation.status.attention
         activity = (comms.root / "activity.jsonl").read_bytes()
         async with drain_failures(comms, "beta", owner, retry):
             await agent.inputs.drain_inbox("beta")
@@ -145,7 +145,7 @@ async def test_restarted_observer_recovers_retained_diagnostic(tmp_path, kind):
     try:
         agent.inputs.ensure_live_drain("beta")
         await until(lambda: owner_view(comms).activity.readiness.source_diagnostic() is None)
-        assert not owner_view(comms).presentation.attention
+        assert not owner_view(comms).presentation.status.attention
     finally:
         await agent.shutdown()
 
@@ -165,7 +165,7 @@ async def test_settled_observer_recovers_another_path_failure(tmp_path):
         # must not make a settled observer skip the actual recovery read.
         agent.inputs.wake_observer("beta")
         await until(lambda: owner_view(comms).activity.readiness.source_diagnostic() is None)
-        assert not owner_view(comms).presentation.attention
+        assert not owner_view(comms).presentation.status.attention
     finally:
         await agent.shutdown()
 

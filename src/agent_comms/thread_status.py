@@ -92,7 +92,7 @@ class ActiveThreadPresence:
         return owner_pid <= 0
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
-        return activity.presentation(title)
+        return activity.ordinary_presentation(title)
 
 
 class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):

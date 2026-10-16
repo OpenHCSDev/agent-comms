@@ -215,7 +215,8 @@ class ActivityData:
         """Project current status without changing this activity's provenance."""
         return replace(self, state=state, detail=self.format_detail(detail))
 
-    def presentation(self, title: str) -> ThreadPresentation:
+    def ordinary_presentation(self, title: str) -> ThreadPresentation:
+        """Activity alone; the view joins readiness after selecting its source."""
         return self.state.presentation(title, self.detail)
 
     def __post_init__(self) -> None:
@@ -265,6 +266,10 @@ class ObservedActivity(ActivityData):
         """Write through the original event boundary; never persist a second state."""
         return Activity(self.thread, self.state, self.detail, self.timestamp,
                         self.readiness.source_diagnostic())
+
+    def presentation(self, title: str) -> ThreadPresentation:
+        """An acquired activity can also be presented independently of a thread view."""
+        return self.readiness.presentation(self.ordinary_presentation(title))
 
 
 @dataclass(frozen=True, slots=True)
