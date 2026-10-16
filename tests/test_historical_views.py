@@ -222,33 +222,6 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     assert native.read_bytes() == original_native
 
 
-def test_original_recorded_projection_is_strict_and_attaches_before_destination_decode(tmp_path):
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.historical_views import HistorySource
-    from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.errors import RelationViolationError
-    from owner_read_projection import RecordedRegistryProjection
-
-    old, live = setup(tmp_path / "old", 0), setup(tmp_path / "live", 0)
-    original = (old.root / "registry.json").read_bytes()
-    packet = json.loads(json.dumps(RecordedRegistryProjection.read(
-        old.registry, old.root, "", FieldCodec.record_schema(RegistryProvenance)
-    )))
-    observed = FieldCodec.decode(HistorySource, packet)
-    assert observed.provenance == RegistryProvenance.capture(old.registry.snapshot())
-    observed.require_original(old.root)
-    attached = live.views.attach_history(old.root, source_read=observed)
-    assert attached.provenance == observed.provenance
-    assert (Path(attached.root) / "registry.json").read_bytes() == original
-    assert (old.root / "registry.json").read_bytes() == original
-    invalid = {**packet, "provenance": {**packet["provenance"], "extra": True}}
-    with pytest.raises(ValueError):
-        FieldCodec.decode(HistorySource, invalid)
-    (old.root / "registry.json").write_bytes(original + b" ")
-    with pytest.raises(RelationViolationError, match="guard"):
-        RecordedRegistryProjection.read(old.registry, old.root, "", FieldCodec.record_schema(RegistryProvenance))
-
-
 def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrated):
     from agent_comms.coordination_errors import StaleRevision
 

@@ -29,6 +29,22 @@ class OwnedWireRecord:
     nested: tuple[OwnedWireText, ...]
 
 
+def test_declared_tool_json_and_optional_containers_do_not_infer_dictionary_keys():
+    from agent_comms.agent_events import ToolStart
+    from typing import Any
+
+    event = ToolStart('one', 'functions.edit', args={'edits': [
+        {'path': 'owned', 'oldText': 'a', 'newText': 'b'},
+        {'path': 'also-owned', 'oldText': 'c', 'newText': 'd'},
+    ]})
+    assert FieldCodec.decode(ToolStart, FieldCodec.encode(event)) == event
+    assert FieldCodec.decode(Any, {'nested': [{'valid': True}]}) == {'nested': [{'valid': True}]}
+    with pytest.raises(TypeError, match='JSON value'):
+        FieldCodec.decode(Any, {1: 'JSON object keys must be text'})
+    with pytest.raises(TypeError, match='declared dict'):
+        FieldCodec.encode({'still': 'undeclared'})
+
+
 def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter():
     value = OwnedWireRecord(OwnedWireText("retained"), (OwnedWireText("nested"),))
     encoded = {"value": "retained", "nested": ["nested"]}

@@ -87,8 +87,12 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
         **source.provenance.threads,
         "reader": replace(source.provenance.require("reader"), created_at=111.0),
     })
+    from agent_comms.read_ledger import ReadSource
+    from agent_comms.wire_log import WireLog
+    with WireLog(Path(source.root) / 'bus.jsonl').certified_read() as captured:
+        identity = ReadSource.from_revision(captured.witness.revision)
     assert ledger.historical_displayed_recipient(messages[1], painted.recipient_identity,
-                                                newer_namespace, readers=ledger.observations(newer_namespace, document=document)) == ()
+        newer_namespace, readers=ledger.observations(newer_namespace, identity, document=document)) == ()
 
 
 def test_response_evidence_rejects_mixed_sql_columns():

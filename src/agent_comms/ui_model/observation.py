@@ -380,16 +380,15 @@ class ObserveSidebar(InterestRequest):
     show_archived: bool
 
     def observation(self, service: ObservationService) -> SidebarReading:
-        return SidebarReading(self, service.bind_viewer(self.worktree))
+        return SidebarReading(self, service)
 
     def _answer(
-        self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str | Thread
+        self, revision: WireRevision, read: Callable[[], CoordinationSnapshot]
     ) -> SidebarObserved | SidebarUnreadable | None:
         from agent_comms.ui_model.sidebar import SidebarModel
 
         try:
-            snapshot = read(
-                subject, show_stopped=self.show_stopped, show_archived=self.show_archived)
+            snapshot = read()
             return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
         except RouteIndexRebuilding:
             raise  # A bounded preparation unit finished; runnable work remains.
@@ -398,48 +397,33 @@ class ObserveSidebar(InterestRequest):
         except StoredHistoryUnreadable as error:
             return SidebarUnreadable(revision, self, UnreadableHistory.capture(error))
 
-    def roster(
-        self, comms: Comms, revision: WireRevision, viewer: Thread
-    ) -> SidebarObserved | SidebarUnreadable | None:
-        return self._answer(revision, comms.views.presentation.roster, viewer.name)
-
-    def answer(
-        self, comms: Comms, revision: WireRevision, viewer: Thread
-    ) -> SidebarObserved | SidebarUnreadable | None:
-        return self._answer(revision, comms.views.viewer_snapshot, viewer)
-
-
 class SidebarReadStage(ABC):
     @abstractmethod
-    def read(
-        self, request: ObserveSidebar, comms: Comms, revision: WireRevision, viewer: Thread
-    ) -> SidebarObserved | SidebarUnreadable | None: ...
+    def read(self, request: ObserveSidebar, comms: Comms, viewer: Thread) -> CoordinationSnapshot: ...
 
     def next(self) -> SidebarReadStage:
         return self
 
 
 class RosterSidebarRead(SidebarReadStage):
-    def read(
-        self, request: ObserveSidebar, comms: Comms, revision: WireRevision, viewer: Thread
-    ) -> SidebarObserved | SidebarUnreadable | None:
-        return request.roster(comms, revision, viewer)
+    def read(self, request: ObserveSidebar, comms: Comms, viewer: Thread) -> CoordinationSnapshot:
+        return comms.views.presentation.roster(viewer.name, show_stopped=request.show_stopped,
+                                               show_archived=request.show_archived)
 
     def next(self) -> SidebarReadStage:
         return CompleteSidebarRead()
 
 
 class CompleteSidebarRead(SidebarReadStage):
-    def read(
-        self, request: ObserveSidebar, comms: Comms, revision: WireRevision, viewer: Thread
-    ) -> SidebarObserved | SidebarUnreadable | None:
-        return request.answer(comms, revision, viewer)
+    def read(self, request: ObserveSidebar, comms: Comms, viewer: Thread) -> CoordinationSnapshot:
+        return comms.views.viewer_snapshot(viewer, show_stopped=request.show_stopped,
+                                          show_archived=request.show_archived)
 
 
 class SidebarReading(Observation[ObserveSidebar]):
-    def __init__(self, request: ObserveSidebar, viewer: Thread):
+    def __init__(self, request: ObserveSidebar, service: ObservationService):
         super().__init__(request)
-        self.viewer = viewer
+        self.service = service
         self.stage: SidebarReadStage = RosterSidebarRead()
         self.sent: SidebarSent | None = None
         self.published: SidebarResult | None = None
@@ -468,7 +452,8 @@ class SidebarReading(Observation[ObserveSidebar]):
                 return
             stage = self.stage
             try:
-                result = stage.read(self.request, comms, revision, self.viewer)
+                result = self.request._answer(revision, lambda: stage.read(
+                    self.request, comms, self.service.bind_viewer(self.request.worktree)))
             except RouteIndexRebuilding:
                 # Continue bounded preparation, letting the service accept and
                 # serve foreground requests between every bounded unit.

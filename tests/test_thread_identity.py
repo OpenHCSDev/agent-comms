@@ -173,7 +173,7 @@ def test_admission_scope_cannot_decode_a_registry_process_owner(tmp_path):
         encoded = FieldCodec.encode(scope)
         assert FieldCodec.decode(type(scope), encoded) == scope
         encoded["admission"] = FieldCodec.encode(registry_owner)
-        with pytest.raises(ValueError):
+        with pytest.raises(TypeError, match='admission_generation'):
             FieldCodec.decode(type(scope), encoded)
     assert FieldCodec.decode(AdmissionIdentity, FieldCodec.encode(admission)) == admission
 

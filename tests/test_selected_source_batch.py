@@ -59,9 +59,9 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
 
         original_capture = SelectedParticipant.capture_sent_outcomes
 
-        def capture_before_turn(selected_comms, owner, sources, assignment_read):
+        def capture_before_turn(selected_comms, owner, sources, assignment_read, identity):
             assert not selected_comms.registry.require(owner.name).turn_state.busy
-            return original_capture(selected_comms, owner, sources, assignment_read)
+            return original_capture(selected_comms, owner, sources, assignment_read, identity)
 
         def forbid_full_presentation(*_args, **_kwargs):
             raise AssertionError("selected outcome capture prepared a full thread presentation")

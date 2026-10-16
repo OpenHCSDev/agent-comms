@@ -272,6 +272,15 @@ class FieldCodec(Sealed):
     def _types(declaration: type) -> dict[str, Any]:
         return get_type_hints(declaration, include_extras=True)
 
+    @classmethod
+    def _container_types(cls, annotation, container):
+        target, _ = cls._representation(annotation)
+        members = get_args(target) if get_origin(target) in (Union, types.UnionType) else (target,)
+        declarations = [get_args(member) for member in members if get_origin(member) is container]
+        if len(declarations) > 1:
+            raise TypeError('Container encoding requires one declared element/key type')
+        return declarations[0] if declarations else ()
+
     @overload
     @classmethod
     def encode(cls, value: DeclaredFamily) -> dict[str, Any]: ...
@@ -285,6 +294,8 @@ class FieldCodec(Sealed):
         representation = cls._value_representation(value, annotation)
         if representation is not None and value is not None:
             return representation.encode(value)
+        if annotation is Any:
+            return compile_decoder(Any).decode(value)
         # Exact JSON scalars cannot also be records, enums or family classes.
         # Representation selection above retains custom scalar declarations.
         kind = type(value)
@@ -326,17 +337,19 @@ class FieldCodec(Sealed):
         if isinstance(value, Enum):
             return cls.encode(value.value)
         if isinstance(value, frozenset):
-            args = get_args(annotation)
+            args = cls._container_types(annotation, frozenset)
             return [cls.encode(item, args[0] if args else None) for item in sorted(value)]
         if isinstance(value, (list, tuple)):
-            args = get_args(annotation)
-            return [cls.encode(item, (args[0] if args and (get_origin(annotation) is list or len(args) == 2 and args[1] is Ellipsis)
+            container = list if isinstance(value, list) else tuple
+            args = cls._container_types(annotation, container)
+            return [cls.encode(item, (args[0] if args and (container is list or len(args) == 2 and args[1] is Ellipsis)
                                       else args[index] if index < len(args) else None))
                     for index, item in enumerate(value)]
         if isinstance(value, dict):
-            if get_origin(annotation) is not dict or len(get_args(annotation)) != 2:
+            args = cls._container_types(annotation, dict)
+            if len(args) != 2:
                 raise TypeError('Dictionary encoding requires a declared dict[K, V] annotation')
-            key_type, value_type = get_args(annotation)
+            key_type, value_type = args
             return _DictDecoder.for_key(key_type).encode(value, key_type, value_type)
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
@@ -576,11 +589,17 @@ class _RepresentedDecoder(ValueDecoder):
             return representation.from_wire(data)
         return representation.decode(data)
 
-@dataclass(frozen=True, slots=True)
 class _AnyDecoder(ValueDecoder):
+    """A declared opaque JSON value, not permission to infer a dictionary key type."""
+    def __init__(self):
+        from pydantic import ConfigDict, JsonValue, TypeAdapter
+        self.json = TypeAdapter(JsonValue, config=ConfigDict(allow_inf_nan=False))
+
     def decode(self, data):
-        FieldCodec.encode(data)  # still require valid JSON data
-        return data
+        try:
+            return self.json.validate_python(data, strict=True)
+        except ValueError as error:
+            raise TypeError('Expected a JSON value with string keys and finite numbers') from error
 
 @dataclass(frozen=True, slots=True)
 class _FamilyNameDecoder(ValueDecoder):

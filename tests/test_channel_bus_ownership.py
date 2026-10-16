@@ -28,7 +28,8 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
         accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
     assert [assignment.recipient for assignment in accepted.assignments] == ["beta"]
     current = comms.views.message_notifications((message,))[(message.seq, message.message_id)]
-    assert [(row.recipient, row.state) for row in current] == [("beta", "Sent")]
+    assert [row.recipient for row in current] == ['beta']
+    assert current[0].state.startswith('Sent ')
     assert comms.registry.require("beta").active_turn is None
     assert original.message in comms.views.channel_history("#team")
     assert message in comms.views.channel_history("#team")

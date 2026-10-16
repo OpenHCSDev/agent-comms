@@ -147,13 +147,13 @@ class ReadDocument:
             key = key.resolved(snapshot)
             conversations = viewers.setdefault(key.viewer.name, {})
             conversations[key.conversation] = conversations.get(key.conversation, ReadProgress()).merge(state)
-        incarnations = {
-            identity.name: participant.incarnation
-            for participant in snapshot.threads.values()
-            for identity in participant.incarnation.recorded_names(snapshot)
-        }
-        return {viewer: ReadMask(conversations, incarnations)
-                for viewer, conversations in viewers.items()}
+        names = {}
+        for name, participant in snapshot.named_members():
+            names.setdefault(participant.incarnation, []).append(name)
+        return {viewer: ReadMask(conversations, {
+                    name: participant for conversation in conversations
+                    for participant in conversation.participants for name in names[participant]
+                }) for viewer, conversations in viewers.items()}
 
 
 class ReadSource(DeclaredFamily, affix='ReadSource'):
