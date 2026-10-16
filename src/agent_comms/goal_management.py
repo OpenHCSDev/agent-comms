@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
+from .goal_actions import GoalAction, RuntimeInvocable
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
 from .coordination_errors import StaleFence, PublicationUncertain
 from .errors import RelationViolationError
@@ -467,11 +467,7 @@ class Goals:
         actor: type = RuntimeInvocable,
     ) -> Goal | None:
         """Apply one declared command; external ingress owns decoding."""
-        with self.writing() as completed:
-            action.apply(
-                GoalActionContext(self, self.registry.require(name), actor, completed=completed)
-            )
-        return self.registry.require(name).goal
+        return action.apply(self, name, actor=actor)
 
     def block_goal_after_failed_turn(
         self,

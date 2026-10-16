@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from math import isfinite
+from pathlib import Path
 from typing import Literal
 from abc import abstractmethod
 
@@ -15,6 +16,16 @@ from .goal_states import ActiveGoal, GoalState
 from .goal_progress import GoalProgress, TextGoalProgress
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .message_reference import MessageReference
+
+
+@dataclass(frozen=True, slots=True)
+class GoalRef:
+    owner: ThreadIncarnation
+    goal_id: str
+
+    def __post_init__(self):
+        self.owner.require_recorded()
+        GoalRevision(self.goal_id, 0)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -126,7 +137,13 @@ class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
     def require_report(self, progress) -> None: ...
 
     @abstractmethod
-    def require_completion(self, progress) -> None: ...
+    def require_completion(self, progress, *, root: Path, goal: GoalRef) -> EventTime: ...
+
+    @abstractmethod
+    def require_current_order(self, root: Path, goal: GoalRef) -> None: ...
+
+    def require_order_source(self, problem_id: str) -> None:
+        raise ValueError("This goal is not a problem-bound order.")
 
     @abstractmethod
     def require_self_direction(self) -> None: ...
@@ -158,7 +175,10 @@ class SelfDirectedGoalAuthor(GoalAuthor):
     def require_report(self, progress) -> None:
         pass
 
-    def require_completion(self, progress) -> None:
+    def require_completion(self, progress, *, root, goal):
+        return UnrecordedEventTime()
+
+    def require_current_order(self, root, goal):
         pass
 
     def require_self_direction(self):
@@ -184,59 +204,6 @@ class SelfDirectedGoalAuthor(GoalAuthor):
     @property
     def instruction(self):
         return ""
-
-
-@dataclass(frozen=True)
-class CommandedGoalAuthor(GoalAuthor):
-    thread: ThreadIncarnation
-    issued_at: float
-    revisions: int = 0
-
-    def require_report(self, progress) -> None:
-        if progress is None:
-            raise ValueError("A commanded goal requires a complete structured report.")
-        progress.require_report()
-
-    def require_completion(self, progress) -> None:
-        self.require_report(progress)
-        progress.require_report().delivery.require_completion()
-
-    def require_self_direction(self):
-        raise ValueError("Use an order from the original commander to revise this goal.")
-
-    def has_report(self, recorded):
-        return recorded.since(self.issued_at)
-
-    @property
-    def revision_count(self):
-        return self.revisions
-
-    def notification_targets(self, registry):
-        return (self.thread,) if self.thread.current(registry) else ()
-
-    @property
-    def issued_times(self):
-        return (self.issued_at,)
-
-    @property
-    def instruction(self):
-        return (
-            f"This is an order from {self.thread.name} (original identity "
-            f"{self.thread.created_at}); commander send-backs: {self.revisions}. "
-            "comms_goal progress must be a complete object with nonempty stupid, "
-            "deleted, delivery and next fields, not free text. Delivery is a declared "
-            "object, for example {\"kind\":\"not_merged\"}, "
-            "{\"kind\":\"merged\",\"sha\":\"...\"}, "
-            "{\"kind\":\"installed\",\"runtime\":\"...\"}, "
-            "{\"kind\":\"works_in_app\",\"evidence\":\"...\"}, or "
-            "{\"kind\":\"broken\",\"reason\":\"...\"}. "
-            "Only works_in_app evidence permits completed."
-        )
-
-    def revised(self, author, registry, now):
-        if self.thread.resolved(registry) != author:
-            raise ValueError("Only this goal's original author can send it back.")
-        return replace(self, issued_at=now, revisions=self.revisions + 1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -317,12 +284,18 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
 
 class GoalDeadline(DeclaredFamily):
     @abstractmethod
-    def overdue(self, now: float, report: EventTime) -> bool: ...
+    def overdue(self, now: float, delivery: EventTime) -> bool: ...
+
+    @abstractmethod
+    def late(self, delivery: EventTime) -> bool: ...
 
 
 @dataclass(frozen=True)
 class NoDeadline(GoalDeadline):
-    def overdue(self, now: float, report: EventTime) -> bool:
+    def overdue(self, now: float, delivery: EventTime) -> bool:
+        return False
+
+    def late(self, delivery: EventTime) -> bool:
         return False
 
 
@@ -331,11 +304,14 @@ class Deadline(GoalDeadline):
     at: float
 
     def __post_init__(self) -> None:
-        if type(self.at) not in (int, float) or not isfinite(self.at) or self.at <= 0:
+        if not isfinite(self.at) or self.at <= 0:
             raise ValueError("A goal deadline requires a positive finite Unix timestamp.")
 
-    def overdue(self, now: float, report: EventTime) -> bool:
-        return now > self.at and not report.since(self.at)
+    def overdue(self, now: float, delivery: EventTime) -> bool:
+        return now > self.at and not delivery.timestamps
+
+    def late(self, delivery: EventTime) -> bool:
+        return any(timestamp > self.at for timestamp in delivery.timestamps)
 
 
 class GoalNotice(DeclaredFamily, affix="GoalNotice"):
@@ -390,6 +366,9 @@ class Goal:
     work_time: EventTime = field(
         default_factory=UnrecordedEventTime, metadata={"wire_omit_default": True}
     )
+    delivery_time: EventTime = field(
+        default_factory=UnrecordedEventTime, metadata={"wire_omit_default": True}
+    )
     notice: GoalNotice = field(default_factory=NoGoalNotice,
                                metadata={"wire_omit_default": True})
 
@@ -439,6 +418,14 @@ class Goal:
     @property
     def checkpoint(self) -> GoalRevision:
         return GoalRevision(self.id, self.revision)
+
+    @property
+    def late(self) -> bool:
+        return self.deadline.late(self.delivery_time)
+
+    @property
+    def delivery_complete(self) -> bool:
+        return self.state.terminal and bool(self.delivery_time.timestamps)
 
     def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
         """Later revisions may describe the same failed goal, never a replacement."""

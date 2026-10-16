@@ -27,7 +27,10 @@ from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
 from .field_codec import FieldCodec, JsonShapeFamily
-from .goals import GoalDeadline, NoDeadline
+from .goals import Deadline, GoalDeadline, NoDeadline
+from .goal_actions import OwnerInvocable
+from .goal_progress import GoalProgress
+from .todos import AcceptanceCheck, Assignment, TodoStore, TodoWhere
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .read_basis import WatchAcknowledgment, OnReadWatchAcknowledgment
@@ -1107,20 +1110,81 @@ class ChannelsCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OrderCliCommand(CliCommand):
-    help = "Issue a Goal or send back the same author's current order"
-    author: str = option("--from")
-    name: str = option("--name")
+class TodoCreateCliCommand(CliCommand, declared_name="todo-create"):
+    help = "Create a durable problem with its original source and acceptance check"
+    id: str = option("--id")
+    repo: str = option("--repo", help="Repository owner/name")
     text: str = option("--text")
-    deadline: GoalDeadline = option("--deadline", default_factory=NoDeadline)
+    creator: str = option("--from")
+    where: TodoWhere = option("--where", help="Declared source/message JSON record")
+    acceptance: AcceptanceCheck = option("--acceptance", normalize=json.loads,
+        help="JSON: repo checkout, command, expected_count; command must print one integer")
 
-    def apply(self, ctx: Comms) -> Any:
-        from .goal_actions import OrderGoalAction
+    def apply(self, ctx: Comms) -> object:
+        todo = TodoStore(ctx.root).create(self.id, self.repo, self.text,
+            creator=ctx.registry.require(self.creator), where=self.where,
+            acceptance=self.acceptance, bus=ctx.bus)
+        return {"todo": FieldCodec.encode(todo)}
 
-        goal = ctx.goals.update_goal(self.name, OrderGoalAction(
-            author=self.author, text=self.text, deadline=self.deadline,
-        ))
-        return {"thread": ctx.registry.require(self.name).name, "goal": goal.to_wire()}
+
+@dataclass(frozen=True, kw_only=True)
+class TodoAssignCliCommand(CliCommand, declared_name="todo-assign"):
+    help = "Assign one problem and create its checked commanded Goal"
+    id: str = option("--id")
+    expected_revision: int = option("--expected-revision")
+    owner: str = option("--owner")
+    parent: str = option("--from")
+    generation: str = option("--generation", help="Unique ID naming this assignment and its Goal")
+    deadline: float = option("--deadline", help="Unix timestamp")
+
+    def apply(self, ctx: Comms) -> object:
+        todo = TodoStore(ctx.root).assign(self.id, expected_revision=self.expected_revision,
+            owner=ctx.registry.require(self.owner), parent=ctx.registry.require(self.parent),
+            generation=self.generation, deadline=Deadline(self.deadline), goals=ctx.goals)
+        return {"todo": FieldCodec.encode(todo)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class TodoTransferCliCommand(CliCommand, declared_name="todo-transfer"):
+    help = "Transfer one exact assignment, pause its old Goal and notify the prior owner"
+    id: str = option("--id")
+    expected_revision: int = option("--expected-revision")
+    previous: Assignment = option("--previous", normalize=json.loads)
+    owner: str = option("--owner")
+    parent: str = option("--from")
+    generation: str = option("--generation")
+    deadline: float = option("--deadline", help="Unix timestamp")
+
+    def apply(self, ctx: Comms) -> object:
+        todo = TodoStore(ctx.root).transfer(self.id, expected_revision=self.expected_revision,
+            previous=self.previous, owner=ctx.registry.require(self.owner),
+            parent=ctx.registry.require(self.parent), generation=self.generation,
+            deadline=Deadline(self.deadline), goals=ctx.goals)
+        return {"todo": FieldCodec.encode(todo)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class TodoCompleteCliCommand(CliCommand, declared_name="todo-complete"):
+    help = "Complete only after the declared acceptance check passes for the reported SHA"
+    id: str = option("--id")
+    expected_revision: int = option("--expected-revision")
+    actor: str = option("--from", help="Current assignee")
+    progress: GoalProgress = option("--progress", help="Structured report JSON including delivery SHA")
+
+    def apply(self, ctx: Comms) -> object:
+        todo = TodoStore(ctx.root).complete(self.id, expected_revision=self.expected_revision,
+            actor=ctx.registry.require(self.actor), progress=self.progress, goals=ctx.goals,
+            actor_kind=OwnerInvocable)
+        return {"todo": FieldCodec.encode(todo)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class TodosCliCommand(CliCommand, declared_name="todos"):
+    help = "List the canonical durable problems and assignments"
+    repo: str | None = option("--repo", default=None)
+
+    def apply(self, ctx: Comms) -> object:
+        return {"todos": FieldCodec.encode(TodoStore(ctx.root).list(self.repo))}
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -1,92 +1,206 @@
-"""A durable todo owns its one assignment; it does not start an agent.
-
-This is an opt-in post-PR1 primitive. An ACP/fork adapter must verify current
-thread identities and reserve a todo BEFORE spawning a worker. File claims,
-collaboration edges and thread goals remain separate authorities.
-"""
+"""A problem owns its definition and exclusive assignment; Goals own its orders."""
 
 from __future__ import annotations
 
+import asyncio
+import re
 import sqlite3
+import time
+from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, fields, replace
+from itertools import islice
 from pathlib import Path
-from abc import abstractmethod
+from typing import TYPE_CHECKING
 
-from .coordination_database import CoordinationStore
-from .field_codec import FieldCodec
+from .child_process import BoundedRun
 from .command import Command
+from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, projected
+from .message_reference import MessageReference
+from .goal_actions import (
+    CompletedGoalAction, GoalActionContext, GoalPrecondition,
+    PausedGoalAction, RuntimeInvocable, SetGoalAction,
+)
+from .goal_mentions import bind_goal_mentions
+from .goals import Goal, GoalAuthor, GoalRef
+from .recorded_time import RecordedEventTime
 from .thread_identity import ThreadIncarnation
-from .threads import Thread
 from .typed_table import Column, TypedRow, TypedTable, sql_literal
+
+if TYPE_CHECKING:
+    from .threads import Thread
+    from .goal_management import Goals
+    from .goal_progress import GoalProgress
+    from .goals import GoalDeadline
+    from .message_bus import MessageBus
 
 
 class TodoError(ValueError):
-    """A todo request is invalid or its persisted state cannot be trusted."""
+    """A request is invalid or its retained state cannot be trusted."""
 
 
-class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
-    """The expected revision, assignee or generation is no longer current."""
-
+class TodoConflict(TodoError):  # noqa: N818
     def __init__(self, current: Todo):
         self.current = current
-        owner = current.assignment.owner if current.assignment else "unassigned"
-        super().__init__(f"Todo {current.id} changed (revision {current.revision}, owner {owner}).")
+        super().__init__(f"Todo {current.id} changed (revision {current.revision}, "
+                         f"owner {current.assignment.description}).")
 
 
-@dataclass(frozen=True, slots=True)
-class GoalRef:
-    owner: str
-    owner_created: float
-    goal_id: str
+def _text(value: str, label: str, limit: int) -> str:
+    if not value.strip() or len(value) > limit:
+        raise TodoError(f"{label} must be nonempty and at most {limit} characters.")
+    return value
 
-    def __post_init__(self) -> None:
-        _text(self.owner, "Thread name", 128)
-        try:
-            self.incarnation.require_recorded()
-        except ValueError as error:
-            raise TodoError("Goal reference requires its recorded owner incarnation") from error
-        _text(self.goal_id, "Goal ID", 128)
 
-    @property
-    def incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.owner, self.owner_created)
+class TodoWhere(DeclaredFamily, affix="TodoWhere"):
+    @abstractmethod
+    def require_source(self, bus: MessageBus) -> None: ...
+
+
+@dataclass(frozen=True)
+class SourceTodoWhere(TodoWhere):
+    path: str
+    line: int
+
+    def __post_init__(self):
+        _text(self.path, "Source path", 4096)
+        if self.line < 1:
+            raise TodoError("Source line must be positive.")
+
+    def require_source(self, bus):
+        with Path(self.path).open() as source:
+            if not tuple(islice(source, self.line - 1, self.line)):
+                raise TodoError(f"Source line does not exist: {self.path}:{self.line}")
+
+
+@dataclass(frozen=True)
+class MessageTodoWhere(TodoWhere):
+    message: MessageReference
+
+    def require_source(self, bus):
+        with bus.log.certified_read() as source:
+            if source.delivery(self.message.seq).message.reference != self.message:
+                raise TodoError("Problem message reference changed.")
+
+
+@dataclass(frozen=True)
+class AcceptedCommit:
+    sha: str
+    committed_at: float
+
+
+@dataclass(frozen=True)
+class AcceptanceCheck:
+    repo: str
+    command: str
+    expected_count: int
+    timeout: float = 120.0
+
+    def __post_init__(self):
+        _text(self.repo, "Check checkout", 4096)
+        _text(self.command, "Acceptance command", 8000)
+        if self.expected_count < 0 or not 0 < self.timeout <= 600:
+            raise TodoError("Check requires a nonnegative count and a timeout of at most 600s.")
+
+    async def _run(self, *command: str) -> str:
+        result = await BoundedRun.run(tuple(command), cwd=self.repo, timeout=self.timeout)
+        if not result.outcome.successful:
+            raise TodoError(f"Acceptance command failed: {result.outcome}; "
+                            f"{result.stderr.decode(errors='replace')[-2000:]}")
+        return result.stdout.decode(errors="strict").strip()
+
+    async def _check(self, sha: str) -> AcceptedCommit:
+        # The delivered commit, not the report's arrival, owns delivery time.
+        async with asyncio.timeout(self.timeout):
+            head = await self._run("git", "show", "-s", "--format=%H %ct", "HEAD")
+            actual, timestamp = head.split()
+            if not actual.startswith(sha.lower()):
+                raise TodoError("Reported SHA is not the acceptance checkout's HEAD.")
+            await self._run("git", "diff", "--exit-code", "HEAD", "--")
+            output = await self._run("bash", "-c", self.command)
+            if re.fullmatch(r"\d+", output) is None or int(output) != self.expected_count:
+                raise TodoError(f"Acceptance expected {self.expected_count}; output: {output[-2000:]}")
+            if await self._run("git", "show", "-s", "--format=%H %ct", "HEAD") != head:
+                raise TodoError("Acceptance checkout changed while the check ran.")
+            await self._run("git", "diff", "--exit-code", "HEAD", "--")
+            return AcceptedCommit(actual, float(timestamp))
+
+    def check(self, sha: str) -> AcceptedCommit:
+        if re.fullmatch(r"[0-9a-fA-F]{7,64}", sha) is None:
+            raise TodoError("Completion requires a reported commit SHA.")
+        return asyncio.run(self._check(sha))
 
 
 @dataclass(frozen=True, slots=True)
 class Assignment:
-    owner: str
-    owner_created: float
-    parent: str
-    parent_created: float
+    owner: ThreadIncarnation
+    parent: ThreadIncarnation
     generation: str
 
-    def __post_init__(self) -> None:
-        _text(self.owner, "Thread name", 128)
-        _text(self.parent, "Thread name", 128)
-        try:
-            self.owner_identity.require_recorded()
-            self.parent_identity.require_recorded()
-        except ValueError as error:
-            raise TodoError("Assignment requires recorded owner and parent incarnations") from error
+    def __post_init__(self):
+        self.owner.require_recorded()
+        self.parent.require_recorded()
         _text(self.generation, "Assignment generation", 128)
 
     @property
-    def owner_identity(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.owner, self.owner_created)
+    def goal(self) -> GoalRef:
+        # An assignment generation names its one order. No second generated ID.
+        return GoalRef(self.owner, self.generation)
+
+    def require_successor(self, proposed: Assignment, current: Todo):
+        if self.generation == proposed.generation or self.owner == proposed.owner:
+            raise TodoConflict(current)
+
+
+class TodoAssignment(DeclaredFamily, affix="TodoAssignment"):
+    @property
+    @abstractmethod
+    def description(self) -> str: ...
+
+    @abstractmethod
+    def require_assigned(self, current: Todo) -> Assignment: ...
+
+    @abstractmethod
+    def assign(self, current: Todo, proposed: Assignment) -> Todo: ...
+
+    def require_exact(self, current: Todo, expected: Assignment):
+        if self.require_assigned(current) != expected:
+            raise TodoConflict(current)
+
+
+@dataclass(frozen=True)
+class UnassignedTodoAssignment(TodoAssignment):
+    @property
+    def description(self):
+        return "unassigned"
+
+    def require_assigned(self, current):
+        raise TodoConflict(current)
+
+    def assign(self, current, proposed):
+        return replace(current, assignment=AssignedTodoAssignment(proposed))
+
+
+@dataclass(frozen=True)
+class AssignedTodoAssignment(TodoAssignment):
+    assignment: Assignment
+
+    @projected(view="wire")
+    def goal(self) -> GoalRef:
+        return self.assignment.goal
 
     @property
-    def parent_identity(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.parent, self.parent_created)
+    def description(self):
+        return self.assignment.owner.name
 
-    def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
-        return (self.owner_identity, self.generation) == (actor, generation)
+    def require_assigned(self, current):
+        return self.assignment
 
-    def require_successor(self, proposed: Assignment, current: Todo) -> None:
-        if self.generation == proposed.generation:
-            raise TodoConflict(current)
+    def assign(self, current, proposed):
+        raise TodoConflict(current)
 
 
 class TodoState(DeclaredFamily, affix="TodoState"):
@@ -99,30 +213,9 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         raise TodoConflict(current)
 
     @classmethod
-    def transferred(cls, current: Todo, command: TransferTodoChange) -> Todo:
-        raise TodoConflict(current)
-
-    @classmethod
     def release(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
-        return replace(
-            current,
-            assignment=None,
-            revision=current.revision + 1,
-            last_transition=type(command),
-            last_previous=command.previous,
-        )
-
-    @classmethod
-    def released(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
-        current.require_result(
-            replace(
-                current,
-                assignment=None,
-                last_transition=type(command),
-                last_previous=command.previous,
-            )
-        )
-        return current
+        current.assignment.require_exact(current, command.previous)
+        return replace(current, assignment=UnassignedTodoAssignment())
 
     @classmethod
     def change(cls, current: Todo, command: ChangeTodoState) -> Todo:
@@ -130,42 +223,19 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
     @classmethod
     def decide(cls, current: Todo, command: ChangeTodoState) -> Todo:
-        current.require_actor(command.actor, command.generation)
-        return (
-            current
-            if cls is current.state
-            else replace(current, state=cls, revision=current.revision + 1)
-        )
+        current.require_actor(command.actor)
+        return replace(current, state=cls)
 
 
 class OpenTodoState(TodoState):
     @classmethod
     def assign(cls, current, proposed):
-        current.require_assignment(None)
-        return replace(current, assignment=proposed, revision=current.revision + 1)
+        return current.assignment.assign(current, proposed)
 
     @classmethod
     def transfer(cls, current, command):
-        current.require_assignment(command.previous)
-        return replace(
-            current,
-            assignment=command.proposed,
-            revision=current.revision + 1,
-            last_transition=type(command),
-            last_previous=command.previous,
-        )
-
-    @classmethod
-    def transferred(cls, current, command):
-        current.require_result(
-            replace(
-                current,
-                assignment=command.proposed,
-                last_transition=type(command),
-                last_previous=command.previous,
-            )
-        )
-        return current
+        current.assignment.require_exact(current, command.previous)
+        return replace(current, assignment=AssignedTodoAssignment(command.proposed))
 
 
 class BlockedTodoState(TodoState):
@@ -178,78 +248,78 @@ class DoneTodoState(TodoState):
         raise TodoConflict(current)
 
     @classmethod
-    def released(cls, current, command):
-        raise TodoConflict(current)
-
-    @classmethod
     def change(cls, current, command):
         raise TodoConflict(current)
 
     @classmethod
     def decide(cls, current, command):
-        if current.assignment is None:
-            current.require_actor(command.actor, command.generation)
-        else:
-            current.require_assignee(command.actor, command.generation)
-        return replace(current, state=cls, assignment=None, revision=current.revision + 1)
+        raise TodoError("Use checked completion; a status change cannot close a problem.")
+
+
+class TodoChangeRecord(DeclaredFamily, affix="TodoChangeRecord"):
+    @abstractmethod
+    def matches(self, command: TodoOperation) -> bool: ...
 
 
 @dataclass(frozen=True)
-class TodoOperation(Command):
+class OriginalTodoChangeRecord(TodoChangeRecord):
+    def matches(self, command):
+        return False
+
+
+@dataclass(frozen=True)
+class AppliedTodoChangeRecord(TodoChangeRecord):
+    command: TodoOperation
+
+    def matches(self, command):
+        return self.command == command
+
+
+@dataclass(frozen=True)
+class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     expected_revision: int
 
-    def __post_init__(self) -> None:
-        if FieldCodec.decode(int, self.expected_revision) <= 0:
-            raise TodoError("Todo operation requires a positive exact revision")
+    def __post_init__(self):
+        if self.expected_revision <= 0:
+            raise TodoError("Todo operation requires a positive exact revision.")
+
+    def apply(self, current: Todo) -> Todo:
+        if current.last_change.matches(self):
+            return current
+        current.require_revision(self.expected_revision)
+        result = self.decide(current)
+        return replace(result, revision=current.revision + 1,
+                       last_change=AppliedTodoChangeRecord(self))
 
     @abstractmethod
-    def apply(self, current: Todo) -> Todo: ...
+    def decide(self, current: Todo) -> Todo: ...
 
 
 @dataclass(frozen=True)
 class AssignTodo(TodoOperation):
     proposed: Assignment
 
-    def apply(self, current):
-        if current.assignment == self.proposed:
-            return current  # The original assignment generation is already reserved.
-        current.require_revision(self.expected_revision)
+    def decide(self, current):
+        current.require_actor(self.proposed.parent)
         return current.state.assign(current, self.proposed)
 
 
-class AssignmentChange(TodoOperation, DeclaredFamily, affix="TodoChange"):
-    """The durable row retains the operation kind and exact previous assignment."""
-
-    previous: Assignment
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        if type(self.previous) is not Assignment:
-            raise TodoError("Assignment change requires the exact previous assignment")
-
-
 @dataclass(frozen=True)
-class TransferTodoChange(AssignmentChange):
+class TransferTodoChange(TodoOperation):
     previous: Assignment
     proposed: Assignment
 
-    def apply(self, current):
+    def decide(self, current):
+        current.require_actor(self.proposed.parent)
         self.previous.require_successor(self.proposed, current)
-        if current.revision == self.expected_revision + 1:
-            return current.state.transferred(current, self)
-        current.require_revision(self.expected_revision)
         return current.state.transfer(current, self)
 
 
 @dataclass(frozen=True)
-class ReleaseTodoChange(AssignmentChange):
+class ReleaseTodoChange(TodoOperation):
     previous: Assignment
 
-    def apply(self, current):
-        if current.revision == self.expected_revision + 1:
-            return current.state.released(current, self)
-        current.require_revision(self.expected_revision)
-        current.require_assignment(self.previous)
+    def decide(self, current):
         return current.state.release(current, self)
 
 
@@ -257,11 +327,18 @@ class ReleaseTodoChange(AssignmentChange):
 class ChangeTodoState(TodoOperation):
     state: type[TodoState]
     actor: ThreadIncarnation
-    generation: str | None
 
-    def apply(self, current):
-        current.require_revision(self.expected_revision)
+    def decide(self, current):
         return current.state.change(current, self)
+
+
+@dataclass(frozen=True)
+class CompleteTodo(TodoOperation):
+    assignment: Assignment
+
+    def decide(self, current):
+        current.assignment.require_exact(current, self.assignment)
+        return replace(current, state=DoneTodoState)
 
 
 @dataclass(frozen=True, slots=True)
@@ -269,77 +346,176 @@ class Todo(TypedTable):
     id: str = field(metadata={"sql": Column(primary_key=True)})
     repo: str
     text: str
-    creator: str
-    creator_created: float
-    state: type[TodoState] = field(
-        metadata={
-            "sql": Column(
-                check=(
-                    '"state" IN ('
-                    + ", ".join(
-                        sql_literal(member)
-                        for member in TodoState.members_with(TodoState)
-                    )
-                    + ")"
-                )
-            )
-        }
-    )
+    creator: ThreadIncarnation
+    created_at: float
+    where: TodoWhere
+    acceptance: AcceptanceCheck
+    state: type[TodoState] = field(metadata={"sql": Column(check=(
+        '"state" IN (' + ", ".join(sql_literal(member)
+            for member in TodoState.members_with(TodoState)) + ")"))})
     revision: int = field(metadata={"sql": Column(check="revision>0")})
-    goal: GoalRef | None
-    assignment: Assignment | None
-    last_transition: type[AssignmentChange] | None = field(
-        default=None,
-        metadata={
-            "sql": Column(
-                check=(
-                    '"last_transition" IN ('
-                    + ", ".join(
-                        sql_literal(member)
-                        for member in AssignmentChange.members_with(AssignmentChange)
-                    )
-                    + ")"
-                )
-            )
-        },
-    )
-    last_previous: Assignment | None = None
+    assignment: TodoAssignment
+    last_change: TodoChangeRecord
 
-    @property
-    def creator_identity(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.creator, self.creator_created)
-
-    def require_result(self, result: Todo) -> None:
-        if self != result:
-            raise TodoConflict(self)
-
-    def require_revision(self, expected: int) -> None:
+    def require_revision(self, expected: int):
         if self.revision != expected:
             raise TodoConflict(self)
 
-    def require_assignment(self, expected: Assignment | None) -> None:
-        if self.assignment != expected:
+    def require_actor(self, actor: ThreadIncarnation):
+        if self.creator != actor and self.assignment.require_assigned(self).owner != actor:
             raise TodoConflict(self)
 
-    def require_assignee(self, actor: ThreadIncarnation, generation: str | None) -> None:
-        if self.assignment is None or not self.assignment.owned_by(actor, generation):
+    def require_same_creation(self, proposed: Todo):
+        if self != replace(proposed, state=self.state, revision=self.revision,
+                           created_at=self.created_at, assignment=self.assignment,
+                           last_change=self.last_change):
             raise TodoConflict(self)
 
-    def require_actor(self, actor: ThreadIncarnation, generation: str | None) -> None:
-        if self.creator_identity != actor:
-            self.require_assignee(actor, generation)
 
-    def require_same_creation(self, proposed: Todo) -> None:
-        self.require_result(
-            replace(
-                proposed,
-                state=self.state,
-                revision=self.revision,
-                assignment=self.assignment,
-                last_transition=self.last_transition,
-                last_previous=self.last_previous,
-            )
-        )
+@dataclass(frozen=True)
+class TodoRef:
+    id: str
+
+    def read(self, root: Path) -> Todo:
+        return TodoStore(root).get(self.id)
+
+    def require_current(self, root: Path, goal: GoalRef) -> Todo:
+        current = self.read(root)
+        if current.assignment.require_assigned(current).goal != goal:
+            raise TodoConflict(current)
+        return current
+
+    def require_completion(self, root: Path, goal: GoalRef, sha: str) -> AcceptedCommit:
+        return self.require_current(root, goal).acceptance.check(sha)
+
+
+@dataclass(frozen=True)
+class CommandedGoalAuthor(GoalAuthor):
+    thread: ThreadIncarnation
+    issued_at: float
+    todo: TodoRef
+    revisions: int = 0
+
+    def require_report(self, progress):
+        if progress is None:
+            raise TodoError("A commanded goal requires a complete structured report.")
+        progress.require_report()
+
+    def require_current_order(self, root, goal):
+        self.todo.require_current(root, goal)
+
+    def require_order_source(self, problem_id):
+        if self.todo.id != problem_id:
+            raise TodoError("This goal belongs to another problem.")
+
+    def require_completion(self, progress, *, root, goal):
+        self.require_report(progress)
+        delivery = progress.require_report().delivery
+        delivery.require_completion()
+        accepted = self.todo.require_completion(root, goal, delivery.reported_sha)
+        return RecordedEventTime(accepted.committed_at)
+
+    def require_self_direction(self):
+        raise TodoError("Only the problem's commander can revise this order.")
+
+    def has_report(self, recorded):
+        return recorded.since(self.issued_at)
+
+    @property
+    def revision_count(self):
+        return self.revisions
+
+    def notification_targets(self, registry):
+        return (self.thread,) if self.thread.current(registry) else ()
+
+    @property
+    def issued_times(self):
+        return (self.issued_at,)
+
+    @property
+    def instruction(self):
+        return (f"Order for problem {self.todo.id} from {self.thread.name}. "
+                "Report a complete progress object: stupid, deleted, delivery, next. "
+                "Completion requires delivery={\"kind\":\"works_in_app\",\"sha\":\"...\","
+                "\"evidence\":\"actual application evidence\"}. Core executes the problem's "
+                "declared acceptance check; a mismatch cannot complete the order.")
+
+    def revised(self, author, registry, now):
+        if self.thread.resolved(registry) != author:
+            raise TodoError("Only this order's original commander can send it back.")
+        return replace(self, issued_at=now, revisions=self.revisions + 1)
+
+
+@dataclass(frozen=True)
+class TransferredGoalAuthor(CommandedGoalAuthor):
+    previous: GoalRef = field(kw_only=True)
+
+    def notification_targets(self, registry):
+        previous = (self.previous.owner,) if self.previous.owner.current(registry) else ()
+        return tuple(dict.fromkeys((*super().notification_targets(registry), *previous)))
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrderGoalAction(SetGoalAction):
+    author: ThreadIncarnation
+    todo: TodoRef
+    goal_id: str
+    preserve_wait = True
+
+    def require_target(self, goals: Goals, reference: GoalRef):
+        target = goals.registry.require(reference.owner.name)
+        if target.incarnation != reference.owner:
+            raise TodoError("Order target incarnation changed.")
+        current = target.goal
+        if current is not None and current.id != reference.goal_id and not current.state.terminal:
+            raise TodoError("Assignee already has another unresolved goal.")
+        if current is not None and current.id == reference.goal_id:
+            current.author.require_order_source(self.todo.id)
+
+    def goal_author(self):
+        return CommandedGoalAuthor(self.author, time.time(), self.todo)
+
+    def change(self, ctx):
+        self.require_target(ctx.goals, GoalRef(ctx.thread.incarnation, self.goal_id))
+        snapshot = ctx.goals.registry.snapshot()
+        if not self.author.current(snapshot):
+            raise TodoError("Order author incarnation changed.")
+        current = ctx.thread.goal
+        if current is not None and current.id == self.goal_id:
+            return current
+        goal = Goal(text=self.text.strip(), id=self.goal_id, revision=1, deadline=self.deadline)
+        goal = replace(goal, mention_source=bind_goal_mentions(
+            goal.text, goal.id, goal.revision, ctx.thread, snapshot, author=self.goal_author()))
+        ctx.goals.open_goal_store().create_goal(goal.id)
+        return goal
+
+    def before_publish(self, goal, ctx):
+        current = ctx.thread.goal
+        if current is None or goal.id != current.id:
+            super().before_publish(goal, ctx)
+
+    @staticmethod
+    def pause_previous(goals: Goals, previous: Assignment, completed):
+        snapshot = goals.registry.snapshot()
+        if previous.owner.current(snapshot):
+            thread = snapshot.require(previous.owner.name)
+            current = thread.goal
+            if current is not None and current.id == previous.goal.goal_id and not current.state.terminal:
+                PausedGoalAction(expect=GoalPrecondition(expected_goal=current))._apply_locked(
+                    GoalActionContext(goals, thread, RuntimeInvocable, completed=completed))
+
+    def issue(self, goals: Goals, assignment: Assignment, completed):
+        self._apply_locked(GoalActionContext(
+            goals, goals.registry.require(assignment.owner.name), RuntimeInvocable,
+            completed=completed))
+
+
+@dataclass(frozen=True, kw_only=True)
+class TransferOrderGoalAction(OrderGoalAction):
+    previous: GoalRef
+
+    def goal_author(self):
+        return TransferredGoalAuthor(self.author, time.time(), self.todo, previous=self.previous)
 
 
 @dataclass(frozen=True)
@@ -347,47 +523,27 @@ class _TodoTable(TypedRow):
     name: str
 
 
-def _text(value: str, label: str, limit: int) -> str:
-    if type(value) is not str or not value.strip() or len(value) > limit:
-        raise TodoError(f"{label} must be nonempty and at most {limit} characters.")
-    return value
+def _participant(thread: Thread) -> ThreadIncarnation:
+    thread.incarnation.require_recorded()
+    return thread.incarnation
 
 
 def _thread(thread: Thread) -> ThreadIncarnation:
-    if type(thread) is not Thread or not thread.role.executable:
-        raise TodoError("Assignments require an executable registered thread snapshot.")
+    thread.role.require_executable()
     return _participant(thread)
-
-
-def _participant(thread: Thread) -> ThreadIncarnation:
-    if type(thread) is not Thread:
-        raise TodoError("Creator must be a registered thread snapshot.")
-    _text(thread.name, "Thread name", 128)
-    try:
-        thread.incarnation.require_recorded()
-    except ValueError as error:
-        raise TodoError("Creator requires a recorded incarnation") from error
-    return thread.incarnation
 
 
 def _repo(value: str) -> str:
     _text(value, "Repo ID", 200)
     pieces = value.split("/")
-    if len(pieces) != 2 or any(
-        piece in {"", ".", ".."} or not all(char.isalnum() or char in "-_." for char in piece)
-        for piece in pieces
-    ):
+    if len(pieces) != 2 or any(piece in {"", ".", ".."}
+            or not all(char.isalnum() or char in "-_." for char in piece) for piece in pieces):
         raise TodoError("Repo ID must have the exact owner/repo form.")
     return value.lower()
 
 
 class TodoStore:
-    """One SQLite row owns both todo state and its exclusive assignment.
-
-    A caller may retry the SAME create ID or assignment generation after an
-    uncertain reply. A different assignee always receives the current owner,
-    without entering a queue or launching another child.
-    """
+    """The existing problem row owns assignment CAS, not a separate task registry."""
 
     def __init__(self, root: Path):
         directory = Path(root).resolve(strict=True)
@@ -397,14 +553,11 @@ class TodoStore:
         with closing(self._connect()) as db:
             db.execute("PRAGMA journal_mode=WAL")
             db.execute("BEGIN IMMEDIATE")
-            tables = _TodoTable.read(
-                db.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            )
+            tables = _TodoTable.read(db.execute("SELECT name FROM sqlite_master WHERE type='table'"))
             if not tables:
                 Todo.create(db)
             elif tables != [_TodoTable(FieldCodec.encode(Todo))]:
                 raise TodoError("Todo storage requires the one-shot durable migration.")
-            # Decode exactly the current declared columns; no runtime converters.
             Todo.select(db, where="0")
             db.execute("COMMIT")
 
@@ -440,43 +593,22 @@ class TodoStore:
         with closing(self._connect()) as db:
             return self._current(db, todo_id)
 
-    def list(self, repo: str) -> tuple[Todo, ...]:
+    def list(self, repo: str | None = None) -> tuple[Todo, ...]:
         with closing(self._connect()) as db:
-            return tuple(
-                Todo.read(
-                    db.execute(
-                        f"SELECT * FROM {Todo.declared_name} WHERE repo=? ORDER BY rowid",
-                        (_repo(repo),),
-                    )
-                )
-            )
+            if repo is None:
+                return tuple(Todo.select(db, order_by=("created_at", "id")))
+            return tuple(Todo.read(db.execute(
+                f"SELECT * FROM {Todo.declared_name} WHERE repo=? ORDER BY rowid", (_repo(repo),))))
 
-    def create(
-        self,
-        todo_id: str,
-        repo: str,
-        text: str,
-        *,
-        creator: Thread,
-        goal: GoalRef | None = None,
-    ) -> Todo:
+    def create(self, todo_id: str, repo: str, text: str, *, creator: Thread,
+               where: TodoWhere, acceptance: AcceptanceCheck, bus: MessageBus) -> Todo:
         _text(todo_id, "Todo ID", 128)
-        _text(text, "Todo text", 2000)
-        repo_id = _repo(repo)
-        identity = _participant(creator)
-        if goal is not None and type(goal) is not GoalRef:
-            raise TodoError("Goal reference must be a typed GoalRef.")
-        proposed = Todo(
-            id=todo_id,
-            repo=repo_id,
-            text=text,
-            creator=identity.name,
-            creator_created=identity.created_at,
-            state=OpenTodoState,
-            revision=1,
-            goal=goal,
-            assignment=None,
-        )
+        _text(text, "Todo text", 8000)
+        where.require_source(bus)
+        proposed = Todo(id=todo_id, repo=_repo(repo), text=text, creator=_participant(creator),
+                        created_at=time.time(), where=where, acceptance=acceptance,
+                        state=OpenTodoState, revision=1, assignment=UnassignedTodoAssignment(),
+                        last_change=OriginalTodoChangeRecord())
         with self._write() as db:
             current = Todo.one(db, id=todo_id)
             if current is not None:
@@ -491,73 +623,60 @@ class TodoStore:
             result = command.apply(current)
             if result == current:
                 return current
-            changes = {
-                item.name: getattr(result, item.name)
-                for item in fields(Todo)
-                if getattr(result, item.name) != getattr(current, item.name)
-            }
-            Todo.update(
-                db, where="id=? AND revision=?", parameters=(todo_id, current.revision), **changes
-            )
+            changes = {item.name: getattr(result, item.name) for item in fields(Todo)
+                       if getattr(result, item.name) != getattr(current, item.name)}
+            Todo.update(db, where="id=? AND revision=?", parameters=(todo_id, current.revision),
+                        **changes)
             return self._current(db, todo_id)
 
-    def assign(
-        self,
-        todo_id: str,
-        *,
-        expected_revision: int,
-        owner: Thread,
-        parent: Thread,
-        generation: str,
-    ) -> Todo:
-        identity, parent_identity = _thread(owner), _thread(parent)
-        proposed = Assignment(
-            identity.name,
-            identity.created_at,
-            parent_identity.name,
-            parent_identity.created_at,
-            generation,
-        )
-        return self._apply(todo_id, AssignTodo(expected_revision, proposed))
+    def assign(self, todo_id: str, *, expected_revision: int, owner: Thread, parent: Thread,
+               generation: str, deadline: GoalDeadline, goals: Goals) -> Todo:
+        proposed = Assignment(_thread(owner), _participant(parent), generation)
+        with goals.writing() as completed:
+            current = self.get(todo_id)
+            order = OrderGoalAction(text=current.text, deadline=deadline, author=proposed.parent,
+                                    todo=TodoRef(todo_id), goal_id=proposed.generation)
+            order.require_target(goals, proposed.goal)
+            result = self._apply(todo_id, AssignTodo(expected_revision, proposed))
+            order.issue(goals, proposed, completed)
+            return result
 
-    def transfer(
-        self,
-        todo_id: str,
-        *,
-        expected_revision: int,
-        previous: Assignment,
-        owner: Thread,
-        parent: Thread,
-        generation: str,
-    ) -> Todo:
-        """Move one current assignment without an unclaimed race window."""
-        identity, parent_identity = _thread(owner), _thread(parent)
-        proposed = Assignment(
-            identity.name,
-            identity.created_at,
-            parent_identity.name,
-            parent_identity.created_at,
-            generation,
-        )
-        return self._apply(todo_id, TransferTodoChange(expected_revision, previous, proposed))
+    def transfer(self, todo_id: str, *, expected_revision: int, previous: Assignment,
+                 owner: Thread, parent: Thread, generation: str, deadline: GoalDeadline,
+                 goals: Goals) -> Todo:
+        proposed = Assignment(_thread(owner), _participant(parent), generation)
+        with goals.writing() as completed:
+            current = self.get(todo_id)
+            order = TransferOrderGoalAction(
+                text=current.text, deadline=deadline, author=proposed.parent,
+                todo=TodoRef(todo_id), goal_id=proposed.generation, previous=previous.goal)
+            order.require_target(goals, proposed.goal)
+            result = self._apply(todo_id, TransferTodoChange(expected_revision, previous, proposed))
+            order.pause_previous(goals, previous, completed)
+            order.issue(goals, proposed, completed)
+            return result
 
-    def release(self, todo_id: str, *, expected_revision: int, previous: Assignment) -> Todo:
-        return self._apply(todo_id, ReleaseTodoChange(expected_revision, previous))
+    def complete(self, todo_id: str, *, expected_revision: int, actor: Thread,
+                 progress: GoalProgress, goals: Goals, actor_kind: type) -> Todo:
+        current = self.get(todo_id)
+        current.require_revision(expected_revision)
+        assignment = current.assignment.require_assigned(current)
+        if assignment.owner != _participant(actor):
+            raise TodoConflict(current)
+        CompletedGoalAction(
+            progress=progress, expect=GoalPrecondition(goal_id=assignment.goal.goal_id)
+        ).apply(goals, assignment.owner.name, actor=actor_kind)
+        with goals.writing():
+            return self._apply(todo_id, CompleteTodo(expected_revision, assignment))
 
-    def set_state(
-        self,
-        todo_id: str,
-        *,
-        expected_revision: int,
-        state: str,
-        actor: Thread,
-        generation: str | None = None,
-    ) -> Todo:
-        """An explicit, revision-checked decision; never infer it from Pi output."""
-        try:
-            state = FieldCodec.decode(type[TodoState], state)
-        except ValueError as error:
-            raise TodoError("Unknown todo state.") from error
-        return self._apply(
-            todo_id, ChangeTodoState(expected_revision, state, _participant(actor), generation)
-        )
+    def release(self, todo_id: str, *, expected_revision: int, previous: Assignment,
+                goals: Goals) -> Todo:
+        with goals.writing() as completed:
+            result = self._apply(todo_id, ReleaseTodoChange(expected_revision, previous))
+            OrderGoalAction.pause_previous(goals, previous, completed)
+            return result
+
+    def set_state(self, todo_id: str, *, expected_revision: int, state: type[TodoState],
+                  actor: Thread, goals: Goals) -> Todo:
+        with goals.writing():
+            return self._apply(todo_id, ChangeTodoState(expected_revision, state, _participant(actor)))

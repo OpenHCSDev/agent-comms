@@ -11,7 +11,6 @@ from .field_codec import projected
 from .messages import Message
 from .activity import ObservedActivity
 from .threads import Thread
-from .goal_progress import WorksInApp
 from .tool_activity import ToolActivity
 
 
@@ -108,19 +107,18 @@ class DoneUnitProgress(UnitProgress):
 
     @classmethod
     def matches(cls, entry):
-        return (entry.goal is not None
-                and any(isinstance(delivery, WorksInApp) for delivery in entry.goal.progress.deliveries)
-                and entry.goal.author.has_report(entry.goal.report_time))
+        goal = entry.thread.goal
+        return goal is not None and goal.delivery_complete
 
 
 class OverdueUnitProgress(UnitProgress):
     priority = 10
     notifies_commander = True
-    summary = "Deadline passed without a report"
+    summary = "Deadline passed without accepted delivery"
 
     @classmethod
     def matches(cls, entry):
-        return entry.open_goal and entry.goal.deadline.overdue(entry.observed_at, entry.goal.report_time)
+        return entry.open_goal and entry.goal.deadline.overdue(entry.observed_at, entry.goal.delivery_time)
 
 
 class ToolSilentUnitProgress(UnitProgress):

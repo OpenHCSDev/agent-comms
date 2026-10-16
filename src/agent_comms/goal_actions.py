@@ -26,11 +26,10 @@ from .goal_states import (
 )
 from .goal_waits import GoalWait, GoalWaits
 from .goals import (
-    Goal, GoalDeadline, NoDeadline, CommandedGoalAuthor,
-    SelfDirectedGoalAuthor,
+    Goal, GoalDeadline, NoDeadline, GoalRef, SelfDirectedGoalAuthor,
 )
 from .goal_progress import GoalProgress
-from .recorded_time import RecordedEventTime
+from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -61,11 +60,11 @@ class GoalPrecondition:
     expected_goal: Goal | None = None
     expected_owner: ProcessIdentity | None = None
 
-    def check(self, ctx: GoalActionContext) -> None:
-        thread, goal = ctx.thread, ctx.thread.goal
+    def check(self, goals: Goals, thread: Thread) -> None:
+        goal = thread.goal
         if self.expected_owner is not None and (
             thread.process_identity != self.expected_owner
-            or not ctx.goals.registry.status(thread.name).running
+            or not goals.registry.status(thread.name).running
         ):
             raise ValueError("The goal owner changed; refresh its state.")
         if self.expected_goal is not None and goal != self.expected_goal:
@@ -132,16 +131,36 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             goal_id=goal.id, expected_revision=goal.revision,
         )
 
-    def apply(self, ctx: GoalActionContext) -> Goal | None:
-        self.expect.check(ctx)
-        if not isinstance(self, ctx.actor):
+    def require_actor(self, actor: type) -> None:
+        if not isinstance(self, actor):
             raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
+
+    def prepare(self, goals: Goals, thread: Thread) -> GoalAction:
+        return self
+
+    def apply(self, goals: Goals, name: str, *, actor: type) -> Goal | None:
+        thread = goals.registry.require(name)
+        self.expect.check(goals, thread)
+        self.require_actor(actor)
+        # Potentially slow acceptance runs before physical write locks. The
+        # prepared completion binds the exact observed Goal for the final CAS.
+        prepared = self.prepare(goals, thread)
+        with goals.writing() as completed:
+            prepared._apply_locked(GoalActionContext(
+                goals, goals.registry.require(name), actor, completed=completed))
+        return goals.registry.require(name).goal
+
+    def _apply_locked(self, ctx: GoalActionContext) -> Goal | None:
+        self.expect.check(ctx.goals, ctx.thread)
+        self.require_actor(ctx.actor)
         if ctx.model_report and any(
             entry.reports_turn(ctx.report_turn)
             for entry in ctx.goals.registry.goal_history(ctx.thread.name)
         ):
             raise ValueError("This goal was already reported in this turn.")
         goal = self.change(ctx)
+        if goal == ctx.thread.goal:
+            return goal
         self.before_publish(goal, ctx)
         goal = ctx.goals.write_goal(ctx.thread, goal, ctx.completed)
         if not self.preserve_wait and ctx.thread.goal is not None:
@@ -169,6 +188,8 @@ class TransitionGoalAction(GoalAction):
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = ctx.require_goal()
         if ctx.model_report:
+            goal.author.require_current_order(
+                ctx.goals.root, GoalRef(ctx.thread.incarnation, goal.id))
             goal.author.require_report(self.progress)
         state = self.next_state(ctx)
         goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
@@ -327,8 +348,22 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
 
 @dataclass(frozen=True, kw_only=True)
 class CompletedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
+    delivery_time: EventTime = field(default_factory=UnrecordedEventTime)
+
+    def prepare(self, goals: Goals, thread: Thread) -> GoalAction:
+        goal = thread.require_goal()
+        delivery = goal.author.require_completion(
+            self.progress, root=goals.root, goal=GoalRef(thread.incarnation, goal.id))
+        return replace(self, delivery_time=delivery,
+                       expect=replace(self.expect, expected_goal=goal))
+
+    def change(self, ctx: GoalActionContext) -> Goal:
+        goal = ctx.require_goal()
+        goal.author.require_current_order(
+            ctx.goals.root, GoalRef(ctx.thread.incarnation, goal.id))
+        return replace(super().change(ctx), delivery_time=self.delivery_time)
+
     def next_state(self, ctx: GoalActionContext) -> GoalState:
-        ctx.require_goal().author.require_completion(self.progress)
         return CompletedGoal()
 
 
@@ -404,36 +439,6 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         )
         ctx.goals.open_goal_store().create_goal(goal.id)
         return goal
-
-
-@dataclass(frozen=True, kw_only=True)
-class OrderGoalAction(SetGoalAction):
-    """A first order creates a Goal; send-back edits it without resuming attempts."""
-    author: str
-    preserve_wait = True
-
-    def goal_author(self, ctx):
-        return CommandedGoalAuthor(
-            ctx.goals.registry.snapshot().require(self.author).incarnation, time.time()
-        )
-
-    def change(self, ctx: GoalActionContext) -> Goal:
-        snapshot = ctx.goals.registry.snapshot()
-        author = snapshot.require(self.author).incarnation
-        now = time.time()
-        current = ctx.thread.goal
-        if current is None:
-            return super().change(ctx)
-        if current.state.terminal:
-            raise ValueError("A completed goal needs a new goal, not an implicit restart.")
-        revised_author = current.author.revised(author, snapshot, now)
-        return replace(current.with_text(
-            self.text, ctx.thread, snapshot, author=revised_author,
-        ), deadline=self.deadline)
-
-    def before_publish(self, goal, ctx):
-        if ctx.thread.goal is None or goal.id != ctx.thread.goal.id:
-            super().before_publish(goal, ctx)
 
 
 @dataclass(frozen=True, kw_only=True)

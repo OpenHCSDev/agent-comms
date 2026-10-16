@@ -3,27 +3,30 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
 
 
+def _require_text(*values: str) -> None:
+    if not all(value.strip() for value in values):
+        raise ValueError("Delivery and report text must be nonempty.")
+
+
 @dataclass(frozen=True)
 class Delivery(DeclaredFamily):
-    def __post_init__(self) -> None:
-        for item in fields(self):
-            value = getattr(self, item.name)
-            if type(value) is not str or not value.strip():
-                raise ValueError(f"{type(self).__name__} requires nonempty {item.name}.")
-
     @property
     @abstractmethod
     def summary(self) -> str: ...
 
     def require_completion(self) -> None:
         raise ValueError("A commanded goal is complete only with WorksInApp evidence.")
+
+    @property
+    def reported_sha(self) -> str:
+        raise ValueError("Completion requires works_in_app with a commit SHA.")
 
     def block_reason(self, next_step: str) -> str:
         return next_step
@@ -40,6 +43,9 @@ class NotMerged(Delivery):
 class Merged(Delivery):
     sha: str
 
+    def __post_init__(self):
+        _require_text(self.sha)
+
     @property
     def summary(self) -> str:
         return f"Merged {self.sha}"
@@ -49,6 +55,9 @@ class Merged(Delivery):
 class Installed(Delivery):
     runtime: str
 
+    def __post_init__(self):
+        _require_text(self.runtime)
+
     @property
     def summary(self) -> str:
         return f"Installed {self.runtime}"
@@ -57,8 +66,17 @@ class Installed(Delivery):
 @dataclass(frozen=True)
 class WorksInApp(Delivery):
     evidence: str
+    sha: str
+
+    def __post_init__(self):
+        _require_text(self.evidence, self.sha)
+
     def require_completion(self) -> None:
         pass
+
+    @property
+    def reported_sha(self):
+        return self.sha
 
     @property
     def summary(self) -> str:
@@ -68,6 +86,9 @@ class WorksInApp(Delivery):
 @dataclass(frozen=True)
 class Broken(Delivery):
     reason: str
+
+    def __post_init__(self):
+        _require_text(self.reason)
 
     @property
     def summary(self) -> str:
@@ -85,11 +106,7 @@ class GoalReport:
     next: str
 
     def __post_init__(self) -> None:
-        if not all(type(text) is str and text.strip()
-                   for text in (self.stupid, self.deleted, self.next)):
-            raise ValueError("Goal reports require nonempty stupid, deleted and next.")
-        if not isinstance(self.delivery, Delivery):
-            raise TypeError("Goal reports require a declared Delivery.")
+        _require_text(self.stupid, self.deleted, self.next)
 
     @property
     def summary(self) -> str:

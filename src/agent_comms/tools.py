@@ -23,7 +23,8 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_states import ActiveGoal
-from .goals import GoalDeadline, NoDeadline
+from .goals import Deadline, GoalDeadline, NoDeadline
+from .todos import AcceptanceCheck, Assignment, TodoStore, TodoWhere
 from .goal_progress import GoalProgress
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
@@ -591,18 +592,82 @@ class CommsGoalHistoryTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsOrderTool(ThreadToolRequest):
-    label = "Issue order"
-    description = "Issue a Goal with a deadline, or revise your own existing order without resuming it."
-    thread: str = tool_field("Thread receiving the order")
-    text: str = tool_field("Goal text")
-    deadline: GoalDeadline = tool_field("Goal deadline", default_factory=NoDeadline)
+class CommsTodoCreateTool(ThreadToolRequest):
+    label = "Create problem"
+    description = "Create a durable Todo owning its source, acceptance check and exclusive assignment."
+    id: str = tool_field("Unique problem ID")
+    repo: str = tool_field("Repository owner/name")
+    text: str = tool_field("Problem and requested repair")
+    where: TodoWhere = tool_field("Declared existing source path/line or original message reference")
+    acceptance: AcceptanceCheck = tool_field(
+        "Checkout repo, command, expected_count; command must exit zero and print one integer")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
-        from .cli_commands import OrderCliCommand
+        todo = TodoStore(comms.root).create(self.id, self.repo, self.text,
+            creator=comms.registry.require(caller.name), where=self.where,
+            acceptance=self.acceptance, bus=comms.bus)
+        return {"todo": FieldCodec.encode(todo)}
 
-        return OrderCliCommand(author=caller.name, name=self.thread,
-                               text=self.text, deadline=self.deadline).apply(comms)
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodoAssignTool(ThreadToolRequest):
+    label = "Assign problem"
+    description = "Assign one Todo and create its acceptance-checked commanded Goal; refuse a busy Goal slot."
+    id: str = tool_field("Problem ID")
+    expected_revision: int = tool_field("Exact current Todo revision")
+    owner: str = tool_field("Assignee thread")
+    generation: str = tool_field("Unique assignment/Goal ID")
+    deadline: float = tool_field("Unix deadline timestamp")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        todo = TodoStore(comms.root).assign(self.id, expected_revision=self.expected_revision,
+            owner=comms.registry.require(self.owner), parent=comms.registry.require(caller.name),
+            generation=self.generation, deadline=Deadline(self.deadline), goals=comms.goals)
+        return {"todo": FieldCodec.encode(todo)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodoTransferTool(ThreadToolRequest):
+    label = "Transfer problem"
+    description = "Transfer an exact assignment, pause the previous Goal and notify its prior owner."
+    id: str = tool_field("Problem ID")
+    expected_revision: int = tool_field("Exact current Todo revision")
+    previous: Assignment = tool_field("Exact previous assignment from Todo listing")
+    owner: str = tool_field("New assignee thread")
+    generation: str = tool_field("Unique new assignment/Goal ID")
+    deadline: float = tool_field("Unix deadline timestamp")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        todo = TodoStore(comms.root).transfer(self.id, expected_revision=self.expected_revision,
+            previous=self.previous, owner=comms.registry.require(self.owner),
+            parent=comms.registry.require(caller.name), generation=self.generation,
+            deadline=Deadline(self.deadline), goals=comms.goals)
+        return {"todo": FieldCodec.encode(todo)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodoCompleteTool(ThreadToolRequest):
+    label = "Complete problem"
+    description = "Assignee completion executes the problem's declared check against the reported commit."
+    id: str = tool_field("Problem ID")
+    expected_revision: int = tool_field("Exact current Todo revision")
+    progress: GoalProgress = tool_field("Structured progress; works_in_app requires evidence and sha")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        todo = TodoStore(comms.root).complete(self.id, expected_revision=self.expected_revision,
+            actor=comms.registry.require(caller.name), progress=self.progress, goals=comms.goals,
+            actor_kind=ModelInvocable)
+        return {"todo": FieldCodec.encode(todo)}
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodosTool(ToolRequest):
+    label = "List problems"
+    description = "List canonical Todo definitions and exclusive assignments; optionally filter by repository."
+    repo: str | None = tool_field("Repository owner/name; omit for all", default=None)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
+        return {"todos": FieldCodec.encode(TodoStore(comms.root).list(self.repo))}
 
 
 @dataclass(frozen=True, kw_only=True)
