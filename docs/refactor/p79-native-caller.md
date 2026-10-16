@@ -1,6 +1,6 @@
 # P79 — explicit caller at every tool entry
 
-Owner: core-native-runtime. Branch: fix/p79-native-caller. Unfinished.
+Owner: core-native-runtime. Branch: fix/p79-native-caller. Core PR #1078. Source complete; installed native acceptance pending.
 
 ## Installed cause, not inferred source behavior
 
@@ -14,8 +14,12 @@ Native artifact: native-current-6468a1979d983e9d/node_modules/@earendil-works/pi
 
 ## Work
 
-Bind the native identity once through the existing entry adapter, refresh its declared immutable snapshot, require caller on both Python APIs, and migrate every source/test/journey consumer explicitly. No Core environment fallback, default caller or refusal catch. Preserve both failed core-retry calls and all live-bus state.
+The existing entry adapter captures the owner name once and carries it through --from. Refresh its declared immutable snapshot so the native package actually contains that code. Require caller on both Python APIs and actor on the context-action boundary. Migrate 59 operator calls plus the publisher utility and one declared-tool call explicitly; retain the already-explicit module/function partial bindings instead of replacing them with another default. New rejection checks prove omitted caller/actor fails. No Core environment fallback, default caller or refusal catch. Both failed core-retry calls and live-bus state remain untouched.
 
-Before AST: current source/tests/tools, actual installed Core and metaclass dependency, paired Toad production: 1413 modules, zero parse omissions. TypeScript and compiled extension read directly; Python AST does not parse JavaScript or establish dynamic dispatch.
+Production delta: src/agent_comms/tools.py +3/-3, net 0 lines. The other production-format change is the two derived snapshot fields in stack/native-import-manifest.json. Existing TypeScript source already carries the fix; it is not claimed as a newly authored change.
+
+Before/after AST: current source/tests/tools, actual installed Core and metaclass dependency, paired Toad production: 1413 modules, zero parse omissions. TypeScript and compiled extension read directly; Python AST does not parse JavaScript or establish dynamic dispatch. Evidence is retained under .artifacts/p79-*. The three deliberate missing-argument calls in test_tool_entries_require_explicit_caller_and_context_actor are rejection checks, not forgotten production callers.
+
+Local source batch: 92 passed, 6 failed. All six fail identically against untouched installed Core 21c25f49d, at wire_log.py:512 with Private bus writer has no durable protocol marker; these are retained baseline fixture failures, assigned to core-retry's existing fixture work. No caller failure is hidden. Ratchet exits 0. `git grep -n 'caller: ToolCaller = NoThreadCaller()' -- src | wc -l` returns 0 on this branch.
 
 Acceptance is a fresh scratch-root native thread on the reviewed installed runtime: actual comms_set_goal records the goal under that thread. Source tests and ratchet are necessary but not installed acceptance. Codex alone builds/installs native and operates the fleet pointer.
