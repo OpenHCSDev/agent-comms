@@ -295,6 +295,10 @@ class ReadViewers(DeclaredFamily, affix='Viewers'):
 class SelectedViewers(ReadViewers):
     incarnations: tuple[ThreadIncarnation, ...]
 
+    @classmethod
+    def humans(cls, participants):
+        return cls(tuple(p.incarnation for p in participants if ReadLedger.human(p.role)))
+
     def messages(self, connection):
         return ReadMessageRow.select(connection, viewer_birth=In(tuple(p.created_at for p in self.incarnations)))
 

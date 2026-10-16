@@ -24,8 +24,8 @@ from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
-from .read_ledger import (ReadLedger, ReadMask, ReadSource, AbsentReadSource,
-                          ReadRevision, SelectedViewers, OneViewer, ReadNotice, NoReadNotice,
+from .read_ledger import (ReadDocument, ReadLedger, ReadMask, ReadSource, AbsentReadSource,
+                          ReadRevision, SelectedViewers, ReadNotice, NoReadNotice,
                           ReadObservations)
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
@@ -48,7 +48,6 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .messages import Message
     from .notification_assignment import NotificationAssignmentRead
-    from .read_ledger import ReadDocument, ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
@@ -437,10 +436,17 @@ class DisplaySelection:
         """
         with registry.store.reading() as document, catalog.reading() as channels:
             snapshot = document.snapshot()
-            viewers = (OneViewer(snapshot.participant(viewer).incarnation) if viewer is not None else
-                       SelectedViewers(tuple(thread.incarnation for thread in snapshot.threads.values())))
-            with reads.reading(viewers) as read_document:
-                selected = cls.capture(snapshot, channels, read_document, viewer, source)
+            participants = ((snapshot.participant(viewer),) if viewer is not None
+                            else snapshot.threads.values())
+            viewers = SelectedViewers.humans(participants)
+            if viewers.incarnations:
+                with reads.reading(viewers) as read_document:
+                    selected = cls.capture(snapshot, channels, read_document, viewer, source)
+            else:
+                # No human consumes read state. Never open/recover a missing authority.
+                selected = cls.capture(
+                    snapshot, channels, ReadDocument({}, source, {}, NoReadNotice()), viewer, source
+                )
             yield selected
 
     @property

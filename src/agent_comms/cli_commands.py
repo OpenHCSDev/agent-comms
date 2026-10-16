@@ -26,7 +26,7 @@ from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, StructuredValue
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .exporting import (
@@ -234,7 +234,7 @@ class TargetOutcome:
 class TargetCompleted(TargetOutcome):
     target: str
     command: CliCommand
-    result: object
+    result: StructuredValue
     successful: ClassVar[bool] = True
 
     def reconnect_targets(self) -> tuple[str, ...]:
@@ -439,7 +439,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
         return self.result_exit_code(result)
 
     def encode_result(self, result: object) -> object:
-        return FieldCodec.encode(result)
+        return FieldCodec.encode(result, StructuredValue)
 
     def result_exit_code(self, result: object) -> int:
         return 0

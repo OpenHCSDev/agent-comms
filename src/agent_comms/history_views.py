@@ -372,8 +372,7 @@ class HistoryViews:
         )
         reads = self.transcripts.bus.reads
         if views:
-            viewers = SelectedViewers(tuple(thread.incarnation for thread in snapshot.threads.values()
-                                           if reads.human(thread.role)))
+            viewers = SelectedViewers.humans(snapshot.threads.values())
             read_observations = reads.read(viewers).observations(snapshot)
         else:
             # No selected consumer needs a read cut. This is not an absent-store fallback.

@@ -76,6 +76,24 @@ def test_projection_retains_declared_container_grammar_and_redacts_nested_values
         FieldCodec.project({'v': 1}, 'status')
 
 
+def test_recursive_output_declaration_retains_record_leaves_and_string_key_grammar():
+    type Output = dict[str, Output] | list[Output] | tuple[Output, ...] | object
+    type IntegerMap = dict[int, str]
+
+    @dataclass(frozen=True)
+    class Reply:
+        value: str
+
+    value = {'rows': [Reply('saved'), {'nested': (Reply('again'),)}]}
+    assert FieldCodec.encode(value, Output) == {
+        'rows': [{'value': 'saved'}, {'nested': [{'value': 'again'}]}],
+    }
+    with pytest.raises((TypeError, ValueError), match='str'):
+        FieldCodec.encode({'nested': {1: 'not a CLI object key'}}, Output)
+    assert FieldCodec.decode(IntegerMap, [[1, 'retained']]) == {1: 'retained'}
+    assert FieldCodec.value_schema(IntegerMap)['type'] == 'array'
+
+
 def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter():
     value = OwnedWireRecord(OwnedWireText("retained"), (OwnedWireText("nested"),))
     encoded = {"value": "retained", "nested": ["nested"]}

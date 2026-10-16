@@ -15,6 +15,7 @@ from typing import (
     Any,
     Literal,
     Self,
+    TypeAliasType,
     TypeVar,
     Union,
     cast,
@@ -28,6 +29,10 @@ from .declared_family import DeclaredFamily
 from .sealed import Sealed
 
 T = TypeVar("T")
+
+# Output trees declare string-keyed objects and may contain owned record leaves.
+# Unlike opaque Any, these leaves are encoded through their actual declarations.
+type StructuredValue = dict[str, StructuredValue] | list[StructuredValue] | tuple[StructuredValue, ...] | object
 
 
 class FieldRepresentation(ABC):
@@ -216,6 +221,8 @@ class FieldCodec(Sealed):
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
         if annotation is None:
             return None, None
+        if isinstance(annotation, TypeAliasType):
+            return FieldCodec._representation(annotation.__value__)
         if isinstance(annotation, type):
             # A class has no Annotated metadata. Its live capability still
             # determines representation, including inherited/virtual members.

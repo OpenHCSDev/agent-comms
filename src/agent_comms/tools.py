@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Literal, Type
+from typing import TYPE_CHECKING, ClassVar, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
@@ -13,7 +13,7 @@ from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, StructuredValue
 from .goal_actions import (
     ActiveGoalAction,
     EditGoalAction,
@@ -31,7 +31,6 @@ from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
-from .thread_identity import TurnId
 from .relationships import RelationshipEdit
 from .thread_status import ThreadStatus
 from .tool_output import (
@@ -43,7 +42,7 @@ from .tool_output import (
 if TYPE_CHECKING:
     from .comms import Comms
 
-JsonObject = dict[str, object]
+JsonObject = dict[str, StructuredValue]
 
 
 class ContextBinding(DeclaredFamily, affix="Binding"):
@@ -127,7 +126,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](NativeRequestTools, NativeExe
             request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
         except (TypeError, ValueError) as error:
             raise ValueError(f"Invalid {cls.declared_name} arguments: {error}") from error
-        return FieldCodec.encode(caller.invoke(request, comms))
+        return FieldCodec.encode(caller.invoke(request, comms), JsonObject)
 
     @abstractmethod
     def apply(self, comms: Comms, caller: Caller) -> JsonObject: ...
