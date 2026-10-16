@@ -942,7 +942,10 @@ class ObservationProcess(AbstractContextManager):
                 self.process.start()
             self._resources.callback(self.process.join)
             self._resources.enter_context(acquisition.pop_all())
-        self._resources.callback(self.abandon_reads)
+        self._resources.callback(
+            self.abandon_reads,
+            StaleRevision("The Comms observation retired before the read was answered"),
+        )
 
     def __exit__(self, *exc) -> None:
         self.close()
@@ -992,10 +995,8 @@ class ObservationProcess(AbstractContextManager):
         finally:
             self.reads.pop(request.request_id, None)
 
-    def abandon_reads(self, error: Exception | None = None) -> None:
-        """The reader's retirement settles its waiters without losing a service failure."""
-        if error is None:
-            error = self.died or StaleRevision("The Comms observation retired before the read was answered")
+    def abandon_reads(self, error: Exception) -> None:
+        """The reader's retirement settles its waiters with the original cause."""
         reads, self.reads = self.reads, {}
         for waiter in reads.values():
             if not waiter.done():
