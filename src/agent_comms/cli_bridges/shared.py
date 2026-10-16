@@ -27,6 +27,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import CORE_ERROR, CoreError, TaggedWire, WireModel
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageKind
@@ -520,9 +521,7 @@ class CoreConnection:
         self.binding = binding
 
     @cached_property
-    def comms(self):
-        from agent_comms.comms import Comms
-
+    def comms(self) -> Comms:
         return Comms(Path(self.binding.root))
 
     async def send(self, target: str, body: str, kind: str) -> SendResult:
