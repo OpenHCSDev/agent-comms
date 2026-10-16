@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 from abc import ABC, ABCMeta
+from contextlib import ExitStack
+from importlib import import_module
 from typing import Any, ClassVar, Self, cast
 
 from metaclass_registry import (  # type: ignore[import-untyped]
@@ -11,6 +13,40 @@ from metaclass_registry import (  # type: ignore[import-untyped]
     LazyDiscoveryDict,
     RegistryConfig,
 )
+from metaclass_registry.discovery import (
+    discover_registry_classes,
+    discover_registry_classes_recursive,
+)
+
+
+class _FamilyDiscoveryDict(LazyDiscoveryDict):
+    """Declared modules and packages share the registry's original first-build lock."""
+
+    def _discovery_failed(self) -> None:
+        self._discovered = False
+
+    def _discover(self) -> None:
+        if not self._has_discovery_configuration():
+            return
+        with self._discovery_lock:
+            if self._discovered:
+                return
+            with ExitStack() as failure:
+                failure.callback(self._discovery_failed)
+                self._discovered = True
+                config = cast(RegistryConfig, self._config)
+                module = import_module(config.discovery_package)
+                spec = module.__spec__
+                if spec is None:
+                    raise ImportError(f"Declared family scope has no module spec: {module.__name__}")
+                paths = spec.submodule_search_locations
+                if paths is not None:
+                    discover = config.discovery_function or (
+                        discover_registry_classes_recursive if config.discovery_recursive
+                        else discover_registry_classes
+                    )
+                    discover(paths, module.__name__ + ".", self._base_class)
+                failure.pop_all()
 
 
 class _FamilyMeta(AutoRegisterMeta, ABCMeta):
@@ -41,7 +77,7 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
             # slots dataclasses recreate the root without its class-header keywords.
             namespace["_family_affix"] = affix if affix is not None else namespace.get("_family_affix", "")
             namespace["__registry__"] = (
-                LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
+                _FamilyDiscoveryDict(enable_cache=False) if discovery_package else {}
             )
             namespace["declared_name"] = None
         elif root is not None:
