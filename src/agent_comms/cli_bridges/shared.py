@@ -867,22 +867,18 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
                 updates = pending[:-1] if ended else pending
                 await asyncio.to_thread(output.publish_batch, updates)
 
-MONITOR_PROTOCOL = 'agent-comms-monitor'
-
-
 class MonitorFrame(TaggedWire, ABC):
     """Our line protocol inside the harness's task-notification envelope."""
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
-    protocol: Literal['agent-comms-monitor'] = MONITOR_PROTOCOL
-    wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(MONITOR_PROTOCOL) + ','
-
     @abstractmethod
     async def confirm(self, bridge: TranscriptBridge, record: ObservedMonitor) -> None: ...
 
 
 class MonitorProbe(MonitorFrame):
     wire_tag = 'probe'
+    protocol: Literal['agent-comms-monitor'] = 'agent-comms-monitor'
+    wire_prefix: ClassVar[str] = '{"protocol":' + json.dumps(protocol) + ','
     session: str
     token: str
 
