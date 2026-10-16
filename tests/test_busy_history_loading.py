@@ -240,3 +240,67 @@ def test_viewer_reset_with_unread_observations_ends_the_service(comms):
         viewer.close()  # The unread observation makes the real socketpair reset.
         service.receive()
         assert service.closed and service.changed.is_set()
+
+
+async def test_peer_write_failure_retires_once_and_cancels_owner_reads(comms):
+    import multiprocessing
+
+    from agent_comms.ui_model.observation import ObservationService, ReadAnswered
+
+    connection, viewer = multiprocessing.get_context("spawn").Pipe()
+    with connection, viewer:
+        service = ObservationService(comms, connection)
+        asking = asyncio.create_task(asyncio.Event().wait())
+        service.owner_reads[7] = asking
+        viewer.close()
+        # The real Connection pickler exports a BytesIO memoryview for this payload.
+        service.send(ReadAnswered(1, "x" * 20_000))
+        assert service.closed and service.changed.is_set()
+        assert asking.cancelling() == 1
+        service.retire()
+        service.send(ReadAnswered(2, "unreachable"))
+        service.receive()
+        assert asking.cancelling() == 1
+        with pytest.raises(asyncio.CancelledError):
+            await asking
+
+
+async def test_owner_reply_uses_the_same_peer_retirement(comms):
+    import multiprocessing
+
+    from agent_comms.thread_identity import ThreadIncarnation
+    from agent_comms.ui_model.observation import ObservationService, ReadOwnerGoal
+
+    connection, viewer = multiprocessing.get_context("spawn").Pipe()
+    with connection, viewer:
+        service = ObservationService(comms, connection)
+        # A real missing-owner refusal still has to be sent through the shared endpoint.
+        request = ReadOwnerGoal(str(comms.root), ThreadIncarnation("missing", 0), request_id=7)
+        request.receive(service)
+        asking = service.owner_reads[7]
+        viewer.close()
+        async with asyncio.timeout(5):
+            await asking
+        assert not service.owner_reads
+        assert service.closed and service.changed.is_set()
+
+
+async def test_awaited_notifications_then_immediate_close_retires_successfully(comms):
+    with ObservationProcess.awaited(comms.route) as process:
+        assert await process.read(ReadNotifications(str(comms.root), ())) == {}
+    assert process.connection.closed and process.process.exitcode == 0
+    assert not process.reads
+
+
+def test_local_pipe_corruption_is_not_peer_retirement(comms):
+    import multiprocessing
+
+    from agent_comms.ui_model.observation import ObservationService, ReadAnswered
+
+    connection, viewer = multiprocessing.get_context("spawn").Pipe()
+    with connection, viewer:
+        service = ObservationService(comms, connection)
+        connection.close()
+        with pytest.raises(OSError, match="handle is closed"):
+            service.send(ReadAnswered(1, None))
+        assert not service.closed
