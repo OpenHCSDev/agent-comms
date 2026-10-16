@@ -315,7 +315,7 @@ class HistoricalDisplay:
         if self.source not in archive.sources():
             raise ValueError("Historical source detached; refresh history")
         self.source.validate()
-        ReadLedger(Path(self.source.root) / ReadLedger.filename).mark_displayed(
+        ReadLedger(Path(self.source.root)).mark_displayed(
             self.viewer,
             self.displayed,
             snapshot=self.source.provenance,

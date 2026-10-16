@@ -12,15 +12,14 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, ClassVar
 
-from .channel_targets import is_channel_target
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
 from .declared_family import DeclaredFamily
 from .historical_views import HistorySource
 from .thread_provenance import ThreadProvenance
 from .message_bus import MessageBus
-from .messages import Message
 from .message_reference import MessageReference
+from .read_ledger import ReadLedger
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .external_transcript import ExternalDraftRow, ExternalTranscript
@@ -155,7 +154,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         metadata={"content_exclude": True}
     )
     reply_revision: PublishedReplyRevision
-    read_revision: FileRevision | None = field(metadata={"content_exclude": True})
+    read_revision: tuple[FileRevision | None, ...] = field(metadata={"content_exclude": True})
     receipt_frontier: AssignedSourceCursor | None
     before: TranscriptCursor | None
     after: TranscriptCursor | None
@@ -504,7 +503,7 @@ class Transcripts:
             FileRevision.capture(root / "coordination.sqlite3"),
             FileRevision.capture(root / "coordination.sqlite3-wal"),
             page.projection.reply_revision(records),
-            FileRevision.capture(root / self.bus.reads.path.name),
+            ReadLedger(root).source_revision(),
             receipt_frontier,
             before,
             after,

@@ -344,7 +344,7 @@ class HistoryViews:
         owner = captured.read.identity.thread
         if not owner.incarnation.current(snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
-        return view.presentation.with_sources(captured)
+        return view.presentation.with_sources(captured, snapshot=snapshot)
 
     def coordination_snapshot(
         self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False
@@ -464,7 +464,7 @@ class HistoryViews:
             "history": self.bus.history.path,
             "activity": self.agents.activity._path,
             "runtime_info": self.agents.runtime_info.path,
-            "reads": self.bus.reads.path,
+            "reads": self.bus.reads.source_paths(),
             "native_unread": self.transcript_reads.index_path,
             "goal_waits": self.root / GoalWaits.filename,
             "relationships": self.root / RelationshipStore.filename,

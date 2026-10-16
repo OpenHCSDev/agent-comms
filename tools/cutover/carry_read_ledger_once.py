@@ -35,6 +35,8 @@ class OldDocument:
 def carry(source, destination, registry, index_root):
     if source.resolve() == destination.resolve() or destination.exists():
         raise ValueError('Export requires a distinct, new destination; never replace a live writer')
+    if destination.name != ReadLedger.filename:
+        raise ValueError(f'Destination must name the canonical {ReadLedger.filename}')
     original = source.read_bytes()
     old = FieldCodec.decode(OldDocument, json.loads(original))
     snapshot = FieldCodec.decode(RegistryDocument, json.loads(registry.read_bytes())).snapshot()
@@ -54,7 +56,7 @@ def carry(source, destination, registry, index_root):
         key = TranscriptKey.capture(viewer, path, inode)
         transcripts[key] = max(transcripts.get(key, 0), through)
     document = ReadDocument(messages, old.bus_identity, transcripts, old.notice)
-    ReadLedger(destination).replace(document)
+    ReadLedger(destination.parent).replace(document)
     assert source.read_bytes() == original, 'Original changed during export; output is not installation-ready'
     return {'source_sha256': hashlib.sha256(original).hexdigest(),
             'source_bytes': len(original), 'destination_bytes': destination.stat().st_size,

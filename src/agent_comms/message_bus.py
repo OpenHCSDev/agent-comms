@@ -48,7 +48,7 @@ class MessageBus:
         from .catalog_store import ChannelCatalog
         from .read_ledger import ReadLedger
 
-        self.reads = ReadLedger(bus_path.parent / ReadLedger.filename)
+        self.reads = ReadLedger(bus_path.parent)
         self.log = WireLog(bus_path)
         self.history = HistoryArchive(bus_path)
         self._registry = registry
@@ -170,7 +170,7 @@ class MessageBus:
 
     def pending_count(self, name: str, target: str | None = None) -> int:
         """Count unread messages without retaining their bodies."""
-        with self.snapshot() as (basis, source):
+        with self.snapshot(viewer=name) as (basis, source):
             counts = self._pending_projection(source, basis, [name])[name]
             if target is None or BuiltinChannel.aggregate_target(target):
                 return sum(counts.values())
@@ -182,7 +182,7 @@ class MessageBus:
             return counts.get(basis.registry.require(target).name, 0)
 
     def pending_counts(self, name: str) -> Mapping[str, int]:
-        with self.snapshot() as (basis, source):
+        with self.snapshot(viewer=name) as (basis, source):
             return self._pending_projection(source, basis, [name])[name]
 
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:

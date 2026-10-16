@@ -127,10 +127,13 @@ class MessageNotification:
         references = tuple(reference for message in messages
                            for reference in message.notification_references())
         sources = log.deliveries_for_references(references)
+        if not sources:
+            return {(message.seq, message.message_id): () for message in messages}
         from .notification_assignment import NotificationAssignment
 
         projected = cls.delivery_window(
-            root, registry, sources, NotificationAssignment.read(root, sources)
+            root, registry, sources, NotificationAssignment.read(root, sources),
+            snapshot=registry.snapshot(),
         )
         return {(message.seq,message.message_id):projected.get((message.seq,message.message_id), ())
                 for message in messages}
@@ -141,13 +144,17 @@ class MessageNotification:
         references: Sequence[MessageReference],
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Borrow mounted references in the original bounded delivery windows."""
+        if not references:
+            return {}
         from .notification_assignment import NotificationAssignment
 
+        snapshot = registry.snapshot()
         return cls.read_references(
             log,
             references,
             lambda sources: cls.delivery_window(
-                root, registry, sources, NotificationAssignment.read(root, sources)
+                root, registry, sources, NotificationAssignment.read(root, sources),
+                snapshot=snapshot,
             ),
         )
 
@@ -168,14 +175,14 @@ class MessageNotification:
     @classmethod
     def delivery_window(
         cls, root: Path, registry: Registration, sources: Sequence[CommittedDelivery],
-        assignment_read: NotificationAssignmentRead, *, owner_lookup: str | None = None,
+        assignment_read: NotificationAssignmentRead, *, snapshot: RegistrySnapshot,
+        owner_lookup: str | None = None,
     ):
-        """Project the original frozen audience even before handling is recorded."""
+        """Project this window using the caller's one acquired namespace."""
         from .agent_activity import AgentActivity
 
         if not sources:
             return {}
-        snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
             (recipient for source in sources for recipient in source.audience.recipients
              if cls.includes_recipient(source, recipient, owner_lookup)),
@@ -225,8 +232,8 @@ class MessageNotification:
         if not keys:
             return {}
         rows = assignment_read.resolve(root)
-        reads = ReadLedger(root / ReadLedger.filename)
-        document = reads.observations(snapshot)
+        reads = ReadLedger(root)
+        document = reads.observations_for(snapshot, sources)
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
@@ -331,12 +338,15 @@ class MessageNotification:
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Project outcomes from the caller's original certified source window."""
+        if not sources:
+            return ()
         from .bus_publication import stable_thread_lookup
 
         projected = cls.delivery_window(
             root, registry, sources,
             owner_lookup=stable_thread_lookup(owner.created_at),
             assignment_read=assignment_read,
+            snapshot=registry.snapshot(),
         )
         return tuple(
             replace(notification, message=source.message)
@@ -379,10 +389,10 @@ class DisplaySelection:
         write that same ledger while identity and membership remain acquired.
         """
         with registry.store.reading() as document, catalog.reading() as channels:
-            with reads.reading() as read_document:
-                selected = cls.capture(
-                    document.snapshot(), channels, reads, read_document, viewer
-                )
+            snapshot = document.snapshot()
+            identity = snapshot.participant(viewer).incarnation if viewer is not None else None
+            with reads.reading(identity) as read_document:
+                selected = cls.capture(snapshot, channels, reads, read_document, viewer)
             yield selected
 
     @property
@@ -830,7 +840,7 @@ class WireRevision:
     history: FileRevision | None
     activity: FileRevision | None
     runtime_info: FileRevision | None
-    reads: FileRevision | None
+    reads: tuple[FileRevision | None, ...]
     native_unread: FileRevision | None
     goal_waits: FileRevision | None
     relationships: FileRevision | None
