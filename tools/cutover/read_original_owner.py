@@ -1,8 +1,8 @@
-"""Run ONLY under the authentic original runtime; emit one acquired read.
+"""Run under the selected current runtime; emit one typed acquired read.
 
 No registry or guard write, process signal, native request or input admission.
-The existing registry owner validates the document under its shared lock. A
-target Thread is never handed an original-format record.
+The current registry owner validates the document under its shared lock. Old
+records must be carried once before this reader can consume them.
 """
 import json
 from pathlib import Path
@@ -16,7 +16,6 @@ from owner_read_projection import OwnerReadProjection
 def main():
     root, name, projection_name = sys.argv[1:]
     projection = OwnerReadProjection.decode(projection_name)
-    projection.require_source_runtime()
     registry_path = Path(root) / 'registry.json'
     if not registry_path.is_file() or not registry_path.with_name('.registry.json.lock').is_file():
         raise ValueError('Original registry and existing shared lock are required')

@@ -1,16 +1,16 @@
-"""Authentic original-runtime fixture process; no native/provider work."""
+"""Report-authoring helper and current-runtime replacement fixture."""
+import asyncio
 from dataclasses import replace
 import json
 import os
 from pathlib import Path
 import sys
 
-from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import BlockedGoalAction, ModelInvocable, SetGoalAction
+from agent_comms.runtime import socket_path
+from agent_comms.runtime_requests import SubscribeRuntimeRequest
 from agent_comms.turn_lease import ActiveTurn
-from agent_comms.owner_lifecycle import OwnerReleaseReceipt, OwnerReleaseStore
-from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
@@ -25,46 +25,32 @@ def author_model_report(service, name, turn):
     service.registry.register(replace(source, active_turn=None))
 
 
-def main():
-    from owner_read_projection import RetiredGoalReportProjection
-
-    RetiredGoalReportProjection.require_source_runtime()
-    root = Path(sys.argv[1])
-    root.mkdir(mode=0o700)
-    service = Comms(root)
-    registry = service.registry
-    source = Thread('captured-original', frozenset({'original'}), str(root),
-                    process_identity=ProcessIdentity.capture(os.getpid()),
-                    task='Private capture fixture only')
-    registry.register(source, new_owner=True)
-    author_model_report(service, source.name, 'c7cc88d777b947d99b6f28f9e0b6ef97')
-    retired = Thread('retired-original', frozenset(), str(root))
-    registry.register(retired, StoppedThreadStatus(), new_owner=True)
-    author_model_report(service, retired.name, 'd7cc88d777b947d99b6f28f9e0b6ef97')
-    retired = registry.require(retired.name)
-    OwnerReleaseStore(root / 'owner_release_receipts.json').replace({
-        retired.name: OwnerReleaseReceipt(1, 2, retired),
-    })
-    print(json.dumps({'pid': os.getpid(), 'root': str(root)}), flush=True)
-    for command in sys.stdin:
-        if command.strip() == 'advance-admission':
-            # Same owner generation and process, a distinct admission domain.
-            with registry.store.editing() as edit:
-                edit.document.admissions.advance(source.name)
-                edit.commit()
-            print('advanced', flush=True)
-        else:
-            break
+async def ready(root, owner):
+    async with asyncio.timeout(12):
+        while not socket_path(root, owner.pid).exists():
+            assert owner.process_alive
+            await asyncio.sleep(.02)
+        reader, writer = await asyncio.open_unix_connection(socket_path(root, owner.pid), limit=8*1024*1024)
+        try:
+            writer.write((json.dumps(SubscribeRuntimeRequest(thread=owner.name).to_wire())+'\n').encode())
+            await writer.drain()
+            while line := await reader.readline():
+                packet = json.loads(line)
+                assert 'error' not in packet, packet
+                if 'ready' in packet:
+                    return
+            raise AssertionError('Original worker closed before attachment')
+        finally:
+            writer.close()
+            await writer.wait_closed()
 
 
 def runtime_owners(root, package):
     """Seed real idle source-runtime workers and SDK-authored saved history."""
-    import asyncio
     from agent_comms.fresh_private_session import create_fresh_private_session
     from agent_comms.goal_states import BlockedGoal
     from agent_comms.goals import Goal
     from native_backend_fixture import NativeBackendFixture
-    from seed_thread_retirement_fixture import ready
 
     root.mkdir(mode=0o700)
     service = Comms(root, private_initial_writes=True)
@@ -100,7 +86,6 @@ def runtime_owners(root, package):
 
 
 if __name__ == '__main__':
-    if sys.argv[1] == '--runtime-owners':
-        runtime_owners(Path(sys.argv[2]), Path(sys.argv[3]))
-    else:
-        main()
+    if sys.argv[1] != '--runtime-owners':
+        raise ValueError('Select the current-runtime owner fixture')
+    runtime_owners(Path(sys.argv[2]), Path(sys.argv[3]))

@@ -332,22 +332,27 @@ class HistoryArchive:
         self.path = bus_path.with_name(self.filename)
 
     def sources(self) -> tuple[HistorySource, ...]:
-        try:
-            raw = json.loads(self.path.read_text())
-        except FileNotFoundError:
-            return ()
-        return FieldCodec.decode(tuple[HistorySource, ...], raw)
+        with self.read_sources() as sources:
+            return sources
 
     @contextmanager
     def read_sources(self) -> Iterator[tuple[HistorySource, ...]]:
         """Decode one read's catalogue; reject changes without decoding it again."""
-        revision = FileRevision.capture(self.path)
-        sources = self.sources()
+        try:
+            stream = self.path.open('rb')
+        except FileNotFoundError:
+            yield ()
+            if self.path.exists():
+                raise ValueError("Historical source catalogue changed; refresh history")
+            return
+        with stream:
+            revision = FileRevision.from_file(stream)
+            sources = FieldCodec.decode(tuple[HistorySource, ...], json.load(stream))
         self._require_revision(revision)
         yield sources
         self._require_revision(revision)
 
-    def _require_revision(self, revision: FileRevision | None) -> None:
+    def _require_revision(self, revision: FileRevision) -> None:
         if FileRevision.capture(self.path) != revision:
             raise ValueError("Historical source catalogue changed; refresh history")
 
