@@ -99,7 +99,7 @@ class BusPageIndex:
         self._resources.close()
 
     def covers(self, opened: OpenedWireSnapshot) -> bool:
-        if opened.stream is None or not self.path.exists():
+        if not self.path.exists():
             return False
         with self.snapshot():
             actual, _ = self._schema(self.connection)
