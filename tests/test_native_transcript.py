@@ -5,7 +5,6 @@ from dataclasses import fields
 
 import pytest
 
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
@@ -93,13 +92,11 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
     assert len(decoded) == 5 and forward.events == latest.events
 
 
-def test_malformed_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
+def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     path = tmp_path / "session.jsonl"
     extension = {"type": "plugin-note", "custom": {"future": True}}
     path.write_bytes(
         encoded(extension)
-        + encoded({"type": "message", "message": {"role": "assistant", "content": 42}})
-        + b'{"type":"message"\n'
         + encoded({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "valid"}]}})
         + b'{"type":"message","message":'
     )
@@ -109,10 +106,33 @@ def test_malformed_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     assert forward == list(reversed(reverse))
     assert isinstance(forward[0].entry, UnknownEntry) and forward[0].entry.payload == extension
     assert forward[0].entry.events(TranscriptProjection()) == []
-    assert forward[1].entry is None and forward[2].entry is None
-    assert forward[3].entry.events(TranscriptProjection()) == [AssistantTranscript("valid")]
+    assert forward[1].entry.events(TranscriptProjection()) == [AssistantTranscript("valid")]
     assert forward[-1].entry is None and not forward[-1].complete
     assert forward[0].start == 0 and forward[-1].end == path.stat().st_size
+    assert all(left.end == right.start for left, right in zip(forward, forward[1:]))
+    assert list(reader.tail()) == [record.entry for record in reversed(forward[:-1])]
+
+
+@pytest.mark.parametrize(
+    "corrupt, error",
+    [
+        (encoded({"type": "message", "message": {"role": "assistant", "content": 42}}), ValueError),
+        (b'{"type":"message"\n', json.JSONDecodeError),
+    ],
+    ids=["invalid-content", "invalid-json"],
+)
+def test_complete_corrupt_entries_raise_without_changing_saved_bytes(tmp_path, corrupt, error):
+    path = tmp_path / "session.jsonl"
+    valid = encoded({"type": "message", "message": {
+        "role": "assistant", "content": [{"type": "text", "text": "answer"}],
+    }})
+    original = valid + corrupt + valid
+    path.write_bytes(original)
+    reader = NativeTranscript(path)
+    for records in (reader.forward(0, len(original)), reader.reverse(len(original)), reader.tail()):
+        with pytest.raises(error):
+            tuple(records)
+    assert path.read_bytes() == original
 
 
 @pytest.mark.parametrize(
@@ -160,17 +180,9 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     from agent_comms.coordination_response import install_private_response_schema
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
     from agent_comms.coordinator import Coordination
-    from agent_comms.transcript_receipts import AssignedTranscriptSource
 
     root = tmp_path / "wire"
     comms = wire(root)
-    thread = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
-    lookup = RecordedThreadIncarnation("fixture", thread.created_at).lookup
-    database = root / "coordination.sqlite3"
-    with Coordination(str(database)) as store:
-        install_native_runtime_schema(store)
-        install_private_response_schema(store)
-        store.participants.register(lookup, thread.name, thread.name, committed=True)
     path = tmp_path / "session.jsonl"
     path.write_bytes(b"".join(encoded(row) for row in (
         {"type": "session", "id": "source", "version": 3},
@@ -181,6 +193,18 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
             "role": "assistant", "content": [{"type": "text", "text": "answer"}],
             "stopReason": "stop"}},
     )))
+    thread = comms.registry.declare(Thread(
+        "worker", frozenset(), str(tmp_path), session_file=str(path),
+    ))
+    lookup = thread.incarnation.require_recorded().lookup
+    database = root / "coordination.sqlite3"
+    with Coordination(str(database)) as store:
+        install_native_runtime_schema(store)
+        install_private_response_schema(store)
+        store.participants.register(lookup, thread.name, thread.name, committed=True)
+    # Let the normal page factory choose live publication behavior. Frozen
+    # history assignments deliberately do not read the live coordinator.
+    source = comms.transcripts.capture_page_read("worker").source.projection
     reader = NativeTranscript(path)
     records = tuple(reader.forward(0, path.stat().st_size))
     observe, ancestry = CoordinationStore.observing, NativeTranscript.inputs_for
@@ -212,7 +236,6 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     monkeypatch.setattr(CoordinationStore, "observing", traced_read)
     monkeypatch.setattr(NativeTranscript, "inputs_for", traced_ancestry)
     monkeypatch.setattr(NativeTranscript, "session_id", property(traced_header))
-    source = AssignedTranscriptSource.for_thread(root, thread, comms.bus.log)
     with comms.transcripts.routes.for_session(str(path)) as routes:
         projected = tuple(source.native_records((records,), routes, reader))
     # One parent walk serves the whole fragment.
