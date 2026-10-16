@@ -17,11 +17,13 @@ from agent_comms.child_process import (
     ExitedOutcome,
     ObservedProcess,
     ParentedProcess,
+    ProcessIdentity,
     SignaledOutcome,
 )
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.threads import Thread
 
 
 @pytest.mark.asyncio
@@ -323,10 +325,8 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
     fails before binding its session, shutdown still records that it stopped,
     instead of leaving a running thread whose process is gone."""
     from agent_comms.acp import CommsAgent
-    from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
     from agent_comms.coordination_errors import PublicationActivationBlocked
-    from agent_comms.threads import Thread
 
     comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current(), private_initial_writes=True)
     comms.messaging.initialize_private_initial_protocol()
