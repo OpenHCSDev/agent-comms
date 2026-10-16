@@ -204,10 +204,9 @@ class WakeCandidateIndex:
         if type(max_bytes) is not int or not 1 <= max_bytes <= _MAX_ROW:
             raise ValueError("max_bytes must be a bounded positive byte count")
 
-    @classmethod
+    @staticmethod
     def _checkpoint_start(
-        cls,
-        db: sqlite3.Connection,
+        checkpoint: CandidateCheckpoint | None,
         stream: Any,
         stat: os.stat_result,
         root_id: str,
@@ -215,8 +214,7 @@ class WakeCandidateIndex:
         rebuild: bool,
         bootstrap_new: bool = False,
     ) -> CandidateCheckpoint:
-        """Check the committed source identity and its bounded prefix fingerprint."""
-        checkpoint = CandidateCheckpoint.one(db, singleton=1)
+        """Derive replay coordinates from the one originally captured stored row."""
         if checkpoint is None and not (rebuild or bootstrap_new):
             raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
         if rebuild or checkpoint is None:
@@ -357,30 +355,38 @@ class WakeCandidateIndex:
                 root_id = source.metadata.root_id
                 stat = os.fstat(stream.fileno())
                 with closing(self._connect(self.path, readonly=False)) as db:
-                    # Rebuild replays current-format projections only; old schemas
-                    # require the explicit store reset outside runtime code.
+                    # Bootstrap is schema work only. Capture the stored row once,
+                    # then release the connection before reading or decoding.
                     self._schema(db, create=True)
+                    recorded = CandidateCheckpoint.one(db, singleton=1)
+                checkpoint = self._checkpoint_start(
+                    recorded, stream, stat, root_id,
+                    rebuild=rebuild, bootstrap_new=bootstrap_new,
+                )
+                batch = self._replay_prefix(
+                    source, checkpoint.byte_offset, checkpoint.last_seq,
+                    max_rows=max_rows, max_bytes=max_bytes,
+                )
+                with closing(self._connect(self.path, readonly=False)) as db:
                     db.execute("BEGIN IMMEDIATE")
                     try:
-                        checkpoint = self._checkpoint_start(
-                            db, stream, stat, root_id,
-                            rebuild=rebuild, bootstrap_new=bootstrap_new,
-                        )
-                        offset, last_seq = checkpoint.byte_offset, checkpoint.last_seq
-                        batch = self._replay_prefix(
-                            source,
-                            offset,
-                            last_seq,
-                            max_rows=max_rows,
-                            max_bytes=max_bytes,
-                        )
+                        current = CandidateCheckpoint.one(db, singleton=1)
+                        if current != recorded:
+                            db.rollback()
+                            # Another writer's committed row, not this stale
+                            # batch, owns progress. Validate it without replay.
+                            advanced = self._checkpoint_start(
+                                current, stream, os.fstat(stream.fileno()), root_id,
+                                rebuild=False,
+                            )
+                            return advanced.byte_offset >= source.boundary
                         tail = self._source_end(stream, batch.next_offset)
                         self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
                         db.commit()
                     except BaseException:
                         db.rollback()
                         raise
-                    return batch.next_offset >= source.boundary
+                return batch.next_offset >= source.boundary
         except (
             OSError,
             ValueError,
@@ -420,7 +426,10 @@ class WakeCandidateIndex:
                 self._schema(db, create=False)
                 with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
-                    checkpoint = self._checkpoint_start(db, stream, stat, root_id, rebuild=False)
+                    checkpoint = self._checkpoint_start(
+                        CandidateCheckpoint.one(db, singleton=1),
+                        stream, stat, root_id, rebuild=False,
+                    )
                 return checkpoint
         except (OSError, RelationViolationError, sqlite3.DatabaseError) as error:
             raise ProjectionUnavailableError("candidate checkpoint unavailable") from error

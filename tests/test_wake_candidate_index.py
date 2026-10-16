@@ -23,7 +23,9 @@ from agent_comms.coordination_tables.publications import canonical_publication_k
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
+from agent_comms.typed_table import TypedTable
 from agent_comms.wake_candidate_index import (
+    CandidateTable,
     ProjectionRebuildRequiredError,
     ProjectionUnavailableError,
     WakeCandidateIndex,
@@ -409,8 +411,10 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
             assert [candidate.source_seq for candidate in first.entries] == [
                 m.seq for m in messages[:2]
             ]
-            saved = {table: db.execute(f'SELECT * FROM "{table}"').fetchall()
-                     for table in ("candidate_checkpoint", "candidate", "candidate_response_key")}
+            saved = {
+                owner.declared_name: db.execute(f'SELECT * FROM "{owner.declared_name}"').fetchall()
+                for owner in TypedTable.members_with(CandidateTable)
+            }
             second_batch = index._replay_prefix(
                 source, first_batch.next_offset, first_batch.last_seq,
                 max_rows=2, max_bytes=256 * 1024,
@@ -434,6 +438,34 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
         index.maintain(rebuild=True)
     with pytest.raises(RelationViolationError):
         comms.bus.log.read_delivery_cohort(root_id, messages[3].seq)
+
+
+def test_candidate_decode_releases_writer_and_discards_a_losing_batch(tmp_path, monkeypatch):
+    comms, root_id, lookup = _private(tmp_path)
+    messages = [comms.messaging.send_initial_cohort("sender", "Alice", body)
+                for body in ("first", "second")]
+    index = WakeCandidateIndex(comms.bus.log)
+    replay = WakeCandidateIndex._replay_prefix
+    races = []
+
+    def another_writer(cls, source, *args, **kwargs):
+        if not races:
+            races.append(True)
+            # This is a real second SQL writer, admitted while the outer
+            # operation decodes. Its committed checkpoint must win intact.
+            assert not index.maintain(bootstrap_new=True, max_rows=1)
+        return replay(source, *args, **kwargs)
+
+    monkeypatch.setattr(WakeCandidateIndex, "_replay_prefix", classmethod(another_writer))
+    assert not index.maintain(rebuild=True)
+    assert index._verified_checkpoint(root_id).last_seq == messages[0].seq
+    first = index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
+                       after_seq=0, required_through_seq=messages[0].seq)
+    assert [entry.source_seq for entry in first.entries] == [messages[0].seq]
+    assert index.maintain()
+    completed = index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
+                           after_seq=0, required_through_seq=messages[-1].seq)
+    assert [entry.source_seq for entry in completed.entries] == [m.seq for m in messages]
 
 
 def test_maintenance_replays_its_captured_cut_not_a_later_partial_append(tmp_path, monkeypatch):
