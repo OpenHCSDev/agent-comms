@@ -45,7 +45,7 @@ def test_configure_refuses_unsupported_result_without_writing(comms, tmp_path, m
         name="worker", **({"thinking": "high"} if change == "thinking" else {"model": "fixture/plain"})
     )
     with pytest.raises(ValueError, match="unavailable; choose one of: off"):
-        command.apply(comms)
+        command.apply(comms, caller=NoThreadCaller())
     assert comms.registry.require("worker") == original
     assert queried == ["fixture/reasoning" if change == "thinking" else "fixture/plain"]
 
@@ -87,11 +87,11 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     assert configured.service_tier.value == "standard"
 
 
-def test_native_arguments_configured_has_one_default(monkeypatch):
+def test_missing_external_arguments_do_not_invent_native_model_defaults(monkeypatch):
     monkeypatch.delenv(NativeArguments.arguments_key, raising=False)
     monkeypatch.delenv(NativeArguments.binary_key, raising=False)
     assert NativeArguments.configured_binary() == NativeArguments.default_binary
-    assert NativeArguments.configured().argv == NativeArguments.default
+    assert NativeArguments.configured().argv == ()
     monkeypatch.setenv(NativeArguments.binary_key, "/fixture/pi")
     monkeypatch.setenv(NativeArguments.arguments_key, '--model "fixture/model" --thinking off')
     assert NativeArguments.configured_binary() == "/fixture/pi"
