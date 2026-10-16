@@ -44,8 +44,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Comms root directory (default $AGENT_COMMS_ROOT, active route, or ~/.agent-comms)",
     )
-    parser.add_argument(ThreadIncarnation.value_flag, type=ThreadCaller.from_json,
-                        dest="caller", default=NoThreadCaller())
+    ThreadIncarnation.add_cli_arguments(parser, required=False, dest="caller_identity")
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
         declaration.add_parser(subparsers)
@@ -60,7 +59,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.admit_client())
             comms = wire(route)
-            return command.run(comms, sys.stdout, caller=args.caller)
+            identity = vars(args).get("caller_identity")
+            caller = NoThreadCaller() if identity is None else ThreadCaller(identity.require_recorded())
+            return command.run(comms, sys.stdout, caller=caller)
     except KeyboardInterrupt:
         return 130
     except StoppedOwnerFailure as exc:

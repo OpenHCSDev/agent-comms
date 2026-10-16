@@ -115,9 +115,8 @@ def main() -> int:
         prog="agent-comms-agent", description=__doc__,
         epilog="Select an existing owner by recorded identity. Use agent-comms for commands.",
     )
-    parser.add_argument(ThreadIncarnation.value_flag, type=ThreadIncarnation.from_json,
-                        dest="incarnation", required=True)
-    incarnation = parser.parse_args().incarnation
+    ThreadIncarnation.add_cli_arguments(parser, required=True, dest="incarnation")
+    incarnation = parser.parse_args().incarnation.require_recorded()
 
     with suppress(KeyboardInterrupt):
         asyncio.run(run(incarnation))
