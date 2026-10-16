@@ -52,7 +52,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
     )) for number, timestamp in enumerate((birth+2, birth-1, birth+2, birth+1))]
     comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
         viewer, (originals[0],), comms.registry.snapshot(), comms.bus.log.path,
-    ))
+    ), snapshot=comms.registry.snapshot())
     with comms.bus.snapshot(viewer=viewer) as (basis, source):
         delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
 
