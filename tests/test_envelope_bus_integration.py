@@ -425,16 +425,18 @@ def test_saved_colliding_creation_id_blocks_claim_write_before_append(tmp_path: 
     claimed = comms.messaging.send_message(
         "alice", "bob", "Claim a", claims=[ExistingFileClaim(Path("a.py"))]
     )
+    original_bytes = comms.bus.log.path.read_bytes()
     with comms.registry.store.editing() as edit:
         threads = edit.document.threads
         threads["bob"] = replace(threads["bob"], created_at=threads["alice"].created_at)
         edit.commit()
     comms = Comms(comms.root)
-    with pytest.raises(RelationViolationError, match="creation identities collide"):
+    with pytest.raises(RelationViolationError, match="Snapshot lookup index differs from its threads"):
         comms.messaging.send_message(
             "bob", "alice", "Cannot release under duplicate ID", releases=["a.py"]
         )
-    assert comms.views.full_history() == [claimed]
+    assert comms.bus.log.path.read_bytes() == original_bytes
+    assert comms.bus.log.full_history() == [claimed]
 
 
 @pytest.mark.parametrize("suffix", ["//a.py", "/./a.py"])
