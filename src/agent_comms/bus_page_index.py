@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
 from .coordination_database import CoordinationStore
+from .errors import RelationViolationError
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
@@ -123,20 +124,22 @@ class BusPageIndex:
                 self.connection.execute("ROLLBACK")
 
     def sync(self) -> bool:
-        """Return false for an unfinished tail, which the caller scans normally."""
+        """Prepare a freshly opened source; incomplete source is an error."""
         from .wire_log import WireLog
 
         with WireLog(self.bus_path)._opened_wire_snapshot(need_sequence=False) as source:
-            return self._sync_opened(source)
+            self.prepare(source)
+        return True
 
-    def _sync_opened(self, opened: OpenedWireSnapshot) -> bool:
+    def prepare(self, opened: OpenedWireSnapshot) -> None:
+        """Bring this disposable index up to the caller's original source cut."""
         while True:
             prepared = self._prepare(opened)
             if prepared is None:
-                return False
+                raise RelationViolationError("Cannot prepare a page index from an incomplete wire cut")
             saved, source, offset, rows = prepared
             if saved == source:
-                return True
+                return
             with self.connection:
                 self.connection.execute("BEGIN IMMEDIATE")
                 if BusPageSource.one(self.connection, singleton=1) != saved:
@@ -182,7 +185,7 @@ class BusPageIndex:
             row_offset = stream.tell()
             raw = stream.readline(min(WireRecord.max_row_bytes + 1, size - row_offset))
             WireRecord.require_row_size(
-                raw, error_type=OversizedIndexedBusRowError,
+                raw, error_type=RelationViolationError,
                 message="Bus row exceeds its declared byte limit",
             )
             if not raw.endswith(b"\n"):
@@ -192,31 +195,20 @@ class BusPageIndex:
             record = json.loads(raw)
             if not isinstance(record, Mapping):
                 raise ValueError("JSONL bus row must be an object.")
-            for message in WireRecord.public_from_wire(record).messages():
+            for message in opened.messages(record):
                 if last_sequence is not None and message.seq <= last_sequence:
-                    raise StaleBusPageIndexError("Wire sequences are not increasing.")
+                    raise RelationViolationError("Wire sequences are not increasing.")
                 rows.append(BusPageRow(message.seq, row_offset, message.sender, message.target))
                 last_sequence = message.seq
         through = stream.tell()
         source = BusPageSource(replace(revision, size=through), AppendCheckpoint.fingerprint(stream, through))
         return saved, source, offset, tuple(rows)
 
-    def current(self) -> bool:
-        """Read-only warm-cache check; never rebuild the bus on a wake."""
-        with self.bus_path.open("rb") as stream:
-            stat = os.fstat(stream.fileno())
-            size = stat.st_size
-            if size:
-                stream.seek(size - 1)
-                if stream.read(1) != b"\n":
-                    return False
-            try:
-                saved = BusPageSource.one(self.connection, singleton=1)
-            except (ValueError, TypeError):
-                return False  # Damaged derived evidence: the caller reads the source.
-            return saved is not None and saved == BusPageSource(
-                FileRevision.from_stat(stat), AppendCheckpoint.fingerprint(stream, size)
-            )
+    def invalidate(self) -> None:
+        """Discard damaged derived coverage; prepare owns the subsequent rebuild."""
+        with self.connection:
+            self.connection.execute("BEGIN IMMEDIATE")
+            BusPageSource.delete(self.connection, singleton=1)
 
     def offsets(
         self,

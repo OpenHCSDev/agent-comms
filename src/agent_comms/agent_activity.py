@@ -10,13 +10,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .native_input_owner import RegistryOwner
+from .notification_progress import AcknowledgedProgress
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .bus_publication import CommittedDelivery
-    from .notification_assignment import AssignmentProgress
+    from .notification_progress import AssignmentProgress
     from .presentation import MessageNotification
 from .activity import (
     Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity,
@@ -25,7 +26,7 @@ from .declared_family import DeclaredFamily
 from .audience_manifest import FrozenRecipient
 from .errors import RelationViolationError
 from .routing import TurnRouting
-from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
+from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
@@ -82,6 +83,7 @@ class ExternalRecipientActivity(RecipientActivity):
                 notification,
                 state="Acknowledged",
                 detail="",
+                progress=AcknowledgedProgress(),
                 priority=2,
                 busy=False,
                 changed=True,
@@ -268,5 +270,5 @@ class AgentActivity:
             canonical = self.registry.require(thread).name
             self.runtime_info.observe(canonical, time.time(), observation)
 
-    def agent_info_of(self, thread: str) -> AgentRuntimeInfo | None:
-        return self.runtime_info.read().get(self.registry.require(thread).name)
+    def agent_info_of(self, thread: str) -> RuntimeInfo:
+        return self.runtime_info.for_thread(self.registry.require(thread).name)

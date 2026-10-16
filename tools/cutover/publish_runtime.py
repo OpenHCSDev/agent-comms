@@ -114,8 +114,9 @@ def main() -> None:
     # Queue requests keep original process identity and session settings. A
     # pending or uncertain previous request is handled by that existing owner.
     os.environ['VIRTUAL_ENV'] = str(publication.runtime)
+    selected = LaunchRuntime(publication.runtime / 'bin/python')
     for owner in owners:
-        request = enqueue(comms, owner.name)
+        request = enqueue(comms, owner.name, launch_runtime=selected)
         print(f'{owner.name}: {request.state.declared_name} ({request.id})', flush=True)
 
 
