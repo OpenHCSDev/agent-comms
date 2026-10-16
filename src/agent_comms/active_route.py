@@ -301,7 +301,7 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        acquire_exclusive_route_lock(directory)
+        fcntl.flock(directory, fcntl.LOCK_EX)
         _publish_active_route_locked(route, path, directory)
     finally:
         os.close(directory)
