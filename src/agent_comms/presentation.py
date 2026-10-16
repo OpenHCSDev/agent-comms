@@ -877,12 +877,6 @@ class WireRevision:
         """A thread registration or a channel declaration changed."""
         return (self.registry, self.catalog) != (earlier.registry, earlier.catalog)
 
-    def bus_replaced_since(self, earlier: WireRevision) -> bool:
-        """Appending preserves conversation identity; replacement or truncation does not."""
-        if self.bus_log is None or earlier.bus_log is None:
-            return self.bus_log != earlier.bus_log
-        return not earlier.bus_log.holds_cut(self.bus_log, earlier.bus_log.size)
-
     def stores_changed_since(self, earlier: WireRevision) -> bool:
         """Any observed store changed; the activity expiry tick is not a store."""
         return replace(self, expiry_tick=earlier.expiry_tick) != earlier

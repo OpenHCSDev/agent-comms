@@ -14,7 +14,10 @@ from typing import TYPE_CHECKING
 from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
 from .messages import Message
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, DMDisplayBasis, DMDisplayScope, MessageDisplayScope
+from .read_basis import (
+    ChannelDisplayScope, DisplaySelection, DMDisplayBasis, DMDisplayScope,
+    MessageDisplayScope, NoDisplaySelection,
+)
 from .wire_log import OpenedWireSnapshot
 
 if TYPE_CHECKING:
@@ -37,6 +40,17 @@ class MessagePage:
     display_basis: DMDisplayBasis | None = None
     historical_display: HistoricalDisplay | None = None
     history_revision: FileRevision | None = None
+
+    @property
+    def selection(self) -> DisplaySelection:
+        """Derive the selected conversation from this page's original evidence."""
+        if self.historical_display is not None:
+            return self.historical_display.selection(self.history_revision)
+        if self.display_basis is not None:
+            return self.display_basis.selection(self.history_revision)
+        if self.display_scope is not None:
+            return self.display_scope.selection(self.history_revision)
+        return NoDisplaySelection()
 
     @property
     def oldest_cursor(self) -> int | HistoryCursor | None:

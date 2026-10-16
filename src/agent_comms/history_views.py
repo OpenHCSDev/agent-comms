@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from contextlib import ExitStack, contextmanager
+from collections.abc import Iterable, Mapping, Sequence
+from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -119,12 +119,6 @@ class HistoryViews:
         self._wire_lock_path = root / "wire"
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
         self.transcript_reads = transcript_read_state(bus.reads.path)
-
-    @contextmanager
-    def shared_read(self) -> Iterator[RegistrySnapshot]:
-        """Borrow one registry/catalogue cut through this view owner's wire lock."""
-        with _store_lock(self._wire_lock_path, shared=True):
-            yield self.registry.snapshot()
 
     def message_notifications(self, messages: Sequence[Message]):
         return MessageNotification.window(self.root, self.registry, self.bus.log, messages)

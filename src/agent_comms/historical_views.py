@@ -23,7 +23,10 @@ from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
-from .read_basis import ChannelDisplayScope, DisplayBasis, DMDisplayScope, MessageDisplayScope
+from .read_basis import (
+    ChannelDisplayScope, ChannelSelection, DisplayBasis, DisplaySelection,
+    DMDisplayScope, DMSelection, HistoricalSelection, MessageDisplayScope,
+)
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy, ResponsePolicy
@@ -36,6 +39,7 @@ if TYPE_CHECKING:
     from .presentation import BusPresentation, WireRevision
     from .history_views import HistoryViews
     from .registry_document import RegistrySnapshot
+    from .catalog_document import CatalogDocument
 
 
 class HistoryView(ABC):
@@ -83,54 +87,6 @@ class HistoryView(ABC):
         return MessagePageRequest(scope, traversal, limit, max_bytes)
 
 
-class DisplaySelection(ABC):
-    """A Core-owned display witness, not a tuple for clients to reconstruct."""
-
-    __slots__ = ()
-
-    @property
-    @abstractmethod
-    def has_evidence(self) -> bool: ...
-
-
-@dataclass(frozen=True, slots=True, kw_only=True)
-class SelectedDisplay(DisplaySelection):
-    viewer: ThreadIncarnation
-    history_revision: FileRevision | None
-
-    @property
-    def has_evidence(self) -> bool:
-        return True
-
-
-@dataclass(frozen=True, slots=True)
-class NoDisplaySelection(DisplaySelection):
-    @property
-    def has_evidence(self) -> bool:
-        return False
-
-
-@dataclass(frozen=True, slots=True)
-class ChannelSelection(SelectedDisplay):
-    bus_identity: tuple[int, int] | None
-    scope: ChannelDisplayScope
-
-
-@dataclass(frozen=True, slots=True)
-class DMSelection(SelectedDisplay):
-    root_identity: tuple[int, int]
-    bus_identity: tuple[int, int] | None
-    worktree: str
-    requested_peer: str
-    peer: ThreadIncarnation
-    scope: DMDisplayScope
-
-
-@dataclass(frozen=True, slots=True)
-class HistoricalSelection(SelectedDisplay):
-    """The original viewer and attached-source revision select an archive page."""
-
-
 @dataclass(frozen=True, slots=True)
 class ConversationRevision:
     """Core's captured selection and original store observation for one view."""
@@ -140,47 +96,36 @@ class ConversationRevision:
 
     def display_changed_since(self, earlier: ConversationRevision) -> bool:
         return (self.selection != earlier.selection
-                or self.stores.bus_replaced_since(earlier.stores))
+                or FileRevision.source_changed(earlier.stores.bus_log, self.stores.bus_log))
 
 
 class ConversationHistoryView:
     """Historical views that present conversation content, not owner state."""
 
     @classmethod
-    def _page_selection(cls, page: MessagePage) -> DisplaySelection:
-        if page.historical_display is not None:
-            return HistoricalSelection(
-                viewer=page.historical_display.displayed.viewer_identity,
-                history_revision=page.history_revision,
-            )
-        return cls._current_page_selection(page)
-
-    @classmethod
-    @abstractmethod
-    def _current_page_selection(cls, page: MessagePage) -> DisplaySelection: ...
-
-    @classmethod
     def same_display(cls, page: MessagePage, earlier: MessagePage) -> bool:
         """Read-scope safety uses the original pages, never a client identity copy."""
-        return cls._page_selection(page) == cls._page_selection(earlier)
+        return page.selection == earlier.selection
 
     @classmethod
     def has_display_evidence(cls, page: MessagePage) -> bool:
-        return cls._page_selection(page).has_evidence
+        return page.selection.has_evidence
 
     @classmethod
     def revision(cls, views: HistoryViews, target: str, *, worktree: str) -> ConversationRevision:
         worktree = str(Path(worktree).resolve())
         viewer = views.messaging.user_identity(worktree).name
-        with views.shared_read() as snapshot:
+        with views.registry.store.reading() as registry, views.channels.catalog.reading() as catalog:
             stores = views.revision()
             return ConversationRevision(
-                stores, cls._selection(views, snapshot, viewer, target, worktree, stores.history),
+                stores, cls._selection(
+                    views, registry.snapshot(), catalog, viewer, target, worktree, stores.history,
+                ),
             )
 
     @classmethod
     @abstractmethod
-    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot,
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
                    history_revision: FileRevision | None) -> DisplaySelection: ...
 
@@ -206,19 +151,10 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     viewer: str | None = None
 
     @classmethod
-    def _current_page_selection(cls, page: MessagePage) -> DisplaySelection:
-        scope = page.display_scope
-        if scope is None or scope.displayed is None:
-            return NoDisplaySelection()
-        return ChannelSelection(viewer=scope.displayed.viewer_identity,
-                                bus_identity=scope.displayed.bus_identity, scope=scope,
-                                history_revision=page.history_revision)
-
-    @classmethod
-    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot,
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
                    history_revision: FileRevision | None) -> ChannelSelection:
-        channel = views.channels.catalog.read().views(snapshot.threads).get(target)
+        channel = catalog.views(snapshot.threads).get(target)
         if channel is None:
             raise ValueError(f"Unknown channel: {target!r}")
         return ChannelSelection(
@@ -251,20 +187,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
     worktree: str
 
     @classmethod
-    def _current_page_selection(cls, page: MessagePage) -> DisplaySelection:
-        basis = page.display_basis
-        if basis is None:
-            return NoDisplaySelection()
-        return DMSelection(
-            root_identity=basis.root_identity, bus_identity=basis.bus_identity,
-            worktree=basis.worktree, requested_peer=basis.requested_peer,
-            viewer=basis.viewer_identity, peer=basis.peer_identity,
-            scope=DMDisplayScope(basis.viewer_names, basis.peer_names),
-            history_revision=page.history_revision,
-        )
-
-    @classmethod
-    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot,
+    def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
                    history_revision: FileRevision | None) -> DMSelection:
         try:
@@ -445,6 +368,11 @@ class HistoricalThread:
 class HistoricalDisplay:
     source: HistorySource
     displayed: DisplayBasis
+
+    def selection(self, history_revision: FileRevision | None) -> HistoricalSelection:
+        return HistoricalSelection(
+            viewer=self.displayed.viewer_identity, history_revision=history_revision,
+        )
 
     @property
     def viewer(self) -> str:
