@@ -102,20 +102,23 @@ def test_exact_cas_and_owner_pause_remain_strict(selected_goal):
 
 
 def test_model_edit_and_resume_use_current_goal_selection(selected_goal, monkeypatch):
+    from agent_comms.tool_caller import ThreadCaller
+
     comms, original = selected_goal
+    caller = ThreadCaller("worker")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    edited = CommsEditGoalTool(goal_id=original.id, text="Edited objective").apply(comms)
+    edited = CommsEditGoalTool(goal_id=original.id, text="Edited objective").apply(comms, caller)
     current = FieldCodec.decode(Goal, edited["goal"])
     assert current.id == original.id and current.revision > original.revision
     comms.goals.update_goal("worker", PausedGoalAction())
-    resumed = CommsResumeGoalTool(goal_id=original.id, progress="Explicit model resume").apply(comms)
+    resumed = CommsResumeGoalTool(goal_id=original.id, progress="Explicit model resume").apply(comms, caller)
     assert FieldCodec.decode(Goal, resumed["goal"]).id == original.id
     assert comms.registry.require("worker").goal.state.active
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="Replacement"))
     with pytest.raises(ValueError, match="replaced or cleared"):
-        CommsEditGoalTool(goal_id=original.id, text="Stale edit").apply(comms)
+        CommsEditGoalTool(goal_id=original.id, text="Stale edit").apply(comms, caller)
     with pytest.raises(ValueError, match="cannot be resumed"):
-        CommsResumeGoalTool(goal_id=original.id, progress="Stale resume").apply(comms)
+        CommsResumeGoalTool(goal_id=original.id, progress="Stale resume").apply(comms, caller)
     assert comms.registry.require("worker").goal == replacement
 
 

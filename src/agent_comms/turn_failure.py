@@ -38,6 +38,12 @@ class TurnFailure(DeclaredFamily):
     def after_provider_retry_exhausted(self) -> TurnFailure:
         return self
 
+    def raise_native(self, proof, provider: str, model: str) -> None:
+        """A runtime failure does not prove a completed provider request."""
+        from .native_pi import NativePiUnavailable
+
+        raise NativePiUnavailable(self.text)
+
     def retry_delay(self, attempt_ordinal: int) -> float:
         raise TypeError("Only a retryable provider failure has a retry delay")
 
@@ -122,6 +128,11 @@ class ModelRequestFailed(TurnFailure):
 
     def after_provider_retry_exhausted(self) -> TurnFailure:
         return ProviderRetryExhausted(self.text)
+
+    def raise_native(self, proof, provider: str, model: str) -> None:
+        from .native_pi import NativePiTerminalFailure
+
+        raise NativePiTerminalFailure(self.text, proof, provider, model, self)
 
     code = FailureReason.MODEL_REQUEST_FAILED
     precedence = 45

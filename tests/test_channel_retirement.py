@@ -17,7 +17,7 @@ from test_private_human_ingress import _root
 
 def saved_catalog(root):
     from agent_comms.catalog_document import CatalogDocument, ChannelPreferences
-    from agent_comms.display_order import ChannelSort, ThreadSort
+    from agent_comms.display_order import LastActivityThreadSort, LastUserInputChannelSort
 
     document = CatalogDocument(
         tags=frozenset({"api", "ui"}),
@@ -25,7 +25,7 @@ def saved_catalog(root):
             "#engineering": ChannelPreferences(
                 created_at=17,
                 pinned=True,
-                order=ThreadSort.LAST_ACTIVITY,
+                order=LastActivityThreadSort,
                 pinned_threads=frozenset({"a"}),
                 parent="#ui",
             ),
@@ -40,7 +40,7 @@ def saved_catalog(root):
                 frozenset({"#engineering"}),
             )
         },
-        list_order=ChannelSort.LAST_USER_INPUT,
+        list_order=LastUserInputChannelSort,
     )
     ChannelCatalog(root / "catalog.json").replace(document)
     return FieldCodec.encode(document)

@@ -62,7 +62,7 @@ def _session(tmp_path, *, package=True):
         frozenset({"team"}),
         str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
-        model="openai-codex/gpt-6-sol",
+        model="test/model",
     )
     comms.registry.declare(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()

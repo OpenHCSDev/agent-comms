@@ -28,7 +28,6 @@ from .bus_source_page import AddressedPage
 from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
-    project_verified_transitions,
 )
 from .errors import (
     RelationViolationError,
@@ -284,7 +283,7 @@ class WireLog:
 
     def register_append_index(self, index: BusAppendIndex[Checkpoint]) -> BusAppendIndex[Checkpoint]:
         """Register one index owner for automatic capture with every opened cut."""
-        if index.bus_path != self.path:
+        if index.source_path != self.path:
             raise ValueError("Append index belongs to another bus")
         if index not in self._append_indexes:
             self._append_indexes.append(index)
@@ -386,21 +385,11 @@ class WireLog:
             for record in lock.certified_read().context_records(manifest):
                 self._append_private_unlocked(marker, record.to_wire())
 
-    def context_manifests(self, name: str, registry):
-        return tuple(resource.value for resource in self.context_manifest_resources(name, registry))
+    def context_manifest_page(self, name: str, registry, *, cursor=None, previous=()):
+        from .private_bus_checkpoint import RecordedContextManifestSources
 
-    def context_manifest_resources(self, name: str, registry, *, previous=()):
-        """Capture original source and rename membership before decoding.
-
-        The original wire -> bus -> registry order selects the read snapshot;
-        neither physical publication lock survives into its decoder.
-        """
-        with _store_lock(self.path.parent / "wire", shared=True), self.certified_read() as source:
-            snapshot = registry.snapshot()
-            incarnation = snapshot.require(name).incarnation
-            captured = source.marker.access.context_resources(
-                source, incarnation, snapshot, previous=previous)
-        return tuple(captured)
+        return RecordedContextManifestSources.for_owner(
+            self, name, registry, cursor=cursor, previous=previous)
 
     @contextmanager
     def retained_sources(self, name: str, registry):
@@ -459,18 +448,9 @@ class WireLog:
             path = path.parent
 
     def claim_projection(self) -> ClaimProjection:
-        """Derive ownership exclusively from guarded, verified bus envelopes."""
-        with self._opened_wire_snapshot(need_sequence=False) as opened:
-            if not opened.metadata.claims:
-                raise RelationViolationError("Claim read barrier is unavailable.")
-            return project_verified_transitions(
-                transition
-                for record in self._snapshot_records(
-                    opened.metadata, opened.stream, opened.boundary
-                )
-                for message in record.messages()
-                for transition in message.claim_transitions
-            )
+        """Read current ownership from the canonical certified checkpoint."""
+        with self.certified_read() as source:
+            return source.claim_projection()
 
     def _private_marker_unlocked(self) -> WireMetadata:
         self._assert_private_directory()
@@ -782,9 +762,9 @@ class WireLog:
             or stat.S_IMODE(marker_info.st_mode) != 0o600
         ):
             raise RelationViolationError("Claim bus read barrier is not durable and private.")
-        from .private_bus_checkpoint import opened_claim_source_unlocked
+        from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
-        with opened_claim_source_unlocked(self, private_marker, shared=shared) as source:
+        with opened_private_checkpoint_unlocked(self, private_marker, shared=shared) as source:
             yield source
 
     @property

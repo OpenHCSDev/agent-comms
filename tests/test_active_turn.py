@@ -12,9 +12,10 @@ from agent_comms.activity import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.drain_failures import DrainFailureState, drain_failures
+from agent_comms.drain_failures import drain_failures
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.threads import Thread
+from agent_comms.thread_presentation import AttentionThreadPresentationStatus
 from agent_comms.turn_phase import (
     CompactionPhase,
     ModelWaitPhase,
@@ -45,7 +46,7 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
         Activity("worker", ActivityState.WORKING, "Still working", time.time() - 1000)
     )
     view = comms.views.thread_views()[0]
-    assert view.thread.executing and view.presentation.busy
+    assert view.thread.executing and view.presentation.status.busy
     current = comms.agents.activity_of("worker")
     assert current.state is ActivityState.THINKING
     assert current.detail == "Long-running work"
@@ -65,7 +66,7 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
 
     comms.agents.finish_turn(first)
     assert comms.agents.activity_of("worker").presentation("Worker").summary == "Ready"
-    assert not comms.views.thread_views()[0].presentation.busy
+    assert not comms.views.thread_views()[0].presentation.status.busy
     comms.agents.begin_turn("worker", "second")
     comms.agents.finish_turn(first)
     assert comms.registry.require("worker").active_turn.id == "second"
@@ -92,7 +93,7 @@ async def test_repeated_turn_preparation_displays_real_native_drain_failure(tmp_
         retried += 1
 
     async with drain_failures(
-        comms, "worker", owner, retry, DrainFailureState()
+        comms, "worker", owner, retry
     ):
         raise NativePiUnavailable("native request never opened")
 
@@ -114,5 +115,6 @@ async def test_repeated_turn_preparation_displays_real_native_drain_failure(tmp_
     recorded = datetime.fromtimestamp(failure.recorded_at).astimezone().strftime("%H:%M")
     assert view.presentation.summary == f"Failed {recorded}"
     assert "native request never opened" in failure.summary
-    assert view.presentation.attention and view.presentation.busy
+    assert isinstance(view.presentation.status, AttentionThreadPresentationStatus)
+    assert view.presentation.status.busy
     comms.agents.finish_turn(repeated.turn_lease)

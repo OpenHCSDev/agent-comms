@@ -12,6 +12,7 @@ from pathlib import Path
 from .declared_family import DeclaredFamily
 from .native_entries import NativeEntry, SessionEntry
 from .private_path import FileRevision
+from .transcript_receipts import TranscriptSource
 
 
 def _reverse_records(
@@ -57,6 +58,10 @@ class RecordsCut(DeclaredFamily, affix="Cut"):
     @abstractmethod
     def contains(self, current, through: int) -> bool: ...
 
+    @abstractmethod
+    def draft_current(self, current: RecordsCut) -> bool:
+        """Whether this cut can still accompany the source's current draft."""
+
 
 @dataclass(frozen=True)
 class SessionCut(RecordsCut):
@@ -76,6 +81,11 @@ class SessionCut(RecordsCut):
         if not self.present or not current.present:
             return self.revision == current.revision
         return self.revision.holds_cut(current.revision, through)
+
+    def draft_current(self, current: RecordsCut) -> bool:
+        # Native drafts belong to the ACP stream, not this saved-record reader.
+        # Appends do not invalidate the already captured page's absent draft.
+        return self.holds(current, self.offset)
 
 
 @dataclass(frozen=True)
@@ -118,7 +128,7 @@ class NativeRecord:
         return None
 
 
-class NativeTranscript:
+class NativeTranscript(TranscriptSource):
     def __init__(self, path: Path):
         self.path = path
 
@@ -173,7 +183,7 @@ class NativeTranscript:
     def cut(self) -> SessionCut:
         return SessionCut(FileRevision.capture(self.path))
 
-    def reply_revision(self, root: Path, thread):
+    def publication_revision(self, root: Path, thread):
         from .bus_publication import stable_thread_lookup
         from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 

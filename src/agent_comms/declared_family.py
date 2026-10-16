@@ -38,7 +38,8 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
             root is None and any(isinstance(base, _FamilyMeta) for base in bases)
         )
         if is_root:
-            namespace["_family_affix"] = affix or ""
+            # slots dataclasses recreate the root without its class-header keywords.
+            namespace["_family_affix"] = affix if affix is not None else namespace.get("_family_affix", "")
             namespace["__registry__"] = (
                 LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
             )
@@ -49,8 +50,8 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
                 r"([a-z0-9])([A-Z])", r"\1_\2", re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", stem)
             ).lower()
             # A slots dataclass recreates its declaration with the derived name in its namespace.
-            namespace["declared_name"] = declared_name or namespace.get("declared_name") or derived
-            if not namespace["declared_name"]:
+            namespace["declared_name"] = declared_name or namespace.get("declared_name", derived)
+            if namespace["declared_name"] == "":
                 raise TypeError("A family member must have a nonempty name.")
         config = (
             RegistryConfig(
@@ -75,7 +76,8 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     """A family root owns one registry; names and capability views derive from members.
 
     Declare a root with ``affix=\"Scope\"`` (or omit it for unstripped names).
-    Abstract intermediate classes are excluded by AutoRegisterMeta. Override a
+    Abstract intermediate classes are excluded by AutoRegisterMeta. An explicit
+    ``declared_name = None`` uses its existing unnamed-class exclusion. Override a
     stored spelling only with ``declared_name=`` at the member declaration.
     A distributed family declares its member package with ``discovery_package``;
     the existing registry acquires those declarations on decode or schema reads.

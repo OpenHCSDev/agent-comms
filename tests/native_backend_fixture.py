@@ -13,7 +13,7 @@ from agent_comms import backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from agent_comms.comms import Comms
 from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.child_process import BoundedRun
+from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_native_backend import PersistentPiSession
@@ -246,20 +246,29 @@ async def native_backend_fixture(tmp_path):
         try:
             yield owner
         finally:
-            await owner.persistent.close()
-            for child in owner.children:
-                await child.stop()
-            server.close()
-            await server.wait_closed()
-            for task in tuple(connections):
-                task.cancel()
-            await asyncio.gather(*connections, return_exceptions=True)
-            assert all(child.retired for child in owner.children)
-            print(json.dumps({
-                "saved_native_fixture": str(root),
-                "localhost_posts": provider.posts,
-                "native_input_proofs": len(read_proof_rows(session))
-                    if Path(str(session) + ".input-proof").is_file() else 0,
-                "children": [FieldCodec.encode(child.identity) for child in owner.children],
-                "children_retired": True,
-            }))
+            async def close_server():
+                server.close()
+                await server.wait_closed()
+                for task in tuple(connections):
+                    task.cancel()
+                await asyncio.gather(*connections, return_exceptions=True)
+
+            async def retire_all():
+                try:
+                    async with AsyncExitStack() as retirement:
+                        retirement.push_async_callback(close_server)
+                        for child in owner.children:
+                            retirement.push_async_callback(child.stop)
+                        retirement.push_async_callback(owner.persistent.close)
+                finally:
+                    assert all(child.retired for child in owner.children)
+                    print(json.dumps({
+                        "saved_native_fixture": str(root),
+                        "localhost_posts": provider.posts,
+                        "native_input_proofs": len(read_proof_rows(session))
+                            if Path(str(session) + ".input-proof").is_file() else 0,
+                        "children": [FieldCodec.encode(child.identity) for child in owner.children],
+                        "children_retired": True,
+                    }))
+
+            await join_retirement(asyncio.create_task(retire_all()))

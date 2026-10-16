@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
@@ -15,7 +15,7 @@ from .bus_activity_index import ChannelActivity
 from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import is_channel_target
 from .channels import Channel
-from .display_order import ChannelSort
+from .display_order import ChannelSort, NameChannelSort
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
@@ -28,6 +28,7 @@ from .read_ledger import ReadLedger
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
+from .display_references import DisplayReferences
 from .thread_presentation import (
     ThreadOwnerBinding,
     ThreadPresentation,
@@ -580,7 +581,7 @@ class ChannelView:
         snapshot: RegistrySnapshot,
         channels: Mapping[str, Channel],
         pins: Mapping[str, frozenset[str]],
-        order: ChannelSort,
+        order: type[ChannelSort],
         activity: Mapping[str, ObservedActivity],
         sent: Mapping[str, float],
         messages: Mapping[str, ChannelActivity],
@@ -690,24 +691,28 @@ class ThreadView:
         cls,
         snapshot: RegistrySnapshot,
         agents: AgentActivity,
-        activities: Mapping[str, ObservedActivity],
+        activities: Mapping[str, ObservedActivity] | None,
         goal_waits: GoalWaits,
         *,
         show_stopped: bool,
         show_archived: bool,
+        names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
+        selected = None if names is None else {snapshot.canonical_name(name) for name in names}
+        threads = tuple(
+            thread for name, thread in snapshot.threads.items()
+            if (selected is None or name in selected)
+            and cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+        )
+        if not threads:
+            return ()
         runtime = agents.runtime_info.read()
         waits = goal_waits.read()
+        if activities is None:
+            activities = agents.all_activity(snapshot=snapshot)
         return tuple(
-            cls.capture(
-                thread,
-                snapshot,
-                activities[name],
-                runtime.get(name),
-                waits,
-            )
-            for name, thread in snapshot.threads.items()
-            if cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+            cls.capture(thread, snapshot, activities[thread.name], runtime.get(thread.name), waits)
+            for thread in threads
         )
 
     @property
@@ -715,23 +720,22 @@ class ThreadView:
         """One declaration-owned interpretation for every thread view."""
         ordinary = self._display_presentation()
         if self.status.active:
-            ordinary = self.activity.readiness.presentation(ordinary, busy=self.activity.state.busy)
+            ordinary = self.activity.readiness.presentation(ordinary)
         return replace(self.thread.execution.presentation(self.thread, self.status, ordinary, self.binding),
                        binding=self.binding)
 
     def _display_presentation(self) -> ThreadPresentation:
-        if self.status.active and self.thread.executing and not self.activity.state.busy:
-            return ActivityState.WORKING.presentation(
-                self.thread.title or self.thread.name, "In a turn"
-            )
-        if (
-            self.status.active
-            and not self.activity.state.busy
-            and self.goal_execution is not None
-            and self.goal_execution.state.view.waiting
-        ):
-            return self.goal_execution.presentation(self.thread.title or self.thread.name)
-        return self.status.presentation(self.thread.title or self.thread.name, self.activity)
+        ordinary = self.status.presentation(self.thread.title or self.thread.name, self.activity)
+        if self.status.active:
+            return ordinary.status.when_idle(ordinary, self._idle_presentation)
+        return ordinary
+
+    def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
+        if self.thread.executing:
+            return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
+        if self.goal_execution is not None and self.goal_execution.state.view.waiting:
+            return self.goal_execution.presentation(ordinary.title)
+        return ordinary
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -757,8 +761,9 @@ class CoordinationSnapshot:
     channels: tuple[ChannelView, ...]
     unread: Mapping[str, int]
     last_sent: Mapping[str, float]
+    references: DisplayReferences
     channel_unread: Mapping[str, int] = field(default_factory=dict)
-    channel_order: ChannelSort = ChannelSort.NAME
+    channel_order: type[ChannelSort] = NameChannelSort
     thread_unread: Mapping[str, int] = field(default_factory=dict)
     unread_pending: frozenset[str] = frozenset()
     show_stopped: bool = True
@@ -786,6 +791,7 @@ class CoordinationSnapshot:
                 show_stopped=show_stopped, show_archived=show_archived,
             ),
             unread=unread, last_sent=sent, channel_unread=channel_unread,
+            references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, show_stopped=show_stopped,
             show_archived=show_archived, read_marker_notice=read_marker_notice,
         )
@@ -796,8 +802,8 @@ class CoordinationSnapshot:
             return ()
         people = {
             person.thread.name: person
-            for person in self.threads
-            if person.status.active and person.presentation.busy
+            for view in self.threads if view.status.active
+            for person in view.presentation.status.working_members(view)
         }
         return tuple(people[name] for name in view.members if name in people)
 

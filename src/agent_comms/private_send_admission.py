@@ -85,7 +85,7 @@ class PrivateSendAdmission:
         return self.selected.identity
 
     @classmethod
-    def reserve(
+    async def reserve(
         cls,
         *,
         selected: SelectedParticipant,
@@ -100,15 +100,19 @@ class PrivateSendAdmission:
         never roll it back or make another input eligible for automatic replay.
         """
         digest = TextDigest.of(token).value
-        input_id = stage.reserve(selected.store, selected.identity, digest)
-        bind_expected_prompt(
-            selected.store,
-            input_id=input_id,
-            stage=stage,
-            owner=selected.owner.thread,
-            generation=selected.identity.generation,
-            prompt=prompt.text,
-        )
+        def reserve(store):
+            input_id = stage.reserve(store, selected.identity, digest)
+            bind_expected_prompt(
+                store,
+                input_id=input_id,
+                stage=stage,
+                owner=selected.owner.thread,
+                generation=selected.identity.generation,
+                prompt=prompt.text,
+            )
+            return input_id
+
+        input_id = await Coordination.run_async(selected.store.session.path, reserve)
         return cls(
             selected=selected,
             stage=stage,
@@ -146,52 +150,57 @@ class PrivateSendAdmission:
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer retains the sole one-use send token after durable admission.
         """
-        with Coordination(str(self.store_path)) as store:
-            try:
-                result = await TrackedTurnSession.execute(
-                    execution.native_package,
-                    input_id=self.input_id,
-                    prompt=self.prompt.text,
-                    context_contributions=self.prompt.contributions,
-                    worktree=Path(self.owner.thread.worktree).absolute(),
-                    session=self.session,
-                    provider=provider,
-                    model=model,
-                    thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level),
-                    environment=self.owner.thread.native_environment(
-                        self.bus.log.path.parent, self.bus._registry.snapshot(),
-                        self.owner.thread.worktree,
-                    ),
-                    maintenance_root=self.bus.log.path.parent,
-                    selected_tool_mode=selected_tool_mode,
-                    observe_event=observe_event,
-                    request_observer=partial(
-                        record_request_progress, self.bus.log.path.parent,
-                        self.owner.thread.require_turn_lease(),
-                    ),
-                    prompt_send_boundary=self,
-                    acquisition_measurements=self._measurements,
-                    launch_owner=execution,
-                    following=following,
-                )
-            except NativePiTerminalFailure as error:
+        registry = await Coordination.run_worker(self.bus._registry.snapshot)
+        try:
+            result = await TrackedTurnSession.execute(
+                execution.native_package,
+                input_id=self.input_id,
+                prompt=self.prompt.text,
+                context_contributions=self.prompt.contributions,
+                worktree=Path(self.owner.thread.worktree).absolute(),
+                session=self.session,
+                provider=provider,
+                model=model,
+                thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level),
+                environment=self.owner.thread.native_environment(
+                    self.bus.log.path.parent, registry,
+                    self.owner.thread.worktree,
+                ),
+                maintenance_root=self.bus.log.path.parent,
+                selected_tool_mode=selected_tool_mode,
+                observe_event=observe_event,
+                request_observer=partial(
+                    record_request_progress, self.bus.log.path.parent,
+                    self.owner.thread.require_turn_lease(),
+                ),
+                prompt_send_boundary=self,
+                acquisition_measurements=self._measurements,
+                launch_owner=execution,
+                following=following,
+            )
+        except NativePiTerminalFailure as error:
+            def settle(store):
                 self.verify(store, error.context)
-                settlement = self.stage.fail_terminal(
+                return self.stage.fail_terminal(
                     store, self.participant, self.input_id, self.token_digest,
                     error.context, error.failure,
                 )
-                try:
-                    await self.stage.continue_after_failure(settlement, error.failure)
-                except RetryScheduled as retry:
-                    raise retry from error
-                raise
-            finally:
-                lease = self.owner.thread.turn_lease
-                assert lease is not None
-                record_acquisition_progress(self.bus.log.path.parent, lease,
-                                            self.input_id, self._measurements)
-            self.verify(store, result.context)
-            return result
+
+            settlement = await Coordination.run_async(self.store_path, settle)
+            try:
+                await self.stage.continue_after_failure(settlement, error.failure)
+            except RetryScheduled as retry:
+                raise retry from error
+            raise
+        finally:
+            lease = self.owner.thread.turn_lease
+            assert lease is not None
+            await Coordination.run_worker(partial(
+                record_acquisition_progress, self.bus.log.path.parent, lease,
+                self.input_id, self._measurements,
+            ))
+        await Coordination.run_read_async(self.store_path, lambda store: self.verify(store, result.context))
+        return result
 
     def commit(self, store: Coordination, context: NativeContextProof) -> None:
         self.stage.commit(store, self.participant, self.input_id, self.token_digest, context)
@@ -229,7 +238,7 @@ class PrivateSendAdmission:
                         self.prompt.text, blocking=False,
                     ))
                 with self._measurements.operation("coordinator_exclusive"):
-                    db = authority.enter_context(store.session.irreversible_admission())
+                    db = authority.enter_context(store.session.transaction())
                 with self._measurements.operation("selected_source_admission"):
                     self.session.admit(identity, selected_runtime_revision)
             except BlockingIOError as error:

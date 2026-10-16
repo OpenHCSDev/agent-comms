@@ -7,6 +7,7 @@ Shell is not a filesystem sandbox; shell work must respect the injected claims.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from dataclasses import dataclass, field, replace
@@ -23,9 +24,8 @@ from .envelope_claim_transitions import (
     ClaimOwner,
     WakeAdmission,
 )
-from .field_codec import FieldCodec
 from .native_tool_call import NativeToolCall, SelectedToolDenied
-from .native_tools import CodingTool
+from .native_tools import NativeExecutableTool
 from .selected_tool_broker import (
     NativeToolMode,
     OwnerToolSocket,
@@ -37,11 +37,11 @@ from .selected_tool_broker import (
 
 @dataclass
 class CodingCall(NativeToolCall):
-    tool: CodingTool
+    tool: NativeExecutableTool
 
     @property
     def name(self) -> str:
-        return FieldCodec.encode(type(self.tool))
+        return self.tool.declared_name
 
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int
@@ -65,13 +65,21 @@ class CodingCall(NativeToolCall):
         ):
             raise SelectedToolDenied("Malformed native coding call")
         try:
-            return cls(call_id, CodingTool.from_call(name, arguments))
+            return NativeExecutableTool.from_call(name, arguments, call_id=call_id)
         except (ValueError, TypeError, KeyError) as error:
             raise SelectedToolDenied(f"Invalid native coding call: {error}") from error
 
     def slot(self, input_id: str, round_number: int) -> str:
         identity = f"{input_id}\0{round_number}\0{self.call_id}"
         return hashlib.sha256(identity.encode()).hexdigest()[:32]
+
+
+@dataclass
+class CoordinationCall(CodingCall):
+    """The declaration executes through Core; raw arguments still own exact call matching."""
+
+    tool: type[NativeExecutableTool]
+    arguments: dict[str, object]
 
 
 @dataclass
@@ -83,6 +91,7 @@ class CodingToolOwner:
     session_dir: Path
     input_id: str
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
+    check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
 
     def for_original(self, assignment, operation_id) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""
@@ -103,25 +112,31 @@ class CodingToolOwner:
             operation_id=operation_id,
         ))
 
-    def admit(self, round_number: int, call: CodingCall) -> None:
-        verify_sent_full_input(self.store, self.admission, self.owner_name, self.input_id)
-        verify_selected_wake(self.comms, self.store, self.admission, self.owner_name)
-        slot = call.slot(self.input_id, round_number)
-        consume_selected_slot(self.session_dir, slot, slot)
-        resource = call.tool.claim
-        if resource is not None:
-            owner = self.comms.registry.require(self.owner_name)
-            canonical = resource.normalized(Path(owner.worktree))
-            prior = self.claims.get(canonical)
-            claim_admission = (
-                prior.admission
-                if prior is not None
-                else replace(self.admission, operation_id=slot)
-            )
-            claimed = publish_selected_resource_claim(
-                self.comms, self.store, claim_admission, self.owner_name, resource
-            )
-            self.claims[canonical] = claimed
+    async def admit(self, round_number: int, call: CodingCall) -> None:
+        def check(store: Coordination) -> None:
+            verify_sent_full_input(store, self.admission, self.owner_name, self.input_id)
+            verify_selected_wake(self.comms, store, self.admission, self.owner_name)
+            slot = call.slot(self.input_id, round_number)
+            consume_selected_slot(self.session_dir, slot, slot)
+            resource = call.tool.claim
+            if resource is not None:
+                owner = self.comms.registry.require(self.owner_name)
+                canonical = resource.normalized(Path(owner.worktree))
+                prior = self.claims.get(canonical)
+                claim_admission = (
+                    prior.admission
+                    if prior is not None
+                    else replace(self.admission, operation_id=slot)
+                )
+                claimed = publish_selected_resource_claim(
+                    self.comms, store, claim_admission, self.owner_name, resource
+                )
+                self.claims[canonical] = claimed
+
+        # Shared original-input views keep one claim map. Serialize its checks;
+        # the native tools themselves remain free to execute in parallel.
+        async with self.check_lock:
+            await Coordination.run_async(self.store.session.path, check)
 
 
 @dataclass(frozen=True)
@@ -129,11 +144,13 @@ class CodingToolMode(NativeToolMode):
     owner: CodingToolOwner
 
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        extension = Path(package) / "dist/channel_coding_tools.mjs"
-        # The copied native package manifest verifies the extension bytes.
-        if not extension.is_file():
-            raise SelectedToolDenied("Native coding extension is not installed")
-        return ("--tools", ",".join(CodingTool.names()), "-e", str(extension))
+        declarations = NativeExecutableTool.members_with(NativeExecutableTool)
+        extensions = tuple(dict.fromkeys(tool.native_extension(package) for tool in declarations))
+        # The native package manifest verifies each declaration's extension bytes.
+        if any(not extension.is_file() for extension in extensions):
+            raise SelectedToolDenied("Native tool extension is not installed")
+        return ("--tools", ",".join(tool.declared_name for tool in declarations),
+                *(argument for extension in extensions for argument in ("-e", str(extension))))
 
     def socket(self, directory: Path, token: str) -> OwnerToolSocket:
         return CodingToolSocket(directory, token, self.owner)
@@ -153,9 +170,9 @@ class CodingToolSocket(OwnerToolSocket[CodingCall]):
     def decode_request(self, raw: bytes) -> CodingCall:
         if not raw.endswith(b"\n") or len(raw) > self.max_request:
             raise SelectedToolDenied("Coding request incomplete or oversized")
-        from .native_pi import _unique
+        from .pi_rpc import unique_fields
 
-        value = json.loads(raw, object_pairs_hook=_unique)
+        value = json.loads(raw, object_pairs_hook=unique_fields)
         if (
             type(value) is not dict
             or set(value) != {"token", "call_id", "name", "arguments"}
@@ -164,8 +181,8 @@ class CodingToolSocket(OwnerToolSocket[CodingCall]):
             raise SelectedToolDenied("Coding request is not authenticated")
         return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
 
-    def admit(self, round_number: int, call: CodingCall) -> None:
-        self.owner.admit(round_number, call)
+    async def admit(self, round_number: int, call: CodingCall) -> None:
+        await self.owner.admit(round_number, call)
 
     def failure_response(self, error: Exception) -> dict[str, object]:
         return {"ok": False, "error": str(error)}

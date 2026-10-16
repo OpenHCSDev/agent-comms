@@ -11,6 +11,7 @@ from agent_comms.activity import (
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.thread_identity import OwnerIdentity, ThreadIncarnation
+from agent_comms.thread_presentation import AttentionThreadPresentationStatus
 
 
 def test_native_warning_keeps_fresh_notifications_and_active_paint_available():
@@ -27,9 +28,10 @@ def test_native_warning_keeps_fresh_notifications_and_active_paint_available():
     assert FieldCodec.decode(DrainReadiness, FieldCodec.encode(ready)) == ready
     busy = replace(acquired, state=ActivityState.THINKING, detail='Handling fresh input')
     assert busy.presentation('receiver').summary == 'Thinking · Handling fresh input'
-    assert not busy.presentation('receiver').attention
+    assert not isinstance(busy.presentation('receiver').status, AttentionThreadPresentationStatus)
     idle = acquired.presentation('receiver')
-    assert idle.attention and 'known provider failure' in idle.summary
+    assert isinstance(idle.status, AttentionThreadPresentationStatus)
+    assert 'known provider failure' in idle.summary
     assert 'Inbox unavailable' not in idle.summary
     successor = replace(owner, generation=3)
     assert ObservedActivity.acquire(event, successor).readiness.source_diagnostic() is None
@@ -44,7 +46,9 @@ def test_real_inbox_failures_refuse_without_owning_message_labels(kind):
     assert isinstance(ready, UnavailableDrainReadiness)
     with pytest.raises(RelationViolationError, match='real read failure'):
         ready.require_available()
-    assert ready.presentation(Activity('receiver', ActivityState.IDLE).presentation('receiver'), busy=False).attention
+    assert isinstance(ready.presentation(
+        Activity('receiver', ActivityState.IDLE).ordinary_presentation('receiver')
+    ).status, AttentionThreadPresentationStatus)
 
 
 @pytest.mark.asyncio

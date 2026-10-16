@@ -116,12 +116,21 @@ class TestCliSuccess:
         assert out["thread"]["name"] == "b" and len(out["inbox"]) == 1
 
     def test_fork_missing_session_reports_error(self, cli, tmp_path):
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        code, _ = cli(
+            tmp_path, "register", "--name", "a", "--worktree", "/wt", "--execution", "native"
+        )
+        assert code == 0
         code, out = cli(tmp_path, "fork", "--name", "kid", "--parent", "a", "--task", "t")
-        assert code == 1 and "session" in out["error"]
+        assert code == 1 and "session file" in out["error"]
 
 
 class TestCliFailClosed:
+    def test_fork_cli_parent_reports_transport_error(self, cli, tmp_path):
+        code, _ = cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        assert code == 0
+        code, out = cli(tmp_path, "fork", "--name", "kid", "--parent", "a", "--task", "t")
+        assert code == 1 and "no native prompt transport" in out["error"]
+
     def test_generic_invocation_rejects_non_object_arguments(self, cli, tmp_path):
         code, out = cli(tmp_path, "invoke", "--tool", "comms_threads", "--arguments", "[]")
         assert code == 1 and "JSON object" in out["error"]
@@ -144,7 +153,8 @@ class TestCliFailClosed:
 
     def test_every_error_is_single_json_object(self, cli, tmp_path):
         code, out = cli(tmp_path, "thread", "--name", "ghost")
-        assert isinstance(out, dict) and set(out) == {"error"}
+        assert isinstance(out, dict) and set(out) == {"error", "type"}
+        assert out["type"] == "failed"
 
 
 class TestCliSubprocess:

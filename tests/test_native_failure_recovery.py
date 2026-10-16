@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
-from agent_comms.assignment_states import FullPendingAssignment
+from agent_comms import native_pi
 from agent_comms.attempt_recovery import (
     RecoveryMonitorCapability,
     VerifiedOwnerLoss,
@@ -24,7 +24,6 @@ from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.selected_request import SelectedRequest
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
@@ -32,7 +31,7 @@ from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 def failed_owner(directory, output, exit_allowed):
     # Persist the historical pre-settlement failure shape for operator recovery.
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
-    runtime._trusted_package = lambda path: path
+    native_pi._trusted_package = lambda path: path
     fake, _calls = _fake_model()
 
     async def old_failure(*args, **kwargs):
@@ -148,6 +147,36 @@ def test_recovery_refuses_released_but_live_owner(released_failure):
         assert store.snapshots.get(execution_id).is_current
 
 
+@pytest.mark.parametrize("stop", ["stop", "error", "toolUse"])
+def test_restart_recovery_preserves_native_outcome_without_replaying(released_failure, stop):
+    from agent_comms.attempt_states import AttemptFailedAttempt, UnknownOutcomeAttempt
+    from agent_comms.comms import Comms
+    from agent_comms.restart_refusals import OwnerBusyRefusal
+
+    process, exit_allowed, root, execution_id, input_id, session_file = released_failure
+    leave(process, exit_allowed)
+    rows = [json.loads(line) for line in session_file.read_text().splitlines()]
+    rows[-1]["message"]["stopReason"] = stop
+    session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    comms = Comms(root)
+    owner = comms.registry.require("beta")
+    with pytest.raises(OwnerBusyRefusal):
+        comms.owners.require_restart_idle(owner)
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        before = NativeRuntimeInput.one(store.session._connection, input_id=input_id)
+        result = RecoveryMonitorCapability.recover_released_native_attempt(store, execution_id).value
+        expected = UnknownOutcomeAttempt if stop == "toolUse" else AttemptFailedAttempt
+        assert type(result.attempt.lifecycle) is expected
+        assert not result.is_current
+        assert not result.can_retry
+        assert NativeRuntimeInput.one(store.session._connection, input_id=input_id) == before
+        assert not result.publication_receipts
+        assert not result.publication_intents
+    comms.owners.require_restart_idle(owner)
+    # Startup after settlement is a read, not another recovery or a replay.
+    RecoveryMonitorCapability.recover_owner(root, owner)
+
+
 @pytest.mark.parametrize(
     "damage",
     [
@@ -184,7 +213,9 @@ def test_recovery_refuses_ambiguous_evidence(released_failure, damage):
     if damage not in {"wrong_session", "wrong_epoch"}:
         session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        with pytest.raises((RecoveryBlocked, NativePiUnavailable)):
+        expected = ValueError if damage == "wrong_session" else (RecoveryBlocked, NativePiUnavailable)
+        message = "Native identity differs from owner's canonical session" if damage == "wrong_session" else None
+        with pytest.raises(expected, match=message):
             RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
         assert store.snapshots.get(execution_id).is_current
 

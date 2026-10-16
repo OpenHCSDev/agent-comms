@@ -39,17 +39,10 @@ class UnreadPresentation(ABC):
 
     @property
     def highlighted(self) -> bool:
-        return bool(self.label)
+        """Whether a known unread count requires emphasis, independent of the badge."""
+        return False
 
-    def __bool__(self) -> bool:
-        return self.highlighted
-
-    def __str__(self) -> str:
-        return self.label.removeprefix("(").removesuffix(")")
-
-    @property
-    def detail(self) -> str:
-        return ""
+    detail = ""
 
 
 @dataclass(frozen=True)
@@ -60,13 +53,20 @@ class ExactUnread(UnreadPresentation):
     def label(self) -> str:
         return f"({self.count})" if self.count else ""
 
+    @property
+    def highlighted(self) -> bool:
+        return bool(self.count)
+
 
 @dataclass(frozen=True)
 class IndexingUnread(UnreadPresentation):
-    @property
-    def label(self) -> str:
-        return "Indexing…"
+    label = "Indexing…"
+    detail = "Unread replies are still being indexed; the exact count is not yet known."
 
-    @property
-    def detail(self) -> str:
-        return "Unread replies are still being indexed; the exact count is not yet known."
+
+@dataclass(frozen=True)
+class UnobservedUnread(UnreadPresentation):
+    """No observation for this view's source has arrived yet."""
+
+    label = ""
+    detail = "Waiting for this source's unread state."

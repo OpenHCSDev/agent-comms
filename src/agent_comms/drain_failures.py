@@ -6,7 +6,6 @@ import asyncio
 import sqlite3
 import time
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
 from functools import partial
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING
@@ -14,9 +13,7 @@ from typing import TYPE_CHECKING
 from acp import RequestError
 
 from .activity import (
-    DrainReadiness,
     NativeInputDrainDiagnostic,
-    ReadyDrainReadiness,
     StoppedDrainDiagnostic,
     UnavailableDrainDiagnostic,
 )
@@ -29,28 +26,15 @@ if TYPE_CHECKING:
     from .thread_identity import OwnerIdentity
 
 
-@dataclass
-class DrainFailureState:
-    """One observer's recorded failure until its next successful drain."""
-
-    readiness: DrainReadiness = field(default_factory=ReadyDrainReadiness)
-
-    def recorded(self, diagnostic) -> None:
-        self.readiness = diagnostic.readiness()
-
-    async def succeeded(self, agents, thread: str) -> None:
-        self.readiness = await self.readiness.retire(agents, thread)
-
-
 @asynccontextmanager
 async def drain_failures(
     comms: Comms,
     thread: str,
     owner: OwnerIdentity,
     retry: Callable[[], Awaitable[None]],
-    state: DrainFailureState,
 ):
-    """Record a recoverable failure and retire it after this observer recovers."""
+    """Record failures; a completed operation recovers its original observation."""
+    observed = await Coordination.run_worker(partial(comms.agents.activity_of, thread))
 
     async def record(kind, error) -> None:
         diagnostic = kind(
@@ -61,7 +45,6 @@ async def drain_failures(
                 comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
                 source_error=error,
             ))
-            state.recorded(diagnostic)
         finally:
             await retry()
 
@@ -85,7 +68,8 @@ async def drain_failures(
             comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
             source_error=error,
         ))
-        state.recorded(diagnostic)
         raise
     else:
-        await state.succeeded(comms.agents, thread)
+        await Coordination.run_worker(partial(
+            comms.agents.recover_drain, thread, owner, observed,
+        ))

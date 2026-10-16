@@ -24,6 +24,7 @@ import re
 import sys
 import time
 from contextlib import AsyncExitStack
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -236,13 +237,13 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise RequestError.invalid_params(
                 {"reason": "Selected write requires attached ACP controller"}
             )
-        receipt = SelectedWritePlans(self._comms, root_id).submit(
+        receipt = await Coordination.run_worker(partial(SelectedWritePlans(self._comms, root_id).submit,
             owner_name=owner,
             source_seq=request.source_seq,
             source_message_id=request.source_message_id,
             resource=request.resource,
             contents=request.contents,
-        )
+        ))
         attached = self.sessions.client if controller is UNBOUND_CONTROLLER else controller
         self._selected_write_controllers[(owner, request.source_seq)] = (
             receipt.operation_id,
@@ -422,11 +423,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             bus, wire_root_id, store_path, stable_thread_lookup(owner.created_at), 0,
             owner_name=owner.name, acquire_package=execution.validate,
         )
-        if (
-            session_id in self.turns.turn_tasks
-            or owner.turn_state.busy
-            or session_id in self.inputs.backend_inboxes
-        ):
+        if self.inputs.owns_execution(session_id, owner):
             # A running turn takes its owner's pending messages as inputs;
             # whatever it cannot take wakes this owner once the turn ends.
             await DeliveredInput.deliver_pending(
@@ -449,6 +446,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 return True
         if not await Coordination.run_read_async(store_path, select):
             await self.cursors.publish(session_id, thread_name, advance=True)
+            return 0
+        # The accepted channel row stays in its durable assignment ledger.
+        # During cutover, leave it unselected; the maintenance witness wakes
+        # observation again on READY, without replaying this bus input.
+        if (await Coordination.run_worker(self._comms.owners.maintenance.read)).turn_pending:
             return 0
         SelectedWakeCheck(
             session_id=session_id, inputs=self.inputs, execution=execution,

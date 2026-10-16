@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Final
 from .wire_record import MessageWireRecord
 from .field_codec import TextRepresentation
 from .errors import RelationViolationError
+from .pi_rpc import unique_fields
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
@@ -69,12 +70,10 @@ class DuplicateWireKeyError(ValueError):
 
 def unique_wire_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
     """Reject ambiguous JSON objects, including nested receipt keys."""
-    result: dict[str, object] = {}
-    for key, value in pairs:
-        if key in result:
-            raise DuplicateWireKeyError("Duplicate bus object key.")
-        result[key] = value
-    return result
+    try:
+        return unique_fields(pairs)
+    except ValueError as error:
+        raise DuplicateWireKeyError("Duplicate bus object key.") from error
 
 
 def has_private_wire_fields(record: Mapping[str, object]) -> bool:
@@ -234,9 +233,10 @@ class CommittedDelivery(MessageWireRecord):
     def require_admission(self, metadata) -> None:
         """Factory already bound root/audience; deliveries need no retained-public exception."""
 
-    def checkpoint_rows(self, offset: int, length: int):
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
         from .private_bus_checkpoint import Addressed, DeliverySources, Replies, ResponseKeys
 
+        yield from super().checkpoint_rows(offset, length, previous_sequence)
         if self.receipt is not None:
             yield ResponseKeys(self.receipt.publication_key)
         yield DeliverySources(self.message.seq, self.message.message_id,

@@ -275,6 +275,29 @@ class NativeEvidenceRead:
         """Decode the captured cut."""
         return self._observe(reverified=False)
 
+    def stopped_input(self, input_id: str):
+        """Read only this input's contiguous branch, ending at the next input.
+
+        A later turn, a fork or a partial tool round cannot finish this input.
+        This observes the native result; it grants no input or reply replay.
+        """
+        from .pi_vocabulary import PendingStopReason
+
+        _header, entries = self.observe()
+        user = NativeEntry.tracked_users(entries).get(input_id)
+        if user is None:
+            return PendingStopReason
+        last = user
+        for entry in entries[entries.index(user) + 1:]:
+            if entry.input_boundary:
+                break
+            if entry.parent_id != last.id:
+                return PendingStopReason
+            last = entry
+        if isinstance(last, MessageEntry) and last.assistant_message:
+            return last.message.stop_reason
+        return PendingStopReason
+
     def _reverify(self):
         self.entries = ()
         self.source.reverify_from_start()

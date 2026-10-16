@@ -23,6 +23,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import projected
 
 if TYPE_CHECKING:
+    from .attempt_states import TerminalAttempt
     from .coordination_session import NativeBoundary
 
 
@@ -219,7 +220,7 @@ class RecoverySnapshot:
         self, session, outcome, reason_code: str | None,
         boundary: NativeBoundary | None = None,
     ) -> None:
-        from .coordination_tables.attempts import AttemptRecord
+        from .coordination_tables.attempts import AttemptRecord, ReplayAssessments
         from .coordination_tables.assignments import WakeAssignment
         from .coordination_tables.executions import ExecutionRecord, CurrentExecutions
         from .coordination_tables.responses import ResponseObligation
@@ -234,8 +235,9 @@ class RecoverySnapshot:
             or not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead)
         ):
             raise RecoveryBlocked("settlement requires exact final done/death evidence")
+        ReplayAssessments.accumulate(db, execution.execution_id, outcome.replay_contribution)
         execution_state, response = outcome.disposition(self, attempt)
-        session.release_resources(self, boundary)
+        session.release_resources(self, outcome, boundary)
         now = session.now(max(execution.updated_at_ms, attempt.updated_at_ms))
         AttemptRecord.update(
             db,
@@ -296,12 +298,13 @@ class RecoverySnapshot:
         if not all(row.lifecycle.published for row in self.require_wire_responses()):
             return
         attempt = self.require_current_attempt()
-        session.release_resources(self, boundary)
+        outcome = SucceededAttempt()
+        session.release_resources(self, outcome, boundary)
         db, execution = session._connection, self.execution
         AttemptRecord.update(
             db, where="execution_id=? AND attempt_ordinal=? AND revision=?",
             parameters=(execution.execution_id, attempt.attempt_ordinal, attempt.revision),
-            lifecycle=SucceededAttempt(), revision=attempt.revision + 1,
+            lifecycle=outcome, revision=attempt.revision + 1,
             updated_at_ms=session.now(attempt.updated_at_ms),
         )
         ExecutionRecord.update(
@@ -326,23 +329,24 @@ class RecoverySnapshot:
             execution_id=None, attempt_ordinal=None, pointer_revision=self.pointer_revision + 1,
         )
 
-    def release_resources(self, boundary: NativeBoundary) -> None:
+    def release_resources(self, boundary: NativeBoundary, outcome: TerminalAttempt) -> None:
         """Release the durable generations acquired by this exact final attempt.
 
         No live selected turn or in-memory tool claim list is needed. A claim
         belonging to a later attempt (or an unbound manual claim) is untouched.
         The caller retains wire/bus/registry exclusion through terminal commit.
         """
-        from .envelope_claim_transitions import ClaimRelease, project_verified_transitions
+        from .envelope_claim_transitions import ClaimRelease, ClaimTransition
         from .messages import ClaimNoticeKind, Message
         from itertools import groupby
 
         bus, bus_lock, registry = boundary.bus, boundary.bus_lock, boundary.registry
         attempt = self.require_attempt()
         metadata = bus.log._private_marker_unlocked()
-        transitions, _ = bus_lock.claim_transitions(bus.log, metadata)
+        with bus_lock.current_source(bus.log, metadata) as source:
+            current = source.claim_projection()
         owned = tuple(
-            claim for claim in project_verified_transitions(transitions).values()
+            claim for claim in current.values()
             if claim.admission is not None
             and claim.admission.execution_id == attempt.execution_id
             and claim.admission.attempt_ordinal == attempt.attempt_ordinal
@@ -368,6 +372,12 @@ class RecoverySnapshot:
 
         from pathlib import Path
 
+        worktree = Path(owner.worktree).absolute()
+
+        def display_resource(claim) -> str:
+            resource = Path(claim.resource)
+            return str(resource.relative_to(worktree) if resource.is_relative_to(worktree) else resource)
+
         ordered = sorted(
             owned, key=lambda claim: (claim.incarnation, target_of(claim))
         )
@@ -375,13 +385,15 @@ class RecoverySnapshot:
             ordered, key=lambda claim: (claim.incarnation, target_of(claim))
         ):
             recorded = tuple(records)
-            for offset in range(0, len(recorded), 32):
+            for offset in range(0, len(recorded), ClaimTransition.max_resources):
+                released = recorded[offset:offset + ClaimTransition.max_resources]
+                names = ", ".join(display_resource(claim) for claim in released)
                 bus.publisher.publish_claim_envelope(
                     Message(owner.name, target,
-                            "Terminal attempt file claims released", ClaimNoticeKind, notice=True),
-                    worktree=Path(owner.worktree), incarnation=incarnation,
+                            f"{outcome.release_wording}: {names}", ClaimNoticeKind, notice=True),
+                    worktree=worktree, incarnation=incarnation,
                     releases=tuple(ClaimRelease(claim.resource, claim.generation)
-                                   for claim in recorded[offset:offset + 32]),
+                                   for claim in released),
                     _locked_registry_snapshot=registry, _bus_lock=bus_lock,
                 )
 

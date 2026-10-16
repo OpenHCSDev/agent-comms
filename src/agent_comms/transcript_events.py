@@ -9,7 +9,7 @@ from typing import Any
 from .declared_family import DeclaredFamily
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
-from .tool_results import ToolDiff
+from .tool_results import ToolDiff, ToolText
 from .transcript_merge import EventMerge, StreamingMerge
 
 
@@ -78,6 +78,11 @@ class SilentTranscript:
 class OutgoingRoute:
     """Route capability shared by native output and original wire projection."""
 
+    def require_reply_route(self) -> MessageRoute:
+        if not self.routed:
+            raise ValueError("Outgoing message evidence requires a reply route")
+        return self.routing.reply
+
     @property
     def routed(self) -> bool:
         return self.routing is not None and self.routing.reply is not None
@@ -136,6 +141,21 @@ class NoticeTranscript(AgentTextTranscript):
 class SentTranscript(OutgoingRoute, WireTextTranscript):
     """One immutable original wire row, separate from native assistant output."""
 
+    def tool_content(self, tool_call_id):
+        """Encode the Send report only at its actual ACP output boundary."""
+        import json
+        from urllib.parse import quote
+        from .field_codec import FieldCodec
+        from .tool_results import SENT_MESSAGE_MIME
+
+        return {"type": "content", "content": {
+            "type": "resource", "resource": {
+                "uri": f"agent-comms:///messages/{self.source.seq}/{quote(self.source.message_id, safe='')}",
+                "mimeType": SENT_MESSAGE_MIME,
+                "text": json.dumps(FieldCodec.encode(self)),
+            },
+        }}
+
     @classmethod
     def from_message(cls, message):
         return cls(message.body, timestamp=message.timestamp, source=message.reference,
@@ -157,14 +177,44 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
     tool_call_id: str
     tool_name: str
 
+    @property
+    def title(self) -> str:
+        from .tool_declaration import ToolDeclaration
+
+        return ToolDeclaration.caption(self.tool_name)
+
+    @property
+    def kind(self) -> str:
+        from .tool_declaration import ToolDeclaration
+
+        return ToolDeclaration.for_name(self.tool_name).acp_kind
+
 
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
     raw_input: Any = None
+    detail: str = field(default="", metadata={"wire_omit_default": True})
+
+    @property
+    def title(self) -> str:
+        from .tool_declaration import ToolDeclaration
+
+        return ToolDeclaration.caption(self.tool_name, self.detail)
 
 
 @dataclass(frozen=True, kw_only=True)
 class ToolEndTranscript(ToolTranscript):
+    @staticmethod
+    def parts_for(text, diff=None, sent_message=None):
+        """The result owner selects its contents once, before transport or paint."""
+        if sent_message is not None:
+            return (sent_message,)
+        return ((diff,) if diff is not None else ()) + ((ToolText(text),) if text else ())
+
+    @property
+    def result_parts(self):
+        return self.parts_for(self.text, self.diff, self.sent_message)
+
     @property
     def text_size(self) -> int:
         return len(self.text)

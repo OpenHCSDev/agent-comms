@@ -134,14 +134,15 @@ class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
     @abstractmethod
     def result(self, attempt: int, redact): ...
 
-    @abstractmethod
-    def apply(self, event, session): ...
+    def apply(self, event, session):
+        self.finish_request(session)
+        return ()
 
     @abstractmethod
     def recovery_events(self, session): ...
 
     @abstractmethod
-    def finish_tracked(self, session) -> None: ...
+    def finish_request(self, session) -> None: ...
 
     @abstractmethod
     def retry_wire(self) -> dict[str, object]: ...
@@ -154,10 +155,6 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
 
         return ProviderRetryResult(success=True, attempt=attempt)
 
-    def apply(self, event, session):
-        session.output.error_message = None
-        return ()
-
     def recovery_events(self, session):
         from .turn_phase import ModelWaitPhase
 
@@ -165,7 +162,7 @@ class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
             "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
         ),)
 
-    def finish_tracked(self, session) -> None:
+    def finish_request(self, session) -> None:
         session.request_retried()
 
     def retry_wire(self) -> dict[str, object]:
@@ -190,6 +187,7 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
     def apply(self, event, session):
         from .turn_phase import ModelWaitPhase
 
+        super().apply(event, session)
         session.watchdog.retry_recovery_pending = False
         return (
             *event.exhausted(session),
@@ -201,8 +199,10 @@ class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
     def recovery_events(self, session):
         return ()
 
-    def finish_tracked(self, session) -> None:
-        session.fail_terminal(self.final_error)
+    def finish_request(self, session) -> None:
+        from .turn_failure import ModelRequestFailed
+
+        session.output.record_failure(ModelRequestFailed(self.final_error))
 
     def retry_wire(self) -> dict[str, object]:
         return {"success": False, "finalError": self.final_error}
@@ -641,9 +641,7 @@ class AssistantMessage(PiMessage):
         return self.stop_reason.permits_progress()
 
     def require_failed_terminal(self):
-        from .tracked_turn import SavedTurnEnd
-
-        SavedTurnEnd.require_failed(self)
+        self.stop_reason.require_failed_terminal()
 
     async def apply_end(self, session):
         from .agent_events import CommittedProgress
@@ -751,7 +749,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 
     def transcript_events(self, context):
-        from .native_tools import NativeTool
+        from .tool_declaration import ToolDeclaration
         from .transcript_events import ToolEndTranscript
 
         if not self.parts:
@@ -764,7 +762,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
                 tool_call_id=self.tool_call_id,
                 tool_name=self.tool_name,
                 ok=not self.is_error,
-                diff=NativeTool.for_name(self.tool_name).result_diff(result, not self.is_error),
+                diff=ToolDeclaration.for_name(self.tool_name).result_diff(result, not self.is_error),
                 sent_message=result.sent_message(not self.is_error),
             )
         ]

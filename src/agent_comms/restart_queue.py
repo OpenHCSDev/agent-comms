@@ -29,6 +29,7 @@ from pathlib import Path
 import fcntl
 
 from .comms import Comms, wire
+from .coordinator import Coordination
 from .errors import RelationViolationError
 from .store_files import _store_lock
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
@@ -225,7 +226,7 @@ def step(comms: Comms) -> None:
             snapshot = comms.registry.snapshot()
             try:
                 owner = record.selection.require_current(snapshot)
-                owner.require_idle()
+                comms.owners.require_restart_idle(owner)
             except RestartRefusal as refusal:
                 record = record.transition(refusal.queue_state())
             except RelationViolationError:
@@ -287,15 +288,22 @@ async def run(comms: Comms) -> None:
         async for _ in WireWatch.observations(
             WatchSource.file(comms.registry.store.path),
             WatchSource.file(comms.registry.store.guard_path),
+            WatchSource.file(comms.root / "coordination.sqlite3"),
+            WatchSource.file(comms.root / "coordination.sqlite3-wal"),
             DirectoryWatchSource(directory),
         ):
-            step(comms)
+            await Coordination.run_worker(lambda: step(comms))
             # Check emptiness and release under enqueue's lock, so a new
             # request cannot slip between the empty check and release.
-            with _store_lock(directory / "queue"):
-                if not any(record.state.pending for _, record in _records(comms)):
+            def release_if_empty():
+                with _store_lock(directory / "queue"):
+                    if any(record.state.pending for _, record in _records(comms)):
+                        return False
                     fcntl.flock(lock, fcntl.LOCK_UN)
-                    return
+                    return True
+
+            if await Coordination.run_worker(release_if_empty):
+                return
     finally:
         os.close(lock)
 

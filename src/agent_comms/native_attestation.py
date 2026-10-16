@@ -25,7 +25,7 @@ class AttestationError(ValueError):
 
     async def refuse(self, session: TurnSession) -> None:
         session.output.record_failure(self.failure)
-        await session.native.proc.stop()
+        await session.native.shutdown()
 
 
 class IdentityAttestationError(AttestationError):

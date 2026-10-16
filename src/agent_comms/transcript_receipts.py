@@ -32,6 +32,14 @@ class AssignedSourceIdentity:
     root: str
     recipient: ThreadIncarnation
 
+    @property
+    def publication_key(self) -> tuple[str, float]:
+        """Published authorship survives a rename, not a new birth or wire."""
+        return self.root, self.recipient.created_at
+
+    def same_publication_source(self, other: AssignedSourceIdentity) -> bool:
+        return self.recipient.has_recorded_birth and self.publication_key == other.publication_key
+
 
 @dataclass(frozen=True)
 class AssignedSourceCursor:
@@ -61,7 +69,7 @@ class AssignedSourceCursor:
 class AssignedSourceWindow:
     """Conversation and sent sources captured with one receipt frontier."""
 
-    cursor: AssignedSourceCursor
+    cursor: AssignedSourceCursor | None
     sources: tuple[CommittedDelivery, ...]
     sent_sources: tuple[CommittedDelivery, ...]
 
@@ -216,8 +224,53 @@ class LaterTranscript(TranscriptTraversal):
         return initial, consumed
 
 
+class TranscriptSource:
+    """Recorded items alone carry no assigned-wire or publication authority.
+
+    Native and external stores supply their original records. An assigned
+    source adds the separately acquired wire/publication capability below.
+    """
+
+    def resolve_sent(self, messages):
+        """Records without a sender assignment cannot qualify Send reports."""
+        return tuple(messages)
+
+    @property
+    def frontier(self) -> AssignedSourceCursor | None:
+        return None
+
+    def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
+        return AssignedSourceWindow(None, (), ())
+
+    def require_cursor(self, cursor):
+        cursor.require_native()
+
+    def page_rows(self, traversal, sequence, through, *, limit):
+        return iter(())
+
+    def reply_revision(self, records):
+        from .native_runtime_input import PublishedReplyRevision
+
+        return PublishedReplyRevision(0, 0)
+
+    def native_records(self, fragments, routes, reader):
+        for fragment in fragments:
+            for record in fragment:
+                yield record, record.project(lambda original: self.native_events(
+                    original, routes, original.entry.events, (),
+                ))
+
+    def native_events(self, record, routes, project_events, references):
+        from .native_entries import TranscriptProjection
+
+        entry = record.entry
+        return tuple(project_events(TranscriptProjection(
+            routes.get(entry.id), routes.input_display(entry.input_id),
+        )))
+
+
 @dataclass(frozen=True)
-class AssignedTranscriptSource:
+class AssignedTranscriptSource(TranscriptSource):
     root: Path
     recipient: ThreadIncarnation
     log: WireLog
@@ -225,6 +278,55 @@ class AssignedTranscriptSource:
     @classmethod
     def for_thread(cls, root, thread, log):
         return cls(root, thread.incarnation, log)
+
+    @classmethod
+    def open(cls, identity: AssignedSourceIdentity):
+        """Open only the recorded wire, without current registry or SQL authority."""
+        from .wire_log import WireLog
+
+        root = Path(identity.root)
+        return (cls(root, identity.recipient, WireLog(root / "bus.jsonl"))
+                if identity.recipient.has_recorded_birth else TranscriptSource())
+
+    def resolve_sent(self, messages):
+        """Qualify reports against exact full rows in one bounded wire read.
+
+        A report is not publication evidence. Keep it unchanged unless this
+        sender's frozen assignments supply its reference, body, time and route.
+        Missing births cannot select an assignment, even if a name matches.
+        """
+        from .sent_message import PublishedSentMessage
+
+        messages = tuple(messages)
+        if not messages:
+            return messages
+        lookup = stable_thread_lookup(self.recipient.created_at)
+        marks = ",".join("?" for _ in messages)
+        originals = {
+            original.message.reference: original.message
+            for original in self.rows(
+                f"w.seq IN ({marks}) AND w.sender_lookup=?",
+                (*[message.source.seq for message in messages], lookup),
+                limit=len(messages),
+            )
+        }
+        scope = AssignedSourceIdentity(str(self.root), self.recipient)
+        return tuple(
+            PublishedSentMessage(message, scope)
+            if (original := originals.get(message.source)) is not None
+            and SentTranscript.from_message(original) == message else message
+            for message in messages
+        )
+
+    def require_cursor(self, cursor):
+        cursor.require_source(AssignedSourceIdentity(str(self.root), self.recipient))
+
+    @classmethod
+    def for_recorded(cls, root, thread, log, records):
+        """Only the original recorded birth can select frozen assignments."""
+        if thread.incarnation.has_recorded_birth:
+            return cls.for_thread(root, thread, log)
+        return records
 
     def rows(
         self, predicate="1", parameters=(), *, limit=1, ascending=False,
@@ -265,41 +367,12 @@ class AssignedTranscriptSource:
         predicate, parameters = traversal.predicate(sequence, through)
         return self.rows(predicate, parameters, ascending=traversal.ascending, limit=limit)
 
-    def native_records(self, fragments, routes, reader):
-        """Native ancestry precedes one atomic SQL read per bounded fragment."""
-        from .native_runtime_input import NativeRuntimeInput
-        from .transcripts import TranscriptRead
-
-        lookup = stable_thread_lookup(self.recipient.created_at)
-        for fragment in fragments:
-            fragment = tuple(fragment)
-            selected = tuple(zip(fragment, reader.inputs_for(fragment)))
-            with TranscriptRead.publication_source(self.root) as db:
-                # Missing coordination remains detached native history. Do not
-                # introduce header failures where no SQL source was selected.
-                session_id = (reader.session_id
-                              if db is not None and any(
-                                  user is not None and user.input_id is not None
-                                  for _, user in selected) else None)
-                capture = partial(
-                    NativeRuntimeInput.transcript_projection,
-                    db, reader, owner_lookup=lookup, session_id=session_id,
-                )
-                originals = tuple((record, record.project(partial(capture, user=user)))
-                                  for record, user in selected)
-            for record, projection in originals:
-                yield record, record.project(
-                    lambda record: self.native_events(record, routes, *projection)
-                )
-
     def native_events(self, record, routes, project_events, references):
-        from .native_entries import TranscriptProjection
-
         entry = record.entry
         published = False
         routing = routes.get(entry.id)
         lookup = stable_thread_lookup(self.recipient.created_at)
-        events = project_events(TranscriptProjection(routing, routes.input_display(entry.input_id)))
+        events = super().native_events(record, routes, project_events, references)
         if entry.final_reply:
             if routing is not None and routing.publications:
                 marks = ",".join("?" for _ in routing.publications)
@@ -365,3 +438,37 @@ class AssignedTranscriptSource:
                 routing=TurnRouting((message.reference,)),
             ),
         )
+
+
+class LiveAssignedTranscriptSource(AssignedTranscriptSource):
+    """Live publication evidence is additional to original wire assignments."""
+
+    def reply_revision(self, records):
+        return records.publication_revision(self.root, self.recipient)
+
+    def native_records(self, fragments, routes, reader):
+        """Native ancestry precedes one atomic SQL read per bounded fragment."""
+        from .native_runtime_input import NativeRuntimeInput
+        from .transcripts import TranscriptRead
+
+        lookup = stable_thread_lookup(self.recipient.created_at)
+        for fragment in fragments:
+            fragment = tuple(fragment)
+            selected = tuple(zip(fragment, reader.inputs_for(fragment)))
+            with TranscriptRead.publication_source(self.root) as db:
+                # Missing coordination remains detached native history. Do not
+                # introduce header failures where no SQL source was selected.
+                session_id = (reader.session_id
+                              if db is not None and any(
+                                  user is not None and user.input_id is not None
+                                  for _, user in selected) else None)
+                capture = partial(
+                    NativeRuntimeInput.transcript_projection,
+                    db, reader, owner_lookup=lookup, session_id=session_id,
+                )
+                originals = tuple((record, record.project(partial(capture, user=user)))
+                                  for record, user in selected)
+            for record, projection in originals:
+                yield record, record.project(
+                    lambda record: self.native_events(record, routes, *projection)
+                )

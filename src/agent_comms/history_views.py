@@ -65,6 +65,32 @@ class RetiredViews:
     channels: frozenset[str]
 
 
+@dataclass(frozen=True)
+class ThreadPresentations:
+    """One status acquisition shared by a reader's thread presentations.
+
+    These rows belong to this registry cut, not a cache. Source acquisition
+    remains per thread, so one busy or damaged source cannot hide its peers.
+    """
+
+    snapshot: RegistrySnapshot
+    views: Mapping[str, ThreadView]
+    transcripts: Transcripts
+    sent_source_limit: int
+
+    def read(self, name: str) -> ThreadPresentation | None:
+        view = self.views.get(self.snapshot.canonical_name(name))
+        if view is None:
+            return None
+        captured = self.transcripts.capture_page_window(
+            view.thread.name, source_limit=5, sent_source_limit=self.sent_source_limit
+        )
+        owner = captured.read.identity.thread
+        if not owner.incarnation.current(self.snapshot):
+            raise StaleRevision("Thread source incarnation changed during presentation")
+        return view.presentation.with_sources(captured)
+
+
 class HistoryViews:
     def __init__(
         self,
@@ -301,7 +327,7 @@ class HistoryViews:
         return ThreadView.roster(
             snapshot,
             self.agents,
-            self.agents.all_activity(snapshot=snapshot),
+            None,
             GoalWaits(self.root / GoalWaits.filename),
             show_stopped=show_stopped,
             show_archived=show_archived,
@@ -323,27 +349,35 @@ class HistoryViews:
     def thread_presentation(
         self, name: str, *, sent_source_limit: int = 5
     ) -> ThreadPresentation | None:
-        """Read one current executable thread and its bounded authored outcomes."""
+        """Read one current executable thread through the shared status acquisition."""
+        return self.thread_presentations((name,), sent_source_limit=sent_source_limit).read(name)
+
+    def thread_presentations(
+        self, names: Iterable[str], *, sent_source_limit: int = 5
+    ) -> ThreadPresentations:
+        """Acquire status documents once, with no document lock held while building rows."""
         snapshot = self.registry.snapshot()
-        thread = snapshot.threads.get(snapshot.canonical_name(name))
-        if thread is None:
-            return None
-        if not ThreadView.visible(thread, snapshot, show_stopped=True, show_archived=False):
-            return None
-        view = ThreadView.capture(
-            thread,
+        views = ThreadView.roster(
             snapshot,
-            self.agents.activity_of(thread.name, snapshot=snapshot),
-            self.agents.runtime_info.read().get(thread.name),
-            GoalWaits(self.root / GoalWaits.filename).read(),
+            self.agents,
+            None,
+            GoalWaits(self.root / GoalWaits.filename),
+            names=names,
+            show_stopped=True,
+            show_archived=False,
         )
-        captured = self.transcripts.capture_page_window(
-            thread.name, source_limit=5, sent_source_limit=sent_source_limit
+        return ThreadPresentations(
+            snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
         )
-        owner = captured.read.identity.thread
-        if not owner.incarnation.current(snapshot):
-            raise StaleRevision("Thread source incarnation changed during presentation")
-        return view.presentation.with_sources(captured)
+
+    def require_thread_presentation(self, name: str) -> ThreadPresentation:
+        """A bound caller must still name an available thread, not an anonymous view."""
+        presentation = self.thread_presentation(name)
+        if presentation is None:
+            from .errors import UnregisteredThreadError
+
+            raise UnregisteredThreadError(f"Thread presentation unavailable: {name}")
+        return presentation
 
     def coordination_snapshot(
         self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False
@@ -484,22 +518,17 @@ class HistoryViews:
 
     def who(self) -> Sequence[Mapping]:
         """Presence: who is in the chat, with status and unread counts."""
-        return self._presence(include_pending=True)
+        views = self._presence_views()
+        # One bus snapshot for every thread, not one per thread.
+        pending = self.bus.pending_counts_all(tuple(view.thread.name for view in views))
+        return [{**view.to_wire(), "pending": pending[view.thread.name]} for view in views]
 
     def presence(self) -> Sequence[Mapping]:
         """Presence without viewer-specific unread scans."""
-        return self._presence(include_pending=False)
+        return [view.to_wire() for view in self._presence_views()]
 
-    def _presence(self, *, include_pending: bool) -> Sequence[Mapping[str, object]]:
-        return [
-            {
-                **view.to_wire(),
-                **(
-                    {"pending": self.bus.pending_count(view.thread.name)} if include_pending else {}
-                ),
-            }
-            for view in sorted(self.thread_views(), key=lambda view: view.thread.name)
-        ]
+    def _presence_views(self):
+        return sorted(self.thread_views(), key=lambda view: view.thread.name)
 
     def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
         """Summarize threads with status and pending counts."""

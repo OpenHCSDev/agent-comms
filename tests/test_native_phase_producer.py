@@ -7,6 +7,9 @@ from pathlib import Path
 import os
 from types import SimpleNamespace
 
+import pytest
+
+from agent_comms.activity import Activity, ActivityState
 from agent_comms.agent_events import NativePhaseChanged
 from agent_comms.backend import TurnSession
 from agent_comms.native_pi import NativePiRpcLaunch
@@ -17,7 +20,11 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.pi_native_backend import PersistentPiSession
 
 
-async def test_native_tool_lifecycle_publishes_actual_phase_after_effects():
+@pytest.mark.parametrize("first,second", [
+    ("read", "bash"),
+    ("x" * (Activity.detail_limit + 1), "y" * (Activity.detail_limit + 1)),
+])
+async def test_native_tool_lifecycle_publishes_actual_phase_after_effects(first, second):
     root = Path.cwd()
     session = TurnSession(NativePiRpcLaunch(("unused",), root, {}, SelectedSession(root), root, configuration=RestartEnvironment.inherit({})), "unused",
                           native_session=PersistentPiSession())
@@ -31,6 +38,8 @@ async def test_native_tool_lifecycle_publishes_actual_phase_after_effects():
         phases = [update.phase for update in updates if isinstance(update, NativePhaseChanged)]
         assert phases == [session.watchdog.phase]
         assert phases[0] is session.watchdog.phase
+        activity = phases[0].project_activity(Activity("worker", ActivityState.THINKING))
+        assert len(activity.detail) <= Activity.detail_limit
         return phases[0]
 
     updates = [
@@ -40,14 +49,14 @@ async def test_native_tool_lifecycle_publishes_actual_phase_after_effects():
     ]
     assert not any(isinstance(update, NativePhaseChanged) for update in updates)
     assert isinstance(session.watchdog.phase, ModelWaitPhase)
-    phase = await consume(ToolExecutionStart(tool_call_id="one", tool_name="read"))
+    phase = await consume(ToolExecutionStart(tool_call_id="one", tool_name=first))
     assert isinstance(phase, ToolRunningPhase)
-    assert phase.tools == (("one", "read"),)
-    phase = await consume(ToolExecutionStart(tool_call_id="two", tool_name="bash"))
-    assert phase.tools == (("one", "read"), ("two", "bash"))
-    phase = await consume(ToolExecutionEnd(tool_call_id="one", tool_name="read"))
-    assert phase.tools == (("two", "bash"),)
-    phase = await consume(ToolExecutionEnd(tool_call_id="two", tool_name="bash"))
+    assert phase.tools == (("one", first),)
+    phase = await consume(ToolExecutionStart(tool_call_id="two", tool_name=second))
+    assert phase.tools == (("one", first), ("two", second))
+    phase = await consume(ToolExecutionEnd(tool_call_id="one", tool_name=first))
+    assert phase.tools == (("two", second),)
+    phase = await consume(ToolExecutionEnd(tool_call_id="two", tool_name=second))
     assert isinstance(phase, ModelWaitPhase)
     updates = [update async for update in UnknownPiEvent(payload={}).consume(session)]
     assert not any(isinstance(update, NativePhaseChanged) for update in updates)

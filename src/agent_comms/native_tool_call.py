@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
@@ -110,7 +110,10 @@ class UncertainCall(CallObservation):
 
 
 class CallAdmission(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
-    def consume(self, call: NativeToolCall, action: Callable[[], None]) -> None:
+    def expire(self, call: NativeToolCall) -> None:
+        """An unstarted waiter cannot change an already consumed admission."""
+
+    async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
         raise SelectedToolDenied("Native tool request was already consumed; outcome may be UNKNOWN")
 
     def finish(
@@ -121,10 +124,14 @@ class CallAdmission(ABC):  # noqa: B024 - shared rejection; leaves override vali
 
 
 class AwaitingAdmission(CallAdmission):
-    def consume(self, call: NativeToolCall, action: Callable[[], None]) -> None:
+    def expire(self, call: NativeToolCall) -> None:
+        call.admission = UncertainAdmission()
+
+    async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
         # No retry even when the callback is cancelled or its durable fsync fails.
         call.admission = UncertainAdmission()
-        action()
+        await action()
+        call.observation.require_executing()
         call.admission = AdmittedCall()
 
 
@@ -182,12 +189,19 @@ class NativeToolCall(ABC):
         except TimeoutError as error:
             raise ToolStartNotSeen() from error
 
-    async def authorize(self, action: Callable[[], None]) -> None:
+    async def authorize(self, action: Callable[[], Awaitable[None]]) -> None:
         try:
             await self._wait_started()
             self.observation.require_executing()
-            self.admission.consume(self, action)
-        except (asyncio.CancelledError, TimeoutError, ToolStartNotSeen):
+            await self.admission.consume(self, action)
+        except ToolStartNotSeen:
+            # The callback never ran. Close admission, but retain the actual
+            # native observations: delayed announcement/start/error events
+            # must still reconcile this denied call in its declared round.
+            self.admission.expire(self)
+            self.started.set()
+            raise
+        except (asyncio.CancelledError, TimeoutError):
             self.observation = UncertainCall()
             self.admission = UncertainAdmission()
             self.started.set()  # Wake other waiters; they must fail state validation.

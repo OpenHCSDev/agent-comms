@@ -22,6 +22,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, ValuesView
 from contextlib import ExitStack, suppress
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import Generic, TypeVar
 
@@ -278,12 +279,17 @@ def selected_tool_mode_for_owner(
     except (ValueError, TypeError) as error:
         raise SelectedToolDenied("Selected mode has no typed owner attempt") from error
 
+    path = store.session.path
+
     def owner_action(request: SelectedToolRequest) -> None:
         # The prompt-send boundary commits this epoch to the exact reserved
         # FULL input before Pi can receive it. A socket token, PID, model text,
         # or context journal alone does not establish this source binding.
-        verify_sent_full_input(store, admission, owner_name, input_id)
-        perform_selected_write(comms, store, admission, owner_name, session_dir, input_id, request)
+        with Coordination(path) as worker_store:
+            verify_sent_full_input(worker_store, admission, owner_name, input_id)
+            perform_selected_write(
+                comms, worker_store, admission, owner_name, session_dir, input_id, request
+            )
 
     return SelectedToolMode(owner_action)
 
@@ -414,7 +420,10 @@ class NativeToolCallTable(Generic[Call]):
     """Broker-owned identities and lifecycle objects for every native tool round."""
 
     def __init__(self) -> None:
-        self._calls: dict[ToolCallIdentity, Call] = {}
+        # A request has only a call id until the native message declares its
+        # round. Keep that unresolved identity in this same table; socket
+        # arrival must never assign the next observed round number.
+        self._calls: dict[ToolCallIdentity | str, Call] = {}
         self.rounds: list[NativeToolRound[Call]] = []
 
     def __bool__(self) -> bool:
@@ -436,40 +445,43 @@ class NativeToolCallTable(Generic[Call]):
         if round.number != len(self.rounds):
             raise SelectedToolDenied("Native tool round sequence changed")
         identities = tuple(ToolCallIdentity(round.number, call.call_id) for call in round.declared)
-        declared = set(identities)
-        pending = {
-            identity for identity in self._calls
-            if identity.round_number == round.number
-        }
-        if pending - declared:
-            raise SelectedToolDenied("Native tool request differs from its declared round")
         resolved: list[Call] = []
         for identity, candidate in zip(identities, round.declared, strict=True):
-            existing = self._calls.get(identity)
+            existing = self._calls.get(identity.call_id)
             if existing is not None:
                 existing.correlate(candidate)
                 resolved.append(existing)
             else:
                 resolved.append(candidate)
-        self._calls.update(zip(identities, resolved, strict=True))
         announced = NativeToolRound(round.number, tuple(resolved))
         for call in announced.declared:
             call.announce()
+        for identity, call in zip(identities, resolved, strict=True):
+            self._calls.pop(identity.call_id, None)
+            self._calls[identity] = call
         self.rounds.append(announced)
 
-    def call_for(self, candidate: Call) -> tuple[ToolCallIdentity, Call]:
+    def call_for(self, candidate: Call) -> Call:
         if self.rounds:
             current_identity = ToolCallIdentity(self.rounds[-1].number, candidate.call_id)
             current = self._calls.get(current_identity)
             if current is not None and current.accepts_current_request(candidate):
-                return current_identity, current
-        identity = ToolCallIdentity(len(self.rounds), candidate.call_id)
-        existing = self._calls.get(identity)
+                return current
+        existing = self._calls.get(candidate.call_id)
         if existing is not None:
             existing.correlate(candidate)
-            return identity, existing
-        self._calls[identity] = candidate
-        return identity, candidate
+            return existing
+        self._calls[candidate.call_id] = candidate
+        return candidate
+
+    def identity_for(self, call: Call) -> ToolCallIdentity:
+        """Resolve admission only after this exact declared call has started."""
+        identity, current = self.require_current(
+            call.call_id, "Native tool request has no declared round"
+        )
+        if current is not call:
+            raise SelectedToolDenied("Native tool request belongs to another round")
+        return identity
 
     def require_current(
         self, call_id: str, missing_message: str
@@ -521,7 +533,7 @@ class OwnerToolSocket(ABC, Generic[Call]):
     def decode_request(self, raw: bytes) -> Call: ...
 
     @abstractmethod
-    def admit(self, round_number: int, call: Call) -> None: ...
+    async def admit(self, round_number: int, call: Call) -> None: ...
 
     def validate_round(self, round: NativeToolRound[Call]) -> None:
         """Apply policy-specific limits after full decode and before any state transition."""
@@ -563,8 +575,8 @@ class OwnerToolSocket(ABC, Generic[Call]):
         return None
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
-        identity, call = self.calls.call_for(self.decode_request(raw))
-        await call.authorize(lambda: self.admit(identity.round_number, call))
+        call = self.calls.call_for(self.decode_request(raw))
+        await call.authorize(lambda: self.admit(self.calls.identity_for(call).round_number, call))
         return {"ok": True}
 
     def failure_response(self, error: Exception) -> dict[str, object]:
@@ -687,8 +699,8 @@ class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
             raise SelectedToolDenied("Invalid selected tool request") from error
         return envelope.authenticate(self.token)
 
-    def admit(self, round_number: int, call: SelectedToolRequest) -> None:
-        self.action(call)
+    async def admit(self, round_number: int, call: SelectedToolRequest) -> None:
+        await Coordination.run_worker(partial(self.action, call))
 
     @property
     def selected_call_id(self) -> str | None:

@@ -45,8 +45,9 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert owner.persistent.custody.child.proc.alive()
     assert owner.persistent.custody.idle().current
     reopened_child = owner.persistent.custody.child.proc
-    # The deliberately oversized output tests framing, not permission to admit
-    # a later prompt beyond the model's stored-context budget.
+    # The deliberately oversized output tests framing and exceeds Core's
+    # immutable retained-context limit. Pi compacts it before settling; the
+    # history and split-turn prefix each require a summary provider request.
     owner.provider.text = "L" * (2 * 1024 * 1024 + 257)
     second = await owner.run("large response")
     assert second[-1].ok and second[-1].text == owner.provider.text, second[-1]
@@ -54,10 +55,67 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert len(owner.saved_inputs()) == 4
     print(f"ordinary_native_response_bytes={len(second[-1].text.encode())}")
 
-    assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 4
+    assert len(owner.starts) == len(owner.saved_inputs()) == 4
+    assert owner.provider.posts == len(owner.provider.requests) == 6
+    original_texts = ["first", "queued followup", "after validated reopen", "large response"]
+    for request, text in zip(owner.provider.requests[:4], original_texts, strict=True):
+        assert request["messages"][-1] == {
+            "role": "user", "content": [{"type": "text", "text": text}]
+        }
+    for request in owner.provider.requests[4:]:
+        assert request["messages"][0]["content"].startswith(
+            "You are a context summarization assistant."
+        )
+    compacted = [
+        row for row in map(json.loads, owner.session.read_text().splitlines())
+        if row["type"] == "compaction"
+    ]
+    assert len(compacted) == 1
+    assert compacted[0]["tokensBefore"] > 300_000
     assert len({row[1] for row in owner.starts}) == 4
     proofs = read_proof_rows(owner.session)
     assert {row["inputId"] for row in proofs} == {row[1] for row in owner.starts}
+
+
+async def test_actual_native_failure_after_tool_keeps_terminal_and_effect_once(
+    native_backend, monkeypatch
+):
+    from acp import RequestError
+    from acp.schema import TextContentBlock
+
+    owner = native_backend
+    await owner.author_history()
+    effect = owner.project / "one-effect.txt"
+    owner.provider.tool_call = (
+        "bash", {"command": "printf 'effect\\n' >> one-effect.txt"}
+    )
+    chunks = owner.provider.response_chunks
+
+    def fail_after_tool():
+        yield from chunks()
+        owner.provider.status = 400
+        owner.provider.error_message = "controlled failure after actual tool effect"
+        owner.provider.error_type = "invalid_request_error"
+
+    monkeypatch.setattr(owner.provider, "response_chunks", fail_after_tool)
+    async with owner.open_owner(native_options=("--tools", "bash")) as (agent, session):
+        with pytest.raises(RequestError):
+            await agent.prompt(session, [TextContentBlock(
+                type="text", text="Distinct isolated native terminal verification."
+            )])
+        assert effect.read_text() == "effect\n"
+        journal = [json.loads(line) for line in owner.session.read_text().splitlines()]
+        messages = [row["message"] for row in journal if row.get("type") == "message"]
+        errors = [message for message in messages if message.get("stopReason") == "error"]
+        assert len(errors) == 1 and "controlled failure" in errors[0]["errorMessage"]
+        assert owner.provider.posts == 2  # One tool request, one terminal refusal; no retries.
+        tools = [message for message in messages if message.get("role") == "toolResult"]
+        assert len(tools) == 1
+        assert len([message for message in messages if message.get("role") == "user"]) == 2
+        reports = list((owner.root / "diagnostics").glob("*.json"))
+        failures = [json.loads(path.read_text()) for path in reports]
+        assert len(failures) == 1
+        assert failures[0]["reason"] == "model_request_failed"
 
 
 @pytest.mark.parametrize("termination", ["cancel", "eof", "owner_stop"])
@@ -72,7 +130,7 @@ async def test_actual_native_interrupted_turn_never_replays_or_retains(native_ba
                 await asyncio.sleep(0.01)
         child = owner.children[-1]
         session = backend.TurnSession.active[turn]
-        stderr, forwarding = session.native.stderr_task, session.steering_task
+        stderr, forwarding = session.native.stderr_task, session.native.forwarding_task
         if termination == "cancel":
             turn.cancel()
             with pytest.raises(asyncio.CancelledError):
@@ -104,7 +162,7 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
     owner.provider.status = 0
     turn = asyncio.create_task(owner.run("Uncertain input before interrupted owner stop"))
     entered, release = asyncio.Event(), asyncio.Event()
-    close = PiSessionChild.close
+    close = PiSessionChild._shutdown
     stop = None
     try:
         async with asyncio.timeout(15):
@@ -112,27 +170,30 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
                 assert not turn.done()
                 await asyncio.sleep(0.01)
         session = backend.TurnSession.active[turn]
+        forwarding = session.native.forwarding_task
 
-        async def held_close(child):
+        async def held_close(child, *, graceful):
             if child is session.native:
                 entered.set()
                 await release.wait()
-            await close(child)
+            return await close(child, graceful=graceful)
 
-        monkeypatch.setattr(PiSessionChild, "close", held_close)
+        monkeypatch.setattr(PiSessionChild, "_shutdown", held_close)
         stop = asyncio.create_task(backend.terminate_task_process(turn))
         await asyncio.wait_for(entered.wait(), 5)
         stop.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await stop
+        assert not stop.done()
         assert backend.TurnSession.active[turn] is session
         assert isinstance(owner.persistent.custody, RetiringNative)
-        assert not owner.persistent.custody.task.done()
+        assert not owner.persistent.custody.child._close_job.done()
         release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await stop
         result = await asyncio.wait_for(turn, 10)
         assert not result[-1].ok
         assert not session.native.proc.alive()
-        assert session.native.stderr_task.done() and session.steering_task.done()
+        assert session.native.stderr_task.done() and forwarding.done()
+        assert session.native.forwarding_task is None
         assert turn not in backend.TurnSession.active
         assert owner.provider.posts == len(owner.saved_inputs()) == 1
     finally:

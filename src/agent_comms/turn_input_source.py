@@ -7,6 +7,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .agent_backend import WhenBusy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .messages import Message
 from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
@@ -208,6 +209,11 @@ class ScheduledOriginalInput(DependencyOriginalInput):
 @dataclass(frozen=True, kw_only=True)
 class FollowingTurnInput(TurnInputSource):
     keys: tuple[str, ...]
+    when_busy: ClassVar[WhenBusy] = WhenBusy.STEER
+
+    def continue_response(self, response, parts):
+        """An actual following request may revise the turn's automatic answer."""
+        return response.later_input(parts)
 
     def display(self, dispositions: InputDispositions, text: str) -> str:
         row = dispositions.lookup(self.keys[0]) if self.keys else None
@@ -234,3 +240,8 @@ class DeliveredFollowingInput(AcceptedFollowingInput):
     """A pending bus message handed to the recipient's running turn."""
 
     origins: tuple[Message, ...]
+    when_busy: ClassVar[WhenBusy] = WhenBusy.FOLLOW_UP
+
+    def continue_response(self, response, parts):
+        """Background handling has no automatic reply of its own."""
+        return response.notification(parts)

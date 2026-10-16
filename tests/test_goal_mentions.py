@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.relationships import RelationshipEdit
+from agent_comms.relationships import CollaboratingRelationshipGroup, RelationshipEdit
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -25,6 +25,7 @@ from agent_comms.goals import (
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
+from agent_comms.tool_caller import ThreadCaller
 
 
 def _wire(tmp_path: Path) -> Comms:
@@ -39,7 +40,7 @@ def _wire(tmp_path: Path) -> Comms:
 
 def _rows(comms: Comms, name: str):
     snapshot = comms.relationships.snapshot(name)
-    group = next(group for group in snapshot.groups if group.key == "collaborating")
+    group = snapshot.groups_by_type[CollaboratingRelationshipGroup]
     return group.entries, snapshot.unresolved_goal_mentions
 
 
@@ -84,7 +85,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
         ("unknown", UnknownMentionBinding),
     ]
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-    tool = invoke_tool(comms, "comms_collaborations", {})
+    tool = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("owner"))
     assert tool["collaborations"] == []
     assert tool["visible_collaborators"][0]["sources"] == ["goal_mention"]
     assert {item["token"] for item in tool["unresolved_goal_mentions"]} == {"owner", "unknown"}
@@ -242,7 +243,7 @@ def test_collaboration_tool_ignores_unrelated_malformed_bus_history(
     original_relationships = comms.relationships.store.path.read_bytes()
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     assert comms.relationships.collaborations("owner") == (manual,)
-    result = invoke_tool(comms, "comms_collaborations", {})
+    result = invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("owner"))
     assert result["collaborations"] == json.loads(json.dumps([asdict(manual)]))
     if goal_mention:
         assert result["visible_collaborators"][0]["sources"] == ["explicit", "goal_mention"]

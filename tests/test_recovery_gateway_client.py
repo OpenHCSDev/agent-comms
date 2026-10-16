@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.private_path import PrivateSocketRole
 from agent_comms.recovery_gateway import RecoveryGateway
 from agent_comms.recovery_gateway_client import read_gateway_projection
 
@@ -73,10 +74,10 @@ async def test_existing_gateway_restart_returns_only_redacted_owner_dto(root: Pa
 @pytest.mark.parametrize(
     "raw",
     [
-        b'{"schema":1,"availability":"available","owner":"Alice","sampledAtMs":0,"current":null,"lastRecovery":null,"connectivity":null,"executionId":"SECRET"}\n',
-        b'{"schema":1,"schema":1,"availability":"unavailable","reason":"busy"}\n',
-        b'{"schema":1,"availability":"unavailable","reason":[]}\n',
-        b'{"schema":1,"availability":"available","owner":"Alice","sampledAtMs":0,"current":{"status":[],"origin":"wire","isCurrent":false,"attempt":null,"canRetry":false,"publication":null},"lastRecovery":null,"connectivity":null}\n',
+        b'{"schema":2,"availability":"available","owner":"Alice","sampledAtMs":0,"current":null,"lastRecovery":null,"connectivity":null,"executionId":"SECRET"}\n',
+        b'{"schema":2,"schema":2,"availability":"unavailable","reason":"busy"}\n',
+        b'{"schema":2,"availability":"unavailable","reason":[]}\n',
+        b'{"schema":2,"availability":"available","owner":"Alice","sampledAtMs":0,"current":{"status":[],"origin":"wire","isCurrent":false,"attempt":null,"canRetry":false,"publications":[]},"lastRecovery":null,"connectivity":null}\n',
         b"X" * 4097 + b"\n",
         b"[" * 1400 + b"0" + b"]" * 1400 + b"\n",  # bounded recursion bomb
     ],
@@ -95,11 +96,12 @@ async def test_malformed_or_overbroad_gateway_reply_fails_closed(root: Path, raw
             writer.close()
             await writer.wait_closed()
 
-    server = await asyncio.start_unix_server(respond, path=str(path))
+    with PrivateSocketRole.address(path) as address:
+        server = await asyncio.start_unix_server(respond, path=str(address))
     path.chmod(0o600)
     try:
         view = await read_gateway_projection(path, "Alice")
-        assert view == {"schema": 1, "availability": "unavailable", "reason": "gateway_unavailable"}
+        assert view == {"schema": 2, "availability": "unavailable", "reason": "gateway_unavailable"}
     finally:
         server.close()
         await server.wait_closed()

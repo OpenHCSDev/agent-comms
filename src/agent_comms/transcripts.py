@@ -33,7 +33,10 @@ from .threads import Thread
 from .turn_lease import TurnLeaseFence
 from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
-from .transcript_receipts import AssignedSourceCursor, AssignedSourceIdentity
+from .transcript_receipts import (
+    AssignedSourceCursor, AssignedSourceIdentity, AssignedTranscriptSource,
+    LiveAssignedTranscriptSource, TranscriptSource,
+)
 from .coordination_errors import StaleRevision, TranscriptChanged
 
 if TYPE_CHECKING:
@@ -47,6 +50,10 @@ class TranscriptCursor:
     session_file: str
     offset: int
     receipts: AssignedSourceCursor | None = None
+
+    @property
+    def source_identity(self) -> AssignedSourceIdentity | None:
+        return self.receipts.identity if self.receipts is not None else None
 
     @property
     def wire_seq(self) -> int:
@@ -82,6 +89,10 @@ class TranscriptCursor:
         if self.receipts is not None:
             self.receipts.require_source(identity)
 
+    def require_native(self) -> None:
+        if self.receipts is not None:
+            raise ValueError("Recorded items cannot acquire an assigned wire cursor")
+
     def covers_incoming(self, sequence: int) -> bool:
         # Callers hold a canonical recipient assignment, never an arbitrary seq.
         return self.receipts is not None and self.receipts.covers(sequence)
@@ -94,6 +105,14 @@ class TranscriptPage:
     after: TranscriptCursor
     has_older: bool
     has_newer: bool
+
+    def resolve_sent_messages(self, reports):
+        """Prove bounded full reports without replacing their input objects."""
+        reports = tuple(reports)
+        scope = self.after.source_identity
+        resolved = (AssignedTranscriptSource.open(scope).resolve_sent(reports)
+                    if scope is not None else reports)
+        return dict(zip(map(id, reports), resolved))
 
     def metadata(self) -> dict[str, object]:
         return {
@@ -115,6 +134,7 @@ class PageSource:
     routes: TranscriptRoutes
     records: NativeTranscript | ExternalTranscript
     identity: Callable[..., TranscriptReadIdentity]
+    projection: TranscriptSource
 
 
 @dataclass(frozen=True)
@@ -136,7 +156,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     )
     reply_revision: PublishedReplyRevision
     read_revision: FileRevision | None = field(metadata={"content_exclude": True})
-    receipt_frontier: AssignedSourceCursor
+    receipt_frontier: AssignedSourceCursor | None
     before: TranscriptCursor | None
     after: TranscriptCursor | None
     through: TranscriptCursor | None
@@ -212,6 +232,11 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         """Finished history and its source projection agree, including the latest record."""
         return self.records_cut == other.records_cut and self.same_content(other)
 
+    def require_draft_snapshot(self, current: TranscriptReadIdentity) -> None:
+        """The record source owns whether growth invalidates its current draft."""
+        if not self.records_cut.draft_current(current.records_cut) or not self.same_content(current):
+            raise StaleRevision("Transcript changed while reading its current draft")
+
 
 @dataclass(frozen=True, slots=True)
 class LiveTranscriptReadIdentity(TranscriptReadIdentity):
@@ -230,7 +255,8 @@ class LiveTranscriptReadIdentity(TranscriptReadIdentity):
         records = (NativeTranscript(Path(session_file)) if session_file else
                    ExternalTranscript(owner.root, thread.incarnation))
         return PageSource(thread, session_file, inherited,
-                          owner.root, owner.bus.log, owner.routes, records, cls)
+                          owner.root, owner.bus.log, owner.routes, records, cls,
+                          LiveAssignedTranscriptSource.for_thread(owner.root, thread, owner.bus.log))
 
     def namespace(self, owner):
         return owner.registry.snapshot()
@@ -257,20 +283,22 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
     def resolve_source(cls, owner, name, source_file, historical_source):
         from .wire_log import WireLog
 
-        source = HistorySource.require(owner.bus.history, historical_source)
+        source = HistorySource.require(owner.bus.history.sources(), historical_source)
         thread = source.provenance.require(name)
         session_file = thread.session_file or ""
         if source_file is not None and source_file != session_file:
             raise TranscriptChanged()
         root = Path(source.root)
+        log = WireLog(root / "bus.jsonl")
         records = (NativeTranscript(Path(session_file)) if session_file else
                    ExternalTranscript(root, thread.incarnation))
         return PageSource(thread, session_file, False, root,
-                          WireLog(root / "bus.jsonl"), TranscriptRoutes(root), records,
-                          partial(cls, source=source))
+                          log, TranscriptRoutes(root), records,
+                          partial(cls, source=source),
+                          AssignedTranscriptSource.for_recorded(root, thread, log, records))
 
     def namespace(self, owner):
-        current = HistorySource.require(owner.bus.history, self.source.key)
+        current = HistorySource.require(owner.bus.history.sources(), self.source.key)
         if current != self.source:
             raise StaleRevision("Transcript witness belongs to another recorded source")
         return current.provenance
@@ -340,18 +368,14 @@ class TranscriptRead:
     def read_snapshot(self) -> tuple[TranscriptPage, ExternalDraftRow | None]:
         """Read the page and external draft from one retained source lifecycle."""
         page, draft = self._read_page()
-        current = self.current_identity()
-        if not self.identity.same_snapshot(current):
-            raise StaleRevision("Transcript finished while reading its current draft")
+        self.identity.require_draft_snapshot(self.current_identity())
         return page, draft
 
     def current_draft(self) -> ExternalDraftRow | None:
         """Read current text beside this page, before its finished cut changes."""
         with self.source.records.reading() as records:
             draft = records.current_draft()
-        current = self.current_identity()
-        if not self.identity.same_snapshot(current):
-            raise StaleRevision("Transcript finished while reading its current draft")
+        self.identity.require_draft_snapshot(self.current_identity())
         return draft
 
 
@@ -400,10 +424,8 @@ class Transcripts:
         through: TranscriptCursor | None = None,
         historical_source: str | None = None,
     ) -> TranscriptRead:
-        from .transcript_receipts import AssignedTranscriptSource
-
         page = self._page_source(name, through, historical_source)
-        frontier = AssignedTranscriptSource.for_thread(page.root, page.thread, page.log).frontier
+        frontier = page.projection.frontier
         identity = self._capture_page_identity(
             page, name, frontier, before=before, after=after, through=through,
         )
@@ -433,10 +455,7 @@ class Transcripts:
         if not 0 <= sent_source_limit <= MessageNotification.window_limit:
             raise ValueError("Sent source capture requires a bounded window")
         page = self._page_source(name, through, historical_source)
-        from .transcript_receipts import AssignedTranscriptSource
-
-        source = AssignedTranscriptSource.for_thread(page.root, page.thread, page.log)
-        captured = source.window(limit=source_limit, sent_limit=sent_source_limit)
+        captured = page.projection.window(limit=source_limit, sent_limit=sent_source_limit)
         identity = self._capture_page_identity(
             page, name, captured.cursor, before=before, after=after, through=through,
         )
@@ -451,11 +470,7 @@ class Transcripts:
         page = self._page_source(
             identity.requested_name, identity.through, identity.historical_source
         )
-        from .transcript_receipts import AssignedTranscriptSource
-
-        frontier = AssignedTranscriptSource.for_thread(
-            page.root, page.thread, page.log
-        ).frontier
+        frontier = page.projection.frontier
         return self._capture_page_identity(
             page,
             identity.requested_name,
@@ -469,7 +484,7 @@ class Transcripts:
         self,
         page: PageSource,
         name: str,
-        receipt_frontier: AssignedSourceCursor,
+        receipt_frontier: AssignedSourceCursor | None,
         *,
         before: TranscriptCursor | None,
         after: TranscriptCursor | None,
@@ -488,7 +503,7 @@ class Transcripts:
             FileRevision.capture(page.log.path),
             FileRevision.capture(root / "coordination.sqlite3"),
             FileRevision.capture(root / "coordination.sqlite3-wal"),
-            records.reply_revision(root, thread),
+            page.projection.reply_revision(records),
             FileRevision.capture(root / self.bus.reads.path.name),
             receipt_frontier,
             before,
@@ -601,7 +616,6 @@ class Transcripts:
         """Read page and draft while their record owner retains one source lifecycle."""
         self.page_reads += 1
         from .transcript_receipts import (
-            AssignedTranscriptSource,
             EarlierTranscript,
             LaterTranscript,
         )
@@ -610,7 +624,7 @@ class Transcripts:
         cursor = before or after
         if cursor and (cursor.session_file != session_file or cursor.offset < 0):
             raise TranscriptChanged()
-        receipts = AssignedTranscriptSource.for_thread(page.root, thread, page.log)
+        receipts = page.projection
         with page.records.reading() as reader:
             size = reader.cut().offset
             if cursor and cursor.offset > size:
@@ -622,7 +636,7 @@ class Transcripts:
                 if cursor and cursor.offset > size:
                     raise ValueError("Cursor is outside the transcript window.")
             frontier = through or TranscriptCursor(session_file, size, receipts.frontier)
-            frontier.require_source(AssignedSourceIdentity(str(page.root), thread.incarnation))
+            receipts.require_cursor(frontier)
             if frontier.wire_seq < 0 or (cursor is not None and not frontier.contains(cursor)):
                 raise ValueError("Cursor is outside the combined transcript source")
             traversal = LaterTranscript() if after is not None else EarlierTranscript()

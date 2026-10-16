@@ -6,7 +6,7 @@ import hashlib
 import multiprocessing
 import sqlite3
 import threading
-from agent_comms.attempt_states import AttemptFailedAttempt, SucceededAttempt
+from agent_comms.attempt_states import AttemptFailedAttempt, SucceededAttempt, UnknownOutcomeAttempt
 from collections.abc import Callable
 from pathlib import Path
 
@@ -188,14 +188,13 @@ def monitor_evidence(
     backend_done: bool,
     *,
     subprocess_dead: bool = True,
-    unknown_effects: bool = True,
 ) -> MonitorEvidence:
     return MonitorEvidence(
         subprocess_dead=subprocess_dead,
         backend_done=backend_done,
         reason_code="process_died",
         observed_at_ms=1_000,
-        unknown_effects=unknown_effects,
+        outcome=UnknownOutcomeAttempt(),
     )
 
 
@@ -1373,16 +1372,16 @@ def test_concurrent_registration_one_writer_one_replay(db_path: Path) -> None:
         )
 
 
-def _read_while_other_store_commits(
+def _read_while_other_store_waits(
     path: Path,
     first_table: str,
     read: Callable[[StandaloneCoordination], object],
     write: Callable[[StandaloneCoordination], None],
 ) -> object:
-    """Hold a reader after its first SELECT while a second connection tries COMMIT."""
+    """Hold a reader while a second connection waits for write admission."""
     first_read = threading.Event()
     writer_ready = threading.Event()
-    commit_started = threading.Event()
+    write_started = threading.Event()
     writer_done = threading.Event()
     errors: list[BaseException] = []
 
@@ -1404,9 +1403,10 @@ def _read_while_other_store_commits(
                 if selected and not paused:
                     paused = True
                     first_read.set()
-                    assert commit_started.wait(timeout=5), "writer never reached COMMIT"
+                    assert write_started.wait(timeout=5), "writer never requested admission"
                     # A real SQLite row was read under the aggregate snapshot.
-                    # The second connection must remain blocked until its reader exits.
+                    # The second connection must remain blocked before changing state
+                    # until its reader exits.
                     writer_done.wait(timeout=0.3)
                 return result
 
@@ -1418,8 +1418,8 @@ def _read_while_other_store_commits(
             with store(path) as other:
 
                 def trace(statement: str) -> None:
-                    if statement == "COMMIT":
-                        commit_started.set()
+                    if statement == "BEGIN EXCLUSIVE":
+                        write_started.set()
 
                 other.session._connection.set_trace_callback(trace)
                 writer_ready.set()
@@ -1448,7 +1448,7 @@ def test_public_snapshot_is_one_committed_revision_during_settlement(db_path: Pa
         _, fence = started(db)
         fence = final_evidence(db, fence)
 
-    observed = _read_while_other_store_commits(
+    observed = _read_while_other_store_waits(
         db_path,
         "executions",
         lambda reader: reader.snapshots.get("exec"),
@@ -1471,7 +1471,7 @@ def test_public_participant_is_one_committed_revision_during_rename(db_path: Pat
     with store(db_path) as db:
         db.participants.register("owner", "Old", "thread", committed=True)
 
-    observed = _read_while_other_store_commits(
+    observed = _read_while_other_store_waits(
         db_path,
         "participants",
         lambda reader: reader.participants.get("owner"),

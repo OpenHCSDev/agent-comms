@@ -8,14 +8,21 @@ model flushes the rows that changed once per frame.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
-from agent_comms.thread_presentation import ThreadPresentation
+from agent_comms.thread_presentation import (
+    IdleThreadPresentationStatus,
+    StatusPending,
+    ThreadRetired,
+    ThreadPresentation,
+    ThreadPresentationStatus,
+)
 from agent_comms.ui_model.changes import KeyedModel
+from agent_comms.ui_model.delivery import InputDelivery
 
 if TYPE_CHECKING:
-    from agent_comms.ui_model.observation import ThreadsObserved
+    from agent_comms.ui_model.observation import ThreadsObserved, UnreadableHistory
 
 NOTIFICATION_EXCERPT = 110
 
@@ -27,16 +34,22 @@ class ThreadStatusModel:
     name: str
     shown: bool
     lines: tuple[str, ...]
-    working: bool
-    attention: bool
-    available: bool = True
+    presentation: ThreadPresentation
     summary: tuple[str, ...] = ()
     """Overview parts for a collapsed status: first summary line, latest inbound, recent count."""
 
+    @property
+    def status(self) -> ThreadPresentationStatus:
+        return self.presentation.status
+
+    def with_delivery(self, delivery: InputDelivery) -> ThreadStatusModel:
+        return replace(self, presentation=delivery.presentation(self.presentation))
+
     @classmethod
     def known(cls, name: str, presentation: ThreadPresentation | None) -> ThreadStatusModel:
+        """Decode the observation's nullable presentation once, for local and foreign views."""
         if presentation is None:
-            return cls(name, False, ("",), False, False)
+            return cls.retired(name)
         lines = [presentation.summary]
         excerpts = []
         for receipt in presentation.notifications:
@@ -55,13 +68,21 @@ class ThreadStatusModel:
             summary.append(f"Latest inbound {latest.message.target} from @{latest.message.sender}: {latest.state}")
         if len(presentation.notifications) > 1:
             summary.append(f"{len(presentation.notifications)} recent")
-        return cls(name, True, tuple(lines), presentation.busy, presentation.attention,
+        return cls(name, True, tuple(lines), presentation,
                    summary=tuple(summary))
 
     @classmethod
-    def unavailable(cls, name: str, reason: str = "Agent status unavailable") -> ThreadStatusModel:
-        return cls(name, True, (reason,), False, True,
-                   available=False, summary=(reason.partition("\n")[0],))
+    def pending(cls, name: str) -> ThreadStatusModel:
+        return cls.known(name, StatusPending().presentation(name))
+
+    @classmethod
+    def retired(cls, name: str) -> ThreadStatusModel:
+        return cls.known(name, ThreadRetired().presentation(name))
+
+    @classmethod
+    def unreadable(cls, name: str, error: UnreadableHistory) -> ThreadStatusModel:
+        return cls.known(name, ThreadPresentation(
+            name, "!", str(error), status=IdleThreadPresentationStatus().with_attention()))
 
 
 class OpenThreadStatus:
@@ -70,18 +91,23 @@ class OpenThreadStatus:
     def __init__(self, schedule: Callable[[Callable[[], None]], None]):
         self.rows: KeyedModel[str, ThreadStatusModel] = KeyedModel(schedule)
 
+    def open(self, name: str) -> ThreadStatusModel:
+        """Register the first observation gap; every open view holds a real member."""
+        if name not in self.rows.rows:
+            self.rows.replace({**self.rows.rows, name: ThreadStatusModel.pending(name)})
+        return self.rows.rows[name]
+
     def observed(self, result: ThreadsObserved) -> None:
         """Publish one observation of the open threads.
 
-        A thread whose store was busy keeps its previous row (or shows
-        unavailable until a first read succeeds); the service reads it again.
+        A thread whose store was busy keeps its previous row, or its initial
+        StatusPending member until the service completes its first read.
         """
         rows = {name: ThreadStatusModel.known(name, presentation)
                 for name, presentation in result.presentations.items()}
-        rows.update((name, ThreadStatusModel.unavailable(name, str(error)))
+        rows.update((name, ThreadStatusModel.unreadable(name, error))
                     for name, error in result.unavailable.items())
-        rows.update((name, self.rows.rows.get(name) or ThreadStatusModel.unavailable(name))
-                    for name in result.busy)
+        rows.update((name, self.open(name)) for name in result.busy)
         self.rows.replace(rows)
 
     def clear(self) -> None:

@@ -73,6 +73,11 @@ class RuntimePublication:
         try:
             temporary.symlink_to(target)
             os.replace(temporary, link)
+            directory = os.open(link.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -94,7 +99,6 @@ def main() -> None:
     print(f'Published {publication.runtime}', flush=True)
     # Queue requests keep original process identity and session settings. A
     # pending or uncertain previous request is handled by that existing owner.
-    os.environ['PATH'] = f'{publication.runtime / "bin"}:{os.environ["PATH"]}'
     os.environ['VIRTUAL_ENV'] = str(publication.runtime)
     for owner in owners:
         request = enqueue(comms, owner.name)

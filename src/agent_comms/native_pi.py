@@ -26,6 +26,7 @@ from .native_session_files import NativeSessionFiles
 from .native_package import OWNER_INSTRUCTIONS
 from .owner_launch import RestartEnvironment
 from .field_codec import FieldCodec
+from .pi_rpc import unique_fields
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
@@ -204,10 +205,10 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
     indexes = (Index(("request_generation",)), Index(("session_id",)))
 
     @classmethod
-    def triggers(cls) -> dict[str, str]:
+    def trigger_bodies(cls) -> dict[str, str]:
         table = cls.declared_name
         return {
-            f"{table}_append": f"""CREATE TRIGGER {table}_append BEFORE INSERT ON {table}
+            f"{table}_append": f""" BEFORE INSERT ON {table}
             WHEN NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM {table}), 0)
               OR EXISTS(SELECT 1 FROM {table} WHERE request_generation=NEW.request_generation
                         AND (llm_context_digest != NEW.llm_context_digest
@@ -215,7 +216,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
               OR NEW.session_id != (SELECT session_id FROM {table} ORDER BY session_id LIMIT 1)
             BEGIN SELECT RAISE(ABORT,'native proof lineage differs'); END""",
             **{
-                f"{table}_{action.lower()}": f"CREATE TRIGGER {table}_{action.lower()} "
+                f"{table}_{action.lower()}": " "
                 f"BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'native proof is append only'); END"
                 for action in ("UPDATE", "DELETE")
             },
@@ -225,14 +226,13 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
     def native_contract(cls) -> dict[str, Any]:
         """Generate the native writer's SQLite contract from this declaration."""
         table = cls.declared_name
-        columns = cls.columns()
         return {
             "objects": cls.schema_objects(),
             "columns": [
                 {"name": item.name, "wire": item.metadata.get("wire_name", item.name)}
                 for item in fields(cls)
             ],
-            "insert": f"INSERT INTO {table} ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+            "insert": cls.insertion_statement(),
             "head": f"SELECT COALESCE(MAX(request_generation),0) AS generation FROM {table}",
             "session": f"SELECT session_id AS id FROM {table} ORDER BY session_id LIMIT 1",
             "current": f"SELECT input_id,session_entry_id FROM {table} "
@@ -319,7 +319,10 @@ class NativeContextProof(NativeContextRecord):
         """
         if self.input_id != input_id:
             return False
-        return self.read_evidence(self.session_file, input_id, evidence=evidence) == self
+        return self.read_evidence(
+            self.session_file, input_id,
+            request_generation=self.request_generation, evidence=evidence,
+        ) == self
 
     @classmethod
     def read_evidence(
@@ -406,9 +409,7 @@ class NativePiRpcLaunch:
             env.pop(name, None)
         env["NODE_DISABLE_COMPILE_CACHE"] = "1"
         env["PI_WORKTREE"] = str(cwd)
-        env["PATH"] = os.pathsep.join(
-            (str(Path(sys.executable).parent), env.get("PATH", os.defpath))
-        )
+        env = RestartEnvironment.inherit(env).for_interpreter(Path(sys.executable)).apply_runtime(env)
         env.update(configuration.encode_native())
         argv = (
             "node", "--no-global-search-paths",
@@ -641,15 +642,6 @@ class NativePiRpcLaunch:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
         return cls._build(cli, tuple(arguments), worktree, env, session, package, configuration)
-
-
-def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise NativePiUnavailable("Ambiguous native Pi JSON object")
-        result[key] = value
-    return result
 
 
 def _read_private_file(path: Path):
@@ -885,7 +877,7 @@ class PrivateEvidenceRead:
     @staticmethod
     def _decode_row(raw):
         try:
-            row = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=_unique)
+            row = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=unique_fields)
         except (UnicodeError, ValueError) as error:
             raise NativePiUnavailable("Native Pi evidence JSON is invalid") from error
         if type(row) is not dict:
@@ -1100,10 +1092,9 @@ def _verify_context(
     except (TypeError, ValueError) as error:
         raise NativePiUnavailable("Native Pi input/context receipt is malformed") from error
     with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
-        proof = NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)
-        if proof != emitted:
+        if not emitted.corroborates_input(input_id, evidence=evidence):
             raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
-        return proof
+        return emitted
 
 
 def _require_reviewed_selected_source_cli() -> None:

@@ -34,7 +34,7 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
     class Owner:
         input_id = secrets.token_hex(16)
 
-        def admit(self, round_number, call) -> None:
+        async def admit(self, round_number, call) -> None:
             pass
 
     tmp_path.chmod(0o700)
@@ -69,12 +69,14 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
     }).encode() + b"\n"
     pending = asyncio.create_task(socket.handle_request(second_request))
     await asyncio.sleep(0)
-    second = socket.calls.require(1, "reused")
+    with pytest.raises(KeyError):
+        socket.calls.require(1, "reused")  # No declaration has supplied round 1 yet.
     assert not pending.done()
 
     socket.announce((
         ToolCallContent(id="reused", name="read", arguments=second_arguments),
     ))
+    second = socket.calls.require(1, "reused")
     socket.tool_started(
         ToolExecutionStart(tool_call_id="reused", tool_name="read", args=second_arguments)
     )
@@ -89,7 +91,7 @@ def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(tmp_path: P
     class Owner:
         input_id = secrets.token_hex(16)
 
-        def admit(self, round_number, call) -> None:
+        async def admit(self, round_number, call) -> None:
             raise AssertionError("invalid round must not admit a call")
 
     socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())

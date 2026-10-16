@@ -37,6 +37,7 @@ from .reservation_rules import ReservationViolationError
 from .selected_triage import SelectedTriage
 from .text_digest import TextDigest
 from .turn_failure import TurnFailure
+from .typed_table import SqlValue
 
 
 @dataclass(frozen=True)
@@ -82,8 +83,8 @@ class NativeSendStage(ABC):
     async def continue_after_failure(self, settlement, failure: TurnFailure) -> None:
         """Triage and terminal full failures have no subsequent attempt."""
 
-    def fail_unknown(self, bus, owner, witness) -> None:
-        owner.require_registry(bus._registry)
+    async def fail_unknown(self, bus, owner, witness) -> None:
+        await Coordination.run_worker(lambda: owner.require_registry(bus._registry))
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
         input_id = secrets.token_hex(16)
@@ -148,19 +149,16 @@ class NativeSendStage(ABC):
                 raise IdentityConflict(
                     "Pi live assembled context differs from its reserved input proof"
                 )
-            with store.session.read():
-                original = self.pending_input(store, input_id, owner, token_digest)
-                original.require_session_identity().require_context(context)
-                binding = self.require_binding(
-                    store,
-                    input_id,
-                    owner,
-                    wire_root_id,
-                    prompt,
-                    blocking=True,
-                )
+            # Binding writers acquire sidecar before SQL. Keep that order here,
+            # and finish journal I/O before acquiring the coordinator snapshot.
+            with self.bound_prompt(
+                store, input_id, owner, wire_root_id, prompt, blocking=True,
+            ) as binding:
                 if not expected_prompt_matches_journal(context.session_file, binding, evidence=evidence):
                     raise IdentityConflict("live native input lacks exact bound source prompt equality")
+                with store.session.read():
+                    original = self.pending_input(store, input_id, owner, token_digest)
+                    original.require_session_identity().require_context(context)
 
     def require_claim(self, store: Coordination) -> None:
         for captured in self.assignments:
@@ -196,20 +194,6 @@ class NativeSendStage(ABC):
             row.assignment_id for row in self.assignments
         ):
             raise IdentityConflict("Native input changed its original source membership")
-
-    def require_binding(
-        self,
-        store: Coordination,
-        input_id: str,
-        owner: ParticipantOwner,
-        wire_root_id: str,
-        prompt: str,
-        *,
-        blocking: bool = False,
-    ) -> PromptBinding:
-        with self.bound_prompt(store, input_id, owner, wire_root_id, prompt,
-                               blocking=blocking) as binding:
-            return binding
 
     @contextmanager
     def bound_prompt(
@@ -288,10 +272,10 @@ class TriageNativeSend(NativeSendStage):
             current = store.assignments.get(captured.assignment_id)
             if current != captured or not current.lifecycle.triage_pending:
                 raise IdentityConflict("triage claim changed before native batch reservation")
-            if db.execute(
+            if SqlValue.for_annotation(int).read(db.execute(
                 f"SELECT 1 FROM ({self.execution.source_membership_sql()}) members "
                 "WHERE members.assignment_id=? LIMIT 1", (captured.assignment_id,),
-            ).fetchone():
+            )):
                 raise IdentityConflict("triage source was previously reserved; no retry")
             # All original CASes and the one reserved input commit before Pi.
             update = WakeAssignment.update(
@@ -357,18 +341,21 @@ class FullNativeSend(NativeSendStage):
             row = self.pending_input(store, input_id, owner, token_digest)
             store.attempts.require_fence(self.fence)
             row.commit_context(db, context)
-        settlement = self.progress.fail_terminal(failure)
-        return settlement
+        with self.progress.using_attempts(store.attempts):
+            return self.progress.fail_terminal(failure)
 
     async def continue_after_failure(self, settlement, failure: TurnFailure) -> None:
         if settlement.can_retry:
             await asyncio.sleep(failure.retry_delay(self.execution.attempt_ordinal))
             raise RetryScheduled
 
-    def fail_unknown(self, bus, owner, witness) -> None:
-        with self.progress.attempts.session.boundary(bus) as boundary:
-            witness.require_live(boundary.registry, self.fence)
-            self.progress.fail_unknown(boundary)
+    async def fail_unknown(self, bus, owner, witness) -> None:
+        def settle(store):
+            with self.progress.using_attempts(store.attempts), store.session.boundary(bus) as boundary:
+                witness.require_live(boundary.registry, self.fence)
+                self.progress.fail_unknown(boundary)
+
+        await Coordination.run_async(self.progress.attempts.session.path, settle)
 
     def reserve_claim(self, store: Coordination, db: sqlite3.Connection) -> None:
         snapshot, _ = store.attempts.require_fence(self.fence)

@@ -48,16 +48,16 @@ class CohortSchemaMeta(CohortTable, TypedTable, PrivateRuntimeSchema):
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest) = 64")})
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "cohort_meta_update_guard": (
-                "CREATE TRIGGER cohort_meta_update_guard BEFORE UPDATE ON cohort_"
+                " BEFORE UPDATE ON cohort_"
                 "schema_meta\n"
                 "        BEGIN SELECT RAISE(ABORT, 'cohort schema metadata is imm"
                 "utable'); END"
             ),
             "cohort_meta_delete_guard": (
-                "CREATE TRIGGER cohort_meta_delete_guard BEFORE DELETE ON cohort_"
+                " BEFORE DELETE ON cohort_"
                 "schema_meta\n"
                 "        BEGIN SELECT RAISE(ABORT, 'cohort schema metadata cannot"
                 " be deleted'); END"
@@ -112,17 +112,17 @@ class ClaimBatchReceipts(CohortTable, TypedTable):
             raise ProjectionUnavailableError("selected source receipt is unsealed or changed")
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "cohort_receipt_insert_guard": (
-                "CREATE TRIGGER cohort_receipt_insert_guard\n"
+                "\n"
                 "        BEFORE INSERT ON claim_batch_receipts\n"
                 "        WHEN NEW.sealed != 0\n"
                 "        BEGIN SELECT RAISE(ABORT, 'cohort must be sealed after i"
                 "ts member rows'); END"
             ),
             "cohort_receipt_update_guard": (
-                "CREATE TRIGGER cohort_receipt_update_guard\n"
+                "\n"
                 "        BEFORE UPDATE ON claim_batch_receipts\n"
                 "        WHEN OLD.sealed != 0 OR NEW.sealed != 1\n"
                 "          OR NEW.wire_root_id != OLD.wire_root_id OR NEW.wire_se"
@@ -142,7 +142,7 @@ class ClaimBatchReceipts(CohortTable, TypedTable):
                 "table'); END"
             ),
             "cohort_receipt_seal_complete": (
-                "CREATE TRIGGER cohort_receipt_seal_complete\n"
+                "\n"
                 "        BEFORE UPDATE OF sealed ON claim_batch_receipts\n"
                 "        WHEN OLD.sealed = 0 AND NEW.sealed = 1\n"
                 "        BEGIN\n"
@@ -211,7 +211,7 @@ class ClaimBatchReceipts(CohortTable, TypedTable):
                 "        END"
             ),
             "cohort_receipt_delete_guard": (
-                "CREATE TRIGGER cohort_receipt_delete_guard\n"
+                "\n"
                 "        BEFORE DELETE ON claim_batch_receipts\n"
                 "        BEGIN SELECT RAISE(ABORT, 'cohort receipt cannot be dele"
                 "ted'); END"
@@ -244,10 +244,10 @@ class ClaimBatchMembers(CohortTable, TypedTable):
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "cohort_members_insert_guard": (
-                "CREATE TRIGGER cohort_members_insert_guard BEFORE INSERT ON clai"
+                " BEFORE INSERT ON clai"
                 "m_batch_members\n"
                 "        BEGIN\n"
                 "            SELECT RAISE(ABORT, 'sealed cohort rejects members')"
@@ -272,13 +272,13 @@ class ClaimBatchMembers(CohortTable, TypedTable):
                 "        END"
             ),
             "cohort_members_update_guard": (
-                "CREATE TRIGGER cohort_members_update_guard BEFORE UPDATE ON clai"
+                " BEFORE UPDATE ON clai"
                 "m_batch_members\n"
                 "        BEGIN SELECT RAISE(ABORT, 'cohort claim member is immuta"
                 "ble'); END"
             ),
             "cohort_members_delete_guard": (
-                "CREATE TRIGGER cohort_members_delete_guard BEFORE DELETE ON clai"
+                " BEFORE DELETE ON clai"
                 "m_batch_members\n"
                 "        BEGIN SELECT RAISE(ABORT, 'cohort claim member cannot be"
                 " deleted'); END"
@@ -348,10 +348,10 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "cohort_delivery_insert_guard": (
-                "CREATE TRIGGER cohort_delivery_insert_guard BEFORE INSERT ON coh"
+                " BEFORE INSERT ON coh"
                 "ort_delivery_receipts\n"
                 "        BEGIN\n"
                 "            SELECT RAISE(ABORT, 'sealed cohort rejects delivery "
@@ -372,7 +372,7 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
                 "        END"
             ),
             "cohort_observer_claim_insert_guard": (
-                "CREATE TRIGGER cohort_observer_claim_insert_guard BEFORE INSERT "
+                " BEFORE INSERT "
                 "ON wake_claims\n"
                 "        WHEN EXISTS (\n"
                 "            SELECT 1 FROM cohort_delivery_receipts d\n"
@@ -386,13 +386,13 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
                 "an unbound wake claim'); END"
             ),
             "cohort_delivery_update_guard": (
-                "CREATE TRIGGER cohort_delivery_update_guard BEFORE UPDATE ON coh"
+                " BEFORE UPDATE ON coh"
                 "ort_delivery_receipts\n"
                 "        BEGIN SELECT RAISE(ABORT, 'cohort delivery receipt is im"
                 "mutable'); END"
             ),
             "cohort_delivery_delete_guard": (
-                "CREATE TRIGGER cohort_delivery_delete_guard BEFORE DELETE ON coh"
+                " BEFORE DELETE ON coh"
                 "ort_delivery_receipts\n"
                 "        BEGIN SELECT RAISE(ABORT, 'cohort delivery receipt canno"
                 "t be deleted'); END"
@@ -407,16 +407,16 @@ class AwarenessSchemaMeta(AwarenessTable, TypedTable):
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest) = 64")})
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "awareness_meta_update_guard": (
-                "CREATE TRIGGER awareness_meta_update_guard BEFORE UPDATE ON awar"
+                " BEFORE UPDATE ON awar"
                 "eness_schema_meta\n"
                 "        BEGIN SELECT RAISE(ABORT, 'optional schema metadata is i"
                 "mmutable'); END"
             ),
             "awareness_meta_delete_guard": (
-                "CREATE TRIGGER awareness_meta_delete_guard BEFORE DELETE ON awar"
+                " BEFORE DELETE ON awar"
                 "eness_schema_meta\n"
                 "        BEGIN SELECT RAISE(ABORT, 'optional schema metadata cann"
                 "ot be deleted'); END"
@@ -500,10 +500,10 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
         )
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         return {
             "awareness_generation_insert_guard": (
-                "CREATE TRIGGER awareness_generation_insert_guard\n"
+                "\n"
                 "        BEFORE INSERT ON awareness_claim_generations BEGIN\n"
                 "            SELECT RAISE(ABORT, 'optional generation requires un"
                 "sealed exact claim/member')\n"
@@ -527,13 +527,13 @@ class AwarenessClaimGenerations(AwarenessTable, TypedTable):
                 "        END"
             ),
             "awareness_generation_update_guard": (
-                "CREATE TRIGGER awareness_generation_update_guard\n"
+                "\n"
                 "        BEFORE UPDATE ON awareness_claim_generations\n"
                 "        BEGIN SELECT RAISE(ABORT, 'optional generation is immuta"
                 "ble'); END"
             ),
             "awareness_generation_delete_guard": (
-                "CREATE TRIGGER awareness_generation_delete_guard\n"
+                "\n"
                 "        BEFORE DELETE ON awareness_claim_generations\n"
                 "        BEGIN SELECT RAISE(ABORT, 'optional generation cannot be"
                 " deleted'); END"

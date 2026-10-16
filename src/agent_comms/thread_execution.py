@@ -31,6 +31,10 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         raise RelationViolationError("This participant checks its CLI inbox; it has no native prompt transport.")
 
     @classmethod
+    def require_external(cls) -> None:
+        raise RelationViolationError("Only an external CLI can publish a bridge process.")
+
+    @classmethod
     def prepare_conversation(cls, preparation: ConversationPreparation):
         return preparation.external()
 
@@ -110,20 +114,25 @@ class NativeThreadExecution(ThreadExecution):
     @classmethod
     def project_activity(cls, thread: Thread, activity):
         """A running native owner displays its current turn phase."""
-        return thread.turn_state.phase.project_activity(activity) if thread.has_process else activity
+        return thread.turn_state.project_activity(activity) if thread.has_process else activity
 
 
 class ExternalThreadExecution(ThreadExecution):
     @classmethod
+    def require_external(cls) -> None:
+        pass
+
+    @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         # The CLI reports its own activity; between turns it is a participant.
-        if not status.active or ordinary.busy:
+        if not status.active:
             return ordinary
-        # Only a registered CLI process can be known to have exited.
+        # A stale busy report cannot keep a known-dead CLI working.
         if thread.has_process and not thread.process_alive:
-            return replace(ordinary, marker="○", summary="CLI offline")
-        return replace(ordinary, marker="@", summary="CLI participant")
+            return replace(ordinary, marker="○", summary="CLI offline",
+                           status=ordinary.status.without_work())
+        return ordinary.status.live_cli_presentation(ordinary)
 
     @classmethod
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):

@@ -22,7 +22,8 @@ from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent
-from .typed_table import Column, TypedStore, TypedTable
+from .transcript_receipts import TranscriptSource
+from .typed_table import Column, TypedRow, TypedStore, TypedTable
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,7 @@ class ExternalRecord:
 
 
 @dataclass(frozen=True)
-class ExternalCut(RecordsCut):
+class ExternalCut(RecordsCut, TypedRow):
     """The thread's newest finished item sequence when read."""
 
     offset: int
@@ -79,6 +80,11 @@ class ExternalCut(RecordsCut):
     def contains(self, current: ExternalCut, through: int) -> bool:
         # Finished items are append-only: later items belong to the next update.
         return current.offset >= self.offset
+
+    def draft_current(self, current: RecordsCut) -> bool:
+        # Finishing a CLI item retires its draft atomically. Its current draft
+        # must not be paired with a page captured before that completion.
+        return self == current
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +136,7 @@ class ExternalTranscriptRead:
 
 
 @dataclass(frozen=True, slots=True)
-class ExternalTranscript(TypedStore):
+class ExternalTranscript(TranscriptSource, TypedStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path
@@ -184,9 +190,9 @@ class ExternalTranscript(TypedStore):
             yield ExternalTranscriptRead(self, connection)
 
     def _cut(self, connection) -> ExternalCut:
-        return ExternalCut(*connection.execute(
-            f'SELECT coalesce(max(seq), 0) FROM "{ExternalItemRow.declared_name}" '
-            'WHERE thread = ?', (self.lookup,)).fetchone())
+        return ExternalCut.read(connection.execute(
+            f'SELECT coalesce(max(seq), 0) AS offset FROM "{ExternalItemRow.declared_name}" '
+            'WHERE thread = ?', (self.lookup,)))[0]
 
     def current_draft(self) -> ExternalDraftRow | None:
         with self.reading() as records:
@@ -196,6 +202,6 @@ class ExternalTranscript(TypedStore):
         with self.reading() as records:
             return records.cut()
 
-    def reply_revision(self, root: Path, thread) -> PublishedReplyRevision:
+    def publication_revision(self, root: Path, thread) -> PublishedReplyRevision:
         return PublishedReplyRevision(0, 0)  # Core publishes no native replies here.
 

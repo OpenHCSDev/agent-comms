@@ -25,18 +25,20 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
+from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, field, replace
-from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING, Generic, Self, TypeVar, final
 
+from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
+from agent_comms.active_route import CommsRoute
+from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
-from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
 from agent_comms.presentation import WireRevision
 
 if TYPE_CHECKING:
@@ -73,9 +75,8 @@ class InterestRequest(ObservationRequest):
 
     def receive(self, service: ObservationService) -> None:
         observation = self.observation()
-        previous = service.observations.get(type(observation))
-        if previous is None or previous.request != self:
-            service.observations[type(observation)] = observation
+        kind = type(observation)
+        service.observations[kind] = observation.for_interest(service.observations.get(kind))
         service.observe_again()
 
 
@@ -88,6 +89,10 @@ class Observation(ABC, Generic[InterestT]):
     def __init__(self, request: InterestT):
         self.request = request
 
+    def for_interest(self, previous: Self | None) -> Self:
+        """The requested view owns whether its read lifetime can be retained."""
+        return previous if previous is not None and previous.request == self.request else self
+
     @abstractmethod
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]: ...
 
@@ -95,6 +100,7 @@ class Observation(ABC, Generic[InterestT]):
         """Subscribe to completion when this observation has unfinished preparation."""
 
 
+@final
 class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     """A strict stored-data read failed, not the observer or the whole UI.
 
@@ -107,11 +113,11 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     # broken saved data.
     DEFERRED_READS = (CoordinationReadUnavailable, StaleRevision)
 
-    def __init__(self, reader_runtime: str, reason: str):
-        self.reader_runtime = reader_runtime
-        self.reason = reason
-        # Keep constructor arguments intact for the process pipe's pickle.
-        super().__init__(reader_runtime, reason)
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, UnreadableHistory) and self.args == other.args
+
+    def __hash__(self) -> int:
+        return hash(self.args)
 
     @classmethod
     def capture(cls, error: Exception) -> UnreadableHistory:
@@ -125,8 +131,9 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
         return cls(sys.prefix, "\nCaused by: ".join(reasons))
 
     def __str__(self) -> str:
-        return (f"Saved history unreadable: {self.reason}\n"
-                f"Reader runtime: {self.reader_runtime}. Restart this process on "
+        reader_runtime, reason = self.args
+        return (f"Saved history unreadable: {reason}\n"
+                f"Reader runtime: {reader_runtime}. Restart this process on "
                 "the reviewed runtime; if it still fails, the saved records need repair.")
 
 
@@ -189,7 +196,7 @@ class OwnerRead(AwaitedRead):
             answer = await self.answer(service.comms)
         finally:
             service.owner_reads.pop(self.request_id, None)
-        service.connection.send(answer)
+        service.send(answer)
 
     async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
         try:
@@ -335,8 +342,9 @@ class ReadRecordedNotifications(ReadNotifications):
     def read(self, comms: Comms):
         from agent_comms.historical_views import HistorySource
 
-        source = HistorySource.require(comms.bus.history, self.source)
-        return source.notification_references(comms.bus.history, self.references)
+        with comms.bus.history.read_sources() as sources:
+            source = HistorySource.require(sources, self.source)
+            return source.notification_references(sources, self.references)
 
     def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
         return revision.history != previous.history
@@ -383,6 +391,8 @@ class ObserveSidebar(InterestRequest):
             snapshot = read(
                 subject, show_stopped=self.show_stopped, show_archived=self.show_archived)
             return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
+        except RouteIndexRebuilding:
+            raise  # A bounded preparation unit finished; runnable work remains.
         except UnreadableHistory.DEFERRED_READS:
             return None  # No new snapshot; keep the original interest for the next observation.
         except StoredHistoryUnreadable as error:
@@ -432,6 +442,7 @@ class SidebarReading(Observation[ObserveSidebar]):
         super().__init__(request)
         self.stage: SidebarReadStage = RosterSidebarRead()
         self.sent: SidebarSent | None = None
+        self.published: SidebarResult | None = None
         self.preparation: Future[ReplyIndexBatch] | None = None
 
     def after_read(self, service: ObservationService) -> None:
@@ -456,12 +467,20 @@ class SidebarReading(Observation[ObserveSidebar]):
             if not changed and key == self.sent:
                 return
             stage = self.stage
-            result = stage.read(self.request, comms, revision)
+            try:
+                result = stage.read(self.request, comms, revision)
+            except RouteIndexRebuilding:
+                # Continue bounded preparation, letting the service accept and
+                # serve foreground requests between every bounded unit.
+                yield None
+                continue
             if result is None:
                 return
             self.sent = key
             result.finish_read(self)
-            yield result
+            if self.published is None or not result.same_observation(self.published):
+                self.published = result
+                yield result
             if self.stage is stage:
                 return
 
@@ -543,23 +562,38 @@ class NotificationReading(Observation[ObserveNotifications]):
 class ThreadReading(Observation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
-        self.revision: WireRevision | None = None
-        self.retry = False
+        self.observed: ThreadsObserved | None = None
+
+    def for_interest(self, previous: Self | None) -> Self:
+        # A new view may join unchanged names. Its turn/read fence needs an
+        # initial presentation, not the previous readers' delta.
+        return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
-        if self.revision is not None and not revision.status_changed_since(self.revision) and not self.retry:
+        previous = self.observed
+        if previous is not None and previous.current_at(revision):
             return
         presentations, unavailable, busy = {}, {}, set()
-        for name in self.request.names:
+        if self.request.names:
             try:
-                presentations[name] = comms.views.thread_presentation(name)
+                batch = comms.views.thread_presentations(self.request.names)
             except UnreadableHistory.DEFERRED_READS:
-                busy.add(name)
+                busy.update(self.request.names)
             except StoredHistoryUnreadable as error:
-                unavailable[name] = UnreadableHistory.capture(error)
-            yield None
-        self.revision, self.retry = revision, bool(busy)
-        yield ThreadsObserved(revision, presentations, unavailable, frozenset(busy))
+                unavailable.update(dict.fromkeys(self.request.names, UnreadableHistory.capture(error)))
+            else:
+                for name in self.request.names:
+                    try:
+                        presentations[name] = batch.read(name)
+                    except UnreadableHistory.DEFERRED_READS:
+                        busy.add(name)
+                    except StoredHistoryUnreadable as error:
+                        unavailable[name] = UnreadableHistory.capture(error)
+                    yield None
+        observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset())
+        self.observed = replace(observed, changed=observed.changed_since(previous))
+        if previous is None or self.observed.changed:
+            yield self.observed
 
 
 class ViewReading(Observation[ObserveViews]):
@@ -642,6 +676,10 @@ class RevisionObserved(Observed):
 class SidebarResult(Observed):
     request: ObserveSidebar
 
+    def same_observation(self, previous: SidebarResult) -> bool:
+        """Every declared answer participates; a store stat is not another answer."""
+        return replace(self, revision=previous.revision) == previous
+
     @abstractmethod
     def finish_read(self, reading: SidebarReading) -> None: ...
 
@@ -674,6 +712,27 @@ class ThreadsObserved(Observed):
     presentations: Mapping[str, ThreadPresentation | None]
     unavailable: Mapping[str, UnreadableHistory]
     busy: frozenset[str]
+    changed: frozenset[str]
+
+    def current_at(self, revision: WireRevision) -> bool:
+        """A busy result stays pending; a successful cut owns its read frontier."""
+        return not self.busy and not revision.status_changed_since(self.revision)
+
+    def changed_since(self, previous: ThreadsObserved | None) -> frozenset[str]:
+        """Read-state transitions and source-owned changes, independent of store churn."""
+        if previous is None:
+            return frozenset((*self.presentations, *self.unavailable, *self.busy))
+        changed = set(self.busy ^ previous.busy)
+        changed.update(self.presentations.keys() ^ previous.presentations.keys())
+        changed.update(self.unavailable.keys() ^ previous.unavailable.keys())
+        for name in self.presentations.keys() & previous.presentations.keys():
+            current, before = self.presentations[name], previous.presentations[name]
+            if current is not before and (current is None or not current.same_observation(before)):
+                changed.add(name)
+        for name in self.unavailable.keys() & previous.unavailable.keys():
+            if self.unavailable[name] != previous.unavailable[name]:
+                changed.add(name)
+        return frozenset(changed)
 
 
 @dataclass(frozen=True)
@@ -738,13 +797,32 @@ class ObservationService:
         self.owner_reads: dict[int, asyncio.Future] = {}
         self.closed = False
 
+    def retire(self) -> None:
+        """Either pipe direction ending retires this service's outstanding work once."""
+        if self.closed:
+            return
+        self.closed = True
+        for asking in tuple(self.owner_reads.values()):
+            asking.cancel()
+        self.changed.set()
+
+    def send(self, result: ServiceResult) -> None:
+        """Every ordinary reply shares the peer's lifetime, not just received EOF."""
+        if self.closed:
+            return
+        try:
+            self.connection.send(result)
+        except BrokenPipeError:
+            self.retire()
+
     def receive(self) -> None:
+        if self.closed:
+            return
         while self.connection.poll():
             try:
                 request = self.connection.recv()
-            except EOFError:
-                self.closed = True
-                self.changed.set()
+            except (EOFError, ConnectionResetError):
+                self.retire()
                 return
             request.receive(self)
 
@@ -778,7 +856,7 @@ class ObservationService:
                 continue
             attempted.add(request_id)
             answer = request.answer(self.comms)
-            self.connection.send(answer)
+            self.send(answer)
             if not isinstance(answer, ReadBusy):
                 self.pending.pop(request_id)
             await asyncio.sleep(0)
@@ -786,7 +864,7 @@ class ObservationService:
     async def observe(self, attempted: set[int]) -> None:
         revision = self.comms.views.revision()
         if self.revision is None or revision.stores_changed_since(self.revision):
-            self.connection.send(RevisionObserved(revision))
+            self.send(RevisionObserved(revision))
         self.revision = revision
         for kind, observation in tuple(self.observations.items()):
             # Fresh foreground requests take precedence at every read boundary.
@@ -797,11 +875,14 @@ class ObservationService:
                 continue
             for result in observation.read(self.comms, revision):
                 if result is not None:
-                    self.connection.send(result)
+                    self.send(result)
                 await self.answer_pending(attempted)
-                if self.closed or self.observations.get(kind) is not observation:
+                if self.closed:
+                    return
+                if self.observations.get(kind) is not observation:
                     break
-            observation.after_read(self)
+            if self.observations.get(kind) is observation:
+                observation.after_read(self)
 
     async def expire(self) -> None:
         """Time-based sidebar state belongs to the sidebar observer, not file watching."""
@@ -825,22 +906,20 @@ class ObservationService:
                     self.observe_due = False
                     await self.observe(attempted)
         finally:
-            self.closed = True
+            self.retire()
+            loop.remove_reader(self.connection.fileno())
             watching.cancel()
             expiring.cancel()
-            for asking in self.owner_reads.values():
-                asking.cancel()
-            loop.remove_reader(self.connection.fileno())
+            self.pending.clear()
+            self.observations.clear()
             self.comms.views.transcript_reads.close()
 
 
-def serve(root: str, connection: Connection) -> None:
-    """Child process entry: observe ``root`` for the UI on the other end of ``connection``."""
-    from agent_comms.active_route import resolve_comms_route
+def serve(route: CommsRoute, connection: Connection) -> None:
+    """Observe the caller's selected route, including its reviewed native package."""
     from agent_comms.comms import wire
 
     try:
-        route = resolve_comms_route(Path(root))
         with route.admit_client():
             asyncio.run(ObservationService(wire(route), connection).run())
     except BaseException:
@@ -853,34 +932,46 @@ def serve(root: str, connection: Connection) -> None:
         connection.close()
 
 
-class ObservationProcess:
-    """The UI side: start the service for a root, send requests, await reads, drain results."""
+class ObservationProcess(AbstractContextManager):
+    """Own reader retirement, awaited reads, the pipe and the joined service, in that order."""
 
     @classmethod
-    @contextmanager
-    def awaited(cls, root: Path):
-        """Own pipe readiness and retirement for an attached asynchronous reader."""
-        process = cls(root)
+    def awaited(cls, route: CommsRoute) -> Self:
+        """Attach readiness to the process lifetime, not a suspended generator's finalizer."""
         loop = asyncio.get_running_loop()
+        process = cls(route)
         descriptor = process.fileno()
-        loop.add_reader(descriptor, process.results)
         try:
-            yield process
-        finally:
-            loop.remove_reader(descriptor)
+            loop.add_reader(descriptor, process.results)
+        except BaseException:
             process.close()
+            raise
+        process._resources.callback(loop.remove_reader, descriptor)
+        return process
 
-    def __init__(self, root: Path):
-        context = multiprocessing.get_context("spawn")
-        self.connection, child = context.Pipe()
-        self.process = context.Process(target=serve, args=(str(root), child), daemon=False,
-                                       name="agent-comms-observation")
-        self.process.start()
-        child.close()
+    def __init__(self, route: CommsRoute):
+        self._resources = ExitStack()
         self.request_ids = itertools.count(1)
         self.reads: dict[int, asyncio.Future] = {}
         # Set by ``results`` when it reads that the service ended.
         self.died: ObserverDied | None = None
+        context = multiprocessing.get_context("spawn")
+        with ExitStack() as acquisition:
+            self.connection, child = context.Pipe()
+            acquisition.enter_context(self.connection)
+            with child:
+                self.process = context.Process(target=serve, args=(route, child), daemon=False,
+                                               name="agent-comms-observation")
+                self.process.start()
+            self._resources.callback(self.process.join)
+            self._resources.enter_context(acquisition.pop_all())
+        self._resources.callback(
+            self.abandon_reads,
+            StaleRevision("The Comms observation retired before the read was answered"),
+        )
+
+    def __exit__(self, *exc) -> None:
+        self.close()
 
     def fileno(self) -> int:
         return self.connection.fileno()
@@ -892,7 +983,7 @@ class ObservationProcess:
         belongs to a service ``results`` has not read the end of yet: the
         same closed pipe is readable there.
         """
-        if self.died is None:
+        if self.died is None and not self.connection.closed:
             try:
                 self.connection.send(request)
             except BrokenPipeError:
@@ -912,6 +1003,8 @@ class ObservationProcess:
         """
         if self.died is not None:
             raise self.died
+        if self.connection.closed:
+            raise StaleRevision("Cannot read a retired Comms observation process")
         request = replace(request, request_id=next(self.request_ids))
         waiter = asyncio.get_running_loop().create_future()
         self.reads[request.request_id] = waiter
@@ -919,14 +1012,14 @@ class ObservationProcess:
             self.request(request)
             return await waiter
         except asyncio.CancelledError:
-            if self.reads.pop(request.request_id, None) is not None and not self.connection.closed:
+            if self.reads.pop(request.request_id, None) is not None:
                 self.request(CancelRead(request.request_id))
             raise
         finally:
             self.reads.pop(request.request_id, None)
 
     def abandon_reads(self, error: Exception) -> None:
-        """The UI stopped using this service: its awaited reads fail with ``error``."""
+        """The reader's retirement settles its waiters with the original cause."""
         reads, self.reads = self.reads, {}
         for waiter in reads.values():
             if not waiter.done():
@@ -938,8 +1031,10 @@ class ObservationProcess:
         The service's end (its failure, or its pipe closing) is raised here
         as ``ObserverDied``; the UI stops reading this pipe then.
         """
+        if self.died is not None:
+            raise self.died
         observed: list[Observed] = []
-        while self.connection.poll():
+        while not self.connection.closed and self.connection.poll():
             try:
                 result = self.connection.recv()
             except (EOFError, ConnectionResetError):
@@ -948,5 +1043,4 @@ class ObservationProcess:
         return observed
 
     def close(self) -> None:
-        self.connection.close()
-        self.process.join()
+        self._resources.close()

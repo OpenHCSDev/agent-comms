@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .delivery_policy import KeyedResponseReceipt
     from .messages import Message
-    from .message_reference import MessageReference
     from .wire_metadata import WireMetadata
 
 
@@ -60,20 +59,6 @@ class WireRecord(ABC):
             return ()
         return cls.public_from_wire(value).messages()
 
-    @classmethod
-    def certified_public_references(cls, value: Mapping) -> tuple[tuple[str, MessageReference], ...]:
-        """Original sender and identity of an already certified canonical row.
-
-        WireScan validated the stored ID against Message.to_wire, including
-        the body-derived hash. This projection neither decodes the message
-        again nor substitutes a recipient index for the complete public stream.
-        """
-        from .message_reference import MessageReference
-
-        if "observation" in value:
-            return ()
-        return ((value["from"], MessageReference(value["seq"], value["id"])),)
-
     def messages(self) -> tuple[Message, ...]:
         return ()
 
@@ -105,7 +90,7 @@ class WireRecord(ABC):
     def require_admission(self, metadata: WireMetadata) -> None: ...
 
     @abstractmethod
-    def checkpoint_rows(self, offset: int, length: int): ...
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int): ...
 
 
 class MessageWireRecord(WireRecord):
@@ -118,6 +103,9 @@ class MessageWireRecord(WireRecord):
         if self.message.seq <= previous:
             raise ValueError("Bus sequence is not increasing.")
         return self.message.seq
+
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
+        return self.message.checkpoint_rows(previous_sequence)
 
 
 class WireObservation(DeclaredFamily, affix="WireObservation"):
@@ -133,7 +121,7 @@ class WireObservation(DeclaredFamily, affix="WireObservation"):
         return ()
 
     @abstractmethod
-    def checkpoint_rows(self, offset: int, length: int): ...
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int): ...
 
 
 @dataclass(frozen=True)
@@ -148,7 +136,7 @@ class ContextEntryManifestWireObservation(WireObservation):
     def context_entries(self):
         return self.entries
 
-    def checkpoint_rows(self, offset: int, length: int):
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
         from .private_bus_checkpoint import ContextEntrySources
 
         return tuple(
@@ -172,7 +160,7 @@ class RecordedContextManifestWireObservation(WireObservation):
     def recorded_context_manifests(self):
         return (self.manifest,)
 
-    def checkpoint_rows(self, offset: int, length: int):
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
         from .private_bus_checkpoint import RecordedContextManifestSources
 
         return (
@@ -202,8 +190,8 @@ class ObservationWireRecord(WireRecord):
         # Decoding validates the observation; it grants no delivery admission.
         return None
 
-    def checkpoint_rows(self, offset: int, length: int):
-        return self.observation.checkpoint_rows(offset, length)
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
+        return self.observation.checkpoint_rows(offset, length, previous_sequence)
 
     def to_wire(self):
         return FieldCodec.encode(self)
@@ -215,9 +203,6 @@ class PublicWireRecord(MessageWireRecord):
 
     def require_admission(self, metadata: WireMetadata) -> None:
         self.message.require_retained_admission(metadata.admission_after_seq)
-
-    def checkpoint_rows(self, offset: int, length: int):
-        return ()
 
 
 @dataclass

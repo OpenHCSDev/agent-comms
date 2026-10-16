@@ -54,7 +54,7 @@ def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
     return witness, tuple(captured), more
 
 
-def test_claim_barrier_retains_post_durability_marker_sample(tmp_path, monkeypatch):
+def test_claim_barrier_reuses_the_writer_sealed_marker(tmp_path, monkeypatch):
     from agent_comms.wire_log import WireLog
 
     comms, root_id = _root(tmp_path)
@@ -70,8 +70,10 @@ def test_claim_barrier_retains_post_durability_marker_sample(tmp_path, monkeypat
     monkeypatch.setattr(WireLog, "read_metadata_unlocked", observe)
     with comms.bus.log.locked() as lock:
         source = lock.certified_read()
-        # One gate read, then the original post-fsync currentness sample.
-        assert reads == [source.marker, source.marker]
+        # The writer already flushed and sealed this exact source. A reader
+        # borrows that proof, rather than resampling or flushing it again.
+        assert reads == [source.marker]
+        source.witness.require_marker(source.marker)
         assert source.marker.root_id == root_id
         assert source.marker.last_seq == first.seq
         source.require_current()
@@ -79,12 +81,13 @@ def test_claim_barrier_retains_post_durability_marker_sample(tmp_path, monkeypat
     reads.clear()
     with comms.bus.log.locked() as lock:
         source = lock.certified_read()
-        assert reads == [source.marker, source.marker]
+        assert reads == [source.marker]
+        source.witness.require_marker(source.marker)
         assert source.marker.last_seq == second.seq
         source.require_current()
 
 
-def test_public_identity_scan_keeps_retained_rows_without_delivery_pointers(tmp_path):
+def test_human_duplicate_check_includes_retained_rows_without_delivery_pointers(tmp_path):
     import json
     from agent_comms.bus_publication import HumanOrigin
     from agent_comms.messages import Message, HandoffKind, InfoKind
@@ -109,7 +112,6 @@ def test_public_identity_scan_keeps_retained_rows_without_delivery_pointers(tmp_
     with comms.bus.log.certified_read() as source:
         assert source.connection.execute(
             f'SELECT COUNT(*) FROM "{DeliverySources.declared_name}"').fetchone()[0] == 0
-        assert tuple(source.public_message_references()) == ((user.name, original.reference),)
     with pytest.raises(RelationViolationError, match='already exists'):
         comms.bus.publisher.publish_ordinary(original,
             _human_origin=HumanOrigin(user.name, user.created_at, user.worktree))
@@ -558,22 +560,3 @@ def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, m
     assert through == 2
     # Once repaired, a shared read succeeds without writing.
     assert asyncio.run(log.read_certified_async(lambda source: source.witness.through_seq)) == 2
-
-
-def test_message_references_skip_only_indexed_context_rows(tmp_path: Path) -> None:
-    from agent_comms.store_files import _iter_jsonl_stream
-    from agent_comms.wire_record import WireRecord
-
-    comms, _ = _root(tmp_path)
-    for body in ("one", "two", "three"):
-        comms.messaging.send_initial_cohort("sender", "Alice", body)
-    with comms.bus.log.certified_read() as source:
-        indexed = tuple(source.public_message_references())
-        source.stream.seek(0)
-        scanned = tuple(
-            reference
-            for row, _ in _iter_jsonl_stream(source.stream, boundary=source.witness.offset)
-            for reference in WireRecord.certified_public_references(row)
-        )
-    assert indexed == scanned
-    assert [reference.seq for _, reference in indexed] == [1, 2, 3]
