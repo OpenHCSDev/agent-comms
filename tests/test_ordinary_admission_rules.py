@@ -140,29 +140,33 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
         report_turn_generation=None,
     )
     common = dict(
-        keys=("bus-input",),
         accepted_id=None,
         goal_permission=ContinuationGoalPermission(goal),
         prompt="Result",
         original_display="Result",
         origins=(message,),
-        batch=SingleInputBatch(),
+        batch=SingleInputBatch(()),
     )
     dependency = DependencyOriginalInput(
         **common, dependency=CapturedInputDependency(wait.wait_id)
     )
     routed = RoutedOriginalInput(**common, dependency=NoInputDependency())
     rules.OrdinaryContextCheck(
-        source=dependency, goal=goal, wait=wait, comms=comms
+        source=dependency, owner=comms.registry.require("owner"), goal=goal, wait=wait, comms=comms
+    ).require_valid()
+    # A keyless routed fixture has no captured input key to refuse on goal authority.
+    rules.OrdinaryContextCheck(
+        source=routed, owner=comms.registry.require("owner"), goal=goal,
+        wait=None, comms=comms
     ).require_valid()
     for source, current_wait, expected in (
-        (routed, None, rules.OrdinaryGoalInputRule),
         (dependency, None, rules.OrdinaryDependencyRule),
         (dependency, replace(wait, wait_id="replacement"), rules.OrdinaryDependencyRule),
         (dependency, replace(wait, after_seq=message.seq), rules.OrdinaryWaitRule),
     ):
         with pytest.raises(ReservationViolationError) as error:
             rules.OrdinaryContextCheck(
-                source=source, goal=goal, wait=current_wait, comms=comms
+                source=source, owner=comms.registry.require("owner"), goal=goal,
+                wait=current_wait, comms=comms
             ).require_valid()
         assert type(error.value.rule) is expected

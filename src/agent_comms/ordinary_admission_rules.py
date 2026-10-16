@@ -154,6 +154,7 @@ class AcceptedInputSourceRule(ReservationRule):
 @dataclass(frozen=True, kw_only=True)
 class OrdinaryContextCheck(RuleCheck):
     source: TurnInputSource
+    owner: Thread
     goal: Goal | None
     wait: GoalWait | None
     comms: Comms
@@ -180,7 +181,9 @@ class OrdinaryWaitRule(ReservationRule):
     explanation = "The current dependency wait does not authorize this input."
 
     def violated(self, check: OrdinaryContextCheck) -> bool:
-        return not check.source.allows_wait(check.wait, check.comms)
+        return not check.source.allows_wait(
+            check.wait, check.comms, check.owner.incarnation.require_recorded()
+        )
 
 
 class OrdinaryGoalInputRule(ReservationRule):

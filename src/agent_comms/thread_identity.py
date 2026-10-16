@@ -115,17 +115,11 @@ class RecordedThreadIncarnation(ThreadIncarnation):
             raise ValueError("Thread incarnation requires a positive recorded birth")
         return float(created_at)
 
-    @staticmethod
-    def _lookup_for_birth(created_at: float) -> str:
-        """The retained birth-only GoalWait format uses this same identity rule."""
-        birth = RecordedThreadIncarnation._require_recorded_birth(created_at)
-        identity = f"agent-comms:thread-creation:v1\0{birth!r}".encode()
-        return hashlib.sha256(identity).hexdigest()[:32]
-
     @cached_property
     def lookup(self) -> str:
         """The creation lookup, computed once for this recorded incarnation."""
-        return self._lookup_for_birth(self.created_at)
+        identity = f"agent-comms:thread-creation:v1\0{float(self.created_at)!r}".encode()
+        return hashlib.sha256(identity).hexdigest()[:32]
 
 
 @dataclass(frozen=True)

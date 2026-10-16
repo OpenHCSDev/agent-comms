@@ -213,7 +213,7 @@ class Goals:
                 return ()
             # An unreadable bus raises to the drain loop, which records it as
             # the owner's visible drain diagnostic; it never proves silence.
-            if wait.has_reply(self.bus.log):
+            if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
                 return ()
             names = ", ".join(f"@{member}" for member in closed)
             note = (
@@ -279,7 +279,7 @@ class Goals:
                 ):
                     continue
                 try:
-                    reply = wait.has_reply(self.bus.log)
+                    reply = wait.has_reply(self.bus.log, owner.incarnation.require_recorded())
                 except (OSError, ValueError, sqlite3.DatabaseError):
                     # The terminal turn has already committed. An unavailable
                     # optional reply read cannot prove silence or release this
@@ -363,7 +363,7 @@ class Goals:
                 original = source.delivery(reference.seq)
                 if original.message.reference != reference:
                     raise ValueError("Dependency reply source reference changed.")
-                if not wait.matches(original):
+                if not wait.matches(original, current.incarnation.require_recorded()):
                     return False
             return self.waits.clear(goal.id, wait_id=wait.wait_id)
 

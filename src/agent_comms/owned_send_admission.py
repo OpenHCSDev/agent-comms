@@ -102,7 +102,7 @@ class OwnedSendAdmission:
         self, source: TurnInputSource, current: Thread, wait: GoalWait | None,
     ) -> None:
         OrdinaryContextCheck(
-            source=source, goal=current.goal, wait=wait, comms=self.comms
+            source=source, owner=current, goal=current.goal, wait=wait, comms=self.comms
         ).require_valid()
         if not source.bypasses_goal_permit and self.goal_permit is not None:
             OrdinaryGoalGrantCheck(permit=self.goal_permit, store=self.goal_store).require_valid()

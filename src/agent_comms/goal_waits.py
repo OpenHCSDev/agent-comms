@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from collections.abc import Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
@@ -29,7 +29,6 @@ class GoalWait:
     after_seq: int
     targets: tuple[GoalWaitTarget, ...]
     owner_created_at: float
-    _owner_lookup: str = field(init=False, repr=False, compare=False)
     # An idle dependency has no turn generation at the moment of declaration.
     target_turn_generations: tuple[int | None, ...]
     # Runtime declarations outside a turn explicitly carry no reporting turn.
@@ -48,11 +47,6 @@ class GoalWait:
             )
         ):
             raise ValueError("A wait requires its owner incarnation and aligned target turns.")
-        object.__setattr__(
-            self,
-            "_owner_lookup",
-            RecordedThreadIncarnation._lookup_for_birth(self.owner_created_at),
-        )
         if (self.report_turn_id is None) != (self.report_turn_generation is None) or (
             self.report_turn_id is not None
             and (
@@ -74,20 +68,21 @@ class GoalWait:
             self.goal_id, self.revision
         )
 
-    def matches(self, original: CommittedDelivery) -> bool:
-        """Join original sender and addressed owner through the certified source."""
+    def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
+        """Join original sender and the actual addressed owner through its source."""
         return (
-            original.message.seq > self.after_seq
-            and original.direct_for(self._owner_lookup)
+            owner.created_at == self.owner_created_at
+            and original.message.seq > self.after_seq
+            and original.direct_for(owner.lookup)
             and any(target.sent(original) for target in self.targets)
         )
 
-    def has_reply(self, bus: WireLog) -> bool:
+    def has_reply(self, bus: WireLog, owner: RecordedThreadIncarnation) -> bool:
+        if owner.created_at != self.owner_created_at:
+            return False
         return any(
-            self.matches(original)
-            for original in bus.addressed_sources(
-                self._owner_lookup, self.after_seq
-            )
+            self.matches(original, owner)
+            for original in bus.addressed_sources(owner.lookup, self.after_seq)
         )
 
 

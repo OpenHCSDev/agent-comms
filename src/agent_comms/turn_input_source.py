@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from .goal_waits import GoalWait
     from .goals import Goal
     from .input_disposition import InputDispositions
-    from .thread_identity import TurnId
+    from .thread_identity import RecordedThreadIncarnation, TurnId
     from .threads import Thread
 
 
@@ -38,7 +38,8 @@ class TurnInputSource(ABC):
         return True
 
     @abstractmethod
-    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool: ...
+    def allows_wait(self, wait: GoalWait | None, comms: Comms,
+                    owner: RecordedThreadIncarnation) -> bool: ...
 
     @abstractmethod
     def allows_goal_input(self, goal: Goal | None) -> bool: ...
@@ -58,7 +59,8 @@ class InputDependency(ABC):
     def current(self, wait: GoalWait | None) -> bool: ...
 
     @abstractmethod
-    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool: ...
+    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...],
+               owner: RecordedThreadIncarnation) -> bool: ...
 
     @abstractmethod
     def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool: ...
@@ -68,7 +70,8 @@ class NoInputDependency(InputDependency):
     def current(self, wait: GoalWait | None) -> bool:
         return True
 
-    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool:
+    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...],
+               owner: RecordedThreadIncarnation) -> bool:
         return wait is None
 
     def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
@@ -82,7 +85,8 @@ class CapturedInputDependency(InputDependency):
     def current(self, wait: GoalWait | None) -> bool:
         return wait is not None and wait.wait_id == self.wait_id
 
-    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...]) -> bool:
+    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...],
+               owner: RecordedThreadIncarnation) -> bool:
         if wait is None:
             return True
         if not self.current(wait):
@@ -90,7 +94,7 @@ class CapturedInputDependency(InputDependency):
         with comms.bus.log.certified_read() as source:
             for origin in origins:
                 original = source.delivery(origin.seq)
-                if original.message.reference == origin.reference and wait.matches(original):
+                if original.message.reference == origin.reference and wait.matches(original, owner):
                     return True
         return False
 
@@ -148,7 +152,8 @@ class OriginalTurnInput(TurnInputSource):
 
 
 class DirectInput(TurnInputSource):
-    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:
+    def allows_wait(self, wait: GoalWait | None, comms: Comms,
+                    owner: RecordedThreadIncarnation) -> bool:
         return True
 
     def allows_goal_input(self, goal: Goal | None) -> bool:
@@ -166,7 +171,8 @@ class OwnerOriginalInput(OriginalTurnInput, DirectInput):
 
 
 class RoutedInput(TurnInputSource):
-    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:
+    def allows_wait(self, wait: GoalWait | None, comms: Comms,
+                    owner: RecordedThreadIncarnation) -> bool:
         return wait is None
 
     def allows_goal_input(self, goal: Goal | None) -> bool:
@@ -194,8 +200,9 @@ class SelectedOriginalInput(RoutedOriginalInput):
 
 
 class DependencyOriginalInput(OriginalTurnInput, DirectInput):
-    def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:
-        return self.dependency.allows(wait, comms, self.origins)
+    def allows_wait(self, wait: GoalWait | None, comms: Comms,
+                    owner: RecordedThreadIncarnation) -> bool:
+        return self.dependency.allows(wait, comms, self.origins, owner)
 
 
 class ScheduledOriginalInput(DependencyOriginalInput):
