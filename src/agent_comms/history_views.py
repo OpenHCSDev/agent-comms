@@ -486,25 +486,8 @@ class HistoryViews:
             self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 
     def revision_paths(self) -> dict[str, tuple[Path, ...]]:
-        """The stores a view derives from, by WireRevision part: what to stat and to watch."""
-        from .external_transcript import ExternalTranscript
-        from .notification_assignment import NotificationAssignment
-        from .relationships import RelationshipStore
-
-        return {
-            "registry": (self.registry.store.path,),
-            "catalog": (self.channels.catalog.path,),
-            "bus_log": (self.bus.log.path,),
-            "history": (self.bus.history.path,),
-            "activity": (self.agents.activity._path,),
-            "runtime_info": (self.agents.runtime_info.path,),
-            "reads": (self.bus.reads.path,),
-            "native_unread": (self.transcript_reads.index_path,),
-            "goal_waits": (self.root / GoalWaits.filename,),
-            "relationships": (self.root / RelationshipStore.filename,),
-            "notifications": tuple(NotificationAssignment.source_paths(self.root)),
-            "external_transcripts": ExternalTranscript.source_paths(self.root),
-        }
+        """The revision owner's declarations supply both stat and watch paths."""
+        return WireRevision.source_paths(self)
 
     def latest_sequence(self) -> int:
         """The sequence number of the newest message on the bus, whoever it was sent to."""
@@ -512,7 +495,7 @@ class HistoryViews:
 
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
-        return WireRevision.capture(self.revision_paths(), expiry_tick=int(time.time()))
+        return WireRevision.capture(self, expiry_tick=int(time.time()))
 
     def who(self) -> Sequence[Mapping]:
         """Presence: who is in the chat, with status and unread counts."""

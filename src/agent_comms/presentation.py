@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from datetime import datetime
+from itertools import zip_longest
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, get_origin, get_type_hints
+from typing import TYPE_CHECKING, ClassVar
 
 from .activity import ActivityState, ObservedActivity
 from .audience_manifest import FrozenRecipient
@@ -18,6 +19,9 @@ from .channels import Channel
 from .display_order import ChannelSort, NameChannelSort
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
+from .external_transcript import ExternalTranscript
+from .notification_assignment import NotificationAssignment
+from .relationships import RelationshipStore
 from .mentions import MentionCandidate
 from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
@@ -44,6 +48,7 @@ if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .goal_waits import GoalWait
+    from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .messages import Message
     from .notification_assignment import NotificationAssignmentRead
@@ -840,34 +845,65 @@ class CoordinationSnapshot:
 class WireRevision:
     """One observation of every Comms store a view derives from, by name."""
 
-    registry: FileRevision | None
-    catalog: FileRevision | None
-    bus_log: FileRevision | None
-    history: FileRevision | None
-    activity: FileRevision | None
-    runtime_info: FileRevision | None
-    reads: FileRevision | None
-    native_unread: FileRevision | None
-    goal_waits: FileRevision | None
-    relationships: FileRevision | None
-    notifications: tuple[FileRevision | None, ...]
-    external_transcripts: tuple[FileRevision | None, ...]
+    registry: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: (views.registry.store.path,),
+    })
+    catalog: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: (views.channels.catalog.path,),
+    })
+    bus_log: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: (views.bus.log.path,),
+    })
+    history: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: (views.bus.history.path,),
+    })
+    activity: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: (views.agents.activity._path,),
+    })
+    runtime_info: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: (views.agents.runtime_info.path,),
+    })
+    reads: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: (views.bus.reads.path,),
+    })
+    native_unread: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: (views.transcript_reads.index_path,),
+    })
+    goal_waits: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: (views.root / GoalWaits.filename,),
+    })
+    relationships: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: (views.root / RelationshipStore.filename,),
+    })
+    notifications: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: NotificationAssignment.source_paths(views.root),
+    })
+    external_transcripts: tuple[FileRevision, ...] = field(metadata={
+        "paths": lambda views: ExternalTranscript.source_paths(views.root),
+    })
     expiry_tick: int
 
     expiry_seconds: ClassVar[int] = 30
 
     @classmethod
-    def capture(cls, paths: Mapping[str, tuple[Path, ...]], *, expiry_tick: int) -> WireRevision:
-        """Capture uniform path groups through the revision field declarations."""
-        declarations = get_type_hints(cls)
-        captured = {}
-        for name, group in paths.items():
-            revisions = tuple(map(FileRevision.capture, group))
-            if get_origin(declarations[name]) is tuple:
-                captured[name] = revisions
-            else:
-                captured[name], = revisions
+    def source_paths(cls, views: HistoryViews) -> dict[str, tuple[Path, ...]]:
+        """Stat and watch the sources declared by the revision fields themselves."""
+        return {source.name: source.metadata["paths"](views)
+                for source in fields(cls) if "paths" in source.metadata}
+
+    @classmethod
+    def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
+        """Every source is a group; missing files contribute no revision."""
+        captured = {
+            name: tuple(revision for path in group
+                        if (revision := FileRevision.capture(path)) is not None)
+            for name, group in cls.source_paths(views).items()
+        }
         return cls(**captured, expiry_tick=expiry_tick)
+
+    def bus_source_changed_since(self, earlier: WireRevision) -> bool:
+        return any(FileRevision.source_changed(before, current)
+                   for before, current in zip_longest(earlier.bus_log, self.bus_log))
 
     @property
     def expiry_period(self) -> int:

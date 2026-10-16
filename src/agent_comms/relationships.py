@@ -33,7 +33,6 @@ from .peer_relevance import (
 )
 from .wire_record import WireRecord
 from .messages import Message
-from .presentation import ThreadView, WireRevision
 from .private_path import FileRevision
 from .registry_document import RegistrySnapshot
 from .routing import DeliveryScope
@@ -45,6 +44,7 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .message_bus import MessageBus
+    from .presentation import ThreadView, WireRevision
     from .registration import Registration
 
 
