@@ -150,57 +150,9 @@ class ResolvedMentionBinding(GoalMentionBinding):
         ), ()
 
 
-class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
-    @abstractmethod
-    def require_report(self, progress) -> None: ...
-
-    @abstractmethod
-    def require_completion(self, progress, *, root: Path, goal: GoalRef) -> EventTime: ...
-
-    @abstractmethod
-    def require_current_order(self, root: Path, goal: GoalRef) -> None: ...
-
-    def require_order_source(self, problem_id: str) -> None:
-        raise ValueError("This goal is not a problem-bound order.")
-
-    @abstractmethod
-    def complete_problem(self, goals, reference: GoalRef) -> None: ...
-
-    @abstractmethod
-    def require_self_direction(self) -> None: ...
-
-    @abstractmethod
-    def require_commander(self, actor: ThreadIncarnation, snapshot) -> None: ...
-
-    @abstractmethod
-    def revised(self, author: ThreadIncarnation, registry, now: float): ...
-
-    @abstractmethod
-    def release(self, goals, reference: GoalRef) -> None: ...
-
-    @abstractmethod
-    def has_report(self, recorded: EventTime) -> bool: ...
-
-    @property
-    @abstractmethod
-    def revision_count(self) -> int: ...
-
-    @abstractmethod
-    def notification_targets(
-        self, registry, root: Path, *, new_order: bool
-    ) -> tuple[ThreadIncarnation, ...]: ...
-
-    @property
-    @abstractmethod
-    def issued_times(self) -> tuple[float, ...]: ...
-
-    @property
-    @abstractmethod
-    def instruction(self) -> str: ...
-
-
 @dataclass(frozen=True)
-class SelfDirectedGoalAuthor(GoalAuthor):
+class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
+    """Ordinary goals share behavior here; orders override their differences."""
     def require_report(self, progress) -> None:
         pass
 
@@ -210,8 +162,8 @@ class SelfDirectedGoalAuthor(GoalAuthor):
     def require_current_order(self, root, goal):
         pass
 
-    def complete_problem(self, goals, reference):
-        pass
+    def require_order_source(self, problem_id: str) -> None:
+        raise ValueError("This goal is not a problem-bound order.")
 
     def require_self_direction(self):
         pass
@@ -236,12 +188,12 @@ class SelfDirectedGoalAuthor(GoalAuthor):
         return ()
 
     @property
-    def issued_times(self):
-        return ()
-
-    @property
     def instruction(self):
         return ""
+
+
+class UncommandedGoalAuthor(GoalAuthor):
+    """The ordinary author's wire case; all behavior belongs to GoalAuthor."""
 
 
 @dataclass(frozen=True, slots=True)

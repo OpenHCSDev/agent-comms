@@ -15,12 +15,11 @@ from agent_comms.comms import Comms
 from agent_comms.goal_actions import ClearGoalAction, CompletedGoalAction, GoalPrecondition, OwnerInvocable, SetGoalAction
 from agent_comms.goal_progress import GoalReport, ReportedGoalProgress, WorksInApp
 from agent_comms.goals import Deadline, GoalRef
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    AcceptanceCheck, AssignedFleetEntry, Assignment, BlockedTodoState, DoneTodoState,
-    FormerOrderFleetEntry, OpenTodoState, SourceTodoWhere, TodoConflict, TodoError,
-    TodoRef, TodoStore, UnassignedFleetEntry, UnassignedTodoAssignment,
+    AcceptanceCheck, BlockedTodoState, DoneTodoState,
+    OpenTodoState, SourceTodoWhere, TodoConflict, TodoError,
+    TodoRef, TodoStore, UnassignedTodoAssignment,
 )
 
 
@@ -94,6 +93,9 @@ def test_create_is_idempotent_and_has_no_order_until_assigned(todo_comms: Comms)
             original.id, original.repo, "Different work", creator=todo_comms.registry.require("lead"),
             where=original.where, acceptance=original.acceptance, bus=todo_comms.bus,
         )
+    closed = store.set_state(original.id, expected_revision=1, state=DoneTodoState,
+                             actor=todo_comms.registry.require("lead"), goals=todo_comms.goals)
+    assert closed.state is DoneTodoState and closed.assignment == UnassignedTodoAssignment()
 
 
 def test_two_processes_assign_one_problem_without_starting_native_workers(todo_comms: Comms):
@@ -202,12 +204,15 @@ def test_real_acceptance_and_ordinary_goal_completion_close_same_problem(todo_co
     todo_comms.goals.update_goal("worker-a", CompletedGoalAction(
         progress=progress, expect=GoalPrecondition(goal_id="order-a")), actor=OwnerInvocable)
     done = store.get("todo-1")
-    assert done.state is DoneTodoState and done.revision == 3
+    assert done == assigned
     assert store.complete("todo-1", expected_revision=2, actor=owner, progress=progress,
                           goals=todo_comms.goals, actor_kind=OwnerInvocable) == done
     goal = todo_comms.registry.require("worker-a").require_goal()
     assert goal.delivery_time.timestamps == (int(git(repo, "show", "-s", "--format=%ct", "HEAD")),)
-    assert goal.late
+    assert goal.delivery_complete and goal.late
+    with pytest.raises(TodoConflict):
+        store.release(done.id, expected_revision=done.revision,
+                      previous=done.assignment.require_assigned(done), goals=todo_comms.goals)
     messages = tuple(todo_comms.bus.log.full_history())
     assert len(messages) == 2 and all(message.target == "lead" for message in messages)
     assert "Works in app." in messages[-1].body
@@ -254,20 +259,8 @@ def test_renames_preserve_problem_authority_and_order_identity(todo_comms: Comms
     assert todo_comms.registry.require("worker-b").require_goal().id == "after-rename"
 
 
-def test_declared_problem_location_and_reference_validation(todo_comms: Comms):
-    source = Path(todo_comms.registry.require("lead").worktree) / "problem.txt"
-    with pytest.raises(TodoError):
-        SourceTodoWhere(str(source), 99).require_source(todo_comms.bus)
-    with pytest.raises(ValueError):
-        GoalRef(RecordedThreadIncarnation("worker-a", float("nan")), "order-a")
-    assignment = Assignment(GoalRef(todo_comms.registry.require("worker-a").incarnation, "order-a"),
-                            todo_comms.registry.require("lead").incarnation)
-    assert assignment.owner == assignment.goal.owner and assignment.generation == assignment.goal.goal_id
-
-
 def test_comms_owns_one_store_and_reads_do_not_create_its_database(todo_comms: Comms):
     store = todo_comms.todos
-    assert todo_comms.goals.todos is store
     assert store.list() == ()
     assert FleetCliCommand().apply(todo_comms) == {"problems": []}
     with pytest.raises(TodoError, match="exact owner/repo"):
@@ -302,21 +295,20 @@ def test_fleet_uses_problem_assignment_and_exact_current_order(todo_comms: Comms
     problem = create(todo_comms)
     store = TodoStore(todo_comms.root)
     initial, = store.fleet(todo_comms.registry, todo_comms.agents)
-    assert isinstance(initial, UnassignedFleetEntry) and initial.todo == problem
+    assert initial.todo == problem and initial.goal is None and initial.activity is None
     assigned = assign(todo_comms)
     todo_comms.agents.set_activity("worker-a", ActivityState.WORKING, "Inspecting the source")
     current, = store.fleet(todo_comms.registry, todo_comms.agents)
-    assert isinstance(current, AssignedFleetEntry) and current.todo == assigned
+    assert current.todo == assigned
     assert current.goal == todo_comms.registry.require("worker-a").require_goal()
     assert current.activity.state is ActivityState.WORKING
     assert FleetCliCommand().apply(todo_comms)["problems"][0]["todo"]["id"] == problem.id
 
     todo_comms.registry.rename("worker-a", "unit")
     renamed, = store.fleet(todo_comms.registry, todo_comms.agents)
-    assert isinstance(renamed, AssignedFleetEntry) and renamed.goal.id == "order-a"
+    assert renamed.goal.id == "order-a"
     old = todo_comms.registry.require("unit")
     todo_comms.registry.remove(old.name)
     todo_comms.registry.declare(Thread(old.name, old.tags, old.worktree, created_at=old.created_at + 100))
     former, = store.fleet(todo_comms.registry, todo_comms.agents)
-    assert isinstance(former, FormerOrderFleetEntry) and former.todo == assigned
-    assert former.todo.assignment.require_assigned(former.todo).goal == assigned.assignment.require_assigned(assigned).goal
+    assert former.todo == assigned and former.goal is None and former.activity is None

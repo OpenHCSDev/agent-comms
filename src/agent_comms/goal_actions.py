@@ -25,7 +25,7 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import Goal, GoalDeadline, NoDeadline, GoalRef, SelfDirectedGoalAuthor
+from .goals import Goal, GoalDeadline, NoDeadline, GoalRef, UncommandedGoalAuthor
 from .goal_progress import GoalProgress
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .threads import Thread
@@ -368,9 +368,6 @@ class CompletedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, 
     def next_state(self, ctx: GoalActionContext) -> GoalState:
         return CompletedGoal()
 
-    def after_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
-        goal.author.complete_problem(ctx.goals, GoalRef(ctx.thread.incarnation, goal.id))
-
 
 @dataclass(frozen=True, kw_only=True)
 class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
@@ -428,7 +425,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
 
     def goal_author(self, ctx):
-        return SelfDirectedGoalAuthor()
+        return UncommandedGoalAuthor()
 
     def change(self, ctx: GoalActionContext) -> Goal:
         current = ctx.thread.goal

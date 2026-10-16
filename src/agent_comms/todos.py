@@ -21,7 +21,6 @@ from .command import Command
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
-from .fleet import UnitObservation
 from .message_reference import MessageReference
 from .goal_actions import (
     ClearGoalAction, CompletedGoalAction, GoalActionContext, GoalPrecondition,
@@ -166,7 +165,7 @@ class Assignment:
 class TodoAssignment(DeclaredFamily, affix="TodoAssignment"):
     @abstractmethod
     def observe(self, problem: Todo, snapshot: RegistrySnapshot,
-                activities: Mapping[str, ObservedActivity], now: float) -> FleetEntry: ...
+                activities: Mapping[str, ObservedActivity]) -> TodoObservation: ...
 
     @property
     @abstractmethod
@@ -182,11 +181,20 @@ class TodoAssignment(DeclaredFamily, affix="TodoAssignment"):
         if self.require_assigned(current) != expected:
             raise TodoConflict(current)
 
+    def require_open(self, current: Todo, snapshot: RegistrySnapshot) -> None:
+        pass
+
+    def require_unassigned(self) -> None:
+        raise TodoError("Use checked completion of the assigned Goal.")
+
 
 @dataclass(frozen=True)
 class UnassignedTodoAssignment(TodoAssignment):
-    def observe(self, problem, snapshot, activities, now):
-        return UnassignedFleetEntry(todo=problem)
+    def observe(self, problem, snapshot, activities):
+        return TodoObservation(problem, None, None)
+
+    def require_unassigned(self):
+        pass
 
     @property
     def description(self):
@@ -203,13 +211,15 @@ class UnassignedTodoAssignment(TodoAssignment):
 class AssignedTodoAssignment(TodoAssignment):
     assignment: Assignment
 
-    def observe(self, problem, snapshot, activities, now):
+    def observe(self, problem, snapshot, activities):
+        owner = self.assignment.owner
+        activity = activities[snapshot.require(owner.name).name] if owner.current(snapshot) else None
+        return TodoObservation(problem, self.assignment.goal.current(snapshot), activity)
+
+    def require_open(self, current, snapshot):
         goal = self.assignment.goal.current(snapshot)
-        if goal is None:
-            return FormerOrderFleetEntry(todo=problem)
-        owner = snapshot.require(self.assignment.owner.name)
-        return AssignedFleetEntry(todo=problem, goal=goal,
-                                  activity=activities[owner.name], observed_at=now)
+        if goal is not None and goal.delivery_complete:
+            raise TodoConflict(current)
 
     @property
     def description(self):
@@ -224,6 +234,10 @@ class AssignedTodoAssignment(TodoAssignment):
 
 class TodoState(DeclaredFamily, affix="TodoState"):
     @classmethod
+    def require_assignment(cls, assignment: TodoAssignment) -> None:
+        pass
+
+    @classmethod
     def assign(cls, current: Todo, proposed: Assignment) -> Todo:
         raise TodoConflict(current)
 
@@ -235,10 +249,6 @@ class TodoState(DeclaredFamily, affix="TodoState"):
     def release(cls, current: Todo, command: ReleaseTodoChange) -> Todo:
         current.assignment.require_exact(current, command.previous)
         return replace(current, assignment=UnassignedTodoAssignment())
-
-    @classmethod
-    def complete(cls, current: Todo) -> Todo:
-        return replace(current, state=DoneTodoState)
 
     @classmethod
     def change(cls, current: Todo, command: ChangeTodoState) -> Todo:
@@ -267,20 +277,12 @@ class BlockedTodoState(TodoState):
 
 class DoneTodoState(TodoState):
     @classmethod
-    def complete(cls, current):
-        return current
-
-    @classmethod
-    def release(cls, current, command):
-        raise TodoConflict(current)
-
-    @classmethod
     def change(cls, current, command):
         raise TodoConflict(current)
 
     @classmethod
-    def decide(cls, current, command):
-        raise TodoError("Use checked completion; a status change cannot close a problem.")
+    def require_assignment(cls, assignment):
+        assignment.require_unassigned()
 
 
 class TodoChangeRecord(DeclaredFamily, affix="TodoChangeRecord"):
@@ -361,15 +363,6 @@ class ChangeTodoState(TodoOperation):
         return current.state.change(current, self)
 
 
-@dataclass(frozen=True)
-class CompleteTodo(TodoOperation):
-    assignment: Assignment
-
-    def decide(self, current):
-        current.assignment.require_exact(current, self.assignment)
-        return current.state.complete(current)
-
-
 @dataclass(frozen=True, slots=True)
 class Todo(TypedTable):
     id: str = field(metadata={"sql": Column(primary_key=True)})
@@ -385,6 +378,9 @@ class Todo(TypedTable):
     revision: int = field(metadata={"sql": Column(check="revision>0")})
     assignment: TodoAssignment
     last_change: TodoChangeRecord
+
+    def __post_init__(self):
+        self.state.require_assignment(self.assignment)
 
     def require_revision(self, expected: int) -> None:
         if self.revision != expected:
@@ -414,23 +410,12 @@ class Todo(TypedTable):
 
 
 @dataclass(frozen=True)
-class FleetEntry(DeclaredFamily, affix="FleetEntry"):
-    """A problem and the order observation selected by its assignment owner."""
+class TodoObservation:
+    """A read of canonical problem, exact current order and assignee activity."""
 
     todo: Todo
-
-
-class UnassignedFleetEntry(FleetEntry):
-    pass
-
-
-class FormerOrderFleetEntry(FleetEntry):
-    """The exact assigned order is no longer current; its reference remains on Todo."""
-
-
-@dataclass(frozen=True)
-class AssignedFleetEntry(UnitObservation, FleetEntry):
-    pass
+    goal: Goal | None
+    activity: ObservedActivity | None
 
 
 @dataclass(frozen=True)
@@ -475,9 +460,6 @@ class CommandedGoalAuthor(GoalAuthor):
         accepted = self.todo.require_completion(root, goal, delivery.reported_sha)
         return RecordedEventTime(accepted.committed_at)
 
-    def complete_problem(self, goals, reference):
-        goals.todos.complete_order(self.todo.id, reference, goals.registry)
-
     def require_self_direction(self):
         raise TodoError("Only the problem's commander can revise this order.")
 
@@ -492,10 +474,6 @@ class CommandedGoalAuthor(GoalAuthor):
         creator = self.todo.read(root).creator
         return tuple(dict.fromkeys(target for target in (creator, self.thread)
                                    if target.current(registry)))
-
-    @property
-    def issued_times(self):
-        return (self.issued_at,)
 
     @property
     def instruction(self):
@@ -673,23 +651,13 @@ class TodoStore:
             return tuple(Todo.read(db.execute(
                 f"SELECT * FROM {Todo.declared_name} WHERE repo=? ORDER BY rowid", (repo,))))
 
-    def complete_order(self, todo_id: str, reference: GoalRef, registry: Registration) -> None:
-        current = self.get(todo_id)
-        assignment = current.require_order(reference)
-        goal = reference.require_current(registry)
-        if not goal.delivery_complete:
-            raise TodoError("The assigned Goal has no accepted completion.")
-        goal.author.require_order_source(todo_id)
-        self._apply(todo_id, CompleteTodo(current.revision, assignment))
-
-    def fleet(self, registry: Registration, agents: AgentActivity) -> tuple[FleetEntry, ...]:
+    def fleet(self, registry: Registration, agents: AgentActivity) -> tuple[TodoObservation, ...]:
         problems = self.list()
         if not problems:
             return ()
         snapshot = registry.snapshot()
         activities = agents.all_activity(snapshot.threads.values(), snapshot=snapshot)
-        now = time.time()
-        return tuple(problem.assignment.observe(problem, snapshot, activities, now)
+        return tuple(problem.assignment.observe(problem, snapshot, activities)
                      for problem in problems)
 
     def create(self, todo_id: str, repo: str, text: str, *, creator: Thread,
@@ -739,6 +707,7 @@ class TodoStore:
         proposed = Assignment(GoalRef(_thread(owner), generation), _participant(parent))
         with goals.writing() as completed:
             current = self.get(todo_id)
+            current.assignment.require_open(current, goals.registry.snapshot())
             order = TransferOrderGoalAction(
                 text=current.text, deadline=deadline, author=proposed.parent,
                 todo=TodoRef(todo_id), goal_id=proposed.generation, previous=previous.goal)
@@ -754,18 +723,18 @@ class TodoStore:
         assignment = current.assignment.require_assigned(current)
         if not assignment.owner.same_publication_birth(_participant(actor)):
             raise TodoConflict(current)
-        command = CompleteTodo(expected_revision, assignment)
-        if current.last_change.matches(command):
-            return current
         current.require_revision(expected_revision)
-        CompletedGoalAction(
-            progress=progress, expect=GoalPrecondition(goal_id=assignment.goal.goal_id)
-        ).apply(goals, assignment.owner.name, actor=actor_kind)
-        return self.get(todo_id)
+        if not assignment.goal.require_current(goals.registry).delivery_complete:
+            CompletedGoalAction(
+                progress=progress, expect=GoalPrecondition(goal_id=assignment.goal.goal_id)
+            ).apply(goals, assignment.owner.name, actor=actor_kind)
+        return current
 
     def release(self, todo_id: str, *, expected_revision: int, previous: Assignment,
                 goals: Goals) -> Todo:
         with goals.writing() as completed:
+            current = self.get(todo_id)
+            current.assignment.require_open(current, goals.registry.snapshot())
             result = self._apply(todo_id, ReleaseTodoChange(expected_revision, previous))
             ClearGoalAction.end_current(previous.goal, goals=goals, completed=completed)
             return result
@@ -773,4 +742,6 @@ class TodoStore:
     def set_state(self, todo_id: str, *, expected_revision: int, state: type[TodoState],
                   actor: Thread, goals: Goals) -> Todo:
         with goals.writing():
+            current = self.get(todo_id)
+            current.assignment.require_open(current, goals.registry.snapshot())
             return self._apply(todo_id, ChangeTodoState(expected_revision, state, _participant(actor)))

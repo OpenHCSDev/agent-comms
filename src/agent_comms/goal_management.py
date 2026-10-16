@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from .native_input_owner import RegistryOwner
 from .goal_presentation import GoalExecution, GoalWaitTarget
 from .goals import Goal, GoalNotice
-from .fleet import UnitObservation
+from .fleet import UnitProgress
 from .messages import Message, AlertKind
 from .recorded_time import RecordedEventTime
 from .message_bus import MessageBus
@@ -56,10 +56,6 @@ class Goals:
             with _store_lock(self._wire_lock_path, shared=shared):
                 yield completed
 
-    def _previous_at(self, goal, event):
-        return max((event.timestamp, *goal.work_time.timestamps,
-                    *goal.report_time.timestamps, *goal.author.issued_times))
-
     def write_goal(self, thread, goal, completed):
         """The work-goal writer; callers hold writing() custody."""
         if goal is not None:
@@ -69,18 +65,15 @@ class Goals:
         self.registry.register(replace(thread, goal=goal), self.registry.status(thread.name))
         if goal is not None and goal.notification_targets(snapshot, self.root, previous=previous):
             activity = self.agents.activity_of(thread.name, snapshot=snapshot)
-            before = (UnitObservation(previous, activity, self._previous_at(previous, activity))
-                      if previous is not None else None)
-            after = UnitObservation(goal, activity, max(goal.work_time.timestamps))
-            completed.callback(self._notify_transition, thread.incarnation.require_recorded(), before, after)
+            completed.callback(self._notify_transition, thread.incarnation.require_recorded(),
+                               previous, goal, activity)
         return goal
 
-    def _notify_transition(self, original, before, after):
-        progress = after.progress
-        goal = after.goal
-        previous = before.goal if before is not None else None
+    def _notify_transition(self, original, previous, goal, activity):
+        progress = UnitProgress.of(goal, activity)
         same_order = goal.same_order_as(previous)
-        if same_order and (not progress.notifies_commander or before.progress == progress):
+        if same_order and (not progress.notifies_commander
+                           or UnitProgress.of(previous, activity) == progress):
             return
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
@@ -92,7 +85,7 @@ class Goals:
             for target in goal.notification_targets(snapshot, self.root, previous=previous):
                 message = Message(
                     sender=unit.name, target=target.name, type=AlertKind,
-                    timestamp=after.observed_at,
+                    timestamp=max(goal.work_time.timestamps),
                     body=f"{unit.name}: {summary}. Goal {goal.id}: {goal.text}",
                 )
                 results.append(GoalNotice.publish(self.bus, message, target))
