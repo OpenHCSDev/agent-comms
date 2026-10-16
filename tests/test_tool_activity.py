@@ -9,7 +9,7 @@ from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.tool_activity import (
     NativeToolSelectorUnavailable, NoToolActivity, RecordedToolActivity, ToolActivity,
 )
-from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript
+from agent_comms.transcript_events import AgentTextTranscript, ToolEndTranscript, ToolStartTranscript
 
 
 def original_call(timestamp=0):
@@ -23,7 +23,7 @@ def test_only_starts_expose_original_calls_in_block_order():
     last = replace(first, tool_call_id='last')
     result = ToolEndTranscript(tool_call_id=first.tool_call_id, tool_name=first.tool_name,
                                text='completed', ok=True)
-    events = (TextTranscript('text'), first, result, last)
+    events = (AgentTextTranscript('text'), first, result, last)
     calls = tuple(call for event in events for call in event.tool_calls)
     assert calls == (first, last)
     assert calls[0] is first and calls[-1] is last
