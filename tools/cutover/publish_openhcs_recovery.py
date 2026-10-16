@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass, replace
-import fcntl
 import hashlib
 import json
 import os
@@ -18,7 +17,7 @@ import subprocess
 import sys
 import time
 
-from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked
+from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked, acquire_exclusive_route_lock
 from agent_comms.child_process import ProcessIdentity, Platform
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
@@ -371,7 +370,7 @@ def main():
         RetainedOwnerLaunch.capture(thread, snapshot, interpreter=str(args.source_interpreter))
     directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        acquire_exclusive_route_lock(directory)
         operation = PublishOpenhcsRecovery(audience, owners, original, directory,
                                          args.current_prefix, args.receipt, manifest_bytes,
                                          sources, carry_proof)

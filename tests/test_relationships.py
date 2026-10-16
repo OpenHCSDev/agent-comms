@@ -83,7 +83,7 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
     pending = comms.bus.pending_count("owner")
     snapshot = comms.relationships.snapshot("owner")
-    groups = {type(group): group for group in snapshot.groups}
+    groups = snapshot.groups_by_type
     assert [row.target for row in groups[InboundRelationshipGroup].entries] == ["peer", "#team"]
     assert [row.target for row in groups[OutboundRelationshipGroup].entries] == ["peer"]
     assert groups[ParentRelationshipGroup].entries[0].target == "origin"
@@ -107,7 +107,7 @@ def test_alias_and_persisted_thread_sort(tmp_path):
         comms.relationships.collaborations("reviewer")[0].peer,
     ) == ("reviewer", "renamed")
     snapshot = Comms(comms.root).relationships.snapshot("renamed")
-    children = next(group for group in snapshot.groups if type(group) is ChildrenRelationshipGroup)
+    children = snapshot.groups_by_type[ChildrenRelationshipGroup]
     assert children.order is LastActivityThreadSort
     assert collaboration_rows(comms, "reviewer")[0].target == "renamed"
 
@@ -175,11 +175,7 @@ def test_bounded_window_reports_omitted_history_and_reuses_tail(tmp_path, monkey
 
 
 def collaboration_rows(comms, owner="owner"):
-    return next(
-        group.entries
-        for group in comms.relationships.snapshot(owner).groups
-        if type(group) is CollaboratingRelationshipGroup
-    )
+    return comms.relationships.snapshot(owner).groups_by_type[CollaboratingRelationshipGroup].entries
 
 
 def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):

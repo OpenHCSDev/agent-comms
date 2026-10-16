@@ -107,7 +107,7 @@ class TestEndToEndLifecycle:
             "--pi-bin",
             str(stub),
         )
-        assert out["forked"] == "kid"
+        assert out["created"] == "kid"
         # The child was launched in the parent's worktree and registered.
         detail = cli(root, "thread", "--name", "kid")
         assert detail["parent"] == "PR111" and detail["task"] == "review the diff"

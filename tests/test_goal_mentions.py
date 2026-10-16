@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.relationships import RelationshipEdit
+from agent_comms.relationships import CollaboratingRelationshipGroup, RelationshipEdit
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -39,7 +39,7 @@ def _wire(tmp_path: Path) -> Comms:
 
 def _rows(comms: Comms, name: str):
     snapshot = comms.relationships.snapshot(name)
-    group = next(group for group in snapshot.groups if group.key == "collaborating")
+    group = snapshot.groups_by_type[CollaboratingRelationshipGroup]
     return group.entries, snapshot.unresolved_goal_mentions
 
 

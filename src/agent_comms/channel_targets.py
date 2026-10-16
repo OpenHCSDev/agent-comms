@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from typing import ClassVar
 from enum import StrEnum
 
 
@@ -38,6 +40,83 @@ class BuiltinChannel(StrEnum):
     @property
     def history_targets(self) -> frozenset[str] | None:
         return None if self.aggregate else frozenset((self.value,))
+
+
+class CommandTarget(ABC):
+    """A command destination owns its binding and catalog participation."""
+
+    needs_catalog: ClassVar[bool] = False
+
+    @staticmethod
+    def named(name: str | CommandTarget) -> CommandTarget:
+        if isinstance(name, CommandTarget):
+            return name
+        if not isinstance(name, str) or not name:
+            raise ValueError("Select a named target")
+        return ChannelTarget(name) if is_channel_target(name) else ThreadTarget(name)
+
+    @staticmethod
+    def arguments(names: tuple[str, ...], project: str):
+        selected = tuple(CommandTarget.named(name) for name in names) or (ProjectTarget(project),)
+        return selected[0] if len(selected) == 1 else selected
+
+    @property
+    @abstractmethod
+    def names(self) -> tuple[str, ...]: ...
+
+    def available(self, snapshot) -> bool:
+        return True
+
+    @abstractmethod
+    def bindings(self, declaration, comms, channel, snapshot, catalog): ...
+
+    def contexts(self, declaration, channel):
+        return declaration.selection_channels(channel, self.name)
+
+
+@dataclass(frozen=True)
+class NamedTarget(CommandTarget):
+    name: str
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return (self.name,)
+
+
+class ThreadTarget(NamedTarget):
+    def available(self, snapshot) -> bool:
+        return snapshot.canonical_name(self.name) in snapshot.threads
+
+    def bindings(self, declaration, comms, channel, snapshot, catalog):
+        thread = snapshot.require(self.name)
+        return declaration.thread_bindings(comms, thread, snapshot.status(thread.name),
+                                           channel, catalog=catalog)
+
+
+class ChannelTarget(NamedTarget):
+    needs_catalog = True
+
+    def bindings(self, declaration, comms, channel, snapshot, catalog):
+        return declaration.channel_bindings(comms, catalog.resolve(self.name), snapshot=snapshot)
+
+
+@dataclass(frozen=True)
+class ProjectTarget(CommandTarget):
+    project: str
+
+    @property
+    def name(self) -> str:
+        return self.project
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return ()
+
+    def contexts(self, declaration, channel):
+        return (None,)
+
+    def bindings(self, declaration, comms, channel, snapshot, catalog):
+        return declaration.project_bindings(comms, self.project)
 
 
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")

@@ -108,12 +108,10 @@ class CodexBridge(TranscriptBridge[CodexOptions]):
             buffered = tuple(codex.pending)
             codex.pending.clear()
             for notification in buffered:
-                update = stream.receive(notification)
-                if update is not None:
+                for update in stream.receive(notification):
                     yield update
             async for notification in codex.notifications():
-                update = stream.receive(notification)
-                if update is not None:
+                for update in stream.receive(notification):
                     yield update
 
     async def deliver(self, message: Message) -> Outcome:

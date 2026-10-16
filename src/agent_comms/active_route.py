@@ -231,6 +231,59 @@ def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> 
         os.close(directory)
 
 
+@dataclass(frozen=True, slots=True)
+class RouteLockHolder:
+    """An observed Linux flock owner; diagnosis, not authority to signal it."""
+
+    pid: int
+    command: str
+
+
+def route_lock_holders(directory: int) -> tuple[RouteLockHolder, ...]:
+    """Identify actual flock owners of this opened directory, not merely open FDs.
+
+    An OFD lock with no reported PID, inaccessible /proc, or a concurrent exit
+    is unknown; absence from this snapshot never certifies exclusive custody.
+    """
+    info = os.fstat(directory)
+    identity = f"{os.major(info.st_dev):02x}:{os.minor(info.st_dev):02x}:{info.st_ino}"
+    holders = []
+    with open('/proc/locks', encoding='ascii') as locks:
+        for line in locks:
+            fields = line.split()
+            if len(fields) < 8 or fields[1] != 'FLOCK' or fields[5] != identity:
+                continue
+            try:
+                pid = int(fields[4])
+            except ValueError:
+                continue
+            if pid < 0:
+                holders.append(RouteLockHolder(pid, '<kernel did not identify owner>'))
+                continue
+            try:
+                command = Path(f'/proc/{pid}/cmdline').read_bytes().replace(b'\0', b' ').decode('utf-8', 'replace').strip()
+            except OSError:
+                command = '<process exited or inaccessible>'
+            holders.append(RouteLockHolder(pid, command or '<empty command>'))
+    return tuple(holders)
+
+
+def acquire_exclusive_route_lock(directory: int) -> None:
+    """Fail with named holders instead of silently retrying or killing clients."""
+    try:
+        fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as error:
+        try:
+            holders = route_lock_holders(directory)
+            detail = '; '.join(f'PID {holder.pid}: {holder.command}' for holder in holders)
+        except OSError as diagnosis:
+            detail = f'holder inspection failed: {diagnosis}'
+        raise RelationViolationError(
+            f'Default route lock busy; wait for borrowers to retire. '
+            f'Holders at inspection: {detail or "unknown (lock changed during inspection)"}'
+        ) from error
+
+
 def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     """Atomically install the first private default after owner migration.
 

@@ -5,13 +5,12 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import ClassVar, Literal, Type
+from typing import TYPE_CHECKING, ClassVar, Literal, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
 from .command import Command
-from .comms import Comms
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
@@ -42,6 +41,9 @@ from .tool_output import (
     materialize_oversized_output,
     serialize_tool_output,
 )
+
+if TYPE_CHECKING:
+    from .comms import Comms
 
 JsonObject = dict[str, object]
 
@@ -851,7 +853,10 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
     def apply(self, comms: Comms) -> JsonObject:
         from .cli_commands import ForkCliCommand
 
-        return ForkCliCommand(name=self.name, parent=self.parent, task=self.task,
+        parent = comms.registry.require(self.parent)
+        return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
+                              project=parent.worktree, model=parent.model,
+                              thinking_level=parent.thinking_level,
                               tags=_tag_set(self.tags) if self.tags is not None else None,
                               prompt=self.prompt).apply(comms)
 

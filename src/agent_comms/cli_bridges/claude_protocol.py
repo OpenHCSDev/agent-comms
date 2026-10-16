@@ -11,10 +11,15 @@ from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_valid
 
 from agent_comms.activity import ActivityState
 from agent_comms.transcript_events import (
-    AssistantTranscript, NoticeTranscript, ThinkingTranscript, TranscriptEvent,
+    AssistantTranscript,
+    NoticeTranscript,
+    ThinkingTranscript,
+    TranscriptEvent,
+    ToolStartTranscript,
+    UserTranscript,
 )
 from .shared import (
-    ActiveItem, FinishedItem, TaggedWire, ToolCall, TranscriptUpdate, TurnEnded,
+    ActiveItem, FinishedItem, TaggedWire, TranscriptUpdate, TurnEnded,
     TurnStarted, WireHeader, WireModel,
 )
 
@@ -22,13 +27,13 @@ from .shared import (
 @dataclass
 class ClaudeSession:
     turn: str = ''
-    tools: dict[str, ToolCall] = field(default_factory=dict)
+    tools: dict[str, ToolStartTranscript] = field(default_factory=dict)
     catching_up: bool = True
 
-    def started(self, call: ToolCall) -> None:
-        self.tools[call.id] = call
+    def started(self, call: ToolStartTranscript) -> None:
+        self.tools[call.tool_call_id] = call
 
-    def result_for(self, tool_id: str) -> ToolCall | None:
+    def result_for(self, tool_id: str) -> ToolStartTranscript | None:
         call = self.tools.pop(tool_id, None)
         if call is None and not self.catching_up:
             raise ValueError(f'Claude result has no tool start: {tool_id}')
@@ -52,9 +57,21 @@ class TimedRecord(WireModel):
         return datetime.fromisoformat(value).timestamp()
 
 
+class ClaudeHeader(WireHeader):
+    @model_validator(mode='before')
+    @classmethod
+    def local_command(cls, value: dict) -> dict:
+        # Local slash commands (/login, /cost) are written as user records
+        # without a prompt; they never reach the model. Decode that shape here.
+        if value.get('type') == 'user' and 'promptId' not in value:
+            return {'type': LocalCommandOutput.wire_tag}
+        return value
+
+
 class ClaudeRecord(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+    header = ClaudeHeader
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return ()
@@ -113,9 +130,10 @@ class ToolUse(AssistantBlock):
     input: JsonValue
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        call = ToolCall(self.id, self.name, self.input)
+        call = ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
+                                   raw_input=self.input, timestamp=record.timestamp)
         session.started(call)
-        return (ActiveItem(session.turn, self.id, ActivityState.WORKING, call.title),)
+        return ActiveItem.tool_started(session.turn, self.id, call)
 
 
 class AssistantMessage(WireModel):
@@ -154,6 +172,46 @@ class ResultToolReference(ResultPart):
         return f'Tool available: {self.tool_name}'
 
 
+class KindHeader(WireHeader):
+    type: str = Field(alias='kind')
+
+
+class PromptOrigin(TaggedWire, ABC):
+    """Who wrote a user record. Only a person's prompt is shown as input."""
+    __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
+        registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
+    header = KindHeader
+
+    def prompt(self, record: TimedRecord, text: str,
+               session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return ()
+
+
+class HumanPrompt(PromptOrigin):
+    wire_tag = 'human'
+
+    def prompt(self, record: TimedRecord, text: str,
+               session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return session.finished(record.uuid, (UserTranscript(text, timestamp=record.timestamp),))
+
+
+class TaskNotification(PromptOrigin):
+    """Monitor output; bus messages in it already reach Toad through Core."""
+    wire_tag = 'task-notification'
+
+
+class PeerMessage(PromptOrigin):
+    wire_tag = 'peer'
+
+
+class AutoContinuation(PromptOrigin):
+    wire_tag = 'auto-continuation'
+
+
+class ToolSupplied(PromptOrigin):
+    """Records Claude writes without an origin: tool results and summaries."""
+
+
 class UserBlock(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
@@ -165,10 +223,10 @@ class UserBlock(TaggedWire, ABC):
 class UserText(UserBlock, TextContent):
     wire_tag = 'text'
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         if self.text.startswith('[Request interrupted by user'):
             return (TurnEnded(),)
-        return super().updates(record, session)
+        return super().updates(record, session) + record.origin.prompt(record, self.text, session)
 
 
 class UserImage(UserBlock, ImageContent):
@@ -207,6 +265,7 @@ class UserRecord(ClaudeRecord, TimedRecord):
     wire_tag = 'user'
     promptId: str
     message: UserMessage
+    origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
     isMeta: bool = False
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
@@ -328,6 +387,11 @@ class FileHistoryDelta(MetadataRecord):
 
 class CostState(MetadataRecord):
     wire_tag = 'cost-state'
+
+
+class LocalCommandOutput(MetadataRecord):
+    """A terminal-only slash command and its output."""
+    wire_tag = 'local-command'
 
 
 CLAUDE_RECORD = TypeAdapter(ClaudeRecord.declared_union())

@@ -38,6 +38,18 @@ class IdentityMismatchError(ProcessLookupError):
     """A recorded process incarnation is absent or has been replaced."""
 
 
+class ChildRetirementError(BaseException):
+    """Capability: the child owner's cleanup receipt failed, independently of cancellation."""
+
+
+class ChildRetirementFailed(RuntimeError, ChildRetirementError):
+    """An ordinary retirement failure; never a cancellation."""
+
+
+class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
+    """Preserve cancellation and an independently failed retirement receipt."""
+
+
 @dataclass(frozen=True)
 class ProcessIdentity:
     pid: int
@@ -817,7 +829,9 @@ async def join_retirement(task: asyncio.Future):
     try:
         while not task.done():
             try:
-                await asyncio.shield(task)
+                # wait does not cancel the original future or replace its own
+                # typed cancellation with shield's synthetic CancelledError.
+                await asyncio.wait((task,))
             except asyncio.CancelledError as error:
                 interrupted = error
         result = task.result()
@@ -907,7 +921,18 @@ class ChildProcess(Sealed, ABC):
     async def stop(self) -> ChildOutcome:
         if self._stop_task is None:
             self._stop_task = asyncio.create_task(self._stop())
-        return await join_retirement(self._stop_task)
+        try:
+            return await join_retirement(self._stop_task)
+        except asyncio.CancelledError:
+            # join_retirement completed the owned task before propagating cancellation.
+            # Its original result, not the caller's exception, owns cleanup certainty.
+            try:
+                self._stop_task.result()
+            except BaseException as error:
+                raise ChildRetirementCancelled("Child retirement was not attested") from error
+            raise
+        except Exception as error:
+            raise ChildRetirementFailed("Child retirement was not attested") from error
 
 
 class ChildStdio(DeclaredFamily, affix="ChildStdio"):
@@ -1082,7 +1107,14 @@ class BoundedRun:
                 await child.stop()
 
     @classmethod
-    async def run(
+    async def run(cls, command: tuple[str, ...], *, timeout: float, **options) -> ChildResult:
+        """Collect a result and join retirement before returning it."""
+        async with cls.exchange(command, timeout=timeout, **options) as result:
+            return result
+
+    @classmethod
+    @asynccontextmanager
+    async def exchange(
         cls,
         command: tuple[str, ...],
         *,
@@ -1091,22 +1123,34 @@ class BoundedRun:
         cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
-    ) -> ChildResult:
+    ):
+        """Borrow a collected result; this scope still owns child retirement.
+
+        Launch and collection consume one absolute deadline. Consumers may deliver
+        a verified response before group cleanup completes. Leaving the scope always
+        joins that cleanup, including under cancellation.
+        """
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("A positive finite timeout is required")
+        deadline = asyncio.get_running_loop().time() + timeout
         try:
-            child = await AttachedChild.start(command, cwd=cwd, env=env, pass_fds=pass_fds)
+            async with asyncio.timeout_at(deadline):
+                child = await AttachedChild.start(command, cwd=cwd, env=env, pass_fds=pass_fds)
+        except TimeoutError:
+            raise  # A launch expiry is not evidence that user code never started.
         except OSError as error:
-            return ChildResult(FailedToStartOutcome(str(error)))
+            yield ChildResult(FailedToStartOutcome(str(error)))
+            return
         exchange = asyncio.create_task(child.process.communicate(input))
         try:
             try:
-                stdout, stderr = await asyncio.wait_for(asyncio.shield(exchange), timeout)
-                outcome = await child.wait()
+                async with asyncio.timeout_at(deadline):
+                    stdout, stderr = await asyncio.shield(exchange)
+                    outcome = await child.wait()
             except TimeoutError:
                 outcome = TimedOutOutcome(await child.stop())
                 stdout, stderr = await exchange
-            return ChildResult(outcome, stdout, stderr)
+            yield ChildResult(outcome, stdout, stderr)
         finally:
             try:
                 await child.stop()
