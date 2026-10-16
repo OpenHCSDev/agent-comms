@@ -85,7 +85,7 @@ class NewThreadSpec:
         return self.task if self.prompt is None else self.prompt
 
     @contextmanager
-    def prepared(self, threads: ThreadManagement, pi_bin: str) -> Iterator[Thread]:
+    def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         from .fresh_private_session import create_fresh_private_session
 
         project = Path(self.project).expanduser().resolve(strict=True)
@@ -132,11 +132,11 @@ class ForkSpec(NewThreadSpec):
         return parent
 
     @contextmanager
-    def prepared(self, threads: ThreadManagement, pi_bin: str) -> Iterator[Thread]:
+    def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
         # Copy saved history outside the wire lock, retaining writer→wire order.
         parent = self._parent(threads)
         threads.registry.require_declaration_available(self.child(parent, parent.require_saved_session()))
-        location = asyncio.run(parent.backend.fork(parent, pi_bin))
+        location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
         with _store_lock(threads._wire_lock_path):
             current = self._parent(threads)
             if current.incarnation != parent.incarnation or current.session_file != parent.session_file:
@@ -635,12 +635,14 @@ class ThreadManagement:
     def create(self, spec: NewThreadSpec, pi_bin: str | None = None) -> Thread:
         """Prepare the session, then register and launch the thread with its first input."""
         resolved_bin = NativeArguments.configured_binary(pi_bin)
-        with spec.prepared(self, resolved_bin) as child:
-            return self._create_unlocked(spec, resolved_bin, child)
-
-    def _create_unlocked(self, spec: NewThreadSpec, pi_bin: str, child: Thread) -> Thread:
-        """Register and launch the thread, removing its declaration if launch fails."""
         runtime = LaunchRuntime.current()
+        with spec.prepared(self, resolved_bin, runtime) as child:
+            return self._create_unlocked(spec, resolved_bin, child, runtime)
+
+    def _create_unlocked(
+        self, spec: NewThreadSpec, pi_bin: str, child: Thread, runtime: LaunchRuntime,
+    ) -> Thread:
+        """Register and launch the thread, removing its declaration if launch fails."""
         # A new incarnation's inbox already starts at its creation time
         # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
         child = self.registry._declare_unlocked(child)
