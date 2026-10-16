@@ -1470,14 +1470,6 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *, sh
         yield CertifiedSourceRead(bus.path, marker, db, stream, saved)
 
 
-@contextmanager
-def opened_claim_source_unlocked(bus: WireLog, private_marker: WireMetadata, *,
-                                 shared: bool = False):
-    """Claims require the canonical checkpoint; no uncertified scan fallback."""
-    with opened_private_checkpoint_unlocked(bus, private_marker, shared=shared) as source:
-        yield source
-
-
 def verify_private_bus_checkpoint_unlocked(bus: WireLog, marker: WireMetadata) -> PrefixWitness:
     """Verify a standalone native/delivery/publication source witness."""
     with opened_private_checkpoint_unlocked(bus, marker) as source:

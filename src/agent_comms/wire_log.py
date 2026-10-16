@@ -762,9 +762,9 @@ class WireLog:
             or stat.S_IMODE(marker_info.st_mode) != 0o600
         ):
             raise RelationViolationError("Claim bus read barrier is not durable and private.")
-        from .private_bus_checkpoint import opened_claim_source_unlocked
+        from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
-        with opened_claim_source_unlocked(self, private_marker, shared=shared) as source:
+        with opened_private_checkpoint_unlocked(self, private_marker, shared=shared) as source:
             yield source
 
     @property
