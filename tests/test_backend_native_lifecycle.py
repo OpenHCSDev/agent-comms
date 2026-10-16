@@ -170,6 +170,7 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
                 assert not turn.done()
                 await asyncio.sleep(0.01)
         session = backend.TurnSession.active[turn]
+        forwarding = session.native.forwarding_task
 
         async def held_close(child, *, graceful):
             if child is session.native:
@@ -191,7 +192,8 @@ async def test_actual_native_cancelled_owner_stop_keeps_cleanup_custody(
         result = await asyncio.wait_for(turn, 10)
         assert not result[-1].ok
         assert not session.native.proc.alive()
-        assert session.native.stderr_task.done() and session.native.forwarding_task.done()
+        assert session.native.stderr_task.done() and forwarding.done()
+        assert session.native.forwarding_task is None
         assert turn not in backend.TurnSession.active
         assert owner.provider.posts == len(owner.saved_inputs()) == 1
     finally:

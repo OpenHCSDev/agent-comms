@@ -73,9 +73,10 @@ class PiSessionChild:
 
     async def finish_input(self) -> None:
         """Retire this input's ingress without retiring a retained idle child."""
-        if self.forwarding_task is not None:
-            self.forwarding_task.cancel()
-            await asyncio.gather(self.forwarding_task, return_exceptions=True)
+        forwarding, self.forwarding_task = self.forwarding_task, None
+        if forwarding is not None:
+            forwarding.cancel()
+            await asyncio.gather(forwarding, return_exceptions=True)
         self.reader.pending.cancel_all()
 
     async def shutdown(self, *, graceful: bool = False) -> ChildOutcome:
