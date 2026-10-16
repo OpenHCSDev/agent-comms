@@ -56,7 +56,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     assert send.type is InfoKind
     configured = parse(["configure", "--name", "a", "--service-tier", "standard"])
     assert configured.service_tier is ServiceTier.STANDARD
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError, match="invalid choice"):
         parser.parse_args(["configure", "--name", "a", "--service-tier", "fast"])
     restart = parse(["restart", "--all"])
     assert restart.all_ is True
@@ -200,6 +200,32 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
     finally:
         await proxy.close()
         await server.close()
+
+
+def test_history_cli_requires_exactly_one_scope_and_defaults_to_fifty(tmp_path, capsys, monkeypatch):
+    parser = build_parser()
+    with pytest.raises(ValueError, match="one of the arguments"):
+        parser.parse_args(["history"])
+    with pytest.raises(ValueError, match="not allowed with argument"):
+        parser.parse_args(["history", "--everything", "--channel", "#team"])
+
+    comms = Comms(tmp_path / "wire")
+    for name in ("alice", "bob"):
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+    for index in range(55):
+        comms.messaging.send("alice", "bob", f"page {index:02d}")
+    monkeypatch.delenv(ROOT_ID_ENV, raising=False)
+    monkeypatch.delenv(PACKAGE_ENV, raising=False)
+    args = ["--root", str(comms.root), "history", "--with", "bob", "--as", "alice"]
+    assert main(args) == 0
+    first = json.loads(capsys.readouterr().out)
+    assert len(first["dm"]) == 50
+    assert [row["text"] for row in first["dm"]] == [f"page {i:02d}" for i in range(54, 4, -1)]
+    assert first["has_older"] and first["before"] == 6
+    assert main([*args, "--before", str(first["before"])]) == 0
+    older = json.loads(capsys.readouterr().out)
+    assert [row["text"] for row in older["dm"]] == [f"page {i:02d}" for i in range(4, -1, -1)]
+    assert not older["has_older"]
 
 
 @pytest.mark.parametrize(
