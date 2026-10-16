@@ -126,18 +126,25 @@ def test_explicit_carry_preserves_bytes_and_recovers_current_and_used_operations
     previous_checkpoint(comms)
     checkpoint = _path(comms.bus.log.path)
     checkpoint_bytes = checkpoint.read_bytes()
+    metadata_bytes = comms.bus.log.metadata_path.read_bytes()
     with pytest.raises(RelationViolationError, match='checkpoint schema'):
         comms.bus.log.claim_projection()
     plan = carry(comms.bus.log.path)
     assert not plan['applied'] and not plan['already_carried']
     assert checkpoint.read_bytes() == checkpoint_bytes and comms.bus.log.path.read_bytes() == bus_bytes
-    applied = carry(comms.bus.log.path, apply=True)
+    backup = tmp_path / 'migration-backup'
+    applied = carry(comms.bus.log.path, apply=True, backup=backup)
     assert applied['applied'] and applied['bus_bytes_rewritten'] == 0
+    assert (backup / checkpoint.name).read_bytes() == checkpoint_bytes
+    assert (backup / comms.bus.log.metadata_path.name).read_bytes() == metadata_bytes
     assert comms.bus.log.path.read_bytes() == bus_bytes
     with Comms(comms.root).bus.log.certified_read() as source:
         assert source.claim_operation_used(admission.operation_id)
         assert all(source.claim(str(path)).seq == original.seq for path in paths[:2])
     assert carry(comms.bus.log.path, apply=True)['already_carried']
+    with pytest.raises(RelationViolationError, match='already applied'):
+        carry(comms.bus.log.path, apply=True, backup=tmp_path / 'second-attempt')
+    assert not (tmp_path / 'second-attempt').exists()
 
 
 def test_carry_refuses_a_foreign_schema_without_changing_anything(tmp_path):
