@@ -129,8 +129,11 @@ class MessageNotification:
         sources = log.deliveries_for_references(references)
         from .notification_assignment import NotificationAssignment
 
-        projected = cls.delivery_window(
-            root, registry, sources, NotificationAssignment.read(root, sources)
+        projected = (
+            cls.delivery_window(
+                root, registry, sources, NotificationAssignment.read(root, sources),
+                document=ReadLedger(root / ReadLedger.filename).read(),
+            ) if sources else {}
         )
         return {(message.seq,message.message_id):projected.get((message.seq,message.message_id), ())
                 for message in messages}
@@ -146,29 +149,36 @@ class MessageNotification:
         return cls.read_references(
             log,
             references,
-            lambda sources: cls.delivery_window(
-                root, registry, sources, NotificationAssignment.read(root, sources)
+            lambda sources, document: cls.delivery_window(
+                root, registry, sources, NotificationAssignment.read(root, sources),
+                document=document,
             ),
         )
 
     @classmethod
     def read_references(
         cls, log: WireLog, references: Sequence[MessageReference],
-        project: Callable[[Sequence[CommittedDelivery]], dict[tuple[int, str], tuple[MessageNotification, ...]]],
+        project: Callable[[Sequence[CommittedDelivery], ReadDocument], dict[tuple[int, str], tuple[MessageNotification, ...]]],
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
-        """Share bounded original delivery acquisition across live/recorded cuts."""
+        """Share bounded deliveries and one read document across live/recorded cuts."""
         result = {}
+        document = None
         for start in range(0, len(references), cls.window_limit):
             sources = log.deliveries_for_references(
                 references[start : start + cls.window_limit]
             )
-            result.update(project(sources))
+            if not sources:
+                continue
+            if document is None:
+                document = ReadLedger(log.path.with_name(ReadLedger.filename)).read()
+            result.update(project(sources, document))
         return result
 
     @classmethod
     def delivery_window(
         cls, root: Path, registry: Registration, sources: Sequence[CommittedDelivery],
-        assignment_read: NotificationAssignmentRead, *, owner_lookup: str | None = None,
+        assignment_read: NotificationAssignmentRead, *, document: ReadDocument,
+        owner_lookup: str | None = None,
     ):
         """Project the original frozen audience even before handling is recorded."""
         from .agent_activity import AgentActivity
@@ -183,7 +193,7 @@ class MessageNotification:
         )
         return cls.project_delivery_window(
             root, snapshot, sources, observations,
-            owner_lookup=owner_lookup, assignment_read=assignment_read,
+            owner_lookup=owner_lookup, assignment_read=assignment_read, document=document,
         )
 
     @staticmethod
@@ -195,7 +205,7 @@ class MessageNotification:
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
-                                 sources: Sequence[CommittedDelivery]):
+                                 sources: Sequence[CommittedDelivery], document: ReadDocument):
         from .agent_activity import RecordedRecipientActivity
         from .notification_assignment import NotificationAssignment
 
@@ -205,14 +215,14 @@ class MessageNotification:
         }
         return cls.project_delivery_window(
             root, namespace, sources, observations,
-            assignment_read=NotificationAssignment.read(root, sources),
+            assignment_read=NotificationAssignment.read(root, sources), document=document,
         )
 
     @classmethod
     def project_delivery_window(
         cls, root: Path, snapshot: RegistryProvenance,
         sources: Sequence[CommittedDelivery], observations: Mapping[str, RecipientActivity],
-        *, assignment_read: NotificationAssignmentRead,
+        *, assignment_read: NotificationAssignmentRead, document: ReadDocument,
         owner_lookup: str | None = None,
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Original assignment and read authorities own both display projections."""
@@ -226,7 +236,6 @@ class MessageNotification:
             return {}
         rows = assignment_read.resolve(root)
         reads = ReadLedger(root / ReadLedger.filename)
-        document = reads.read()
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
@@ -333,10 +342,13 @@ class MessageNotification:
         """Project outcomes from the caller's original certified source window."""
         from .bus_publication import stable_thread_lookup
 
+        if not sources:
+            return ()
         projected = cls.delivery_window(
             root, registry, sources,
             owner_lookup=stable_thread_lookup(owner.created_at),
             assignment_read=assignment_read,
+            document=ReadLedger(root / ReadLedger.filename).read(),
         )
         return tuple(
             replace(notification, message=source.message)
