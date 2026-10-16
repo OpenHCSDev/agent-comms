@@ -95,6 +95,12 @@ class TrackedTerminal(ABC):
     def later_input(self, parts: list[str]) -> TrackedTerminal:
         return PendingTrackedTerminal()
 
+    def notification(self, parts: list[str]) -> TrackedTerminal:
+        return self.later_input(parts).keep_response()
+
+    def keep_response(self) -> TrackedTerminal:
+        return UnansweredNotifiedTrackedTerminal()
+
     @abstractmethod
     def require_response(self, parts: list[str]) -> str: ...
 
@@ -140,6 +146,31 @@ class AnsweredTrackedTerminal(TrackedTerminal):
 
     def require_response(self, parts):
         return self.text
+
+    def keep_response(self):
+        return NotifiedTrackedTerminal(self.text)
+
+
+class NotificationTrackedTerminal(TrackedTerminal):
+    """Notice handling cannot answer or revise the original requested task."""
+
+    def append(self, text):
+        return self
+
+    def tool_round(self):
+        return self
+
+    def notification(self, parts):
+        return self
+
+
+class NotifiedTrackedTerminal(NotificationTrackedTerminal, AnsweredTrackedTerminal):
+    def later_input(self, parts):
+        return AnsweredTrackedTerminal(self.text)
+
+
+class UnansweredNotifiedTrackedTerminal(NotificationTrackedTerminal, PendingTrackedTerminal):
+    pass
 
 
 class AmbiguousTrackedTerminal(PendingTrackedTerminal):
@@ -481,9 +512,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         matched, input_id = self.inputs.mark_started(self, event)
         if not matched:
             raise NativePiUnavailable("Native Pi started a user message this turn did not send")
-        self.terminal = self.terminal.later_input(self.text_parts)
+        source = await self.following.started(input_id)
+        self.terminal = source.continue_response(self.terminal, self.text_parts)
         self.text_parts.clear()
-        await self.following.started(input_id)
 
     @handles(pi.ContextCommitted)
     async def committed_context(self, event: pi.ContextCommitted) -> None:
@@ -519,10 +550,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     @handles(pi.NativeRetryEnd)
     async def native_retry_finished(self, event: pi.NativeRetryEnd) -> None:
         event.outcome.finish_request(self)
-
-    def request_retried(self) -> None:
-        super().request_retried()
-        self.terminal = PendingTrackedTerminal()
 
     async def context_proof(self) -> NativeContextProof:
         if not self.admission.acknowledged:

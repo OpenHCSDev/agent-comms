@@ -13,7 +13,7 @@ class NativeRunState {
     constructor(owner, attempt = 1) { this.owner = owner; this.attempt = attempt; }
     get retrying() { return false; }
     refusal() { return undefined; }
-    started() { return this; }
+    started() { return new NothingProduced(this.owner); }
     produced() { return this; }
     finished() { return this; }
     close() {}
@@ -21,14 +21,15 @@ class NativeRunState {
 }
 
 class NothingProduced extends NativeRunState {
+    started() { return this; }
     produced() { return new OutputProduced(this.owner, this.attempt); }
     terminal() { return new ClosedNothingProduced(this.owner, this.attempt); }
     finished(message) {
         // One decision constructs the state for this refusal. Retryable and
         // terminal states then own disjoint behavior without checking a flag.
         if (!this.owner.tracked) return this;
-        const reason = this.owner.retryReason(message);
-        if (reason === undefined) return this.terminal(message);
+        if (!this.owner.retryable(message)) return this.terminal(message);
+        const reason = message.errorMessage || 'Provider request failed';
         return (this.attempt < RecoveryBudget.attempts
             ? new RefusedNothingProduced(this.owner, this.attempt, reason)
             : new FailedProviderRequest(this.owner, this.attempt, reason)
@@ -43,16 +44,18 @@ class RecoveringNothingProduced extends NothingProduced {
         return super.produced();
     }
     terminal(message) {
-        this.owner.finishRetry(false, message?.errorMessage, this.attempt - 1);
+        // A clean provider stop completes recovery. Whether its text answers
+        // the selected task belongs to Core's TrackedTerminal, not this run.
+        const success = message?.stopReason === 'stop';
+        this.owner.finishRetry(success, success ? undefined :
+            (message?.errorMessage || 'Provider retry closed before completing'), this.attempt - 1);
         return super.terminal();
     }
     close() { this.owner.state = this.terminal(); }
 }
 
-/** A completed request does not make later provider requests unsafe to retry. */
-class OutputProduced extends NativeRunState {
-    started() { return new NothingProduced(this.owner); }
-}
+/** Both completed states use the next request's own production and retry window. */
+class OutputProduced extends NativeRunState {}
 class ClosedNothingProduced extends NativeRunState {}
 
 class RefusedNothingProduced extends RecoveringNothingProduced {
@@ -149,11 +152,6 @@ export class NativeTurnRun {
     }
     get tracked() { return this.inputs.size > 0; }
     get retrying() { return this.state.retrying; }
-    retryReason(message) {
-        if (this.retryable(message)) return message.errorMessage || 'Provider request failed';
-        if (message.stopReason === 'stop') return 'Provider returned no authoritative response';
-        return undefined;
-    }
     include(messages, claims) {
         for (const message of messages) {
             if (message.role === 'user' && claims.has(message.inputId)) this.inputs.add(message.inputId);
