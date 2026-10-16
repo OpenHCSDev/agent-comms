@@ -431,14 +431,22 @@ class ActivityLog(ThreadOwnedState):
             return Activity(thread=thread, state=ActivityState.IDLE, timestamp=latest.timestamp)
         return latest
 
-    def all_current(self, *, active: frozenset[str] = frozenset(),
-                    threads: Iterable[str] = ()) -> dict[str, Activity]:
-        """Latest activity per thread (idle included for known threads)."""
-        result = self._read_snapshot().latest
+    def all_current(self, *, active: frozenset[str] = frozenset()) -> dict[str, Activity]:
+        """Latest activity for every observed thread."""
+        latest = self._read_snapshot().latest
+        return self._current_for(latest, latest, active)
+
+    def current_for(self, threads: Iterable[str], *,
+                    active: frozenset[str] = frozenset()) -> dict[str, Activity]:
+        """Latest activity for the selected thread names, including absent ones."""
+        return self._current_for(threads, self._read_snapshot().latest, active)
+
+    def _current_for(self, threads: Iterable[str], events: Mapping[str, Activity],
+                     active: frozenset[str]) -> dict[str, Activity]:
         now = time.time()
         return {
-            thread: self._observed(thread, result, active=thread in active, now=now)
-            for thread in dict.fromkeys((*result, *threads))
+            thread: self._observed(thread, events, active=thread in active, now=now)
+            for thread in dict.fromkeys(threads)
         }
 
     def _read_snapshot(self) -> ActivitySnapshot:

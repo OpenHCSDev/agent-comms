@@ -11,7 +11,7 @@ from abc import abstractmethod
 
 from .declared_family import DeclaredFamily
 from .coordination_errors import PublicationUncertain
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 from .field_codec import FieldCodec
 from .goal_states import ActiveGoal, GoalState
@@ -24,12 +24,15 @@ _LOG = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class GoalRef:
-    owner: ThreadIncarnation
+    owner: RecordedThreadIncarnation
     goal_id: str
 
     def __post_init__(self):
         self.owner.require_recorded()
         GoalRevision(self.goal_id, 0)
+
+    def same_order(self, other: GoalRef) -> bool:
+        return self.goal_id == other.goal_id and self.owner.same_publication_birth(other.owner)
 
     def current(self, snapshot) -> Goal | None:
         if not self.owner.current(snapshot):
@@ -42,19 +45,6 @@ class GoalRef:
         if goal is None:
             raise ValueError("Goal reference is no longer current.")
         return goal
-
-    def end_current(self, goals, completed) -> None:
-        """Free this exact order's slot; retain it in the existing Goal journal."""
-        from .goal_actions import (
-            ClearGoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable,
-        )
-
-        snapshot = goals.registry.snapshot()
-        goal = self.current(snapshot)
-        if goal is not None:
-            thread = snapshot.require(self.owner.name)
-            ClearGoalAction(expect=GoalPrecondition(expected_goal=goal))._apply_locked(
-                GoalActionContext(goals, thread, RuntimeInvocable, completed=completed))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -126,11 +116,11 @@ class ResolvedMentionBinding(GoalMentionBinding):
 
     def __post_init__(self):
         super().__post_init__()
-        ThreadIncarnation(self.peer_name, self.peer_created_at)
+        RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
     @property
     def peer(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.peer_name, self.peer_created_at)
+        return RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
     def project(self, registry, owner, goal, source):
         from .relationships import GoalDerivedContact, GoalMentionDiagnostic
@@ -260,7 +250,7 @@ class GoalMentionSource:
 
         GoalRevision(self.goal_id, self.text_revision)
         TextDigest(self.text_digest)
-        ThreadIncarnation(self.owner_name, self.owner_created_at)
+        RecordedThreadIncarnation(self.owner_name, self.owner_created_at)
 
     @property
     def checkpoint(self) -> GoalRevision:
@@ -274,7 +264,7 @@ class GoalMentionSource:
 
     @property
     def incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.owner_name, self.owner_created_at)
+        return RecordedThreadIncarnation(self.owner_name, self.owner_created_at)
 
     def matches(self, goal, owner, registry) -> bool:
         if self.goal_id != goal.id or self.text_revision > goal.revision:

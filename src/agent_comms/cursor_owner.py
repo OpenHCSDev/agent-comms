@@ -6,7 +6,6 @@ import sqlite3
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .bus_publication import stable_thread_lookup
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
@@ -39,7 +38,7 @@ class CursorOwner(RegistryOwner):
 
     @property
     def lookup(self) -> str:
-        return stable_thread_lookup(self.thread.created_at)
+        return self.thread.incarnation.lookup
 
     def require_live(self, bus: MessageBus, registry: RegistrySnapshot, reason: str) -> None:
         if bus.log._private_marker_unlocked().root_id != self.wire_root_id:

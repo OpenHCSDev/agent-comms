@@ -114,15 +114,10 @@ class OwnedTurn:
         self.thread_name = self.thread.name
         wait = self.runner.comms.goals.goal_wait(self.thread_name)
         active_goal = self.thread.active_goal
-        if (
-            wait is not None
-            and not self.original_owner_input
-            and wait.wait_id != self.dependency_wait_id
-        ):
-            return
-        if self.dependency_wait_id is not None and (
-            wait is None or wait.wait_id != self.dependency_wait_id
-        ):
+        if self.dependency_wait_id is not None:
+            if not wait.matches_id(self.dependency_wait_id):
+                return
+        elif not wait.allows_routed_input() and not self.original_owner_input:
             return
         if self.original_owner_input and self.original_goal_id != (
             active_goal.id if active_goal is not None else None

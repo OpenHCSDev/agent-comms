@@ -21,13 +21,13 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .goal_actions import (
-    CompletedGoalAction, GoalActionContext, GoalPrecondition,
+    ClearGoalAction, CompletedGoalAction, GoalActionContext, GoalPrecondition,
     RuntimeInvocable, SetGoalAction,
 )
 from .goal_mentions import bind_goal_mentions
 from .goals import Goal, GoalAuthor, GoalRef
 from .recorded_time import RecordedEventTime
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation
 from .typed_table import Column, TypedRow, TypedTable, sql_literal
 
 if TYPE_CHECKING:
@@ -137,14 +137,14 @@ class AcceptanceCheck:
 @dataclass(frozen=True, slots=True)
 class Assignment:
     goal: GoalRef
-    parent: ThreadIncarnation
+    parent: RecordedThreadIncarnation
 
     def __post_init__(self):
         self.parent.require_recorded()
         _text(self.generation, "Assignment generation", 128)
 
     @property
-    def owner(self) -> ThreadIncarnation:
+    def owner(self) -> RecordedThreadIncarnation:
         return self.goal.owner
 
     @property
@@ -154,7 +154,7 @@ class Assignment:
         return self.goal.goal_id
 
     def require_successor(self, proposed: Assignment, current: Todo):
-        if self.generation == proposed.generation or self.owner == proposed.owner:
+        if self.generation == proposed.generation or self.owner.same_publication_birth(proposed.owner):
             raise TodoConflict(current)
 
 
@@ -335,7 +335,7 @@ class ReleaseTodoChange(TodoOperation):
 @dataclass(frozen=True)
 class ChangeTodoState(TodoOperation):
     state: type[TodoState]
-    actor: ThreadIncarnation
+    actor: RecordedThreadIncarnation
 
     def decide(self, current):
         return current.state.change(current, self)
@@ -355,7 +355,7 @@ class Todo(TypedTable):
     id: str = field(metadata={"sql": Column(primary_key=True)})
     repo: str
     text: str
-    creator: ThreadIncarnation
+    creator: RecordedThreadIncarnation
     created_at: float
     where: TodoWhere
     acceptance: AcceptanceCheck
@@ -366,12 +366,13 @@ class Todo(TypedTable):
     assignment: TodoAssignment
     last_change: TodoChangeRecord
 
-    def require_revision(self, expected: int):
+    def require_revision(self, expected: int) -> None:
         if self.revision != expected:
             raise TodoConflict(self)
 
-    def require_actor(self, actor: ThreadIncarnation):
-        if self.creator != actor and self.assignment.require_assigned(self).owner != actor:
+    def require_actor(self, actor: RecordedThreadIncarnation):
+        if (not self.creator.same_publication_birth(actor)
+                and not self.assignment.require_assigned(self).owner.same_publication_birth(actor)):
             raise TodoConflict(self)
 
     def order_result(self, goals: Goals) -> dict[str, object]:
@@ -395,7 +396,7 @@ class TodoRef:
 
     def require_current(self, root: Path, goal: GoalRef) -> Todo:
         current = self.read(root)
-        if current.assignment.require_assigned(current).goal != goal:
+        if not current.assignment.require_assigned(current).goal.same_order(goal):
             raise TodoConflict(current)
         return current
 
@@ -414,7 +415,7 @@ class TodoRef:
 
 @dataclass(frozen=True)
 class CommandedGoalAuthor(GoalAuthor):
-    thread: ThreadIncarnation
+    thread: RecordedThreadIncarnation
     issued_at: float
     todo: TodoRef
     revisions: int = 0
@@ -488,7 +489,7 @@ class TransferredGoalAuthor(CommandedGoalAuthor):
 
 @dataclass(frozen=True, kw_only=True)
 class OrderGoalAction(SetGoalAction):
-    author: ThreadIncarnation
+    author: RecordedThreadIncarnation
     todo: TodoRef
     goal_id: str
     preserve_wait = True
@@ -544,12 +545,11 @@ class _TodoTable(TypedRow):
     name: str
 
 
-def _participant(thread: Thread) -> ThreadIncarnation:
-    thread.incarnation.require_recorded()
-    return thread.incarnation
+def _participant(thread: Thread) -> RecordedThreadIncarnation:
+    return thread.incarnation.require_recorded()
 
 
-def _thread(thread: Thread) -> ThreadIncarnation:
+def _thread(thread: Thread) -> RecordedThreadIncarnation:
     thread.role.require_executable()
     return _participant(thread)
 
@@ -679,7 +679,7 @@ class TodoStore:
                 todo=TodoRef(todo_id), goal_id=proposed.generation, previous=previous.goal)
             order.require_target(goals, proposed.goal)
             result = self._apply(todo_id, TransferTodoChange(expected_revision, previous, proposed))
-            previous.goal.end_current(goals, completed)
+            ClearGoalAction.end_current(previous.goal, goals=goals, completed=completed)
             order.issue(goals, proposed, completed)
             return result
 
@@ -687,7 +687,7 @@ class TodoStore:
                  progress: GoalProgress, goals: Goals, actor_kind: type) -> Todo:
         current = self.get(todo_id)
         assignment = current.assignment.require_assigned(current)
-        if assignment.owner != _participant(actor):
+        if not assignment.owner.same_publication_birth(_participant(actor)):
             raise TodoConflict(current)
         command = CompleteTodo(expected_revision, assignment)
         if current.last_change.matches(command):
@@ -702,7 +702,7 @@ class TodoStore:
                 goals: Goals) -> Todo:
         with goals.writing() as completed:
             result = self._apply(todo_id, ReleaseTodoChange(expected_revision, previous))
-            previous.goal.end_current(goals, completed)
+            ClearGoalAction.end_current(previous.goal, goals=goals, completed=completed)
             return result
 
     def set_state(self, todo_id: str, *, expected_revision: int, state: type[TodoState],

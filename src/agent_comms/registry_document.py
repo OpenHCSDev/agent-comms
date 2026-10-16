@@ -4,20 +4,27 @@ from __future__ import annotations
 
 import math
 import time
-from typing import TYPE_CHECKING
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
+from typing import TYPE_CHECKING
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
-from .registration_change import InitialRegistration, NativeSourcePublication, RegistrationChange, UpdatedRegistration
-from .routing import TurnRouting
+from .registration_change import (
+    InitialRegistration,
+    NativeSourcePublication,
+    RegistrationChange,
+    UpdatedRegistration,
+)
+from .registry_provenance import RegisteredRecipient, RegistryNames, RegistryProvenance, RetiredRecipient
 from .restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
     OwnerGenerationChangedRefusal,
 )
+from .routing import TurnRouting
 from .thread_identity import AdmissionIdentity, GenerationCounter, OwnerIdentity
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
@@ -26,11 +33,12 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
-from .registry_provenance import RegistryNames, RegistryProvenance
 from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnState
 from .turn_phase import TurnPhase
 
 if TYPE_CHECKING:
+    from .audience_manifest import FrozenRecipient
+    from .bus_publication import CommittedDelivery
     from .native_input_owner import RegistryOwner
 
 
@@ -84,14 +92,7 @@ class RegistryDocument(RegistryPresence):
         )
 
     def snapshot(self) -> RegistrySnapshot:
-        return RegistrySnapshot(
-            threads=dict(self.threads),
-            statuses=dict(self.statuses),
-            last_seen=dict(self.last_seen),
-            aliases=dict(self.aliases),
-            owner_generations=dict(self.owners.generations),
-            admission_generations=dict(self.admissions.generations),
-        )
+        return RegistrySnapshot.capture(self)
 
     def entry(self, name: str) -> RegistryEntry:
         thread = self.require(name)
@@ -531,6 +532,57 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
+    by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        super(RegistrySnapshot, self).__post_init__()
+        seen: set[str] = set()
+        for thread in self.threads.values():
+            lookup = thread.incarnation.require_recorded().lookup
+            if lookup in seen:
+                raise RelationViolationError("Registry creation identities collide.")
+            seen.add(lookup)
+            if self.by_lookup.get(lookup) is not thread:
+                raise RelationViolationError("Snapshot lookup index differs from its threads.")
+        if len(seen) != len(self.by_lookup):
+            raise RelationViolationError("Snapshot lookup index includes an unregistered thread.")
+
+    @classmethod
+    def capture(cls, document: RegistryDocument) -> RegistrySnapshot:
+        """One live registry cut owns the index and all its source maps."""
+        indexed: dict[str, Thread] = {}
+        for thread in document.threads.values():
+            incarnation = thread.incarnation.require_recorded()
+            lookup = incarnation.lookup
+            indexed[lookup] = thread
+        return cls(
+            threads=MappingProxyType(dict(document.threads)),
+            statuses=MappingProxyType(dict(document.statuses)),
+            last_seen=MappingProxyType(dict(document.last_seen)),
+            aliases=MappingProxyType(dict(document.aliases)),
+            owner_generations=MappingProxyType(dict(document.owners.generations)),
+            admission_generations=MappingProxyType(dict(document.admissions.generations)),
+            by_lookup=MappingProxyType(indexed),
+        )
+
+    def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
+        if not reads.human(thread.role):
+            return ()
+        return super().displayed_recipient_effect(reads, message, thread, document=document)
+
+    def recipient(
+        self, recipient: FrozenRecipient, original: CommittedDelivery
+    ) -> RegisteredRecipient | RetiredRecipient:
+        """A missing live thread was retired only if the original send names it."""
+        lookup = recipient.recipient_lookup
+        thread = self.by_lookup.get(lookup)
+        if thread is not None:
+            if thread.name != self.canonical_name(recipient.canonical_thread):
+                raise RelationViolationError("Frozen recipient name does not match its lookup.")
+            return RegisteredRecipient(thread)
+        if recipient not in original.audience.recipients:
+            raise UnregisteredThreadError("Recipient lookup is not in the original message.")
+        return RetiredRecipient(lookup)
 
     def retired(self, name: str) -> bool:
         """Removal keeps the name's generations; they are the deletion record."""
@@ -548,11 +600,6 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         return {
             alias: self.aliases[alias] for alias in unoccupied if self.aliases[alias] in matching
         }
-
-    def require_unambiguous_ownership(self) -> None:
-        """Archived identities remain readable; publication requires unique owners."""
-        if len({thread.created_at for thread in self.threads.values()}) != len(self.threads):
-            raise RelationViolationError("Registry creation identities collide.")
 
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.canonical_name(name)
@@ -584,6 +631,9 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             raise RelationViolationError("Stopping owner was removed") from error
         if current.incarnation != expected.incarnation:
             raise RelationViolationError("Stopping owner incarnation changed")
-        current.require_local_process(expected.require_process())
+        expected.role.require_executable()
+        current.role.require_executable()
+        if current.process_identity != expected.process_identity:
+            raise RelationViolationError("Stopping owner process changed")
         if self.admission_generations[expected.name] != admission:
             raise RelationViolationError("Stopping owner admission changed")

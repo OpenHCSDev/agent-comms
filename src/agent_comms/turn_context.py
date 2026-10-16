@@ -940,8 +940,8 @@ class ContextTurn(DeclaredFamily, affix="ContextTurn"):
         previous = other.require_recorded()
         return (selected.identity == previous.identity
                 and selected.occurrence.generation == previous.occurrence.generation
-                and selected.occurrence.incarnation.created_at
-                == previous.occurrence.incarnation.created_at)
+                and selected.occurrence.incarnation.require_recorded().created_at
+                == previous.occurrence.incarnation.require_recorded().created_at)
 
     def matches_generation(self, generation: int) -> bool:
         return False

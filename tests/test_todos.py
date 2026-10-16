@@ -10,14 +10,14 @@ import time
 import pytest
 
 from agent_comms.comms import Comms
-from agent_comms.goal_actions import CompletedGoalAction, GoalPrecondition, OwnerInvocable, SetGoalAction
+from agent_comms.goal_actions import ClearGoalAction, CompletedGoalAction, GoalPrecondition, OwnerInvocable, SetGoalAction
 from agent_comms.goal_progress import GoalReport, ReportedGoalProgress, WorksInApp
 from agent_comms.goals import Deadline, GoalRef
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     AcceptanceCheck, Assignment, BlockedTodoState, DoneTodoState, OpenTodoState,
-    SourceTodoWhere, TodoConflict, TodoError, TodoStore, UnassignedTodoAssignment,
+    SourceTodoWhere, TodoConflict, TodoError, TodoRef, TodoStore, UnassignedTodoAssignment,
 )
 
 
@@ -126,7 +126,7 @@ def test_transfer_frees_old_slot_preserves_history_and_is_exactly_repeatable(tod
     reused = assign(todo_comms, "todo-2", generation="next-order-a")
     assert store.transfer("todo-1", **kwargs) == moved
     with todo_comms.goals.writing() as completed:
-        previous.goal.end_current(todo_comms.goals, completed)
+        ClearGoalAction.end_current(previous.goal, goals=todo_comms.goals, completed=completed)
     assert reused.assignment.require_assigned(reused).goal.require_current(todo_comms.registry).id == "next-order-a"
     with pytest.raises(TodoConflict):
         store.release("todo-1", expected_revision=3, previous=previous, goals=todo_comms.goals)
@@ -225,8 +225,30 @@ def test_goal_reference_never_rebinds_to_a_recreated_owner(todo_comms: Comms):
     with pytest.raises(ValueError, match="no longer current"):
         reference.require_current(todo_comms.registry)
     with todo_comms.goals.writing() as completed:
-        reference.end_current(todo_comms.goals, completed)
+        ClearGoalAction.end_current(reference, goals=todo_comms.goals, completed=completed)
     assert todo_comms.registry.require("worker-a").require_goal() == replacement
+
+
+def test_renames_preserve_problem_authority_and_order_identity(todo_comms: Comms):
+    create(todo_comms)
+    assigned = assign(todo_comms)
+    previous = assigned.assignment.require_assigned(assigned)
+    todo_comms.registry.rename("lead", "captain")
+    todo_comms.registry.rename("worker-a", "unit")
+    unit = todo_comms.registry.require("unit")
+    reference = GoalRef(unit.incarnation.require_recorded(), "order-a")
+    assert TodoRef("todo-1").require_current(todo_comms.root, reference) == assigned
+    store = TodoStore(todo_comms.root)
+    captain = todo_comms.registry.require("captain")
+    store.set_state("todo-1", expected_revision=2, state=BlockedTodoState,
+                    actor=captain, goals=todo_comms.goals)
+    store.set_state("todo-1", expected_revision=3, state=OpenTodoState,
+                    actor=unit, goals=todo_comms.goals)
+    moved = store.transfer("todo-1", expected_revision=4, previous=previous,
+        owner=todo_comms.registry.require("worker-b"), parent=captain,
+        generation="after-rename", deadline=Deadline(time.time()+3600), goals=todo_comms.goals)
+    assert moved.revision == 5 and todo_comms.registry.require("unit").goal is None
+    assert todo_comms.registry.require("worker-b").require_goal().id == "after-rename"
 
 
 def test_declared_problem_location_and_reference_validation(todo_comms: Comms):
@@ -234,7 +256,7 @@ def test_declared_problem_location_and_reference_validation(todo_comms: Comms):
     with pytest.raises(TodoError):
         SourceTodoWhere(str(source), 99).require_source(todo_comms.bus)
     with pytest.raises(ValueError):
-        GoalRef(ThreadIncarnation("worker-a", float("nan")), "order-a")
+        GoalRef(RecordedThreadIncarnation("worker-a", float("nan")), "order-a")
     assignment = Assignment(GoalRef(todo_comms.registry.require("worker-a").incarnation, "order-a"),
                             todo_comms.registry.require("lead").incarnation)
     assert assignment.owner == assignment.goal.owner and assignment.generation == assignment.goal.goal_id

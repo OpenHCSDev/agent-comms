@@ -991,6 +991,11 @@ class StatusCliCommand(CliCommand):
     help = "Live activity: what each thread is doing right now"
 
     def apply(self, ctx: Comms) -> Any:
+        snapshot = ctx.registry.snapshot()
+        running = (
+            thread for name, thread in snapshot.threads.items()
+            if snapshot.statuses[name].active
+        )
         return {
             "status": [
                 {
@@ -999,7 +1004,9 @@ class StatusCliCommand(CliCommand):
                     "detail": activity.detail,
                     "ts": activity.timestamp,
                 }
-                for thread, activity in sorted(ctx.agents.all_activity().items())
+                for thread, activity in sorted(
+                    ctx.agents.all_activity(running, snapshot=snapshot).items()
+                )
             ]
         }
 

@@ -10,12 +10,15 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .registration import Registration
 from .native_input_owner import RegistryOwner
+from .notification_progress import AcknowledgedProgress
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
-    from .notification_assignment import AssignmentProgress
+    from .registration import Registration
+    from .registry_document import RegistrySnapshot
+    from .bus_publication import CommittedDelivery
+    from .notification_progress import AssignmentProgress
     from .presentation import MessageNotification
 from .activity import (
     Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity,
@@ -23,7 +26,6 @@ from .activity import (
 from .declared_family import DeclaredFamily
 from .audience_manifest import FrozenRecipient
 from .errors import RelationViolationError
-from .registry_document import RegistrySnapshot
 from .routing import TurnRouting
 from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock
@@ -46,7 +48,7 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
 
     def displayed_recipient(self, notification, source, reads, document, snapshot):
         return reads.displayed_recipient(
-            source.message, notification.recipient_identity, snapshot, document=document
+            source, notification.recipient_identity, snapshot, document=document
         )
 
     def selected_response(
@@ -82,6 +84,7 @@ class ExternalRecipientActivity(RecipientActivity):
                 notification,
                 state="Acknowledged",
                 detail="",
+                progress=AcknowledgedProgress(),
                 priority=2,
                 busy=False,
                 changed=True,
@@ -139,30 +142,31 @@ class AgentActivity:
         activity = ObservedActivity.acquire(event, owner)
         return participant.execution.project_activity(participant, activity)
 
-    def all_activity(self, *, snapshot: RegistrySnapshot | None = None) -> Mapping[str, ObservedActivity]:
-        snapshot = snapshot or self.registry.snapshot()
-        events = self.activity.all_current(
-            active=frozenset(name for name, thread in snapshot.threads.items() if thread.executing),
-            threads=snapshot.threads,
+    def all_activity(self, threads: Iterable[Thread], *, snapshot: RegistrySnapshot) -> Mapping[str, ObservedActivity]:
+        requested = {thread.name: thread for thread in threads}
+        if not requested:
+            return {}
+        events = self.activity.current_for(
+            requested,
+            active=frozenset(name for name, thread in requested.items() if thread.executing),
         )
         return {
             name: self._observed(thread, snapshot.owner_identity(name), events[name])
-            for name, thread in snapshot.threads.items()
+            for name, thread in requested.items()
         }
 
-    def observe_recipients(self, recipients: Iterable[FrozenRecipient], *, snapshot: RegistrySnapshot) -> Mapping[str, RecipientActivity]:
-        """Acquire one bounded window's recipients from the original source snapshot."""
-        from .bus_publication import stable_thread_lookup
-
-        snapshot.require_unambiguous_ownership()
-        observations: dict[str, RecipientActivity] = {
-            recipient.recipient_lookup: UnavailableRecipientActivity() for recipient in recipients
-        }
-        for thread in snapshot.threads.values():
-            lookup = stable_thread_lookup(thread.created_at)
-            if lookup not in observations:
+    def observe_recipients(
+        self, recipients: Iterable[tuple[CommittedDelivery, FrozenRecipient]], *,
+        snapshot: RegistrySnapshot,
+    ) -> Mapping[str, RecipientActivity]:
+        """Acquire one bounded window's recipients from the original sends."""
+        observations: dict[str, RecipientActivity] = {}
+        for original, recipient in recipients:
+            lookup = recipient.recipient_lookup
+            if lookup in observations:
                 continue
-            observations[lookup] = thread.execution.observe_recipient(self, snapshot, thread)
+            selected = snapshot.recipient(recipient, original)
+            observations[lookup] = selected.activity(self, snapshot)
         return observations
 
     def _emit_activity(self, activity: Activity, completed) -> None:

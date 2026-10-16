@@ -287,7 +287,7 @@ class MessageBus:
             with self.log.certified_read(blocking=blocking) as source:
                 marker = source.marker
                 rows = addressed_source_pointers_unlocked(
-                    self.log, marker, owner.incarnation.stable_thread_lookup()
+                    self.log, marker, owner.incarnation.lookup
                 )
         except (BlockingIOError, RelationViolationError):
             # Contention or a checkpoint/source change during the read; any
@@ -296,7 +296,7 @@ class MessageBus:
         if not rows:
             return ()
         first = {
-            relation.peer.stable_thread_lookup()
+            relation.peer.recorded_or(lambda peer: peer.lookup, lambda: None)
             for relation in relations
             if relation.relevance.grants(Prioritized)
         }

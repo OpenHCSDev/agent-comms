@@ -9,7 +9,7 @@ from .acp_extension import CoordinationChangedUpdate
 from .pi_vocabulary import ThinkingLevel
 from .registration import Registration
 from .runtime_info import AgentRuntimeInfo
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation
 from .thread_management import ThreadManagement
 from .agent_activity import AgentActivity
 
@@ -26,7 +26,7 @@ class ThreadConfiguration:
         info = self.agents.agent_info_of(thread.name)
         usage = AgentRuntimeInfo.optional_context_usage(info)
         return CoordinationChangedUpdate(
-            ThreadIncarnation(thread.name, thread.created_at),
+            RecordedThreadIncarnation(thread.name, thread.created_at),
             str(self.root.resolve()),
             os.getpid(),
             thread.worktree,
