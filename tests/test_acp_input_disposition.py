@@ -33,6 +33,7 @@ from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
+from stored_inputs import stored_inputs
 from test_backend_native_lifecycle import native_backend
 
 
