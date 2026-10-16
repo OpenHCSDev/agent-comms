@@ -77,6 +77,42 @@ def test_coding_names_and_argument_types_come_from_declarations():
         CodingCall.decode("call", "forged", {})
 
 
+@pytest.mark.parametrize("name,arguments", [
+    ("read", {"file_path": "x"}),
+    ("read", {"path": "x", "file_path": "x"}),
+    ("read", {"path": "x", "offset": None}),
+    ("read", {"path": "x", "limit": True}),
+    ("bash", {}),
+    ("bash", {"command": True}),
+    ("bash", {"command": "pwd", "timeout": "1"}),
+    ("edit", {"path": "x", "oldText": "old", "newText": "new"}),
+    ("edit", {"path": "x", "edits": []}),
+    ("edit", {"path": "x", "edits": [{"oldText": False, "newText": "new"}]}),
+    ("write", {"path": "x", "content": 3}),
+])
+def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
+    from agent_comms.native_tool_call import SelectedToolDenied
+
+    with pytest.raises(SelectedToolDenied):
+        CodingCall.decode("bad-argument-shape", name, arguments)
+
+
+@pytest.mark.parametrize("name,arguments", [
+    ("read", {"path": "x", "offset": 2, "limit": 3}),
+    ("bash", {"command": "pwd", "timeout": 2}),
+    ("edit", {"path": "x", "edits": [{"oldText": "old", "newText": "new"}]}),
+    ("write", {"path": "x", "content": "value"}),
+])
+def test_pi_argument_fields_own_roundtrip_and_display(name, arguments):
+    from dataclasses import fields
+    from agent_comms.tool_declaration import ToolDeclaration
+
+    call = CodingCall.decode("typed-argument-shape", name, arguments)
+    assert "arguments" not in {item.name for item in fields(call.tool)}
+    assert call.tool.arguments == arguments
+    assert call.tool.detail in ToolDeclaration.start("typed", name, arguments, detail=call.tool.detail).title
+
+
 @pytest.mark.asyncio
 async def test_multicall_native_transport_matches_events_and_refuses_duplicate(tmp_path):
     class Owner:

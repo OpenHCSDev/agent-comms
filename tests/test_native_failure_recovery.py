@@ -14,7 +14,6 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import native_pi
-from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_recovery import (
     RecoveryMonitorCapability,
     VerifiedOwnerLoss,
@@ -25,7 +24,6 @@ from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.selected_request import SelectedRequest
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
@@ -147,6 +145,36 @@ def test_recovery_refuses_released_but_live_owner(released_failure):
         with pytest.raises(RecoveryBlocked, match="release does not prove loss"):
             RecoveryMonitorCapability.recover_native_failure(store, execution_id, session_file)
         assert store.snapshots.get(execution_id).is_current
+
+
+@pytest.mark.parametrize("stop", ["stop", "error", "toolUse"])
+def test_restart_recovery_preserves_native_outcome_without_replaying(released_failure, stop):
+    from agent_comms.attempt_states import AttemptFailedAttempt, UnknownOutcomeAttempt
+    from agent_comms.comms import Comms
+    from agent_comms.restart_refusals import OwnerBusyRefusal
+
+    process, exit_allowed, root, execution_id, input_id, session_file = released_failure
+    leave(process, exit_allowed)
+    rows = [json.loads(line) for line in session_file.read_text().splitlines()]
+    rows[-1]["message"]["stopReason"] = stop
+    session_file.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    comms = Comms(root)
+    owner = comms.registry.require("beta")
+    with pytest.raises(OwnerBusyRefusal):
+        comms.owners.require_restart_idle(owner)
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        before = NativeRuntimeInput.one(store.session._connection, input_id=input_id)
+        result = RecoveryMonitorCapability.recover_released_native_attempt(store, execution_id).value
+        expected = UnknownOutcomeAttempt if stop == "toolUse" else AttemptFailedAttempt
+        assert type(result.attempt.lifecycle) is expected
+        assert not result.is_current
+        assert not result.can_retry
+        assert NativeRuntimeInput.one(store.session._connection, input_id=input_id) == before
+        assert not result.publication_receipts
+        assert not result.publication_intents
+    comms.owners.require_restart_idle(owner)
+    # Startup after settlement is a read, not another recovery or a replay.
+    RecoveryMonitorCapability.recover_owner(root, owner)
 
 
 @pytest.mark.parametrize(

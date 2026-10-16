@@ -113,7 +113,9 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
 
 
 def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path):
-    comms = wire(tmp_path)
+    from goal_owner_fixture import canonical_goal_wire
+
+    comms = canonical_goal_wire(tmp_path)
     register(comms, "owner")
     register(comms, "peer")
     comms.agents.begin_turn("peer", "peer-turn")
@@ -171,15 +173,18 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, fake_native_catalog
 ):
     from agent_comms.native_arguments import NativeArguments
 
-    configured_model = NativeArguments.parse(NativeArguments.default).model
+    arguments = ("--model", "test/model")
+    configured_model = NativeArguments.configured(arguments).model
     assert configured_model is not None
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = wire(tmp_path / "wire")
-    owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+    owner = CommsAgent(
+        comms, agent_bin="pi", agent_args=arguments, runtime_enabled=True, auto_wake=False
+    )
     from goal_owner_fixture import activate_empty_source
 
     activate_empty_source(owner)

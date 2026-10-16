@@ -2,6 +2,17 @@ from agent_comms.cli_bridges.codex_protocol import BusInput, ItemsPage
 from agent_comms.transcript_events import UserTranscript
 
 
+def _output(tmp_path):
+    from agent_comms.comms import Comms
+    from agent_comms.cli_bridges.shared import ThreadOutput
+    from agent_comms.thread_execution import ExternalThreadExecution
+    from agent_comms.threads import Thread
+
+    comms = Comms(tmp_path)
+    comms.registry.declare(Thread('cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    return ThreadOutput(comms.transcripts.external('cli'), comms.agents)
+
+
 def test_items_page_decodes_every_declared_user_input():
     # The JSON-RPC envelope is decoded first; items arrive as decoded JSON.
     page = ItemsPage.model_validate({"data": [{
@@ -21,17 +32,20 @@ def test_bus_input_encodes_its_text_with_the_codex_tag():
     assert params["input"] == [{"type": "text", "text": "hi"}]
 
 
-def test_codex_stream_reports_activity_and_finishes_items():
+def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
     from agent_comms.activity import ActivityState
     from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
     from agent_comms.cli_bridges.shared import ActiveItem, FinishedItem, TurnEnded, TurnStarted
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
     stream = ItemStream("th")
+    output = _output(tmp_path)
     command = {"type": "commandExecution", "id": "c1", "command": "ls -la", "status": "inProgress"}
 
     def receive(method, **params):
-        return stream.receive(RpcNotification(method=method, params={"threadId": "th", **params}))
+        update = stream.receive(RpcNotification(method=method, params={"threadId": "th", **params}))
+        parts = () if update is None else update.accumulate(output)
+        return parts[0] if parts else None
 
     assert receive("turn/started", turn={"id": "t1"}) == TurnStarted()
     assert receive("item/started", turnId="t1", item=command, startedAtMs=1000) \
@@ -43,7 +57,7 @@ def test_codex_stream_reports_activity_and_finishes_items():
                                        "aggregatedOutput": "a\n"})
     assert finished == FinishedItem("t1", "c1", (
         ToolStartTranscript(tool_call_id="c1", tool_name="bash",
-                            raw_input={"command": "ls -la"}, timestamp=1.0),
+                            raw_input={"command": "ls -la"}, detail="ls -la", timestamp=1.0),
         ToolEndTranscript(tool_call_id="c1", tool_name="bash", text="a\n", ok=True,
                           timestamp=1.0)))
     thinking = {"type": "reasoning", "id": "r1", "summary": []}
@@ -64,48 +78,50 @@ def test_attaching_reports_the_status_codex_gives_its_thread():
     assert resumed({"type": "idle"}).thread.status.update() == TurnEnded()
 
 
-def test_deltas_require_start_and_finish_retires_the_assembly():
+def test_deltas_require_start_and_finish_retires_the_assembly(tmp_path):
     from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
-    from agent_comms.cli_bridges.shared import DraftItem
     from agent_comms.transcript_events import AssistantTranscript
 
     stream = ItemStream("th")
+    output = _output(tmp_path)
 
     def receive(method, **params):
-        return stream.receive(RpcNotification(method=method, params={"threadId": "th", "turnId": "t", **params}))
+        update = stream.receive(RpcNotification(method=method, params={"threadId": "th", "turnId": "t", **params}))
+        parts = () if update is None else update.accumulate(output)
+        return parts[-1] if parts else None
 
     assert receive("item/agentMessage/delta", itemId="a", delta="suffix") is None
     receive("item/started", item={"type": "agentMessage", "id": "a", "text": ""}, startedAtMs=1000)
     receive("item/agentMessage/delta", itemId="a", delta="Hello")
-    assert receive("item/agentMessage/delta", itemId="a", delta=" world") == DraftItem(
-        "t", "a", (AssistantTranscript("Hello world", timestamp=1.0),))
+    assert receive("item/agentMessage/delta", itemId="a", delta=" world").events == (
+        AssistantTranscript("Hello world", timestamp=1.0),)
     complete = receive("item/completed", item={"type": "agentMessage", "id": "a", "text": "Hello world!"},
                        completedAtMs=2000)
     assert complete.events[0].text == "Hello world!"
-    assert not stream.drafts
     assert receive("item/agentMessage/delta", itemId="a", delta="late") is None
     receive("item/started", item={"type": "reasoning", "id": "r", "summary": []}, startedAtMs=3000)
     receive("item/reasoning/summaryTextDelta", itemId="r", summaryIndex=0, delta="One")
     draft = receive("item/reasoning/summaryTextDelta", itemId="r", summaryIndex=1, delta="Two")
     assert draft.events[0].text == "One\n\nTwo"
     receive("turn/completed", turn={"id": "t"})
-    assert not stream.drafts and not stream.started and not stream.summary_indices
+    assert receive("item/reasoning/summaryTextDelta", itemId="r", summaryIndex=1, delta="late") is None
 
 
 def test_coalescing_preserves_completion_and_unrelated_updates():
-    from agent_comms.cli_bridges.shared import DraftItem, FinishedItem, TranscriptUpdate, TurnEnded
+    from agent_comms.cli_bridges.shared import DraftItem, FinishedItem, TextDraft, TranscriptUpdate, TurnEnded
+    from agent_comms.recorded_time import UnrecordedEventTime
     from agent_comms.transcript_events import AssistantTranscript
 
-    first = DraftItem("t", "a", (AssistantTranscript("H"),))
-    newer = DraftItem("t", "a", (AssistantTranscript("Hello"),))
-    other = DraftItem("t", "b", (AssistantTranscript("Other"),))
+    first = DraftItem("t", "a", TextDraft.from_parts(AssistantTranscript, ("H",), UnrecordedEventTime()))
+    newer = DraftItem("t", "a", TextDraft.from_parts(AssistantTranscript, ("Hello",), UnrecordedEventTime()))
+    other = DraftItem("t", "b", TextDraft.from_parts(AssistantTranscript, ("Other",), UnrecordedEventTime()))
     final = FinishedItem("t", "a", (AssistantTranscript("Hello!"),))
     end = TurnEnded()
     assert TranscriptUpdate.coalesced([first, other, newer]) == [other, newer]
     assert TranscriptUpdate.coalesced([first, other, newer, final, end]) == [other, final, end]
 
 
-def test_function_outputs_keep_wire_fields_and_share_page_and_live_decoding():
+def test_function_outputs_keep_wire_fields_and_share_page_and_live_decoding(tmp_path):
     from agent_comms.cli_bridges.codex_protocol import (
         FunctionOutputItem, ItemStream, RpcNotification, SendOutputItem,
     )
@@ -124,13 +140,17 @@ def test_function_outputs_keep_wire_fields_and_share_page_and_live_decoding():
         assert entry.publication().events == expected
 
         stream = ItemStream("thread")
-        stream.receive(RpcNotification(method="item/started", params={
+        output = _output(tmp_path / name)
+        started = stream.receive(RpcNotification(method="item/started", params={
             "threadId": "thread", "turnId": "turn", "startedAtMs": 1000, "item": wire,
         }))
-        finished = stream.receive(RpcNotification(method="item/completed", params={
+        started.accumulate(output)
+        complete = stream.receive(RpcNotification(method="item/completed", params={
             "threadId": "thread", "turnId": "turn", "completedAtMs": 2000, "item": wire,
         }))
-        assert finished == entry.publication()
+        finished, = complete.accumulate(output)
+        assert finished.events == expected
+        assert entry.publication().accumulate(output) == (finished,)
 
 
 def test_function_output_names_remain_required_and_strict():

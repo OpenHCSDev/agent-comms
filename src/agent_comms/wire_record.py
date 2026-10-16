@@ -105,10 +105,7 @@ class MessageWireRecord(WireRecord):
         return self.message.seq
 
     def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
-        from .private_bus_checkpoint import PublicMessages
-
-        yield PublicMessages(self.message.seq, previous_sequence,
-                             self.message.sender, self.message.message_id)
+        return self.message.checkpoint_rows(previous_sequence)
 
 
 class WireObservation(DeclaredFamily, affix="WireObservation"):

@@ -106,6 +106,5 @@ class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
         # VerifiedOwnerLoss. New admissions atomically record the selected file;
         # keep its additional subprocess check whenever it exists. Neither
         # representation permits borrowing the replacement owner's selection.
-        if row.session_id is None:
-            return ()
-        return (row.require_session_identity().path,)
+        session = row.selected_session
+        return () if session is None else (session.path,)

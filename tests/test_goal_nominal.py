@@ -6,6 +6,7 @@ from dataclasses import dataclass, replace
 import pytest
 
 from agent_comms import tools
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.agent_events import GoalChanged
 from agent_comms.comms import wire
@@ -81,7 +82,8 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
         monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
         previous = comms.goals.goal_snapshot("worker")
         tool.invoke(
-            comms, {"status": "checkpoint", "goal_id": goal.id, "progress": "Evidence recorded"}
+            comms, {"status": "checkpoint", "goal_id": goal.id, "progress": "Evidence recorded"},
+            caller=ThreadCaller("worker")
         )
         event = wire(comms.root).goals.goal_changed("worker", previous)
         assert isinstance(event, GoalChanged)

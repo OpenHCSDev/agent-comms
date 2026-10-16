@@ -23,6 +23,7 @@ from agent_comms.goal_history import GoalHistoryQuery
 from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
+from agent_comms.tool_caller import ThreadCaller
 
 
 def _owner(tmp_path):
@@ -63,7 +64,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
     with pytest.raises(ValueError, match="nonempty reason"):
         tool.invoke(
             comms,
-            {"goal_id": original.id, "status": "blocked", "progress": " \t "},
+            {"goal_id": original.id, "status": "blocked", "progress": " \t "}, caller=ThreadCaller("worker"),
         )
     assert (tmp_path / "registry.json").read_bytes() == before_registry
 
@@ -76,7 +77,7 @@ def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monk
     )
     reason = "Need the exact ACP error text from the user before diagnosing."
     result = tool.invoke(
-        comms, {"goal_id": original.id, "status": "blocked", "progress": f"  {reason}  "}
+        comms, {"goal_id": original.id, "status": "blocked", "progress": f"  {reason}  "}, caller=ThreadCaller("worker")
     )
     blocked = wire(tmp_path).registry.require("worker").goal
     assert blocked is not None and blocked.state.declared_name == "blocked"

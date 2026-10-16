@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from dataclasses import replace
 from difflib import unified_diff
 from typing import ClassVar, Generic, Literal, TypeVar
 
@@ -20,6 +19,7 @@ from pydantic import (
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -31,9 +31,13 @@ from agent_comms.transcript_events import (
 )
 
 from .shared import (
-    ActiveItem,
-    DraftItem,
-    FinishedItem,
+    AppendDraftItem,
+    CompletedItem,
+    DraftAccumulator,
+    FinishedTurn,
+    ParagraphDraft,
+    StartedItem,
+    TextDraft,
     ToolCall,
     TranscriptUpdate,
     TurnEnded,
@@ -268,6 +272,9 @@ class Item(TaggedWire, ABC):
     def events(self) -> tuple[TranscriptEvent, ...]:
         """The finished item's presentation."""
 
+    def accumulator(self, started_at: EventTime) -> DraftAccumulator:
+        return DraftAccumulator(started_at)
+
     @property
     def activity_detail(self) -> str:
         return self.doing
@@ -275,8 +282,11 @@ class Item(TaggedWire, ABC):
 class TextBody(WireModel):
     text: str
 
+    def accumulator(self, started_at: EventTime) -> TextDraft:
+        return TextDraft.from_parts(AssistantTranscript, (self.text,), started_at)
+
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (AssistantTranscript(self.text),)
+        return self.accumulator(UnrecordedEventTime()).events
 
 
 class AssistantItem(TextBody, Item):
@@ -294,10 +304,12 @@ class ReasoningItem(Item):
     activity = ActivityState.THINKING
     summary: list[str] = Field(default_factory=list)
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
+    def accumulator(self, started_at: EventTime) -> ParagraphDraft:
         # Only public summaries; private/raw reasoning is never projected.
-        text = '\n\n'.join(part for part in self.summary if part)
-        return (ThinkingTranscript(text),) if text else ()
+        return ParagraphDraft.from_parts(ThinkingTranscript, self.summary, started_at)
+
+    def events(self) -> tuple[TranscriptEvent, ...]:
+        return self.accumulator(UnrecordedEventTime()).events
 
 
 class UserItem(Item):
@@ -330,8 +342,12 @@ class ToolItem(Item, ABC):
     def succeeded(self) -> bool: ...
 
     @property
+    def tool_detail(self) -> str:
+        return ""
+
+    @property
     def call(self) -> ToolCall:
-        return ToolCall(self.id, self.tool_name, self.arguments)
+        return ToolCall(self.id, self.tool_name, self.arguments, self.tool_detail)
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.call.finished(self.output, self.succeeded)
@@ -355,6 +371,10 @@ class CommandItem(ToolItem):
     @property
     def arguments(self) -> JsonValue:
         return {'command': self.command}
+
+    @property
+    def tool_detail(self) -> str:
+        return self.command
 
     @property
     def output(self) -> str:
@@ -643,7 +663,7 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return ToolCall(call_id, 'edit', {'file_path': self.path}).finished(
+        return ToolCall(call_id, 'edit', {'file_path': self.path}, self.path).finished(
             '', ok, diff=self.kind.patch(self.path, self.diff))
 
 
@@ -711,12 +731,13 @@ class ItemEntry(WireModel):
     def completed(self) -> bool:
         return self.completedAtMs is not None
 
-    def publication(self) -> FinishedItem:
+    def publication(self) -> CompletedItem:
         if self.completedAtMs is None:
             raise ValueError(f'Item {self.item.id} has not finished')
-        timestamp = self.startedAtMs or self.completedAtMs
-        return FinishedItem(self.turnId, self.item.id, tuple(
-            replace(event, timestamp=timestamp / 1000) for event in self.item.events()))
+        started_at = EventTime.capture(None if self.startedAtMs is None else self.startedAtMs / 1000)
+        event_time = started_at.continued_from(self.completedAtMs / 1000)
+        return CompletedItem(self.turnId, self.item.id, tuple(
+            event_time.stamp(event) for event in self.item.events()))
 
 
 class ItemsPage(WireModel):
@@ -751,11 +772,7 @@ class TurnFinished(TranscriptNotification):
     turn: TurnHeader
 
     def apply(self, stream: ItemStream) -> TranscriptUpdate:
-        for key in [key for key in stream.started if key[0] == self.turn.id]:
-            del stream.started[key]
-            stream.drafts.pop(key, None)
-            stream.summary_indices.pop(key, None)
-        return TurnEnded()
+        return FinishedTurn(self.turn.id)
 
 
 class ItemNotification(TranscriptNotification, ABC):
@@ -768,8 +785,8 @@ class Started(ItemNotification):
     startedAtMs: int
 
     def apply(self, stream: ItemStream) -> TranscriptUpdate:
-        stream.started[self.turnId, self.item.id] = self.startedAtMs
-        return ActiveItem(self.turnId, self.item.id, self.item.activity, self.item.activity_detail)
+        return StartedItem(self.turnId, self.item.id, self.item.activity, self.item.activity_detail,
+                           self.item.accumulator(RecordedEventTime(self.startedAtMs / 1000)))
 
 
 class Completed(ItemNotification):
@@ -779,59 +796,37 @@ class Completed(ItemNotification):
 
     def apply(self, stream: ItemStream) -> TranscriptUpdate:
         # Completion is authoritative, including after joining mid-item.
-        key = self.turnId, self.item.id
-        stream.drafts.pop(key, None)
-        stream.summary_indices.pop(key, None)
         return ItemEntry(turnId=self.turnId, item=self.item,
-                         startedAtMs=stream.started.pop((self.turnId, self.item.id), None),
                          completedAtMs=self.completedAtMs).publication()
 
 
 class TextDelta(ItemNotification, ABC):
     itemId: str
     delta: str
-    transcript_type: ClassVar[type[TranscriptEvent]]
+    def section(self) -> int:
+        return 0
 
-    def append(self, stream: ItemStream, key: tuple[str, str]) -> str:
-        return stream.drafts.get(key, '') + self.delta
-
-    def apply(self, stream: ItemStream) -> DraftItem | None:
-        key = self.turnId, self.itemId
-        if key not in stream.started:
-            # A suffix received after attaching is not the whole draft.
-            return None
-        text = stream.drafts[key] = self.append(stream, key)
-        return DraftItem(self.turnId, self.itemId, (
-            self.transcript_type(text, timestamp=stream.started[key] / 1000),))
+    def apply(self, stream: ItemStream) -> AppendDraftItem:
+        return AppendDraftItem(self.turnId, self.itemId, self.delta, self.section())
 
 
 class AssistantDelta(TextDelta):
     method = 'item/agentMessage/delta'
-    transcript_type = AssistantTranscript
 
 
 class ReasoningDelta(TextDelta):
     method = 'item/reasoning/summaryTextDelta'
-    transcript_type = ThinkingTranscript
     summaryIndex: int = Field(ge=0)
 
-    def append(self, stream: ItemStream, key: tuple[str, str]) -> str:
-        text = stream.drafts.get(key, '')
-        previous = stream.summary_indices.get(key)
-        if previous is not None and previous != self.summaryIndex and text:
-            text += '\n\n'
-        stream.summary_indices[key] = self.summaryIndex
-        return text + self.delta
+    def section(self) -> int:
+        return self.summaryIndex
 
 
 class ItemStream:
-    """Drafts begun on this subscription; completed items always arrive whole."""
+    """Decode this thread's parts; the shared output owns their accumulation."""
 
     def __init__(self, thread: str):
         self.thread = thread
-        self.started: dict[tuple[str, str], int] = {}
-        self.drafts: dict[tuple[str, str], str] = {}
-        self.summary_indices: dict[tuple[str, str], int] = {}
 
     def receive(self, notification: RpcNotification) -> TranscriptUpdate | None:
         declarations = TranscriptNotification.__registry_config__.registry_dict

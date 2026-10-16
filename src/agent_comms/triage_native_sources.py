@@ -24,23 +24,23 @@ class TriageNativeSources(NativeRuntimeTable, TypedTable, declared_name="native_
             raise IdentityConflict("Native input membership must name distinct original sources")
 
     @classmethod
-    def triggers(cls):
+    def trigger_bodies(cls):
         from .native_input_record import TriageNativeExecution
 
         guards = {
             f"{cls.declared_name}_{operation.lower()}_guard":
-            f"CREATE TRIGGER {cls.declared_name}_{operation.lower()}_guard BEFORE {operation} "
+            f" BEFORE {operation} "
             f"ON {cls.declared_name} BEGIN SELECT RAISE(ABORT,'native source membership is frozen'); END"
             for operation in ("UPDATE", "DELETE")
         }
         guards[f"{cls.declared_name}_stage_guard"] = (
-            f"CREATE TRIGGER {cls.declared_name}_stage_guard BEFORE INSERT ON {cls.declared_name} "
+            f" BEFORE INSERT ON {cls.declared_name} "
             "WHEN NOT EXISTS (SELECT 1 FROM native_runtime_input n "
             f"WHERE n.input_id=NEW.input_id AND n.stage='{TriageNativeExecution.declared_name}') "
             "BEGIN SELECT RAISE(ABORT,'only triage owns separate source membership'); END"
         )
         guards[f"{cls.declared_name}_membership_guard"] = (
-            f"CREATE TRIGGER {cls.declared_name}_membership_guard BEFORE INSERT ON {cls.declared_name} "
+            f" BEFORE INSERT ON {cls.declared_name} "
             "WHEN EXISTS (SELECT 1 FROM json_each(NEW.assignment_ids) member "
             "LEFT JOIN wake_claims c ON c.assignment_id=member.value "
             "JOIN native_runtime_input n ON n.input_id=NEW.input_id "

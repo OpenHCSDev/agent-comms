@@ -167,7 +167,6 @@ class DMDisplayBasis:
             peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
             bus_identity = bus.reads.bus_identity(bus.log.path)
-            read_revision = bus.reads.revision()
         # Native admission uses this same wire lock. Page preparation and the
         # older-unread scan use opened source boundaries, outside admission.
         page = bus.conversation_page(
@@ -182,8 +181,9 @@ class DMDisplayBasis:
                     for message, _ in records
                 )
         with _store_lock(root / "wire", shared=True), registry.store.reading() as document:
-            if bus.reads.revision() != read_revision:
-                raise ValueError("Read marker changed while paging; refresh the displayed page.")
+            # Read progress is not page identity. It only adds seen messages
+            # while these incarnations live; an older-unread result can become
+            # conservative, but another view cannot invalidate this page.
             root_info = root.stat()
             basis = cls(
                 root=str(root.resolve()),

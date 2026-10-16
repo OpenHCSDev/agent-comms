@@ -202,10 +202,13 @@ class Message:
         self.task.require_target(self.target, snapshot)
         self.task.require_publication(sender, snapshot, original_source)
 
-    @property
-    def claim_transitions(self) -> tuple[ClaimTransition, ...]:
-        """This envelope's claim change, as the bus-ordered sequence a claim table folds."""
-        return () if self.claim_transition is None else (self.claim_transition,)
+    def checkpoint_rows(self, previous_sequence: int):
+        """The envelope declares both publication and optional claim facts."""
+        from .private_bus_checkpoint import ClaimCommits, PublicMessages
+
+        yield PublicMessages(self.seq, previous_sequence, self.sender, self.message_id)
+        if self.claim_transition is not None:
+            yield ClaimCommits(self.claim_transition)
 
     def require_claim_transition(self) -> ClaimTransition:
         if self.claim_transition is None:

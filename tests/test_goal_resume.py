@@ -21,6 +21,11 @@ from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, 
 from agent_comms.goals import Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
+from agent_comms.tool_caller import ThreadCaller
+from functools import partial
+
+# Every case in this module exercises the explicitly declared owner.
+invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
 
 
 def _goal(comms, monkeypatch):

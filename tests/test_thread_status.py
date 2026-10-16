@@ -167,3 +167,110 @@ def test_roster_and_controls_keep_archived_threads_dormant():
         assert live.restored() == stopped
         assert not CommsStartTool.available_for(live, owner_pid=123)
         assert CommsStartTool.available_for(live, owner_pid=0)
+
+
+def test_batch_presentations_acquire_documents_once_and_release_locks_before_rows(comms, monkeypatch):
+    from collections import Counter
+    from agent_comms.goal_waits import GoalWaits
+    from agent_comms.locked_store import JsonDocument
+
+    for name in ("alpha", "beta"):
+        comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
+    comms.agents.runtime_info.replace({})
+    waits = GoalWaits(comms.root / GoalWaits.filename)
+    waits.replace({})
+    counts = Counter()
+    decode = JsonDocument._decode
+    capture = ThreadView.capture.__func__
+
+    def counted(self, data):
+        if self.path.name in ("runtime_info.json", "goal_waits.json"):
+            counts[self.path.name] += 1
+        return decode(self, data)
+
+    def unlocked(cls, *args, **kwargs):
+        for store in (comms.agents.runtime_info, waits, comms.registry.store):
+            with store.locked(blocking=False):
+                pass
+        return capture(cls, *args, **kwargs)
+
+    monkeypatch.setattr(JsonDocument, "_decode", counted)
+    monkeypatch.setattr(ThreadView, "capture", classmethod(unlocked))
+    batch = comms.views.thread_presentations(("alpha", "beta", "missing"))
+    assert set(batch.views) == {"alpha", "beta"}
+    assert batch.read("missing") is None
+    assert batch.read("alpha").read_identity.thread.incarnation == batch.views["alpha"].thread.incarnation
+    assert batch.read("beta").read_identity.thread.incarnation == batch.views["beta"].thread.incarnation
+    assert counts == {"runtime_info.json": 1, "goal_waits.json": 1}
+
+    def unrelated(*args, **kwargs):
+        pytest.fail("A missing thread acquired unrelated activity/documents")
+
+    monkeypatch.setattr(comms.agents, "all_activity", unrelated)
+    monkeypatch.setattr(JsonDocument, "_decode", unrelated)
+    assert comms.views.thread_presentation("missing") is None
+
+
+def test_batch_source_rename_keeps_the_original_registry_fence(comms):
+    from agent_comms.coordination_errors import StaleRevision
+
+    comms.registry.register(
+        Thread("alpha", frozenset(), str(comms.root), process_identity=ProcessIdentity.capture(os.getpid())),
+        RunningThreadStatus(),
+    )
+    batch = comms.views.thread_presentations(("alpha",))
+    comms.registry.rename("alpha", "renamed")
+    with pytest.raises(StaleRevision, match="incarnation changed"):
+        batch.read("alpha")
+    current = comms.views.thread_presentations(("alpha",))
+    assert set(current.views) == {"renamed"}
+    assert current.read("alpha").read_identity.thread.incarnation == comms.registry.require("renamed").incarnation
+
+
+def test_observed_batch_keeps_source_busy_scoped_to_one_thread(comms, monkeypatch):
+    from agent_comms.coordination_errors import CoordinationReadUnavailable
+    from agent_comms.ui_model.observation import ObserveThreads, ThreadReading
+
+    for name in ("alpha", "beta"):
+        comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
+    capture = comms.transcripts.capture_page_window
+
+    def read(name, **kwargs):
+        if name == "alpha":
+            raise CoordinationReadUnavailable("original source deferred")
+        return capture(name, **kwargs)
+
+    monkeypatch.setattr(comms.transcripts, "capture_page_window", read)
+    reading = ThreadReading(ObserveThreads(frozenset({"alpha", "beta"})))
+    list(reading.read(comms, comms.views.revision()))
+    assert reading.observed.busy == {"alpha"}
+    assert set(reading.observed.presentations) == {"beta"}
+    assert reading.observed.unavailable == {}
+
+
+def test_observed_batch_acquisition_busy_recovers_without_a_new_revision(comms, monkeypatch):
+    from agent_comms.coordination_errors import CoordinationReadUnavailable
+    from agent_comms.runtime_info import RuntimeInfoStore
+    from agent_comms.ui_model.observation import ObserveThreads, ThreadReading
+
+    for name in ("alpha", "beta"):
+        comms.registry.declare(Thread(name, frozenset(), str(comms.root)))
+    calls = []
+    original = RuntimeInfoStore.read
+
+    def busy(self):
+        calls.append(self.path)
+        raise CoordinationReadUnavailable("shared metadata deferred")
+
+    reading = ThreadReading(ObserveThreads(frozenset({"alpha", "beta"})))
+    revision = comms.views.revision()
+    monkeypatch.setattr(RuntimeInfoStore, "read", busy)
+    list(reading.read(comms, revision))
+    assert calls == [comms.agents.runtime_info.path]
+    assert reading.observed.busy == {"alpha", "beta"}
+    assert reading.observed.presentations == {}
+    monkeypatch.setattr(RuntimeInfoStore, "read", original)
+    list(reading.read(comms, revision))
+    assert not reading.observed.busy
+    assert set(reading.observed.presentations) == {"alpha", "beta"}
+    assert reading.observed.changed == {"alpha", "beta"}
