@@ -236,14 +236,19 @@ class Thread(ThreadProvenance):
             raise ValueError("Canonical saved session required")
         return self.session_file
 
-    def imported_sources(self):
-        """Absent native selection has no imported historical instruction sources."""
+    @property
+    def native_transcripts(self):
+        """The saved native session's records; a thread without one has none yet."""
         from pathlib import Path
         from .native_transcript import NativeTranscript
 
         if self.session_file is None:
             return ()
-        return NativeTranscript(Path(self.session_file)).imported_sources()
+        return (NativeTranscript(Path(self.session_file)),)
+
+    def imported_sources(self):
+        return tuple(source for transcript in self.native_transcripts
+                     for source in transcript.imported_sources())
 
     def require_idle(self) -> None:
         if self.active_turn is not None:
