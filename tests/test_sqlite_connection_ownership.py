@@ -1,4 +1,4 @@
-"""SQLite connection and busy policy have one production owner."""
+"""Each SQLite store family keeps connection and busy policy with its owner."""
 
 import ast
 import asyncio
@@ -12,10 +12,17 @@ from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordinator import Coordination
 
 PACKAGE = Path(__file__).parents[1] / "src" / "agent_comms"
-CONNECTION_OWNER = PACKAGE / "coordination_database.py"
+CONNECTION_OWNERS = frozenset(
+    PACKAGE / path
+    for path in (
+        "coordination_database.py",
+        "typed_table.py",
+        "cli_bridges/shared.py",
+    )
+)
 
 
-def test_sqlite_connections_and_busy_policy_have_one_owner():
+def test_sqlite_connections_and_busy_policy_stay_in_owner_modules():
     direct_connections = []
     timeout_arguments = []
     for path in PACKAGE.rglob("*.py"):
@@ -26,7 +33,7 @@ def test_sqlite_connections_and_busy_policy_have_one_owner():
             if not isinstance(node, ast.Call):
                 continue
             if (
-                path != CONNECTION_OWNER
+                path not in CONNECTION_OWNERS
                 and isinstance(node.func, ast.Attribute)
                 and isinstance(node.func.value, ast.Name)
                 and node.func.value.id == "sqlite3"
