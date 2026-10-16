@@ -34,6 +34,7 @@ from .child_process import join_retirement
 from .native_input_owner import RegistryOwner
 from .input_attempt import InputAttempt
 from .input_disposition import InputDispositions, InputDocument
+from .maintenance_barrier import MaintenanceBarrier, MaintenanceStatus
 from .input_effects import InputEffects
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .errors import RelationViolationError
@@ -98,6 +99,7 @@ class TickRevision:
                 root / "goal-private" / "goal_attempts.sqlite3-wal",
             ),
             auth=auth,
+            maintenance=MaintenanceBarrier(registry).witness_paths,
         )
 
 
@@ -112,17 +114,18 @@ class TickRevisionPaths:
     goal_waits: Path
     goal_attempts: tuple[Path, ...]
     auth: Path
+    maintenance: tuple[Path, Path]
 
     @property
     def other(self) -> tuple[Path, ...]:
-        return self.goal_waits, *self.goal_attempts, self.auth
+        return self.goal_waits, *self.goal_attempts, self.auth, *self.maintenance
 
     @property
     def watch_sources(self) -> tuple[WatchSource, ...]:
         # The marker is the final durable publication for bus bytes and their
         # checkpoint. Watching the intermediate files wakes readers before the
         # append is complete and repeats the same observation several times.
-        replaced = (*self.registry, *self.bus[1:], self.goal_waits, self.auth)
+        replaced = (*self.registry, *self.bus[1:], self.goal_waits, self.auth, *self.maintenance)
         modified = (*self.coordination, *self.goal_attempts)
         return (
             *(WatchSource.file(path) for path in replaced),
@@ -205,7 +208,17 @@ class InputObservation:
 
     def register_wake(self, session_id: str, task: asyncio.Task[None]) -> None:
         self.wake_tasks[session_id] = task
-        task.add_done_callback(lambda _task: self.wake_observer(session_id))
+
+        def finished(completed: asyncio.Task[None]) -> None:
+            # A deferred wake has not consumed its queue or assignment. The
+            # maintenance witness itself wakes the observer on READY; waking
+            # again now would spin on the same closed phase.
+            if (not completed.cancelled() and completed.exception() is None
+                    and isinstance(completed.result(), MaintenanceStatus)):
+                return
+            self.wake_observer(session_id)
+
+        task.add_done_callback(finished)
 
     def _repeat_observation_ready(self, session_id: str, drained: int) -> bool:
         if drained != 0 or session_id not in self._repeat_private_observations:
@@ -456,6 +469,8 @@ class InputObservation:
             pending,
             cursor,
             (original.st_dev, original.st_ino),
+            tuple(FileRevision.capture(path) for path in
+                  MaintenanceBarrier(self.comms.registry.store.path).witness_paths),
         ))
 
     async def _observe_private_revision(self, session_id: str, root_id: str) -> PrivateObservation:
