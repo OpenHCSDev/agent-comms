@@ -100,6 +100,11 @@ class PageInfo(ForgeAnswer):
     has_next_page: bool
     end_cursor: str | None
 
+    @property
+    def following(self) -> tuple[tuple[str, ...], ...]:
+        """The next page's cursor arguments, or none after the last page."""
+        return ((self.end_cursor,),) if self.has_next_page else ()
+
 
 class Connection[Node](ForgeAnswer):
     nodes: tuple[Node, ...]
@@ -221,16 +226,14 @@ query($owner: String!, $name: String!, $after: String) {
         return owner, name
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
-        after: str | None = None
-        while True:
+        pages: list[tuple[str, ...]] = [()]
+        for after in pages:
             arguments = ["gh", "api", "graphql", "-f", f"query={query}"]
-            for key, value in {**variables, **({"after": after} if after else {})}.items():
+            for key, value in {**variables, **dict(zip(("after",), after))}.items():
                 arguments += ["-F", f"{key}={value}"]
             connection = answer.model_validate_json(self._run(*arguments)).data.repository.connection
             yield from connection.nodes
-            if not connection.page_info.has_next_page:
-                return
-            after = connection.page_info.end_cursor
+            pages.extend(connection.page_info.following)
 
     def _worktrees(self) -> dict[str, tuple[str, ...]]:
         """Branch name -> worktree paths that have it checked out."""
