@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .declared_family import DeclaredFamily
-from .tool_declaration import ToolDeclaration
+from .tool_declaration import ToolDeclaration, ToolLocations
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
 from .tool_results import ToolDiff, ToolText
@@ -192,7 +192,7 @@ class ToolPendingTranscript(ToolTranscript):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolStartTranscript(ToolTranscript):
+class ToolStartTranscript(ToolLocations, ToolTranscript):
     raw_input: Any = None
     detail: str = field(default="", metadata={"wire_omit_default": True})
     path: str | None = field(default=None, metadata={"wire_omit_default": True})

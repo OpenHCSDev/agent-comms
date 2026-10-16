@@ -74,7 +74,7 @@ class AcpEventConsumer(MroDispatch):
             tool_call_id=event.id,
             title=event.title or event.name or "tool",
             kind=cast(Any, event.kind),
-            locations=[ToolCallLocation(path=event.path)] if event.path is not None else [],
+            locations=[ToolCallLocation(path=path) for path in event.locations],
             status="in_progress",
         )
         if event.args is not None:

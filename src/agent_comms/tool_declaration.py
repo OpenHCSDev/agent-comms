@@ -12,21 +12,13 @@ from .declared_family import DeclaredFamily
 from .recorded_time import EventTime
 
 
-class ToolDeclaration(DeclaredFamily, affix="Tool"):
+class ToolDeclaration(DeclaredFamily, affix="Tool", discovery_package="agent_comms.tools"):
     CAPTION_CHARS: ClassVar[int] = 80
     acp_kind: ClassVar[str] = "other"
     label: ClassVar[str]
 
     @classmethod
-    def _member_declarations(cls):
-        # Registry discovery acquires the modules declaring this family's members.
-        from . import native_tools, tools
-
-        return super()._member_declarations()
-
-    @classmethod
     def for_name(cls, name: str) -> type[ToolDeclaration] | UndeclaredTool:
-        cls._member_declarations()
         try:
             return cls.decode(name.lower())
         except ValueError:
@@ -92,6 +84,15 @@ class UndeclaredTool(ToolDeclaration):
     @property
     def label(self) -> str:
         return self.name
+
+
+class ToolLocations:
+    """Tool metadata exposes its zero or one file location."""
+    path: str | None
+
+    @property
+    def locations(self) -> tuple[str, ...]:
+        return () if self.path is None else (self.path,)
 
 
 @dataclass(frozen=True)

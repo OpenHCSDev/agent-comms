@@ -21,7 +21,7 @@ from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .tool_results import ToolDiff
-from .tool_declaration import ToolCall
+from .tool_declaration import ToolCall, ToolLocations
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
@@ -120,7 +120,7 @@ class ToolEvent(AgentEvent):
 
 
 @dataclass(frozen=True)
-class ToolStart(ToolEvent):
+class ToolStart(ToolLocations, ToolEvent):
     title: str = ""
     args: dict[str, Any] | None = None
     kind: str = "other"
