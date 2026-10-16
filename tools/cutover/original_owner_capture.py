@@ -13,24 +13,14 @@ import subprocess
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
-from agent_comms.owner_lifecycle import OwnerReleaseReceipt, OwnerRestartSelection
-from agent_comms.goal_history import GoalHistoryEntry
-from agent_comms.registry_document import RegistryDocument
+from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.historical_views import HistorySource
 from agent_comms.threads import Thread
 from owner_read_projection import (
-    CurrentThreadProjection, LiveOwnerReadProjection,
+    CurrentThreadProjection, LiveOwnerReadProjection, OriginalOwnerRead,
     RecordedRegistryProjection,
 )
-
-
-@dataclass(frozen=True)
-class OriginalOwnerRead:
-    document: RegistryDocument
-    selection: OwnerRestartSelection
-    releases: dict[str, OwnerReleaseReceipt] = field(default_factory=dict)
-    goal_history: tuple[GoalHistoryEntry, ...] = ()
 
 
 @dataclass(frozen=True)

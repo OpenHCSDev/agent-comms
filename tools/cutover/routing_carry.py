@@ -16,6 +16,7 @@ from typing import Any
 from agent_comms.field_codec import FieldCodec
 from agent_comms.transcript_routes import RouteAnnotationTable, _assert_schema, _schema
 from agent_comms.typed_table import Column, TypedTable
+from owner_read_projection import RecordedOwnerRead
 
 
 def digest_bytes(value: bytes) -> str:
@@ -96,7 +97,7 @@ class RoutingCarryPlan:
     turns: tuple[RegistryRouting, ...]
     originals: tuple[dict[str, Any], ...]
     protected: dict[str, dict[str, Any]]
-    recorded_source: dict[str, Any]
+    recorded_source: RecordedOwnerRead
 
     def require_sources(self, root: Path) -> None:
         if file_witness(root / 'bus.jsonl') != self.bus:
@@ -111,7 +112,7 @@ class RoutingCarryPlan:
         from agent_comms.historical_views import HistorySource
 
         self.require_sources(root)
-        source = FieldCodec.decode(HistorySource, self.recorded_source)
+        source = FieldCodec.decode(HistorySource, FieldCodec.encode(self.recorded_source))
         source.require_original(root)
         registry_bytes = (root / 'registry.json').read_bytes()
         document = json.loads(registry_bytes)
