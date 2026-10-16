@@ -42,6 +42,18 @@ def test_unconfigured_launch_has_no_provider_or_model_policy():
          arguments=("--provider", "user", "--model", "selected"),
     )
     assert NativeArguments.parse(selected.arguments).model == "user/selected"
+    assert selected.model == "user/selected"
+
+
+def test_settings_resolve_explicit_selection_once_at_the_record_boundary():
+    selected = NativeThreadDefaults(arguments=(
+        "--model", "override/selected", "--thinking", "low", "--thinking=off",
+    ))
+    assert selected.model == "override/selected"
+    assert selected.thinking_level is OffThinkingLevel
+    assert NativeThreadDefaults.from_arguments(selected.cli_arguments) == selected
+    defaults = NativeThreadDefaults()
+    assert defaults.model and defaults.thinking_level is not None
 
 
 def test_offline_record_owns_the_shared_isolation_arguments():
