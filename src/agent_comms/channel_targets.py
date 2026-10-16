@@ -64,8 +64,8 @@ class CommandTarget(ABC):
     @abstractmethod
     def names(self) -> tuple[str, ...]: ...
 
-    @abstractmethod
-    def available(self, snapshot) -> bool: ...
+    def available(self, snapshot) -> bool:
+        return True
 
     @abstractmethod
     def bindings(self, declaration, comms, channel, snapshot, catalog): ...
@@ -96,9 +96,6 @@ class ThreadTarget(NamedTarget):
 class ChannelTarget(NamedTarget):
     needs_catalog = True
 
-    def available(self, snapshot) -> bool:
-        return True
-
     def bindings(self, declaration, comms, channel, snapshot, catalog):
         return declaration.channel_bindings(comms, catalog.resolve(self.name), snapshot=snapshot)
 
@@ -114,9 +111,6 @@ class ProjectTarget(CommandTarget):
     @property
     def names(self) -> tuple[str, ...]:
         return ()
-
-    def available(self, snapshot) -> bool:
-        return True
 
     def contexts(self, declaration, channel):
         return (None,)
