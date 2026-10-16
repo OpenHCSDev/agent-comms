@@ -733,7 +733,7 @@ class ThreadsObserved(Observed):
     def changed_threads(self, revision: WireRevision) -> frozenset[str]:
         """The retained result owns the exact originals its views currently present."""
         names = self.presentations.keys() | self.unavailable.keys() | self.busy
-        if not self.presentations:
+        if not any(view is not None for view in self.presentations.values()):
             return frozenset(names)
         affected = revision.changed_threads(self.revision)
         namespace = revision.registration.snapshot

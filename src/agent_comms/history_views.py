@@ -328,9 +328,14 @@ class HistoryViews:
         self, *, show_stopped: bool = True, show_archived: bool = False
     ) -> tuple[ThreadView, ...]:
         snapshot = self.registry.snapshot()
+        visible = tuple(ThreadView.visible_threads(
+            snapshot, show_stopped=show_stopped, show_archived=show_archived,
+        ))
+        if not visible:
+            return ()
         return ThreadViewSources.capture(
             snapshot, self.agents, None, GoalWaits(self.root / GoalWaits.filename),
-        ).roster(show_stopped=show_stopped, show_archived=show_archived)
+        ).roster(visible)
 
     def retired_views(self, threads: Iterable[ThreadIncarnation], channels: Iterable[str]) -> RetiredViews:
         """Which of these thread incarnations and channel views no longer exist.
@@ -356,10 +361,14 @@ class HistoryViews:
         revision: WireRevision | None = None,
     ) -> ThreadPresentations:
         """Selected rows use the same acquired metadata as their revision attribution."""
-        sources = (revision or self.revision()).thread_sources
-        views = sources.roster(names=names, show_stopped=True, show_archived=False)
+        revision = revision or self.revision()
+        snapshot = revision.registration.snapshot
+        visible = tuple(ThreadView.visible_threads(
+            snapshot, names=names, show_stopped=True, show_archived=False,
+        ))
+        views = revision.thread_sources.roster(visible) if visible else ()
         return ThreadPresentations(
-            sources.registry, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
+            snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
         )
 
     def require_thread_presentation(self, name: str) -> ThreadPresentation:

@@ -681,11 +681,14 @@ class ThreadView:
 
     @classmethod
     def visible_threads(
-        cls, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
+        cls, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool,
+        names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
+        selected = None if names is None else {snapshot.canonical_name(name) for name in names}
         return (
             thread for thread in snapshot.threads.values()
-            if cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+            if (selected is None or thread.name in selected)
+            and cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
         )
 
     @classmethod
@@ -782,15 +785,11 @@ class ThreadViewSources:
                     changed.add(name)
         return frozenset(changed)
 
-    def roster(self, *, show_stopped: bool, show_archived: bool,
-               names: Iterable[str] | None = None) -> tuple[ThreadView, ...]:
-        selected = None if names is None else {self.registry.canonical_name(name) for name in names}
+    def roster(self, threads: Iterable[Thread]) -> tuple[ThreadView, ...]:
         return tuple(
             ThreadView.capture(thread, self.registry, self.activities[thread.name],
                                self.runtime.get(thread.name), self.waits)
-            for thread in ThreadView.visible_threads(
-                self.registry, show_stopped=show_stopped, show_archived=show_archived
-            ) if selected is None or thread.name in selected
+            for thread in threads
         )
 
 
@@ -818,9 +817,9 @@ class CoordinationSnapshot:
         show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
-        visible = ThreadView.visible_threads(
+        visible = tuple(ThreadView.visible_threads(
             registry, show_stopped=show_stopped, show_archived=show_archived
-        )
+        ))
         activities = agents.all_activity(visible, snapshot=registry)
         return cls(
             channels=ChannelView.roster(
@@ -830,7 +829,7 @@ class CoordinationSnapshot:
             ),
             threads=ThreadViewSources.capture(
                 registry, agents, activities, GoalWaits(root / GoalWaits.filename),
-            ).roster(show_stopped=show_stopped, show_archived=show_archived),
+            ).roster(visible),
             unread=unread, last_sent=sent, channel_unread=channel_unread,
             references=DisplayReferences.capture(root, registry, declarations),
             channel_order=catalog.list_order, show_stopped=show_stopped,
