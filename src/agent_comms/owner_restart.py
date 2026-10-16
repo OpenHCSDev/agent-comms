@@ -6,18 +6,18 @@ RegistryDocument to reinterpret. Production readers keep one format.
 """
 from __future__ import annotations
 
-from contextlib import ExitStack
-from dataclasses import dataclass, field, replace
 import os
 import stat
-import sys
+from contextlib import ExitStack
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
 from .errors import RelationViolationError
-from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from .owner_launch import RetainedOwnerLaunch
+from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
+from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
-from .owner_lifecycle import OwnerRestartSelection
 from .thread_identity import AdmissionIdentity, OwnerIdentity
 
 if TYPE_CHECKING:
@@ -35,6 +35,7 @@ class OwnerRestartRequest:
     expected: OwnerRestartSelection | None = None
     runtime: RestartEnvironment | None = None
     source_interpreter: str | None = None
+    launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.current, kw_only=True)
 
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
         if self.names is None:
@@ -50,8 +51,9 @@ class OwnerRestartRequest:
             self.expected.require_current(snapshot)
 
     def environment(self, lifecycle: OwnerLifecycle) -> RestartEnvironment:
+        self.launch_runtime.require_available()
         return RestartEnvironment.inherit(lifecycle.restart_environment(
-            os.environ if self.runtime is None else self.runtime.encode()))
+            os.environ if self.runtime is None else self.runtime.encode(), self.launch_runtime))
 
 
 @dataclass(frozen=True)
@@ -101,24 +103,28 @@ class OwnerRestartHandoff:
     runtime: RestartEnvironment
     agent_bin: str | None
     agent_args: tuple[str, ...] | None
+    launch_runtime: LaunchRuntime
 
-    def launch(self, lifecycle: OwnerLifecycle) -> tuple[OwnerRestartResult, ...]:
+    def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
         def target(thread, source):
             return lifecycle._launch_owner_unlocked(
-                thread, self.agent_bin or lifecycle.restart_entrypoint(source.binary),
+                thread, self.agent_bin or lifecycle.restart_entrypoint(source.binary, runtime),
                 self.agent_args if self.agent_args is not None else source.arguments,
                 environment=self.runtime.apply_runtime(source.environment),
+                launch_runtime=runtime,
             )
 
         return self._launch(lifecycle, target)
 
     def restore(self, lifecycle: OwnerLifecycle) -> tuple[OwnerRestartResult, ...]:
         """Restore EACH acquired launch unchanged under its authentic decoder."""
-        if any(owner.launch.interpreter != sys.executable for owner in self.owners):
+        runtime = RestoredRuntime.running()
+        if any(owner.launch.interpreter != str(runtime.interpreter) for owner in self.owners):
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
         return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner_unlocked(
             thread, source.binary, source.arguments, environment=source.environment,
+            launch_runtime=runtime,
         ))
 
     def _launch(self, lifecycle: OwnerLifecycle, launch) -> tuple[OwnerRestartResult, ...]:
@@ -162,8 +168,8 @@ class StoppedOwnerBatch:
             raise RelationViolationError('Retained stopped batch names another root')
         return cls(lifecycle, descriptor, handoff)
 
-    def launch(self) -> tuple[OwnerRestartResult, ...]:
-        return self.handoff.launch(self.lifecycle)
+    def launch(self, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
+        return self.handoff.launch(self.lifecycle, runtime)
 
     def close(self) -> None:
         """Explicitly release physical custody; never launch or retry inputs."""
@@ -252,7 +258,8 @@ class FencedOwnerBatch:
                 owner.require_current(snapshot)
                 progress = replace(progress, retired=progress.retired + (owner,))
             handoff = OwnerRestartHandoff(str(self.lifecycle.root), progress.retired, self.runtime,
-                                         self.request.agent_bin, self.request.agent_args)
+                                         self.request.agent_bin, self.request.agent_args,
+                                         self.request.launch_runtime)
             stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, self.custody.pop_all())
         except BaseException as cause:
             failure = StoppedOwnerFailure(progress, cutover)

@@ -12,7 +12,7 @@ from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.messages import QuestionKind
-from agent_comms.owner_launch import CallingThreadUnavailable, RestartEnvironment
+from agent_comms.launch_runtime import CallingThreadUnavailable, RestartEnvironment
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread

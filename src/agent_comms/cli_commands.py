@@ -745,7 +745,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
         import asyncio
 
         from .config_options import ConfigOptions
-        from .owner_launch import RestartEnvironment
+        from .launch_runtime import RestartEnvironment
         from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
 

@@ -31,6 +31,7 @@ from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, MessageKind
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.thread_identity import ThreadRole
@@ -756,7 +757,7 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         self.binding = binding
         self.journal = journal
         # The CLI of the runtime this bridge runs from.
-        self.core = CoreConnection(str(Path(sys.executable).with_name('agent-comms')), binding)
+        self.core = CoreConnection(str(LaunchRuntime.running().interpreter.with_name('agent-comms')), binding)
 
     @abstractmethod
     async def deliver(self, message: Message) -> type[Outcome]:
