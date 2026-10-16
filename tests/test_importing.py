@@ -196,7 +196,7 @@ def test_import_refuses_redirected_session_directory(tmp_path):
     assert not comms.registry.name_reserved("imported")
 
 
-def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path):
+def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path, comms):
     source = tmp_path / "rollout-2026-10-16T15-00-00-codex-id.jsonl"
     records = [
         {"type": "session_meta", "payload": {"id": "codex-id", "cwd": str(tmp_path)}},
@@ -207,7 +207,7 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path):
     ]
     source.write_text("".join(json.dumps(record) + "\n" for record in records))
     original = source.read_bytes()
-    comms = wire(tmp_path / "wire")
+    comms.messaging.initialize_private_initial_protocol()
     receipt = comms.threads.import_thread(
         source, ImportFormat.CODEX, name="paper4_jair", tags=frozenset({"papers"})
     )
