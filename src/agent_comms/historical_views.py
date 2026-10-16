@@ -29,7 +29,7 @@ from .registration import Registration
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy, ResponsePolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
-from .thread_identity import ThreadProvenance
+from .thread_identity import ThreadIncarnation, ThreadProvenance, UnrecordedThreadIncarnation
 from .wire_log import WireLog
 from .wire_metadata import ArchivedAccess
 
@@ -250,29 +250,27 @@ class HistorySource:
 class HistoricalMessage(Message):
     source: HistorySource
     source_order: int
-    sender_created_at: float | None
-    target_created_at: float | None
+    sender_incarnation: ThreadIncarnation
+    target_incarnation: ThreadIncarnation
 
     @classmethod
     def project(
         cls, message: Message, source: HistorySource, order: int, snapshot: RegistryProvenance
     ) -> HistoricalMessage:
-        def creation(name: str) -> float | None:
+        def incarnation(name: str) -> ThreadIncarnation:
             declaration = snapshot.threads.get(snapshot.canonical_name(name))
-            # A later source declaration cannot certify a row from an earlier
-            # incarnation. The original registry remains available for inspection.
-            return (
-                declaration.created_at
-                if declaration is not None and declaration.created_at <= message.timestamp
-                else None
-            )
+            # A later source declaration cannot certify an earlier message.
+            # Preserve the named unknown state; never manufacture a birth.
+            if declaration is None or declaration.created_at > message.timestamp:
+                return UnrecordedThreadIncarnation(name)
+            return declaration.incarnation.renamed(name)
 
         return cls(
             **{f.name: getattr(message, f.name) for f in fields(Message)},
             source=source,
             source_order=order,
-            sender_created_at=creation(message.sender),
-            target_created_at=creation(message.target),
+            sender_incarnation=incarnation(message.sender),
+            target_incarnation=incarnation(message.target),
         )
 
     def notification_references(self) -> tuple[MessageReference, ...]:
@@ -302,8 +300,8 @@ class HistoricalMessage(Message):
                 "source": self.source.original_root,
                 "wire_root_id": self.source.wire_root_id,
                 "bus_identity": self.source.bus_identity,
-                "sender_created_at": self.sender_created_at,
-                "target_created_at": self.target_created_at,
+                "sender_incarnation": FieldCodec.encode(self.sender_incarnation),
+                "target_incarnation": FieldCodec.encode(self.target_incarnation),
             },
         }
 

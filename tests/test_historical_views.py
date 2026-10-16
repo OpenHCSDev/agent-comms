@@ -12,6 +12,7 @@ from agent_comms.historical_views import HistoryArchive
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
+from agent_comms.thread_identity import RecordedThreadIncarnation, UnrecordedThreadIncarnation
 
 
 @pytest.mark.parametrize('exists', [False, True])
@@ -99,7 +100,8 @@ def test_original_identity_and_no_delivery_authority(migrated):
     historical = [m for m in rows if isinstance(m, HistoricalMessage) and m.source == source]
     original = old.views.channel_history("#team")
     assert [m.to_wire() for m in historical] == [m.to_wire() for m in original]
-    assert all(m.sender_created_at == 10.0 for m in historical)
+    assert all(m.sender_incarnation == RecordedThreadIncarnation(m.sender, 10.0)
+               for m in historical)
     assert len(live.bus.incoming_page("bob", after=0).messages) == 2
     assert live.bus.log.latest_sequence() == 4
     assert live.views.attach_history(old.root) == source
@@ -320,7 +322,7 @@ def test_older_than_registry_incarnation_stays_unattributed(migrated):
     projected = HistoricalMessage.project(
         replace(original, timestamp=1.0), source, 0, source.provenance
     )
-    assert projected.sender_created_at is None
+    assert projected.sender_incarnation == UnrecordedThreadIncarnation(projected.sender)
     assert projected.timestamp == 1.0
 
 

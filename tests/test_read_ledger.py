@@ -64,6 +64,23 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     assert second.read_marker_notice == NoReadMarkerNotice()
 
 
+@pytest.mark.parametrize('raw,expected', [
+    (None, NoReadMarkerNotice()),
+    ('', NoReadMarkerNotice()),
+    ('Read positions changed', RecordedReadMarkerNotice('Read positions changed')),
+])
+def test_read_notice_is_chosen_once_at_the_native_boundary(raw, expected):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.read_ledger import ReadDocument
+
+    document = FieldCodec.decode(ReadDocument, {'notice': raw})
+    assert document.notice == expected
+    assert FieldCodec.decode(ReadDocument, FieldCodec.encode(document)) == document
+    assert document.notice.messages_since(document.notice) == ()
+    with pytest.raises(ValueError, match='requires text'):
+        RecordedReadMarkerNotice('')
+
+
 def test_bounded_page_marks_only_shown_messages(tmp_path):
     comms = prepared(tmp_path)
     for i in range(5):
