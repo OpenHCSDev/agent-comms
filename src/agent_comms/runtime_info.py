@@ -22,7 +22,10 @@ class RuntimeInfo(ABC):
     """A runtime-info read is observed or explicitly unobserved."""
 
     __slots__ = ()
-    model: str | None
+
+    @property
+    @abstractmethod
+    def model(self) -> str | None: ...
 
     @property
     @abstractmethod
