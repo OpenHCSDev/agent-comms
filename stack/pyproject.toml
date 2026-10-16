@@ -1,7 +1,7 @@
 [project]
 name = "agent-comms-stack"
 version = "0.1.0"
-description = "Pinned local agent-comms, Toad, and Textual runtime"
+description = "Main-checkout agent-comms with main-branch UI packages"
 requires-python = ">=3.14"
 dependencies = [
     "agent-comms[acp]",
@@ -11,14 +11,15 @@ dependencies = [
 
 [tool.uv]
 package = false
-# This stack owns the paired core and framework pins, including Toad's requirements.
+# This stack owns source selection, including Toad's transitive requirements.
 override-dependencies = [
     "agent-comms[acp]",
     "textual[syntax]==8.2.8",
-    "ui-theme @ git+https://github.com/OpenHCSDev/ui-theme.git@93920bcf07c355482bdccbcb1067537f56481d06",
+    "ui-theme",
 ]
 
 [tool.uv.sources]
-agent-comms = { git = "https://github.com/OpenHCSDev/agent-comms.git", rev = "88f4e6ee115ba817118ffcc0b52e5579eb7763e5" }
-batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", rev = "501421fec4eb888caf918f1a01b017b969d97a0e" }
-textual = { git = "https://github.com/OpenHCSDev/textual.git", rev = "b69cc8e34eeb7d84f9b4d33afd3c18538ac74ae9" }
+agent-comms = { path = "..", editable = true }
+batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", branch = "main" }
+textual = { git = "https://github.com/OpenHCSDev/textual.git", branch = "main" }
+ui-theme = { git = "https://github.com/OpenHCSDev/ui-theme.git", branch = "main" }

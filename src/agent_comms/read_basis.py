@@ -17,8 +17,57 @@ from .channel_targets import is_channel_target
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
+from .private_path import FileRevision
 from .store_files import _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadIncarnationRecord
+
+class DisplaySelection(ABC):
+    """The conversation selected by an original page or store observation."""
+
+    __slots__ = ()
+
+    @property
+    @abstractmethod
+    def has_evidence(self) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class SelectedDisplay(DisplaySelection):
+    viewer: ThreadIncarnation
+    history_revision: FileRevision | None
+
+    @property
+    def has_evidence(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class NoDisplaySelection(DisplaySelection):
+    @property
+    def has_evidence(self) -> bool:
+        return False
+
+
+@dataclass(frozen=True, slots=True)
+class ChannelSelection(SelectedDisplay):
+    bus_identity: tuple[int, int] | None
+    scope: ChannelDisplayScope
+
+
+@dataclass(frozen=True, slots=True)
+class DMSelection(SelectedDisplay):
+    root_identity: tuple[int, int]
+    bus_identity: tuple[int, int] | None
+    worktree: str
+    requested_peer: str
+    peer: ThreadIncarnation
+    scope: DMDisplayScope
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalSelection(SelectedDisplay):
+    """The original viewer and attached-source revision select an archive page."""
+
 
 class WatchAcknowledgment(DeclaredFamily, affix="WatchAcknowledgment"):
     """Who confirms that a streamed message reached its receiver."""
@@ -227,6 +276,15 @@ class DMDisplayBasis:
             )
             basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))
             return replace(page, display_basis=basis)
+
+    def selection(self, history_revision: FileRevision | None) -> DMSelection:
+        return DMSelection(
+            root_identity=self.root_identity, bus_identity=self.bus_identity,
+            worktree=self.worktree, requested_peer=self.requested_peer,
+            viewer=self.viewer_identity, peer=self.peer_identity,
+            scope=DMDisplayScope(self.viewer_names, self.peer_names),
+            history_revision=history_revision,
+        )
 
     @property
     def viewer(self) -> str:
@@ -441,6 +499,14 @@ class ChannelDisplayScope(MessageDisplayScope):
         # The existing offset index has no mention column. Any-mode can match
         # sender, DM peer or a mention regardless of target; never drop those rows.
         return None if self.any_mode else self.targets
+
+    def selection(self, history_revision: FileRevision | None) -> DisplaySelection:
+        if self.displayed is None:
+            return NoDisplaySelection()
+        return ChannelSelection(
+            viewer=self.displayed.viewer_identity, bus_identity=self.displayed.bus_identity,
+            scope=self, history_revision=history_revision,
+        )
 
     def require_displayed(self) -> DisplayBasis:
         if self.displayed is None:

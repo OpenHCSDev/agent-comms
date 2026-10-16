@@ -20,7 +20,7 @@ from typing import ClassVar
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
-from .transcript_events import TranscriptEvent
+from .transcript_events import TranscriptEvent, TurnDigest
 from .transcript_receipts import TranscriptSource
 from .typed_table import Column, TypedRow, TypedStore, TypedTable
 
@@ -35,6 +35,23 @@ class ExternalItemRow(TypedTable):
     seq: int
     events: tuple[TranscriptEvent, ...]
     unique = (("thread", "seq"),)
+
+    @classmethod
+    def recent_turn_ids(cls, connection: Connection, thread: str, last: int) -> tuple[str, ...]:
+        """Find recent identities without decoding bodies or grouping the full history."""
+        turn_field, = cls._fields_named(("turn_id",))
+        cursor = connection.execute(
+            f'SELECT {cls._column_list(("turn_id",))} FROM "{cls.declared_name}" '
+            'WHERE thread = ? ORDER BY seq DESC', (thread,))
+        identities: dict[str, None] = {}
+        try:
+            for value, in cursor:
+                identities[turn_field.decode(value)] = None
+                if len(identities) >= last:
+                    break
+        finally:
+            cursor.close()
+        return tuple(identities)
 
 
 @dataclass(frozen=True)
@@ -119,6 +136,17 @@ class ExternalTranscriptRead:
                 yield ExternalRecord(row.seq, row.events)
         finally:
             rows.close()
+
+    def turns(self, last: int) -> tuple[TurnDigest, ...]:
+        if self.connection is None:
+            return ()
+        return tuple(
+            TurnDigest(turn_id, tuple(
+                event
+                for row in ExternalItemRow.select(
+                    self.connection, thread=self.lookup, turn_id=turn_id, order_by=("seq",))
+                for event in row.events))
+            for turn_id in ExternalItemRow.recent_turn_ids(self.connection, self.lookup, last))
 
     def forward(self, after: int, through: int) -> Iterator[ExternalRecord]:
         return self._records("seq > ? AND seq <= ?", (after, through), descending=False)

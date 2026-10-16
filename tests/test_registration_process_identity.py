@@ -21,12 +21,12 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     assert owner.process_identity == identity
     session = tmp_path / "session.jsonl"
     session.write_text('{"type":"session","id":"fixture"}\n')
-    attached = comms.threads.attach_session(owner.name, str(session))
+    attached = comms.threads.attach_session(owner, str(session))
     assert attached.process_identity == identity
     assert wire(tmp_path).registry.require(owner.name) == attached
-    unbound = comms.threads.attach_session(owner.name, str(session), pid=0)
+    unbound = comms.threads.attach_session(attached, str(session), pid=0)
     assert unbound.process_identity is None and unbound.pid == 0
-    rebound = comms.threads.attach_session(owner.name, str(session), pid=os.getpid())
+    rebound = comms.threads.attach_session(unbound, str(session), pid=os.getpid())
     assert rebound.process_identity == identity
     restored = RegistryDocument()
     restored.restore_stopped(comms.registry.snapshot(), (owner.name,))

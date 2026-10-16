@@ -3,16 +3,30 @@
 set -euo pipefail
 
 usage() {
-    printf 'Usage: toad-comms [THREAD]\n\nOpen Agent Comms in Toad. Optionally open an existing thread.\n'
+    printf 'Usage: toad-comms [THREAD]\n       toad-comms --serve [THREAD] [TOAD SERVE OPTIONS...]\n\nOpen Agent Comms in Toad. Optionally open an existing thread.\nWith --serve, open the same session in a local web browser (toad serve).\n'
 }
 
-if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
-    usage
-    exit 0
-fi
-if (( $# > 1 )); then
-    usage >&2
-    exit 2
+frontend=()
+thread=""
+if [[ "${1:-}" == --serve ]]; then
+    shift
+    frontend=(serve)
+    if (( $# )) && [[ "$1" != -* ]]; then
+        thread="$1"
+        shift
+    fi
+    # toad serve owns its options, loopback binding and access token.
+    frontend+=("$@" --)
+else
+    if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
+        usage
+        exit 0
+    fi
+    if (( $# > 1 )); then
+        usage >&2
+        exit 2
+    fi
+    thread="${1:-}"
 fi
 
 # Borrow the original publication resource before runtime/default selection.
@@ -53,14 +67,14 @@ unset AGENT_COMMS_THREAD AGENT_COMMS_MANAGED PI_AGENT_ID PI_PARENT_ID PI_TASK PI
 
 project="$PWD"
 session=()
-if (( $# )); then
-    project="$("$python" -c 'import sys; from agent_comms.comms import wire; print(wire().registry.require(sys.argv[1]).worktree)' "$1")"
-    session=(--session "$1")
+if [[ -n "$thread" ]]; then
+    project="$("$python" -c 'import sys; from agent_comms.comms import wire; print(wire().registry.require(sys.argv[1]).worktree)' "$thread")"
+    session=(--session "$thread")
 fi
 if [[ ! -d "$project" ]]; then
     printf 'Project directory is unavailable: %s\n' "$project" >&2
     exit 1
 fi
 
-exec "$toad" acp "$python -m agent_comms.acp" "$project" \
+exec "$toad" "${frontend[@]}" acp "$python -m agent_comms.acp" "$project" \
     --title 'Agent Comms' "${session[@]}"
