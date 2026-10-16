@@ -50,6 +50,7 @@ class OwnerRestartRequest:
             self.expected.require_current(snapshot)
 
     def environment(self, lifecycle: OwnerLifecycle) -> RestartEnvironment:
+        self.launch_runtime.require_available()
         return RestartEnvironment.inherit(lifecycle.restart_environment(
             os.environ if self.runtime is None else self.runtime.encode(), self.launch_runtime))
 
