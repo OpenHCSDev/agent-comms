@@ -5,7 +5,6 @@ member discovers formats from missing fields or offers a fallback reader.
 """
 from abc import abstractmethod
 from pathlib import Path
-from typing import get_type_hints
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
@@ -78,12 +77,11 @@ class RecordedRegistryProjection(OwnerReadProjection):
     @classmethod
     def project(cls, document: RegistryDocument, declaration) -> dict:
         requested = declaration['properties']['threads']['additionalProperties']['properties']
-        declarations = get_type_hints(type(document), include_extras=True)
-        encoded = FieldCodec.encode(document.threads, declarations['threads'])
+        encoded = FieldCodec.encode(document.threads)
         return {
             'threads': {name: {key: thread[key] for key in requested}
                         for name, thread in encoded.items()},
-            'aliases': FieldCodec.encode(document.aliases, declarations['aliases']),
+            'aliases': FieldCodec.encode(document.aliases),
         }
 
     @classmethod
@@ -109,5 +107,5 @@ class RecordedRegistryProjection(OwnerReadProjection):
             raise ValueError('Original recorded source changed during acquisition')
         return {'root': str(root), 'original_root': str(root),
                 'wire_root_id': marker.root_id, 'bus_identity': [info.st_dev, info.st_ino],
-                'size': info.st_size, 'snapshot_bus_revision': FieldCodec.encode(bus_revision),
-                'snapshot_registry_revision': FieldCodec.encode(registry_revision), 'provenance': provenance}
+                'size': info.st_size, 'snapshot_bus_revision': bus_revision,
+                'snapshot_registry_revision': registry_revision, 'provenance': provenance}

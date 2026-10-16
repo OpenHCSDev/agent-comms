@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import sys
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.registration import Registration
 from owner_read_projection import OwnerReadProjection
 
@@ -22,7 +23,7 @@ def main():
     expected = sys.stdin.read()
     registry = Registration(registry_path)
     packet = projection.read(registry, Path(root), name, json.loads(expected) if expected else None)
-    print(json.dumps(packet, allow_nan=False), flush=True)
+    print(json.dumps(FieldCodec.encode(packet)), flush=True)
 
 
 if __name__ == '__main__':
