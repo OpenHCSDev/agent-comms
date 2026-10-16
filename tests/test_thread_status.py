@@ -186,7 +186,7 @@ def test_batch_presentations_acquire_documents_once_and_release_locks_before_row
     waits = GoalWaits(comms.root / GoalWaits.filename)
     waits.replace({})
     counts = Counter()
-    read = ReadLedger.read
+    read = ReadLedger.capture_observations
     prepare = ReadDocument.observations
     decode = JsonDocument._decode
     capture = ThreadView.capture.__func__
@@ -197,9 +197,9 @@ def test_batch_presentations_acquire_documents_once_and_release_locks_before_row
             counts[self.path.name] += 1
         return decode(self, data)
 
-    def counted_read(self, viewers):
+    def counted_read(self, snapshot, sources):
         counts[ReadLedger.filename] += 1
-        return read(self, viewers)
+        return read(self, snapshot, sources)
 
     def counted_preparation(self, snapshot):
         counts['read_masks'] += 1
@@ -219,7 +219,7 @@ def test_batch_presentations_acquire_documents_once_and_release_locks_before_row
             pass
         return source(*args, **kwargs)
 
-    monkeypatch.setattr(ReadLedger, 'read', counted_read)
+    monkeypatch.setattr(ReadLedger, 'capture_observations', counted_read)
     monkeypatch.setattr(ReadDocument, 'observations', counted_preparation)
     monkeypatch.setattr(JsonDocument, "_decode", counted)
     monkeypatch.setattr(ThreadView, "capture", classmethod(unlocked))
@@ -236,7 +236,7 @@ def test_batch_presentations_acquire_documents_once_and_release_locks_before_row
 
     monkeypatch.setattr(comms.agents, "all_activity", unrelated)
     monkeypatch.setattr(JsonDocument, "_decode", unrelated)
-    monkeypatch.setattr(ReadLedger, 'read', unrelated)
+    monkeypatch.setattr(ReadLedger, 'capture_observations', unrelated)
     monkeypatch.setattr(ReadDocument, 'observations', unrelated)
     assert comms.views.thread_presentation("missing") is None
 

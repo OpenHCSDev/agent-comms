@@ -9,6 +9,7 @@ from agent_comms.coordination_errors import StaleRevision
 from agent_comms.assignment_states import IgnoredAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.notification_progress import SentProgress
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
@@ -69,7 +70,7 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
     root, _root_id, comms, _initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
-    commit_requested = threading.Event()
+    write_requested = threading.Event()
     committed = threading.Event()
     errors, statements = [], []
     project = RecoverySelection.project
@@ -91,7 +92,7 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
         try:
             with Coordination(str(database)) as store:
                 store.session._connection.set_trace_callback(
-                    lambda sql: commit_requested.set() if sql == "COMMIT" else None
+                    lambda sql: write_requested.set() if sql == "BEGIN EXCLUSIVE" else None
                 )
                 store.participants.advance_generation(
                     lookup, "renamed", expected_generation=1
@@ -105,7 +106,7 @@ def test_gateway_uses_original_snapshot_and_one_metadata_read(tmp_path, monkeypa
 
     def during_commit(db, owner_lookup, owner_thread):
         changing.start()
-        assert commit_requested.wait(2), errors
+        assert write_requested.wait(2), errors
         assert not committed.is_set()
         result = project(db, owner_lookup, owner_thread)
         captured.append(result)
@@ -155,7 +156,8 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     notice = next(item for item in comms.views.recent_notifications('sender')
                   if item.recipient=='beta')
-    assert notice.state=='Sent'
+    assert type(notice.progress) is SentProgress
+    assert notice.state == notice.timed_state(notice.progress.label, notice.progress.at_ms)
     assert notice.detail == ''
     assert notice.message.reference==initial.message.reference
     assert not notice.busy
@@ -166,7 +168,8 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     comms.agents.activity.emit(replace(activity,diagnostic=foreign))
     current = next(item for item in comms.views.recent_notifications('sender')
                    if item.recipient=='beta')
-    assert current.state=='Sent'
+    assert current.progress == notice.progress
+    assert current.state == current.timed_state(current.progress.label, current.progress.at_ms)
 
 
 def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):  # noqa: F811
@@ -298,7 +301,8 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     lookup = RecordedThreadIncarnation("fixture", target.created_at).lookup
     receipts = comms.views.recent_notifications("sender")
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
-    assert beta.message.reference == message.reference and beta.state == "Sent"
+    assert beta.message.reference == message.reference
+    assert type(beta.progress) is SentProgress
     original = next(
         row.assignment for row in NotificationAssignment.read(root, (initial,)).resolve(root)
         if row.assignment.recipient_lookup == lookup
@@ -495,7 +499,7 @@ def test_original_open_certificate_expires_with_canonical_lock(tmp_path):  # noq
 def test_missing_certified_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     comms.bus.log.path.unlink()
-    with pytest.raises(RelationViolationError, match="inode is missing"):
+    with pytest.raises(RelationViolationError, match="durability is UNKNOWN"):
         comms.views.thread_presentation("beta")
 
 

@@ -1,6 +1,6 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
-from agent_comms.coordination_errors import CoordinationReadBusy
+from agent_comms.coordination_errors import CoordinationReadBusy, CoordinationReadFailed
 
 from tests.read_membership import stored_read_state
 import asyncio
@@ -88,7 +88,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         # cache with the actual refusal; a full-source reader is still forbidden.
         index_path.unlink(missing_ok=True)
         index_path.mkdir()
-        with pytest.raises(sqlite3.OperationalError) as unavailable:
+        with pytest.raises(CoordinationReadFailed) as unavailable:
             with closing(CoordinationStore.read_snapshot(index_path)):
                 pass
     with comms.views.presentation.snapshot(viewer=viewer.name) as (basis, source):
@@ -97,9 +97,9 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         if indexed:
             assert comms.bus.pending_counts_opened(source, basis) == before
         else:
-            with pytest.raises(sqlite3.OperationalError) as refused:
+            with pytest.raises(CoordinationReadFailed) as refused:
                 comms.bus.pending_counts_opened(source, basis)
-            assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
+            assert refused.value.__cause__.sqlite_errorcode == unavailable.value.__cause__.sqlite_errorcode
         def mark_channel():
             comms.bus.reads.mark_displayed(viewer.name, comms.bus.reads.capture(
                 viewer.name, (channel,), comms.registry.snapshot(), comms.bus.log.path),
@@ -110,15 +110,15 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
             # Optional compaction tolerates transient coordination, not permanent
             # I/O failure. Refusal must leave durable read progress unchanged.
             unchanged = stored_read_state(comms.bus.reads)
-            with pytest.raises(sqlite3.OperationalError):
+            with pytest.raises(CoordinationReadFailed):
                 mark_channel()
             assert stored_read_state(comms.bus.reads) == unchanged
         comms.messaging.send_message("bob", viewer.name, "later direct")
         comms.registry.rename("bob", "renamed-bob")
         if not indexed:
-            with pytest.raises(sqlite3.OperationalError) as refused:
+            with pytest.raises(CoordinationReadFailed) as refused:
                 comms.bus.pending_counts_opened(source, basis)
-            assert refused.value.sqlite_errorcode == unavailable.value.sqlite_errorcode
+            assert refused.value.__cause__.sqlite_errorcode == unavailable.value.__cause__.sqlite_errorcode
             index_path.rmdir()
         # Repair the derived resource, not the captured source or read ledger.
         assert comms.bus.pending_counts_opened(source, basis) == before

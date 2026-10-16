@@ -54,6 +54,7 @@ class ShownContextEvidence(AssignmentContextEvidence):
         return ShownToModelProgress(self.committed_at_ms)
 
 
+@dataclass(frozen=True)
 class AssignmentResponse(DeclaredFamily, affix="Response"):
     def recorded(self, message) -> AssignmentResponse:
         return self

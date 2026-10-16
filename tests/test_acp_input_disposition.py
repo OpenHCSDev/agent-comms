@@ -30,6 +30,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.notification_progress import ShownToModelProgress
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
@@ -277,7 +278,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
                 if outcome.message.reference == message.reference
             )
             assert sent_read.state.startswith("Read ")
-            assert sent_read.read_at_ms == assignment.updated_at_ms
+            assert sent_read.progress == ShownToModelProgress(assignment.updated_at_ms)
             assert sent_read.changed
             # One turn, two inputs: the prompt and the message, each sent once.
             assert native.provider.posts == 2
@@ -361,7 +362,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             await asyncio.wait_for(started.wait(), 30)
             in_flight, = comms.views.message_notifications([message])[key]
             assert in_flight.state == "Sent"
-            assert in_flight.read_at_ms is None
+            assert not in_flight.progress.read
             started_release.set()
             # Opening is the retry trigger; no second bus append or observation
             # tick is needed to reserve the waiting input.
@@ -380,7 +381,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             assert type(assignments[-1].lifecycle) is DeliveredAssignment
             read, = comms.views.message_notifications([message])[key]
             assert read.state.startswith("Read ") and not read.busy
-            assert read.read_at_ms == assignments[-1].updated_at_ms
+            assert read.progress == ShownToModelProgress(assignments[-1].updated_at_ms)
             assert native.provider.posts == 2
             rows = [json.loads(line) for line in native.session.read_text().splitlines()]
             tool_result = next(
