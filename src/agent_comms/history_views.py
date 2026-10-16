@@ -171,10 +171,6 @@ class HistoryViews:
     def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
         return self.bus.history.threads(name)
 
-    @staticmethod
-    def dm_display_changed_since(revision: WireRevision, earlier: WireRevision) -> bool:
-        return DMDisplayHistory.display_changed_since(revision, earlier)
-
     def dm_display_page(
         self,
         peer: str,
@@ -193,10 +189,6 @@ class HistoryViews:
             limit=limit,
             max_bytes=max_bytes,
         )
-
-    @staticmethod
-    def channel_display_changed_since(revision: WireRevision, earlier: WireRevision) -> bool:
-        return ChannelDisplayHistory.display_changed_since(revision, earlier)
 
     def channel_display_page(
         self,
