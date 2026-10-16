@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -70,6 +71,10 @@ class PiSessionChild:
         if job is None or not job.done():
             return False
         return not job.cancelled() and job.exception() is None and isinstance(job.result(), ChildOutcome)
+
+    def forward_input(self, operation: Callable[[], Coroutine[None, None, None]]) -> None:
+        if self.forwarding_task is None:
+            self.forwarding_task = asyncio.create_task(operation())
 
     async def finish_input(self) -> None:
         """Retire this input's ingress without retiring a retained idle child."""

@@ -310,9 +310,9 @@ class TurnSession:
         return self.started_input and self.accepts_output and self.output.matches_message(text)
 
     def ensure_input_forwarding(self):
-        if self.native.forwarding_task is None and self.inputs.can_forward(self.native.proc.stdin):
+        if self.inputs.can_forward(self.native.proc.stdin):
             self.stdin = self.native.proc.stdin
-            self.native.forwarding_task = asyncio.create_task(self.inputs.forward(self))
+            self.native.forward_input(partial(self.inputs.forward, self))
 
     def observe_input_during_abort(self, event):
         if self.accepts_output:
