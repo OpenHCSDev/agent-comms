@@ -34,20 +34,16 @@ from .envelope_claim_transitions import (
 )
 from .errors import (
     ClaimEnvelopeUnknownError,
-    HumanAdmissionBlockedError,
     HumanInitialUnknownError,
     RelationViolationError,
     UnregisteredThreadError,
 )
 from .mentions import ThreadMention
 from .messages import Message
+from .private_path import FileRevision
 from .private_registry_guard import _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
-from .store_files import (
-    StoreLock,
-    _store_lock,
-    file_revision,
-)
+from .store_files import StoreLock, _store_lock
 
 if TYPE_CHECKING:
 
@@ -223,7 +219,7 @@ class Publisher:
         worktree: Path,
         incarnation: str,
         claims: Sequence[FileClaimPath] = (),
-        releases: Sequence[str | Path] = (),
+        releases: Sequence[str | Path | ClaimRelease] = (),
         _locked_registry_snapshot: RegistrySnapshot | None = None,
         _bus_lock: StoreLock | None = None,
         _admission: WakeAdmission | None = None,
@@ -281,13 +277,19 @@ class Publisher:
             )
             owner_incarnation = str(incarnation)
             requested = tuple(sorted(path.normalized(worktree) for path in claims))
-            release_paths = tuple(sorted(_release_resource(worktree, path) for path in releases))
             release_records: list[ClaimRelease] = []
-            for resource in release_paths:
-                current = projection.get(resource)
-                if current is None:
-                    raise RelationViolationError("Cannot release an unclaimed resource.")
-                release_records.append(ClaimRelease(resource, current.generation))
+            for release in releases:
+                if isinstance(release, ClaimRelease):
+                    # A recorded claim names its own path and generation; the owner
+                    # may have changed project since. apply_transition fences it.
+                    release_records.append(release)
+                else:
+                    resource = _release_resource(worktree, release)
+                    current = projection.get(resource)
+                    if current is None:
+                        raise RelationViolationError("Cannot release an unclaimed resource.")
+                    release_records.append(ClaimRelease(resource, current.generation))
+            release_records.sort(key=lambda release: release.resource)
             transition = ClaimTransition(
                 stored.sender,
                 owner_incarnation,
@@ -358,7 +360,7 @@ class Publisher:
                 self._registry.store.path,
                 self._channels.path,
             )
-            before_revisions = tuple(file_revision(path) for path in source_paths)
+            before_revisions = tuple(FileRevision.capture(path) for path in source_paths)
             snapshot = self._registry.snapshot()
             snapshot.require_unambiguous_ownership()
             catalog = self._channels.read()
@@ -418,37 +420,11 @@ class Publisher:
                 original_source=source,
             )
             if _human_origin is not None:
-                # The marker reserves a sequence before the row. A crash after
-                # reservation can leave NO row carrying the human message ID.
-                # Never admit another human input while such an UNKNOWN gap is
-                # present, even if another ordinary sender subsequently skips
-                # over that sequence. This intentionally favors safety over
-                # availability until explicit operator reconciliation exists.
-                expected_sequence = 1
-                duplicate = False
-                for previous_sender, previous in source.public_message_references():
-                    if previous.seq != expected_sequence:
-                        raise HumanAdmissionBlockedError(
-                            "Private bus sequence gap has UNKNOWN outcome; "
-                            "human send blocked, do not retry."
-                        )
-                    expected_sequence += 1
-                    duplicate |= (
-                        previous_sender == sender and previous.message_id == stored.message_id
-                    )
-                if metadata.last_seq != expected_sequence - 1:
-                    raise HumanAdmissionBlockedError(
-                        "Private bus sequence reservation has UNKNOWN outcome; "
-                        "human send blocked, do not retry."
-                    )
-                if duplicate:
-                    raise RelationViolationError(
-                        "Human initial ID already exists; inspect its receipt, do not retry."
-                    )
+                source.require_new_human_message(sender, stored.message_id)
             revision = hashlib.sha256(
                 repr(
                     (
-                        file_revision(self._registry.store.path),
+                        FileRevision.capture(self._registry.store.path),
                         self._channels.revision(),
                         sorted(
                             (name, thread.created_at, sorted(thread.tags))
@@ -490,7 +466,7 @@ class Publisher:
             }
             # Check the exact bytes and one coherent source revision before any append.
             CommittedDelivery.from_wire(row, metadata.root_id)
-            if before_revisions != tuple(file_revision(path) for path in source_paths):
+            if before_revisions != tuple(FileRevision.capture(path) for path in source_paths):
                 raise RelationViolationError("Send-time registry/catalog revision changed.")
             # Every frozen subscriber needs an identity, including stopped
             # observers. Register from this authoritative registry snapshot,
@@ -531,7 +507,7 @@ class Publisher:
         matched, previous_sequence, metadata = self.log._keyed_receipt_unlocked(intent)
         if matched is not None:
             return matched
-        message = intent.expected_message
+        message = intent.message
         # A durable exact replay above wins even after registry/route renames.
         sender, target = self._validate_publish_request(
             message, registry_snapshot=registry_snapshot

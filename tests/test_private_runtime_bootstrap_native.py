@@ -98,7 +98,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     monkeypatch.setenv(
         "AGENT_COMMS_AGENT_ARGS", "--offline --no-extensions --no-skills --no-context-files"
     )
-    for name in ("PI_PROMPT", "PI_PARENT_ID", "PI_AGENT_ID", "AGENT_COMMS_THREAD"):
+    for name in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(name, raising=False)
     comms = Comms(tmp_path / "wire")
     for name in ("sender", "recipient"):

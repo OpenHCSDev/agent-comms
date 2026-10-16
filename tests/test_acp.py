@@ -15,6 +15,7 @@ import tempfile
 from agent_comms.goal_attempts import ProviderUsageTotal
 from agent_comms.goal_actions import ActiveGoalAction, PausedGoalAction
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from acp import RequestError
@@ -49,20 +50,27 @@ from agent_comms.goal_states import ActiveGoal
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.manual_compaction_bridge import compact_context
 from agent_comms.native_pi import CAPABILITY
-from agent_comms.pi_payloads import PiUsage
+from agent_comms.pi_payloads import PiUsage, ReportedModel, StateData
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.turn_phase import CompactionPhase
 from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend
+
+pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
 def facts(metadata, kind):
     return tuple((f for f in decode_updates(metadata) if isinstance(f, kind)))
 
 
-@pytest.fixture(autouse=True)
-def _model_catalog_without_a_local_pi_process(monkeypatch):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/z-ai/glm-5.3-flash")
+def fake_input_started(args, kwargs):
+    """Bind and start the original input as Pi does before emitting output."""
+    text = args[2]
+    native_id = uuid4().hex
+    with kwargs["send_boundary"](None, native_id, text) as admitted:
+        assert admitted is True
+    assert kwargs["native_start"](None, native_id, text)
+    return ae.InputStarted(id=None)
 
 
 @pytest.fixture
@@ -127,6 +135,28 @@ class TestHandlers:
         assert len(agent._comms.registry.snapshot().threads) == 0
 
     async def test_session_model_config_is_persisted_and_selectable(self, tmp_path, monkeypatch):
+        from agent_comms.pi_commands import SetModel
+        from agent_comms.pi_vocabulary import OffThinkingLevel, ThinkingLevel
+
+        async def configure(command, _agent_bin, arguments, **_kwargs):
+            def argument(name):
+                prefix = f"--{name}="
+                for index, value in enumerate(arguments):
+                    if value.startswith(prefix):
+                        return value.removeprefix(prefix)
+                    if value == f"--{name}" and index + 1 < len(arguments):
+                        return arguments[index + 1]
+                return None
+
+            provider = command.provider if isinstance(command, SetModel) else argument("provider")
+            model_id = command.model_id if isinstance(command, SetModel) else argument("model")
+            level = getattr(command, "level", None)
+            return StateData(
+                model=ReportedModel(provider=provider, id=model_id, name=model_id),
+                thinking_level=(ThinkingLevel.decode(level) if level else OffThinkingLevel),
+            )
+
+        monkeypatch.setattr("agent_comms.pi_commands.SettingCommand.configure", configure)
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "openrouter/one,anthropic/two")
         agent = canonical_agent(
             wire(tmp_path / "wire"),
@@ -166,15 +196,15 @@ class TestHandlers:
     ):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.agents.set_agent_info(
-            "proj", model="test/model", context_used=38723, context_size=272000
+        agent._comms.agents.observe_runtime_info(
+            "proj", ae.AgentInfo(model="test/model", context_used=38723, context_size=272000)
         )
         reopened = canonical_agent(wire(agent._comms.root))
         assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
-        agent._comms.agents.set_agent_info(
-            "proj", model="test/model", context_used=None, context_size=272000
+        agent._comms.agents.observe_runtime_info(
+            "proj", ae.ContextInfo(context_used=None, context_size=272000)
         )
         assert (
             facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[0].context_usage
@@ -215,7 +245,7 @@ class TestHandlers:
                     async def session_update(self, session_id=None, update=None, **kwargs):
                         updates.append(update)
 
-                await agent.turns.replay_turn_state(session, client=Client())
+                await agent.turns.publish_turn_state(session, client=Client())
                 assert facts(updates[0].field_meta, TurnChangedUpdate) == (TurnChangedUpdate(state),)
                 assert state.started_at == started_at and state.managed_id == turn.turn_id
                 assert state.busy and state.activity == "Compacting context"
@@ -302,17 +332,22 @@ class TestHandlers:
         await agent.initialize(1, {})
         await agent.new_session("/wt/proj")
         path = tmp_path / "history.jsonl"
-        path.write_text(
-            "\n".join(
-                (
-                    json.dumps(
-                        {"type": "message", "message": {"role": "assistant", "content": str(index)}}
-                    )
-                    for index in range(100)
-                )
-            )
-        )
-        agent._comms.threads.attach_session("proj", str(path))
+        records = [
+            {"type": "session", "version": 3, "id": "snapshot"},
+            *(
+                {
+                    "type": "message",
+                    "id": f"message-{index}",
+                    "message": {
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": str(index)}],
+                    },
+                }
+                for index in range(100)
+            ),
+        ]
+        path.write_text("".join(json.dumps(record) + "\n" for record in records))
+        agent._comms.threads.attach_session(agent._comms.registry.require("proj"), str(path))
         sent = []
 
         class Client:
@@ -373,30 +408,32 @@ class TestHandlers:
         response = await first.new_session(cwd="/wt/proj", mcp_servers=[])
         session_file = tmp_path / "session.jsonl"
         session_file.write_text(
-            "\n".join(
-                [
-                    json.dumps(
-                        {
-                            "type": "message",
-                            "message": {
-                                "role": "user",
-                                "content": [{"type": "text", "text": "replayed user"}],
-                            },
-                        }
-                    ),
-                    json.dumps(
-                        {
-                            "type": "message",
-                            "message": {
-                                "role": "assistant",
-                                "content": [{"type": "text", "text": "replayed response"}],
-                            },
-                        }
-                    ),
-                ]
+            "".join(
+                json.dumps(record) + "\n"
+                for record in (
+                    {"type": "session", "version": 3, "id": "saved"},
+                    {
+                        "type": "message",
+                        "id": "user-message",
+                        "message": {
+                            "role": "user",
+                            "content": [{"type": "text", "text": "replayed user"}],
+                        },
+                    },
+                    {
+                        "type": "message",
+                        "id": "assistant-message",
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "replayed response"}],
+                        },
+                    },
+                )
             )
         )
-        first._comms.threads.attach_session("proj", str(session_file), pid=os.getpid())
+        first._comms.threads.attach_session(
+            first._comms.registry.require("proj"), str(session_file), pid=os.getpid()
+        )
         await first.shutdown()
         assert first._comms.registry.status("proj").declared_name == "stopped"
         second = self._agent(tmp_path)
@@ -449,13 +486,13 @@ class TestHandlers:
         await agent.new_session(cwd="/wt/My Project!", mcp_servers=[])
         assert "My-Project" in agent._comms.registry
 
-    async def test_cancel_drains_inbox(self, tmp_path):
+    async def test_cancel_preserves_unbound_inbox(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         agent._comms.registry.declare(Thread(name="peer", tags=frozenset(), worktree="/wt"))
         agent._comms.messaging.send("peer", "proj", "hello")
         await agent.cancel(session_id="proj")
-        assert agent._comms.bus.pending_count("proj") == 0
+        assert agent._comms.bus.pending_count("proj") == 1
 
     async def test_cancel_ends_active_relay_turn(self, tmp_path):
         agent = canonical_agent(
@@ -503,18 +540,12 @@ class TestAgentTurn:
     )
 
     def _agent_with_events(self, tmp_path: Path, wired) -> CommsAgent:
-        return canonical_agent(wired, agent_bin="pi", agent_args=[])
+        return canonical_agent(wired, agent_bin="pi", agent_args=[], auto_wake=False)
 
     def _authorize_test_goal(self, agent: CommsAgent, wired, goal) -> None:
-        """Provide the private owner grant used by goal-turn tests with fake Pi events."""
-        from agent_comms.goal_attempts import GoalAttemptStore
-
+        """Check the generation created by Goals; tests never add launch records."""
         agent.turns.agent_bin = "pi"
-        private = wired.root / "goal-private"
-        private.mkdir(mode=448, exist_ok=True)
-        store = GoalAttemptStore.initialize(private)
-        store.create_goal(goal.id)
-        agent.turns.goals.goal_store = store
+        wired.goals.open_goal_store().require_generation(goal.id)
 
     async def test_pi_session_name_stays_runtime_metadata(self, wired, tmp_path, monkeypatch):
         agent = self._agent_with_events(tmp_path, wired)
@@ -525,8 +556,11 @@ class TestAgentTurn:
                 sent.append(update)
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.AgentInfo(session_name="Agent-chosen title", model="test/model")
             yield ae.AgentInfo(session_name="Agent-chosen title", model="test/model")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="named")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
@@ -549,9 +583,12 @@ class TestAgentTurn:
                 sent.append(update)
 
         async def events(*args, **kwargs):
-            monkeypatch.setenv("PI_AGENT_ID", "proj")
+            yield fake_input_started(args, kwargs)
+            monkeypatch.setenv("AGENT_COMMS_THREAD", "proj")
             wired.threads.rename_self("renamed-proj")
             yield ae.ToolEnd(id="rename", ok=True, output="renamed", name="tool")
+            yield ae.StreamSettled()
+            yield ae.Done(ok=True, text="renamed")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         agent.sessions.client = FakeClient()
@@ -582,6 +619,7 @@ class TestAgentTurn:
         message = "Codex error: The usage limit has been reached"
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.Error(text=message)
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text=message)
@@ -591,7 +629,8 @@ class TestAgentTurn:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
         self._authorize_test_goal(agent, wired, goal)
-        await agent.turns.run_agent_turn("proj", "proj", "work")
+        with pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn("proj", "proj", "work")
         failures = [
             fact for update in sent for fact in facts(update.field_meta, RequestFailedUpdate)
         ]
@@ -603,7 +642,7 @@ class TestAgentTurn:
         assert not wired.registry.require("proj").executing
 
     @pytest.mark.parametrize("completed_in_turn", [False, True])
-    async def test_missing_terminal_blocks_only_still_active_goal(
+    async def test_missing_terminal_blocks_goal_with_canonical_failure_progress(
         self, wired, tmp_path, monkeypatch, completed_in_turn
     ):
         agent = self._agent_with_events(tmp_path, wired)
@@ -613,6 +652,7 @@ class TestAgentTurn:
         secret = "provider stderr SECRET_PRIVATE_937"
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.Error(text=secret)
             if completed_in_turn:
                 wired.goals.update_goal(
@@ -625,7 +665,8 @@ class TestAgentTurn:
             yield ae.StreamSettled()
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn("proj", "proj", "work")
+        with pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn("proj", "proj", "work")
         result = wired.registry.require("proj").goal
         assert result is not None
         assert result.state.declared_name == "blocked"
@@ -636,56 +677,11 @@ class TestAgentTurn:
             )
         else:
             assert (
-                result.progress == "Backend turn ended without a result; inspect local diagnostics."
+                result.progress == "Backend turn failed; inspect local diagnostics before resuming."
             )
         assert secret not in result.progress
-        assert "proj" not in agent.turns.emitted_errors
         await agent.turns.goals.schedule_goal("proj")
         assert not agent.inputs.pending_turns.get("proj")
-
-    async def test_error_dedup_is_scoped_to_one_turn_and_cancel_clears_it(
-        self, wired, tmp_path, monkeypatch
-    ):
-        agent = self._agent_with_events(tmp_path, wired)
-        sent: list = []
-
-        class FakeClient:
-            async def session_update(self, session_id=None, update=None, **kw):
-                sent.append(update)
-                if _update_text(update) == "busy":
-                    seen_error.set()
-
-        seen_error = asyncio.Event()
-        agent.sessions.client = FakeClient()
-        await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
-        turns = 0
-
-        async def events(*args, **kwargs):
-            nonlocal turns
-            turns += 1
-            if turns == 1:
-                yield ae.Error(text="busy")
-                yield ae.Done(ok=True, text="A succeeded")
-            elif turns == 2:
-                yield ae.Done(ok=False, text="busy")
-            else:
-                yield ae.Error(text="busy")
-                await asyncio.Event().wait()
-
-        monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn("proj", "proj", "A")
-        assert "proj" not in agent.turns.emitted_errors
-        seen_error.clear()
-        await agent.turns.run_agent_turn("proj", "proj", "B")
-        assert [_update_text(item) for item in sent].count("busy") == 2
-        assert "proj" not in agent.turns.emitted_errors
-        seen_error.clear()
-        cancelled = asyncio.create_task(agent.turns.run_agent_turn("proj", "proj", "C"))
-        await asyncio.wait_for(seen_error.wait(), 2)
-        cancelled.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await cancelled
-        assert "proj" not in agent.turns.emitted_errors
 
     async def test_successful_turn_without_a_goal_report_authorizes_next_attempt(
         self, wired, tmp_path, monkeypatch
@@ -699,6 +695,7 @@ class TestAgentTurn:
                 pass
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="did the work")
 
@@ -728,6 +725,7 @@ class TestAgentTurn:
                 pass
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             if empty_kind == "whitespace":
                 yield ae.Chunk(text=" \n\t")
             elif empty_kind == "thinking":
@@ -735,7 +733,7 @@ class TestAgentTurn:
             elif empty_kind == "unfinished_tool":
                 yield ae.ToolStart(id="unfinished", name="read")
             yield ae.StreamSettled()
-            yield ae.AgentInfo(context_used=None, context_size=1000)
+            yield ae.ContextInfo(context_used=None, context_size=1000)
             yield ae.Done(ok=True, text="")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
@@ -768,6 +766,7 @@ class TestAgentTurn:
         self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.StreamSettled()
             if outcome != "missing_done":
                 yield ae.Done(ok=outcome == "success", text="work")
@@ -800,7 +799,8 @@ class TestAgentTurn:
 
         monkeypatch.setattr(wired.goals, "update_goal", interpose_pause)
         monkeypatch.setattr(wired.goals, "block_goal_after_failed_turn", interpose_block)
-        await agent.turns.run_agent_turn("proj", "proj", "work")
+        with pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn("proj", "proj", "work")
         goal = wired.registry.require("proj").goal
         assert raced
         assert goal is not None and goal.id == initial.id
@@ -830,6 +830,7 @@ class TestAgentTurn:
         assert original is not None
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="backend unavailable")
 
@@ -854,7 +855,8 @@ class TestAgentTurn:
             return original_block(name, **kwargs)
 
         monkeypatch.setattr(wired.goals, "block_goal_after_failed_turn", interpose)
-        await agent.turns.run_agent_turn("proj", "proj", "work")
+        with pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn("proj", "proj", "work")
         current = wired.registry.require("proj").goal
         assert superseding is not None and current is not None
         if transition is SetGoalAction:
@@ -887,6 +889,7 @@ class TestAgentTurn:
         self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             wire(wired.root).goals.update_goal(
                 "proj",
                 ActiveGoalAction(
@@ -899,7 +902,8 @@ class TestAgentTurn:
                 yield ae.Done(ok=False, text="backend unavailable")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn("proj", "proj", "work")
+        with pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn("proj", "proj", "work")
         goal = wired.registry.require("proj").goal
         assert goal is not None and goal.id == initial.id
         assert goal.state.declared_name == "blocked"
@@ -923,6 +927,7 @@ class TestAgentTurn:
         self._authorize_test_goal(agent, wired, initial)
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.ToolStart(id="goal-progress", name="comms_goal", title="Report progress")
             wired.goals.update_goal(
                 "proj",
@@ -957,13 +962,10 @@ class TestAgentTurn:
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Ship the release"))
-        private = wired.root / "goal-private"
-        private.mkdir(mode=448)
-        store = GoalAttemptStore.initialize(private)
-        store.create_goal(goal.id)
-        agent.turns.goals.goal_store = store
+        store = wired.goals.open_goal_store()
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             wired.goals.update_goal(
                 "proj",
                 CompletedGoalAction(
@@ -985,8 +987,10 @@ class TestAgentTurn:
         await agent.turns.goals.schedule_goal("proj")
         await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
         assert wired.registry.require("proj").goal.state.declared_name == "completed"
-        assert GoalAttemptStore(private).snapshot(goal.id).lifecycle == CompletedGeneration()
-        assert ProviderUsageTotal.for_goal(GoalAttemptStore(private), goal.id).responses == 1
+        assert GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id).lifecycle == CompletedGeneration()
+        assert ProviderUsageTotal.for_goal(
+            GoalAttemptStore(wired.root / "goal-private"), goal.id
+        ).responses == 1
         await agent.shutdown()
 
     @pytest.mark.parametrize("owner_paused", [False, True])
@@ -1007,6 +1011,7 @@ class TestAgentTurn:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.ProviderUsage(
                 response_id="1",
                 usage=PiUsage.from_wire(
@@ -1039,7 +1044,7 @@ class TestAgentTurn:
         assert store.snapshot(goal.id).number == 2
         assert ProviderUsageTotal.for_goal(store, goal.id).responses == 2
         assert str(ProviderUsageTotal.for_goal(store, goal.id).cost_total) == "0.03"
-        grant = agent.turns.goals.goal_store.ready_grant(goal.id, 2)
+        grant = wired.goals.open_goal_store().ready_grant(goal.id, 2)
         assert grant not in repr(updates)
         assert grant not in repr(goal)
         await agent.shutdown()
@@ -1059,13 +1064,10 @@ class TestAgentTurn:
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Finish safely"))
-        private = wired.root / "goal-private"
-        private.mkdir(mode=448)
-        store = GoalAttemptStore.initialize(private)
-        store.create_goal(goal.id)
-        agent.turns.goals.goal_store = store
+        store = wired.goals.open_goal_store()
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             wired.goals.update_goal(
                 "proj",
                 CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="Premature"),
@@ -1077,10 +1079,14 @@ class TestAgentTurn:
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.goals.schedule_goal("proj")
-        await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
+        with pytest.raises(RequestError, match="Internal error"):
+            await asyncio.wait_for(agent.inputs.wake_tasks["proj"], timeout=2)
         try:
             assert wired.registry.require("proj").goal.state.declared_name == "blocked"
-            assert GoalAttemptStore(private).snapshot(goal.id).lifecycle == BlockedGeneration()
+            assert (
+                GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id).lifecycle
+                == BlockedGeneration()
+            )
         finally:
             await agent.shutdown()
 
@@ -1100,13 +1106,15 @@ class TestAgentTurn:
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             wired.goals.update_goal("proj", SetGoalAction(text="Do not replay"))
             yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="provider failed")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn("proj", "proj", "Set a goal")
+        with pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn("proj", "proj", "Set a goal")
         goal = wired.registry.require("proj").goal
         store = GoalAttemptStore(wired.root / "goal-private")
         assert goal.state.declared_name == "blocked"
@@ -1133,8 +1141,7 @@ class TestAgentTurn:
         agent.on_connect(FakeClient())
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Keep working"))
-        store = agent.turns.goals.open_goal_store()
-        store.create_goal(goal.id)
+        store = wired.goals.open_goal_store()
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
         reservation.fail(store, "The previous turn failed")
@@ -1177,8 +1184,7 @@ class TestAgentTurn:
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = wired.goals.update_goal("proj", SetGoalAction(text="Recover a retry"))
-        store = agent.turns.goals.open_goal_store()
-        store.create_goal(goal.id)
+        store = wired.goals.open_goal_store()
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
         reservation.fail(store, "Previous turn failed")
@@ -1194,16 +1200,16 @@ class TestAgentTurn:
             attempt_id=reservation.attempt_id,
             user_decision_id="first-ui-retry-before-crash",
         )
-        agent.turns.goals.goal_store = GoalAttemptStore(wired.root / "goal-private")
+        wired.goals.goal_store = GoalAttemptStore(wired.root / "goal-private")
         proxy = RuntimeProxy(agent, "proj", socket_path(wired.root, os.getpid()))
         try:
             result = await proxy.request(
                 "retry_goal", goal_id=goal.id, expected_revision=blocked.revision
             )
             assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
-            generation = agent.turns.goals.goal_store.snapshot(goal.id)
+            generation = wired.goals.open_goal_store().snapshot(goal.id)
             assert (generation.number, generation.lifecycle) == (3, ReadyGeneration())
-            assert agent.turns.goals.goal_store.ready_grant(goal.id, 3)
+            assert wired.goals.open_goal_store().ready_grant(goal.id, 3)
         finally:
             await agent.shutdown()
 
@@ -1223,7 +1229,7 @@ class TestAgentTurn:
         agent.sessions.client = Client()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         goal = await agent.turns.goals.set_goal("proj", "Keep working")
-        store = agent.turns.goals.goal_store
+        store = wired.goals.open_goal_store()
         assert store is not None
         if failed:
             reservation = store.reserve(goal.id, 1)
@@ -1275,12 +1281,10 @@ class TestAgentTurn:
             name = next(iter(agent.sessions.bindings))
             goal = wired.goals.update_goal(name, SetGoalAction(text="No replay after crash"))
             private = root / "goal-private"
-            private.mkdir(mode=448)
-            store = GoalAttemptStore.initialize(private)
-            store.create_goal(goal.id)
+            store = wired.goals.open_goal_store()
             reservation = store.reserve(goal.id, 1)
             store.claim_launch(reservation)
-            agent.turns.goals.goal_store = GoalAttemptStore(private)
+            wired.goals.goal_store = GoalAttemptStore(private)
 
             async def forbidden_backend(*args, **kwargs):
                 raise AssertionError("A claimed attempt must never launch again")
@@ -1327,6 +1331,7 @@ class TestAgentTurn:
         async def events(*args, **kwargs):
             nonlocal calls
             calls += 1
+            yield fake_input_started(args, kwargs)
             entered.set()
             await release.wait()
             yield ae.StreamSettled()
@@ -1339,7 +1344,8 @@ class TestAgentTurn:
             await agent.turns.run_agent_turn("proj", "proj", "second")
         assert calls == 1
         release.set()
-        await asyncio.wait_for(first, timeout=2)
+        with pytest.raises(RequestError, match="Internal error"):
+            await asyncio.wait_for(first, timeout=2)
         await agent.shutdown()
 
     async def test_uncertain_usage_write_terminates_goal_child_without_replay(
@@ -1355,6 +1361,7 @@ class TestAgentTurn:
         terminated = []
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.ProviderUsage(response_id="1", usage=PiUsage.from_wire({"totalTokens": 5}))
             await asyncio.Event().wait()
 
@@ -1369,8 +1376,9 @@ class TestAgentTurn:
         from agent_comms.goal_attempts import LaunchPermit
 
         monkeypatch.setattr(LaunchPermit, "record_provider_usage", fail_usage)
-        with pytest.raises(StorageUncertainError):
+        with pytest.raises(RequestError, match="Internal error") as failed:
             await agent.turns.run_agent_turn("proj", "proj", "continue")
+        assert isinstance(failed.value.__cause__, StorageUncertainError)
         assert terminated
         assert (
             GoalAttemptStore(wired.root / "goal-private").snapshot(goal.id).lifecycle
@@ -1694,6 +1702,7 @@ class TestFailureFeedback:
         message = "Codex error: The usage limit has been reached"
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.Error(text=message)
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text=message)
@@ -1704,12 +1713,13 @@ class TestFailureFeedback:
             Thread(name="peer", tags=frozenset({"team"}), worktree=str(tmp_path / "proj"))
         )
         origin = Message(sender="peer", target="#team", body="do the work", type=InfoKind)
-        await agent.turns.run_agent_turn("proj", "proj", "do the work", origins=(origin,))
+        with pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn("proj", "proj", "do the work", origins=(origin,))
         history = wired.views.channel_history("#team")
         assert history, "failed agent delivery must be reported where the request came from"
         notice = history[-1]
         assert notice.notice is True
-        assert notice.body.startswith("Delivery failed: backend turn did not complete. ")
+        assert notice.body.startswith("Request failed: backend turn did not complete. ")
         assert "[Open diagnostic](file://" in notice.body
         assert message not in notice.body
         assert not notice.starts_turn
@@ -1736,14 +1746,16 @@ class TestFailureFeedback:
         )
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.Chunk(text="unfinished secret answer")
             yield ae.StreamSettled()
             yield ae.Done(ok=False, text="provider failed SECRET_PRIVATE_938")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn(
-            "proj", "proj", "answer", reply_targets=(reply_target,), origins=(origin,)
-        )
+        with pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn(
+                "proj", "proj", "answer", origins=(origin,)
+            )
         history = (
             wired.views.channel_history(reply_target)
             if channel
@@ -1773,13 +1785,15 @@ class TestFailureFeedback:
         )
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.Chunk(text="unfinished secret answer")
             yield ae.StreamSettled()
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn(
-            "proj", "proj", "answer", reply_targets=(human.name,), origins=(origin,)
-        )
+        with pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn(
+                "proj", "proj", "answer", origins=(origin,)
+            )
         history = wired.views.dm_history("proj", human.name)
         assert len(history) == 1
         assert history[0].notice is True
@@ -1792,33 +1806,26 @@ class TestFailureFeedback:
     async def test_foreign_tool_use_before_input_start_never_notifies_channel(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms import backend
         from agent_comms.messages import Message, AlertKind, InfoKind
         from agent_comms.threads import Thread
-        from test_backend import _stub
-
-        stub = _stub(
-            tmp_path,
-            f"#!{sys.executable}\nimport json, sys\ndef emit(row): print(json.dumps(row), flush=True)\nstate=json.loads(sys.stdin.readline())\nemit({{'type':'response','command':'get_state','id':state['id'],'success':True,'data':{{'nativeInputProofCapability':'pi-native-input-v1-live-only'}}}})\nprompt=json.loads(sys.stdin.readline())\nemit({{'type':'response','command':'prompt','id':prompt['id'],'success':True}})\nemit({{'type':'message_start','message':{{'role':'assistant'}}}})\nemit({{'type':'message_update','assistantMessageEvent':{{'type':'text_delta','delta':'foreign earlier turn'}}}})\nemit({{'type':'message_end','message':{{'role':'assistant','stopReason':'toolUse','content':[{{'type':'text','text':'foreign earlier turn'}}]}}}})\nemit({{'type':'message_start','message':{{'role':'user','content':'foreign later turn','inputId':'foreign'}}}})\n",
-        )
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         human = wired.messaging.user_identity(str(tmp_path / "proj"))
         wired.registry.declare(Thread("member", frozenset({"team"}), str(tmp_path / "proj")))
         origin = Message(human.name, "#team", "please help", InfoKind)
-        original = backend.stream_agent_events
-
         async def events(*args, **kwargs):
-            async for event in original(stub, [], args[2], args[3]):
-                yield event
+            yield ae.ToolStart(id="foreign", name="read", title="Foreign earlier turn")
+            yield ae.Chunk(text="foreign earlier turn")
+            yield ae.StreamSettled()
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await asyncio.wait_for(
-            agent.turns.run_agent_turn(
-                "proj", "proj", "answer", reply_targets=("#team",), origins=(origin,)
-            ),
-            timeout=9,
-        )
+        with pytest.raises(RequestError, match="Internal error"):
+            await asyncio.wait_for(
+                agent.turns.run_agent_turn(
+                    "proj", "proj", "answer", origins=(origin,)
+                ),
+                timeout=9,
+            )
         assert all(
             (
                 "foreign earlier turn" not in message.body
@@ -1839,16 +1846,18 @@ class TestFailureFeedback:
         origin = Message(human.name, "#team", "please help", InfoKind)
 
         async def events(*args, **kwargs):
+            yield fake_input_started(args, kwargs)
             yield ae.Chunk(text="unfinished")
             yield ae.Done(ok=False, text="failed")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
-        await agent.turns.run_agent_turn(
-            "proj", "proj", "answer", reply_targets=(human.name, "#team"), origins=(origin,)
-        )
+        with pytest.raises(RequestError, match="Internal error"):
+            await agent.turns.run_agent_turn(
+                "proj", "proj", "answer", origins=(origin,)
+            )
         history = wired.views.full_history()
-        assert len(history) == 2
-        assert {message.target for message in history} == {human.name, "#team"}
+        assert len(history) == 1
+        assert {message.target for message in history} == {"#team"}
         assert all((message.notice and (not message.starts_turn) for message in history))
         assert all(("unfinished" not in message.body for message in history))
 
@@ -1864,17 +1873,13 @@ class TestLiveConfigSync:
             async def session_update(self, session_id=None, update=None, **kw):
                 sent.append(update)
 
-        async def options(_thread: Thread):
-            return []
-
-        monkeypatch.setattr(agent.sessions.config, "options", options)
         agent.sessions.client = FakeClient()
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
         await agent.sessions.config.sync_thread("proj")
-        assert not any((isinstance(update, ConfigOptionUpdate) for update in sent))
-        assert len(sent) == 1 and isinstance(sent[0], SessionInfoUpdate)
-        assert facts(sent[0].field_meta, GoalChangedUpdate) == (GoalChangedUpdate(None, None),)
-        assert "title" not in sent[0].model_fields_set
+        info = [update for update in sent if isinstance(update, SessionInfoUpdate)]
+        assert len(info) == 1
+        assert facts(info[0].field_meta, GoalChangedUpdate) == (GoalChangedUpdate(None, None),)
+        assert "title" not in info[0].model_fields_set
         sent.clear()
         wired.threads.set_thread_configuration(wired.registry.require('proj'), model='openrouter/deepseek/deepseek-v4.1-flash')
         await agent.sessions.config.sync_thread("proj")
@@ -1893,11 +1898,12 @@ class TestLiveConfigSync:
         async def assert_snapshot_update():
             goal, execution = wired.goals.goal_snapshot("proj")
             await agent.sessions.config.sync_thread("proj")
-            assert len(sent) == 1 and isinstance(sent[0], SessionInfoUpdate)
-            assert facts(sent[0].field_meta, GoalChangedUpdate) == (
+            info = [update for update in sent if isinstance(update, SessionInfoUpdate)]
+            assert len(info) == 1
+            assert facts(info[0].field_meta, GoalChangedUpdate) == (
                 GoalChangedUpdate(goal, execution),
             )
-            assert "title" not in sent[0].model_fields_set
+            assert "title" not in info[0].model_fields_set
             sent.clear()
             await agent.sessions.config.sync_thread("proj")
             assert sent == []
@@ -1962,4 +1968,4 @@ class TestQueueControl:
         )
         assert response.stop_reason == "end_turn"
         assert ran == []
-        assert "proj" not in agent.inputs.queued_inputs
+        assert agent.inputs.queued_inputs["proj"] == {}

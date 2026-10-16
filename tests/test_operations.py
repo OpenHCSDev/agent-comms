@@ -1,17 +1,29 @@
 import json
 import os
 import subprocess
+from dataclasses import replace
 import sys
 
 import pytest
 
 from agent_comms.activity import ActivityState
+from agent_comms.agent_events import AgentInfo
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.messages import QuestionKind
+from agent_comms.owner_launch import CallingThreadUnavailable, RestartEnvironment
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
+
+
+def test_calling_thread_is_declared_by_owner_launch_environment():
+    assert RestartEnvironment.calling_thread(
+        {"AGENT_COMMS_THREAD": "owner"}
+    ) == "owner"
+    with pytest.raises(CallingThreadUnavailable, match="AGENT_COMMS_THREAD"):
+        RestartEnvironment.calling_thread({})
+    assert not RestartEnvironment.called_by("owner", lambda caller: caller, environment={})
 
 
 class TestMessaging:
@@ -30,15 +42,18 @@ class TestMessaging:
 
     def test_ack_clears_inbox(self, wired):
         wired.messaging.send("PR111", "fixer", "hello")
-        assert wired.messaging.acknowledge("fixer") == 1
+        messages = wired.bus.inbox("fixer")
+        references = tuple(message.reference for message in messages)
+        assert wired.messaging.acknowledge("fixer", references) == 1
         assert wired.bus.pending_count("fixer") == 0
-        assert wired.messaging.acknowledge("fixer") == 0
+        assert wired.messaging.acknowledge("fixer", references) == 0
 
     def test_scoped_ack_only_clears_selected_conversation(self, wired):
         wired.messaging.send("PR111", "fixer", "direct")
         wired.messaging.send("PR111", "#all", "global")
 
-        assert wired.messaging.acknowledge("fixer", "PR111") == 1
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+        assert wired.messaging.acknowledge("fixer", references) == 1
         assert wired.bus.pending_count("fixer", "PR111") == 0
         assert wired.bus.pending_count("fixer", "#all") == 1
         assert wired.bus.pending_count("fixer") == 1
@@ -47,7 +62,8 @@ class TestMessaging:
         wired.messaging.send("PR111", "fixer", "direct")
         wired.messaging.send("PR111", "#all", "global")
 
-        assert wired.messaging.acknowledge("fixer", "#all") == 1
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", "#all"))
+        assert wired.messaging.acknowledge("fixer", references) == 1
         assert wired.bus.pending_count("fixer", "#all") == 0
         assert wired.bus.pending_count("fixer", "PR111") == 1
         assert wired.bus.pending_count("fixer") == 1
@@ -64,7 +80,8 @@ class TestMessaging:
         wired.messaging.send("PR111", "#all", "global")
 
         assert wired.bus.pending_counts("fixer") == {"PR111": 2, "#all": 1}
-        wired.messaging.acknowledge("fixer", "PR111")
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+        wired.messaging.acknowledge("fixer", references)
         assert wired.bus.pending_counts("fixer") == {"#all": 1}
 
     def test_shared_history_page_contract(self, wired):
@@ -121,7 +138,7 @@ class TestThreadOps:
                 },
             },
         ]
-        session_file.write_text("\n".join(json.dumps(record) for record in records))
+        session_file.write_text("\n".join(json.dumps(record) for record in records) + "\n")
         wired.registry.declare(
             Thread(
                 name="transcript-thread",
@@ -183,14 +200,30 @@ class TestThreadOps:
         wired.messaging.send("PR111", "#all", "after claim")
         assert [message.body for message in wired.bus.inbox(claimed.name)] == ["after claim"]
 
-    def test_runtime_info_is_exposed_in_presence(self, wired):
-        wired.agents.set_agent_info(
-            "fixer", model="openrouter/model", context_used=25, context_size=100
+    def test_presence_uses_configured_model_with_runtime_context(self, wired):
+        wired.threads.set_thread_configuration(
+            wired.registry.require("fixer"), model="configured/model"
+        )
+        wired.agents.observe_runtime_info(
+            "fixer", AgentInfo(model="observed/model", context_used=25, context_size=100)
         )
         row = next(row for row in wired.views.who() if row["name"] == "fixer")
-        assert row["model"] == "openrouter/model"
+        assert row["model"] == "configured/model"
         assert row["context_percent"] == 25
         assert wired.agents.agent_info_of("fixer").context_used == 25
+
+    def test_configuration_names_the_resolved_model(self, wired):
+        wired.agents.observe_runtime_info("fixer", AgentInfo(model="observed/model", context_used=25, context_size=100))
+        answer = wired.configuration.answer("fixer")
+        assert answer.model == "observed/model"
+        assert answer.context_usage.label == "25/100 tokens (25.0%)"
+        wired.threads.set_thread_configuration(
+            wired.registry.require("fixer"), model="configured/model"
+        )
+        answer = wired.configuration.answer("fixer")
+        assert answer.model == "configured/model"
+        assert answer.context_usage.used == 25
+        assert wired.configuration.answer("PR111").context_usage is None
 
     def test_presence_omits_expensive_viewer_pending_counts(self, wired):
         rows = {row["name"]: row for row in wired.views.presence()}
@@ -198,7 +231,7 @@ class TestThreadOps:
 
     def test_runtime_info_rejects_unknown_thread(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.agents.set_agent_info("ghost", model="model")
+            wired.agents.observe_runtime_info("ghost", AgentInfo(model="model"))
 
     def test_list_threads_shape(self, wired):
         rows = {row["name"]: row for row in wired.views.list_threads()}
@@ -231,7 +264,9 @@ class TestThreadOps:
         wired.owners.stop("fixer")
         session_file = tmp_path / "session.jsonl"
 
-        attached = wired.threads.attach_session("fixer", str(session_file), pid=123)
+        attached = wired.threads.attach_session(
+            wired.registry.require("fixer"), str(session_file), pid=123
+        )
 
         assert attached.tags == frozenset({"auth"})
         assert attached.parent == "PR111"
@@ -241,7 +276,7 @@ class TestThreadOps:
         assert wired.registry.status("fixer").declared_name == "running"
 
     def test_release_only_allows_the_calling_thread(self, wired, monkeypatch):
-        monkeypatch.setenv("PI_AGENT_ID", "fixer")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
 
         with pytest.raises(RelationViolationError, match="cannot release"):
             wired.owners.release("PR111")
@@ -249,9 +284,23 @@ class TestThreadOps:
         wired.owners.release("fixer")
         assert wired.registry.status("fixer").declared_name == "stopped"
 
+    def test_stop_current_calling_thread_uses_voluntary_release(self, wired, monkeypatch):
+        owner = wired.registry.require("fixer")
+        wired.registry.register(
+            replace(owner, process_identity=ProcessIdentity.capture(os.getpid()))
+        )
+        before = wired.registry.snapshot().admission_generations[owner.name]
+        monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
+
+        wired.owners.stop(owner.name)
+
+        snapshot = wired.registry.snapshot()
+        assert snapshot.statuses[owner.name].declared_name == "stopped"
+        assert snapshot.admission_generations[owner.name] > before
+
     def test_archive_requires_stopped_thread(self, wired):
         wired.messaging.send("PR111", "fixer", "kept after archive")
-        with pytest.raises(RelationViolationError, match="Stop"):
+        with pytest.raises(RelationViolationError, match="no longer stopped"):
             wired.threads.archive("fixer")
         wired.owners.stop("fixer")
         wired.threads.archive("fixer")
@@ -264,9 +313,10 @@ class TestThreadOps:
 
     def test_rename_self_preserves_routing_history_and_state(self, wired, monkeypatch):
         wired.messaging.send("fixer", "PR111", "before rename")
-        assert wired.messaging.acknowledge("PR111", "fixer") == 1
+        references = tuple(message.reference for message in wired.bus.inbox("PR111", "fixer"))
+        assert wired.messaging.acknowledge("PR111", references) == 1
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
-        wired.agents.set_agent_info("PR111", model="test/model")
+        wired.agents.observe_runtime_info("PR111", AgentInfo(model="test/model"))
         wired.ledger.merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
 
@@ -408,9 +458,9 @@ class TestThreadOps:
 
 
 class TestFork:
-    def test_spec_requires_task(self):
-        with pytest.raises(ValueError, match="task"):
-            ForkSpec(name="x", parent="p", task="")
+    def test_spec_allows_an_empty_task_and_uses_an_explicit_prompt(self):
+        assert ForkSpec(name="x", parent="p").initial_prompt == ""
+        assert ForkSpec(name="x", parent="p", prompt="first input").initial_prompt == "first input"
 
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(RelationViolationError, match="session file"):
@@ -438,7 +488,10 @@ class TestLedgerOps:
                 json.dumps(
                     {
                         "type": "message",
-                        "message": {"role": "assistant", "content": "x" * 2_000_000},
+                        "message": {
+                            "role": "assistant",
+                            "content": [{"type": "text", "text": "x" * 2_000_000}],
+                        },
                     }
                 )
                 + "\n"
@@ -446,7 +499,13 @@ class TestLedgerOps:
             for index in range(100):
                 stream.write(
                     json.dumps(
-                        {"type": "message", "message": {"role": "assistant", "content": str(index)}}
+                        {
+                            "type": "message",
+                            "message": {
+                                "role": "assistant",
+                                "content": [{"type": "text", "text": str(index)}],
+                            },
+                        }
                     )
                     + "\n"
                 )
@@ -478,13 +537,13 @@ class TestPollAndWire:
         assert "ledger" in snap
 
     def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
-        monkeypatch.setenv("PI_AGENT_ID", "fixer")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
         snap = wired.views.poll()
         assert snap["thread"]["name"] == "fixer"
 
     def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):
-        monkeypatch.setenv("PI_AGENT_ID", "me")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
         thread = comms.threads.adopt_current()
         assert thread.name == "me"
@@ -555,7 +614,6 @@ class TestReDeclarationPreservesProvenance:
     def test_current_thread_reads_agent_comms_tags(self, monkeypatch, tmp_path):
         from agent_comms.threads import current_thread
 
-        monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
         monkeypatch.setenv("AGENT_COMMS_TAGS", "ci, docs")
         monkeypatch.chdir(tmp_path)

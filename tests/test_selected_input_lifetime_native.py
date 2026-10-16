@@ -57,7 +57,7 @@ class SelectedNativeJourney:
         self.replies.append(LoopbackProvider(status=200, text=text))
 
     def execution(self):
-        WakeCandidateIndex(self.comms.bus).maintain(rebuild=True)
+        WakeCandidateIndex(self.comms.bus.log).maintain(rebuild=True)
         return SelectedExecution(
             root=self.root,
             wire_root_id=self.root_id,
@@ -266,6 +266,7 @@ async def test_actual_saved_eof_preserves_unknown_and_never_replays(journey):
 
 @pytest.mark.parametrize("direct", [False])
 async def test_actual_fresh_enrollment_retains_coverage_across_triage(journey):
+    (journey.root / "runtime").mkdir(mode=0o700, exist_ok=True)
     journey.text('{"decision":"FULL"}')
     journey.text("FRESH_TRIAGE_FULL_COMPLETED")
     result = await SelectedExecution(
@@ -281,6 +282,7 @@ async def test_actual_fresh_enrollment_retains_coverage_across_triage(journey):
     assert {row.stage for row in rows} == {"triage", "full"}
     assert len(rows) == 2 and len(journey.received) == 2
     assert {Path(row.session_file) for row in rows} == {result.fresh_session.path}
+    assert Path(journey.comms.registry.require("beta").session_file) == result.fresh_session.path
     assert all(not child.alive() for child in journey.children)
     assert journey.comms.registry.require("beta").active_turn is None
     print(

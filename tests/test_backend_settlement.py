@@ -21,7 +21,7 @@ async def test_followup_outlives_previous_native_settlement(
     tmp_path, start_before_settlement, inject_during_stats
 ):
     session = tmp_path / "session.jsonl"
-    session.write_text("session\n")
+    session.write_text('{"type":"session","version":3,"id":"same"}\n')
     stub = tmp_path / "pi-stub"
     stub.write_text(f"#!{sys.executable}\n" + f"""
 import json, sys, threading, time
@@ -35,7 +35,8 @@ def start(command):
           "content":command["message"], "inputId":command["inputId"]}}}})
 def stop(index):
     send({{"type":"message_end", "message":{{"role":"assistant",
-          "stopReason":"stop", "usage":{{"totalTokens":index}}}}}})
+          "stopReason":"stop", "content":[{{"type":"text", "text":"answer"}}],
+          "usage":{{"totalTokens":index}}}}}})
 def finish():
     global busy
     time.sleep(.15)
@@ -92,7 +93,7 @@ for line in sys.stdin:
         ):
             events.append(event)
             inject = (
-                isinstance(event, ae.AgentInfo) and event.context_used == 2
+                isinstance(event, ae.ContextInfo) and event.context_used == 2
                 if inject_during_stats
                 else isinstance(event, ae.ProviderUsage) and event.usage.total_tokens == 1
             )

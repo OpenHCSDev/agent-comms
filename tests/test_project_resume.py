@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 from dataclasses import replace
+from types import SimpleNamespace
 
 import pytest
 
@@ -19,7 +20,7 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.threads import Thread
 from agent_comms.turn_phase import CancellingPhase
-from agent_comms.wake import derive_exact_reply_target
+from agent_comms.schedule_rules import ProjectResumeCheck, WakeScheduleCheck
 from native_backend_fixture import native_backend_fixture
 
 
@@ -60,6 +61,48 @@ def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_p
     assert comms.agents.finish_turn(following.turn_lease)
     assert "project_resume_due" not in json.loads(
         comms.registry.store.path.read_text())["threads"]["owner"]
+
+
+async def test_selected_wake_queues_resume_before_retiring_its_task(tmp_path):
+    comms, _old, new = declared_owner(tmp_path)
+    turn = comms.agents.begin_turn("owner", "changing-turn")
+    comms.threads.set_project("owner", str(new))
+    assert comms.agents.finish_turn(turn.turn_lease)
+
+    current = asyncio.current_task()
+    assert current is not None
+    launched = []
+
+    class Runtime:
+        def background(self, work):
+            launched.append(work)
+            work.close()
+            return current
+
+    class Inputs:
+        closing = False
+        background_wakes_disabled = False
+        backend_inboxes = {}
+        pending_turns = {}
+        wake_tasks = {"owner": current}
+        sessions = SimpleNamespace(require=lambda _session: "owner")
+        runtime = Runtime()
+
+        async def _own_entry(self, _session):
+            return comms.registry.entry("owner")
+
+    inputs = Inputs()
+    turns = SimpleNamespace(turn_tasks={})
+    await ProjectResumeCheck(
+        session_id="owner", inputs=inputs, turns=turns,
+    ).schedule()
+    assert len(inputs.pending_turns["owner"]) == 1
+    assert str(new) in inputs.pending_turns["owner"][0].prompt
+    assert not launched  # The selected wake still owns this session.
+
+    inputs.wake_tasks.pop("owner")
+    WakeScheduleCheck(session_id="owner", inputs=inputs).schedule()
+    assert len(launched) == 1
 
 
 def test_cancelled_turn_withdraws_the_recorded_resume(tmp_path):
@@ -108,7 +151,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
 
             def reply(message):
                 return json.dumps(FieldCodec.encode((Message(
-                    session, derive_exact_reply_target(message), f"Reply {len(sent)}",
+                    session, message.exact_reply_target, f"Reply {len(sent)}",
                     InfoKind, timestamp=0,
                 ),)))
 

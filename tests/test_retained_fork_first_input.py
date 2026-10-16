@@ -17,6 +17,7 @@ from agent_comms.input_attempt import StartedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -105,7 +106,7 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
                 await asyncio.sleep(0.05)
             while not comms.registry.require(child.name).last_finished_turn_id:
                 await asyncio.sleep(0.05)
-        rows = InputDispositions(fixture.root / InputDispositions.filename).read().rows
+        rows = stored_inputs(fixture.root).rows
         original = [row for row in rows.values() if row.owner == child.name]
         assert len(original) == 1 and isinstance(original[0], StartedInput), original
         assert marker in original[0].source_text

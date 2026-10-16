@@ -16,10 +16,15 @@ from .pi_vocabulary import ThinkingLevel
 from .agent_events import CompactionEvent
 from .pi_native_backend import PersistentPiSession
 from .comms import Comms
-from .coordination_errors import IdentityConflict, PublicationActivationBlocked
+from .coordination_errors import (
+    IdentityConflict,
+    PublicationActivationBlocked,
+    RetryScheduled,
+)
 from .coordinator import Coordination
+from .following_inputs import FollowingInputs
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
-from .selected_actions import SelectedAction, SelectedExistingFileWrite
+from .selected_actions import SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
@@ -39,7 +44,7 @@ class SelectedExecution:
     session_file: Path | None = None
     fresh_private_enrollment: bool = False
     selected_thinking_level: str | None = None
-    selected_existing_file_write: SelectedExistingFileWrite | None = None
+    selected_existing_file_write: SelectedAction | None = None
     selected_tool_intent: SelectedToolIntent | None = None
     write_authority: SelectedWriteAuthority = field(default_factory=NoSelectedWritePlans)
     # The worker verifies its pinned package once (packages never change in
@@ -51,6 +56,7 @@ class SelectedExecution:
     pi_session: PersistentPiSession = field(
         default_factory=PersistentPiSession, init=False, compare=False,
     )
+    following: FollowingInputs = field(default_factory=FollowingInputs, init=False, compare=False)
     _tracked_factory: Callable[..., NativePiRpcLaunch] | None = field(
         init=False, default=None, repr=False, compare=False,
     )
@@ -100,11 +106,6 @@ class SelectedExecution:
                 raise IdentityConflict(
                     "Selected level requires explicitly supported fresh enrollment"
                 )
-        if (
-            self.selected_existing_file_write is not None
-            and type(self.selected_existing_file_write) is not SelectedExistingFileWrite
-        ):
-            raise TypeError("selected write requires an explicit trusted plan")
         if self.selected_tool_intent is not None:
             if type(self.selected_tool_intent) is not SelectedToolIntent:
                 raise TypeError("selected tool requires a nominal owner intent")
@@ -128,32 +129,41 @@ class SelectedExecution:
     async def run(
         self, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None,
         pi_session: PersistentPiSession | None = None,
+        following: FollowingInputs | None = None,
     ) -> CoordinatedTurn | None:
         if not self._run_permit.acquire(blocking=False):
             raise IdentityConflict("Selected execution cannot be reused")
         if pi_session is not None:
             self.pi_session = pi_session
+        if following is not None:
+            self.following = following
         self.root = Path(self.root).absolute()
         # Package acquisition belongs to this execution before it can select
         # a claim. Join its blocking verification before that custody advances.
         await Coordination.run_worker(self.validate)
         comms = Comms(self.root)
         with Coordination(str(self.root / "coordination.sqlite3")) as store:
-            async with SelectedParticipant.select(
-                comms,
-                store,
-                self.wire_root_id,
-                self.owner_name,
-                self.after_seq,
-                on_compaction=on_compaction,
-            ) as participant:
-                if participant is None:
-                    return None
-                session = await SelectedSession.prepare(
-                    participant,
-                    self.session_file,
-                    self.fresh_private_enrollment,
-                    self.selected_thinking_level,
-                    self,
-                )
-                return await SelectedConsideration(participant).run(self, session)
+            while True:
+                async with SelectedParticipant.select(
+                    comms,
+                    store,
+                    self.wire_root_id,
+                    self.owner_name,
+                    self.after_seq,
+                    on_compaction=on_compaction,
+                ) as participant:
+                    if participant is None:
+                        return None
+                    session = await SelectedSession.prepare(
+                        participant,
+                        self.session_file,
+                        self.fresh_private_enrollment,
+                        self.selected_thinking_level,
+                        self,
+                    )
+                    try:
+                        return await SelectedConsideration(participant).run(self, session)
+                    except RetryScheduled:
+                        # Leaving the selection closes this turn lease. The next
+                        # iteration acquires the newer generation required by retry.
+                        continue

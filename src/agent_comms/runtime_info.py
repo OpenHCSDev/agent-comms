@@ -12,6 +12,8 @@ from .locked_store import LockedStore
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
+    from .agent_events import RuntimeInfoObservation
+    from .acp_extension import ContextUsage
     from .threads import Thread
 
 
@@ -42,10 +44,16 @@ class AgentRuntimeInfo:
         return self.context_used / self.context_size * 100
 
     @property
-    def context_label(self) -> str:
-        if self.context_percent is None:
-            return ""
-        return f"{self.context_used:,}/{self.context_size:,} tokens ({self.context_percent:.1f}%)"
+    def context_usage(self) -> ContextUsage | None:
+        if self.context_used is None or not self.context_size:
+            return None
+        from .acp_extension import ContextUsage
+
+        return ContextUsage(self.context_used, self.context_size)
+
+    @classmethod
+    def optional_context_usage(cls, info: AgentRuntimeInfo | None) -> ContextUsage | None:
+        return info.context_usage if info is not None else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,8 +70,16 @@ class RuntimeInfoStore(ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]
     def empty(self) -> dict[str, AgentRuntimeInfo]:
         return {}
 
-    def set(self, info: AgentRuntimeInfo) -> None:
-        self.update(lambda values: {**values, info.thread: info})
+    def observe(self, thread: str, timestamp: float, observation: RuntimeInfoObservation) -> None:
+        """Apply only this observation's fields in the original store transaction."""
+        def apply(values: dict[str, AgentRuntimeInfo]) -> dict[str, AgentRuntimeInfo]:
+            current = values.get(thread)
+            if current is None:
+                current = AgentRuntimeInfo(thread=thread, timestamp=timestamp)
+            observed = observation.project_runtime_info(replace(current, timestamp=timestamp))
+            return {**values, thread: observed}
+
+        self.update(apply)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         names = {thread.name for thread in threads}

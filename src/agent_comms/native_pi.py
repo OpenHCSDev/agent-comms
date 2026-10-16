@@ -18,8 +18,9 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
+from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
 from .native_package import OWNER_INSTRUCTIONS
@@ -35,6 +36,7 @@ if TYPE_CHECKING:
     from .selected_tool_broker import NativeToolMode
     from .fresh_private_session import FreshPrivateSession
     from .selected_session import SelectedSession
+    from .turn_failure import TurnFailure
 
 CAPABILITY = "pi-native-input-v1-live-only"
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
@@ -137,6 +139,14 @@ class NativeContextRecord:
             ),
         }
     )
+    # The native writer stamps the moment this context was committed for a
+    # model request: the time the input was shown to the model.
+    committed_at_ms: int = field(
+        metadata={
+            "wire_name": "committedAtMs",
+            "sql": Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991"),
+        }
+    )
 
     @classmethod
     def from_events(cls, input_id, session_id, input_event, context_event):
@@ -167,6 +177,8 @@ class NativeContextRecord:
             raise ValueError("Native context lacks committed session identity")
         if not 0 < self.request_generation <= 2**53 - 1:
             raise ValueError("Native context generation is outside its native range")
+        if not 0 < self.committed_at_ms <= 2**53 - 1:
+            raise ValueError("Native context commit time is outside its native range")
 
     def at(self, session_file: Path) -> NativeContextProof:
         """Locate recorded facts; this does not grant acceptance or replay."""
@@ -176,6 +188,7 @@ class NativeContextRecord:
             self.session_entry_id,
             self.request_generation,
             self.llm_context_digest,
+            self.committed_at_ms,
             session_file,
         )
 
@@ -184,7 +197,7 @@ class NativeContextRecord:
 class NativeContextJournal(NativeContextRecord, TypedTable):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
-    schema: Literal[1]
+    schema: Literal[2]
     type: Literal["context_committed"]
 
     without_rowid = True
@@ -197,7 +210,8 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
             f"{table}_append": f"""CREATE TRIGGER {table}_append BEFORE INSERT ON {table}
             WHEN NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM {table}), 0)
               OR EXISTS(SELECT 1 FROM {table} WHERE request_generation=NEW.request_generation
-                        AND llm_context_digest != NEW.llm_context_digest)
+                        AND (llm_context_digest != NEW.llm_context_digest
+                             OR committed_at_ms != NEW.committed_at_ms))
               OR NEW.session_id != (SELECT session_id FROM {table} ORDER BY session_id LIMIT 1)
             BEGIN SELECT RAISE(ABORT,'native proof lineage differs'); END""",
             **{
@@ -245,13 +259,11 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 PrivateFileRole.require(before)
                 if before.st_nlink != 1:
                     raise NativePiUnavailable("Native proof must be private and unaliased")
-                db = custody.enter_context(closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True)))
-                db.execute("PRAGMA query_only=ON")
-                db.execute("BEGIN")
+                db = custody.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
                 actual = SQLiteSchemaObject.read(
                     db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
                 )
-                if {item.name: item.sql for item in actual} != cls.schema_objects():
+                if SQLiteSchemaObject.differences(actual, cls.schema_objects()):
                     raise NativePiUnavailable("Native proof requires offline durable conversion")
                 if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
                     raise NativePiUnavailable("Native proof inode changed while opening")
@@ -307,7 +319,10 @@ class NativeContextProof(NativeContextRecord):
         """
         if self.input_id != input_id:
             return False
-        return self.read_evidence(self.session_file, input_id, evidence=evidence) == self
+        return self.read_evidence(
+            self.session_file, input_id,
+            request_generation=self.request_generation, evidence=evidence,
+        ) == self
 
     @classmethod
     def read_evidence(
@@ -333,11 +348,15 @@ class NativeContextProof(NativeContextRecord):
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
 
-    def __init__(self, detail: str, context: NativeContextProof, provider: str, model: str):
+    def __init__(
+        self, detail: str, context: NativeContextProof, provider: str, model: str,
+        failure: TurnFailure,
+    ):
         super().__init__(f"Native Pi assistant did not finish successfully: {detail}")
         self.context = context
         self.provider = provider
         self.model = model
+        self.failure = failure
         # Provider text may contain arbitrary response bodies. Only complete
         # known short errors may be broadcast into a shared channel.
         match = re.fullmatch(
@@ -349,7 +368,7 @@ class NativePiTerminalFailure(NativePiUnavailable):
             flags=re.IGNORECASE,
         )
         self.public_message = (
-            f"{provider}/{model}: {match.group(1) if match else 'provider request failed'}."
+            f"{provider}/{model}: {match.group(1) if match else 'request failed'}."
         )
 
 
@@ -437,7 +456,7 @@ class NativePiRpcLaunch:
         else:
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         allowed = (
-            Path(sys.executable).with_name("pi-comms-native").resolve(),
+            Path(NativeArguments.owner_launcher()).resolve(),
             stack_launcher.resolve(),
             (package / "dist" / "cli.js").resolve(),
         )
@@ -566,8 +585,8 @@ class NativePiRpcLaunch:
         *,
         worktree: Path,
         session: SelectedSession,
-        provider: str = "openrouter",
-        model: str = "z-ai/glm-5.3-flash",
+        provider: str,
+        model: str,
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode | None = None,
@@ -646,59 +665,225 @@ def _read_private_file(path: Path):
         yield from evidence.rows()
 
 
-class PrivateEvidenceRead:
-    """Pinned private source with a verified original byte prefix.
+def _read_private_header(path: Path):
+    """Decode only row one while the source owner verifies every captured byte."""
+    with PrivateEvidenceRead.open(path) as evidence:
+        return evidence.header()
 
-    Resource custody lasts until close. Appending cannot invalidate earlier
-    decoded bytes unnoticed: each read hashes the whole original prefix and
-    checks both the descriptor and named revision across the observation.
+
+class NativeEvidencePrefixChanged(NativePiUnavailable):
+    """The retained verified prefix must be reacquired from byte zero."""
+
+
+class NativeEvidenceRemoved(NativePiUnavailable):
+    """The recorded recipient session no longer exists at its owned path."""
+
+
+class NativeEvidenceDigest(Protocol):
+    def copy(self) -> NativeEvidenceDigest: ...
+
+    def update(self, value: bytes) -> None: ...
+
+    def digest(self) -> bytes: ...
+
+
+class UnverifiedNativeEvidencePrefix:
+    """Named start state: no byte from the currently opened inode is trusted."""
+
+    size = 0
+
+    @staticmethod
+    def copy_digest():
+        return hashlib.sha256()
+
+    @staticmethod
+    def prepare(source: PrivateEvidenceRead, revision: FileRevision) -> FileRevision:
+        return revision
+
+    @staticmethod
+    def commit(
+        source: PrivateEvidenceRead,
+        size: int,
+        digest: NativeEvidenceDigest,
+        revision: FileRevision,
+    ) -> FileRevision:
+        observed = source._observe_revision_after(revision)
+        return (
+            observed
+            if observed == revision
+            else source.verify_snapshot(size, digest.digest())
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedNativeEvidencePrefix:
+    """The sole retained position, hash, and observed revision for one source."""
+
+    size: int
+    digest: NativeEvidenceDigest
+    revision: FileRevision
+
+    def copy_digest(self):
+        return self.digest.copy()
+
+    def prepare(
+        self, source: PrivateEvidenceRead, revision: FileRevision
+    ) -> FileRevision:
+        if revision == self.revision:
+            return revision
+        if revision.size < self.revision.size:
+            raise NativeEvidencePrefixChanged(
+                "Native Pi evidence observed revision was truncated"
+            )
+        if revision.size > self.revision.size:
+            # A private Pi session has append-only growth. The full-prefix hash
+            # additionally detected a same-inode rewrite combined with growth,
+            # but only by rereading every old byte. Pinned identity/revision
+            # still reject replacement, truncation, and non-growth mutation;
+            # the running digest extends across the bytes added here.
+            return revision
+        return source.verify_snapshot(self.size, self.digest.digest())
+
+    @staticmethod
+    def commit(
+        source: PrivateEvidenceRead,
+        size: int,
+        digest: NativeEvidenceDigest,
+        revision: FileRevision,
+    ) -> FileRevision:
+        return source._observe_revision_after(revision)
+
+
+class PrivateEvidenceRead:
+    """Pinned private source with one owned verified-prefix state.
+
+    Resource custody lasts until close. Initial acquisition verifies the full
+    prefix. Later observations trust an unchanged pinned revision and extend
+    its running digest only across appended bytes; non-growth revision changes
+    reverify the retained prefix before it can be reused.
     """
 
     def __init__(self, path, stream):
         self.path, self.stream = path, stream
         self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
-        self.size = 0
-        self.digest = hashlib.sha256()
+        self.prefix = UnverifiedNativeEvidencePrefix()
+
+    @property
+    def size(self) -> int:
+        return self.prefix.size
+
+    @classmethod
+    def _open_stream(cls, path):
+        stream = None
+        try:
+            stream = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
+            PrivateFileRole.require(os.fstat(stream.fileno()))
+            return stream
+        except FileNotFoundError as error:
+            if stream is not None:
+                stream.close()
+            raise NativeEvidenceRemoved("Native Pi evidence session was removed") from error
+        except (OSError, ValueError) as error:
+            if stream is not None:
+                stream.close()
+            raise NativePiUnavailable("Native Pi evidence file is unavailable") from error
 
     @classmethod
     @contextmanager
     def open(cls, path):
-        with ExitStack() as custody:
-            try:
-                stream = custody.enter_context(
-                    os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
-                )
-                source = cls(path, stream)
-            except OSError as error:
-                raise NativePiUnavailable("Native Pi evidence file is unavailable") from error
+        source = cls(path, cls._open_stream(path))
+        try:
             yield source
+        finally:
+            source.close()
 
     def close(self):
         self.stream.close()
 
+    def reverify_from_start(self) -> None:
+        """Enter the named unverified state on the current canonical inode."""
+        self.close()
+        self.stream = self._open_stream(self.path)
+        self.identity = FileIdentity.from_stat(os.fstat(self.stream.fileno()))
+        self.prefix = UnverifiedNativeEvidencePrefix()
+
     def _capture_append(self):
-        """Read original bytes under the file's own I/O exception boundary."""
+        """Verify and hash original bytes without retaining the complete prefix."""
         try:
             info = os.fstat(self.stream.fileno())
             PrivateFileRole.require(info)
             revision = FileRevision.from_stat(info)
             if revision.identity != self.identity:
-                raise NativePiUnavailable("Native Pi evidence inode changed")
-            if not info.st_size or info.st_size < self.size:
-                raise NativePiUnavailable("Native Pi evidence file is empty or truncated")
-            self.stream.seek(self.size)
-            digest = self.digest.copy()
-            appended = self.stream.read(info.st_size - self.size)
-            if len(appended) != info.st_size - self.size or (appended and not appended.endswith(b"\n")):
+                raise NativeEvidencePrefixChanged("Native Pi evidence inode changed")
+            if not info.st_size:
+                raise NativePiUnavailable("Native Pi evidence file is empty")
+            if info.st_size < self.size:
+                raise NativeEvidencePrefixChanged(
+                    "Native Pi evidence verified prefix was truncated"
+                )
+            revision = self.prefix.prepare(self, revision)
+            digest = self.prefix.copy_digest()
+            last = b""
+            for raw in self._pread_chunks(self.size, info.st_size):
+                digest.update(raw)
+                last = raw[-1:]
+            if info.st_size > self.size and last != b"\n":
                 raise NativePiUnavailable("Native Pi evidence file is incomplete")
-            digest.update(appended)
-            for observed in (os.fstat(self.stream.fileno()), self.path.lstat()):
-                PrivateFileRole.require(observed)
-                if revision != FileRevision.from_stat(observed):
-                    raise NativePiUnavailable("Native Pi evidence changed during observation")
-            return info.st_size, digest, appended
+            observed = self._observe_revision_after(revision)
+            if not revision.holds_cut(observed, info.st_size):
+                raise NativeEvidencePrefixChanged(
+                    "Native Pi evidence source changed during observation"
+                )
+            return info.st_size, digest, revision
         except (OSError, ValueError) as error:
-            raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
+            raise NativePiUnavailable(
+                "Native Pi evidence file is unavailable or not private"
+            ) from error
+
+    def _pread_chunks(self, start, stop):
+        """Read a pinned byte range without touching buffered decode state."""
+        descriptor = self.stream.fileno()
+        while start < stop:
+            raw = os.pread(descriptor, min(stop - start, 128 * 1024), start)
+            if not raw:
+                raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
+            start += len(raw)
+            yield raw
+
+    def _decode_captured(self, size):
+        """Decode through a fresh buffer over the pinned descriptor each time."""
+        try:
+            descriptor = os.dup(self.stream.fileno())
+        except (OSError, ValueError) as error:
+            raise NativePiUnavailable(
+                "Native Pi evidence file is unavailable or not private"
+            ) from error
+        try:
+            decoder = os.fdopen(descriptor, "rb")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        try:
+            try:
+                decoder.seek(self.size)
+            except (OSError, ValueError) as error:
+                raise NativePiUnavailable(
+                    "Native Pi evidence file is unavailable or not private"
+                ) from error
+            remaining = size - self.size
+            while remaining:
+                try:
+                    raw = decoder.readline(remaining)
+                except (OSError, ValueError) as error:
+                    raise NativePiUnavailable(
+                        "Native Pi evidence file is unavailable or not private"
+                    ) from error
+                if not raw or not raw.endswith(b"\n"):
+                    raise NativePiUnavailable("Native Pi evidence file is incomplete")
+                remaining -= len(raw)
+                yield self._decode_row(raw)
+        finally:
+            decoder.close()
 
     @staticmethod
     def _decode_row(raw):
@@ -710,18 +895,44 @@ class PrivateEvidenceRead:
             raise NativePiUnavailable("Native Pi evidence row has wrong type")
         return row
 
+    def header(self):
+        """Return row one after verifying the complete captured byte prefix."""
+        try:
+            size, digest, revision = self._capture_append()
+            self.stream.seek(0)
+            raw = self.stream.readline(size)
+            if not raw or not raw.endswith(b"\n"):
+                raise NativePiUnavailable("Native Pi evidence header is incomplete")
+            header = self._decode_row(raw)
+            self._commit_snapshot(size, digest, revision)
+            return header
+        except BaseException:
+            self.close()
+            raise
+
+    def _commit_snapshot(self, size, digest, revision) -> None:
+        try:
+            observed = self.prefix.commit(self, size, digest, revision)
+        except (OSError, ValueError) as error:
+            raise NativePiUnavailable(
+                "Native Pi evidence file is unavailable or not private"
+            ) from error
+        self.prefix = VerifiedNativeEvidencePrefix(size, digest, observed)
+
     def rows(self):
         try:
-            size, digest, appended = self._capture_append()
-            # Byte acquisition and decoding own their errors. Yielding these
-            # original rows transfers no authority over a consumer's failures.
-            for raw in appended.splitlines(keepends=True):
-                yield self._decode_row(raw)
-            try:
-                self.verify_snapshot(size, digest.digest())
-            except (OSError, ValueError) as error:
-                raise NativePiUnavailable("Native Pi evidence file is unavailable or not private") from error
-            self.size, self.digest = size, digest
+            previous_size = self.size
+            size, digest, revision = self._capture_append()
+            if size == previous_size:
+                # The pinned revision is unchanged, or a suspicious non-growth
+                # change just passed full verification. No row needs decoding.
+                self.prefix = VerifiedNativeEvidencePrefix(size, digest, revision)
+                return
+            # Decode only the captured append. Initial acquisition rehashes its
+            # complete prefix once before trust; retained prefixes extend their
+            # digest after a final pinned-revision check.
+            yield from self._decode_captured(size)
+            self._commit_snapshot(size, digest, revision)
         except BaseException:
             self.close()
             raise
@@ -729,30 +940,41 @@ class PrivateEvidenceRead:
     def verify_snapshot(self, size, expected_digest):
         """Validate the captured prefix after decoding, allowing later appends.
 
-        The current revision must stay fixed during this short hash read. It
-        need not equal the older capture revision: native appends during typed
-        decoding are legitimate, while altered captured bytes are refused.
+        Rehash the captured range once from the pinned descriptor without
+        disturbing buffered decoding. Later appends do not change those bytes;
+        a later observation rechecks them again before exposing more rows.
         """
         before = os.fstat(self.stream.fileno())
         PrivateFileRole.require(before)
-        revision = FileRevision.from_stat(before)
+        revision = self._observe_revision_after(FileRevision.from_stat(before))
         if revision.identity != self.identity or revision.size < size:
-            raise NativePiUnavailable("Native Pi evidence snapshot source changed")
-        self.stream.seek(0)
+            raise NativeEvidencePrefixChanged("Native Pi evidence snapshot source changed")
         digest = hashlib.sha256()
-        remaining = size
-        while remaining:
-            raw = self.stream.read(min(remaining, 128 * 1024))
-            if not raw:
-                raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
-            remaining -= len(raw)
+        for raw in self._pread_chunks(0, size):
             digest.update(raw)
+        revision = self._observe_revision_after(revision)
         if digest.digest() != expected_digest:
-            raise NativePiUnavailable("Native Pi evidence original prefix changed")
-        for observed in (os.fstat(self.stream.fileno()), self.path.lstat()):
-            PrivateFileRole.require(observed)
-            if revision != FileRevision.from_stat(observed):
-                raise NativePiUnavailable("Native Pi evidence changed during snapshot verification")
+            raise NativeEvidencePrefixChanged("Native Pi evidence original prefix changed")
+        return revision
+
+    def _observe_revision_after(self, revision):
+        """Check original private inode and monotonic growth, not byte integrity.
+
+        Return the last observation so hashing cannot accept a digest from an
+        earlier revision. Each observation also fences the next: growth seen on
+        the descriptor cannot be hidden by shrinking the named file back.
+        """
+        for info in (os.fstat(self.stream.fileno()), self.path.lstat()):
+            PrivateFileRole.require(info)
+            observed = FileRevision.from_stat(info)
+            if observed.identity != self.identity or (
+                observed != revision and observed.size <= revision.size
+            ):
+                raise NativeEvidencePrefixChanged(
+                    "Native Pi evidence source changed without growth"
+                )
+            revision = observed
+        return revision
 
 
 def _trusted_package(package: Path) -> Path:
@@ -881,10 +1103,9 @@ def _verify_context(
     except (TypeError, ValueError) as error:
         raise NativePiUnavailable("Native Pi input/context receipt is malformed") from error
     with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
-        proof = NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)
-        if proof != emitted:
+        if not emitted.corroborates_input(input_id, evidence=evidence):
             raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
-        return proof
+        return emitted
 
 
 def _require_reviewed_selected_source_cli() -> None:

@@ -12,6 +12,7 @@ from collections.abc import Callable, Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 
+from agent_comms.coordination_database import StoreBusy
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
@@ -31,7 +32,7 @@ from .envelope_claim_transitions import (
     project_verified_transitions,
 )
 from .errors import RelationViolationError
-from .messages import InfoKind, Message
+from .messages import ClaimNoticeKind, Message
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import StoreLock, _store_lock
@@ -48,11 +49,11 @@ def verify_selected_wake(
         raise IdentityConflict("Wake admission is not typed")
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
-    with _store_lock(comms._wire_lock_path):
+    with _store_lock(comms._wire_lock_path, shared=True):
         _require_no_private_owner_rename(comms.root)
         try:
-            with comms.bus.log.locked():
-                marker = comms.bus.log._private_marker_unlocked()
+            with comms.bus.log.certified_read() as source:
+                marker = source.marker
                 if admission.source_seq <= marker.admission_after_seq:
                     raise IdentityConflict("Selected wake precedes the current admission floor")
             initial = comms.bus.log.read_delivery_cohort(
@@ -131,7 +132,7 @@ def _committed_source(
 def _selected_claim_boundary(
     comms: Comms, store: Coordination, admission: WakeAdmission, owner_name: str
 ):
-    """One wire/bus/registry boundary for claim acquisition and exact release."""
+    """One wire/bus/registry boundary for selected claim acquisition."""
     if type(comms) is not Comms or type(store) is not Coordination:
         raise TypeError("Wake claim requires the actual wire and coordinator stores")
     if type(admission) is not WakeAdmission or type(owner_name) is not str:
@@ -206,7 +207,7 @@ def publish_selected_resource_claim(
         if target == owner.name:
             target = BuiltinChannel.ALL.value
         committed = bus.publisher.publish_claim_envelope(
-            Message(owner.name, target, "Resource claim admitted", InfoKind, notice=True),
+            Message(owner.name, target, "Resource claim admitted", ClaimNoticeKind, notice=True),
             worktree=Path(owner.worktree),
             incarnation=str(owner.created_at),
             claims=[resource_path],
@@ -224,51 +225,6 @@ def publish_selected_resource_claim(
             committed.seq,
             committed.message_id,
             admission,
-        )
-
-
-def release_selected_resources(
-    comms: Comms,
-    store: Coordination,
-    admission: WakeAdmission,
-    owner_name: str,
-    claims: tuple[ClaimOwner, ...],
-) -> None:
-    """Release only these observed generations under their current selected owner."""
-    # No resource was acquired, so there is no claim mutation to authorize.
-    # Input/turn settlement retains its own independent current-owner fences.
-    if not claims:
-        return
-    with _selected_claim_boundary(comms, store, admission, owner_name) as (
-        bus,
-        bus_lock,
-        metadata,
-        registry,
-        owner,
-        initial,
-    ):
-        transitions, _ = bus_lock.claim_transitions(bus.log, metadata)
-        projection = project_verified_transitions(transitions)
-        if any(projection.get(assignment.resource) != assignment for assignment in claims):
-            raise IdentityConflict("Coding claim changed before release")
-        target = (
-            initial.message.sender
-            if initial.message.sender != owner.name
-            else BuiltinChannel.ALL.value
-        )
-        bus.publisher.publish_claim_envelope(
-            Message(
-                owner.name,
-                target,
-                "Completed coding tool claims released",
-                InfoKind,
-                notice=True,
-            ),
-            worktree=Path(owner.worktree),
-            incarnation=str(owner.created_at),
-            releases=tuple(assignment.resource for assignment in claims),
-            _locked_registry_snapshot=registry,
-            _bus_lock=bus_lock,
         )
 
 
@@ -385,7 +341,9 @@ def write_selected_claimed_file(
         # A separate fail-fast coordinator connection holds the transaction
         # through fsync. A concurrently settling attempt must not slip between
         # verification and irreversible file mutation.
-        with Coordination(str(store.session.path), lock_timeout=0) as scoped, scoped.session.transaction():
+        with Coordination(
+            str(store.session.path), contention=StoreBusy()
+        ) as scoped, scoped.session.transaction():
             _verify_selected_wake_state(initial, owner, generation, scoped, admission)
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
             transitions, _ = bus_lock.claim_transitions(bus.log, marker)

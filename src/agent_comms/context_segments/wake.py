@@ -12,6 +12,8 @@ import json
 from dataclasses import dataclass
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
+from agent_comms.field_codec import FieldCodec
+from agent_comms.presentation import SentMessageOutcome
 
 from ..bus_publication import CommittedDelivery
 from ..threads import Thread
@@ -33,23 +35,31 @@ class SelectedWakeSegment(InstructionSegment):
     owner: Thread
     obligations: tuple[ResponseObligation, ...]
     relevance: InstructionFile
+    sent_outcomes: tuple[SentMessageOutcome, ...]
+
+    sent_limit = 5
 
     @classmethod
-    def capture(cls, sources, owner, *, obligations=()):
+    def capture(cls, sources, owner, *, obligations=(), sent_outcomes=()):
         instruction = InstructionFile.read("selected-wake.md")
         relevance = WakePolicy.relevance_instruction()
+        sent_outcomes = tuple(sent_outcomes)
+        if len(sent_outcomes) > cls.sent_limit:
+            raise ValueError("Selected wake sent outcomes exceed their bounded window")
         return cls(
             provenance=(
                 instruction.source,
                 relevance.source,
                 OwnerProvenance(owner.incarnation, NextContextTurn().source_revision(owner)),
                 *(WireProvenance(initial.message.reference) for initial, _ in sources),
+                *(WireProvenance(outcome.message.reference) for outcome in sent_outcomes),
             ),
             instruction=instruction,
             sources=tuple(sources),
             owner=owner,
             obligations=tuple(obligations),
             relevance=relevance,
+            sent_outcomes=sent_outcomes,
         )
 
     def values(self):
@@ -93,9 +103,65 @@ class SelectedWakeSegment(InstructionSegment):
             ensure_ascii=True,
             separators=(",", ":"),
         )
+        sent_values = []
+        for outcome in self.sent_outcomes:
+            message, reference = outcome.message, outcome.answer
+            sent_values.append({
+                "source_seq": message.seq,
+                "target": message.target,
+                "recipient": outcome.recipient,
+                "state": outcome.state,
+                "detail": outcome.detail,
+                "answer": (
+                    FieldCodec.encode(reference) if reference is not None else None
+                ),
+            })
+        sent_outcomes = json.dumps(
+            sent_values,
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
         return dict(
             count=len(selected),
             selected=selected_line,
             work_context=work_context,
+            sent_outcomes=sent_outcomes,
             relevance=relevance.content,
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliveredMessageSegment(InstructionSegment):
+    """One committed message handed to its recipient's already running turn."""
+
+    source: CommittedDelivery
+    assignment: WakeAssignment
+    owner: Thread
+
+    @classmethod
+    def capture(cls, source, assignment, owner):
+        instruction = InstructionFile.read("delivered-message.md")
+        return cls(
+            provenance=(instruction.source, WireProvenance(source.message.reference)),
+            instruction=instruction,
+            source=source,
+            assignment=assignment,
+            owner=owner,
+        )
+
+    def values(self):
+        self.assignment.require_selected_source(self.source, self.owner)
+        message = self.source.message
+        return dict(
+            message=json.dumps(
+                {
+                    "source_seq": self.assignment.wire_seq,
+                    "sender": message.sender,
+                    "target": message.target,
+                    "audience": self.assignment.audience.value,
+                    "body": message.body,
+                },
+                ensure_ascii=True,
+                separators=(",", ":"),
+            )
         )

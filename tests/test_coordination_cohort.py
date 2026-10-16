@@ -13,11 +13,19 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignment
+from agent_comms.assignment_states import (
+    DeferredAssignment,
+    DeliveredAssignment,
+    FullPendingAssignment,
+)
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, stable_thread_lookup
-from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.cohort_schema import CohortDeliveryReceipts, install_private_cohort_schema
 from agent_comms.comms import Comms
-from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+from agent_comms.coordination_cohort import (
+    accept_delivery_cohort,
+    pending_sealed_assignments,
+    sealed_cohort_assignments,
+)
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
@@ -32,7 +40,7 @@ from agent_comms.exporting import (
     FullLimit,
     JsonlFormat,
 )
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import InfoKind, Message
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus
 from agent_comms.threads import Thread
@@ -70,13 +78,8 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
 def _intent(message: Message, execution_id: str = "execution-1") -> PublicationIntents:
     return PublicationIntents(
         execution_id=execution_id,
-        sender=message.sender,
         exact_target=message.target,
-        message_type=message.type,
-        notice=message.notice,
-        timestamp=message.timestamp,
-        payload=message.body,
-        payload_digest=hashlib.sha256(message.body.encode()).hexdigest(),
+        message=message,
         publication_key=canonical_publication_key(execution_id, message.target),
         expected_message_id=message.message_id,
     )
@@ -89,7 +92,8 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     message = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
     raw = json.loads((tmp_path / "comms" / "bus.jsonl").read_text())
     assert (tmp_path / "comms" / "bus.jsonl").stat().st_mode & 0o777 == 0o600
-    assert set(raw[PRIVATE_WIRE_FIELD]) == {"version", "initial"}
+    assert set(raw[PRIVATE_WIRE_FIELD]) == {"kind", "version", "initial"}
+    assert raw[PRIVATE_WIRE_FIELD]["kind"] == "initial"
     assert raw["seq"] == message.seq and raw["id"] == message.message_id
     assert all(PRIVATE_WIRE_FIELD not in item.to_wire() for item in comms.bus.log.full_history())
     assert [item.seq for item in comms.bus.full_history_page(max_bytes=32).messages] == [
@@ -176,6 +180,28 @@ def test_crash_before_sql_and_lost_ack_replay_after_rename_and_tags(tmp_path: Pa
     assert (
         recovered.session._connection.execute("SELECT COUNT(*) FROM wake_claims").fetchone()[0] == 2
     )
+
+
+def test_sealed_receipts_follow_recipient_progress(tmp_path: Path) -> None:
+    comms, store, root_id, lookups = _root(tmp_path)
+    alice_first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+    bob = comms.messaging.send_initial_cohort("sender", "Bob", "other recipient")
+    alice_second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
+    for message in (alice_first, bob, alice_second):
+        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+
+    assert CohortDeliveryReceipts.sealed_sequences_after(
+        store.session._connection,
+        wire_root_id=root_id,
+        recipient_lookup=lookups["Alice"],
+        after_seq=alice_first.seq,
+    ) == frozenset({alice_second.seq})
+    assert CohortDeliveryReceipts.sealed_sequences_after(
+        store.session._connection,
+        wire_root_id=root_id,
+        recipient_lookup=lookups["Bob"],
+        after_seq=0,
+    ) == frozenset({bob.seq})
 
 
 def test_zero_member_zero_claim_and_direct_message(tmp_path: Path) -> None:
@@ -278,11 +304,18 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
     case = _ready(tmp_path, direct=True)
     try:
         intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "reply", owner_witness=case.witness
+            case.store, case.bus, case.fence, "reply",
+            exact_target=case.reply_target, owner_witness=case.witness,
         ).value
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(
+            case.store, case.bus, case.fence,
+            exact_target=case.reply_target, owner_witness=case.witness,
+        )
         first = case.bus.log.read_keyed_response(intent)
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(
+            case.store, case.bus, case.fence,
+            exact_target=case.reply_target, owner_witness=case.witness,
+        )
         assert case.bus.log.read_keyed_response(intent) == first
         assert [m.seq for m in case.bus.log.full_history()] == [case.origin_seq, first.seq]
         delivery = case.bus.log.read_delivery_cohort(case.root_id, first.seq)
@@ -441,3 +474,58 @@ def test_simultaneous_accepts_one_applied_one_replay(tmp_path: Path) -> None:
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         assert sorted(executor.map(worker, range(2))) == ["AlreadyApplied", "Applied"]
+
+
+def test_message_taken_by_a_running_turn_is_delivered_once_and_stays_delivered(
+    tmp_path: Path,
+) -> None:
+    comms, coordinator, root_id, lookups = _root(tmp_path)
+    message = comms.messaging.send_initial_cohort("sender", "#team", "read this while you work")
+    accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator)
+    alice, bob = sorted(accepted.value.assignments, key=lambda item: item.recipient)
+
+    # Pending cannot jump to delivered: only a message already handed to the
+    # running turn (paused) can be proved started there.
+    with pytest.raises(IdentityConflict):
+        coordinator.assignments.transition_preengagement(
+            alice.assignment_id, DeliveredAssignment, expected_revision=alice.revision
+        )
+
+    paused = coordinator.assignments.transition_preengagement(
+        alice.assignment_id, DeferredAssignment, expected_revision=alice.revision
+    ).value
+    delivered = coordinator.assignments.transition_preengagement(
+        alice.assignment_id, DeliveredAssignment, expected_revision=paused.revision
+    ).value
+    assert type(delivered.lifecycle) is DeliveredAssignment
+    assert delivered.lifecycle.mode == alice.lifecycle.mode
+    assert delivered.execution_id is None
+
+    # Delivered is final: no wake, no second delivery.
+    for after in (DeferredAssignment, type(alice.lifecycle)):
+        with pytest.raises(IdentityConflict):
+            coordinator.assignments.transition_preengagement(
+                alice.assignment_id, after, expected_revision=delivered.revision
+            )
+    pending = pending_sealed_assignments(coordinator, lookups["Alice"], "Alice")
+    assert alice.assignment_id not in {item.assignment_id for item in pending}
+
+    # The stored rules, not only the Python states, refuse to reopen it.
+    with pytest.raises(sqlite3.IntegrityError):
+        coordinator.session._connection.execute(
+            "UPDATE wake_claims SET lifecycle=(SELECT lifecycle FROM wake_claims "
+            "WHERE assignment_id=?), revision=revision+1 WHERE assignment_id=?",
+            (bob.assignment_id, alice.assignment_id),
+        )
+    coordinator.session._connection.rollback()
+
+    # A message the turn never took returns to pending and wakes normally.
+    bob_paused = coordinator.assignments.transition_preengagement(
+        bob.assignment_id, DeferredAssignment, expected_revision=bob.revision
+    ).value
+    back = coordinator.assignments.transition_preengagement(
+        bob.assignment_id, type(bob.lifecycle), expected_revision=bob_paused.revision
+    ).value
+    assert type(back.lifecycle) is type(bob.lifecycle)
+    pending = pending_sealed_assignments(coordinator, lookups["Bob"], "Bob")
+    assert bob.assignment_id in {item.assignment_id for item in pending}

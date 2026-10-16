@@ -5,6 +5,7 @@ from agent_comms.input_disposition import InputDocument
 from agent_comms.turn_failure import InputIdUnavailable, PromptSendFailed
 from agent_comms.turn_output import TurnOutput
 from agent_comms.diagnostics import FailureReason
+from stored_inputs import stored_inputs
 
 @pytest.mark.parametrize('reason', [FailureReason.PREFLIGHT_EXIT, FailureReason.PREFLIGHT_TIMEOUT])
 def test_preflight_diagnostics_keep_original_phase(reason):
@@ -36,12 +37,12 @@ def test_post_dispatch_failure_preserves_bound_uncertainty(tmp_path):
     from agent_comms.input_attempt import BoundUnknownInput, SentInput
     from agent_comms.input_disposition import InputDispositions
 
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions(tmp_path)
     store.record('acp:partial-write', seq=None, owner='owner', admission=1,
                  target='owner', text='original input')
     assert store.bind('acp:partial-write', admission=1, turn_id='turn',
                       native_id='a' * 32, text='original input')
-    before = store.read().lookup('acp:partial-write')
+    before = stored_inputs(store.root).lookup('acp:partial-write')
     assert isinstance(before, SentInput)
     assert isinstance(before, BoundUnknownInput)
     output = TurnOutput(failure=InputIdUnavailable('Native prompt write failed after dispatch'))

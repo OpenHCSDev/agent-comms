@@ -7,7 +7,6 @@ send-admission and live-context authority. Installation never resets them.
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated, Literal
@@ -112,7 +111,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         reference = self.reference.require_recorded()
         return NativeContextProof(
             reference.input_id, reference.session_id, self.session_entry_id,
-            reference.request_generation, self.llm_context_digest,
+            reference.request_generation, self.llm_context_digest, self.committed_at_ms,
             self.require_session_identity().path,
         )
 
@@ -122,27 +121,6 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             return self.stage.from_columns(self.execution_id, self.attempt_ordinal)
         except (TypeError, ValueError) as error:
             raise IdentityConflict("Native input execution columns conflict with their stage") from error
-
-    @classmethod
-    @contextmanager
-    def _publication_read(cls, root):
-        from .coordination_database import CoordinationStore
-        from .coordinated_runtime_schema import assert_native_runtime_schema
-        from .coordination_response import _assert_response_schema
-        from .errors import RelationViolationError
-        from .recovery_projection import _preflight
-
-        database = root / "coordination.sqlite3"
-        failure = _preflight(database)
-        if failure == "missing":
-            yield None
-            return
-        if failure:
-            raise RelationViolationError("Native reply source has an invalid coordinator")
-        with CoordinationStore.observing(database, lock_timeout=0.05) as db:
-            assert_native_runtime_schema(db)
-            _assert_response_schema(db)
-            yield db
 
     @classmethod
     def for_native_user(cls, db, reader, user, *, session_id):
@@ -193,7 +171,9 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         from .coordination_tables.executions import ExecutionRecord
         from .coordination_tables.responses import ResponseObligation
 
-        with cls._publication_read(root) as db:
+        from .transcripts import TranscriptRead
+
+        with TranscriptRead.publication_source(root) as db:
             if db is None:
                 return PublishedReplyRevision(0, 0)
             return PublishedReplyRevision.read(
@@ -244,6 +224,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     session_entry_id: str | None = field(default=None, metadata={"native_context": str})
     request_generation: int | None = field(default=None, metadata={"native_context": int})
     llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
+    committed_at_ms: int | None = field(default=None, metadata={"native_context": int})
     verdict: Annotated[type[SelectedTriage] | None, RecordedTriageText] = field(
         default=None, metadata={"sql": Column(check=RecordedTriageText.sql_constraint("verdict"))}
     )
@@ -256,9 +237,10 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         "(session_id IS NULL AND session_file IS NULL) OR "
         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
         "AND length(session_file)>0 AND sent_owner_admission_generation IS NOT NULL)",
-        "(session_entry_id IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL) OR "
+        "(session_entry_id IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL "
+        "AND committed_at_ms IS NULL) OR "
         "(session_entry_id IS NOT NULL AND length(session_entry_id)>0 AND request_generation>0 "
-        "AND length(llm_context_digest)=64 AND session_id IS NOT NULL)",
+        "AND length(llm_context_digest)=64 AND committed_at_ms>0 AND session_id IS NOT NULL)",
         "stage='triage' OR verdict IS NULL",
     )
 
@@ -285,6 +267,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             session_entry_id=context.session_entry_id,
             request_generation=context.request_generation,
             llm_context_digest=context.llm_context_digest,
+            committed_at_ms=context.committed_at_ms,
             verdict=verdict,
         )
         if updated.rowcount != 1:

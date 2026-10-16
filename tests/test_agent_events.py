@@ -14,7 +14,6 @@ import pytest
 from agent_comms import agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.activity import ActivityState
 from agent_comms.mro_dispatch import MroDispatch, handles
 from agent_comms.pending_requests import PendingRequests
 from agent_comms.threads import Thread
@@ -142,11 +141,42 @@ async def test_selected_handlers_preserve_replacements_and_identity(synchronous)
             await consumer.dispatch(Value("wrong"), borrowed)
 
 
+@pytest.mark.parametrize("synchronous", [False, True])
+async def test_handler_can_consume_without_returning_a_publication(synchronous):
+    @dataclass(frozen=True)
+    class PrivateObservation(events.AgentEvent):
+        pass
+
+    seen = []
+
+    class SyncConsumer(MroDispatch):
+        @handles(PrivateObservation)
+        def consume(self, value):
+            seen.append("consumed")
+            return self.DISCARD
+
+        @handles(events.AgentEvent)
+        def must_not_run(self, value):
+            seen.append("published")
+
+    class AsyncConsumer(SyncConsumer):
+        @handles(PrivateObservation)
+        async def consume(self, value):
+            return super().consume(value)
+
+        @handles(events.AgentEvent)
+        async def must_not_run(self, value):
+            return super().must_not_run(value)
+
+    consumer = SyncConsumer() if synchronous else AsyncConsumer()
+    value = PrivateObservation()
+    result = (consumer.dispatch_sync(value) if synchronous else await consumer.dispatch(value))
+    assert result is None
+    assert seen == ["consumed"]
+
+
 def test_payload_fields_and_frozen_multiple_inheritance():
     start = events.ToolStart("id", "read", "Read file", {"path": "file"})
-    assert start.activity_state == ActivityState.WORKING
-    assert start.activity_detail == "Read file"
-    assert events.ActivityEvent in type(start).__mro__
     assert events.ToolEvent in type(start).__mro__
     for value in (start, events.InputStarted(None), events.ModelChanged("id", True)):
         with pytest.raises(FrozenInstanceError):
@@ -154,49 +184,6 @@ def test_payload_fields_and_frozen_multiple_inheritance():
     done = events.Done("failed", False, "input_authority_changed", {"elapsed_ms": 3})
     assert done.reason_code == "input_authority_changed"
     assert done.diagnostic == {"elapsed_ms": 3}
-
-
-@dataclass(frozen=True)
-class ContextWarning(events.ActivityEvent):
-    """New behavior-bearing case; neither consumer is edited to support it."""
-
-    text: str
-
-    @property
-    def activity_state(self):
-        return ActivityState.WORKING
-
-    @property
-    def activity_detail(self):
-        return self.text
-
-
-async def test_new_activity_declaration_reaches_real_turn_consumer(comms, tmp_path, monkeypatch):
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    owner = CommsAgent(
-        comms,
-        agent_bin="unused",
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
-    )
-    session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
-    observed = []
-
-    async def stream(*args, **kwargs):
-        yield ContextWarning("context warning")
-        observed.append(
-            comms.agents.activity_of(owner.sessions.bindings[session.session_id]).detail
-        )
-        yield events.Done("done", True)
-
-    monkeypatch.setattr("agent_comms.backend.stream_agent_events", stream)
-    try:
-        await owner.turns.run_agent_turn(
-            session.session_id, owner.sessions.bindings[session.session_id], "task"
-        )
-        assert observed == ["context warning"]
-    finally:
-        await owner.shutdown()
 
 
 async def test_request_correlation_separates_families_and_ignores_late_results():

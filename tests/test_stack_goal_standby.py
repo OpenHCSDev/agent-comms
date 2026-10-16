@@ -18,6 +18,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import CompletedGeneration
 from agent_comms.goal_presentation import GoalExecutionState
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 @pytest.mark.parametrize("restart, review_pending", [(False, False), (True, False), (True, True)])
@@ -202,7 +203,6 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             goal = comms.goals.update_goal(
                 "parent",
                 SetGoalAction(text="Review @child report"),
-                owner_store=agent.turns.goals.open_goal_store(),
             )
             goal_id = goal.id
             if review_pending:
@@ -236,7 +236,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             assert first_proc is not None and first_proc.returncode is None
             await agent.turns.goals.schedule_goal("parent")
             assert not agent.inputs.pending_turns.get("parent")
-            assert agent.turns.goals.goal_store.snapshot(goal.id).number == 2
+            assert comms.goals.open_goal_store().snapshot(goal.id).number == 2
             if restart:
                 # Wait intent survives reopening. The new executing owner may
                 # rotate only the unused READY grant at the send boundary.
@@ -263,15 +263,15 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             else:
                 assert first_proc.returncode is not None
             assert (
-                agent.inputs.dispositions.read().rows[f"bus:{message.seq}"].declared_name
+                stored_inputs(agent.inputs.dispositions.root).rows[f"bus:{message.seq}"].declared_name
                 == "started"
             )
             for key in pending_keys:
-                row = agent.inputs.dispositions.read().rows.get(key)
+                row = stored_inputs(agent.inputs.dispositions.root).rows.get(key)
                 assert row.declared_name == "reserved" and not hasattr(row, "native_id")
                 assert row.reviewed_for_goal(goal.id)
             assert comms.registry.require("parent").goal.state.declared_name == "completed"
-            assert agent.turns.goals.goal_store.snapshot(goal.id).lifecycle == CompletedGeneration()
+            assert comms.goals.open_goal_store().snapshot(goal.id).lifecycle == CompletedGeneration()
             session = Path(comms.registry.require("parent").session_file)
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             users = [row["message"] for row in rows if row.get("message", {}).get("role") == "user"]

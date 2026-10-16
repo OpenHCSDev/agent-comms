@@ -10,12 +10,12 @@ import select
 import subprocess
 import sys
 import threading
-import time
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms import claim_admission
 from agent_comms import cohort_foreground as foreground
 from agent_comms import cohort_send
 from agent_comms import coordinated_runtime as runtime
@@ -30,9 +30,10 @@ from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from agent_comms.errors import RelationViolationError
-from agent_comms.native_pi import NativeContextProof, NativeTurnResult
+from agent_comms.native_pi import NativeContextProof, NativePiRpcLaunch, NativeTurnResult
 from agent_comms.native_prompt_send import _enter_admission
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.selected_actions import SelectedExistingFileWrite
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -59,6 +60,19 @@ def _fake_package(package):
     (dist / extension.name).write_bytes(extension.read_bytes())
 
 
+def _fake_acquire(package):
+    _fake_package(package)
+    return lambda **_options: None
+
+
+def _patch_package_acquisition(monkeypatch):
+    monkeypatch.setattr(
+        NativePiRpcLaunch,
+        "acquire_tracked",
+        classmethod(lambda _cls, package: _fake_acquire(package)),
+    )
+
+
 @pytest.fixture(autouse=True)
 def configured_foreground(monkeypatch):
     monkeypatch.setattr(foreground, "Thread", _configured_thread)
@@ -78,24 +92,31 @@ def _wire(base: Path) -> tuple[Path, str, Comms]:
 
 def _fake_pi(calls: list[str]):
     async def run(
-        package, *, input_id, prompt, worktree, session_dir, session_file=None, **_kwargs
+        package, *, input_id, prompt, worktree, session, **_kwargs
     ):
-        assert session_file is None
-        session_file = session_dir / "one.jsonl"
+        assert session.session_file is None
+        session_file = session.directory / "one.jsonl"
         # The real get_state provides an actual saved file before prompt send.
         session_file.write_text(json.dumps({"type": "session", "id": "foreground"}) + "\n")
         session_file.chmod(0o600)
 
         def admitted():
-            # The fake Pi must cross the same irreversible send-admission
-            # boundary before claiming a native context. Do not synthesize a
-            # receipt from a reservation that was never sent.
-            with _enter_admission(
-                lambda: _kwargs["prompt_send_boundary"](session_file),
-                threading.Event(),
-                time.monotonic() + 5,
-            ):
-                calls.append(input_id)
+            # The fake Pi crosses the real irreversible send-admission owner;
+            # only its local dummy pipe replaces the paid child's pipe.
+            read_fd, write_fd = os.pipe()
+            try:
+                with _enter_admission(
+                    read_fd,
+                    lambda: _kwargs["prompt_send_boundary"](
+                        NativeSessionIdentity("foreground", str(session_file))
+                    ),
+                    threading.Event(),
+                    _kwargs["acquisition_measurements"],
+                ):
+                    calls.append(input_id)
+            finally:
+                os.close(read_fd)
+                os.close(write_fd)
 
         await asyncio.to_thread(admitted)
         entry_id = hashlib.sha256(input_id.encode()).hexdigest()[:16]
@@ -121,13 +142,14 @@ def _fake_pi(calls: list[str]):
             session_file,
             [
                 {
-                    "schema": 1,
+                    "schema": 2,
                     "type": "context_committed",
                     "sessionId": "foreground",
                     "inputId": input_id,
                     "sessionEntryId": entry_id,
                     "requestGeneration": 1,
                     "llmContextDigest": digest,
+                    "committedAtMs": 1_791_964_800_000,
                 }
             ],
         )
@@ -146,7 +168,9 @@ def _fake_pi(calls: list[str]):
         )
         await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
         return NativeTurnResult(
-            "42", NativeContextProof(input_id, "foreground", entry_id, 1, digest, session_file)
+            "42", NativeContextProof(
+                input_id, "foreground", entry_id, 1, digest, 1_791_964_800_000, session_file
+            )
         )
 
     return run
@@ -161,7 +185,7 @@ async def test_foreground_registers_own_pid_and_seals_one_selected_direct(
         root, root_id, comms = _wire(base)
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
-        monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
+        _patch_package_acquisition(monkeypatch)
         monkeypatch.setattr(TrackedTurnSession, "execute", _fake_pi(calls))
 
         def ready(thread: Thread) -> None:
@@ -205,8 +229,16 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
         root, root_id, comms = _wire(base)
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
-        monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
+        _patch_package_acquisition(monkeypatch)
         monkeypatch.setattr(TrackedTurnSession, "execute", _fake_pi(calls))
+        published_resources: list[Path] = []
+        publish_claim = claim_admission.publish_selected_resource_claim
+
+        def capture_claim(comms, store, admission, owner_name, resource_path):
+            published_resources.append(resource_path.resource)
+            return publish_claim(comms, store, admission, owner_name, resource_path)
+
+        monkeypatch.setattr(claim_admission, "publish_selected_resource_claim", capture_claim)
 
         def ready(thread: Thread) -> None:
             assert resource.read_bytes() == b"before\n"
@@ -223,17 +255,18 @@ async def test_foreground_explicit_selected_existing_file_entry_mutates_under_cl
             wait_seconds=0,
             ready=ready,
             selected_existing_file_write=SelectedExistingFileWrite(
-                ExistingFileClaim(Path(resource)), b"after selected claim\n"
+                ExistingFileClaim(Path("module.py")), b"after selected claim\n"
             ),
         )
         assert result is not None and result.publications
+        assert published_resources == [resource]
         assert len(calls) == 1 and resource.read_bytes() == b"after selected claim\n"
-        claimed = Comms(root).bus.log.claim_projection()[str(resource)]
-        assert (
-            claimed.admission is not None
-            and claimed.admission.wake_assignment_id == result.assignment_ids[0]
+        # Successful publication releases the exact selected file claim.
+        assert Comms(root).bus.log.claim_projection().get(str(resource)) is None
+        assert result.assignment_ids
+        assert any(
+            message.body == "42" for message in comms.views.dm_history("sender", "beta")
         )
-        assert comms.views.dm_history("sender", "beta")[-1].body == "42"
 
 
 async def test_foreground_selected_write_preflight_refuses_uninitialized_or_external_resource(
@@ -265,6 +298,12 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
             )
         assert "alpha" not in comms.registry and resource.read_bytes() == b"before\n"
         root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.registry.declare(
+            Thread(
+                "sender", frozenset(), str(base),
+                process_identity=ProcessIdentity.capture(os.getpid()),
+            )
+        )
         external = tmp_path / "external.py"
         external.write_bytes(b"external\n")
         with pytest.raises(ValueError, match="outside this thread.s project directory"):
@@ -278,6 +317,9 @@ async def test_foreground_selected_write_preflight_refuses_uninitialized_or_exte
                 wait_seconds=0,
                 selected_existing_file_write=SelectedExistingFileWrite(
                     ExistingFileClaim(Path(external)), b"forbidden\n"
+                ),
+                ready=lambda _: comms.messaging.send_initial_cohort(
+                    "sender", "alpha", "attempt external write"
                 ),
             )
         assert "alpha" not in comms.registry and external.read_bytes() == b"external\n"
@@ -372,7 +414,7 @@ async def test_foreground_explicit_selected_write_never_mutates_no_wake(
         )
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
-        monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
+        _patch_package_acquisition(monkeypatch)
         monkeypatch.setattr(TrackedTurnSession, "execute", _fake_pi(calls))
 
         def ready(thread: Thread) -> None:
@@ -412,7 +454,7 @@ async def test_foreground_two_recipients_one_no_wake_and_no_model(
         root, root_id, comms = _wire(base)
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
-        monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
+        _patch_package_acquisition(monkeypatch)
         monkeypatch.setattr(TrackedTurnSession, "execute", _fake_pi(calls))
         ready_names: set[str] = set()
 
@@ -509,7 +551,9 @@ async def test_foreground_refuses_takeover_and_cosmetic_subprocess_pid(
         code = """import asyncio, sys
 from pathlib import Path
 from agent_comms import coordinated_runtime as r
-r._trusted_package = lambda _: None
+from agent_comms.native_pi import NativePiRpcLaunch
+NativePiRpcLaunch.acquire_tracked = classmethod(
+    lambda cls, package: lambda **options: None)
 try:
     asyncio.run(r.SelectedExecution(root=Path(sys.argv[1]), wire_root_id=sys.argv[2],
         owner_name="beta", native_package=Path(sys.argv[1]), opt_in=True).run())
@@ -546,10 +590,11 @@ def test_actual_foreground_command_owns_its_recipient_process(tmp_path: Path) ->
 import threading
 import time
 from agent_comms import cohort_foreground as f, coordinated_runtime as r
-from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
+from test_cohort_foreground import _fake_pi, _fake_package, _fake_acquire, _configured_thread
 f.Thread = _configured_thread
 f._trusted_package = _fake_package
-r._trusted_package = _fake_package
+from agent_comms.native_pi import NativePiRpcLaunch
+NativePiRpcLaunch.acquire_tracked = classmethod(lambda cls, package: _fake_acquire(package))
 from agent_comms.tracked_turn import TrackedTurnSession
 TrackedTurnSession.execute = _fake_pi([])
 raise SystemExit(f.main(sys.argv[1:]))
@@ -614,7 +659,8 @@ raise SystemExit(f.main(sys.argv[1:]))
             assert json.loads(sender.stdout)["wire_seq"] == 1
             out, err = child.communicate(timeout=12)
             assert child.returncode == 0, (out, err)
-            assert json.loads(out.strip())["publications"]
+            response = json.loads(out.strip())
+            assert response["publications"], (response, err)
             assert comms.registry.status("beta") == StoppedThreadStatus()
             assert comms.views.dm_history("sender", "beta")[-1].body == "42"
         finally:
@@ -632,10 +678,11 @@ def test_two_real_recipient_processes_emit_selected_and_typed_no_wake(tmp_path: 
 import threading
 import time
 from agent_comms import cohort_foreground as f, coordinated_runtime as r
-from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
+from test_cohort_foreground import _fake_pi, _fake_package, _fake_acquire, _configured_thread
 f.Thread = _configured_thread
 f._trusted_package = _fake_package
-r._trusted_package = _fake_package
+from agent_comms.native_pi import NativePiRpcLaunch
+NativePiRpcLaunch.acquire_tracked = classmethod(lambda cls, package: _fake_acquire(package))
 from agent_comms.tracked_turn import TrackedTurnSession
 TrackedTurnSession.execute = _fake_pi([])
 original_run = f.run_foreground_once
@@ -759,7 +806,7 @@ async def test_failed_model_reservation_is_not_polled_or_replayed(
         root, root_id, comms = _wire(base)
         calls: list[str] = []
         monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
-        monkeypatch.setattr(runtime, "_trusted_package", _fake_package)
+        _patch_package_acquisition(monkeypatch)
 
         async def uncertain(*args, input_id: str, **kwargs):
             calls.append(input_id)

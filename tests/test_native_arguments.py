@@ -1,6 +1,7 @@
 """Launch selection has one grammar, then typed consumers and native validation."""
 
 import ast
+import re
 from pathlib import Path
 
 from native_proof_cases import read_proof_rows
@@ -16,6 +17,16 @@ from agent_comms.native_arguments import (
 )
 from test_backend_native_lifecycle import native_backend as native_backend
 from agent_comms.pi_vocabulary import OffThinkingLevel
+
+
+def test_unconfigured_launch_has_no_provider_or_model_policy():
+    arguments = NativeArguments.configured(environment={})
+    assert arguments.argv == ()
+    assert arguments.model is None
+    assert arguments.thinking is None
+    assert NativeArguments.configured(environment={
+        NativeArguments.arguments_key: "--provider user --model selected",
+    }).model == "user/selected"
 
 
 def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments():
@@ -66,8 +77,10 @@ def test_option_declaration_extends_consumption_rendering_and_mode_validation():
     with pytest.raises(ValueError, match="fixture denied"):
         NativeArguments.parse(("--fixture-value=denied",)).rpc()
     for member in OptionArgument.members_with(OneShotArgument):
-        for flag in (member.flag(), member.short):
-            with pytest.raises(ValueError, match="one-shot"):
+        with pytest.raises(ValueError) as declared:
+            member().validate_rpc()
+        for flag in (value for value in (member.flag(), member.short) if value is not None):
+            with pytest.raises(ValueError, match=re.escape(str(declared.value))):
                 NativeArguments.parse((flag,)).rpc()
     for mode in (("--mode", "text"), ("--mode=json",), ("--mode",)):
         with pytest.raises(ValueError):

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Never
 
 if TYPE_CHECKING:
     from .backend import TurnSession
-    from .pi_events import AgentSettled, MessageStart, Response
+    from .pi_events import AgentSettled, InputCommitted, MessageStart, Response
 
 
 class PromptAdmission(ABC):
@@ -30,7 +30,7 @@ class PromptAdmission(ABC):
     def acknowledge(self, response: Response) -> PromptAdmission:
         return self
 
-    def start(self, event: MessageStart) -> PromptAdmission:
+    def start(self, event: MessageStart | InputCommitted) -> PromptAdmission:
         return self
 
     def settle(self, event: AgentSettled) -> PromptAdmission:
@@ -77,7 +77,7 @@ class AcknowledgedPrompt(PromptAdmission):
 
 @dataclass(frozen=True)
 class StartedPrompt(AcknowledgedPrompt):
-    message: MessageStart
+    input_start: MessageStart | InputCommitted
     started = True
     awaiting_start = False
 
@@ -85,7 +85,7 @@ class StartedPrompt(AcknowledgedPrompt):
         return session.native.attestation.admits_extension_input(session.inputs)
 
     def settle(self, event):
-        return SettledPrompt(self.response, self.message, event)
+        return SettledPrompt(self.response, self.input_start, event)
 
 
 @dataclass(frozen=True)

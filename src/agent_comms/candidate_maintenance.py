@@ -1,8 +1,8 @@
-"""Best-effort post-publication candidate indexing; never delivery authority.
+"""Best-effort indexing of successful appends after the outer locks release.
 
-The publisher gives this scheduler only a durable sequence after releasing the
-wire and bus locks. Losing a hint or crashing this daemon leaves the WAL index
-stale/unavailable; canonical bus and sealed SQL still drive original delivery.
+Losing a hint or crashing the daemon leaves the optional index unavailable;
+canonical bus and sealed SQL still drive original delivery. Byte positions
+include observations as well as messages, without inventing message sequences.
 """
 
 from __future__ import annotations
@@ -11,29 +11,39 @@ import logging
 import threading
 from pathlib import Path
 
-from .message_bus import MessageBus
+from .bus_route_counts import BusRouteCounts
+from .routing import DeliveryMessage
+from .wire_log import WireLog
 from .wake_candidate_index import WakeCandidateIndex
 
 _LOG = logging.getLogger(__name__)
 _MAX_ACTIVE_ROOTS = 32
 _guard = threading.Lock()
-_pending: dict[Path, tuple[MessageBus, int]] = {}
+_pending: dict[Path, tuple[WireLog, int]] = {}
 
 
-def schedule_candidate_catchup(bus: MessageBus, committed_seq: int) -> None:
-    """A bounded memory-only signal; never wait for WAL or a wire lock here."""
-    if type(bus) is not MessageBus or type(committed_seq) is not int or committed_seq <= 0:
-        raise ValueError("candidate notification needs an actual committed bus sequence")
-    root = bus.log.path.parent
+class CandidateMaintenanceFailed(RuntimeError):  # noqa: N818 - named worker failure
+    """One optional index drain failed; a later append may start a fresh drain."""
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        super().__init__(f"Candidate maintenance failed for {root}")
+
+
+def schedule_candidate_catchup(log: WireLog, through_bytes: int) -> None:
+    """Prepare writer indexes, then signal their existing maintenance worker."""
+    if type(log) is not WireLog or type(through_bytes) is not int or through_bytes <= 0:
+        raise ValueError("candidate notification needs an actual committed byte position")
+    BusRouteCounts(log.path).prepare()
+    root = log.path.parent
     with _guard:
         current = _pending.get(root)
         if current is not None:
-            _pending[root] = (current[0], max(current[1], committed_seq))
+            _pending[root] = (current[0], max(current[1], through_bytes))
             return
         if len(_pending) >= _MAX_ACTIVE_ROOTS:
-            _LOG.warning("Candidate notification omitted: maintenance root budget exceeded")
-            return
-        _pending[root] = (bus, committed_seq)
+            raise CandidateMaintenanceFailed(root)
+        _pending[root] = (log, through_bytes)
         try:
             threading.Thread(
                 target=_drain_candidate,
@@ -49,35 +59,40 @@ def schedule_candidate_catchup(bus: MessageBus, committed_seq: int) -> None:
 def _drain_candidate(root: Path) -> None:
     try:
         with _guard:
-            bus, _seq = _pending[root]
-        # Recheck source ownership off the producer path. Derived maintenance
-        # cannot create the protocol marker or authorize delivery.
-        with bus.log.locked():
-            metadata = bus.log._private_marker_unlocked()
+            log, _bytes = _pending[root]
+        # Source ownership is checked off the producer path. Maintenance cannot
+        # create the protocol marker or authorize delivery.
+        with log.certified_read() as source:
+            metadata = source.marker
         root_id = metadata.root_id
-        index = WakeCandidateIndex(bus)
-        # Each batch owns its own bounds; the drain itself runs until the
-        # derived index is caught up with the latest notified delivery — a
-        # stalled index must not wait for future deliveries to advance.
+        index = WakeCandidateIndex(log)
+        routes = BusRouteCounts(log.path)
         while True:
             with _guard:
                 target = _pending[root][1]
-            hint = index.notify_committed_append(root_id=root_id, through_seq=target)
+            hint = index.notify_committed_append(root_id=root_id, through_bytes=target)
             result = index.catch_up_committed_append(
                 hint, max_rows=64, max_bytes=256 * 1024, bootstrap_new=True
             )
-            if result.caught_up:
+            with log._opened_wire_snapshot(need_sequence=False) as source:
+                route_result = routes.sync(
+                    source.stream,
+                    source.revision,
+                    lambda record: DeliveryMessage.from_wire(record, root_id=source.metadata.root_id),
+                )
+            if result.caught_up and route_result.complete:
                 with _guard:
-                    if _pending[root][1] <= result.checkpoint_seq:
-                        _pending.pop(root, None)
+                    if _pending[root][1] <= result.checkpoint_bytes:
+                        # Retire this worker once, atomically with its final
+                        # target check. A later append can start a new worker;
+                        # this worker must not remove that successor's signal.
+                        _pending.pop(root)
                         return
-            elif not result.more_source_bytes:
-                return
-    except Exception:
-        # The worker thread has no caller: record the defect with its traceback
-        # and let the thread fail through threading.excepthook.
-        _LOG.exception("Candidate maintenance failed")
-        raise
-    finally:
+    except Exception as error:
         with _guard:
             _pending.pop(root, None)
+        # The worker thread has no caller. Publish one named failure through the
+        # log and threading.excepthook after retiring this process-local drain.
+        failure = CandidateMaintenanceFailed(root)
+        _LOG.exception("%s", failure)
+        raise failure from error

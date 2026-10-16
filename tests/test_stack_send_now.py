@@ -18,6 +18,7 @@ from agent_comms import backend
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, WhenBusy
+from stored_inputs import stored_inputs
 
 
 @pytest.mark.asyncio
@@ -320,7 +321,6 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 owner._comms.goals.update_goal(
                     "project",
                     SetGoalAction(text="Continue useful work"),
-                    owner_store=owner.turns.goals.open_goal_store(),
                 )
 
         pi_session = PersistentPiSession()
@@ -413,7 +413,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 assert len(requests) == 1 and not started.is_set()
                 assert any(
                     row.unresolved
-                    for row in owner.inputs.dispositions.read().rows.values()
+                    for row in stored_inputs(owner.inputs.dispositions.root).rows.values()
                 )
                 return
             if surface in {"revoked", "oversized"}:
@@ -485,7 +485,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 assert not owner.inputs.queued_inputs.get("project")
                 assert all(
                     row.declared_name == "started"
-                    for row in owner.inputs.dispositions.read().rows.values()
+                    for row in stored_inputs(owner.inputs.dispositions.root).rows.values()
                 )
                 assert not any(
                     isinstance(row.get("content"), dict) and "[agent error]" in row["content"].get("text", "")

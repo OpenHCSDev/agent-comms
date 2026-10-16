@@ -60,7 +60,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
         assert str(database) in text
         assert proxy.task is None and proxy.controller_token is None
         assert not owner._runtime.clients.get(thread.name)
-        assert not (comms.root / "input_dispositions.json").exists()
+        assert not (comms.root / "input_dispositions.sqlite3").exists()
         assert not (comms.root / "native-sessions").exists()
     finally:
         holder.close()

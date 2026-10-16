@@ -10,8 +10,9 @@ from acp.schema import SessionConfigSelectOption
 from agent_comms.acp import CommsClient
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
+from agent_comms.errors import RelationViolationError
 from agent_comms.config_options import (
     CatalogConfigOption,
     ConfigOption,
@@ -39,8 +40,9 @@ async def owner(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ModelConfigOption, "discover", models)
     monkeypatch.setattr(ThinkingLevelConfigOption, "discover", levels)
+    monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     agent = canonical_agent(
-        wire(tmp_path / "wire"),
+        Comms(tmp_path / "wire"),
         agent_bin="pi",
         agent_args=["--model", "test/one"],
         auto_wake=False,
@@ -53,7 +55,7 @@ async def owner(tmp_path, monkeypatch):
 
 
 async def test_state_is_owned_once_and_attachments_do_not_share_negotiation(owner, tmp_path):
-    other = CommsClient(wire(tmp_path / "other"), agent_bin="pi")
+    other = CommsClient(Comms(tmp_path / "other"), agent_bin="pi")
     assert type(owner.sessions) is SessionLifecycle
     assert type(other.sessions) is AttachedSessionLifecycle
     await owner.initialize(1, {})
@@ -98,20 +100,44 @@ async def test_attached_declaration_publishes_membership_without_acquiring_execu
         await attachment.shutdown()
 
 
+def test_thread_service_tier_round_trips_legacy_rows():
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.pi_vocabulary import ServiceTier
+    from agent_comms.threads import Thread
+
+    encoded = FieldCodec.encode(Thread("legacy", frozenset(), "."))
+    assert encoded.pop("service_tier") == "priority"
+    restored = FieldCodec.decode(Thread, encoded)
+    assert restored.service_tier is ServiceTier.PRIORITY
+    standard = Thread("standard", frozenset(), ".", service_tier=ServiceTier.STANDARD)
+    assert FieldCodec.decode(Thread, FieldCodec.encode(standard)).service_tier is ServiceTier.STANDARD
+    with pytest.raises(RelationViolationError, match="configuration changed"):
+        standard.require_original_model_configuration(restored)
+
+
 async def test_native_observation_only_initializes_unset_configuration(owner, tmp_path):
     session = await owner.new_session(str(tmp_path / "native-config"))
     thread = owner._comms.registry.require(session.session_id)
     assert thread.thinking_level is None
+    assert thread.service_tier.value == "priority"
     await owner.sessions.observe_native_configuration(
-        session.session_id, thread.name, events.AgentInfo(model="test/two", thinking_level="high")
+        session.session_id, thread.name, events.AgentInfo(
+            model="test/two", thinking_level="high"
+        )
     )
     observed = owner._comms.registry.require(thread.name)
     assert observed.model == "test/one"
     assert observed.thinking_level is HighThinkingLevel
+    environment = observed.native_environment(
+        owner._comms.root, owner._comms.registry.snapshot(), observed.worktree
+    )
+    assert environment["AGENT_COMMS_SERVICE_TIER"] == "priority"
     owner._comms.threads.set_thread_configuration(owner._comms.registry.require(thread.name), thinking_level='off')
     before = (owner._comms.root / "registry.json").read_bytes()
     await owner.sessions.observe_native_configuration(
-        session.session_id, thread.name, events.AgentInfo(model="test/two", thinking_level="high")
+        session.session_id, thread.name, events.AgentInfo(
+            model="test/two", thinking_level="high"
+        )
     )
     assert owner._comms.registry.require(thread.name).thinking_level is OffThinkingLevel
     assert (owner._comms.root / "registry.json").read_bytes() == before
@@ -136,7 +162,7 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
                 for value in ("medium", "high")
             ]
 
-        async def apply(self, config, session_id, thread, value):
+        async def apply(self, config, thread, value):
             config.comms.registry.register(replace(thread, task=value))
 
     router = build_agent_router(owner)
@@ -154,7 +180,7 @@ async def test_one_option_declaration_reaches_real_acp_router_and_persistence(
         False,
     )
     assert changed["configOptions"][-1]["currentValue"] == "high"
-    assert wire(owner._comms.root).registry.require(response.session_id).task == "high"
+    assert Comms(owner._comms.root).registry.require(response.session_id).task == "high"
 
     # Polling must use the same declaration catalog as parser/set dispatch.
     # A newly declared option backed by another Thread field is not invisible.

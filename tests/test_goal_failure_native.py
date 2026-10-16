@@ -15,7 +15,7 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from agent_comms.agent_events import CompactionStart, CompactionEnd
-from agent_comms.acp_failure import PromptFailureReceipt
+from agent_comms.acp_failure import RequestFailure
 from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction, SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptStore, UnresolvedAttemptError
@@ -24,6 +24,7 @@ from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
 from test_backend_native_lifecycle import native_backend as native_backend
+from stored_inputs import sent_text, stored_inputs
 
 
 async def test_saved_native_autonomous_goal_compacts_before_original_input(
@@ -104,8 +105,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             goal = comms.goals.update_goal(
                 sid, SetGoalAction(text="One journaled autonomous continuation")
             )
-            store = agent.turns.goals.open_goal_store()
-            store.create_goal(goal.id)
+            store = comms.goals.open_goal_store()
             admission = comms.registry.snapshot().admission_generations[sid]
             preserved = "acp:unrelated-unattempted"
             agent.inputs.dispositions.record(
@@ -116,7 +116,7 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
                 target="other-owner",
                 text="Never replay this unrelated reserved input",
             )
-            unknown = agent.inputs.dispositions.read().lookup(preserved)
+            unknown = stored_inputs(agent.inputs.dispositions.root).lookup(preserved)
             before_posts = native.provider.posts
             native.provider.text = "Journaled local summary and successful goal continuation."
             agent.inputs.auto_wake = True
@@ -132,10 +132,10 @@ async def test_saved_native_autonomous_goal_compacts_before_original_input(
             # original native user input is required to start exactly once.
             assert native.provider.posts >= before_posts + 2
             assert native.session.read_bytes().startswith(history)
-            rows = agent.inputs.dispositions.read()
+            rows = stored_inputs(agent.inputs.dispositions.root)
             originals = [row for row in rows.rows.values() if row.key.startswith("turn:")]
             assert len(originals) == 1 and originals[0].has_started
-            assert originals[0].source_text == originals[0].sent_text
+            assert originals[0].source_text == sent_text(native, originals[0])
             assert rows.lookup(preserved) == unknown
             entries = [json.loads(line) for line in native.session.read_text().splitlines()]
             compact = [index for index, row in enumerate(entries) if row["type"] == "compaction"]
@@ -194,16 +194,16 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert response.stop_reason == "end_turn"
             assert len(native.saved_inputs()) == 2
             goal = comms.goals.update_goal(sid, SetGoalAction(text="Exercise one explicit failed attempt"))
-            store = agent.turns.goals.open_goal_store()
-            store.create_goal(goal.id)
+            store = comms.goals.open_goal_store()
             admission = comms.registry.snapshot().admission_generations[sid]
             key = "acp:retained-unknown"
             agent.inputs.dispositions.record(
                 key, seq=None, owner=sid, admission=admission,
                 target=sid, text="Never replay this earlier uncertain input",
             )
-            unknown = agent.inputs.dispositions.read().rows[key]
-            native.provider.status = 503
+            unknown = stored_inputs(agent.inputs.dispositions.root).rows[key]
+            native.provider.status = 400
+            native.provider.error_message = "insufficient_quota"
             if owner_pauses:
                 class PauseAtResponse:
                     async def wait(self):
@@ -226,15 +226,15 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
                 await agent.turns.run_agent_turn(
                     sid, sid, "One new failed goal input", autonomous_goal=True
                 )
-            receipt = PromptFailureReceipt.from_error(
+            request_failure = RequestFailure.from_error(
                 error.value.code, str(error.value), error.value.data
             )
-            assert receipt.notification_published
+            assert request_failure.notification_published
             assert store.snapshot(goal.id).lifecycle == BlockedGeneration()
             assert len(native.saved_inputs()) == 3
             assert native.saved_inputs()[-1]["content"][0]["text"].endswith("One new failed goal input")
             assert native.session.read_bytes().startswith(history)
-            assert agent.inputs.dispositions.read().rows[key] == unknown
+            assert stored_inputs(agent.inputs.dispositions.root).rows[key] == unknown
             registry = comms.registry.snapshot()
             owner = registry.threads[sid]
             assert owner.active_turn is None
@@ -261,7 +261,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
                 assert paused.state.pause_source.instruction()
                 assert reopened.goals.goal_history(sid)[-1].after == paused
                 assert not (comms.root / "goal_pause_events.json").exists()
-                assert agent.inputs.dispositions.read().rows[key] == unknown
+                assert stored_inputs(agent.inputs.dispositions.root).rows[key] == unknown
                 return
             # Explicit owner Retry traverses the socket control, new scheduler,
             # existing wake runner and native journal. The failed/UNKNOWN input
@@ -283,7 +283,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
                 "Continue working toward the active goal."
             )
             assert native.session.read_bytes().startswith(history)
-            assert agent.inputs.dispositions.read().rows[key] == unknown
+            assert stored_inputs(agent.inputs.dispositions.root).rows[key] == unknown
             assert not agent.inputs.pending_turns.get(sid)
             print(f"native_failed_goal_projection={projected.to_primitive()} provider_posts={native.provider.posts} retry_generation=2 next_ready_generation=3 saved_inputs=4")
     finally:

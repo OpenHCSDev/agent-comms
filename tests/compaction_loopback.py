@@ -5,7 +5,8 @@ import json
 
 
 class LoopbackProvider:
-    def __init__(self, *, status: int = 503, text: str = "local summary", response_timeout: float = 15):
+    def __init__(self, *, status: int = 503, text: str = "local summary", response_timeout: float = 15,
+                 error_message: str | None = None, error_type: str = "server_error"):
         self.status = status
         self.text = text
         self.port = 0
@@ -16,6 +17,8 @@ class LoopbackProvider:
         self.thinking = ""
         self.response_gate = None
         self.response_timeout = response_timeout
+        self.error_message = error_message
+        self.error_type = error_type
 
     def response_chunks(self):
         if self.thinking:
@@ -62,10 +65,11 @@ class LoopbackProvider:
                 await asyncio.wait_for(self.response_gate.wait(), self.response_timeout)
             if self.status == 0:
                 # This attempt stays in flight until Pi is cancelled.
-                await asyncio.wait_for(reader.read(), 20)
+                await asyncio.wait_for(reader.read(), self.response_timeout)
                 return
             if self.status in {400, 503}:
-                body = (
+                body = json.dumps({'error': {'message': self.error_message,
+                                             'type': self.error_type}}).encode() if self.error_message else (
                     b'{"error":{"message":"maximum context length exceeded; '
                     b'private prompt","type":"context_length_exceeded"}}'
                     if self.status == 400

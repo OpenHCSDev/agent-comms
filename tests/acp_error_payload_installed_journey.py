@@ -23,7 +23,7 @@ from acp.schema import TextContentBlock
 
 import agent_comms
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
-from agent_comms.acp_failure import PromptFailureReceipt, ProviderQuotaFailure
+from agent_comms.acp_failure import RequestFailure, ProviderQuotaFailure
 from agent_comms.comms import Comms
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.field_codec import FieldCodec
@@ -31,6 +31,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 
 from native_context_budget_installed_journey import ReceiptSubscriber
+from stored_inputs import stored_inputs
 
 
 REASON = "Controlled provider usage limit has been reached; original input not retried"
@@ -160,26 +161,26 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
                     await client.prompt(session_id="error-native", prompt=[
                         TextContentBlock(type="text", text="One private provider failure input")])
                 except RequestError as error:
-                    receipt = PromptFailureReceipt.from_error(error.code, str(error), error.data)
+                    request_failure = RequestFailure.from_error(error.code, str(error), error.data)
                 else:
                     raise AssertionError("Real provider refusal did not reach SDK RequestError")
-                assert receipt.notification_published
-                assert isinstance(receipt.failure, ProviderQuotaFailure)
-                assert REASON in receipt.failure.detail
+                assert request_failure.notification_published
+                assert isinstance(request_failure.failure, ProviderQuotaFailure)
+                assert REASON in request_failure.failure.detail
                 (evidence / "failure-boundary.json").write_text(json.dumps({
-                    "receipt": FieldCodec.encode(receipt),
+                    "request_failure": FieldCodec.encode(request_failure),
                     "notifications": [FieldCodec.encode(fact) for fact in subscriber.failure_facts],
                 }, indent=2) + "\n")
-                assert subscriber.failure_facts == [receipt.failure]
+                assert subscriber.failure_facts == [request_failure.failure]
                 assert len(requests) == 2 and not provider_errors
                 owner = comms.registry.require("error-native")
                 native = Path(owner.session_file)
                 original = native.read_bytes()
-                dispositions = InputDispositions(root / InputDispositions.filename).read()
+                dispositions = stored_inputs(root)
             async with attached(FailureSubscriber()) as client:
                 assert len(requests) == 2, "Failure/history reattachment replayed original input"
                 assert native.read_bytes() == original
-                assert InputDispositions(root / InputDispositions.filename).read() == dispositions
+                assert stored_inputs(root) == dispositions
                 assert comms.registry.require("error-native").active_turn is None
                 users = [row["message"] for row in map(json.loads, original.splitlines())
                          if row.get("type") == "message" and row["message"].get("role") == "user"]
@@ -187,9 +188,9 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
                 report = {"installed_core": str(Path(agent_comms.__file__).parent),
                           "sdk": importlib.metadata.version("agent-client-protocol"),
                           "provider_posts": 2, "native_originals": 2, "same_client_repeated_load": repeat_load,
-                          "notification_published": receipt.notification_published,
-                          "failure_title": receipt.failure.title,
-                          "disposition": receipt.failure.input_disposition,
+                          "notification_published": request_failure.notification_published,
+                          "failure_title": request_failure.failure.title,
+                          "disposition": request_failure.failure.input_disposition,
                           "nested_provider_reason_preserved": True,
                           "passive_failed_history_and_dispositions_unchanged": True,
                           "public_effects": 0, "paid_calls": 0, "replays": 0}

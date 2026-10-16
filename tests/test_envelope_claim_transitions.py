@@ -91,8 +91,9 @@ def test_existing_physical_worktree_files_and_aliases(tmp_path):
     other = tmp_path / "other"
     other.mkdir()
     (other / "a.py").write_text("a")
-    assert a != ExistingFileClaim(Path("a.py")).normalized(other)
-    for path in ("missing.py", "../outside.py", ".", other / "a.py"):
+    outside = ExistingFileClaim(other / "a.py").normalized(worktree)
+    assert outside == str(other / "a.py") and outside != a
+    for path in ("missing.py", "../outside.py", "."):
         with pytest.raises(ClaimTransitionError):
             ExistingFileClaim(Path(path)).normalized(worktree)
     (worktree / "link.py").symlink_to(worktree / "a.py")

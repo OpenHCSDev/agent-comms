@@ -14,7 +14,6 @@ from uuid import uuid4
 from .turn_phase import ShutdownPhase
 
 from .native_turn_context import NativeContextData
-from .pi_vocabulary import ThinkingLevel
 from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -226,14 +225,7 @@ class GetState(SessionSnapshot, NativeQuery):
             session.session_name = state.session_name
             session.active_session_file = state.session_file or session.active_session_file
             session.usage.size = state.model.context_window
-            yield events.AgentInfo(
-                model=state.model.display_name,
-                thinking_level=ThinkingLevel.optional_name(state.thinking_level),
-                session_name=state.session_name,
-                session_file=session.active_session_file,
-                context_used=session.usage.used,
-                context_size=session.usage.size,
-            )
+            yield state.agent_info(session)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -388,6 +380,13 @@ class SetThinkingLevel(SettingCommand):
     result_type = events.ThinkingChanged
     error_message = "Thinking level change failed"
     level: str | None = field(default=None, metadata={"wire_omit_default": True})
+
+
+@dataclass(frozen=True, kw_only=True)
+class SetSteeringMode(PiCommand):
+    """How many waiting steers Pi hands the model at one step: "all" or "one-at-a-time"."""
+
+    mode: str | None = field(default=None, metadata={"wire_omit_default": True})
 
 
 @dataclass(frozen=True, kw_only=True)

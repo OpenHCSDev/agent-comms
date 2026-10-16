@@ -45,15 +45,16 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
         assert c.bus.log.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
 
 
-def test_create_claim_preserves_physical_worktree_scope(tmp_path):
+def test_create_claim_preserves_physical_paths_without_aliases(tmp_path):
     outside = tmp_path / "outside"
     outside.mkdir()
     root = tmp_path / "work"
     root.mkdir()
     (root / "link").symlink_to(outside, target_is_directory=True)
-    for path in ("../outside/x", "link/missing.py", str(outside / "x"), "."):
+    for path in ("../outside/x", "link/missing.py", ".", outside):
         with pytest.raises(ClaimTransitionError):
             WritableFileClaim(Path(path)).normalized(root)
+    assert WritableFileClaim(outside / "x").normalized(root) == str(outside / "x")
     with pytest.raises(ClaimTransitionError):
         ExistingFileClaim(Path("new.py")).normalized(root)
     (root / "existing").write_text("a")
@@ -82,7 +83,7 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
         input_id = secrets.token_hex(16)
         calls = []
 
-        def admit(self, call):
+        def admit(self, round_number, call):
             self.calls.append(call)
 
     owner = Owner()
@@ -107,8 +108,9 @@ async def test_multicall_native_transport_matches_events_and_refuses_duplicate(t
         # Terminal ledger needs the consumed slot an actual owner writes.
         from agent_comms.selected_tool_broker import consume_selected_slot
 
-        call = socket.calls[id]
-        consume_selected_slot(tmp_path, call.slot(owner.input_id), call.slot(owner.input_id))
+        call = socket.calls.require(0, id)
+        slot = call.slot(owner.input_id, 0)
+        consume_selected_slot(tmp_path, slot, slot)
         socket.tool_finished(
             ToolExecutionEnd(tool_call_id=id, tool_name=name, is_error=False), owner.input_id
         )
@@ -133,7 +135,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog)
     class Owner:
         input_id = secrets.token_hex(16)
 
-        def admit(self, call):
+        def admit(self, round_number, call):
             answered.set()
 
     tmp_path.chmod(0o700)
@@ -168,7 +170,7 @@ async def test_tool_call_pi_never_started_is_refused_with_its_reason(tmp_path):
     class Owner:
         input_id = secrets.token_hex(16)
 
-        def admit(self, call):
+        def admit(self, round_number, call):
             raise AssertionError("an unstarted call was checked")
 
     tmp_path.chmod(0o700)

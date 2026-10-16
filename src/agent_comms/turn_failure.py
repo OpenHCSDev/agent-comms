@@ -29,6 +29,24 @@ class TurnFailure(DeclaredFamily):
     def supersedes(self, previous: TurnFailure | None) -> bool:
         return previous is None or self.precedence >= previous.precedence
 
+    def prepare_execution_retry(self, db, execution_id: str) -> None:
+        """Consume any earlier provider proof for this nonretryable failure."""
+        from .coordination_tables.attempts import ReplayAssessments
+
+        ReplayAssessments.revoke(db, execution_id)
+
+    def after_provider_retry_exhausted(self) -> TurnFailure:
+        return self
+
+    def raise_native(self, proof, provider: str, model: str) -> None:
+        """A runtime failure does not prove a completed provider request."""
+        from .native_pi import NativePiUnavailable
+
+        raise NativePiUnavailable(self.text)
+
+    def retry_delay(self, attempt_ordinal: int) -> float:
+        raise TypeError("Only a retryable provider failure has a retry delay")
+
 
 class InputIdUnavailable(TurnFailure):
     def with_startup_diagnostics(self, stderr: str) -> TurnFailure:
@@ -101,9 +119,46 @@ class FinalStopMissing(TerminalFailure):
 class ModelRequestFailed(TurnFailure):
     """An original native error terminal is evidence, not a missing stop."""
 
+    @classmethod
+    def from_diagnostics(cls, text: str, diagnostics) -> TurnFailure:
+        failure = cls(text)
+        for diagnostic in diagnostics:
+            failure = diagnostic.refine_model_request_failure(failure)
+        return failure
+
+    def after_provider_retry_exhausted(self) -> TurnFailure:
+        return ProviderRetryExhausted(self.text)
+
+    def raise_native(self, proof, provider: str, model: str) -> None:
+        from .native_pi import NativePiTerminalFailure
+
+        raise NativePiTerminalFailure(self.text, proof, provider, model, self)
+
     code = FailureReason.MODEL_REQUEST_FAILED
     precedence = 45
     ends_with_request_retry = True
+
+
+class RetryableProviderFailure:
+    """Capability shared by declared transient provider failures."""
+
+    def prepare_execution_retry(self, db, execution_id: str) -> None:
+        """A provider refusal may retry only while durable output facts are absent."""
+        from .coordination_tables.attempts import ReplayAssessments
+
+        ReplayAssessments.authorize_if_unobserved(db, execution_id)
+
+    def retry_delay(self, attempt_ordinal: int) -> float:
+        """Bounded exponential delay between distinct durable attempts."""
+        return min(2 ** (attempt_ordinal - 1), 8)
+
+
+class ProviderRetryExhausted(RetryableProviderFailure, ModelRequestFailed):
+    """The native provider-retry owner exhausted a declared transient failure."""
+
+
+class ProviderTransportFailed(RetryableProviderFailure, ModelRequestFailed):
+    """The native diagnostic declared a provider transport failure."""
 
 
 class QueuedInputMissing(TerminalFailure):

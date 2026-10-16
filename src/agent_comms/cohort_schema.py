@@ -316,6 +316,28 @@ class CohortDeliveryReceipts(CohortTable, TypedTable):
     without_rowid = True
 
     @classmethod
+    def sealed_sequences_after(
+        cls,
+        db: sqlite3.Connection,
+        *,
+        wire_root_id: str,
+        recipient_lookup: str,
+        after_seq: int,
+    ) -> frozenset[int]:
+        """Sealed addressed receipts after one recipient's visited position."""
+        rows = cls.read(
+            db.execute(
+                "SELECT d.* FROM cohort_delivery_receipts d "
+                "JOIN claim_batch_receipts r ON r.wire_root_id=d.wire_root_id "
+                "AND r.wire_seq=d.wire_seq AND r.sealed=1 "
+                "WHERE d.wire_root_id=? AND d.recipient_lookup=? AND d.wire_seq>? "
+                "ORDER BY d.wire_seq",
+                (wire_root_id, recipient_lookup, after_seq),
+            )
+        )
+        return frozenset(row.wire_seq for row in rows)
+
+    @classmethod
     def references(cls):
         return (
             ForeignKey(("recipient_lookup",), Participants, ("participant_lookup",)),
@@ -531,28 +553,16 @@ def _digest(schema: dict[str, str]) -> str:
     return hashlib.sha256("\n".join(schema.values()).encode()).hexdigest()
 
 
-def _cohort_objects(db: sqlite3.Connection) -> dict[str, str]:
-    return {
-        row.name: row.sql
-        for row in SQLiteSchemaObject.read(
-            db.execute(
-                "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
-                "AND (name LIKE 'cohort_%' OR name LIKE 'claim_batch_%')"
-            )
-        )
-    }
+def _cohort_objects(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+    return SQLiteSchemaObject.read(db.execute(
+        "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
+        "AND (name LIKE 'cohort_%' OR name LIKE 'claim_batch_%')"))
 
 
-def _awareness_objects(db: sqlite3.Connection) -> dict[str, str]:
-    return {
-        row.name: row.sql
-        for row in SQLiteSchemaObject.read(
-            db.execute(
-                "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
-                "AND name LIKE 'awareness_%'"
-            )
-        )
-    }
+def _awareness_objects(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+    return SQLiteSchemaObject.read(db.execute(
+        "SELECT name,sql FROM sqlite_master WHERE type IN ('table','trigger','index') "
+        "AND name LIKE 'awareness_%'"))
 
 
 def assert_cohort_schema(db: sqlite3.Connection) -> None:
@@ -565,7 +575,7 @@ def assert_cohort_schema(db: sqlite3.Connection) -> None:
         singleton=1, version=COHORT_SCHEMA_VERSION, ddl_digest=_digest(schema)
     ):
         raise SchemaVersionError("unsupported private cohort schema version")
-    if _cohort_objects(db) != schema or SQLiteForeignKeys.read(
+    if SQLiteSchemaObject.differences(_cohort_objects(db), schema) or SQLiteForeignKeys.read(
         db.execute("PRAGMA foreign_keys")
     ) != [SQLiteForeignKeys(True)]:
         raise SchemaVersionError("private cohort schema is missing or drifted")
@@ -574,7 +584,7 @@ def assert_cohort_schema(db: sqlite3.Connection) -> None:
 def assert_optional_awareness_schema(db: sqlite3.Connection) -> None:
     schema = _schema(AwarenessTable)
     meta = AwarenessSchemaMeta.one(db, singleton=1)
-    if _awareness_objects(db) != schema or meta != AwarenessSchemaMeta(
+    if SQLiteSchemaObject.differences(_awareness_objects(db), schema) or meta != AwarenessSchemaMeta(
         singleton=1, version=2, ddl_digest=_digest(schema)
     ):
         raise SchemaVersionError("optional awareness generation schema is unavailable")

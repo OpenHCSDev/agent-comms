@@ -6,7 +6,11 @@ import re
 from abc import ABC, ABCMeta
 from typing import Any, ClassVar, Self, cast
 
-from metaclass_registry import AutoRegisterMeta, LazyDiscoveryDict, RegistryConfig  # type: ignore[import-untyped]
+from metaclass_registry import (  # type: ignore[import-untyped]
+    AutoRegisterMeta,
+    LazyDiscoveryDict,
+    RegistryConfig,
+)
 
 
 class _FamilyMeta(AutoRegisterMeta, ABCMeta):
@@ -34,7 +38,8 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
             root is None and any(isinstance(base, _FamilyMeta) for base in bases)
         )
         if is_root:
-            namespace["_family_affix"] = affix or ""
+            # slots dataclasses recreate the root without its class-header keywords.
+            namespace["_family_affix"] = affix if affix is not None else namespace.get("_family_affix", "")
             namespace["__registry__"] = (
                 LazyDiscoveryDict(enable_cache=False) if discovery_package else {}
             )
@@ -122,9 +127,14 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         return "(" + ",".join("'" + name.replace("'", "''") + "'" for name in cls.names()) + ")"
 
     @classmethod
+    def _member_declarations(cls) -> tuple[type[DeclaredFamily], ...]:
+        """Acquire this family's declarations before the shared capability query."""
+        return tuple(cls.__registry__.values())
+
+    @classmethod
     def members_with(cls, capability: type) -> tuple[type[Self], ...]:
         return tuple(
             cast(type[Self], member)
-            for member in cls.__registry__.values()
+            for member in cls._member_declarations()
             if issubclass(member, cls) and issubclass(member, capability)
         )

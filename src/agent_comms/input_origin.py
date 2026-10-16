@@ -39,6 +39,14 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     def matches_owner(self, recorded_name, incarnation):
         return recorded_name == incarnation.name
 
+    def delivery_reference(self, root_id: str) -> MessageReference | None:
+        return None
+
+    @property
+    def reply_target(self) -> str | None:
+        """Automatic native destination declared by this original ingress."""
+        return None
+
 
 @dataclass(frozen=True)
 class InputProvenance(Provenance):
@@ -52,8 +60,7 @@ class InputProvenance(Provenance):
     def public_text(self, comms) -> str:
         from .input_disposition import InputDispositions
 
-        inputs = InputDispositions(comms.root / InputDispositions.filename).read()
-        return self.require_original(inputs).source_text
+        return self.require_original(InputDispositions(comms.root)).source_text
 
     def require_human_input(self):
         self.origin.require_human()
@@ -73,6 +80,9 @@ class UnattributedInputOrigin(InputOrigin):
 class WireInputOrigin(InputOrigin):
     root_id: Annotated[str, WireRootIdText]
     reference: MessageReference
+
+    def delivery_reference(self, root_id: str) -> MessageReference | None:
+        return self.reference if self.root_id == root_id else None
 
     def require_ingress(self, comms, snapshot, admission, controller):
         raise RelationViolationError("Wire input provenance belongs to its original routed producer")
@@ -107,6 +117,10 @@ class HumanInputOrigin(InputOrigin):
             user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
             return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
                        admission, owner.worktree, owner.goal_checkpoint)
+
+    @property
+    def reply_target(self) -> str:
+        return self.author.sender
 
     def require_ingress(self, comms, snapshot, admission, controller):
         from .runtime import UNBOUND_CONTROLLER

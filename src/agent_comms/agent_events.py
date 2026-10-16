@@ -7,12 +7,14 @@ ACP publication constructs SDK updates directly from these declared fields.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import TYPE_CHECKING, Any
 
-from .activity import ActivityState
-from .acp_failure import FailureSource, UnrecordedFailureSource
+from .acp_failure import (
+    FailureSource, UnrecordedFailureSource, NativeTurnOutcome, ProviderRetryResult,
+    UnresolvedNativeTurnOutcome, SuccessfulNativeTurnOutcome, FailedNativeTurnOutcome,
+)
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
@@ -30,6 +32,9 @@ if TYPE_CHECKING:
     from .goals import Goal
     from .pi_events import RetryAttemptEvent
     from .turn_phase import TurnPhase
+    from .input_disposition import InputDocument
+    from .turn_input_source import OriginalTurnInput
+    from .runtime_info import AgentRuntimeInfo
 
 
 class AgentEvent(ABC):
@@ -107,20 +112,6 @@ class ThinkingChanged(SettingChangeResult):
     pass
 
 
-class ActivityEvent(AgentEvent):
-    """An observation whose declaration supplies a shared activity reaction."""
-
-    @property
-    @abstractmethod
-    def activity_state(self) -> ActivityState:
-        pass
-
-    @property
-    @abstractmethod
-    def activity_detail(self) -> str:
-        pass
-
-
 @dataclass(frozen=True)
 class ToolEvent(AgentEvent):
     id: str
@@ -128,18 +119,10 @@ class ToolEvent(AgentEvent):
 
 
 @dataclass(frozen=True)
-class ToolStart(ToolEvent, ActivityEvent):
+class ToolStart(ToolEvent):
     title: str = ""
     args: dict[str, Any] | None = None
     kind: str = "other"
-
-    @property
-    def activity_state(self) -> ActivityState:
-        return ActivityState.WORKING
-
-    @property
-    def activity_detail(self) -> str:
-        return self.title
 
 
 @dataclass(frozen=True)
@@ -199,6 +182,16 @@ class Done(AgentEvent):
     ok: bool
     reason_code: str | None = None
     diagnostic: dict[str, Any] | None = None
+    outcome: NativeTurnOutcome = field(default_factory=UnresolvedNativeTurnOutcome)
+    # Immutable completion snapshot of TurnOutput's already decoded result.
+    retry_result: ProviderRetryResult | None = None
+
+    def resolve(
+        self, error: Error | None, document: InputDocument, original: OriginalTurnInput,
+    ) -> Done:
+        outcome = (SuccessfulNativeTurnOutcome() if self.ok else
+                   FailedNativeTurnOutcome.resolve(self, error, document, original))
+        return replace(self, outcome=outcome)
 
 
 @dataclass(frozen=True)
@@ -228,6 +221,8 @@ class Notice(AgentEvent):
 
 @dataclass(frozen=True)
 class Error(AgentEvent):
+    # Raw native failure evidence is not a public completed outcome. Done owns
+    # its resolution; a recovered turn never publishes an interim refusal.
     text: str
     reason_code: str | None = None
     command: PiCommand | None = None
@@ -235,14 +230,54 @@ class Error(AgentEvent):
     source: FailureSource = UnrecordedFailureSource()
 
 
-@dataclass(frozen=True)
-class AgentInfo(AgentEvent):
+class RuntimeInfoObservation(AgentEvent):
+    """Record one producer observation through the existing runtime-info owner."""
+
+    def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
+        return current
+
+    async def record_in(self, consumer: AgentEventConsumer) -> None:
+        from .coordinator import Coordination
+
+        await Coordination.run_worker(partial(
+            consumer.comms.agents.observe_runtime_info, consumer.thread_name, self,
+        ))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ContextInfo(RuntimeInfoObservation):
+    """Usage changes do not observe a session identity or model selection."""
+
+    context_used: int | None = None
+    context_size: int | None = None
+
+    def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
+        return replace(super().project_runtime_info(current),
+                       context_used=self.context_used, context_size=self.context_size)
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeMetadataObservation(RuntimeInfoObservation):
+    """Only native state snapshots carry identity/configuration observations."""
+
     model: str | None = None
     session_name: str | None = None
     session_file: str | None = None
-    context_used: int | None = None
-    context_size: int | None = None
     thinking_level: str | None = None
+
+    def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
+        return replace(super().project_runtime_info(current),
+                       model=self.model, session_name=self.session_name)
+
+    async def record_in(self, consumer: AgentEventConsumer) -> None:
+        await consumer.before_native_metadata(self)
+        await super().record_in(consumer)
+        await consumer.after_native_metadata(self)
+
+
+@dataclass(frozen=True, kw_only=True)
+class AgentInfo(NativeMetadataObservation, ContextInfo):
+    """A full native state observation composes both independent capabilities."""
 
 
 @dataclass(frozen=True)
@@ -299,23 +334,12 @@ class AgentEventConsumer(MroDispatch):
     def thread_name(self) -> str:
         return self._thread_name
 
-    async def before_agent_info(self, event: AgentInfo) -> None:
+    async def before_native_metadata(self, event: NativeMetadataObservation) -> None:
         pass
 
-    async def after_agent_info(self, event: AgentInfo) -> None:
+    async def after_native_metadata(self, event: NativeMetadataObservation) -> None:
         pass
 
-    @handles(AgentInfo)
-    async def record_agent_info(self, event: AgentInfo) -> None:
-        from .coordinator import Coordination
-
-        await self.before_agent_info(event)
-        await Coordination.run_worker(partial(
-            self.comms.agents.set_agent_info,
-            self.thread_name,
-            model=event.model,
-            session_name=event.session_name,
-            context_used=event.context_used,
-            context_size=event.context_size,
-        ))
-        await self.after_agent_info(event)
+    @handles(RuntimeInfoObservation)
+    async def record_runtime_info(self, event: RuntimeInfoObservation) -> None:
+        await event.record_in(self)

@@ -10,6 +10,10 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
 const CLI = "agent-comms";
+const SERVICE_TIER_CAPABLE_APIS = new Set([
+	"openai-responses",
+	"openai-codex-responses",
+]);
 
 interface ToolDeclaration {
 	name: string;
@@ -47,11 +51,23 @@ function run(args: string[], timeout = 30_000): Record<string, unknown> {
 }
 
 export default function (pi: ExtensionAPI) {
-	const forkThread = process.env.PI_PARENT_ID
-		? process.env.PI_AGENT_ID || process.env.AGENT_COMMS_THREAD
-		: undefined;
+	const currentThread = process.env.AGENT_COMMS_THREAD;
+	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
 	const task = process.env.PI_TASK || "";
 	const managed = process.env.AGENT_COMMS_MANAGED === "1";
+	let serviceTier = process.env.AGENT_COMMS_SERVICE_TIER;
+	if (serviceTier !== undefined && serviceTier !== "standard" && serviceTier !== "priority") {
+		throw new Error(`Unsupported agent-comms service tier: ${serviceTier}`);
+	}
+	pi.on("before_provider_request", (event, ctx) => {
+		if (serviceTier !== "priority") return;
+		if (typeof event.payload !== "object" || event.payload === null || Array.isArray(event.payload)) {
+			ctx.abort();
+			throw new TypeError("Provider request payload must be an object");
+		}
+		if (!ctx.model || !SERVICE_TIER_CAPABLE_APIS.has(ctx.model.api)) return;
+		return { ...event.payload, service_tier: serviceTier };
+	});
 	const activity = (state: string, detail = "") => {
 		if (!forkThread) return;
 		try {
@@ -165,6 +181,13 @@ export default function (pi: ExtensionAPI) {
 					"--arguments",
 					JSON.stringify(params),
 				]);
+				if (declaration.name === "comms_model" && result.thread === currentThread) {
+					const selectedTier = result.service_tier;
+					if (selectedTier !== "standard" && selectedTier !== "priority") {
+						throw new Error(`agent-comms returned an invalid service tier: ${selectedTier}`);
+					}
+					serviceTier = selectedTier;
+				}
 				return {
 					content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
 					details: result,

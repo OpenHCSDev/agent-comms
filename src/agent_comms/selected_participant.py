@@ -3,32 +3,36 @@
 from __future__ import annotations
 
 import secrets
-from collections.abc import Awaitable, Callable, Generator
+from collections.abc import Awaitable, Callable, Generator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from functools import partial
 
 from .agent_events import CompactionEvent, NativePhaseChanged
-from .pi_events import TurnContextObserved
-from .bus_publication import stable_thread_lookup
+from .bus_publication import CommittedDelivery, stable_thread_lookup
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _receipt_matches, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordination_response import LiveResponseOwner, _assert_response_schema
+from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
-from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_attestation import ObservedAttestation
-from .private_registry_guard import _require_no_private_owner_rename
+from .native_input_owner import ParticipantOwner, RegistryOwner
+from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
-from .turn_phase import PreparingPhase, TurnPhase
+from .pi_events import TurnContextObserved
+from .presentation import MessageNotification, SentMessageOutcome
+from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
+from .threads import Thread
+from .turn_phase import PreparingPhase, TurnPhase
 
 
 @dataclass
@@ -41,6 +45,7 @@ class SelectedParticipant(MroDispatch):
     identity: ParticipantOwner
     lookup: str
     batch: SelectedSourceBatch
+    sent_outcomes: tuple[SentMessageOutcome, ...]
     provider: str
     model: str
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
@@ -65,6 +70,19 @@ class SelectedParticipant(MroDispatch):
         self.owner = await Coordination.run_worker(partial(
             self.comms.registry.attach_native_session, self.owner, identity.session_file
         ))
+
+    def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:
+        """Acquire the strictly newer coordinator owner required by a retry."""
+        if snapshot.execution.lifecycle.retry:
+            participant = self.store.participants.advance_generation(
+                self.lookup,
+                self.owner.thread.name,
+                expected_generation=self.identity.generation,
+            ).value
+            self.identity = ParticipantOwner(
+                self.owner.thread, participant.participant_generation
+            )
+        self.require_current(self.store)
 
     def require_current(self, resource: Coordination) -> None:
         self.owner.require_registry(self.comms.registry)
@@ -102,8 +120,11 @@ class SelectedParticipant(MroDispatch):
     @classmethod
     @asynccontextmanager
     async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
-        bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
-        owner, participant, pending = await Coordination.run_async(
+        bus = MessageBus(
+            comms.root / "bus.jsonl", comms.registry, private_response_writes=True,
+            private_claim_writes=comms.bus.publisher._private_claim_writes,
+        )
+        owner, participant, pending, sent_outcomes = await Coordination.run_async(
             store.session.path,
             lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
         )
@@ -126,11 +147,12 @@ class SelectedParticipant(MroDispatch):
                 ParticipantOwner(leased.thread, identity.generation),
                 participant.lookup,
                 batch,
+                sent_outcomes,
                 provider,
                 model,
                 on_compaction=on_compaction,
             )
-            await Coordination.run_async(store.session.path, selected.require_current)
+            await Coordination.run_read_async(store.session.path, selected.require_current)
             await Coordination.run_worker(lambda: selected.transition(
                 PreparingPhase(f"Preparing {len(batch.sources)} messages in {batch.target}")
             ))
@@ -141,21 +163,35 @@ class SelectedParticipant(MroDispatch):
             await Coordination.run_worker(lease.close)
 
     @staticmethod
+    def capture_sent_outcomes(
+        comms: Comms, owner: Thread, sources: Sequence[CommittedDelivery],
+        assignment_read: NotificationAssignmentRead,
+    ) -> tuple[SentMessageOutcome, ...]:
+        """Project optional prompt context from the drain's captured source and SQL cuts."""
+        notifications = MessageNotification.for_sources(
+            comms.root, comms.registry, owner, sources, assignment_read=assignment_read,
+        )
+        return tuple(
+            outcome
+            for notification in notifications
+            if (outcome := notification.sent_outcome()) is not None
+        )
+
+    @staticmethod
     def prepare(
         comms: Comms, bus: MessageBus, store: Coordination,
         root_id: str, name: str, after_seq: int,
-    ) -> tuple[RegistryOwner, ParticipantSnapshot, tuple[WakeAssignment, ...]]:
-        """Capture detached original registry/participant rows in one worker."""
-        with bus.log.locked():
+    ) -> tuple[
+        RegistryOwner, ParticipantSnapshot, tuple[WakeAssignment, ...],
+        tuple[MessageNotification, ...],
+    ]:
+        """Capture detached registry, participant and optional context in one worker."""
+        with bus.log.certified_read() as source:
             _require_no_private_owner_rename(comms.root)
-            marker = bus.log._private_marker_unlocked()
+            marker = source.marker
             if marker.root_id != root_id:
                 raise IdentityConflict("selected admission wire root changed")
             after_seq = max(after_seq, marker.admission_after_seq)
-        with store.session.read():
-            assert_cohort_schema(store.session._connection)
-            _assert_response_schema(store.session._connection)
-            assert_native_runtime_schema(store.session._connection)
         try:
             thread, generation = comms.registry.live_owner_with_admission(name)
         except (RelationViolationError, ValueError) as error:
@@ -163,14 +199,32 @@ class SelectedParticipant(MroDispatch):
         owner = RegistryOwner(thread=thread, admission_generation=generation)
         owner.require_registry(comms.registry)
         lookup = stable_thread_lookup(thread.created_at)
-        participant = store.participants.get(lookup)
-        identity = ParticipantOwner(thread, participant.participant_generation)
+        sent_owner, sent_sources = MessageNotification.sent_sources(
+            comms.root, comms.registry, comms.bus.log, name,
+            limit=MessageNotification.window_limit,
+        )
+        LiveResponseOwner(
+            thread=thread, admission_generation=generation
+        ).resolve_retained(store, bus)
         with store.session.read():
+            assert_cohort_schema(store.session._connection)
+            _assert_response_schema(store.session._connection)
+            assert_native_runtime_schema(store.session._connection)
+            participant = store.participants.get(lookup)
+            identity = ParticipantOwner(thread, participant.participant_generation)
             identity.require(store, lookup)
-        pending = pending_sealed_assignments(store, lookup, thread.name, after_seq=after_seq)
+            pending = pending_sealed_assignments(
+                store, lookup, thread.name, after_seq=after_seq
+            )
+            sent_read = NotificationAssignment.capture(
+                store.session._connection, sent_sources
+            )
         if pending:
             participant.pointer.require_idle()
-        return owner, participant, pending
+        sent_outcomes = SelectedParticipant.capture_sent_outcomes(
+            comms, sent_owner, sent_sources, sent_read
+        )
+        return owner, participant, pending, sent_outcomes
 
     @staticmethod
     def configured_model(comms: Comms, name: str) -> tuple[str, str]:
@@ -213,9 +267,9 @@ class SelectedParticipant(MroDispatch):
         receipt through that same validator, without re-entering acceptance. Both
         read resources close before any native preparation or provider request.
         """
-        def capture(resource: Coordination):
-            # The certificate lends original pointer/byte snapshots. Decode
-            # outside its custody, using only the worker's owned SQL connection.
+        def capture():
+            # The certificate lends original pointer/byte snapshots before SQL
+            # snapshot custody, so file decoding cannot retain a database reader.
             with bus.log.certified_read() as source:
                 marker = source.marker
                 if marker.root_id != root_id:
@@ -223,11 +277,14 @@ class SelectedParticipant(MroDispatch):
                 for assignment in assignments:
                     if assignment.wire_seq <= marker.admission_after_seq:
                         raise IdentityConflict("historical source precedes the current admission floor")
-                captured = source.references(tuple(
+                return tuple(source.references(tuple(
                     MessageReference(assignment.wire_seq, assignment.message_id)
                     for assignment in assignments
-                ))
-            originals = tuple(captured)
+                )))
+
+        originals = await Coordination.run_worker(capture)
+
+        def verify(resource: Coordination):
             with resource.session.read():
                 assert_cohort_schema(resource.session._connection)
                 for assignment, initial in zip(assignments, originals, strict=True):
@@ -237,9 +294,8 @@ class SelectedParticipant(MroDispatch):
                         raise IdentityConflict("selected assignment is absent from its sealed receipt")
                     assignment.require_selected_source(initial, identity.thread)
                     identity.require(resource, assignment.recipient_lookup)
-            return originals
 
-        originals = await Coordination.run_async(store.session.path, capture)
+        await Coordination.run_read_async(store.session.path, verify)
         # Mutable claims stay with the original caller's open store; the worker
         # exports no connection, lease or second source/lifecycle authority.
         return tuple(

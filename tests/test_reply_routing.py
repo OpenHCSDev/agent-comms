@@ -5,6 +5,8 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import invoke_tool
+from agent_comms.acp_extension import QueuePromptRequest, encode_request
+from agent_comms.input_origin import HumanInputOrigin
 from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.routing import MessageRoute
@@ -69,8 +71,7 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
         # Routing persists by entry identity on the current owned turn. Native
         # channel notification/admission is covered by the canonical drain tests.
         await asyncio.wait_for(agent.turns.run_agent_turn(
-            "worker", "worker", message.body,
-            reply_targets=(message.target,), origins=(message,),
+            "worker", "worker", message.body, origins=(message,),
         ), 2)
         routed = [
             update
@@ -98,6 +99,76 @@ async def test_route_is_forwarded_live_and_preserved_by_entry_id(tmp_path, monke
             wire(tmp_path / "wire").transcripts.thread_transcript_page("worker").events[-1].routing
             is None
         )
+    finally:
+        await agent.shutdown()
+
+
+async def test_native_user_dm_reply_ignores_earlier_channel_route(
+    wired, tmp_path, monkeypatch
+):
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    project = tmp_path / "worker"
+    project.mkdir()
+    comms = wired
+    agent = canonical_agent(
+        comms, agent_bin="pi", agent_args=[], runtime_enabled=True, auto_wake=False
+    )
+    session = await agent.new_session(str(project))
+
+    class Client:
+        async def session_update(self, **kwargs):
+            pass
+
+    agent.sessions.client = Client()
+    session_file = tmp_path / "session.jsonl"
+    session_file.touch()
+    comms.threads.attach_session(comms.registry.require("worker"), str(session_file))
+    comms.channels.update_tags("worker", add=frozenset({"test"}))
+    human = comms.messaging.user_identity(str(project))
+    origin = HumanInputOrigin.capture(
+        comms, comms.registry.snapshot().admission_identity("worker")
+    )
+    earlier = comms.messaging.send_user_message(
+        "#test", "Earlier channel context", worktree=str(project)
+    )
+    channel_context = comms.views.channel_history("#test")
+    assert channel_context[-1] == earlier
+    prompts: list[str] = []
+
+    async def events(*args, **kwargs):
+        prompts.append(args[2])
+        native_id = "a" * 32
+        with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+            assert allowed
+        with session_file.open("a") as output:
+            output.write(json.dumps({
+                "type": "message",
+                "id": "user-input",
+                "message": {
+                    "role": "user",
+                    "inputId": native_id,
+                    "content": args[2],
+                },
+            }) + "\n")
+        assert kwargs["native_start"](None, native_id, args[2])
+        yield ae.InputStarted(id=None)
+        yield ae.Chunk(text="Private DM answer")
+        yield ae.StreamSettled()
+        yield ae.Done(ok=True, text="")
+
+    monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
+    try:
+        response = await agent.prompt(
+            session_id=session.session_id,
+            prompt=[{"type": "text", "text": "Unrelated private question"}],
+            **encode_request(QueuePromptRequest(origin=origin)),
+        )
+        assert response.stop_reason == "end_turn"
+        assert len(prompts) == 1
+        assert "Unrelated private question" in prompts[0]
+        assert f"delivered automatically to {human.name}" in prompts[0]
+        assert comms.views.channel_history("#test") == channel_context
+        assert comms.views.dm_history("worker", human.name) == []
     finally:
         await agent.shutdown()
 

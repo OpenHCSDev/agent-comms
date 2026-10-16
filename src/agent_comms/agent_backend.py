@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
 from .declared_family import DeclaredFamily
 
@@ -85,6 +85,14 @@ class InputContent:
     contributions: tuple[InputContributionCoordinates, ...] = ()
 
 
+class TurnInboxReceiver(Protocol):
+    """What a running turn does with each record its inbox carries."""
+
+    def place(self, turn: object, item: InputRequest) -> Awaitable[bool]: ...
+    def send_now(self, turn: object, item: SendNow) -> Awaitable[bool]: ...
+    def use_settings(self, turn: object, item: UseSettings) -> Awaitable[bool]: ...
+
+
 @dataclass(frozen=True, kw_only=True)
 class InputRequest:
     """One queued user input handed to a backend: identity, content and busy policy.
@@ -100,7 +108,7 @@ class InputRequest:
     def carried_inputs(self) -> tuple[InputId, ...]:
         return (self.input_id,)
 
-    def deliver_to(self, receiver: Any, turn: Any) -> Awaitable[bool]:
+    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
         """Hand this input to the running turn's receiver; False ends forwarding."""
         return receiver.place(turn, self)
 
@@ -119,8 +127,31 @@ class SendNow:
         """A control names inputs already queued; it carries no input of its own."""
         return ()
 
-    def deliver_to(self, receiver: Any, turn: Any) -> Awaitable[bool]:
+    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
         return receiver.send_now(turn, self)
+
+
+@dataclass(frozen=True)
+class UseSettings:
+    """Ask the running turn to use the thread's stored model and thinking level.
+
+    The backend applies them from its next model call; the call in flight
+    finishes on the settings it started with.
+    """
+
+    model: str
+    thinking_level: str
+
+    @property
+    def carried_inputs(self) -> tuple[InputId, ...]:
+        return ()
+
+    def deliver_to(self, receiver: TurnInboxReceiver, turn: object) -> Awaitable[bool]:
+        return receiver.use_settings(turn, self)
+
+
+# Everything a running turn's inbox carries.
+TurnInboxItem = InputRequest | SendNow | UseSettings
 
 
 class UnansweredReason(DeclaredFamily, affix="Reason"):
@@ -324,7 +355,7 @@ class TurnDelivery:
 
     worktree: str
     environment: dict[str, str]
-    inbox: asyncio.Queue[InputRequest | SendNow]
+    inbox: asyncio.Queue[TurnInboxItem]
     finish_event: asyncio.Event
     send_boundary: Callable[..., Any]
     interrupt_boundary: Callable[..., Any]

@@ -10,7 +10,6 @@ import hashlib
 import json
 import os
 import sqlite3
-import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -18,7 +17,6 @@ from native_proof_cases import read_proof_rows, write_proof_rows
 
 import pytest
 
-from agent_comms import coordinated_runtime as runtime
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.bus_publication import stable_thread_lookup
@@ -26,14 +24,20 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordinated_runtime import SelectedExecution
+from agent_comms.context_segments.selected import SelectedTriageSegment
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.native_pi import NativePiUnavailable, read_tracked_input_digest
+from agent_comms.native_pi import (
+    NativePiRpcLaunch,
+    NativePiUnavailable,
+    read_tracked_input_digest,
+)
 from agent_comms.native_prompt_binding import (
     binding_store_path,
     install_prompt_binding_schema,
@@ -46,12 +50,21 @@ from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
 
 
+@pytest.fixture(autouse=True)
+def fake_native_package_acquisition(monkeypatch):
+    """Prompt-binding cases fake the acquired child, not package trust policy."""
+    monkeypatch.setattr(
+        NativePiRpcLaunch,
+        "acquire_tracked",
+        classmethod(lambda _cls, _package: lambda **_options: None),
+    )
+
+
 @pytest.fixture
-def tmp_path():
-    if os.name != "posix" or not Path("/var/tmp").is_dir() or Path("/var").is_symlink():
-        pytest.skip("sealed runtime requires a real, disposable /var/tmp root")
-    with tempfile.TemporaryDirectory(prefix="ac-binding-test-", dir="/var/tmp") as root:
-        yield Path(root)
+def tmp_path(tmp_path_factory):
+    if os.name != "posix":
+        pytest.skip("sealed runtime requires POSIX private directories")
+    return tmp_path_factory.mktemp("native-binding")
 
 
 def _root(tmp_path: Path):
@@ -100,7 +113,6 @@ async def test_suppressed_binding_insert_denies_native_send(tmp_path, monkeypatc
     from agent_comms import native_prompt_binding as binding
 
     root, root_id, _, _, _ = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     original = binding.sidecar_connection
@@ -128,7 +140,6 @@ async def test_uncertain_binding_commit_denies_native_send_and_retry(tmp_path, m
     from agent_comms import private_sidecar
 
     root, root_id, _, _, _ = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     publish = private_sidecar._publish
@@ -155,10 +166,18 @@ async def test_uncertain_binding_commit_denies_native_send_and_retry(tmp_path, m
     assert calls == []
 
 
+def _is_triage_request(options: dict) -> bool:
+    return any(
+        issubclass(contribution.kind, SelectedTriageSegment)
+        for contribution in options.get("context_contributions", ())
+    )
+
+
 def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
     calls: list[tuple[str, str]] = []
 
-    async def fake(package, *, input_id, prompt, worktree, session_dir, session_file=None, **_):
+    async def fake(package, *, input_id, prompt, worktree, session, **_):
+        session_dir, session_file = session.directory, session.path
         fresh = session_file is None
         if fresh:
             session_file = session_dir / f"{input_id}.jsonl"
@@ -169,7 +188,10 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         assert session_file is not None
 
         def admitted():
-            with _["prompt_send_boundary"](session_file):
+            identity = NativeSessionIdentity(
+                json.loads(session_file.read_text().splitlines()[0])["id"], str(session_file)
+            )
+            with _["prompt_send_boundary"](identity):
                 calls.append((input_id, prompt))
 
         await asyncio.to_thread(admitted)
@@ -196,18 +218,19 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         context_digest = hashlib.sha256((input_id + str(generation)).encode()).hexdigest()
         proof_rows.append(
             {
-                "schema": 1,
+                "schema": 2,
                 "type": "context_committed",
                 "sessionId": "isolated-session",
                 "inputId": input_id,
                 "sessionEntryId": entry_id,
                 "requestGeneration": generation,
                 "llmContextDigest": context_digest,
+                "committedAtMs": 1_791_964_800_000 + generation,
             }
         )
         proof_file = Path(str(session_file) + ".input-proof")
         write_proof_rows(session_file, proof_rows)
-        reply = json.dumps({"decision": decision}) if "bounded triage" in prompt else "42"
+        reply = json.dumps({"decision": decision}) if _is_triage_request(_) else "42"
         from agent_comms.native_pi import NativeContextProof, NativeTurnResult
 
         observer = _.get("observe_event")
@@ -228,21 +251,53 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         return NativeTurnResult(
             reply,
             NativeContextProof(
-                input_id, "isolated-session", entry_id, generation, context_digest, session_file
+                input_id, "isolated-session", entry_id, generation, context_digest,
+                1_791_964_800_000 + generation, session_file,
             ),
         )
 
     return fake, calls
 
 
-async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monkeypatch):
+@pytest.fixture
+def journal_without_sql(monkeypatch):
+    from agent_comms import private_send_stage
+    from agent_comms.coordination_database import StoreBusy
+
+    journal_checks = []
+    stores = []
+    bound_prompt = private_send_stage.NativeSendStage.bound_prompt
+    matches = private_send_stage.expected_prompt_matches_journal
+
+    @contextmanager
+    def ordered_binding(stage, store, *args, **kwargs):
+        assert not store.session._connection.in_transaction
+        stores.append(store.session.path)
+        with bound_prompt(stage, store, *args, **kwargs) as binding:
+            yield binding
+
+    def check_journal(*args, **kwargs):
+        # Another real coordinator must admit a writer while the journal is read.
+        # A borrowed SQL reader here used to block that writer, while the inverse
+        # sidecar/SQL order could keep the reader waiting on the writer's sidecar.
+        with Coordination(str(stores[-1]), contention=StoreBusy()) as other:
+            with other.session.transaction():
+                journal_checks.append(True)
+        return matches(*args, **kwargs)
+
+    monkeypatch.setattr(private_send_stage.NativeSendStage, "bound_prompt", ordered_binding)
+    monkeypatch.setattr(private_send_stage, "expected_prompt_matches_journal", check_journal)
+    return journal_checks
+
+
+async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monkeypatch, journal_without_sql):
     root, root_id, comms, initial, people = _root(tmp_path)
-    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     turn = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
+    assert journal_without_sql == [True]
     assert turn is not None
     assert turn.cursor_status == "proven"
     assert len(calls) == 1
@@ -252,7 +307,15 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
         )
         assert current is not None and current.input_id == turn.input_id
         assert current.injected_seq == initial.message.seq
-        assert current.covered_seq == initial.message.seq
+        coverage = SourceCoverage(
+            comms.bus,
+            store,
+            wire_root_id=root_id,
+            recipient_lookup=stable_thread_lookup(people[1].created_at),
+        ).read()
+        assert current.covered_seq == coverage.covered_seq
+        assert coverage.covered_seq >= initial.message.seq
+        assert coverage.covered_seq == coverage.source_witness.latest_source_seq
         evidence = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
@@ -279,7 +342,6 @@ async def test_binding_matches_journal_and_exposes_equality(tmp_path: Path, monk
 
 async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path, monkeypatch):
     root, root_id, comms, first, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     second = comms.messaging.send_initial_cohort("sender", "#team", "Second source.")
@@ -288,7 +350,6 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
         assert before.covered_seq == 0 and before.blocked_seq == first.message.seq
-        accept_delivery_cohort(bus, root_id, second.seq, store)
     first_turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
@@ -300,13 +361,16 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
         assert middle.blocked_seq == second.seq
         current = NativeSourceCursor(bus, store, wire_root_id=root_id).read(owner_name="alpha")
         assert current is not None and current.injected_seq == first.message.seq
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        accept_delivery_cohort(bus, root_id, second.seq, store)
     second_turn = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
     assert second_turn is not None and second_turn.cursor_status == "proven"
     with Coordination(str(root / "coordination.sqlite3")) as store:
         after = SourceCoverage(bus, store, wire_root_id=root_id, recipient_lookup=lookup).read()
-        assert after.covered_seq == second.seq
+        assert after.covered_seq >= second.seq
+        assert after.covered_seq == after.source_witness.latest_source_seq
         assert after.injected_source_seqs == (first.message.seq, second.seq)
         assert after.blocked_seq is None
         current = NativeSourceCursor(bus, store, wire_root_id=root_id).read(owner_name="alpha")
@@ -317,7 +381,6 @@ async def test_source_coverage_stops_at_missing_claim_and_unknown_input(tmp_path
 
 async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, monkeypatch):
     root, root_id, comms, first, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     bad, _ = _fake_model(decision="IGNORE", digest_override="b" * 64)
     good, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", bad)
@@ -359,7 +422,6 @@ async def test_source_coverage_mismatch_cannot_skip_to_later_proof(tmp_path, mon
 
 async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_path, monkeypatch):
     root, root_id, comms, first, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     beta = Thread(
@@ -389,7 +451,8 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
             wire_root_id=root_id,
             recipient_lookup=stable_thread_lookup(people[1].created_at),
         ).read()
-        assert coverage.covered_seq == second.seq
+        assert coverage.covered_seq >= second.seq
+        assert coverage.covered_seq == coverage.source_witness.latest_source_seq
         assert coverage.injected_source_seqs == (first.message.seq,)
         assert coverage.no_wake_seqs == (second.seq,)
         assert coverage.blocked_seq is None
@@ -398,11 +461,10 @@ async def test_source_coverage_distinguishes_no_wake_from_native_injection(tmp_p
 
 async def test_source_coverage_stops_at_triage_without_required_full(tmp_path, monkeypatch):
     root, root_id, comms, first, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
 
     async def fail_full(package, **kwargs):
-        if "bounded triage" in kwargs["prompt"]:
+        if _is_triage_request(kwargs):
             return await fake(package, **kwargs)
         raise NativePiUnavailable("full launch failed after triage")
 
@@ -426,7 +488,6 @@ async def test_source_coverage_stops_at_triage_without_required_full(tmp_path, m
 
 async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monkeypatch):
     root, root_id, comms, initial, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await SelectedExecution(
@@ -452,7 +513,6 @@ async def test_current_cursor_never_promotes_old_owner_generation(tmp_path, monk
 
 async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, monkeypatch):
     root, root_id, comms, _, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await SelectedExecution(
@@ -505,7 +565,6 @@ async def test_old_input_id_cannot_directly_seed_new_admission_cursor(tmp_path, 
 
 async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
     root, root_id, comms, first, _ = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await SelectedExecution(
@@ -524,7 +583,6 @@ async def test_current_cursor_rejects_forged_high_water(tmp_path, monkeypatch):
 
 async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path, monkeypatch):
     root, root_id, comms, first, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     old_turn = await SelectedExecution(
@@ -560,14 +618,14 @@ async def test_current_cursor_new_owner_generation_cannot_borrow_proof(tmp_path,
     assert len(calls) == 2 and first.message.seq < second.seq
 
 
-async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, monkeypatch):
+async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, monkeypatch, journal_without_sql):
     root, root_id, comms, initial, people = _root(tmp_path)
-    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     turn = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path, opt_in=True
+        root=root, wire_root_id=root_id, owner_name="alpha", native_package=tmp_path
     ).run()
+    assert journal_without_sql == [True, True]
     assert turn is not None
     assert turn.cursor_status == "proven"
     assert len(calls) == 2  # triage probe, then the FULL answer turn
@@ -591,7 +649,6 @@ async def test_full_stage_binding_joins_after_triage_engagement(tmp_path: Path, 
 
 async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypatch):
     root, root_id, comms, initial, people = _root(tmp_path)
-    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, _ = _fake_model(digest_override="b" * 64)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
@@ -617,7 +674,7 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
             "JOIN wake_claims c ON c.assignment_id=m.assignment_id WHERE c.wire_seq=?",
             (initial.message.seq,),
         ).fetchone()
-        assert binding is not None and binding[1] is None
+        assert binding is not None and binding[1] == "isolated-session"
     # The uncertain, already reserved input remains deferred, not retried.
     assert (
         await SelectedExecution(
@@ -633,11 +690,10 @@ async def test_journal_digest_mismatch_is_not_equality(tmp_path: Path, monkeypat
 
 async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_path, monkeypatch):
     root, root_id, _, initial, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
 
     async def corrupt_full(package, **kwargs):
-        if "bounded triage" in kwargs["prompt"]:
+        if _is_triage_request(kwargs):
             return await fake(package, **kwargs)
         bad, _ = _fake_model(digest_override="b" * 64)
         return await bad(package, **kwargs)
@@ -661,7 +717,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
             "SELECT stage,session_id FROM native_runtime_input ORDER BY stage"
         ).fetchall()
         assert [(row["stage"], row["session_id"] is not None) for row in rows] == [
-            ("full", False),
+            ("full", True),
             ("triage", True),
         ]
     assert (
@@ -690,14 +746,13 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
     from agent_comms import native_prompt_binding as binding_module
 
     root, root_id, _, initial, people = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         path = binding_store_path(store)
 
     async def mutate_after_admitted_send(package, **kwargs):
         result = await fake(package, **kwargs)
-        current_stage = "triage" if "bounded triage" in kwargs["prompt"] else "full"
+        current_stage = "triage" if _is_triage_request(kwargs) else "full"
         if current_stage == stage:
             with sqlite3.connect(path) as db:
                 db.execute("DROP TRIGGER prompt_binding_update_guard")
@@ -727,7 +782,7 @@ async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
         assert [type(row.execution) for row in evidence] == ([] if stage == "triage" else [TriageNativeExecution])
         assert (
             store.session._connection.execute(
-                "SELECT COUNT(*) FROM native_runtime_input WHERE stage=? AND session_id IS NULL",
+                "SELECT COUNT(*) FROM native_runtime_input WHERE stage=? AND session_id IS NOT NULL",
                 (stage,),
             ).fetchone()[0]
             == 1
@@ -746,7 +801,6 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
     tmp_path, monkeypatch
 ):
     root, root_id, comms, initial, people = _root(tmp_path)
-    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
 
@@ -782,7 +836,6 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
 
 async def test_launch_failure_after_binding_leaves_input_unproven(tmp_path: Path, monkeypatch):
     root, root_id, comms, initial, people = _root(tmp_path)
-    monkeypatch.setattr("agent_comms.coordinated_runtime._trusted_package", lambda _: None)
 
     async def dying(package, **_):
         raise NativePiUnavailable("fake backend died after the prelaunch binding")

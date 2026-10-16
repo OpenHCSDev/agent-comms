@@ -25,6 +25,7 @@ from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.transcript_events import ContextTranscript
 from delivery_owner_fixture import canonical_agent
+from stored_inputs import stored_inputs
 
 
 async def owner(tmp_path, monkeypatch):
@@ -120,7 +121,7 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
             public_id, command = await queue_followup(agent, kwargs)
         goal = comms.goals.update_goal("project", SetGoalAction(text="Read files until stopped"))
         yield ae.ToolEnd(id="set-goal", name="comms_set_goal", ok=True)
-        assert agent.turns.goals.goal_store.snapshot(goal.id).lifecycle == ReservedGeneration()
+        assert comms.goals.open_goal_store().snapshot(goal.id).lifecycle == ReservedGeneration()
         if not queued_before_activation:
             public_id, command = await queue_followup(agent, kwargs)
         observed.update(goal=goal, public_id=public_id)
@@ -142,10 +143,10 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
             "project", "project", "Set a goal for model", initial_display_text="Set a goal as typed"
         )
         assert comms.registry.require("project").goal.state.active
-        state = agent.turns.goals.goal_store.snapshot(observed["goal"].id)
+        state = comms.goals.open_goal_store().snapshot(observed["goal"].id)
         assert state.lifecycle == ReadyGeneration() and state.number == 2
         key = "acp:" + observed["public_id"]
-        row = InputDispositions(comms.root / InputDispositions.filename).read().lookup(key)
+        row = stored_inputs(comms.root).lookup(key)
         assert row.declared_name == ("reserved" if queued_before_activation else "started")
         if queued_before_activation:
             assert not row.has_native_binding
@@ -164,9 +165,9 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
 ):
     caplog.set_level(logging.INFO, logger="agent_comms.owned_send_admission")
     agent, comms, session, _ = await owner(tmp_path, monkeypatch)
-    store = agent.turns.goals.open_goal_store()
+    store = comms.goals.open_goal_store()
     original_goal = comms.goals.update_goal(
-        "project", SetGoalAction(text="Read files until stopped"), owner_store=store
+        "project", SetGoalAction(text="Read files until stopped")
     )
     observed = {}
 
@@ -185,7 +186,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
             comms.goals.update_goal("project", ClearGoalAction())
         elif change == "replace":
             observed["replacement"] = comms.goals.update_goal(
-                "project", SetGoalAction(text="A different goal"), owner_store=store
+                "project", SetGoalAction(text="A different goal")
             )
         with kwargs["send_boundary"](public_id, "b" * 32, command["message"]) as allowed:
             assert allowed is (change is None)
@@ -205,7 +206,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
             "project", "project", "Continue working toward the active goal.", autonomous_goal=True
         )
         key = "acp:" + observed["public_id"]
-        row = InputDispositions(comms.root / InputDispositions.filename).read().lookup(key)
+        row = stored_inputs(comms.root).lookup(key)
         assert row.declared_name == ("started" if change is None else "reserved")
         if change is not None:
             assert not row.has_native_binding

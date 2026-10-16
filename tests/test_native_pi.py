@@ -30,7 +30,9 @@ from agent_comms.native_pi import (
     _trusted_package,
 )
 from agent_comms.tracked_turn import TrackedTurnSession
-from agent_comms.selected_session import SelectedSession
+from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.selected_session import SavedSelectedSession, SelectedSession
 
 INPUT_ID = "a" * 32
 DIGEST = "b" * 64
@@ -59,13 +61,14 @@ def _evidence(tmp_path: Path) -> Path:
     ]
     journal = [
         {
-            "schema": 1,
+            "schema": 2,
             "type": "context_committed",
             "sessionId": "sid",
             "inputId": INPUT_ID,
             "sessionEntryId": "entry",
             "requestGeneration": 1,
             "llmContextDigest": "c" * 64,
+            "committedAtMs": 1_791_964_800_001,
         }
     ]
     session.write_text("".join(json.dumps(row) + "\n" for row in entries))
@@ -144,7 +147,8 @@ def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_f
     assert decoded.at(session) == NativeContextProof.read_evidence(session, INPUT_ID)
     for changed in (
         {**row, "schema": True},
-        {**row, "schema": 2},
+        {**row, "schema": 1},
+        {**row, "committedAtMs": 0},
         {**row, "type": "input_committed"},
         {**row, "requestGeneration": True},
         {**row, "requestGeneration": 0},
@@ -168,7 +172,7 @@ def test_proof_reader_rejects_session_id_duplicate_or_untrusted_ancestor(tmp_pat
         NativeContextProof.read_evidence(session, INPUT_ID)
     session.write_text(data)
     session.parent.chmod(0o777)
-    with pytest.raises(NativePiUnavailable, match="writable ancestor"):
+    with pytest.raises(NativePiUnavailable, match="unsafe ancestor"):
         NativeContextProof.read_evidence(session, INPUT_ID)
 
 
@@ -203,8 +207,9 @@ async def test_unprivate_session_rejected_before_pi_process_starts(
             input_id=INPUT_ID,
             prompt="Never disclose input ID",
             worktree=tmp_path,
-            session_dir=selected,
-            session_file=existing,
+            session=(SelectedSession(selected) if existing is None else SavedSelectedSession(
+                selected, identity=NativeSessionIdentity("sid", str(existing))
+            )),
         )
 
 
@@ -312,7 +317,8 @@ async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_e
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", fail_once)
     monkeypatch.setattr(AttachedChild, "start", launch)
-    request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path, session_dir=sessions)
+    request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path,
+                   session=SelectedSession(sessions), pi_session=PersistentPiSession())
     with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
         await TrackedTurnSession.execute(tmp_path, **request)
     assert launches == 0
@@ -328,7 +334,7 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
 
     sessions = tmp_path / "sessions"
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session_dir=sessions)
+    NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session=SelectedSession(sessions))
     original_fsync = native.os.fsync
 
     def fail_parent(descriptor):
@@ -349,7 +355,7 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
             input_id=INPUT_ID,
             prompt="no provider",
             worktree=tmp_path,
-            session_dir=sessions,
+            session=SelectedSession(sessions),
         )
 
 
@@ -367,13 +373,13 @@ async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: P
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", forbidden)
-    with pytest.raises(NativePiUnavailable, match="redirected ancestor"):
+    with pytest.raises(NativePiUnavailable, match="unsafe ancestor"):
         await TrackedTurnSession.execute(
             tmp_path,
             input_id=INPUT_ID,
             prompt="no provider",
             worktree=tmp_path,
-            session_dir=sessions,
+            session=SelectedSession(sessions),
         )
 
 
@@ -409,7 +415,8 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(
             input_id=INPUT_ID,
             prompt="no output",
             worktree=tmp_path,
-            session_dir=tmp_path / "sessions",
+            session=SelectedSession(tmp_path / "sessions"),
+            pi_session=PersistentPiSession(),
             model_wait_timeout=20,
         )
     )
@@ -452,9 +459,9 @@ input_id = command['inputId']
 entry = {'type':'message','id':'entry','message':{'role':'user',
     'inputId':input_id,'inputDigest':'b'*64}}
 file.write_text(json.dumps({'type':'session','id':'sid'})+'\\n'+json.dumps(entry)+'\\n')
-proof = {'schema':1,'type':'context_committed','sessionId':'sid',
+proof = {'schema':2,'type':'context_committed','sessionId':'sid',
     'inputId':input_id,'sessionEntryId':'entry','requestGeneration':1,
-    'llmContextDigest':'c'*64}
+    'llmContextDigest':'c'*64,'committedAtMs':1_791_964_800_001}
 write_proof_rows(file, [proof])
 os.chmod(file,0o600)
 os.chmod(str(file)+'.input-proof',0o600)
@@ -487,7 +494,8 @@ send({'type':'agent_settled'})
         input_id=INPUT_ID,
         prompt="Decide IGNORE",
         worktree=tmp_path,
-        session_dir=tmp_path / "sessions",
+        session=SelectedSession(tmp_path / "sessions"),
+        pi_session=PersistentPiSession(),
         model_wait_timeout=3,
     )
     if stop_reason == "stop":
@@ -564,193 +572,14 @@ async def test_selected_header_marker_denies_path_only_legacy_reopen_before_spaw
             input_id=INPUT_ID,
             prompt="do not send",
             worktree=tmp_path,
-            session_dir=file.parent,
-            session_file=file,
+            session=SavedSelectedSession(
+                file.parent, identity=NativeSessionIdentity(fresh.session_id, str(file))
+            ),
         )
     if alias in {"original", "copy"}:
         fresh.verify_prewrite()
     elif alias == "with_message":
         fresh.verify_saved_identity()
-
-
-async def test_selected_first_source_is_default_off_before_any_real_cli_spawn(
-    tmp_path: Path, monkeypatch
-) -> None:
-
-    fresh = create_fresh_private_session(
-        tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
-    )
-
-    async def forbidden(*_args, **_kwargs):
-        raise AssertionError("unreviewed selected CLI must never spawn")
-
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(AttachedChild, "start", forbidden)
-    with pytest.raises(NativePiUnavailable, match="builtins are unreviewed"):
-        await TrackedTurnSession.execute(
-            tmp_path,
-            input_id=INPUT_ID,
-            prompt="do not send",
-            worktree=tmp_path,
-            session_dir=fresh.path.parent,
-            session_file=fresh.path,
-            maintenance_root=tmp_path,
-            prompt_send_boundary=lambda _: None,
-            fresh_selected=fresh,
-        )
-    fresh.verify_prewrite()
-
-
-@pytest.mark.parametrize(
-    "damage", ["low_runtime", "wrong_model", "wrong_session", "changed_inode", "valid_preflight"]
-)
-async def test_selected_first_source_get_state_fences_runtime_before_raw_prompt(
-    tmp_path: Path, monkeypatch, damage: str
-) -> None:
-    """Fake RPC only; no real CLI factory, provider, prompt, or terminal authority."""
-    import agent_comms.native_pi as native
-
-    fresh = create_fresh_private_session(
-        tmp_path / "sessions", worktree=tmp_path, selected_thinking_level="high"
-    )
-    received = tmp_path / "preflight.json"
-    start = AttachedChild.start
-    launched: list[tuple[str, ...]] = []
-    launch_envs: list[dict[str, str]] = []
-    boundary_seen = False
-
-    async def launch(argv, **kwargs):
-        launched.append(argv)
-        launch_envs.append(kwargs["env"])
-        if damage == "changed_inode":
-            # Keep the original inode allocated; unlink may immediately reuse it.
-            fresh.path.rename(fresh.path.with_suffix(".original"))
-            fresh.path.write_text('{"type":"session","id":"replacement"}\n')
-            fresh.path.chmod(0o600)
-        else:
-            for row in (
-                {
-                    "type": "model_change",
-                    "id": "f0f0f001",
-                    "parentId": fresh.bootstrap_leaf_id,
-                    "timestamp": "2026-09-26T00:00:00.000Z",
-                    "provider": "openrouter",
-                    "modelId": "z-ai/glm-5.3-flash",
-                },
-                {
-                    "type": "thinking_level_change",
-                    "id": "f0f0f002",
-                    "parentId": "f0f0f001",
-                    "timestamp": "2026-09-26T00:00:00.000Z",
-                    "thinkingLevel": "high",
-                },
-            ):
-                with fresh.path.open("a") as stream:
-                    stream.write(json.dumps(row, separators=(",", ":")) + "\n")
-        state = {
-            "type": "response",
-            "id": "native-capability",
-            "command": "get_state",
-            "success": True,
-            "data": {
-                "nativeInputProofCapability": CAPABILITY,
-                "sessionId": fresh.session_id,
-                "sessionFile": str(fresh.path),
-                "model": {"provider": "openrouter", "id": "z-ai/glm-5.3-flash"},
-                "thinkingLevel": "high",
-                "messageCount": 0,
-                "pendingMessageCount": 0,
-                "isStreaming": False,
-                "isCompacting": False,
-            },
-        }
-        data = state["data"]
-        if damage == "low_runtime":
-            data["thinkingLevel"] = "low"
-        elif damage == "wrong_model":
-            data["model"]["id"] = "unreviewed/model"
-        elif damage == "wrong_session":
-            data["sessionId"] = "other-session"
-        program = (
-            "import json,sys; from pathlib import Path; "
-            "request=json.loads(sys.stdin.readline()); "
-            f"Path({str(received)!r}).write_text(json.dumps(request)); "
-            f"state=json.loads({json.dumps(state)!r}); state['id']=request['id']; "
-            "print(json.dumps(state),flush=True); sys.stdin.read()"
-        )
-        return await start((sys.executable, "-u", "-c", program), **kwargs)
-
-    class BoundaryReachedError(RuntimeError):
-        pass
-
-    def boundary(_file, revision):
-        nonlocal boundary_seen
-        assert _file == fresh.path
-        assert revision == fresh.verify_selected_startup()
-        boundary_seen = True
-        raise BoundaryReachedError("fake prewrite boundary reached; never send prompt")
-
-    async def fake_prompt_send(_stdin, _payload, admission, *, timeout):
-        assert timeout > 0
-        admission()  # The real raw writer is deliberately never entered.
-
-    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-ambient-sentinel-not-a-key")
-    monkeypatch.setenv("HTTP_PROXY", "fake-ambient-proxy-sentinel")
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
-    monkeypatch.setattr(
-        "agent_comms.native_pi._require_reviewed_selected_source_cli", lambda: None
-    )
-    monkeypatch.setattr(AttachedChild, "start", launch)
-    monkeypatch.setattr("agent_comms.tracked_turn.send_fenced_prompt", fake_prompt_send)
-    monkeypatch.setattr(
-        "agent_comms.maintenance_barrier.MaintenanceBarrier.assert_open_unlocked", lambda _: None
-    )
-    reason = (
-        "fake prewrite boundary"
-        if damage == "valid_preflight"
-        else "saved inode changed" if damage == "changed_inode"
-        else {"low_runtime": "thinking_changed: Selected first source thinking level differs",
-              "wrong_model": "model_changed: Selected first source model differs",
-              "wrong_session": "session_changed: Selected first source session identity differs"}[damage]
-    )
-    expected = BoundaryReachedError if damage == "valid_preflight" else NativePiUnavailable
-    with pytest.raises(expected, match=reason):
-        await TrackedTurnSession.execute(
-            tmp_path,
-            input_id=INPUT_ID,
-            prompt="never send this fake prompt",
-            worktree=tmp_path,
-            session_dir=fresh.path.parent,
-            session_file=fresh.path,
-            maintenance_root=tmp_path,
-            prompt_send_boundary=boundary,
-            fresh_selected=fresh,
-        )
-    assert len(launched) == 1
-    argv = launched[0]
-    assert argv[argv.index("--provider") + 1] == "openrouter"
-    assert argv[argv.index("--model") + 1] == "z-ai/glm-5.3-flash"
-    assert argv[argv.index("--thinking") + 1] == "high"
-    assert "--no-prompt-templates" in argv and "--no-themes" in argv
-    assert len(launch_envs) == 1
-    assert set(launch_envs[0]) == {
-        "HOME",
-        "USER",
-        "LOGNAME",
-        "PATH",
-        "LANG",
-        "TMPDIR",
-        "PI_OFFLINE",
-        "PI_CODING_AGENT_DIR",
-        "AGENT_COMMS_SELECTED_SOURCE_COPY",
-    }
-    assert launch_envs[0]["AGENT_COMMS_SELECTED_SOURCE_COPY"] == "1"
-    assert launch_envs[0]["PI_OFFLINE"] == "1"
-    from agent_comms.pi_commands import GetState, PiCommand
-
-    preflight = PiCommand.from_wire(json.loads(received.read_text()))
-    assert isinstance(preflight, GetState) and preflight.id
-    assert boundary_seen is (damage == "valid_preflight")
 
 
 async def test_untracked_capability_is_rejected_before_prompt(tmp_path: Path, monkeypatch):
@@ -773,13 +602,14 @@ sys.stdin.read()
 
     monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", launch)
-    with pytest.raises(NativePiUnavailable, match="capability is unavailable"):
+    with pytest.raises(NativePiUnavailable, match="capability preflight failed"):
         await TrackedTurnSession.execute(
             tmp_path,
             input_id=INPUT_ID,
             prompt="must not send",
             worktree=tmp_path,
-            session_dir=tmp_path / "sessions",
+            session=SelectedSession(tmp_path / "sessions"),
+            pi_session=PersistentPiSession(),
         )
     from agent_comms.pi_commands import GetState, PiCommand
 
@@ -796,7 +626,7 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_resources(
     worktree = tmp_path / "project"
     worktree.mkdir()
     sessions = tmp_path / "sessions"
-    monkeypatch.setenv("PI_AGENT_ID", "must-not-leak")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "must-not-leak")
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "wrong-global"))
     launch = NativePiRpcLaunch.tracked(Path(selected), worktree=worktree, session=SelectedSession(sessions))
     assert str(_trusted_package(Path(selected))) in launch.argv
@@ -805,7 +635,7 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_resources(
     assert launch.cwd == worktree
     assert launch.session.directory == sessions
     assert launch.session.path is None
-    assert "PI_AGENT_ID" not in launch.env
+    assert "AGENT_COMMS_THREAD" not in launch.env
     assert launch.env["PI_OFFLINE"] == "1"
     assert launch.env["PI_CODING_AGENT_DIR"] == str(sessions / ".native-pi-agent")
     assert stat.S_IMODE((sessions / ".native-pi-agent").stat().st_mode) == 0o700
@@ -814,13 +644,14 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_resources(
 
 @pytest.mark.parametrize("provider,model", [("", "model"), ("provider", ""), ("--bad", "model")])
 def test_missing_native_model_fails_before_any_session_side_effect(
-    tmp_path: Path, provider: str, model: str
+    tmp_path: Path, monkeypatch, provider: str, model: str
 ) -> None:
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: Path("/bin/true"))
     with pytest.raises(NativePiUnavailable, match="explicit provider and model"):
         NativePiRpcLaunch.tracked(
             tmp_path,
             worktree=tmp_path,
-            session_dir=tmp_path / "sessions",
+            session=SelectedSession(tmp_path / "sessions"),
             provider=provider,
             model=model,
         )
@@ -830,11 +661,11 @@ def test_missing_native_model_fails_before_any_session_side_effect(
 @pytest.fixture
 def durable_attempt(tmp_path):
     from agent_comms.coordination_tables.executions import ExecutionOrigin
-    from agent_comms.coordinator import Coordination
+    from agent_comms.coordinator import StandaloneCoordination
     from agent_comms.durable_turn import DurableTurn
     from agent_comms.owner_fence import prepare_fence_token
 
-    with Coordination(tmp_path / "attempt.sqlite3") as store:
+    with StandaloneCoordination(tmp_path / "attempt.sqlite3") as store:
         store.participants.register("owner", "owner", "owner", committed=True)
         created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value
         pending = store.executions.mark_pending(
@@ -870,7 +701,7 @@ def durable_attempt(tmp_path):
         "eof-large",
     ],
 )
-async def test_copied_cli_private_policy_allows_one_local_http_attempt(
+async def test_copied_cli_private_policy_preserves_one_input_across_local_requests(
     tmp_path: Path, monkeypatch, outcome: str, durable_attempt
 ) -> None:
     """Explicit opt-in: real pinned CLI, loopback-only fake provider, no paid key."""
@@ -879,6 +710,18 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         pytest.skip("Set AC_NATIVE_COPIED_PACKAGE to the reviewed private copied fork")
     package = Path(selected)
     _trusted_package(package)
+    from agent_comms.turn_watchdog import ProgressWatchdog
+
+    waits_after_start = []
+    select_wait = ProgressWatchdog.wait_for
+
+    def observe_wait(watchdog, session):
+        wait = select_wait(watchdog, session)
+        if session.started_input:
+            waits_after_start.append(wait is watchdog.input_wait)
+        return wait
+
+    monkeypatch.setattr(ProgressWatchdog, "wait_for", observe_wait)
     provider = "configured-fixture" if outcome in {"configured", "restarted"} else "openrouter"
     model = "fixture-model" if outcome in {"configured", "restarted"} else "z-ai/glm-5.3-flash"
     calls: list[str] = []
@@ -929,6 +772,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
+    native_session = PersistentPiSession()
     try:
         worktree = tmp_path / "project"
         worktree.mkdir(mode=0o700)
@@ -1059,11 +903,11 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
 
         request = dict(
             observe_event=observe,
+            pi_session=native_session,
             input_id=INPUT_ID,
             prompt="Respond with X, fixture only",
             worktree=worktree,
-            session_dir=sessions,
-            model_wait_timeout=15,
+            session=SelectedSession(sessions),
             provider=provider,
             model=model,
         )
@@ -1083,9 +927,11 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
             assert len(children) == 1 and children[0].returncode is not None
             assert calls == ["/v1/chat/completions"]
             assert observed.count("input_committed") == 1
+            assert waits_after_start and not any(waits_after_start)
             assert observed.count("context_committed") == 1
             assert "agent_settled" not in observed
-            settled = durable_attempt.fail_unknown()
+            with durable_attempt.attempts.session.settlement() as boundary:
+                settled = durable_attempt.fail_unknown(boundary)
             assert not settled.is_current and not settled.can_retry
             return
         if outcome == "rejected":
@@ -1136,7 +982,8 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                 await TrackedTurnSession.execute(package, **request)
             assert failed.value.context.input_id == INPUT_ID
             assert "agent_settled" in observed
-        assert calls == ["/v1/chat/completions"]
+        attempts = 4 if outcome == "429" else 1
+        assert calls == ["/v1/chat/completions"] * attempts
         assert not (sessions / ".native-pi-agent" / "auth.json").exists()
         assert not (sessions / ".native-pi-agent" / "models.json").exists()
         preflight_index, preflight = next(
@@ -1160,19 +1007,29 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
         assert committed_input["inputId"] == INPUT_ID
         assert committed_context["inputId"] == INPUT_ID
         assert preflight_index < prompt_index < rpc_events.index(committed_input)
-        assert observed.count("context_committed") == 1
+        assert waits_after_start and not any(waits_after_start)
+        assert observed.count("input_committed") == 1
+        assert observed.count("context_committed") == attempts
         assert "auto_retry_start" not in observed
         assert "compaction_start" not in observed
         proof_files = list(sessions.glob("*.jsonl.input-proof"))
         assert len(proof_files) == 1
         durable_proofs = read_proof_rows(Path(str(proof_files[0]).removesuffix(".input-proof")))
-        assert len(durable_proofs) == 1
-        assert durable_proofs[0]["requestGeneration"] == 1
+        assert len(durable_proofs) == attempts
+        assert [row["requestGeneration"] for row in durable_proofs] == list(range(1, attempts + 1))
         if outcome == "restarted":
             # A second real child reopens the first child's saved private history.
             # The outer worker still has its isolated PI_CODING_AGENT_DIR.
             request.pop("observe_event")
-            request.update(input_id="b" * 32, session_file=result.context.session_file)
+            request.update(
+                input_id="b" * 32,
+                session=SavedSelectedSession(
+                    sessions,
+                    identity=NativeSessionIdentity(
+                        result.context.session_id, str(result.context.session_file)
+                    ),
+                ),
+            )
             reopened = await TrackedTurnSession.execute(package, **request)
             assert reopened.text == "X"
             assert reopened.context.input_id == "b" * 32
@@ -1199,6 +1056,7 @@ async def test_copied_cli_private_policy_allows_one_local_http_attempt(
                 if entry["type"] == "message" and entry["message"]["role"] == "user"
             ] == [INPUT_ID, "b" * 32]
     finally:
+        await native_session.close()
         server.shutdown()
         server.server_close()
         worker.join(timeout=2)
@@ -1219,7 +1077,7 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
             input_id=INPUT_ID,
             prompt="do not send",
             worktree=tmp_path,
-            session_dir=tmp_path / "sessions",
+            session=SelectedSession(tmp_path / "sessions"),
         )
     assert os.geteuid() == os.stat(tmp_path).st_uid
     with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
@@ -1263,6 +1121,8 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
         "rpc",
         "--model",
         "owner/model",
+        "--append-system-prompt",
+        str(native_pi.OWNER_INSTRUCTIONS.resolve()),
     ]
     assert environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] == str(tmp_path / "canonical")
     assert "NODE_OPTIONS" not in environment
@@ -1276,19 +1136,55 @@ def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
         native_pi.main()
 
 
+@pytest.mark.parametrize(
+    ("stop_reason", "detail"),
+    [
+        ("error", "provider failed"),
+        ("length", "Model output limit reached"),
+        ("aborted", "provider failed"),
+    ],
+)
+def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
+    from types import SimpleNamespace
+
+    from agent_comms.pi_events import PiEvent
+    from agent_comms.turn_failure import ModelRequestFailed
+    from agent_comms.turn_output import TurnOutput
+
+    event = PiEvent.from_wire({
+        "type": "message_end",
+        "message": {
+            "role": "assistant",
+            "content": [],
+            "stopReason": stop_reason,
+            "errorMessage": detail if stop_reason != "length" else None,
+        },
+    })
+    output = TurnOutput()
+    event.message.tracked_end(SimpleNamespace(output=output))
+
+    assert output.declared_failure == ModelRequestFailed(detail)
+    with pytest.raises(NativePiTerminalFailure, match=detail) as caught:
+        output.raise_if_failed(None, "provider", "model")
+    assert caught.value.failure == output.declared_failure
+
+
 def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_path):
     from agent_comms.native_pi import NativeContextProof
+    from agent_comms.turn_failure import ModelRequestFailed
 
     context = NativeContextProof(
-        INPUT_ID, "session", "entry", 1, DIGEST, tmp_path / "session.jsonl"
+        INPUT_ID, "session", "entry", 1, DIGEST, 1_791_964_800_001, tmp_path / "session.jsonl"
     )
     failed = NativePiTerminalFailure(
-        "SECRET provider response including prompt data", context, "provider", "model"
+        "SECRET provider response including prompt data", context, "provider", "model",
+        ModelRequestFailed("SECRET provider response including prompt data"),
     )
     assert failed.public_message == "provider/model: provider request failed."
     assert "SECRET" not in failed.public_message
     usage = NativePiTerminalFailure(
-        "Codex error: The usage limit has been reached", context, "openai-codex", "gpt-6-sol"
+        "Codex error: The usage limit has been reached", context, "openai-codex", "gpt-6-sol",
+        ModelRequestFailed("Codex error: The usage limit has been reached"),
     )
     assert "The usage limit has been reached" in usage.public_message
 
@@ -1307,6 +1203,23 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
         FieldCodec.decode(NativeContextJournal, later).insert(db)
     assert NativeContextProof.read_evidence(session, INPUT_ID).request_generation == 2
     assert NativeContextProof.read_evidence(session, INPUT_ID, request_generation=1) == recorded
+    assert recorded.corroborates_input(INPUT_ID)
+    assert not recorded.corroborates_input("e" * 32)
+
+    from dataclasses import replace
+    from agent_comms.native_pi import _verify_context
+    from agent_comms.pi_events import ContextCommitted, InputCommitted
+
+    input_event = InputCommitted(
+        input_id=INPUT_ID, session_id="sid", session_entry_id="entry"
+    )
+    context_event = ContextCommitted.from_wire({key: value for key, value in first.items() if key != "schema"})
+    assert _verify_context(session, INPUT_ID, "sid", input_event, context_event) == recorded
+    with pytest.raises(NativePiUnavailable, match="without matching durable proof"):
+        _verify_context(
+            session, INPUT_ID, "sid", input_event,
+            replace(context_event, llm_context_digest="d" * 64),
+        )
     with pytest.raises(NativePiUnavailable, match="no assembled-context"):
         NativeContextProof.read_evidence(session, INPUT_ID, request_generation=3)
 

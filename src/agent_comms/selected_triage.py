@@ -98,7 +98,8 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         participant.require_current(participant.store)
         created = participant.store.executions.create_after_triage(
             participant.batch.execution_id, ExecutionOrigin.WIRE,
-            participant.lookup, participant.owner.thread.name, 1,
+            participant.lookup, participant.owner.thread.name,
+            SelectedAttempt.max_attempts,
             sources=participant.batch.sources, settled=settled,
         ).value
         attempt = SelectedAttempt.engage(participant, created)
@@ -142,7 +143,7 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     def settle(self, participant, stage, admission, context):
         from .selected_result import publish_native_failure
 
-        settled = stage.fail_terminal(participant.store, participant.identity,
+        settled = stage.fail_decision(participant.store, participant.identity,
                                       admission.input_id, admission.token_digest, context)
         publish_native_failure(participant, admission.input_id,
                                "The selected model returned an invalid triage decision.",

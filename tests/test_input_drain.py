@@ -11,6 +11,7 @@ from agent_comms.acp_extension import (
     decode_updates,
 )
 from test_backend_native_lifecycle import native_backend as native_backend
+from stored_inputs import stored_inputs
 
 
 @pytest.mark.parametrize("terminal", [False, True])
@@ -39,11 +40,11 @@ async def test_unstarted_input_failure_restores_exact_original_without_replay(na
             assert len(failed) == 1 and failed[0].text == "lost prompt"
             assert failed[0].failure.description == "Pi preflight ended before attestation"
             key = turn.original_keys[0]
-            original = agent.inputs.dispositions.read().lookup(key)
+            original = stored_inputs(agent.inputs.dispositions.root).lookup(key)
             assert original.declared_name == ("not_sent" if terminal else "reserved")
             assert not original.has_native_binding
         # Retiring that acquired turn preserves its input for explicit recovery.
-        preserved = agent.inputs.dispositions.read().lookup(key)
+        preserved = stored_inputs(agent.inputs.dispositions.root).lookup(key)
         assert preserved.declared_name == "not_sent"
         async with native.original_input(agent, session_id, "distinct explicit input") as next_turn:
             assert next_turn.original_keys != (key,)
@@ -51,5 +52,5 @@ async def test_unstarted_input_failure_restores_exact_original_without_replay(na
             failed = tuple(fact for fact in decode_updates(updates[-1].field_meta)
                            if isinstance(fact, InputFailedUpdate))
             assert len(failed) == 1 and failed[0].text == "distinct explicit input"
-            assert agent.inputs.dispositions.read().lookup(key) == preserved
+            assert stored_inputs(agent.inputs.dispositions.root).lookup(key) == preserved
     assert native.session.read_bytes() == saved and native.provider.posts == 0

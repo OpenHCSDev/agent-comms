@@ -11,7 +11,7 @@ from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
     from .presentation import MessageNotification
-    from .transcripts import TranscriptReadIdentity
+    from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
 
 
 class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
@@ -72,9 +72,47 @@ class ThreadPresentation:
     summary: str
     busy: bool = False
     notifications: tuple[MessageNotification, ...] = ()
+    sent_notifications: tuple[MessageNotification, ...] = ()
     attention: bool = False
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
     read_identity: TranscriptReadIdentity | None = None
+
+    def same_observation(self, other: ThreadPresentation | None) -> bool:
+        """Equal view and turn evidence, not merely equal global store revisions.
+
+        Keep the exact registered thread and binding used for turn settlement.
+        The transcript owner decides whether its page changed; unrelated bus,
+        read-mark and coordinator writes do not create another page publication.
+        """
+        if other is None or replace(self, read_identity=other.read_identity) != other:
+            return False
+        original, current = self.read_identity, other.read_identity
+        if original is None or current is None:
+            return original is current
+        return original.thread == current.thread and original.same_snapshot(current)
+
+    def with_sources(self, window: TranscriptSourceWindow) -> ThreadPresentation:
+        """Incoming and sent outcomes are views of one captured notification window."""
+        from .bus_publication import stable_thread_lookup
+        from .notification_assignment import NotificationAssignment
+        from .presentation import MessageNotification
+
+        transcripts = window.read.owner
+        sources = tuple({source.message.reference: source
+                         for source in (*window.sources, *window.sent_sources)}.values())
+        projected = MessageNotification.delivery_window(
+            transcripts.root, transcripts.registry, sources,
+            NotificationAssignment.read(transcripts.root, sources),
+            owner_lookup=stable_thread_lookup(window.read.identity.thread.created_at),
+        )
+        incoming, sent = (
+            tuple(replace(notification, message=source.message)
+                  for source in selected
+                  for notification in projected[source.message.seq, source.message.message_id])
+            for selected in (window.sources, window.sent_sources)
+        )
+        return replace(self, notifications=incoming, sent_notifications=sent,
+                       read_identity=window.read.identity)
 
     @property
     def label(self) -> str:

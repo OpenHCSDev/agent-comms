@@ -11,6 +11,7 @@ from agent_comms import Registration
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.owner_launch import CallingThreadUnavailable
 from agent_comms.goals import Goal
 from agent_comms.message_bus import MessageBus
 from agent_comms.messages import Message, HandoffKind, InfoKind
@@ -618,7 +619,10 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
     older = reopened.bus.dm_history_page("renamed", "b", before=2, max_bytes=1)
     assert [row.seq for row in older.messages] == [1]
     assert [row.seq for row in reopened.bus.inbox("b")] == [1, 3]
-    assert reopened.bus.mark_delivered("b") == 2
+    unread = reopened.bus.inbox("b")
+    assert reopened.bus.mark_delivered(
+        "b", tuple(message.reference for message in unread)
+    ) == 2
     assert reopened.bus.pending_count("b") == 0
     later = reopened.messaging.send_message("renamed", "b", "later")
     assert later.seq == 4
@@ -649,12 +653,12 @@ class TestSharedLedger:
 
 class TestCurrentThread:
     def test_fail_closed_without_env(self, monkeypatch: pytest.MonkeyPatch):
-        monkeypatch.delenv("PI_AGENT_ID", raising=False)
-        with pytest.raises(UnregisteredThreadError, match="PI_AGENT_ID"):
+        monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
+        with pytest.raises(CallingThreadUnavailable, match="AGENT_COMMS_THREAD"):
             current_thread()
 
     def test_declares_from_env(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-        monkeypatch.setenv("PI_AGENT_ID", "worker")
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
         monkeypatch.setenv("PI_AGENT_TAGS", "a, b")
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("PI_PARENT_ID", raising=False)

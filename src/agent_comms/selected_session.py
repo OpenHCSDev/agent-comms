@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict, StaleFence
-from .coordination_response import _response_boundary
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .diagnostics import PublicationMeasurements
@@ -52,6 +51,9 @@ class SelectedSession:
 
         return PendingAttestation()
 
+    def tracked_attestation(self, current):
+        return current
+
     def startup_admission(self, launch, root, boundary, *,
                           measurements: PublicationMeasurements | None = None):
         from .native_startup import NativeStartupAdmission
@@ -73,7 +75,7 @@ class SelectedSession:
     def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
         environment = dict(os.environ)
         for name in (
-            "PI_AGENT_ID", "PI_PARENT_ID", "PI_AGENT_TAGS", "AGENT_COMMS_THREAD",
+            "PI_PARENT_ID", "PI_AGENT_TAGS", RestartEnvironment.owner_key,
             "AGENT_COMMS_TAGS", "AGENT_COMMS_SELECTED_TOOL_SOCKET",
             "AGENT_COMMS_SELECTED_TOOL_TOKEN",
         ):
@@ -147,13 +149,13 @@ class SelectedSession:
             # Original wire→bus→registry→store→journal order spans exclusive file
             # creation, fsync and enrollment. No historical-file coverage inference.
             with (
-                _response_boundary(participant.bus) as registry,
+                participant.store.session.boundary(participant.bus) as boundary,
                 Coordination(str(participant.store.session.path)) as resource,
                 resource.session.read(),
             ):
                 try:
                     participant.owner.require_snapshot(
-                        registry, "fresh-session owner changed before enrollment"
+                        boundary.registry, "fresh-session owner changed before enrollment"
                     )
                 except RelationViolationError as error:
                     raise StaleFence("fresh-session owner changed before enrollment") from error
@@ -167,7 +169,7 @@ class SelectedSession:
             if thinking_level is not None:
                 return FirstSelectedSession(directory,
                     identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
-            return SavedSelectedSession(directory,
+            return EnrolledSelectedSession(directory,
                 identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
 
         return await Coordination.run_worker(acquire)
@@ -191,6 +193,11 @@ class SavedSelectedSession(SelectedSession):
 
         return PendingAttestation(self.identity)
 
+    def tracked_attestation(self, current):
+        from .native_attestation import KnownSessionAttestation
+
+        return KnownSessionAttestation(self.identity)
+
     def require_launch_header(self) -> None:
         if self.custody is not None:
             try:
@@ -207,6 +214,11 @@ class SavedSelectedSession(SelectedSession):
 
     def admit(self, actual: NativeSessionIdentity, runtime_revision) -> Path:
         self.identity.require_same_session(actual)
+        try:
+            if self.path.resolve(strict=True) != self.path or not self.path.is_file():
+                raise IdentityConflict("native admission requires the exact saved session")
+        except OSError as error:
+            raise IdentityConflict("native admission requires the exact saved session") from error
         return self.path
 
     def require_context(self, context) -> None:
@@ -214,9 +226,17 @@ class SavedSelectedSession(SelectedSession):
 
 
 @dataclass(frozen=True)
-class FirstSelectedSession(SavedSelectedSession):
+class EnrolledSelectedSession(SavedSelectedSession):
+    """A newly created source must publish its first native identity observation."""
+
     creation: FreshPrivateSession = field(kw_only=True)
 
+    def tracked_attestation(self, current):
+        return current
+
+
+@dataclass(frozen=True)
+class FirstSelectedSession(EnrolledSelectedSession):
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()
 

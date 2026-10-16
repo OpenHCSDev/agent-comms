@@ -5,12 +5,13 @@ import json
 
 import pytest
 
+from agent_comms.agent_events import AgentInfo
 from agent_comms.field_codec import FieldCodec
 from agent_comms.thread_identity import TurnId, TurnIdentity
-from agent_comms.turn_context import ContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
+from agent_comms.turn_context import ContextManifest, RecordedContextManifest, RecordedContextTurn, SegmentManifest, OwnerProvenance, TurnContext, TranscriptSegment, UserInputSegment
 from agent_comms.pi_commands import Prompt
 from agent_comms.image_inputs import ImageInput
-from agent_comms.wire_record import WireRecord, ObservationWireRecord, ContextManifestWireObservation
+from agent_comms.wire_record import WireRecord, ObservationWireRecord, RecordedContextManifestWireObservation
 from agent_comms.cli_commands import ContextCliCommand
 from agent_comms.comms import Comms
 from test_private_bus_checkpoint import _root, _page
@@ -56,7 +57,7 @@ def test_awareness_inspection_waits_for_original_source_without_input_delay(tmp_
 
 
 def test_context_resources_revalidate_selected_bytes_without_redecoding(tmp_path, monkeypatch):
-    from agent_comms.private_bus_checkpoint import ContextManifestSources
+    from agent_comms.private_bus_checkpoint import RecordedContextManifestSources
 
     comms, _ = _root(tmp_path)
     owner = comms.registry.require('Alice')
@@ -64,13 +65,13 @@ def test_context_resources_revalidate_selected_bytes_without_redecoding(tmp_path
     for original in originals:
         comms.bus.log.record_context(original)
     decoded = []
-    original_decode = ContextManifestSources.decode_bytes
+    original_decode = RecordedContextManifestSources.decode_bytes
 
     def measured(pointer, raw, root):
         decoded.append(pointer.offset)
         return original_decode(pointer, raw, root)
 
-    monkeypatch.setattr(ContextManifestSources, 'decode_bytes', measured)
+    monkeypatch.setattr(RecordedContextManifestSources, 'decode_bytes', measured)
     acquired = comms.bus.log.context_manifest_resources('Alice', comms.registry)
     assert tuple(item.value for item in acquired) == originals
     assert len(decoded) == 20
@@ -140,7 +141,7 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
     observed_owner, observed = observations[0]
     data = NativeContextManifestData(observed.counter, observed.segments, request_id=observed.request_id)
     comms, root_id = _root(tmp_path)
-    comms.agents.set_agent_info('Bob', model=observed_owner.model)
+    comms.agents.observe_runtime_info('Bob', AgentInfo(model=observed_owner.model))
     original_message = comms.messaging.send_initial_cohort('sender', '#team', '@Bob recording fixture')
     owner = CommsAgent(comms, auto_wake=False)
     turn = OwnedTurn(owner.turns, 'Alice', 'Alice', '')
@@ -153,10 +154,10 @@ async def test_installed_context_callbacks_share_original_writer_custody(tmp_pat
         batch=SingleInputBatch(()))
     resources = ExitStack()
     goals = TurnGoalAccount(comms=comms, owner=thread, turn=TurnId(lease.turn_id),
-        lease=lease, permit=None, open_store=owner.turns.goals.open_goal_store,
+        lease=lease, permit=None,
         pending_origins=owner.turns.goals.pending_goal_origins, claims=resources)
     progress = TurnProgress(comms=comms, sessions=owner.sessions, inputs=owner.inputs,
-        effects=owner, runtime=owner._runtime, emitted_errors=owner.turns.emitted_errors,
+        effects=owner, runtime=owner._runtime,
         session_id='Alice', turn=turn, finish_event=asyncio.Event(),
         goals=goals, sync_goals=owner.turns.goals.sync_goal_execution)
     results = []
@@ -281,7 +282,8 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
 
 def test_observation_family_rejects_message_fields_and_preview(tmp_path):
     comms,root_id=_root(tmp_path)
-    row=ObservationWireRecord(ContextManifestWireObservation(manifest(comms.registry.require('Alice'))))
+    recorded, _entries = RecordedContextManifest.capture(manifest(comms.registry.require('Alice')))
+    row=ObservationWireRecord(RecordedContextManifestWireObservation(recorded))
     assert WireRecord.from_wire(row.to_wire(),root_id).messages()==()
     assert row.sequence_after(39)==39
     with pytest.raises(ValueError):

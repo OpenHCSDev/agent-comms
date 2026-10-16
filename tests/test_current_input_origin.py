@@ -21,6 +21,7 @@ from agent_comms.queued_input import QueuedInput
 from agent_comms.retained_task_facts import CurrentHumanInputTaskFact, HumanInputTaskFact, InputTaskFact
 from agent_comms.store_files import _store_lock
 from test_acp_queue_contract import _owner
+from stored_inputs import stored_inputs
 
 
 class Client:
@@ -54,7 +55,7 @@ def test_queue_observation_owns_capture_and_rejects_malformed_available_scope(tm
         FieldCodec.decode(QueueChangedUpdate, malformed)
     observation = QueueChangedUpdate(scope, 0, AvailableQueueProjection())
     assert observation.projection.capture_human_input(comms, lambda: scope) == capture(comms)
-    assert not agent.inputs.dispositions.read().rows
+    assert not stored_inputs(agent.inputs.dispositions.root).rows
 
 
 async def test_original_human_followup_survives_forwarding_reservation_and_native_disposition(tmp_path):
@@ -72,9 +73,9 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
                            field_meta=encode_request(command))
         inputs = agent.inputs.dispositions
         key = "acp:" + command.input_id
-        row = InputDispositions(inputs.path).read().lookup(key)
+        row = stored_inputs(inputs.root).lookup(key)
         assert row.origin == origin and row.source_text == command.user_text
-        assert len(inputs.read().rows) == 1 and comms.bus.log.full_history() == before
+        assert len(stored_inputs(inputs.root).rows) == 1 and comms.bus.log.full_history() == before
         from agent_comms.pi_commands import Prompt
         queued = agent.inputs.backend_inboxes['beta'].get_nowait()
         queued.pop('_input_id')
@@ -90,10 +91,10 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         # Existing terminal settlement never rewrites a started original as
         # unsent or grants a replay; the canonical native completion owns that.
         assert inputs.settle_unbound((key,)).lookup(key).has_started
-        terminal = InputDispositions(inputs.path).read().lookup(key)
+        terminal = stored_inputs(inputs.root).lookup(key)
         assert terminal.origin == origin
         assert terminal.has_started and terminal.source_text == command.user_text
-        facts = inputs.read().compaction_material(comms.registry.require("beta"), (), None)[1]
+        facts = stored_inputs(inputs.root).compaction_material(comms.registry.require("beta"), (), None)[1]
         assert facts[0].for_owner(comms.registry.require("beta"), comms.registry.snapshot()) == CurrentHumanInputTaskFact(terminal)
     finally:
         await agent.shutdown()
@@ -118,7 +119,7 @@ def test_foreign_or_changed_origin_refused_before_any_reservation(tmp_path):
             QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
                                 echo=True, images=(), controller=None, origin=origin, custody=custody)
             custody.pop_all()
-    assert agent.inputs.dispositions.read().rows == {}
+    assert stored_inputs(agent.inputs.dispositions.root).rows == {}
 
 
 def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(tmp_path):
@@ -177,14 +178,14 @@ def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_p
             QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
                                 echo=True, images=(), controller=Client(), origin=absent, custody=custody)
             custody.pop_all()
-    assert agent.inputs.dispositions.read().rows == {}
+    assert stored_inputs(agent.inputs.dispositions.root).rows == {}
 
     with _store_lock(comms._wire_lock_path):
         with ExitStack() as custody:
             queued, _, _receipt = QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
                                             echo=True, images=(), controller=Client(), origin=restored, custody=custody)
             custody.pop_all()
-    assert agent.inputs.dispositions.read().lookup(queued.key).origin == restored
+    assert stored_inputs(agent.inputs.dispositions.root).lookup(queued.key).origin == restored
     assert restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
     current = comms.registry.require("beta")
     comms.registry.register(replace(current, goal=replace(goal, revision=5)))
@@ -211,7 +212,7 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
                                             echo=True, images=(), controller=Client(), origin=origin, custody=custody)
             custody.pop_all()
     inputs = agent.inputs.dispositions
-    row = inputs.read().lookup(queued.key)
+    row = stored_inputs(inputs.root).lookup(queued.key)
     original_inputs = inputs.path.read_bytes()
     subject = row.context_provenance()
     pin = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
@@ -223,7 +224,7 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
         owner = comms.registry.require(name)
         with comms.bus.log.certified_read() as source:
             wire_facts = tuple(source.retained_task_facts(owner.incarnation))
-        input_facts = tuple(r.origin.retained_fact(r) for r in inputs.read().rows.values())
+        input_facts = tuple(r.origin.retained_fact(r) for r in stored_inputs(inputs.root).rows.values())
         return RetainedTaskFacts(wire_facts + input_facts).for_owner(owner, comms.registry.snapshot())
 
     snapshot = comms.registry.snapshot()
@@ -258,7 +259,7 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
             second, _, _receipt = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
                                             echo=True, images=(), controller=Client(), origin=origin, custody=custody)
             custody.pop_all()
-    second_subject = inputs.read().lookup(second.key).context_provenance()
+    second_subject = stored_inputs(inputs.root).lookup(second.key).context_provenance()
     second_pin = comms.messaging.pin_input_constraint('beta', second_subject, worktree=origin.project)
     assert second_subject != subject
     assert captured('beta').current_authored_sources(snapshot.require('beta'), snapshot) == (repeated, second_pin)
@@ -266,7 +267,7 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     owner = comms.registry.require('renamed-beta')
     assert row.matches_owner(owner.incarnation)
     assert not row.matches_owner(replace(owner.incarnation, created_at=owner.created_at + 1))
-    assert captured(owner.name).original_text_source(second_pin) == inputs.read().lookup(second.key)
+    assert captured(owner.name).original_text_source(second_pin) == stored_inputs(inputs.root).lookup(second.key)
     revised = comms.messaging.send_user_message(owner.name, 'Exact human correction.', worktree=origin.project,
         task=UserTaskSupersession(CorrectionTaskChange(repeated.reference)))
     current = captured(owner.name)
@@ -274,5 +275,5 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     comms.messaging.send_user_message(owner.name, 'Drop the second original.', worktree=origin.project,
         task=UserTaskDrop(CorrectionTaskChange(second_pin.reference)))
     assert captured(owner.name).current_authored_sources(owner, comms.registry.snapshot()) == (revised,)
-    assert inputs.read().lookup(row.key) == row
-    assert inputs.read().lookup(second.key).unresolved
+    assert stored_inputs(inputs.root).lookup(row.key) == row
+    assert stored_inputs(inputs.root).lookup(second.key).unresolved

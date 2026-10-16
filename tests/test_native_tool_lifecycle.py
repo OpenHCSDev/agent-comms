@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms import selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.native_tool_call import SelectedToolDenied
+from agent_comms.native_tool_call import NativeToolCall, SelectedToolDenied, ToolStartNotSeen
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 
@@ -24,18 +24,21 @@ def policy(request, tmp_path):
     name = "selected_claimed_write" if selected else "write"
     args = {"resource": "x", "contents": "value"} if selected else {"path": "x", "content": "value"}
 
-    def action(call):
+    def commit(call, round_number):
         effects.append(call.call_id)
-        slot = input_id if selected else call.slot(input_id)
+        slot = input_id if selected else call.slot(input_id, round_number)
         ledger_call = call.call_id if selected else slot
         broker.consume_selected_slot(tmp_path, slot, ledger_call)
         if selected:
             broker.record_selected_terminal(tmp_path, slot, ledger_call)
 
     socket = (
-        broker.SelectedToolSocket(tmp_path, token, action)
+        broker.SelectedToolSocket(tmp_path, token, lambda call: commit(call, 0))
         if selected
-        else CodingToolSocket(tmp_path, token, SimpleNamespace(admit=action))
+        else CodingToolSocket(
+            tmp_path, token,
+            SimpleNamespace(admit=lambda round_number, call: commit(call, round_number)),
+        )
     )
 
     def raw(call_id="one", arguments=None):
@@ -183,6 +186,72 @@ async def test_cancelled_wait_cannot_be_restarted_or_replayed(policy):
     assert not p.effects
 
 
+async def test_start_timeout_retains_observations_without_reopening_admission(policy, monkeypatch):
+    p = policy
+
+    async def missed_start(call):
+        raise ToolStartNotSeen()
+
+    with monkeypatch.context() as timeout:
+        timeout.setattr(NativeToolCall, "_wait_started", missed_start)
+        with pytest.raises(ToolStartNotSeen):
+            await p.socket.handle_request(p.raw())
+    assert not p.effects
+    p.announce()
+    p.start()
+    with pytest.raises(SelectedToolDenied, match="already consumed"):
+        await p.socket.handle_request(p.raw())
+    if p.selected:
+        with pytest.raises(SelectedToolDenied):
+            p.end(is_error=True)
+        with pytest.raises(SelectedToolDenied):
+            p.socket.assert_complete()
+    else:
+        p.end(is_error=True)
+        p.socket.assert_complete()
+    assert not p.effects
+
+
+async def test_delayed_declaration_binds_only_its_exact_request(policy, monkeypatch):
+    p = policy
+    if p.selected:
+        return  # Selected policy has one slot, not consecutive normal rounds.
+
+    async def missed_start(call):
+        raise ToolStartNotSeen()
+
+    with monkeypatch.context() as timeout:
+        timeout.setattr(NativeToolCall, "_wait_started", missed_start)
+        with pytest.raises(ToolStartNotSeen):
+            await p.socket.handle_request(p.raw("first"))
+    second = asyncio.create_task(p.socket.handle_request(p.raw("second")))
+    try:
+        await asyncio.sleep(0)
+        with pytest.raises(KeyError):
+            p.socket.calls.require(0, "first")
+        p.announce("first")
+        assert p.socket.calls.require(0, "first").call_id == "first"
+        with pytest.raises(KeyError):
+            p.socket.calls.require(0, "second")
+        p.start("first")
+        p.end("first", is_error=True)
+        with pytest.raises(SelectedToolDenied, match="UNKNOWN"):
+            p.socket.assert_complete()  # The unresolved request cannot disappear.
+        assert not p.effects and not second.done()
+        p.announce("second")
+        p.start("second")
+        assert await second == {"ok": True}
+        p.end("second")
+        p.socket.assert_complete()
+        assert p.effects == ["second"]
+        assert [round.number for round in p.socket.calls.rounds] == [0, 1]
+        first = p.socket.calls.require(0, "first")
+        assert not (p.root / "selected-tool-ledger" / first.slot(p.input_id, 0)).exists()
+    finally:
+        second.cancel()
+        await asyncio.gather(second, return_exceptions=True)
+
+
 async def test_concurrent_duplicate_requests_admit_exactly_once(policy):
     p = policy
     p.announce()
@@ -208,7 +277,7 @@ async def test_failed_admission_is_consumed_and_never_retried(policy, monkeypatc
         )
     else:
 
-        def fail(_call):
+        def fail(*_args):
             p.effects.append("attempted")
             if failure == "cancel-action":
                 raise asyncio.CancelledError()
@@ -278,7 +347,8 @@ async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
     tmp_path.chmod(0o700)
     observed = []
     socket = CodingToolSocket(
-        tmp_path, secrets.token_hex(32), SimpleNamespace(admit=lambda c: observed.append(c.call_id))
+        tmp_path, secrets.token_hex(32),
+        SimpleNamespace(admit=lambda round_number, call: observed.append(call.call_id)),
     )
     arguments = {"path": "x"}
     socket.announce(

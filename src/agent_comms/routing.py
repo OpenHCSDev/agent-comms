@@ -7,13 +7,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .channel_targets import BuiltinChannel, is_channel_target
-from .messages import Message
-from .message_reference import MessageReference
 from .field_codec import FieldCodec
+from .message_reference import MessageReference
+from .messages import Message
 from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
-from .wake import derive_exact_reply_target
 
 if TYPE_CHECKING:
+    from .catalog_document import CatalogDocument
     from .registry_document import RegistrySnapshot
 
 
@@ -139,8 +139,8 @@ class ScheduledTurn:
             (
                 index
                 for index, turn in enumerate(pending)
-                if derive_exact_reply_target(turn.origin)
-                != derive_exact_reply_target(pending[0].origin)
+                if (turn.origin.exact_reply_target if turn.origin else None)
+                != (pending[0].origin.exact_reply_target if pending[0].origin else None)
                 or (turn.origin and turn.origin.response_policy.separate_turn)
             ),
             len(pending),
@@ -169,6 +169,13 @@ class DeliveryScope(MessageDisplayScope):
     actor: str
     aliases: Mapping[str, str]
     channels: frozenset[str]
+
+    @classmethod
+    def capture(
+        cls, name: str, snapshot: RegistrySnapshot, catalog: CatalogDocument
+    ) -> DeliveryScope:
+        thread = snapshot.require(name)
+        return cls(thread.name, snapshot.aliases, catalog.targets_for(thread.tags))
 
     @property
     def index_targets(self) -> frozenset[str]:
@@ -214,8 +221,12 @@ class DeliveryScope(MessageDisplayScope):
             return None
         return max(source.created_at, snapshot.threads[self.actor].created_at)
 
-    def current(self, delivery: DeliveryMessage, snapshot: RegistrySnapshot) -> bool:
+    def unread(
+        self, delivery: DeliveryMessage, snapshot: RegistrySnapshot, seen: frozenset[int]
+    ) -> bool:
         message = delivery.message
+        if message.seq in seen:
+            return False
         since = self.minimum_timestamp(
             message.sender, message.target, delivery.sender_lookup, snapshot
         )
@@ -226,10 +237,3 @@ class DeliveryScope(MessageDisplayScope):
             return target
         sender, target = self.canonical(sender), self.canonical(target)
         return sender if target == self.actor else target
-
-
-@dataclass(frozen=True, slots=True)
-class PendingCounts:
-    revision: tuple[tuple[int, int, int, int] | None, ...]
-    delivery: DeliveryScope
-    counts: Mapping[str, int]

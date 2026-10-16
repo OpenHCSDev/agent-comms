@@ -30,6 +30,7 @@ from agent_comms.queued_input import QueuedInput
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 def register(comms, name):
@@ -85,14 +86,12 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     register(comms, "owner")
     goal = Goal("Objective", "goal", state=state)
     comms.registry.register(replace(comms.registry.require("owner"), goal=goal))
-    private = tmp_path / "private"
-    private.mkdir(mode=0o700)
-    store = GoalAttemptStore.initialize(private)
+    store = comms.goals.open_goal_store()
     retry = RetryGoalAction(
         expect=GoalPrecondition(goal_id=goal.id, expected_owner=ProcessIdentity.capture(os.getpid()))
     )
     with pytest.raises(ValueError, match="Retry cannot create a grant"):
-        comms.goals.update_goal("owner", retry, actor=OwnerInvocable, owner_store=store)
+        comms.goals.update_goal("owner", retry, actor=OwnerInvocable)
     assert store.snapshot(goal.id) is None
     assert comms.registry.require("owner").goal == goal
     # A known failed generation requires an explicit owner decision to advance.
@@ -100,7 +99,7 @@ def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, s
     reservation = store.reserve(goal.id, 1)
     reservation.fail(store, "Observed failure")
     assert not store.snapshot(goal.id).lifecycle.allows_resume(False)
-    changed = comms.goals.update_goal("owner", retry, actor=OwnerInvocable, owner_store=store)
+    changed = comms.goals.update_goal("owner", retry, actor=OwnerInvocable)
     assert changed.state.active and changed.id == goal.id
     assert store.snapshot(goal.id).lifecycle == ReadyGeneration()
     assert store.snapshot(goal.id).number == 2
@@ -120,20 +119,21 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     comms.agents.begin_turn("peer", "peer-turn")
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for the peer"))
     message = comms.messaging.send_message("peer", "owner", "Review this uncertain reply")
-    store = InputDispositions(tmp_path / InputDispositions.filename)
+    store = InputDispositions(tmp_path)
     admission = comms.registry.snapshot().admission_generations["owner"]
     key = f"bus:{message.seq}"
     store.record(
         key, seq=message.seq, owner="owner", admission=admission, target="owner", text=message.body
     )
-    comms.messaging.acknowledge("owner")
+    messages = comms.bus.inbox("owner")
+    comms.messaging.acknowledge("owner", tuple(message.reference for message in messages))
     action = StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
         comms.goals.update_goal("owner", action)
     review = comms.goals.goal_input_review("owner", goal.id, ["peer"])
     assert review["reviewed_inputs"] == [key]
     comms.goals.update_goal("owner", replace(action, reviewed_inputs=(key,)))
-    row = store.read().rows[key]
+    row = stored_inputs(store.root).rows[key]
     assert row.accepts_reservation and row.reviewed_for_goal(goal.id)
     assert not (tmp_path / "acp_delivery_cursors.json").exists()
     # A later native-started reply is already handled, regardless of display reads.
@@ -173,7 +173,11 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
 async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    from agent_comms.native_arguments import NativeArguments
+
+    configured_model = NativeArguments.parse(NativeArguments.default).model
+    assert configured_model is not None
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = wire(tmp_path / "wire")
     owner = CommsAgent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
     from goal_owner_fixture import activate_empty_source
@@ -202,14 +206,14 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
             native_id="b" * 32,
             text="uncertain",
         )
-        before = ledger.read().rows
+        before = stored_inputs(ledger.root).rows
         current = await proxy.request("input_dispositions")
         assert [row["inputId"] for row in current["inputs"]] == [queued.input_id]
         assert current["historicalCount"] == 1
         cleared = await proxy.request("dismiss_historical_inputs")
         assert cleared["dismissedHistoricalCount"] == 1 and cleared["inputs"] == current["inputs"]
         assert {
-            key: replace(row, notice_dismissed=False) for key, row in ledger.read().rows.items()
+            key: replace(row, notice_dismissed=False) for key, row in stored_inputs(ledger.root).rows.items()
         } == before
         assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
         goal = Goal(
@@ -218,7 +222,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
         comms.registry.register(replace(comms.registry.require(session), goal=goal))
         with pytest.raises(RuntimeError, match="Retry cannot create a grant"):
             await proxy.request("retry_goal", goal_id=goal.id, expected_revision=goal.revision)
-        assert owner.turns.goals.open_goal_store().snapshot(goal.id) is None
+        assert comms.goals.open_goal_store().snapshot(goal.id) is None
         assert comms.registry.require(session).goal == goal
         assert not owner.turns.turn_tasks and not owner.inputs.wake_tasks
     finally:

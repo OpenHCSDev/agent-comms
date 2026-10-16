@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from agent_comms.threads import Thread
@@ -6,7 +8,6 @@ from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_
 
 class TestToolCatalog:
     def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
-        monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
@@ -40,11 +41,15 @@ class TestToolCatalog:
         assert not comms.views.full_history()
 
     def test_collaboration_tool_rejects_bad_arguments_before_writes(self, comms, monkeypatch):
-        monkeypatch.delenv("PI_AGENT_ID", raising=False)
         monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
-        with pytest.raises(ValueError, match="identity"):
+        with pytest.raises(ValueError, match="AGENT_COMMS_THREAD"):
             invoke_tool(comms, "comms_collaborations", {})
-        with pytest.raises(ValueError, match="Value does not match"):
+        with pytest.raises(
+            ValueError,
+            match=re.escape(
+                "Invalid comms_collaboration arguments: Unknown RelationshipEdit name: 'start'"
+            ),
+        ):
             invoke_tool(comms, "comms_collaboration", {"action": "start", "peer": "b"})
         with pytest.raises(ValueError, match="Unknown fields"):
             invoke_tool(comms, "comms_collaboration", {"action": "add", "peer": "b", "owner": "c"})
@@ -72,7 +77,6 @@ class TestToolCatalog:
             "comms_start",
             "comms_queue_restart",
             "comms_archive",
-            "comms_ack",
         ]
         assert actions[0]["context_bindings"] == {"parent": "subject"}
 
@@ -88,23 +92,52 @@ class TestToolCatalog:
         assert comms.bus.pending_count("b") == 0
 
     def test_arguments_are_validated_before_dispatch(self, comms):
-        with pytest.raises(ValueError, match="missing.*name"):
+        with pytest.raises(
+            ValueError,
+            match=re.escape("Invalid comms_stop arguments: Missing required fields for CommsStopTool: name"),
+        ):
             invoke_tool(comms, "comms_stop", {})
         with pytest.raises(ValueError, match="Unknown fields"):
             invoke_tool(comms, "comms_stop", {"name": "a", "force": True})
         with pytest.raises(ValueError, match="Expected.*bool"):
             invoke_tool(comms, "comms_threads", {"active_only": "yes"})
 
-    def test_ack_can_target_one_conversation(self, comms):
+    def test_threads_tool_includes_callers_bounded_sent_outcomes(self, comms, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "sender")
+        comms.registry.declare(Thread(name="sender", tags=frozenset(), worktree="/wt"))
+        comms.registry.declare(Thread(name="recipient", tags=frozenset(), worktree="/wt"))
+        sent = comms.messaging.send_message("sender", "recipient", "track me")
+        for index in range(6):
+            comms.messaging.send_message("recipient", "sender", f"incoming {index}")
+
+        presentation = comms.views.thread_presentation("sender")
+        assert all(row.message.reference != sent.reference for row in presentation.notifications)
+        assert [row.message.reference for row in presentation.sent_notifications] == [sent.reference]
+
+        result = invoke_tool(comms, "comms_threads", {})
+        assert [
+            (
+                row["message"]["seq"],
+                row["message"]["text"],
+                row["recipient_identity"]["canonical_thread"],
+                row["state"],
+            )
+            for row in result["sent_notifications"]
+        ] == [(sent.seq, "track me", "recipient", "Sent")]
+
+    def test_inbox_ack_can_target_one_conversation(self, comms):
         comms.registry.declare(Thread(name="a", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="b", tags=frozenset(), worktree="/wt"))
         comms.registry.declare(Thread(name="c", tags=frozenset(), worktree="/wt"))
         comms.messaging.send("a", "b", "from a")
         comms.messaging.send("c", "b", "from c")
 
-        result = invoke_context_tool(comms, "comms_ack", subject="a", actor="b")
+        result = invoke_tool(
+            comms, "comms_inbox", {"thread": "b", "target": "a"}
+        )
 
-        assert result == {"acknowledged": 1}
+        assert [message["text"] for message in result["messages"]] == ["from a"]
+        assert result["acknowledged"] == 1
         assert comms.bus.pending_count("b", "a") == 0
         assert comms.bus.pending_count("b", "c") == 1
 
@@ -113,7 +146,7 @@ class TestToolCatalog:
 def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms, monkeypatch):
     from dataclasses import dataclass
 
-    from agent_comms.tools import ActorBinding, SubjectBinding, ToolRequest, tool_field
+    from agent_comms.tools import SubjectBinding, ToolRequest, tool_field
 
     monkeypatch.setattr(ToolRequest, "__registry__", dict(ToolRequest.__registry__))
 
@@ -123,7 +156,7 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
         description = "Test-only declaration extends the complete adapter path."
         context = "thread"
         target: str = tool_field("Selected peer", binding=SubjectBinding)
-        viewer: str = tool_field("Acting thread", binding=ActorBinding)
+        viewer: str = tool_field("Viewing thread")
         include_body: bool = tool_field("Include message bodies", default=False)
 
         def apply(self, comms):
@@ -139,17 +172,21 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
     schema = next(row for row in tool_catalog() if row["name"] == InspectInboxTool.declared_name)
     assert schema["parameters"]["required"] == ["target", "viewer"]
     assert schema["parameters"]["properties"]["include_body"]["default"] is False
-    assert schema["context_bindings"] == {"target": "subject", "viewer": "actor"}
+    assert schema["context_bindings"] == {"target": "subject"}
     assert schema in context_tool_catalog("thread")
     result = invoke_context_tool(
         comms,
         InspectInboxTool.declared_name,
         subject="a",
         actor="b",
-        arguments={"include_body": True},
+        arguments={"viewer": "b", "include_body": True},
     )
     assert result == {"count": 1, "bodies": ["Actual inbox source"]}
-    for arguments in ({"include_body": "yes"}, {"include_body": None}, {"tool": "forged"}):
+    for arguments in (
+        {"viewer": "b", "include_body": "yes"},
+        {"viewer": "b", "include_body": None},
+        {"viewer": "b", "tool": "forged"},
+    ):
         with pytest.raises(ValueError):
             invoke_context_tool(
                 comms, InspectInboxTool.declared_name, subject="a", actor="b", arguments=arguments

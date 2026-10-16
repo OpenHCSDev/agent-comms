@@ -25,7 +25,6 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.selected_tool_broker import SelectedToolIntent
 from agent_comms.wake_candidate_index import WakeCandidateIndex
-from agent_comms.wake import derive_exact_reply_target
 from test_coordinated_runtime import _root
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -55,7 +54,7 @@ async def test_native_full_four_tools_publish_and_release(
             accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
     comms.registry.register(replace(owner, model="selected-offline/fixture", thinking_level="low"))
-    assert WakeCandidateIndex(comms.bus).maintain(rebuild=True)
+    assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
     requests = []
     failures = []
@@ -143,7 +142,7 @@ async def test_native_full_four_tools_publish_and_release(
                         assert 'CANONICAL_TOOL_RUNNING' in str(tools[-1]['content'])
                     assert phase.declared_name == 'model_wait'
                     assert 'participant' not in comms.registry.snapshot().threads
-                    answer = Message("beta", derive_exact_reply_target(initial.message),
+                    answer = Message("beta", initial.message.exact_reply_target,
                                      "CODING_TOOLS_OK", InfoKind, timestamp=0)
                     delta = {"role": "assistant", "content": json.dumps(FieldCodec.encode((answer,)))}
                     reason = "stop"

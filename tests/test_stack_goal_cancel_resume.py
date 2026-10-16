@@ -17,6 +17,8 @@ from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, ReservedGeneration
 from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.input_attempt import StartedInput
+from stored_inputs import stored_inputs
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -93,7 +95,6 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
         )
         for name in (
-            "PI_AGENT_ID",
             "AGENT_COMMS_THREAD",
             "AGENT_COMMS_ROOT",
             "PI_SESSION_FILE",
@@ -151,7 +152,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
         proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
         created = await proxy.request("set_goal", text="Continue the owner objective")
         goal_id = created["goal"]["id"]
-        store = owner.turns.goals.open_goal_store()
+        store = comms.goals.open_goal_store()
         owner.inputs.dispositions.record(
             "acp:uncertain-sentinel",
             seq=None,
@@ -160,7 +161,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             target=session,
             text="UNCERTAIN_INPUT_MUST_NOT_REPLAY",
         )
-        sentinel_before = owner.inputs.dispositions.read().rows.get("acp:uncertain-sentinel")
+        sentinel_before = stored_inputs(owner.inputs.dispositions.root).rows.get("acp:uncertain-sentinel")
         turn = asyncio.create_task(
             proxy.request(
                 "prompt",
@@ -221,16 +222,14 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(mo
             assert final.number == ready.number + 1 and final.lifecycle == ReadyGeneration()
             assert len(requests) == 2
             assert (
-                owner.inputs.dispositions.read().rows.get("acp:uncertain-sentinel")
+                stored_inputs(owner.inputs.dispositions.root).rows.get("acp:uncertain-sentinel")
                 == sentinel_before
             )
             assert "UNCERTAIN_INPUT_MUST_NOT_REPLAY" not in json.dumps(requests)
-            disposition_rows = json.loads(owner.inputs.dispositions.path.read_text())[
-                "rows"
-            ].values()
-            accepted = [row for row in disposition_rows if row["status"] == "started"]
+            disposition_rows = stored_inputs(owner.inputs.dispositions.root).rows.values()
+            accepted = [row for row in disposition_rows if isinstance(row, StartedInput)]
             assert len(accepted) == 2
-            assert len({row["native_id"] for row in accepted}) == 2
+            assert len({row.native_id for row in accepted}) == 2
             native_session = Path(comms.registry.require(session).session_file)
             native_rows = [json.loads(line) for line in native_session.read_text().splitlines()]
             users = [

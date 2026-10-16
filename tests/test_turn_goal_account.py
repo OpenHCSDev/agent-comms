@@ -21,6 +21,7 @@ from agent_comms.input_attempt import NotSentInput
 from agent_comms.turn_goal_account import TurnGoalAccount
 from agent_comms.turn_input_source import OriginalTurnInput
 from test_s1_event_behavior import owner_turn as owner_turn
+from stored_inputs import stored_inputs
 
 
 def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path):
@@ -57,7 +58,7 @@ async def test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal(
     execution, progress = owner_turn
     runner = execution.runner
     goal = runner.comms.goals.update_goal(execution.thread_name, SetGoalAction(text="new work"))
-    store = runner.goals.open_goal_store()
+    store = runner.comms.goals.open_goal_store()
 
     def lost_claim(_reservation):
         raise GoalAttemptError("claim outcome unavailable")
@@ -89,7 +90,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
     name = owner.sessions.bindings[session.session_id]
     goal = await owner.turns.goals.set_goal(session.session_id, "preserve failed original")
     execution = OwnedTurn(owner.turns, session.session_id, name, "work", autonomous_goal=True)
-    store = owner.turns.goals.open_goal_store()
+    store = comms.goals.open_goal_store()
     pending_before = tuple(owner.inputs.pending_turns.get(session.session_id, ()))
 
     def fail(*args, **kwargs):
@@ -126,7 +127,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
         assert not owner.inputs.input_keys(session.session_id)
         assert tuple(owner.inputs.pending_turns.get(session.session_id, ())) == pending_before
         if failure == "receipt_capture":
-            originals = tuple(owner.inputs.dispositions.read().rows.values())
+            originals = tuple(stored_inputs(owner.inputs.dispositions.root).rows.values())
             assert len(originals) == 1
             assert isinstance(originals[0], NotSentInput)
         with pytest.raises(GoalAttemptError):
@@ -176,7 +177,7 @@ async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
             assert str(cancelled.value.__cause__) == (
                 "Original reservation worker failed after cancellation"
             )
-        original, = owner.inputs.dispositions.read().rows.values()
+        original, = stored_inputs(owner.inputs.dispositions.root).rows.values()
         assert isinstance(original, NotSentInput)
         assert comms.registry.require(name).turn_lease is None
         assert session.session_id not in owner.inputs.original_sources

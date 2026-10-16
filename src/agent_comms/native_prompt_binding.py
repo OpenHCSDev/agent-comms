@@ -148,32 +148,32 @@ def bind_expected_prompt(
     # hold SQL generation writers through insertion. Registry lifecycle writers
     # are excluded separately by the final native-send boundary, not this SQL lock.
     _ensure_binding_schema(store)
-    with store.session.transaction() as db:
-        assert_native_runtime_schema(db)
-        assert_cohort_schema(db)
-        ParticipantOwner(owner, generation).require(store, stage.recipient_lookup)
-        reserved = NativeRuntimeInput.one(db, input_id=input_id)
-        if reserved is None:
-            raise IdentityConflict("prompt binding requires an already reserved input")
-        try:
-            NativeIdentityCheck(
-                row=reserved,
-                stage=stage,
-                owner=ParticipantOwner(owner, generation).coordinator_identity(
-                    stage.recipient_lookup
-                ),
-            ).require_valid()
-        except ReservationViolationError as error:
-            raise IdentityConflict(
-                f"prompt binding identity differs from its reservation: {error}"
-            ) from error
-        stage.require_sources(db, input_id)
-        roots = {_binding_wire_root(store, original) for original in stage.assignments}
-        if len(roots) != 1:
-            raise IdentityConflict("Native sources belong to different canonical wire roots")
-        wire_root_id = next(iter(roots))
-        path = binding_store_path(store)
-        with sidecar_connection(path, PromptBinding) as sidecar:
+    path = binding_store_path(store)
+    with sidecar_connection(path, PromptBinding) as sidecar:
+        with store.session.transaction() as db:
+            assert_native_runtime_schema(db)
+            assert_cohort_schema(db)
+            ParticipantOwner(owner, generation).require(store, stage.recipient_lookup)
+            reserved = NativeRuntimeInput.one(db, input_id=input_id)
+            if reserved is None:
+                raise IdentityConflict("prompt binding requires an already reserved input")
+            try:
+                NativeIdentityCheck(
+                    row=reserved,
+                    stage=stage,
+                    owner=ParticipantOwner(owner, generation).coordinator_identity(
+                        stage.recipient_lookup
+                    ),
+                ).require_valid()
+            except ReservationViolationError as error:
+                raise IdentityConflict(
+                    f"prompt binding identity differs from its reservation: {error}"
+                ) from error
+            stage.require_sources(db, input_id)
+            roots = {_binding_wire_root(store, original) for original in stage.assignments}
+            if len(roots) != 1:
+                raise IdentityConflict("Native sources belong to different canonical wire roots")
+            wire_root_id = next(iter(roots))
             if PromptBinding.one(sidecar, input_id=input_id) is not None:
                 raise IdentityConflict("this input already has a prelaunch prompt binding")
             expected = PromptBinding(

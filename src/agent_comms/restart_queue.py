@@ -7,13 +7,11 @@ review. No credentials or owner environment are written to the queue.
 
 from __future__ import annotations
 
-import ctypes
+import asyncio
 import json
 import os
-import select
 import sys
 import uuid
-from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from typing import ClassVar
 from collections.abc import Mapping
@@ -23,6 +21,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from .native_arguments import NativeArguments
 from .owner_restart import StoppedOwnerFailure
 from .restart_refusals import RestartRefusal
 from pathlib import Path
@@ -32,6 +31,7 @@ import fcntl
 from .comms import Comms, wire
 from .errors import RelationViolationError
 from .store_files import _store_lock
+from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
 
 DIRECTORY = "owner-restart-queue"
 
@@ -88,7 +88,7 @@ class RestartTarget:
         return cls(
             sys.executable,
             runtime,
-            comms.owners.restart_entrypoint(source[RestartEnvironment.binary_key]),
+            comms.owners.restart_entrypoint(source[NativeArguments.binary_key]),
         )
 
     def require_watcher(self, comms: Comms) -> None:
@@ -273,30 +273,7 @@ def step(comms: Comms) -> None:
             _save(path, record)
 
 
-@contextmanager
-def _watch(root: Path, directory: Path):
-    libc = ctypes.CDLL(None, use_errno=True)
-    init = libc.inotify_init1
-    init.argtypes = [ctypes.c_int]
-    init.restype = ctypes.c_int
-    add = libc.inotify_add_watch
-    add.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint32]
-    add.restype = ctypes.c_int
-    fd = init(os.O_CLOEXEC | os.O_NONBLOCK)
-    if fd < 0:
-        raise OSError(ctypes.get_errno(), "inotify_init1")
-    for path in (root, directory):
-        if add(fd, os.fsencode(path), 0x00000080 | 0x00000008) < 0:
-            error = ctypes.get_errno()
-            os.close(fd)
-            raise OSError(error, "inotify_add_watch")
-    try:
-        yield fd
-    finally:
-        os.close(fd)
-
-
-def run(comms: Comms) -> None:
+async def run(comms: Comms) -> None:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
     directory = _directory(comms)
@@ -307,19 +284,18 @@ def run(comms: Comms) -> None:
         except BlockingIOError:
             return
         # Watch before the first step, so no turn settlement can be missed.
-        with _watch(comms.root, directory) as fd:
-            while True:
-                step(comms)
-                # Exit after the last pending request, allowing a subsequently
-                # installed runtime to own a new watcher. Release the watcher
-                # lease under the same queue lock used by enqueue: a new
-                # request cannot slip between the empty check and release.
-                with _store_lock(directory / "queue"):
-                    if not any(record.state.pending for _, record in _records(comms)):
-                        fcntl.flock(lock, fcntl.LOCK_UN)
-                        return
-                select.select([fd], [], [])
-                os.read(fd, 65536)
+        async for _ in WireWatch.observations(
+            WatchSource.file(comms.registry.store.path),
+            WatchSource.file(comms.registry.store.guard_path),
+            DirectoryWatchSource(directory),
+        ):
+            step(comms)
+            # Check emptiness and release under enqueue's lock, so a new
+            # request cannot slip between the empty check and release.
+            with _store_lock(directory / "queue"):
+                if not any(record.state.pending for _, record in _records(comms)):
+                    fcntl.flock(lock, fcntl.LOCK_UN)
+                    return
     finally:
         os.close(lock)
 
@@ -329,7 +305,7 @@ def main() -> None:
         raise SystemExit("usage: python -m agent_comms.restart_queue ROOT")
     comms = wire(sys.argv[1])
     try:
-        run(comms)
+        asyncio.run(run(comms))
     except Exception as exc:
         directory = _directory(comms)
         with _store_lock(directory / "queue"):

@@ -109,6 +109,102 @@ class PiPayload:
 
 
 @dataclass(frozen=True)
+class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
+    opaque = False
+
+    @classmethod
+    def wire_member(cls, value):
+        try:
+            success = FieldCodec.decode(bool, value.get("success"))
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Provider retry end requires a boolean success outcome"
+            ) from error
+        if success:
+            return SucceededProviderRetry
+        final_error = value.get("finalError")
+        if not isinstance(final_error, str) or not final_error.strip():
+            raise ValueError("Failed provider retry end requires finalError")
+        return FailedProviderRetry
+
+    @abstractmethod
+    def result(self, attempt: int, redact): ...
+
+    def apply(self, event, session):
+        self.finish_request(session)
+        return ()
+
+    @abstractmethod
+    def recovery_events(self, session): ...
+
+    @abstractmethod
+    def finish_request(self, session) -> None: ...
+
+    @abstractmethod
+    def retry_wire(self) -> dict[str, object]: ...
+
+
+@dataclass(frozen=True)
+class SucceededProviderRetry(ProviderRetryOutcome, declared_name="succeeded"):
+    def result(self, attempt: int, redact):
+        from .acp_failure import ProviderRetryResult
+
+        return ProviderRetryResult(success=True, attempt=attempt)
+
+    def recovery_events(self, session):
+        from .turn_phase import ModelWaitPhase
+
+        return (session.watchdog.state(
+            "recovered", "provider_auto_retry_progress", 0, phase=ModelWaitPhase()
+        ),)
+
+    def finish_request(self, session) -> None:
+        session.request_retried()
+
+    def retry_wire(self) -> dict[str, object]:
+        return {"success": True}
+
+
+@dataclass(frozen=True)
+class FailedProviderRetry(ProviderRetryOutcome, declared_name="failed"):
+    final_error: str = field(metadata={"wire_name": "finalError"})
+
+    def __post_init__(self) -> None:
+        if not self.final_error.strip():
+            raise ValueError("Failed provider retry end requires finalError")
+
+    def result(self, attempt: int, redact):
+        from .acp_failure import ProviderRetryResult
+
+        return ProviderRetryResult(
+            success=False, attempt=attempt, final_error=redact(self.final_error)
+        )
+
+    def apply(self, event, session):
+        from .turn_phase import ModelWaitPhase
+
+        super().apply(event, session)
+        session.watchdog.retry_recovery_pending = False
+        return (
+            *event.exhausted(session),
+            session.watchdog.state(
+                "failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()
+            ),
+        )
+
+    def recovery_events(self, session):
+        return ()
+
+    def finish_request(self, session) -> None:
+        from .turn_failure import ModelRequestFailed
+
+        session.output.record_failure(ModelRequestFailed(self.final_error))
+
+    def retry_wire(self) -> dict[str, object]:
+        return {"success": False, "finalError": self.final_error}
+
+
+@dataclass(frozen=True)
 class PiCost(PiPayload):
     input: float | None = wire_field("input")
     output: float | None = wire_field("output")
@@ -361,6 +457,9 @@ class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
         except ValueError:
             return UnknownDiagnostic
 
+    def refine_model_request_failure(self, failure):
+        return failure
+
     @property
     def description(self) -> str:
         return ""
@@ -372,6 +471,11 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     error: ProviderDiagnosticError
     details: ProviderTransportDetails
     timestamp: int | None = None
+
+    def refine_model_request_failure(self, failure):
+        from .turn_failure import ProviderTransportFailed
+
+        return ProviderTransportFailed(failure.text)
 
     @property
     def description(self) -> str:
@@ -395,6 +499,9 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
 
     def tracked_end(self, session) -> None:
         """Non-assistant messages cannot supply a tracked final response."""
+
+    async def tracked_start(self, session, event) -> None:
+        """Only a user message can be an input the tracked turn was handed."""
 
     @property
     def parts(self) -> tuple[PiContent, ...]:
@@ -530,9 +637,7 @@ class AssistantMessage(PiMessage):
         return self.stop_reason.permits_progress()
 
     def require_failed_terminal(self):
-        from .tracked_turn import SavedTurnEnd
-
-        SavedTurnEnd.require_failed(self)
+        self.stop_reason.require_failed_terminal()
 
     async def apply_end(self, session):
         from .agent_events import CommittedProgress
@@ -581,6 +686,10 @@ class UserMessage(PiMessage):
 
     def matches_input(self, text, native_id, require_id):
         return self.text == text and (not require_id or self.input_id == native_id)
+
+    async def tracked_start(self, session, event) -> None:
+        if not self.matches_input(session.command.message, session.command.input_id, True):
+            await session.later_input_started(event)
 
     async def apply_start(self, session, event):
         async for update in session.admit_user_message(self, event):
@@ -666,6 +775,7 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
     wire_tag = "type"
     opaque: ClassVar[bool] = False
     progress: ClassVar[bool] = False
+    response_progress: ClassVar[bool] = False
 
     @classmethod
     def wire_member(cls, value):
@@ -681,6 +791,7 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
 @dataclass(frozen=True)
 class TextDelta(PiDelta, declared_name="text_delta"):
     delta: str
+    response_progress = True
 
     @property
     def progress(self):
@@ -711,6 +822,7 @@ class ThinkingDelta(PiDelta, declared_name="thinking_delta"):
 
 class ToolDelta:
     progress = True
+    response_progress = True
 
     def emit(self, session):
         return ()
@@ -890,6 +1002,19 @@ class StateData(NativeSessionSnapshot, PiResponseData):
         if key == "model" and value is None:
             return {"kind": UnreportedModel.declared_name}
         return super().normalize_field(target, key, value, record)
+
+    def agent_info(self, session):
+        """Project this actual native state, not a later usage-only observation."""
+        from .agent_events import AgentInfo
+
+        return AgentInfo(
+            model=self.model.display_name,
+            thinking_level=ThinkingLevel.optional_name(self.thinking_level),
+            session_name=self.session_name,
+            session_file=session.active_session_file,
+            context_used=session.usage.used,
+            context_size=session.usage.size,
+        )
 
     def matches_model(self, selected: tuple[str, str]) -> bool:
         return self.model.matches_identity(selected)

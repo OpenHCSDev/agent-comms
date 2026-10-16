@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .errors import RelationViolationError
+from .errors import RelationViolationError, StoredHistoryUnreadable
 from .field_codec import FieldCodec
 from .declared_family import DeclaredFamily
 
@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .delivery_policy import KeyedResponseReceipt
     from .messages import Message
-    from .message_reference import MessageReference
     from .wire_metadata import WireMetadata
 
 
@@ -60,24 +59,16 @@ class WireRecord(ABC):
             return ()
         return cls.public_from_wire(value).messages()
 
-    @classmethod
-    def certified_public_references(cls, value: Mapping) -> tuple[tuple[str, MessageReference], ...]:
-        """Original sender and identity of an already certified canonical row.
-
-        WireScan validated the stored ID against Message.to_wire, including
-        the body-derived hash. This projection neither decodes the message
-        again nor substitutes a recipient index for the complete public stream.
-        """
-        from .message_reference import MessageReference
-
-        if "observation" in value:
-            return ()
-        return ((value["from"], MessageReference(value["seq"], value["id"])),)
-
     def messages(self) -> tuple[Message, ...]:
         return ()
 
     def context_manifests(self):
+        return ()
+
+    def context_entries(self):
+        return ()
+
+    def recorded_context_manifests(self):
         return ()
 
     @abstractmethod
@@ -99,7 +90,7 @@ class WireRecord(ABC):
     def require_admission(self, metadata: WireMetadata) -> None: ...
 
     @abstractmethod
-    def checkpoint_rows(self, offset: int, length: int): ...
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int): ...
 
 
 class MessageWireRecord(WireRecord):
@@ -113,6 +104,12 @@ class MessageWireRecord(WireRecord):
             raise ValueError("Bus sequence is not increasing.")
         return self.message.seq
 
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
+        from .private_bus_checkpoint import PublicMessages
+
+        yield PublicMessages(self.message.seq, previous_sequence,
+                             self.message.sender, self.message.message_id)
+
 
 class WireObservation(DeclaredFamily, affix="WireObservation"):
     """A silent fact; it has no message, audience, receipt or sequence allocation."""
@@ -120,24 +117,60 @@ class WireObservation(DeclaredFamily, affix="WireObservation"):
     @abstractmethod
     def context_manifests(self): ...
 
+    def context_entries(self):
+        return ()
+
+    def recorded_context_manifests(self):
+        return ()
+
     @abstractmethod
-    def checkpoint_rows(self, offset: int, length: int): ...
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int): ...
 
 
 @dataclass(frozen=True)
-class ContextManifestWireObservation(WireObservation):
-    manifest: "ContextManifest"
+class ContextEntryManifestWireObservation(WireObservation):
+    """Transcript entry manifests recorded independently of turn membership."""
+
+    entries: tuple["ContextEntryManifest", ...]
+
+    def context_manifests(self):
+        return ()
+
+    def context_entries(self):
+        return self.entries
+
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
+        from .private_bus_checkpoint import ContextEntrySources
+
+        return tuple(
+            ContextEntrySources.for_entry(entry, offset=offset, length=length)
+            for entry in self.entries
+        )
+
+
+@dataclass(frozen=True)
+class RecordedContextManifestWireObservation(WireObservation):
+    """One turn context referencing independently recorded transcript entries."""
+
+    manifest: "RecordedContextManifest"
 
     def __post_init__(self):
         self.manifest.turn.require_recorded()
 
     def context_manifests(self):
+        return ()
+
+    def recorded_context_manifests(self):
         return (self.manifest,)
 
-    def checkpoint_rows(self, offset: int, length: int):
-        from .private_bus_checkpoint import ContextManifestSources
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
+        from .private_bus_checkpoint import RecordedContextManifestSources
 
-        return (ContextManifestSources(self.manifest.thread, offset=offset, length=length),)
+        return (
+            RecordedContextManifestSources(
+                self.manifest.thread, offset=offset, length=length
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -147,6 +180,12 @@ class ObservationWireRecord(WireRecord):
     def context_manifests(self):
         return self.observation.context_manifests()
 
+    def context_entries(self):
+        return self.observation.context_entries()
+
+    def recorded_context_manifests(self):
+        return self.observation.recorded_context_manifests()
+
     def sequence_after(self, previous: int) -> int:
         return previous
 
@@ -154,8 +193,8 @@ class ObservationWireRecord(WireRecord):
         # Decoding validates the observation; it grants no delivery admission.
         return None
 
-    def checkpoint_rows(self, offset: int, length: int):
-        return self.observation.checkpoint_rows(offset, length)
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
+        return self.observation.checkpoint_rows(offset, length, previous_sequence)
 
     def to_wire(self):
         return FieldCodec.encode(self)
@@ -168,9 +207,6 @@ class PublicWireRecord(MessageWireRecord):
     def require_admission(self, metadata: WireMetadata) -> None:
         self.message.require_retained_admission(metadata.admission_after_seq)
 
-    def checkpoint_rows(self, offset: int, length: int):
-        return ()
-
 
 @dataclass
 class WireScan:
@@ -182,7 +218,7 @@ class WireScan:
     max_row_bytes = 8 * 1024 * 1024
 
     def read(self, line: bytes) -> WireRecord:
-        from .bus_publication import DuplicateWireKeyError, unique_wire_object
+        from .bus_publication import unique_wire_object
 
         if len(line) > self.max_row_bytes:
             raise RelationViolationError("Oversized private bus row.")
@@ -197,12 +233,12 @@ class WireScan:
             record.record_key(self.seen_keys)
             self.previous_sequence = record.sequence_after(self.previous_sequence)
             return record
-        except (RelationViolationError, DuplicateWireKeyError):
+        except RelationViolationError:
             raise
         except (KeyError, TypeError, ValueError, AttributeError, OverflowError) as error:
-            raise RelationViolationError("Malformed public bus row blocks publication.") from error
+            raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
 
 
-from .turn_context import ContextManifest
+from .turn_context import ContextEntryManifest, RecordedContextManifest
 from .delivery_policy import KeyedResponseReceipt
 from .messages import Message

@@ -10,11 +10,10 @@ from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .thread_identity import ThreadIncarnation
-
 from .catalog_store import ChannelCatalog
 from .goal_waits import GoalWaits
 from .registration import Registration
+from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
@@ -25,6 +24,7 @@ from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
 from .channel_targets import BuiltinChannel, is_channel_target
 from .collaboration_ledger import CollaborationLedger
+from .coordination_errors import StaleRevision
 from .exporting import (
     WireExportBoundary,
     WireExportFormat,
@@ -47,12 +47,12 @@ from .presentation import (
     ThreadView,
     WireRevision,
 )
+from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayBasis
-from .store_files import _store_lock, file_revision
+from .store_files import _store_lock
 from .thread_presentation import ThreadPresentation
 from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
-from .coordination_errors import StaleRevision
 
 _LOG = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ class HistoryViews:
         self.goals = goals
         self.ledger = ledger
         self._wire_lock_path = root / "wire"
-        self.presentation = BusPresentation(bus, registry, channels.catalog)
+        self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
         self.transcript_reads = transcript_read_state(bus.reads.path)
 
     def message_notifications(self, messages: Sequence[Message]):
@@ -263,7 +263,7 @@ class HistoryViews:
         """Export one fixed, non-mutating snapshot of authoritative wire rows."""
         started_at = time.time() if export_started_at is None else export_started_at
         with ExitStack() as stack:
-            with _store_lock(self._wire_lock_path):
+            with _store_lock(self._wire_lock_path, shared=True):
                 resolved = scope.resolve(self.channels.catalog, self.registry)
                 through, messages = stack.enter_context(self.bus.log.full_history_snapshot())
 
@@ -320,8 +320,10 @@ class HistoryViews:
             frozenset(channel for channel in channels if channel not in views or views[channel].archived),
         )
 
-    def thread_presentation(self, name: str) -> ThreadPresentation | None:
-        """Read one current executable thread, including its assigned messages."""
+    def thread_presentation(
+        self, name: str, *, sent_source_limit: int = 5
+    ) -> ThreadPresentation | None:
+        """Read one current executable thread and its bounded authored outcomes."""
         snapshot = self.registry.snapshot()
         thread = snapshot.threads.get(snapshot.canonical_name(name))
         if thread is None:
@@ -335,16 +337,13 @@ class HistoryViews:
             self.agents.runtime_info.read().get(thread.name),
             GoalWaits(self.root / GoalWaits.filename).read(),
         )
-        read, sources = self.transcripts.capture_page_window(thread.name, source_limit=5)
-        if not read.identity.thread.incarnation.current(snapshot):
-            raise StaleRevision("Thread source incarnation changed during presentation")
-        return replace(
-            view.presentation,
-            notifications=MessageNotification.for_sources(
-                self.root, self.registry, read.identity.thread, sources
-            ),
-            read_identity=read.identity,
+        captured = self.transcripts.capture_page_window(
+            thread.name, source_limit=5, sent_source_limit=sent_source_limit
         )
+        owner = captured.read.identity.thread
+        if not owner.incarnation.current(snapshot):
+            raise StaleRevision("Thread source incarnation changed during presentation")
+        return view.presentation.with_sources(captured)
 
     def coordination_snapshot(
         self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False
@@ -376,25 +375,22 @@ class HistoryViews:
         """Local presentation scope, independent of agent delivery cursors."""
         viewer = self.messaging.user_identity(worktree).name
         with self.presentation.snapshot(viewer=viewer) as (basis, source):
-            scopes = basis.scopes
-            captured_viewer = basis.viewer
-            assert captured_viewer is not None
-            display_activity, display_unread = self.presentation.display_view_metrics(
-                source, scopes, scopes, captured_viewer, basis.viewer_names
-            )
+            captured_viewer = basis.require_viewer()
+            display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(source=source, registry=basis.registry), display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
                 show_stopped=show_stopped, show_archived=show_archived,
-                read_marker_notice=basis.notice,
+                read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
         unread = self.transcript_reads.counts(
             captured_viewer,
             {view.thread.name: view.thread.session_file or "" for view in snapshot.threads},
+            document=basis.document,
         )
-        return replace(snapshot, thread_unread=unread.counts, thread_unread_pending=unread.pending)
+        return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge only the native transcript boundary actually displayed."""
@@ -449,10 +445,12 @@ class HistoryViews:
             checkpoint = self.transcripts.transcript_checkpoint(thread.name)
             if checkpoint.session_file and Path(checkpoint.session_file).is_file():
                 self.transcript_reads.mark_read(viewer, checkpoint.session_file, checkpoint.offset)
-            self.bus.mark_delivered(viewer, thread.name)
+            messages = self.bus.inbox(viewer, thread.name)
+            self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 
     def revision_paths(self) -> dict[str, Path | tuple[Path, ...]]:
         """The stores a view derives from, by WireRevision part: what to stat and to watch."""
+        from .external_transcript import ExternalTranscript
         from .notification_assignment import NotificationAssignment
         from .relationships import RelationshipStore
 
@@ -464,9 +462,11 @@ class HistoryViews:
             "activity": self.agents.activity._path,
             "runtime_info": self.agents.runtime_info.path,
             "reads": self.bus.reads.path,
+            "native_unread": self.transcript_reads.index_path,
             "goal_waits": self.root / GoalWaits.filename,
             "relationships": self.root / RelationshipStore.filename,
             "notifications": tuple(NotificationAssignment.source_paths(self.root)),
+            "external_transcripts": ExternalTranscript.source_paths(self.root),
         }
 
     def latest_sequence(self) -> int:
@@ -475,9 +475,11 @@ class HistoryViews:
 
     def revision(self) -> WireRevision:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
-        parts = {name: (tuple(file_revision(item) for item in path) if isinstance(path, tuple)
-                        else file_revision(path))
-                 for name, path in self.revision_paths().items()}
+        parts = {
+            name: (tuple(map(FileRevision.capture, path)) if isinstance(path, tuple)
+                   else FileRevision.capture(path))
+            for name, path in self.revision_paths().items()
+        }
         return WireRevision(**parts, expiry_tick=int(time.time()))
 
     def who(self) -> Sequence[Mapping]:

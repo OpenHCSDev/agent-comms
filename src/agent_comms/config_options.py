@@ -21,6 +21,7 @@ from acp.schema import (
 
 from .pi_vocabulary import ThinkingLevel
 from .comms import Comms
+from .agent_backend import UseSettings
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -34,6 +35,10 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .pi_commands import SettingCommand
     from .session_lifecycle import SessionLifecycle
+
+
+class InvalidConfigChoice(ValueError):
+    """A configured value is not a member of its discovered catalog."""
 
 
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
@@ -52,7 +57,7 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 
     @abstractmethod
     async def change(
-        self, owner: ConfigOptions, thread: Thread, value: str
+        self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None: ...
 
 
@@ -80,10 +85,10 @@ class CatalogConfigOption(ConfigOption):
                 self.auth = self.configuration.auth_revision()
             key = self.cache_key(thread)
             if key not in self.catalogs:
-                choices = await self.discover(thread)
-                if not choices:
-                    raise NativePiUnavailable(f"{self.title} catalog has no available choices")
-                self.catalogs[key] = choices
+                # A successful empty catalogue is setup state, not a failed
+                # native process. Keep the existing unset choice reachable so
+                # the client can connect a provider before selecting a model.
+                self.catalogs[key] = await self.discover(thread)
             return self.catalogs[key]
 
     async def describe(self, thread: Thread) -> SessionConfigOptionSelect:
@@ -94,10 +99,11 @@ class CatalogConfigOption(ConfigOption):
             choices = [SessionConfigSelectOption(
                 value=selected, name="Not configured"
             ), *choices]
-        elif selected not in {choice.value for choice in choices}:
-            raise NativePiUnavailable(
-                f"Configured {self.title.lower()} {selected!r} is absent from its native catalog"
-            )
+        else:
+            try:
+                self.require_value(selected, choices)
+            except InvalidConfigChoice as error:
+                raise NativePiUnavailable(str(error)) from error
         return SessionConfigOptionSelect(
             id=FieldCodec.encode(type(self)),
             name=self.title,
@@ -110,23 +116,32 @@ class CatalogConfigOption(ConfigOption):
 
     @abstractmethod
     async def apply(
-        self, owner: ConfigOptions, thread: Thread, value: str
+        self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None: ...
 
     async def change(
-        self, owner: ConfigOptions, thread: Thread, value: str
+        self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None:
-        choices = await self.choices(thread)
-        if value not in {choice.value for choice in choices}:
-            raise RequestError.invalid_params(
-                {"reason": f"Unknown {self.title.lower()}: {value!r}"}
-            )
+        try:
+            await self.validate(thread, value)
+        except InvalidConfigChoice as error:
+            raise RequestError.invalid_params({"reason": str(error)}) from error
         await self.apply(owner, thread, value)
+
+    def require_value(self, value: str, choices: list[SessionConfigSelectOption]) -> None:
+        if value not in {choice.value for choice in choices}:
+            valid = ", ".join(choice.value for choice in choices)
+            raise InvalidConfigChoice(
+                f"{self.title} {value!r} is unavailable; choose one of: {valid}"
+            )
+
+    async def validate(self, thread: Thread, value: str) -> None:
+        self.require_value(value, await self.choices(thread))
 
 
 class ModelConfigOption(CatalogConfigOption):
     title = "Model"
-    description = "Model selected for the next turn; the running turn keeps its captured model"
+    description = "Model for this thread; a running turn switches at its next model call"
     category = "model"
 
     def current_value(self, thread: Thread) -> str | None:
@@ -151,7 +166,7 @@ class ModelConfigOption(CatalogConfigOption):
         ]
 
     async def apply(
-        self, owner: ConfigOptions, thread: Thread, value: str
+        self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None:
         from .pi_commands import SetModel
 
@@ -163,26 +178,23 @@ class ModelConfigOption(CatalogConfigOption):
 
 class ThinkingLevelConfigOption(CatalogConfigOption):
     title = "Thinking level"
-    description = "Thinking level selected for the next turn; the running turn keeps its captured effort"
+    description = "Thinking level for this thread; a running turn switches at its next model call"
     category = "thought_level"
 
     def current_value(self, thread: Thread) -> str | None:
         return ThinkingLevel.optional_name(thread.thinking_level)
 
     async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
-        if os.environ.get("AGENT_COMMS_AGENT_MODELS"):
-            levels = [member.declared_name for member in ThinkingLevel.members_with(ThinkingLevel) if member.ordinary_choice]
-        else:
-            from .pi_commands import GetAvailableThinkingLevels
+        from .pi_commands import GetAvailableThinkingLevels
 
-            data = await GetAvailableThinkingLevels().discover(
-                self.agent_bin, self.agent_args.with_model(thread.model).argv
-            )
-            levels = [member.declared_name for member in data.levels]
+        data = await GetAvailableThinkingLevels().discover(
+            self.agent_bin, self.agent_args.with_model(thread.model).argv
+        )
+        levels = [member.declared_name for member in data.levels]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
 
     async def apply(
-        self, owner: ConfigOptions, thread: Thread, value: str
+        self, owner: SessionConfigOptions, thread: Thread, value: str
     ) -> None:
         from .pi_commands import SetThinkingLevel
 
@@ -192,21 +204,17 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
 
 
 class ConfigOptions:
+    """Own one launch's declared model and thinking catalogs."""
+
     def __init__(
         self,
-        comms: Comms,
         agent_bin: str,
         agent_args: NativeArguments,
-        runtime: RuntimeServer,
-        sessions: SessionLifecycle,
-        effects: SessionEffects,
+        configuration: RestartEnvironment,
     ):
-        self.comms, self.agent_bin, self.agent_args = comms, agent_bin, agent_args
-        self.runtime, self.sessions, self.effects = runtime, sessions, effects
-        self.configuration = RestartEnvironment.inherit(os.environ)
+        self.agent_bin, self.agent_args = agent_bin, agent_args
+        self.configuration = configuration
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
-        self.catalog_publish_lock = asyncio.Lock()
-        self.publications: dict[str, ConfigOptionUpdate] = {}
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
@@ -219,6 +227,35 @@ class ConfigOptions:
             await self.catalog_for(member).describe(thread)
             for member in ConfigOption.members_with(CatalogConfigOption)
         ]
+
+    async def validate(self, thread: Thread) -> None:
+        """Require every configured value through its owning catalog."""
+        for member in ConfigOption.members_with(CatalogConfigOption):
+            option = self.catalog_for(member)
+            value = option.current_value(thread)
+            if value is not None:
+                await option.validate(thread, value)
+
+
+class SessionConfigOptions(ConfigOptions):
+    """Add ACP publication and persistence to the shared catalog owner."""
+
+    def __init__(
+        self,
+        comms: Comms,
+        agent_bin: str,
+        agent_args: NativeArguments,
+        runtime: RuntimeServer,
+        sessions: SessionLifecycle,
+        effects: SessionEffects,
+    ):
+        super().__init__(agent_bin, agent_args, RestartEnvironment.inherit(os.environ))
+        self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
+        self.catalog_publish_lock = asyncio.Lock()
+        self.publications: dict[str, ConfigOptionUpdate] = {}
+        # The stored settings each session's owner last saw, to notice a change.
+        # The model and thinking level each running turn currently uses.
+        self.settings_in_use: dict[str, UseSettings] = {}
 
     @asynccontextmanager
     async def session_options(
@@ -265,9 +302,10 @@ class ConfigOptions:
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         try:
             await self.catalog_for(member).change(self, thread, value)
-        except (NativePiUnavailable, ValueError) as error:
+        except (NativePiUnavailable, InvalidConfigChoice) as error:
             raise RequestError.invalid_params({"reason": str(error)}) from error
         await self.effects.turns.close_idle_backend(session_id, thread)
+        await self.use_stored_settings(session_id, name)
         async with self.session_options(name) as options:
             await self._publish(session_id, options)
             return SetSessionConfigOptionResponse(config_options=options)
@@ -275,7 +313,7 @@ class ConfigOptions:
     async def configure_thread(
         self, thread: Thread, command: SettingCommand,
     ) -> None:
-        """Persist the native owner's complete next-turn result, never steer a turn."""
+        """Store the model and thinking level Pi itself reports for this change."""
         arguments = self.agent_args.with_model(thread.model).with_thinking(
             ThinkingLevel.optional_name(thread.thinking_level)
         )
@@ -292,9 +330,28 @@ class ConfigOptions:
             thread, model=model, thinking_level=level,
         ))
 
+    @staticmethod
+    def stored_settings(thread: Thread) -> UseSettings:
+        return UseSettings(thread.model, ThinkingLevel.optional_name(thread.thinking_level))
+
+    def turn_started(self, session_id: str, thread: Thread) -> None:
+        self.settings_in_use.setdefault(session_id, self.stored_settings(thread))
+
+    async def use_stored_settings(self, session_id: str, name: str) -> None:
+        """A running turn switches at its next model call, whichever process stored the change."""
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        settings = self.stored_settings(thread)
+        if self.settings_in_use.get(session_id, settings) == settings:
+            return
+        inbox = await self.effects.turns.active_backend_inbox(session_id)
+        if inbox is not None:
+            self.settings_in_use[session_id] = settings
+            inbox.put_nowait(settings)
+
     async def sync_thread(self, session_id: str) -> None:
         name = await self.sessions.sync_identity(session_id)
         await self.effects.turns.goals.sync_goal_execution(session_id, name)
+        await self.use_stored_settings(session_id, name)
         await self.publish_configuration(session_id, name)
 
     async def publish_configuration(self, session_id: str, thread_name: str) -> None:

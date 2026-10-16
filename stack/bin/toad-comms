@@ -1,23 +1,32 @@
 #!/usr/bin/env bash
-# Attach the installed Toad runtime to an owner on the active route.
+# Open the installed Comms workspace, optionally attaching a named thread.
 set -euo pipefail
 
 usage() {
-    printf 'Usage: toad-comms [--serve [THREAD]] [THREAD]\n\nLaunch Agent Comms in Toad. Default thread: agent-comms-ux.\nWith --serve, serve the same session to a local web browser instead.\n'
+    printf 'Usage: toad-comms [THREAD]\n       toad-comms --serve [THREAD] [TOAD SERVE OPTIONS...]\n\nOpen Agent Comms in Toad. Optionally open an existing thread.\nWith --serve, open the same command in a browser. Network serving stays opt-in.\n'
 }
 
-serve=false
+frontend=()
+thread=""
 if [[ "${1:-}" == --serve ]]; then
-    serve=true
     shift
-fi
-if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
-    usage
-    exit 0
-fi
-if (( $# > 1 )); then
-    usage >&2
-    exit 2
+    frontend=(serve)
+    if (( $# )) && [[ "$1" != -* ]]; then
+        thread="$1"
+        shift
+    fi
+    # Toad owns server option decoding, bind policy and authentication.
+    frontend+=("$@" --)
+else
+    if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
+        usage
+        exit 0
+    fi
+    if (( $# > 1 )); then
+        usage >&2
+        exit 2
+    fi
+    thread="${1:-}"
 fi
 
 # Borrow the original publication resource before runtime/default selection.
@@ -40,8 +49,7 @@ if [[ -z "$runtime" ]]; then
         exit 1
     fi
     runtime="$(dirname "$(readlink -f "$acp_launcher")")"
-    # The published frontend can advance without replacing backend owners.
-    toad="$(command -v toad || true)"
+    toad="$runtime/toad"
 else
     toad="$runtime/toad"
 fi
@@ -57,17 +65,16 @@ unset AGENT_COMMS_ROOT AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID AGENT_COMMS_PRIVATE_N
 unset PYTHONPATH
 unset AGENT_COMMS_THREAD AGENT_COMMS_MANAGED PI_AGENT_ID PI_PARENT_ID PI_TASK PI_WORKTREE PI_PROMPT
 
-thread="${1:-agent-comms-ux}"
-project="$("$python" -c 'import sys; from agent_comms.comms import wire; print(wire().registry.require(sys.argv[1]).worktree)' "$thread")"
+project="$PWD"
+session=()
+if [[ -n "$thread" ]]; then
+    project="$("$python" -c 'import sys; from agent_comms.comms import wire; print(wire().registry.require(sys.argv[1]).worktree)' "$thread")"
+    session=(--session "$thread")
+fi
 if [[ ! -d "$project" ]]; then
-    printf 'Thread project directory is unavailable: %s\n' "$project" >&2
+    printf 'Project directory is unavailable: %s\n' "$project" >&2
     exit 1
 fi
 
-if $serve; then
-    exec "$toad" serve -- acp "$python -m agent_comms.acp" "$project" \
-        --title 'Agent Comms' --session "$thread"
-fi
-
-exec "$toad" acp "$python -m agent_comms.acp" "$project" \
-    --title 'Agent Comms' --session "$thread"
+exec "$toad" "${frontend[@]}" acp "$python -m agent_comms.acp" "$project" \
+    --title 'Agent Comms' "${session[@]}"

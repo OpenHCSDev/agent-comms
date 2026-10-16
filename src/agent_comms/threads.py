@@ -13,7 +13,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec
 from .thread_provenance import ThreadProvenance
 from .thread_execution import ThreadExecution, NativeThreadExecution
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
 from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
@@ -50,6 +50,10 @@ class Thread(ThreadProvenance):
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     thinking_level: type[ThinkingLevel] | None = field(
         default=None, metadata={"registration_inheritance": InheritMissing}
+    )
+    service_tier: ServiceTier = field(
+        default=ServiceTier.PRIORITY, kw_only=True,
+        metadata={"registration_inheritance": InheritPrevious},
     )
     goal: Goal | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
@@ -120,12 +124,14 @@ class Thread(ThreadProvenance):
         from .runtime_requests import ProjectRuntimeRequest
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
+        from .owner_launch import RestartEnvironment
+
         return {
-            "AGENT_COMMS_THREAD": self.name,
-            "PI_AGENT_ID": self.name,
+            RestartEnvironment.owner_key: self.name,
             "AGENT_COMMS_ROOT": str(root),
             "PI_PARENT_ID": self.parent or "",
             "AGENT_COMMS_MANAGED": "1",
+            SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
             "PI_WORKTREE": worktree,
             **project.environment(root),
         }
@@ -166,9 +172,30 @@ class Thread(ThreadProvenance):
         if self.thinking_level is not None:
             object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
 
+    def require_original_model_configuration(self, original: Thread) -> None:
+        changed = any((
+            self.incarnation != original.incarnation,
+            self.worktree != original.worktree,
+            self.model != original.model,
+            self.thinking_level != original.thinking_level,
+            self.service_tier != original.service_tier,
+        ))
+        if changed:
+            raise RelationViolationError("Thread configuration changed before publication")
+
+    def with_model_configuration(
+        self, *, model: str | None = None, thinking_level: str | None = None,
+        service_tier: ServiceTier | None = None,
+    ) -> Thread:
+        return replace(
+            self,
+            model=self.model if model is None else model.strip(),
+            thinking_level=self.thinking_level if thinking_level is None else thinking_level,
+            service_tier=self.service_tier if service_tier is None else service_tier,
+        )
 
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: str | None
+        self, *, model: str | None, thinking_level: str | None,
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
@@ -447,15 +474,10 @@ class Thread(ThreadProvenance):
 
 
 def current_thread() -> Thread:
-    """Declare the current thread from process environment.
+    """Declare the current thread from its owner launch environment."""
+    from .owner_launch import RestartEnvironment
 
-    Fail-closed: raises if neither PI_AGENT_ID nor AGENT_COMMS_THREAD is set.
-    """
-    name = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-    if not name:
-        raise UnregisteredThreadError(
-            "PI_AGENT_ID is not set. This process is not an orchestrated thread."
-        )
+    name = RestartEnvironment.calling_thread()
     tag_env = os.environ.get("PI_AGENT_TAGS") or os.environ.get("AGENT_COMMS_TAGS", "")
     tags = frozenset(t.strip() for t in tag_env.split(",") if t.strip())
     return Thread(

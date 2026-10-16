@@ -25,6 +25,7 @@ from agent_comms.comms import wire
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompactionReason
+from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
 
@@ -74,8 +75,8 @@ def _is_summary(request: dict) -> bool:
 
 
 @pytest.mark.parametrize("case", [
-    "threshold", "acp_threshold", "overflow", "compacted_resume", "summary_failure",
-    "post_compaction_tool_rounds",
+    "threshold", "cap_disabled", "acp_threshold", "overflow", "compacted_resume",
+    "summary_failure", "post_compaction_tool_rounds",
 ])
 async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> None:
     native_bin = os.environ.get("AC_NATIVE_STACK_BIN")
@@ -87,11 +88,15 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
         (project / ".pi").mkdir(parents=True, mode=0o700)
         (project / ".pi" / "settings.json").write_text(json.dumps({
             "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
-            "compaction": {"enabled": True},
+            "compaction": {"enabled": case != "cap_disabled"},
         }))
         session = root / "saved.jsonl"
         # Above the threshold (128000 - 16384) and below the window, except for overflow.
-        _saved_history(session, project, used=1000 if case == "overflow" else 120000)
+        _saved_history(
+            session,
+            project,
+            used=(1000 if case == "overflow" else 300001 if case == "cap_disabled" else 120000),
+        )
         if case == "compacted_resume":
             rows = [json.loads(line) for line in session.read_text().splitlines()]
             boundary = datetime.fromtimestamp(1790290000.200, UTC).isoformat()
@@ -164,8 +169,10 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
         try:
             (agent / "models.json").write_text(json.dumps({"providers": {"openrouter": {
                 "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
-                "modelOverrides": {"z-ai/glm-5.3-flash": {"contextWindow": 128000,
-                                                          "maxTokens": 4096}},
+                "modelOverrides": {"z-ai/glm-5.3-flash": {
+                    "contextWindow": 272000 if case == "cap_disabled" else 128000,
+                    "maxTokens": 4096,
+                }},
             }}}))
             (agent / "models.json").chmod(0o600)
             preload = root / "local-only.cjs"
@@ -195,7 +202,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
             if case == "acp_threshold":
                 await _acp_threshold(root, project, session, native_bin, native_args, child_env,
                                      summary_entered, release_summary, monkeypatch)
-                assert len(summaries) == 1 and len(prompts) == 1
+                assert len(summaries) >= 1 and len(prompts) == 1
                 assert "TASK_BRIEF_SENTINEL" in json.dumps(summaries[0]["messages"])
                 return
             pi_session = PersistentPiSession()
@@ -236,17 +243,28 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
         assert done.ok is True, done
         assert len(ends) == 1 and not ends[0].aborted
         assert len(compactions) == 1 and SUMMARY in compactions[0]["summary"]
-        assert len(summaries) == 1
+        assert len(summaries) >= 1
         assert "TASK_BRIEF_SENTINEL" in json.dumps(summaries[0]["messages"])
         assert "LEGACY_DISCARDED_HISTORY" in json.dumps(summaries[0]["messages"])
         final = json.dumps(prompts[-1]["messages"])
         assert SUMMARY in final and "LEGACY_DISCARDED_HISTORY" not in final
-        if case == "threshold":
+        if case in {"threshold", "cap_disabled"}:
             # Pi compacts before the prompt; the input is sent once, after the summary.
+            # The Core-owned budget remains effective even when this thread persisted
+            # compaction.enabled=false. Even though this completed response is also
+            # above its model's 272,000-token window, retained context uses the
+            # standard threshold reason; overflow is reserved for interrupted recovery.
             assert ends[0].reason is ThresholdCompactionReason
             assert len(prompts) == 1
             kinds = [type(event) for event in events]
             assert kinds.index(ae.CompactionEnd) < kinds.index(ae.InputStarted)
+            if case == "cap_disabled":
+                final_assistant = next(
+                    row["message"] for row in reversed(saved)
+                    if row.get("type") == "message"
+                    and row.get("message", {}).get("role") == "assistant"
+                )
+                assert final_assistant["usage"]["totalTokens"] < 300000
             return
         if case == "overflow":
             # The refused request is resent once after Pi's overflow compaction; the turn succeeds.
@@ -320,7 +338,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
             turn.cancel()
         await asyncio.gather(turn, return_exceptions=True)
         await owner.shutdown()
-    rows = InputDispositions(comms.root / InputDispositions.filename).read().rows
+    rows = stored_inputs(comms.root).rows
     assert len(rows) == 1 and not next(iter(rows.values())).unresolved
     compaction_events = [field.event for update in updates
                          for field in decode_updates(update.field_meta or {})

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
 from .messages import Message
+from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayBasis, MessageDisplayScope
 
 if TYPE_CHECKING:
@@ -34,7 +35,7 @@ class MessagePage:
     display_scope: ChannelDisplayScope | None = None
     display_basis: DMDisplayBasis | None = None
     historical_display: HistoricalDisplay | None = None
-    history_revision: tuple[int, int, int, int] | None = None
+    history_revision: FileRevision | None = None
 
     @property
     def oldest_cursor(self) -> int | HistoryCursor | None:
@@ -129,7 +130,7 @@ class OlderTraversal(PageTraversal):
         window = PageWindow(request.limit, request.max_bytes)
         more = opposite = False
         for message, size in records:
-            if not request.scope.includes(message):
+            if not request.includes(message):
                 continue
             if self.cursor is not None and message.seq >= self.cursor:
                 opposite = True
@@ -172,7 +173,7 @@ class NewerTraversal(PageTraversal):
         window = PageWindow(request.limit, request.max_bytes)
         opposite = False
         for message, size in records:
-            if not request.scope.includes(message):
+            if not request.includes(message):
                 continue
             if message.seq <= self.cursor:
                 opposite = True
@@ -235,6 +236,9 @@ class MessagePageRequest:
         """
         return cls(scope, NewerTraversal(after), sys.maxsize, sys.maxsize)
 
+    def includes(self, message: Message) -> bool:
+        return self.scope.includes(message)
+
     def collect(self, records: Iterator[tuple[Message, int]]) -> MessagePage:
         return self.traversal.collect(self, records)
 
@@ -245,25 +249,27 @@ class MessagePageRequest:
     def read_opened(self, log, marker, source, stream, records) -> MessagePage:
         """Both readers consume the exact cut opened before scope capture."""
         if stream is not None:
-            with log.locked():
-                access = marker.access
-                try:
-                    with access.open_page_index(log.path) as index:
-                        if access.prepare_page_index(index):
-                            # Pin original source coverage and offsets in one
-                            # SQLite read transaction; later rebuilds cannot mix.
-                            index.connection.execute("BEGIN")
-                            saved = BusPageSource.one(index.connection, singleton=1)
-                            if saved is not None and saved.covers(stream, source):
-                                return self.indexed(index, log, marker, source, stream)
-                except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
-                    # A disposable index cannot replace the original wire cut.
-                    pass
+            access = marker.access
+            try:
+                with (
+                    access.open_page_index(log.path) as index,
+                    access.prepare_page_index(index) as ready,
+                ):
+                    if ready:
+                        # The prepared index lifetime pins coverage and offsets.
+                        # The opened wire is already a fixed cut, so neither
+                        # resource borrows current bus custody.
+                        saved = BusPageSource.one(index.connection, singleton=1)
+                        if saved is not None and saved.covers(stream, source):
+                            return self.indexed(index, marker, source, stream)
+            except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError):
+                # A disposable index cannot replace the original wire cut.
+                pass
             stream.seek(0)
         # Full scans borrow that SAME cut after publication custody closes.
         return self.collect(records)
 
-    def indexed(self, index, log, marker, source, stream) -> MessagePage:
+    def indexed(self, index, marker, source, stream) -> MessagePage:
         from .wire_log import OpenedWireSnapshot
 
         window = PageWindow(self.limit, self.max_bytes)
@@ -274,7 +280,7 @@ class MessagePageRequest:
                 (message, _), = OpenedWireSnapshot.public_page_records(
                     *index.record(stream, row, max_bytes=source.size - row.offset), marker
                 )
-                if self.scope.includes(message):
+                if self.includes(message):
                     opposite = True
                     break
         with closing(self.traversal.offsets(index, targets, source.size)) as rows:
@@ -282,10 +288,17 @@ class MessagePageRequest:
                 (message, size), = OpenedWireSnapshot.public_page_records(
                     *index.record(stream, row, max_bytes=source.size - row.offset), marker
                 )
-                if not self.scope.includes(message):
+                if not self.includes(message):
                     continue
                 if window.full_with(size):
                     more = True
                     break
                 self.traversal.append(window, message, size)
         return self.traversal.result(window, more, opposite)
+
+
+class ConversationMessagePageRequest(MessagePageRequest):
+    """A presented conversation excludes declaration-owned state records."""
+
+    def includes(self, message: Message) -> bool:
+        return message.type.conversation_message and super().includes(message)

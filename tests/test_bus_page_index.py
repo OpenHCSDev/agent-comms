@@ -4,13 +4,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
+from concurrent.futures import ThreadPoolExecutor
 
-from agent_comms.bus_page_index import BusPageRow
+import pytest
+
+from agent_comms.bus_page_index import BusPageIndex, BusPageRow
 from agent_comms.comms import Comms
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import InfoKind, Message
+from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
-from agent_comms.wire_metadata import ArchivedAccess
 from agent_comms.wire_log import OpenedWireSnapshot
+from agent_comms.wire_metadata import ArchivedAccess
 
 
 def retained_source(root, count):
@@ -25,6 +30,13 @@ def retained_source(root, count):
     comms.bus.log.path.chmod(0o600)
     marker = comms.bus.log.read_metadata_unlocked(required=True)
     marker.last_seq = marker.admission_after_seq = count
+    marker.checkpoint_version = marker.checkpoint_seal = None
+    comms.bus.log.write_metadata_unlocked(marker)
+    (root / "private_bus_checkpoint.sqlite3").unlink()
+    install_private_bus_checkpoint(comms.bus.log)
+    with BusPageIndex(comms.bus.log.path) as index:
+        assert index.sync()
+    marker = comms.bus.log.read_metadata_unlocked(required=True)
     marker.access = ArchivedAccess()
     comms.bus.log.write_metadata_unlocked(marker)
     return comms.bus
@@ -55,3 +67,35 @@ def test_bad_cached_offset_uses_authoritative_current_source(tmp_path):
         connection.execute(f"UPDATE {BusPageRow.declared_name} SET offset=0 WHERE seq=9")
     page = bus.incoming_page("b", after=6)
     assert [message.seq for message in page.messages] == [9]
+
+
+def test_parallel_preparation_commits_each_message_once(tmp_path):
+    comms = Comms(tmp_path)
+    for name in ("a", "b"):
+        comms.registry.declare(Thread(name, frozenset(), str(tmp_path)))
+    message = comms.messaging.send_message("a", "b", "once")
+    prepared = threading.Barrier(2)
+
+    class Together(BusPageIndex):
+        batch_bytes = 1
+
+        def _prepare(self, opened):
+            result = super()._prepare(opened)
+            assert not self.connection.in_transaction
+            if result is not None and result[0] is None:
+                prepared.wait(timeout=5)
+            return result
+
+    def index():
+        with Together(comms.bus.log.path) as source:
+            return source.sync()
+
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        results = [workers.submit(index) for _ in range(2)]
+        assert all(result.result(timeout=10) for result in results)
+    with BusPageIndex(comms.bus.log.path) as source:
+        rows = tuple(source.offsets(lower=None, upper=None, descending=False, targets=None))
+        assert [row.seq for row in rows] == [message.seq]
+        with pytest.raises(sqlite3.IntegrityError), source.connection:
+            rows[0].insert(source.connection)
+    assert [row.seq for row in comms.bus.incoming_page("b", after=0).messages] == [message.seq]

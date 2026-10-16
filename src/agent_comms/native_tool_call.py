@@ -19,6 +19,13 @@ class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcom
     """A rejected request, including duplicate or uncertain prior consumption."""
 
 
+class DuplicateToolCallIdentity(SelectedToolDenied):
+    """One assistant tool round declared the same provider call identity twice."""
+
+    def __init__(self, call_id: str) -> None:
+        super().__init__(f"Native tool round repeats call identity {call_id!r}")
+
+
 class CoordinationBusy(SelectedToolDenied):
     """The coordination database stayed busy; the call was not checked and nothing changed."""
 
@@ -42,6 +49,7 @@ class ToolStartNotSeen(SelectedToolDenied):
 
 class CallObservation(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
     executing = False
+    complete = False
 
     def announce(self, call: NativeToolCall) -> None:
         raise SelectedToolDenied("Native tool call announcement was repeated or invalid")
@@ -52,7 +60,10 @@ class CallObservation(ABC):  # noqa: B024 - shared rejection; leaves override va
     def require_executing(self) -> None:
         raise SelectedToolDenied("Native tool is not executing; outcome may be UNKNOWN")
 
-    def finish(self, call: NativeToolCall, is_error: bool, directory: Path, input_id: str) -> None:
+    def finish(
+        self, call: NativeToolCall, is_error: bool, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
         raise SelectedToolDenied("Native tool terminal is missing or repeated")
 
     def assert_complete(self) -> None:
@@ -76,15 +87,20 @@ class ExecutingCall(CallObservation):
     def require_executing(self) -> None:
         pass
 
-    def finish(self, call: NativeToolCall, is_error: bool, directory: Path, input_id: str) -> None:
+    def finish(
+        self, call: NativeToolCall, is_error: bool, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
         # A failed terminal fsync cannot be retried or converted to a completed
         # error by a subsequent event. The live receipt must succeed exactly once.
         call.observation = UncertainCall()
-        call.admission.finish(call, is_error, directory, input_id)
+        call.admission.finish(call, is_error, directory, input_id, round_number)
         call.observation = CompletedCall()
 
 
 class CompletedCall(CallObservation):
+    complete = True
+
     def assert_complete(self) -> None:
         pass
 
@@ -94,14 +110,23 @@ class UncertainCall(CallObservation):
 
 
 class CallAdmission(ABC):  # noqa: B024 - shared rejection; leaves override valid transitions
+    def expire(self, call: NativeToolCall) -> None:
+        """An unstarted waiter cannot change an already consumed admission."""
+
     def consume(self, call: NativeToolCall, action: Callable[[], None]) -> None:
         raise SelectedToolDenied("Native tool request was already consumed; outcome may be UNKNOWN")
 
-    def finish(self, call: NativeToolCall, is_error: bool, directory: Path, input_id: str) -> None:
+    def finish(
+        self, call: NativeToolCall, is_error: bool, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
         raise SelectedToolDenied("Native tool ran without owner admission")
 
 
 class AwaitingAdmission(CallAdmission):
+    def expire(self, call: NativeToolCall) -> None:
+        call.admission = UncertainAdmission()
+
     def consume(self, call: NativeToolCall, action: Callable[[], None]) -> None:
         # No retry even when the callback is cancelled or its durable fsync fails.
         call.admission = UncertainAdmission()
@@ -110,12 +135,18 @@ class AwaitingAdmission(CallAdmission):
 
 
 class AdmittedCall(CallAdmission):
-    def finish(self, call: NativeToolCall, is_error: bool, directory: Path, input_id: str) -> None:
-        call.commit_terminal(is_error, directory, input_id)
+    def finish(
+        self, call: NativeToolCall, is_error: bool, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
+        call.commit_terminal(is_error, directory, input_id, round_number)
 
 
 class UncertainAdmission(CallAdmission):
-    def finish(self, call: NativeToolCall, is_error: bool, directory: Path, input_id: str) -> None:
+    def finish(
+        self, call: NativeToolCall, is_error: bool, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
         if not is_error:
             raise SelectedToolDenied("Native tool succeeded without owner admission")
         call.admission_failed()
@@ -162,22 +193,44 @@ class NativeToolCall(ABC):
             await self._wait_started()
             self.observation.require_executing()
             self.admission.consume(self, action)
-        except (asyncio.CancelledError, TimeoutError, ToolStartNotSeen):
+        except ToolStartNotSeen:
+            # The callback never ran. Close admission, but retain the actual
+            # native observations: delayed announcement/start/error events
+            # must still reconcile this denied call in its declared round.
+            self.admission.expire(self)
+            self.started.set()
+            raise
+        except (asyncio.CancelledError, TimeoutError):
             self.observation = UncertainCall()
             self.admission = UncertainAdmission()
             self.started.set()  # Wake other waiters; they must fail state validation.
             raise
 
-    def finish(self, name: str, is_error: bool | None, directory: Path, input_id: str) -> None:
+    def finish(
+        self, name: str, is_error: bool | None, directory: Path,
+        input_id: str, round_number: int,
+    ) -> None:
         if name != self.name or type(is_error) is not bool:
             raise SelectedToolDenied("Native tool terminal identity/result changed")
-        self.observation.finish(self, is_error, directory, input_id)
+        self.observation.finish(self, is_error, directory, input_id, round_number)
+
+    @property
+    def complete(self) -> bool:
+        return self.observation.complete
+
+    def accepts_current_request(self, candidate: NativeToolCall) -> bool:
+        if self.complete:
+            return False
+        self.correlate(candidate)
+        return True
 
     def assert_complete(self) -> None:
         self.observation.assert_complete()
 
     @abstractmethod
-    def commit_terminal(self, is_error: bool, directory: Path, input_id: str) -> None: ...
+    def commit_terminal(
+        self, is_error: bool, directory: Path, input_id: str, round_number: int
+    ) -> None: ...
 
     @abstractmethod
     def admission_failed(self) -> None: ...

@@ -9,15 +9,15 @@ from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import InfoKind, Message
+from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
-from agent_comms.wire_metadata import WireMetadata
 from test_private_human_ingress import _root
 
 
 def saved_catalog(root):
     from agent_comms.catalog_document import CatalogDocument, ChannelPreferences
-    from agent_comms.display_order import ChannelSort, ThreadSort
+    from agent_comms.display_order import LastActivityThreadSort, LastUserInputChannelSort
 
     document = CatalogDocument(
         tags=frozenset({"api", "ui"}),
@@ -25,7 +25,7 @@ def saved_catalog(root):
             "#engineering": ChannelPreferences(
                 created_at=17,
                 pinned=True,
-                order=ThreadSort.LAST_ACTIVITY,
+                order=LastActivityThreadSort,
                 pinned_threads=frozenset({"a"}),
                 parent="#ui",
             ),
@@ -40,7 +40,7 @@ def saved_catalog(root):
                 frozenset({"#engineering"}),
             )
         },
-        list_order=ChannelSort.LAST_USER_INPUT,
+        list_order=LastUserInputChannelSort,
     )
     ChannelCatalog(root / "catalog.json").replace(document)
     return FieldCodec.encode(document)
@@ -51,7 +51,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     for name, tags in (("a", {"api"}), ("b", {"ui"}), ("other", set())):
         comms.registry.declare(Thread(name, frozenset(tags), str(tmp_path)))
     original = saved_catalog(tmp_path)
-    root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.messaging.initialize_private_initial_protocol()
     rows = [
         Message("other", target, str(i), InfoKind, timestamp=i, seq=i)
         for i, target in enumerate(("#engineering", "#api", "#ui", "#engineering"), 1)
@@ -59,10 +59,12 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     before = "".join(json.dumps(row.to_wire()) + "\n" for row in rows)
     comms.bus.log.path.write_text(before)
     comms.bus.log.path.chmod(0o600)
-    comms.bus.log.write_metadata_unlocked(WireMetadata(
-        last_seq=4, admission_after_seq=4, writer_protocol_version=1,
-        wire_root_id=root_id, claim_envelopes_version=1,
-    ))
+    marker = comms.bus.log.read_metadata_unlocked(required=True)
+    marker.last_seq = marker.admission_after_seq = 4
+    marker.checkpoint_version = marker.checkpoint_seal = None
+    comms.bus.log.write_metadata_unlocked(marker)
+    (tmp_path / "private_bus_checkpoint.sqlite3").unlink()
+    install_private_bus_checkpoint(comms.bus.log)
     catalog = comms.channels.catalog
     imported = catalog.read()
     assert json.loads(catalog.path.read_text()) == original  # read is not activation

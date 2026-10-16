@@ -21,20 +21,21 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import PublicationActivationBlocked, StaleFence
+from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.message_bus import MessageBus
-from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from agent_comms.tracked_turn import TrackedTurnSession
+from delivery_owner_fixture import drain_diagnostic, reply_turn_finished
 from test_coordinated_runtime import _fake_model
 from test_coordinated_runtime import tmp_path as private_root_fixture
 from test_native_prompt_binding import _fake_model as separate_session_fake
@@ -42,6 +43,7 @@ from test_backend_native_lifecycle import native_backend as native_backend
 from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
 
 tmp_path = private_root_fixture
+pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
 def _session(tmp_path, *, package=True):
@@ -60,7 +62,7 @@ def _session(tmp_path, *, package=True):
         frozenset({"team"}),
         str(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
-        model="openai-codex/gpt-6-sol",
+        model="test/model",
     )
     comms.registry.declare(owner)
     root_id = comms.messaging.initialize_private_initial_protocol()
@@ -138,6 +140,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
         {"from": "sender", "to": owner.name, "body": "Compute 17+25"},
     )
     assert await agent.inputs.drain_inbox(session.session_id) == 1
+    await reply_turn_finished(agent, session.session_id)
     assert len(calls) == 1
 
 
@@ -168,6 +171,7 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "new owner"})
     assert await agent.inputs.drain_inbox("beta") == 1
+    await reply_turn_finished(agent, "beta")
     assert len(calls) == 1
     assert agent.sessions.bindings["beta"] == "gamma"
     assert await agent.inputs.drain_inbox("beta") == 0  # no second model send
@@ -191,6 +195,7 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     assert await agent.inputs.drain_inbox("beta") == 1
+    await reply_turn_finished(agent, "beta")
     assert len(calls) == 1
     assert "new-after-rename" in calls[0][1]
     assert "old-before-rename" not in calls[0][1]
@@ -210,6 +215,7 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     assert await agent.inputs.drain_inbox("beta") == 1
+    await reply_turn_finished(agent, "beta")
     assert len(calls) == 1 and "new canonical" in calls[0][1]
     assert await agent.inputs.drain_inbox("beta") == 0
 
@@ -316,8 +322,12 @@ async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_pa
     assert (comms.root / ".private-owner-rename.pending").is_file()
     assert comms.registry.require("beta").name == "beta"
     release.set()
-    with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
-        await asyncio.wait_for(running, timeout=8)
+    assert await asyncio.wait_for(running, timeout=8) == 1
+    await reply_turn_finished(agent, "beta")
+    failure = drain_diagnostic(comms, "beta")
+    assert isinstance(failure, UnavailableDrainDiagnostic)
+    assert failure.error_type == "RelationViolationError"
+    assert "Private owner rename is pending" in failure.reason
     assert calls == []  # No raw native send; reserved outcome remains UNKNOWN, never retried.
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
@@ -377,6 +387,7 @@ async def test_acp_session_selected_native_pipeline_never_uses_legacy_ack(
     agent.on_connect(Client())
     async with asyncio.timeout(30):
         assert await agent.inputs.drain_inbox(sid) == 1
+        await reply_turn_finished(agent, sid)
     current = cursor_envelope((await agent.sessions.metadata(sid)))
     assert current.status == "proven"
     (reply,) = comms.bus.inbox("sender")
@@ -453,7 +464,8 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
     monkeypatch.setattr(agent._runtime, "start", noop)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(agent.sessions.config, "options", no_options)
-    drain = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+    assert await agent.inputs.drain_inbox("beta") == 1
+    reply_turn = agent.inputs.wake_tasks["beta"]
     await asyncio.wait_for(entered.wait(), timeout=5)
     comms.registry.unregister("beta")
     comms.registry.heartbeat("beta")
@@ -462,8 +474,11 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
     assert fresh.status == "none"
     assert fresh.scope.admission_generation > 0
     release.set()
-    assert await asyncio.wait_for(drain, timeout=5) == 1
-    old = cursor_envelope(delivered[-1].field_meta)
+    await asyncio.wait_for(reply_turn, timeout=5)
+    old = next(
+        cursor.envelope for update in delivered
+        if (cursor := cursor_fact(update.field_meta)) and cursor.envelope.status == "proven"
+    )
     assert old.status == "proven" and old.observation.cursor.input_id
     assert old.scope.admission_generation < fresh.scope.admission_generation
     assert old.revision < fresh.revision
@@ -489,6 +504,7 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "first"})
     assert await agent.inputs.drain_inbox("beta") == 1
+    await reply_turn_finished(agent, "beta")
     proven = cursor_envelope((await agent.sessions.metadata("beta")))
     assert proven.status == "proven"
     comms.registry.unregister("beta")
@@ -503,9 +519,13 @@ async def test_observed_mid_session_admission_change_invalidates_old_proof(tmp_p
     assert renewed.scope.admission_generation > proven.scope.admission_generation
     assert renewed.revision > proven.revision
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "second"})
+    before_second = len(updates)
     assert await agent.inputs.drain_inbox("beta") == 1
-    assert updates[-1].status == "none"
-    assert updates[-1].scope == renewed.scope
+    await reply_turn_finished(agent, "beta")
+    # The turn's own publication, and nothing after it claims proof.
+    assert updates[before_second].status == "none"
+    assert updates[before_second].scope == renewed.scope
+    assert "proven" not in [update.status for update in updates[before_second:]]
     assert len(calls) == 2  # no old-epoch native input can initialize new proof
 
 
@@ -538,6 +558,7 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     monkeypatch.setattr(agent._runtime, "session_update", record_update)
     comms.messaging.send_message("sender", "beta", "first")
     assert await agent.inputs.drain_inbox("beta") == 1
+    await reply_turn_finished(agent, "beta")
     assert updates[-1].status == "proven"
     before = len(updates)
     for _ in range(3):
@@ -607,7 +628,6 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
     from agent_comms.field_codec import FieldCodec
     from agent_comms.messages import Message, InfoKind
     from agent_comms.native_input_record import FullNativeExecution
-    from agent_comms.wake import derive_exact_reply_target
 
     native = native_backend
     await native.author_history()
@@ -617,7 +637,7 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         async with native.original_input(agent, session, "Current human input") as turn:
             sent = comms.messaging.send_message("sender", session, "Selected input after current turn")
             native.provider.text = json.dumps(FieldCodec.encode((Message(
-                session, derive_exact_reply_target(sent), "Selected input acknowledged",
+                session, sent.exact_reply_target, "Selected input acknowledged",
                 InfoKind, timestamp=0,
             ),)))
             assert await agent.inputs.drain_inbox(session) == 0
@@ -630,7 +650,11 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         # original drain owns the admission consumes the original assignment.
         await agent.inputs.drain_inbox(session)
         async with asyncio.timeout(30):
-            while native.provider.posts != 1 or agent.turns.turn_state(session).busy:
+            while (
+                native.provider.posts != 1
+                or agent.turns.turn_state(session).busy
+                or agent.inputs.backend_inboxes  # the reply turn retires its inbox after it stops being busy
+            ):
                 await asyncio.sleep(0.01)
         assert native.provider.posts == 1
         with Coordination(str(comms.root / "coordination.sqlite3")) as store, store.session.read():
@@ -714,15 +738,22 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     assert comms.bus.log.message_by_id(sent["id"]) is not None
-    with pytest.raises(NativePiUnavailable):
-        await agent.inputs.drain_inbox("beta")
+    assert await agent.inputs.drain_inbox("beta") == 1
+    await reply_turn_finished(agent, "beta")
+    failure = drain_diagnostic(comms, "beta")
+    assert isinstance(failure, NativeInputDrainDiagnostic)
+    assert failure.error_type == "NativePiUnavailable"
     assert len(calls) == 1
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 1
     assert agent.inputs.pending_turns == {}
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         rows = NativeRuntimeInput.select(store.session._connection)
-        assert len(rows) == 1 and rows[0].session_id is None
+        assert (
+            len(rows) == 1
+            and rows[0].session_id == "isolated-session"
+            and rows[0].session_entry_id is None
+        )
 
 
 async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
@@ -754,22 +785,21 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
     running = asyncio.create_task(first.inputs.drain_inbox("beta"))
     await asyncio.wait_for(entered.wait(), timeout=5)
     try:
-        with pytest.raises(StaleFence, match="busy"):
-            await second.inputs.drain_inbox("beta")
+        assert await second.inputs.drain_inbox("beta") == 0
         assert len(calls) == 1
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             assert (
                 store.session._connection.execute(
                     "SELECT COUNT(*) FROM wake_claims WHERE disposition='engaged'"
                 ).fetchone()[0]
-                == 1
+                == 2
             )
             assert len(NativeRuntimeInput.select(store.session._connection)) == 1
     finally:
         release.set()
         assert await asyncio.wait_for(running, timeout=5) == 1
-    assert await second.inputs.drain_inbox("beta") == 1
-    assert len(calls) == 2
+    assert await second.inputs.drain_inbox("beta") == 0
+    assert len(calls) == 1
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
@@ -793,18 +823,18 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     comms.agents.begin_turn("beta", "human-live-turn")
-    with pytest.raises(StaleFence, match="busy"):
-        await agent.inputs.drain_inbox("beta")
+    assert await agent.inputs.drain_inbox("beta") == 0
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
             store.session._connection.execute(
-                "SELECT COUNT(*) FROM claim_batch_receipts"
+                "SELECT COUNT(*) FROM claim_batch_receipts WHERE sealed=1"
             ).fetchone()[0]
-            == 0
+            == 1
         )
     assert calls == []
     comms.agents.finish_turn(comms.registry.require("beta").turn_lease)
     assert await agent.inputs.drain_inbox("beta") == 1
+    await reply_turn_finished(agent, "beta")
     assert len(calls) == 1
 
 
@@ -829,8 +859,12 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
         assert goal.state.active
     finally:
         release.set()
-    with pytest.raises(StaleFence, match="owner changed before native send"):
-        await asyncio.wait_for(running, timeout=5)
+    assert await asyncio.wait_for(running, timeout=5) == 1
+    await reply_turn_finished(agent, "beta")
+    failure = drain_diagnostic(comms, "beta")
+    assert isinstance(failure, UnavailableDrainDiagnostic)
+    assert failure.error_type == "StaleFence"
+    assert "owner changed before native send" in failure.reason
     assert calls == []
     assert await agent.inputs.drain_inbox("beta") == 0
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
@@ -847,6 +881,7 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
     original = comms.goals.update_goal("beta", SetGoalAction(text="Separate ongoing goal"))
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     assert await agent.inputs.drain_inbox("beta") == 1
+    await reply_turn_finished(agent, "beta")
     assert len(calls) == 1
     assert comms.registry.require("beta").goal == original
 
@@ -856,14 +891,18 @@ async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path,
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"})
     original = comms.bus.log.message_by_id(sent["id"])
     agent._private_nk_wire_root_id = "f" * 32
-    with pytest.raises(PublicationActivationBlocked, match="root does not match configuration"):
+    with pytest.raises(IdentityConflict, match="original root changed"):
         await agent.inputs.drain_inbox("beta")
     agent._private_nk_wire_root_id = root_id
     # Preflight must run before any SQL acceptance, not only before reservation.
     monkeypatch.setattr(
-        cohort_foreground,
-        "_trusted_package",
-        lambda _: (_ for _ in ()).throw(PublicationActivationBlocked("unreviewed Pi")),
+        native_pi.NativePiRpcLaunch,
+        "acquire_tracked",
+        classmethod(
+            lambda _cls, _package: (_ for _ in ()).throw(
+                PublicationActivationBlocked("unreviewed Pi")
+            )
+        ),
     )
     with pytest.raises(PublicationActivationBlocked, match="unreviewed Pi"):
         await agent.inputs.drain_inbox("beta")

@@ -3,7 +3,6 @@
 import asyncio
 import json
 import os
-import select
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -14,6 +13,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms import restart_queue as queue
 from agent_comms.owner_launch import RestartEnvironment, RetainedOwnerLaunch
+from agent_comms.native_arguments import NativeArguments
 from agent_comms.private_nk_entrypoint import PACKAGE_ENV
 from agent_comms.comms import Comms
 from agent_comms.child_process import AttachedChild
@@ -21,22 +21,29 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.private_nk_entrypoint import ROOT_ID_ENV
 from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
+from agent_comms.wire_watch import DirectoryWatchSource, WatchSource, open_wire_watcher
 from explicit_private_owner_installed_journey import Subscriber
 from test_backend_native_lifecycle import native_backend
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux watcher")
-def test_inotify_wakes_for_registry_and_queue_changes(tmp_path):
+async def test_inotify_wakes_for_registry_and_queue_changes(tmp_path):
     root = tmp_path / "wire"
     root.mkdir()
     directory = root / queue.DIRECTORY
     directory.mkdir()
-    with queue._watch(root, directory) as fd:
+    watcher = open_wire_watcher(
+        WatchSource.file(root / "registry.json"), DirectoryWatchSource(directory)
+    )
+    try:
+        await watcher.prepare()
         (root / "registry.json").write_text("changed")
-        assert select.select([fd], [], [], 1)[0] == [fd]
-        os.read(fd, 65536)
+        await asyncio.wait_for(watcher.wait(), 1)
+        await watcher.prepare()
         (directory / "next.json").write_text("queued")
-        assert select.select([fd], [], [], 1)[0] == [fd]
+        await asyncio.wait_for(watcher.wait(), 1)
+    finally:
+        watcher.close()
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux watcher")
@@ -205,7 +212,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
         assert replacement_env["QUEUE_FIXTURE_AUTH_SENTINEL"] == "source-auth-only"
         assert replacement_env["PI_CODING_AGENT_DIR"] == str(fixture.config)
         assert replacement_env[PACKAGE_ENV] == str(target_package)
-        assert replacement_env[RestartEnvironment.binary_key] == request.target.agent_bin
+        assert replacement_env[NativeArguments.binary_key] == request.target.agent_bin
         assert replacement_env.get("PYTHONPATH") == os.environ.get("PYTHONPATH")
         assert replacement_env.get("VIRTUAL_ENV") == os.environ.get("VIRTUAL_ENV")
         assert fixture.session.read_bytes().startswith(before)

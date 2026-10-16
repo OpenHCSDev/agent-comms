@@ -6,20 +6,19 @@ from dataclasses import dataclass, replace
 
 from agent_comms.assignment_states import EngagedAssignment
 from agent_comms.attempt_start import AttemptStart
-from agent_comms.attempt_states import AttemptFailedAttempt, AttemptState, TerminalAttempt
+from agent_comms.attempt_states import AttemptState, TerminalAttempt, UnknownOutcomeAttempt
 from agent_comms.coordination_contracts import (
     MAX_SANITIZED_DETAIL_CHARS,
     _bounded_reason,
 )
 from agent_comms.coordination_errors import (
     IdentityConflict,
-    IntegrityViolationError,
     PublicationUncertain,
     StaleFence,
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
-from agent_comms.coordination_session import CoordinationSession
+from agent_comms.coordination_session import CoordinationSession, NativeBoundary
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments, ReplayFact
@@ -33,6 +32,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.obligation_states import PendingResponse
 from agent_comms.owner_fence import OwnerFence
 from agent_comms.participant_store import ParticipantStore
+from agent_comms.turn_failure import TurnFailure
 from agent_comms.recovery_reader import RecoveryReader
 from agent_comms.recovery_states import RecoveryCondition
 
@@ -88,11 +88,6 @@ class AttemptStore:
     def _resume_retry(self, snapshot: RecoverySnapshot, request: AttemptStart) -> None:
         """Revoke prior replay proof and reengage coupled response/claim state atomically."""
         db, execution = self.session._connection, snapshot.execution
-        if request.attempt_ordinal > 1:
-            # Replay safety is execution-scoped in v2, not bound to the new
-            # attempt.  Monotonically revoke the previous attempt's proof;
-            # a further automatic retry needs a separately versioned schema.
-            ReplayAssessments.revoke_for_retry(db, request.execution_id)
         for obligation in snapshot.obligations:
             if obligation.lifecycle.deferred:
                 ResponseObligation.update(
@@ -213,21 +208,19 @@ class AttemptStore:
         fence: OwnerFence,
         *,
         expected_pointer_revision: int,
+        boundary: NativeBoundary | None = None,
     ) -> Applied[RecoverySnapshot]:
         """Atomically fail a fenced, reaped backend; UNKNOWN is never replayable.
 
         The live runner holds registry owner exclusion and has completed native
         child/tool cleanup. Finality here is local, not provider acceptance.
         """
-        with self.session.transaction():
+        with self.session.settlement(boundary) as acquired:
             snapshot, attempt = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
             if bool(snapshot.publication_intents):
                 raise PublicationUncertain("UNKNOWN failure cannot resolve frozen publication")
-            ReplayAssessments.accumulate(
-                self.session._connection, fence.execution_id, ReplayFact.UNKNOWN_EFFECTS
-            )
             if not (attempt.lifecycle.backend_done and attempt.lifecycle.process_dead):
                 attempt.advance(
                     self.session,
@@ -238,7 +231,7 @@ class AttemptStore:
                     reason_code="native_unknown",
                 )
             self.snapshots.get(fence.execution_id).settle(
-                self.session, AttemptFailedAttempt(), "native_unknown"
+                self.session, UnknownOutcomeAttempt(), "native_unknown", acquired
             )
             return Applied(self.snapshots.get(fence.execution_id))
 
@@ -310,13 +303,19 @@ class AttemptStore:
         expected_pointer_revision: int,
         outcome: TerminalAttempt,
         reason_code: str | None = None,
+        failure: TurnFailure | None = None,
     ) -> Applied[RecoverySnapshot]:
         if not isinstance(outcome, TerminalAttempt):
             raise ValueError("settlement requires a terminal attempt outcome")
         _bounded_reason(reason_code)
-        with self.session.transaction():
+        with self.session.settlement() as acquired:
             snapshot, _ = self.require_fence(fence)
             if snapshot.pointer_revision != expected_pointer_revision:
                 raise StaleRevision("pointer revision changed")
-            snapshot.settle(self.session, outcome, reason_code)
+            if failure is not None:
+                failure.prepare_execution_retry(
+                    self.session._connection, fence.execution_id
+                )
+                snapshot, _ = self.require_fence(fence)
+            snapshot.settle(self.session, outcome, reason_code, acquired)
             return Applied(self.snapshots.get(fence.execution_id))

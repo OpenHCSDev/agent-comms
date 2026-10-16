@@ -88,7 +88,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
         VIRTUAL_ENV=str(binary.parent.parent),
         AGENT_COMMS_DEBUG_LOG=str(stage/'acp.log'),
         PATH=str(binary.parent)+os.pathsep+environment.get('PATH', ''))
-    for key in ('PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK', 'PI_AGENT_ID',
+    for key in ('PI_PROMPT', 'PI_PARENT_ID', 'PI_TASK',
                 'AGENT_COMMS_THREAD', 'AGENT_COMMS_STARTUP_INPUT_KEY', 'PYTHONPATH'):
         environment.pop(key, None)
     os.environ.clear(); os.environ.update(environment)
@@ -815,7 +815,7 @@ async def run(arguments):
         AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(arguments.package),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
         AGENT_COMMS_AGENT_MODELS='restart-local/fixture')
-    for key in ('PYTHONPATH','PI_PROMPT','PI_TASK','PI_PARENT_ID','PI_AGENT_ID',
+    for key in ('PYTHONPATH','PI_PROMPT','PI_TASK','PI_PARENT_ID',
                 'AGENT_COMMS_STARTUP_INPUT_KEY'):
         env.pop(key, None)
     os.environ.clear();os.environ.update(env)
@@ -924,7 +924,7 @@ async def run(arguments):
                             ['sudo','-n','/home/ts/.local/bin/py-spy','dump','--pid',
                              str(owner.pid),'--nonblocking'],capture_output=True,text=True,timeout=3)
                         frames = stack.stdout
-                        if ('acquire_posix (' in frames and '_response_boundary (' in frames
+                        if ('acquire_posix (' in frames and 'coordination_session.py' in frames
                                 and 'native_source_cursor.py' in frames):
                             (stage/'cursor-busy-original-scope.txt').write_text(frames)
                             contention_observations.append({

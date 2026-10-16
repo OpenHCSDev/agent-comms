@@ -27,6 +27,7 @@ from .pi_payloads import (
     PiResponseData,
     PiToolResult,
     PiUsage,
+    ProviderRetryOutcome,
 )
 
 if TYPE_CHECKING:
@@ -58,6 +59,8 @@ class PiEvent(PiPayload, DeclaredFamily):
             return FieldCodec.encode(CompactionReason.from_external(value))
         if target is PiToolResult:
             return PiToolResult.normalize_wire(value)
+        if target is ProviderRetryOutcome:
+            return ProviderRetryOutcome.normalize_wire(record)
         return super().normalize_field(target, key, value, record)
 
     @classmethod
@@ -222,18 +225,44 @@ class ModelRequestProgress(PiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class AutoRetryEnd(PiEvent):
-    success: bool | None = field(default=None, metadata={"wire_name": "success"})
+    outcome: ProviderRetryOutcome = field(metadata={"wire_name": "success"})
+    attempt: int
+
+    def __post_init__(self) -> None:
+        if self.attempt < 0:
+            raise ValueError("Native retry count must be nonnegative")
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
-        if self.success:
-            session.output.error_message = None
-        else:
-            session.watchdog.retry_recovery_pending = False
-            yield session.output.error("Provider retry attempts were exhausted.")
-            yield session.watchdog.state(
-                "failed", "provider_retry_exhausted", 0, phase=ModelWaitPhase()
-            )
+        updates = self.outcome.apply(self, session)
+        session.output.retry_result = self.outcome.result(
+            self.attempt, session.output.redact
+        )
+        for event in updates:
+            yield event
+
+    def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
+        return (session.output.error("Provider retry attempts were exhausted."),)
+
+    def to_wire(self):
+        return {
+            "type": self.wire_kind(),
+            "attempt": self.attempt,
+            **self.outcome.retry_wire(),
+        }
+
+
+class NativeRetryEnd(AutoRetryEnd):
+    """Close native recovery; the retained assistant reports its final failure."""
+
+    async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        async for event in super().apply(session):
+            yield event
+        for event in self.outcome.recovery_events(session):
+            yield event
+
+    def exhausted(self, session: TurnSession) -> tuple[events.AgentEvent, ...]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -269,12 +298,25 @@ class RetryAttemptEvent(PiEvent):
 
 class AutoRetryStart(RetryAttemptEvent):
     retry_reason_code = "provider_auto_retry"
+    recovery_on_progress = True
 
     def prepare_retry(self, session: TurnSession) -> None:
         session.output.final_assistant_stop = False
         session.watchdog.prompt_accepted = True
-        session.watchdog.retry_recovery_pending = True
+        session.watchdog.retry_recovery_pending = self.recovery_on_progress
         session.watchdog.retry_recovery_reason = "provider_auto_retry_progress"
+
+
+class NativeRetryStart(AutoRetryStart):
+    """The native turn recovery re-requests a refused empty response.
+
+    stack/native-turn-recovery.mjs owns whether a provider refusal is retryable
+    and how many times (RecoveryBudget); this wire kind carries that decision
+    before the refused assistant message, so Core reports only the recovery's
+    final outcome and never counts a refusal itself.
+    """
+
+    recovery_on_progress = False
 
 
 class ReasonedCompaction(PiEvent):
@@ -350,6 +392,7 @@ class ContextCommitted(PiEvent):
         default=None, metadata={"wire_name": "requestGeneration"}
     )
     llm_context_digest: str | None = field(default=None, metadata={"wire_name": "llmContextDigest"})
+    committed_at_ms: int | None = field(default=None, metadata={"wire_name": "committedAtMs"})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -647,6 +690,10 @@ class MessageUpdate(PiEvent):
     @property
     def delta_progress(self) -> bool:
         return self.assistant_message_event is not None and self.assistant_message_event.progress
+
+    def observed_phase(self, phase):
+        delta = self.assistant_message_event
+        return phase.response_output() if delta is not None and delta.response_progress else phase
 
 
 @dataclass(frozen=True, kw_only=True)

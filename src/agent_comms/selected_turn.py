@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import dataclass
+from typing import ClassVar
 
 from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
@@ -44,11 +45,15 @@ class SelectedPrompt:
             tuple(segments),
         )
 
+    def sent_outcomes(self):
+        return self.participant.sent_outcomes[:SelectedWakeSegment.sent_limit]
+
     def triage(self) -> RenderedInput:
         participant = self.participant
         frame = SelectedWakeSegment.capture(
             tuple((source.delivery, source.assignment) for source in participant.batch.sources),
             participant.owner.thread,
+            sent_outcomes=self.sent_outcomes(),
         )
         return self.context(
             (frame, SelectedTriageSegment.capture(participant, frame.provenance))
@@ -63,9 +68,11 @@ class SelectedPrompt:
             ),
             participant.owner.thread,
             obligations=obligations,
+            sent_outcomes=self.sent_outcomes(),
         )
         projection = OptionalAwarenessProjection.for_selected(
-            WakeCandidateIndex(participant.bus),
+            WakeCandidateIndex(participant.bus.log),
+            registry=participant.bus._registry,
             through_seq=participant.batch.sources[-1].delivery.message.seq,
             generation=participant.identity.generation,
             admission_generation=participant.owner.admission_generation,
@@ -89,6 +96,8 @@ class SelectedPrompt:
 class SelectedAttempt:
     """An engaged attempt always has its full native stage and evolving fence."""
 
+    max_attempts: ClassVar[int] = 3
+
     participant: SelectedParticipant
     stage: FullNativeSend
     token: str
@@ -97,7 +106,7 @@ class SelectedAttempt:
     @classmethod
     def engage(cls, participant: SelectedParticipant,
                snapshot: RecoverySnapshot) -> SelectedAttempt:
-        participant.require_current(participant.store)
+        participant.prepare_attempt(snapshot)
         store = participant.store
         assignment_ids = participant.batch.assignment_ids
         execution_id = participant.batch.execution_id
@@ -109,10 +118,11 @@ class SelectedAttempt:
                 expected_revision=snapshot.execution.revision,
             ).value
         token = prepare_fence_token()
+        attempt_ordinal = (snapshot.execution.lifecycle.current_attempt_ordinal or 0) + 1
         started = store.attempts.start(
             AttemptStart(
                 execution_id,
-                1,
+                attempt_ordinal,
                 participant.owner.thread.name,
                 participant.identity.generation,
                 token,
@@ -163,12 +173,15 @@ class SelectedAttempt:
         participant = self.participant
         try:
             action = BatchSelectedAction(tuple(
-                (assignment, write_authority.select(
+                (
                     assignment,
-                    participant.owner.thread,
-                    participant.owner.admission_generation,
-                    action,
-                ))
+                    write_authority.select(
+                        assignment,
+                        participant.owner.thread,
+                        participant.owner.admission_generation,
+                        action,
+                    ).prepare(participant.owner.thread),
+                )
                 for assignment in self.stage.assignments
             ))
             prompt = await SelectedPrompt(participant).full(
@@ -204,6 +217,8 @@ class SelectedAttempt:
                 model=participant.model,
                 observe_event=self.observe_event,
                 selected_tool_mode=action.mode(tools),
+                # Only the full answer takes later inputs; a triage call answers one question.
+                following=execution.following,
             )
             result.require_publishable()
             replies = (participant.batch.response_message(result.text, participant.owner.thread.name),)
@@ -235,7 +250,8 @@ class SelectedConsideration:
             participant.require_current(participant.store)
             created = participant.store.executions.create(
                 participant.batch.execution_id, ExecutionOrigin.WIRE,
-                participant.lookup, participant.owner.thread.name, 1,
+                participant.lookup, participant.owner.thread.name,
+                SelectedAttempt.max_attempts,
                 sources=participant.batch.sources,
             ).value
             attempt = SelectedAttempt.engage(participant, created)

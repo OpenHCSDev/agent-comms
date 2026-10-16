@@ -97,7 +97,7 @@ class NativeSessionPreparation(backend.TurnSession):
                             raise NativePiUnavailable(event.text)
                 state = preparation.native.attestation.state
                 assert state is not None
-                await observe(state, preparation.context_info())
+                await observe(state, state.agent_info(preparation))
                 return state
             finally:
                 if owner is not None:

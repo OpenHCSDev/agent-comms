@@ -20,43 +20,43 @@ import itertools
 import multiprocessing
 import os
 import signal
+import sys
+import time
 import traceback
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
+from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Generic, Self, TypeVar, final
 
-from agent_comms.coordination_errors import CoordinationError, CoordinationReadUnavailable, StaleRevision
+from agent_comms.coordination_errors import (
+    CoordinationError,
+    CoordinationReadUnavailable,
+    StaleRevision,
+)
+from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
+from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
+from agent_comms.active_route import CommsRoute
+from agent_comms.presentation import WireRevision
 
 if TYPE_CHECKING:
+    from concurrent.futures import Future
     from multiprocessing.connection import Connection
 
-    from agent_comms.acp_extension import TranscriptSnapshotUpdate
     from agent_comms.comms import Comms
     from agent_comms.history_views import RetiredViews
     from agent_comms.message_reference import MessageReference
-    from agent_comms.presentation import CoordinationSnapshot, WireRevision
+    from agent_comms.presentation import CoordinationSnapshot, MessageNotification
     from agent_comms.runtime import RuntimeConnection
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
-    from agent_comms.transcripts import TranscriptCursor, TranscriptReadIdentity
+    from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
     from agent_comms.ui_model.delivery import InputDelivery
     from agent_comms.ui_model.goal import OwnerGoalSnapshot
     from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel
+    from agent_comms.view_unread import ReplyIndexBatch
 
-# Activity older than this reads as idle; re-derive rows at least this often
-# so staleness shows without a store change.
-EXPIRY_PERIOD = 30
-
-
-@dataclass(frozen=True)
-class Interest:
-    """What the UI currently shows and so wants observed."""
-
-    sidebar: ObserveSidebar | None = None
-    threads: frozenset[str] = frozenset()
-    views: ObserveViews | None = None
 
 
 class ObservationRequest(ABC):
@@ -70,12 +70,70 @@ class InterestRequest(ObservationRequest):
     """Changes what is observed; the service observes again."""
 
     @abstractmethod
-    def apply(self, interest: Interest) -> Interest: ...
+    def observation(self) -> Observation: ...
 
     def receive(self, service: ObservationService) -> None:
-        service.interest = self.apply(service.interest)
-        service.observe_due = True
-        service.changed.set()
+        observation = self.observation()
+        kind = type(observation)
+        service.observations[kind] = observation.for_interest(service.observations.get(kind))
+        service.observe_again()
+
+
+InterestT = TypeVar("InterestT", bound=InterestRequest)
+
+
+class Observation(ABC, Generic[InterestT]):
+    """A requested view owns its read state and yields between store operations."""
+
+    def __init__(self, request: InterestT):
+        self.request = request
+
+    def for_interest(self, previous: Self | None) -> Self:
+        """The requested view owns whether its read lifetime can be retained."""
+        return previous if previous is not None and previous.request == self.request else self
+
+    @abstractmethod
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]: ...
+
+    def after_read(self, service: ObservationService) -> None:
+        """Subscribe to completion when this observation has unfinished preparation."""
+
+
+@final
+class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
+    """A strict stored-data read failed, not the observer or the whole UI.
+
+    The reader runtime is known; the writer version is not inferred from a
+    missing declaration. Older saved records can fail after a declaration is
+    deleted just as newer records can fail in an older reader.
+    """
+
+    # Currentness and contention defer the existing read; they do not show
+    # broken saved data.
+    DEFERRED_READS = (CoordinationReadUnavailable, StaleRevision)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, UnreadableHistory) and self.args == other.args
+
+    def __hash__(self) -> int:
+        return hash(self.args)
+
+    @classmethod
+    def capture(cls, error: Exception) -> UnreadableHistory:
+        if isinstance(error, cls):
+            return error
+        reasons = []
+        cause: BaseException | None = error
+        while cause is not None:
+            reasons.append(str(cause))
+            cause = cause.__cause__
+        return cls(sys.prefix, "\nCaused by: ".join(reasons))
+
+    def __str__(self) -> str:
+        reader_runtime, reason = self.args
+        return (f"Saved history unreadable: {reason}\n"
+                f"Reader runtime: {reader_runtime}. Restart this process on "
+                "the reviewed runtime; if it still fails, the saved records need repair.")
 
 
 @dataclass(frozen=True)
@@ -94,8 +152,7 @@ class AwaitedRead(ObservationRequest):
             raise StaleRevision("The read belongs to another Comms root than the observed one")
 
     def refused(self, error: Exception) -> ReadRefused:
-        # The read's own exception, re-raised to the UI caller exactly as an
-        # in-process read raised it; the caller's handling decides.
+        """Return the read owner's named failure without reclassifying it."""
         return ReadRefused(self.request_id, error, traceback.format_exc())
 
 
@@ -109,11 +166,13 @@ class ReadRequest(AwaitedRead):
     @abstractmethod
     def read(self, comms: Comms) -> object: ...
 
-    def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
+    def answer(self, comms: Comms) -> ReadAnswered | ReadRefused | ReadBusy:
         try:
             self.require_root(comms)
             return ReadAnswered(self.request_id, self.read(comms))
-        except Exception as error:
+        except CoordinationReadUnavailable:
+            return ReadBusy(self.request_id)
+        except (RelationViolationError, UnreadableHistory, StaleRevision) as error:
             return self.refused(error)
 
 
@@ -127,8 +186,6 @@ class OwnerRead(AwaitedRead):
     """
 
     owner: ThreadIncarnation
-    # The owner answers from its own stores; a slower answer is a stalled owner.
-    TIMEOUT: ClassVar[float] = 3
 
     def receive(self, service: ObservationService) -> None:
         service.owner_reads[self.request_id] = asyncio.ensure_future(self.serve(service))
@@ -143,27 +200,22 @@ class OwnerRead(AwaitedRead):
     async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
         try:
             self.require_root(comms)
-            async with asyncio.timeout(self.TIMEOUT):
-                return ReadAnswered(self.request_id, await self.ask(comms))
+            return ReadAnswered(self.request_id, await self.ask(comms))
         except Exception as error:
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
-        from agent_comms.runtime import RuntimeConnection, socket_path
+        from agent_comms.runtime import OwnerReplyConnection, socket_path
 
         owner = comms.registry.require(self.owner.name)
         if owner.incarnation != self.owner:
             raise ValueError("The owner incarnation changed while preparing the request.")
-        return RuntimeConnection(comms, owner.name, socket_path(comms.root, owner.pid))
+        return OwnerReplyConnection(comms, owner.name, socket_path(comms.root, owner.pid))
 
     async def ask(self, comms: Comms) -> object:
-        from acp.exceptions import RequestError
-
         connection = await asyncio.to_thread(self.connect, comms)
         try:
             return await self.read(connection)
-        except (RuntimeError, RequestError) as error:
-            raise ValueError(str(error)) from error
         finally:
             await connection.close()
 
@@ -183,8 +235,11 @@ class CancelRead(ObservationRequest):
             asking.cancel()
 
 
+TranscriptResult = TypeVar("TranscriptResult")
+
+
 @dataclass(frozen=True)
-class ReadTranscript(ReadRequest):
+class TranscriptRequest(ReadRequest, Generic[TranscriptResult]):
     """One bounded transcript page and the witness it was read under.
 
     Without ``read_identity`` the source is captured now; with it, the page is
@@ -198,20 +253,47 @@ class ReadTranscript(ReadRequest):
     read_identity: TranscriptReadIdentity | None = None
     historical_source: str | None = None
 
-    def read(self, comms: Comms) -> TranscriptSnapshotUpdate:
-        from agent_comms.acp_extension import TranscriptSnapshotUpdate
+    def read(self, comms: Comms) -> TranscriptResult:
+        try:
+            transcripts = comms.transcripts
+            window = dict(before=self.before, after=self.after, through=self.through)
+            if self.read_identity is None:
+                read = transcripts.capture_page_read(
+                    self.thread, historical_source=self.historical_source, **window
+                )
+            else:
+                if (self.historical_source is not None
+                        and self.historical_source != self.read_identity.historical_source):
+                    raise StaleRevision("Published transcript belongs to another recorded source")
+                read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
+            # The read checks its witness before and after preparing the page.
+            return self.result(read)
+        except StoredHistoryUnreadable as error:
+            raise UnreadableHistory.capture(error) from error
 
-        transcripts = comms.transcripts
-        window = dict(before=self.before, after=self.after, through=self.through)
-        if self.read_identity is None:
-            read = transcripts.capture_page_read(self.thread, historical_source=self.historical_source, **window)
-        else:
-            if (self.historical_source is not None
-                    and self.historical_source != self.read_identity.historical_source):
-                raise StaleRevision("Published transcript belongs to another recorded source")
-            read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
-        # The read checks its witness before and after preparing the page.
-        return TranscriptSnapshotUpdate(read.read(), read.identity)
+    @abstractmethod
+    def result(self, read: TranscriptRead) -> TranscriptResult: ...
+
+
+@dataclass(frozen=True)
+class ReadTranscript(TranscriptRequest[TranscriptSnapshotUpdate]):
+    """Read a complete page, including its current draft."""
+
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
+        return TranscriptSnapshotUpdate.from_read(read)
+
+
+@dataclass(frozen=True)
+class ReadTranscriptUpdate(TranscriptRequest[TranscriptSnapshotUpdate | TranscriptDraftUpdate]):
+    """Refresh a published page, reading only its draft while its contents agree."""
+
+    previous: TranscriptReadIdentity | None = None
+
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
+        previous = self.previous
+        if previous is not None and previous.same_snapshot(read.identity):
+            return TranscriptDraftUpdate(read.identity, read.current_draft())
+        return TranscriptSnapshotUpdate.from_read(read)
 
 
 @dataclass(frozen=True)
@@ -221,10 +303,15 @@ class RefreshTranscript(ReadRequest):
     identity: TranscriptReadIdentity
 
     def read(self, comms: Comms) -> TranscriptSnapshotUpdate | None:
-        from agent_comms.transcripts import TranscriptRead
-
         identity = self.identity
-        if TranscriptRead(comms.transcripts, identity).content_current():
+        read = comms.transcripts.bind_page_read(
+            identity.requested_name,
+            identity,
+            before=identity.before,
+            after=identity.after,
+            through=identity.through,
+        )
+        if read.content_current():
             return None
         return ReadTranscript(
             self.root, identity.requested_name, before=identity.before, after=identity.after,
@@ -240,6 +327,25 @@ class ReadNotifications(ReadRequest):
 
     def read(self, comms: Comms):
         return comms.views.message_notifications_for_references(self.references)
+
+    def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
+        return revision.notifications_changed_since(previous)
+
+
+@dataclass(frozen=True)
+class ReadRecordedNotifications(ReadNotifications):
+    """The selected archive's recorded handling, independent of today's recipients."""
+
+    source: str
+
+    def read(self, comms: Comms):
+        from agent_comms.historical_views import HistorySource
+
+        source = HistorySource.require(comms.bus.history, self.source)
+        return source.notification_references(comms.bus.history, self.references)
+
+    def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
+        return revision.history != previous.history
 
 
 @dataclass(frozen=True)
@@ -271,22 +377,131 @@ class ObserveSidebar(InterestRequest):
     show_stopped: bool
     show_archived: bool
 
-    def apply(self, interest: Interest) -> Interest:
-        return replace(interest, sidebar=self)
+    def observation(self) -> SidebarReading:
+        return SidebarReading(self)
+
+    def _answer(
+        self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        from agent_comms.ui_model.sidebar import SidebarModel
+
+        try:
+            snapshot = read(
+                subject, show_stopped=self.show_stopped, show_archived=self.show_archived)
+            return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
+        except UnreadableHistory.DEFERRED_READS:
+            return None  # No new snapshot; keep the original interest for the next observation.
+        except StoredHistoryUnreadable as error:
+            return SidebarUnreadable(revision, self, UnreadableHistory.capture(error))
+
+    def roster(
+        self, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        viewer = comms.messaging.user_identity(self.worktree).name
+        return self._answer(revision, comms.views.presentation.roster, viewer)
+
+    def answer(
+        self, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        return self._answer(revision, comms.views.viewer_snapshot, self.worktree)
+
+
+class SidebarReadStage(ABC):
+    @abstractmethod
+    def read(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None: ...
+
+    def next(self) -> SidebarReadStage:
+        return self
+
+
+class RosterSidebarRead(SidebarReadStage):
+    def read(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        return request.roster(comms, revision)
+
+    def next(self) -> SidebarReadStage:
+        return CompleteSidebarRead()
+
+
+class CompleteSidebarRead(SidebarReadStage):
+    def read(
+        self, request: ObserveSidebar, comms: Comms, revision: WireRevision
+    ) -> SidebarObserved | SidebarUnreadable | None:
+        return request.answer(comms, revision)
+
+
+class SidebarReading(Observation[ObserveSidebar]):
+    def __init__(self, request: ObserveSidebar):
+        super().__init__(request)
+        self.stage: SidebarReadStage = RosterSidebarRead()
+        self.sent: SidebarSent | None = None
+        self.published: SidebarResult | None = None
+        self.preparation: Future[ReplyIndexBatch] | None = None
+
+    def after_read(self, service: ObservationService) -> None:
+        preparation = service.comms.views.transcript_reads.preparation
+        if preparation is None or preparation is self.preparation:
+            return
+        self.preparation = preparation
+        loop = asyncio.get_running_loop()
+        preparation.add_done_callback(
+            lambda _: loop.call_soon_threadsafe(self.prepared, service)
+        )
+
+    def prepared(self, service: ObservationService) -> None:
+        if service.observations.get(type(self)) is self:
+            self.sent = None
+            service.observe_again()
+
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
+        while True:
+            key = SidebarSent(revision.expiry_period, type(self.stage), revision)
+            changed = self.sent is None or revision.sidebar_changed_since(self.sent.revision)
+            if not changed and key == self.sent:
+                return
+            stage = self.stage
+            result = stage.read(self.request, comms, revision)
+            if result is None:
+                return
+            self.sent = key
+            result.finish_read(self)
+            if self.published is None or not result.same_observation(self.published):
+                self.published = result
+                yield result
+            if self.stage is stage:
+                return
 
 
 @dataclass(frozen=True)
-class StopSidebar(InterestRequest):
-    def apply(self, interest: Interest) -> Interest:
-        return replace(interest, sidebar=None)
+class SidebarSent:
+    expiry_period: int
+    stage: type[SidebarReadStage]
+    revision: WireRevision = field(compare=False)
+
+
+@dataclass(frozen=True)
+class StopSidebar(ObservationRequest):
+    def receive(self, service: ObservationService) -> None:
+        service.observations.pop(SidebarReading, None)
+
+
+@dataclass(frozen=True)
+class StopObserving(ObservationRequest):
+    """Views are retiring; finish their outstanding reads without observing more state."""
+
+    def receive(self, service: ObservationService) -> None:
+        service.observations.clear()
 
 
 @dataclass(frozen=True)
 class ObserveThreads(InterestRequest):
     names: frozenset[str]
 
-    def apply(self, interest: Interest) -> Interest:
-        return replace(interest, threads=self.names)
+    def observation(self) -> ThreadReading:
+        return ThreadReading(self)
 
 
 @dataclass(frozen=True)
@@ -296,8 +511,85 @@ class ObserveViews(InterestRequest):
     threads: frozenset
     channels: frozenset[str]
 
-    def apply(self, interest: Interest) -> Interest:
-        return replace(interest, views=self)
+    def observation(self) -> ViewReading:
+        return ViewReading(self)
+
+
+@dataclass(frozen=True)
+class ObserveNotifications(InterestRequest):
+    """Original message references currently visible in the open views."""
+
+    reads: frozenset[ReadNotifications]
+
+    def observation(self) -> NotificationReading:
+        return NotificationReading(self)
+
+
+class NotificationReading(Observation[ObserveNotifications]):
+    def __init__(self, request: ObserveNotifications):
+        super().__init__(request)
+        self.revisions: dict[ReadNotifications, WireRevision] = {}
+
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
+        for request in self.request.reads:
+            previous = self.revisions.get(request)
+            if previous is not None and not request.changed_since(revision, previous):
+                continue
+            try:
+                request.require_root(comms)
+                outcomes = request.read(comms)
+            except UnreadableHistory.DEFERRED_READS:
+                yield None  # Keep the interest pending until its source can be read.
+                continue
+            except (StoredHistoryUnreadable, RelationViolationError, ValueError) as error:
+                result = NotificationsUnreadable(revision, request, UnreadableHistory.capture(error))
+            else:
+                result = NotificationsObserved(revision, request, outcomes)
+            self.revisions[request] = revision
+            yield result
+
+
+class ThreadReading(Observation[ObserveThreads]):
+    def __init__(self, request: ObserveThreads):
+        super().__init__(request)
+        self.observed: ThreadsObserved | None = None
+
+    def for_interest(self, previous: Self | None) -> Self:
+        # A new view may join unchanged names. Its turn/read fence needs an
+        # initial presentation, not the previous readers' delta.
+        return self
+
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
+        previous = self.observed
+        if previous is not None and previous.current_at(revision):
+            return
+        presentations, unavailable, busy = {}, {}, set()
+        for name in self.request.names:
+            try:
+                presentations[name] = comms.views.thread_presentation(name)
+            except UnreadableHistory.DEFERRED_READS:
+                busy.add(name)
+            except StoredHistoryUnreadable as error:
+                unavailable[name] = UnreadableHistory.capture(error)
+            yield None
+        observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset())
+        self.observed = replace(observed, changed=observed.changed_since(previous))
+        if previous is None or self.observed.changed:
+            yield self.observed
+
+
+class ViewReading(Observation[ObserveViews]):
+    def __init__(self, request: ObserveViews):
+        super().__init__(request)
+        self.revision: WireRevision | None = None
+
+    def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
+        if self.revision is not None and not revision.registrations_changed_since(self.revision):
+            return
+        retired = comms.views.retired_views(self.request.threads, self.request.channels)
+        self.revision = revision
+        if retired.threads or retired.channels:
+            yield ViewsRetired(revision, retired)
 
 
 class ServiceResult(ABC):
@@ -328,6 +620,22 @@ class ReadAnswered(ServiceResult):
 
 
 @dataclass(frozen=True)
+class ReadBusy(ServiceResult):
+    """Source busy: the original read remains pending, not a failed input."""
+
+    request_id: int
+
+    @property
+    def title(self) -> str:
+        return "History loading"
+
+    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+        # Keep the same waiter. The service owns waiting for the source and
+        # answers this request when its next observation can acquire a read.
+        pass
+
+
+@dataclass(frozen=True)
 class ReadRefused(ServiceResult):
     """The read raised ``error``; the UI caller receives that same exception."""
 
@@ -347,10 +655,36 @@ class RevisionObserved(Observed):
 
 
 @dataclass(frozen=True)
-class SidebarObserved(Observed):
+class SidebarResult(Observed):
     request: ObserveSidebar
+
+    def same_observation(self, previous: SidebarResult) -> bool:
+        """Every declared answer participates; a store stat is not another answer."""
+        return replace(self, revision=previous.revision) == previous
+
+    @abstractmethod
+    def finish_read(self, reading: SidebarReading) -> None: ...
+
+
+@dataclass(frozen=True)
+class SidebarObserved(SidebarResult):
     snapshot: CoordinationSnapshot
     derived: tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]
+
+    def finish_read(self, reading: SidebarReading) -> None:
+        reading.stage = reading.stage.next()
+        if self.snapshot.unread_pending:
+            reading.sent = None
+
+
+@dataclass(frozen=True)
+class SidebarUnreadable(SidebarResult):
+    """The requested sidebar could not be read; no stale snapshot is offered."""
+
+    error: UnreadableHistory
+
+    def finish_read(self, reading: SidebarReading) -> None:
+        """Keep this stage until its source revision changes."""
 
 
 @dataclass(frozen=True)
@@ -358,8 +692,41 @@ class ThreadsObserved(Observed):
     """Presentations of the observed threads; a busy store leaves some unread this time."""
 
     presentations: Mapping[str, ThreadPresentation | None]
-    unavailable: frozenset[str]
+    unavailable: Mapping[str, UnreadableHistory]
     busy: frozenset[str]
+    changed: frozenset[str]
+
+    def current_at(self, revision: WireRevision) -> bool:
+        """A busy result stays pending; a successful cut owns its read frontier."""
+        return not self.busy and not revision.status_changed_since(self.revision)
+
+    def changed_since(self, previous: ThreadsObserved | None) -> frozenset[str]:
+        """Read-state transitions and source-owned changes, independent of store churn."""
+        if previous is None:
+            return frozenset((*self.presentations, *self.unavailable, *self.busy))
+        changed = set(self.busy ^ previous.busy)
+        changed.update(self.presentations.keys() ^ previous.presentations.keys())
+        changed.update(self.unavailable.keys() ^ previous.unavailable.keys())
+        for name in self.presentations.keys() & previous.presentations.keys():
+            current, before = self.presentations[name], previous.presentations[name]
+            if current is not before and (current is None or not current.same_observation(before)):
+                changed.add(name)
+        for name in self.unavailable.keys() & previous.unavailable.keys():
+            if self.unavailable[name] != previous.unavailable[name]:
+                changed.add(name)
+        return frozenset(changed)
+
+
+@dataclass(frozen=True)
+class NotificationsObserved(Observed):
+    request: ReadNotifications
+    outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]]
+
+
+@dataclass(frozen=True)
+class NotificationsUnreadable(Observed):
+    request: ReadNotifications
+    error: UnreadableHistory
 
 
 @dataclass(frozen=True)
@@ -399,20 +766,12 @@ class ObserverDied(CoordinationError):
 class ObservationService:
     """The child process side: one Comms service, the UI's interest, and what was sent."""
 
-    # Core's read failures a status line shows as "unavailable"; Core has no
-    # common base for them yet, so these are the families its reads raise.
-    UNAVAILABLE = (OSError, ValueError, RuntimeError)
-
     def __init__(self, comms, connection: Connection):
         self.comms = comms
         self.connection = connection
-        self.interest = Interest()
+        self.observations: dict[type[Observation], Observation] = {}
         self.changed = asyncio.Event()
         self.revision: WireRevision | None = None
-        self.sent_sidebar: tuple[ObserveSidebar, int] | None = None
-        self.sent_threads: frozenset[str] | None = None
-        self.checked_views: tuple[ObserveViews, WireRevision] | None = None
-        self.retry_threads = False
         self.observe_due = True
         # Store reads the UI awaits, in arrival order, until served or cancelled.
         self.pending: dict[int, ReadRequest] = {}
@@ -438,80 +797,89 @@ class ObservationService:
                          for path in paths(value) if path.parent == self.comms.root)
 
     async def watch(self) -> None:
-        from agent_comms.wire_watch import WireWatch
+        from agent_comms.wire_watch import ModifiedWatchSource, WireWatch
 
-        async for _ in WireWatch.observations(self.comms.root, self.store_names(), modified=True):
+        source = ModifiedWatchSource(self.comms.root, self.store_names())
+        async for _ in WireWatch.observations(source):
+            self.observe_again()
+
+    def observe_again(self) -> None:
+        if not self.closed:
             self.observe_due = True
             self.changed.set()
 
-    def observe(self) -> None:
-        from agent_comms.ui_model.sidebar import SidebarModel
+    async def answer_pending(self, attempted: set[int]) -> None:
+        """Finish each waiting store read once, accepting cancellations between reads."""
+        await asyncio.sleep(0)
+        self.receive()
+        for request_id, request in tuple(self.pending.items()):
+            if self.closed:
+                return
+            if request_id in attempted or self.pending.get(request_id) is not request:
+                continue
+            attempted.add(request_id)
+            answer = request.answer(self.comms)
+            self.connection.send(answer)
+            if not isinstance(answer, ReadBusy):
+                self.pending.pop(request_id)
+            await asyncio.sleep(0)
 
-        views = self.comms.views
-        revision = views.revision()
-        stores = self.revision is None or revision.stores_changed_since(self.revision)
-        self.revision = revision
-        if stores:
+    async def observe(self, attempted: set[int]) -> None:
+        revision = self.comms.views.revision()
+        if self.revision is None or revision.stores_changed_since(self.revision):
             self.connection.send(RevisionObserved(revision))
-        sidebar = self.interest.sidebar
-        if sidebar is not None:
-            key = (sidebar, revision.expiry_tick // EXPIRY_PERIOD)
-            if stores or key != self.sent_sidebar:
-                snapshot = views.viewer_snapshot(
-                    sidebar.worktree, show_stopped=sidebar.show_stopped, show_archived=sidebar.show_archived)
-                self.connection.send(SidebarObserved(revision, sidebar, snapshot, SidebarModel.derive(snapshot)))
-                self.sent_sidebar = key
-        threads = self.interest.threads
-        if threads and (stores or threads != self.sent_threads or self.retry_threads):
-            presentations, unavailable, busy = {}, set(), set()
-            for name in threads:
-                try:
-                    presentations[name] = views.thread_presentation(name)
-                except CoordinationReadUnavailable:
-                    busy.add(name)
-                except self.UNAVAILABLE:
-                    unavailable.add(name)
-            self.connection.send(ThreadsObserved(revision, presentations, frozenset(unavailable), frozenset(busy)))
-            self.sent_threads, self.retry_threads = threads, bool(busy)
-        views = self.interest.views
-        if views is not None and (self.checked_views is None or self.checked_views[0] != views
-                                  or revision.registrations_changed_since(self.checked_views[1])):
-            retired = self.comms.views.retired_views(views.threads, views.channels)
-            if retired.threads or retired.channels:
-                self.connection.send(ViewsRetired(revision, retired))
-            self.checked_views = (views, revision)
+        self.revision = revision
+        for kind, observation in tuple(self.observations.items()):
+            # Fresh foreground requests take precedence at every read boundary.
+            await self.answer_pending(attempted)
+            if self.closed:
+                return
+            if self.observations.get(kind) is not observation:
+                continue
+            for result in observation.read(self.comms, revision):
+                if result is not None:
+                    self.connection.send(result)
+                await self.answer_pending(attempted)
+                if self.closed or self.observations.get(kind) is not observation:
+                    break
+            observation.after_read(self)
+
+    async def expire(self) -> None:
+        """Time-based sidebar state belongs to the sidebar observer, not file watching."""
+        while not self.closed:
+            now = time.time()
+            await asyncio.sleep(WireRevision.expiry_seconds - now % WireRevision.expiry_seconds)
+            self.observe_again()
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()
         loop.add_reader(self.connection.fileno(), self.receive)
         watching = asyncio.create_task(self.watch())
+        expiring = asyncio.create_task(self.expire())
         try:
             while not self.closed:
                 await self.changed.wait()
                 self.changed.clear()
-                # Awaited reads first, one at a time; between them the loop
-                # takes new requests and cancellations.
-                while self.pending and not self.closed:
-                    request_id = next(iter(self.pending))
-                    self.connection.send(self.pending.pop(request_id).answer(self.comms))
-                    await asyncio.sleep(0)
+                attempted: set[int] = set()
+                await self.answer_pending(attempted)
                 if self.observe_due and not self.closed:
                     self.observe_due = False
-                    self.observe()
+                    await self.observe(attempted)
         finally:
+            self.closed = True
             watching.cancel()
+            expiring.cancel()
             for asking in self.owner_reads.values():
                 asking.cancel()
             loop.remove_reader(self.connection.fileno())
+            self.comms.views.transcript_reads.close()
 
 
-def serve(root: str, connection: Connection) -> None:
-    """Child process entry: observe ``root`` for the UI on the other end of ``connection``."""
-    from agent_comms.active_route import resolve_comms_route
+def serve(route: CommsRoute, connection: Connection) -> None:
+    """Observe the caller's selected route, including its reviewed native package."""
     from agent_comms.comms import wire
 
     try:
-        route = resolve_comms_route(Path(root))
         with route.admit_client():
             asyncio.run(ObservationService(wire(route), connection).run())
     except BaseException:
@@ -527,10 +895,24 @@ def serve(root: str, connection: Connection) -> None:
 class ObservationProcess:
     """The UI side: start the service for a root, send requests, await reads, drain results."""
 
-    def __init__(self, root: Path):
+    @classmethod
+    @contextmanager
+    def awaited(cls, route: CommsRoute):
+        """Own pipe readiness and retirement for an attached asynchronous reader."""
+        process = cls(route)
+        loop = asyncio.get_running_loop()
+        descriptor = process.fileno()
+        loop.add_reader(descriptor, process.results)
+        try:
+            yield process
+        finally:
+            loop.remove_reader(descriptor)
+            process.close()
+
+    def __init__(self, route: CommsRoute):
         context = multiprocessing.get_context("spawn")
         self.connection, child = context.Pipe()
-        self.process = context.Process(target=serve, args=(str(root), child), daemon=True,
+        self.process = context.Process(target=serve, args=(route, child), daemon=False,
                                        name="agent-comms-observation")
         self.process.start()
         child.close()
@@ -606,7 +988,4 @@ class ObservationProcess:
 
     def close(self) -> None:
         self.connection.close()
-        self.process.join(timeout=2)
-        if self.process.is_alive():
-            self.process.terminate()
-            self.process.join(timeout=2)
+        self.process.join()

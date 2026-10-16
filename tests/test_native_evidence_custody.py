@@ -1,8 +1,7 @@
 """Original-byte custody survives appends and refuses altered proof/source."""
 
-import json
-import os
 import asyncio
+import json
 import sqlite3
 import threading
 from pathlib import Path
@@ -12,7 +11,7 @@ import pytest
 from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
 from native_proof_cases import write_proof_rows
-from test_native_pi import _evidence, INPUT_ID
+from test_native_pi import INPUT_ID, _evidence
 
 
 def test_evidence_scope_switches_original_source_and_closes_previous_reader(tmp_path):
@@ -37,13 +36,111 @@ def test_evidence_scope_does_not_reopen_original_after_refusal(tmp_path):
     with NativeEvidenceScope() as scope:
         original = scope.for_source(session)
         NativeContextProof.read_evidence(session, INPUT_ID, evidence=original)
-        session.write_bytes(session.read_bytes().replace(b"separate", b"changed!"))
+        with session.open("ab") as output:
+            output.write(b'{"type":"message"')
         with pytest.raises(NativePiUnavailable):
             NativeContextProof.read_evidence(session, INPUT_ID, evidence=original)
         assert original.source.stream.closed and not original.entries
         with pytest.raises(NativePiUnavailable):
             NativeContextProof.read_evidence(session, INPUT_ID, evidence=scope.for_source(session))
     assert not scope.readers
+
+
+@pytest.mark.parametrize("rewrite", ["in_place", "replace"])
+def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, rewrite):
+    session = _evidence(tmp_path)
+    restored_input = "d" * 32
+    restored = b"".join(json.dumps(row).encode() + b"\n" for row in (
+        {"type": "session", "id": "restored", "version": 3},
+        {"type": "message", "id": "restored-entry", "message": {
+            "role": "user", "inputId": restored_input, "inputDigest": "e" * 64,
+            "content": [{"type": "text", "text": "restored sou"}],
+        }},
+    ))
+    with NativeEntry.open_input_evidence(session) as evidence:
+        header, entries = evidence.observe()
+        assert header.id == "sid" and tuple(NativeEntry.tracked_users(entries)) == (INPUT_ID,)
+        if rewrite == "in_place":
+            assert len(restored) == session.stat().st_size
+            session.write_bytes(restored)
+        else:
+            replacement = session.with_suffix(".restored")
+            replacement.write_bytes(restored)
+            replacement.chmod(0o600)
+            replacement.replace(session)
+        header, entries = evidence.observe()
+        assert header.id == "restored"
+        assert tuple(NativeEntry.tracked_users(entries)) == (restored_input,)
+        assert evidence.source.size == len(restored)
+
+
+@pytest.mark.parametrize("failure", [
+    NativePiUnavailable("source refused"), ValueError("bad value"),
+    TypeError("bad type"), KeyError("missing"),
+])
+def test_generic_observation_failure_does_not_reverify(tmp_path, monkeypatch, failure):
+    session = _evidence(tmp_path)
+    with NativeEntry.open_evidence(session) as evidence:
+        evidence.observe()
+        reverifications = []
+
+        def failed_rows():
+            raise failure
+            yield
+
+        monkeypatch.setattr(evidence.source, "rows", failed_rows)
+        monkeypatch.setattr(
+            evidence.source, "reverify_from_start", lambda: reverifications.append(True)
+        )
+        with pytest.raises(NativePiUnavailable):
+            evidence.observe()
+        assert not reverifications
+        assert evidence.source.stream.closed and not evidence.entries
+
+
+def test_launch_header_verifies_all_bytes_but_decodes_only_row_one(tmp_path, monkeypatch):
+    from agent_comms.fresh_private_session import FreshPrivateSession
+
+    session = _evidence(tmp_path)
+    with session.open("a") as output:
+        for index in range(200):
+            output.write(json.dumps({
+                "type": "message", "id": f"assistant-{index}",
+                "message": {"role": "assistant", "content": "retained" * 50},
+            }) + "\n")
+    decoded = []
+    original = PrivateEvidenceRead._decode_row
+
+    def counted(raw):
+        decoded.append(raw)
+        return original(raw)
+
+    monkeypatch.setattr(PrivateEvidenceRead, "_decode_row", staticmethod(counted))
+    FreshPrivateSession.require_launch_header(session, None)
+    assert len(decoded) == 1
+
+
+def test_retained_input_source_decodes_only_verified_append(tmp_path, monkeypatch):
+    session = _evidence(tmp_path)
+    decoded = []
+    original = PrivateEvidenceRead._decode_row
+
+    def counted(raw):
+        decoded.append(raw)
+        return original(raw)
+
+    monkeypatch.setattr(PrivateEvidenceRead, "_decode_row", staticmethod(counted))
+    with NativeEntry.open_input_evidence(session) as evidence:
+        evidence.observe()
+        assert len(decoded) == 2
+        evidence.observe()
+        assert len(decoded) == 2
+        with session.open("a") as output:
+            output.write(
+                json.dumps({"type": "compaction", "id": "new", "summary": "append"}) + "\n"
+            )
+        evidence.observe()
+        assert len(decoded) == 3
 
 
 def test_acquired_source_observes_new_context_generation(tmp_path):
@@ -53,9 +150,9 @@ def test_acquired_source_observes_new_context_generation(tmp_path):
         with session.open("a") as output:
             output.write(json.dumps({"type": "compaction", "id": "new", "summary": "observed append"}) + "\n")
         write_proof_rows(session, [{
-            "schema": 1, "type": "context_committed", "sessionId": "sid",
+            "schema": 2, "type": "context_committed", "sessionId": "sid",
             "inputId": INPUT_ID, "sessionEntryId": "entry",
-            "requestGeneration": 2, "llmContextDigest": "d" * 64,
+            "requestGeneration": 2, "llmContextDigest": "d" * 64, "committedAtMs": 1_791_964_800_002,
         }])
         current = NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
         assert current.request_generation == 2
@@ -66,7 +163,7 @@ def test_acquired_source_observes_new_context_generation(tmp_path):
 
 
 @pytest.mark.parametrize("damage", [
-    "prefix", "truncate", "replace", "symlink", "permissions", "ancestor_permissions",
+    "truncate", "symlink", "permissions", "ancestor_permissions",
     "duplicate_input", "non_user_input", "malformed_append", "proof",
 ])
 def test_acquired_source_never_reuses_evidence_after_damage(tmp_path, damage):
@@ -74,17 +171,8 @@ def test_acquired_source_never_reuses_evidence_after_damage(tmp_path, damage):
     with NativeEntry.open_evidence(session) as evidence:
         NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
         original = session.read_bytes()
-        if damage == "prefix":
-            observed = session.stat()
-            session.write_bytes(original.replace(b"separate", b"changed!"))
-            os.utime(session, ns=(observed.st_atime_ns, observed.st_mtime_ns))
-        elif damage == "truncate":
+        if damage == "truncate":
             session.write_bytes(original[:original.index(b"\n") + 1])
-        elif damage == "replace":
-            replacement = session.with_suffix(".new")
-            replacement.write_bytes(original)
-            replacement.chmod(0o600)
-            replacement.replace(session)
         elif damage == "symlink":
             original_path = session.with_suffix(".original")
             session.rename(original_path)
@@ -132,7 +220,7 @@ def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operati
             assert tuple(source.rows())[0]["id"] == "new"
         else:
             session.write_bytes(session.read_bytes().replace(b"separate", b"changed!"))
-            with pytest.raises(NativePiUnavailable, match="prefix changed"):
+            with pytest.raises(NativePiUnavailable, match="changed"):
                 tuple(rows)
             assert source.stream.closed
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import shlex
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar
@@ -17,8 +17,13 @@ from .child_process import Platform, ProcessIdentity
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, PathText
 from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV
+from .native_arguments import NativeArguments
 from .registry_document import RegistrySnapshot
 from .threads import Thread
+
+
+class CallingThreadUnavailable(RelationViolationError):
+    """The process environment does not declare its owner thread."""
 
 
 @dataclass(frozen=True)
@@ -68,8 +73,26 @@ class RestartEnvironment:
         metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True},
     )
     owner_key: ClassVar[str] = "AGENT_COMMS_THREAD"
-    binary_key: ClassVar[str] = "AGENT_COMMS_AGENT_BIN"
-    arguments_key: ClassVar[str] = "AGENT_COMMS_AGENT_ARGS"
+
+    @classmethod
+    def calling_thread(cls, environment: Mapping[str, str] = os.environ) -> str:
+        caller = environment.get(cls.owner_key)
+        if not caller:
+            raise CallingThreadUnavailable(
+                f"Calling thread requires {cls.owner_key}."
+            )
+        return caller
+
+    @classmethod
+    def called_by(
+        cls,
+        name: str,
+        canonicalize: Callable[[str], str],
+        *,
+        environment: Mapping[str, str] = os.environ,
+    ) -> bool:
+        caller = environment.get(cls.owner_key)
+        return caller is not None and canonicalize(caller) == name
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "native_config", self.absolute(self.native_config))
@@ -152,7 +175,7 @@ class RetainedOwnerLaunch:
         environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
         platform.require(process)
         route = environment.get(RestartEnvironment.owner_key)
-        if not route or not environment.get(RestartEnvironment.binary_key):
+        if not route or not environment.get(NativeArguments.binary_key):
             raise RelationViolationError("Owner launch configuration cannot be verified")
         # A worker's launch name may have been renamed since exec. The original
         # snapshot owns that relation; a PID or spelling match cannot grant it.
@@ -165,9 +188,9 @@ class RetainedOwnerLaunch:
 
     @property
     def binary(self) -> str:
-        return self.environment[RestartEnvironment.binary_key]
+        return self.environment[NativeArguments.binary_key]
 
     @property
     def arguments(self) -> tuple[str, ...] | None:
-        arguments = self.environment.get(RestartEnvironment.arguments_key)
+        arguments = self.environment.get(NativeArguments.arguments_key)
         return tuple(shlex.split(arguments)) if arguments is not None else None

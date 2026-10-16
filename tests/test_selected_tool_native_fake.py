@@ -45,8 +45,9 @@ send({'type':'response','id':state['id'],'command':'get_state','success':True,
 command = json.loads(sys.stdin.readline()); iid = command['inputId']
 entry = {'type':'message','id':'entry','message':{'role':'user','inputId':iid,'inputDigest':'b'*64}}
 file.write_text(json.dumps({'type':'session','id':'sid'})+'\\n'+json.dumps(entry)+'\\n')
-proof = {'schema':1,'type':'context_committed','sessionId':'sid','inputId':iid,
-    'sessionEntryId':'entry','requestGeneration':1,'llmContextDigest':'c'*64}
+proof = {'schema':2,'type':'context_committed','sessionId':'sid','inputId':iid,
+    'sessionEntryId':'entry','requestGeneration':1,'llmContextDigest':'c'*64,
+    'committedAtMs':1_791_964_800_001}
 write_proof_rows(file, [proof])
 os.chmod(file,0o600); os.chmod(str(file)+'.input-proof',0o600)
 send({'type':'response','id':command['id'],'command':'prompt','success':True})

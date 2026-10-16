@@ -7,7 +7,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .channel_input_batch import InputBatch
+from .channel_input_batch import InputBatch, SingleInputBatch
 from .messages import Message
 from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 
@@ -176,6 +176,22 @@ class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
     pass
 
 
+class SelectedOriginalInput(RoutedOriginalInput):
+    """The messages a selected turn answers: their assignments record them, not input rows."""
+
+    @classmethod
+    def answering(cls, prompt: str) -> SelectedOriginalInput:
+        return cls(
+            accepted_id=None,
+            goal_permission=InactiveGoalPermission(),
+            prompt=prompt,
+            original_display=None,
+            origins=(),
+            dependency=NoInputDependency(),
+            batch=SingleInputBatch(()),
+        )
+
+
 class DependencyOriginalInput(OriginalTurnInput, DirectInput):
     def allows_wait(self, wait: GoalWait | None, comms: Comms) -> bool:
         return self.dependency.allows(wait, comms, self.origins)
@@ -194,7 +210,7 @@ class FollowingTurnInput(TurnInputSource):
     keys: tuple[str, ...]
 
     def display(self, dispositions: InputDispositions, text: str) -> str:
-        row = dispositions.read().lookup(self.keys[0]) if self.keys else None
+        row = dispositions.lookup(self.keys[0]) if self.keys else None
         return row.source_text if row is not None and row.exists else text
 
     def defers_for_goal(self, original: Goal | None, current: Goal | None) -> bool:
@@ -211,3 +227,10 @@ class AcceptedFollowingInput(FollowingTurnInput, DirectInput):
 
 class RoutedFollowingInput(FollowingTurnInput, RoutedInput):
     pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliveredFollowingInput(AcceptedFollowingInput):
+    """A pending bus message handed to the recipient's running turn."""
+
+    origins: tuple[Message, ...]

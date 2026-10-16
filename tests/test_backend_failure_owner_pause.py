@@ -18,6 +18,7 @@ from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
 from test_acp import TestAgentTurn as GoalFixture
+from stored_inputs import stored_inputs
 
 
 @pytest.mark.parametrize("outcome", ["failed_done", "missing_done"])
@@ -38,7 +39,7 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         target="project",
         text="Do not replay this input",
     )
-    ledger_before = agent.inputs.dispositions.path.read_bytes()
+    ledger_before = stored_inputs(agent.inputs.dispositions.root)
     paused = None
     pause_bytes = None
 
@@ -84,15 +85,15 @@ async def test_failed_attempt_preserves_explicit_owner_pause(
         assert wired.registry.require("project").goal == paused
         assert (wired.root / "goal_pause_events.json").read_bytes() == pause_bytes
         assert wired.registry.require("project").goal.state.pause_source.instruction() is not None
-        assert agent.inputs.dispositions.path.read_bytes() == ledger_before
+        assert stored_inputs(agent.inputs.dispositions.root) == ledger_before
         assert (
-            agent.inputs.dispositions.read().rows["acp:earlier-uncertain"].declared_name
+            stored_inputs(agent.inputs.dispositions.root).rows["acp:earlier-uncertain"].declared_name
             == "unknown"
         )
-        generation = agent.turns.goals.goal_store.snapshot(goal.id)
+        generation = wired.goals.open_goal_store().snapshot(goal.id)
         assert generation.lifecycle == BlockedGeneration() and generation.attempt_id is not None
         with pytest.raises(UnresolvedAttemptError):
-            agent.turns.goals.goal_store.resume(goal.id, generation.number)
+            wired.goals.open_goal_store().resume(goal.id, generation.number)
         await agent.turns.goals.schedule_goal("project")
         assert not agent.inputs.pending_turns.get("project")
         diagnostics = list((wired.root / "diagnostics").glob("*.json"))

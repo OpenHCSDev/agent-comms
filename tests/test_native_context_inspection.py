@@ -20,6 +20,7 @@ from agent_comms.native_entries import NativeEntry
 from agent_comms.task_sources import CurrentTaskScopeSelection, OriginalTaskChange
 from agent_comms.tools import tool_catalog
 from delivery_owner_fixture import canonical_agent
+from stored_inputs import stored_inputs
 
 pytest_plugins = ("test_backend_native_lifecycle",)
 
@@ -124,7 +125,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
         goal = owner._comms.goals.update_goal(thread.name, SetGoalAction(
             text="Preserve the exact retained source; never replay an uncertain input.",
             expect=GoalPrecondition(expected_owner=thread.require_process())),
-            actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())
+            actor=OwnerInvocable)
         owner._comms.goals.update_goal(thread.name, StandbyGoalAction(
             wait_for=(peer.name,), expect=GoalPrecondition(goal_id=goal.id)),
             actor=RuntimeInvocable)
@@ -195,7 +196,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
             # merely to satisfy this manual-input oracle.
             assert {part.kind for part in contributors} >= {'coordination', 'user_input', 'user_followup'}
             assert all(part.provenance for part in contributors)
-            stored = InputDispositions(owner._comms.root / InputDispositions.filename).read()
+            stored = stored_inputs(owner._comms.root)
             terminals = tuple(stored.lookup(original.key) for original in originals)
             assert all(item.has_started for item in terminals)
             assert len({item.native_id for item in terminals}) == len(originals)
@@ -267,13 +268,13 @@ async def test_context_manifest_native_acp_and_cli_continuous(
             expect=GoalPrecondition(goal_id=goal.id)), actor=RuntimeInvocable)
         replacement = owner._comms.goals.update_goal(thread.name, SetGoalAction(
             text='Replacement acceptance scope', expect=GoalPrecondition(expected_owner=thread.require_process())),
-            actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())
+            actor=OwnerInvocable)
         owner._comms.goals.update_goal(thread.name, StandbyGoalAction(
             wait_for=(peer.name,), expect=GoalPrecondition(goal_id=replacement.id)), actor=RuntimeInvocable)
         assert replacement.id != goal.id
         assert not original_origin.applies(owner._comms.registry.require(thread.name),
             owner._comms.registry.snapshot())
-        assert InputDispositions(owner._comms.root / InputDispositions.filename).read().lookup(
+        assert stored_inputs(owner._comms.root).lookup(
             originals[-1].key).origin == original_origin
         (output / 'goal-boundaries.json').write_text(json.dumps({
             'absent': FieldCodec.encode(absent_origin.goal), 'present': FieldCodec.encode(original_origin.goal),

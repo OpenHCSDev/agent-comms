@@ -5,7 +5,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-SESSION_SHA = "6328da38d5d037b8ad86c934b3cfda26f760eca218f130daa9b3edff4d47baed"
+SESSION_SHA = "65f919c02920b68ff359f26d149a167bf0b3ca041f7fbd578087a2e34c571130"
 RPC_SHA = "6f5438c028032f3bc212b6270a1acf9d3e5d22ce5837b85ff5a6fea6c240c76a"
 LOOP_SHA = "7469aebae3badc125087c55843130fe44c2ea3b68ea1b757c884469dd355d5f4"
 ABORT_AFTER_TOOLS = """\

@@ -43,6 +43,8 @@ from .turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
+from .native_arguments import NativeArguments
+from .pi_vocabulary import ServiceTier
 from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, ThreadDeleted
@@ -568,12 +570,12 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
             elif isinstance(scalar, type) and issubclass(scalar, Enum):
                 options["choices"] = [kind.value for kind in scalar]
             elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
-                options["choices"] = scalar.names()
+                options.setdefault("choices", scalar.names())
             elif (
                 get_origin(scalar) is type and get_args(scalar)
                 and issubclass(get_args(scalar)[0], DeclaredFamily)
             ):
-                options["choices"] = get_args(scalar)[0].names()
+                options.setdefault("choices", get_args(scalar)[0].names())
             if metadata["parser_default"] is not MISSING:
                 options["default"] = metadata["parser_default"]
             elif metadata["parser_default_factory"] is not MISSING:
@@ -624,17 +626,6 @@ class ToolsCliCommand(CliCommand):
         from .tools import tool_catalog
 
         return {"tools": tool_catalog()}
-
-
-@dataclass(frozen=True, kw_only=True)
-class RepairInputRoutingCliCommand(CliCommand, declared_name="repair-input-routing"):
-    help = "Preview historical native-input attribution repair"
-    persist: bool = option(
-        "--apply", help="Persist verified input routing", default=False, wire_name="apply"
-    )
-
-    def apply(self, ctx: Comms) -> Any:
-        return ctx.transcripts.repair_input_routing(dry_run=not self.persist)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -701,7 +692,9 @@ class SendCliCommand(CliCommand):
     sender: str = option("--from")
     target: str = option("--to")
     body: str = option("--body")
-    type: Type[MessageKind] = option("--type", default=InfoKind)
+    type: Type[MessageKind] = option(
+        "--type", default=InfoKind, choices=MessageKind.sendable_names()
+    )
     report: dict[str, Any] | None = option(
         "--report", help="Change report fields as a JSON object", default=None,
         normalize=_report_fields,
@@ -732,12 +725,17 @@ class UserSendCliCommand(CliCommand, declared_name="user-send"):
 
 @dataclass(frozen=True, kw_only=True)
 class ConfigureCliCommand(CliCommand, declared_name="configure"):
-    help = "Set a stopped thread's model or thinking level for its next start"
+    help = "Set a stopped thread's model, thinking level, or service tier for its next start"
     name: str = option("--name")
     model: str | None = option("--model", default=None)
     thinking: str | None = option("--thinking", default=None)
+    service_tier: ServiceTier | None = option("--service-tier", default=None)
 
     def apply(self, ctx: Comms) -> Any:
+        import asyncio
+
+        from .config_options import ConfigOptions
+        from .owner_launch import RestartEnvironment
         from .pi_vocabulary import ThinkingLevel
         from .errors import RelationViolationError
 
@@ -746,9 +744,29 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             raise RelationViolationError(
                 f"{thread.name} is running; change its settings through its session")
         level = ThinkingLevel.decode(self.thinking).declared_name if self.thinking is not None else None
-        updated = ctx.threads.set_thread_configuration(thread, model=self.model, thinking_level=level)
-        return {"configured": updated.name, "model": updated.model,
-                "thinking_level": ThinkingLevel.optional_name(updated.thinking_level)}
+        candidate = thread.with_model_configuration(
+            model=self.model,
+            thinking_level=level,
+            service_tier=self.service_tier,
+        )
+        catalogs = ConfigOptions(
+            NativeArguments.configured_binary(),
+            NativeArguments.configured(),
+            RestartEnvironment.inherit(os.environ),
+        )
+        asyncio.run(catalogs.validate(candidate))
+        updated = ctx.threads.set_thread_configuration(
+            thread,
+            model=candidate.model,
+            thinking_level=ThinkingLevel.optional_name(candidate.thinking_level),
+            service_tier=candidate.service_tier,
+        )
+        return {
+            "configured": updated.name,
+            "model": updated.model,
+            "thinking_level": ThinkingLevel.optional_name(updated.thinking_level),
+            "service_tier": updated.service_tier.value,
+        }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -780,14 +798,8 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
 
     def original_source(self, ctx: Comms):
         from .input_disposition import InputDispositions
-        from .errors import RelationViolationError
 
-        with InputDispositions(ctx.root / InputDispositions.filename).reading() as inputs:
-            try:
-                original = inputs.rows[self.source]
-            except KeyError as error:
-                raise RelationViolationError("Constraint lacks its original input") from error
-            return original.context_provenance().require_human_input()
+        return InputDispositions(ctx.root).lookup(self.source).context_provenance().require_human_input()
 
     def pin_original(self, ctx: Comms, source):
         return ctx.messaging.pin_input_constraint(self.thread, source, worktree=self.worktree)
@@ -924,7 +936,12 @@ class AckCliCommand(CliCommand):
     thread: str = option("--thread")
 
     def apply(self, ctx: Comms) -> Any:
-        return {"acknowledged": ctx.messaging.acknowledge(self.thread)}
+        messages = ctx.bus.inbox(self.thread)
+        return {
+            "acknowledged": ctx.messaging.acknowledge(
+                self.thread, tuple(message.reference for message in messages)
+            )
+        }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1138,6 +1155,16 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
+    help = "Report declared DDL differences in existing SQLite stores (including retained copies)"
+
+    def apply(self, ctx: Comms) -> Any:
+        from .schema_report import StoreSchemaReport
+
+        return FieldCodec.encode(StoreSchemaReport.scan(ctx))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     help = "Commit and push a thread's uncommitted worktree changes as a checkpoint branch"
     name: str = option("--name")
@@ -1145,13 +1172,17 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     def apply(self, ctx: Comms) -> Any:
         import subprocess
 
-        worktree = Path(ctx.registry.require(self.name).worktree)
+        worktree = Path(ctx.registry.require(self.name).worktree).resolve()
         branch = f"checkpoint/{self.name}"
+        # Git requires an absolute ceiling. Stop before entering the declared
+        # worktree's parent, never checkpoint an ancestor repository.
+        environment = {**os.environ, "GIT_CEILING_DIRECTORIES": str(worktree.parent)}
 
         def git(*arguments: str, timeout: int = 60):
             try:
                 done = subprocess.run(["git", "-C", str(worktree), *arguments],
-                                      capture_output=True, text=True, timeout=timeout)
+                                      capture_output=True, text=True, timeout=timeout,
+                                      env=environment)
             except (OSError, subprocess.TimeoutExpired):
                 return 1, "", ""
             return done.returncode, done.stdout, done.stderr
@@ -1319,7 +1350,7 @@ class ForkCliCommand(CliCommand):
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
     pi_bin: str = option(
-        "--pi-bin", default_factory=lambda: os.environ.get("AGENT_COMMS_AGENT_BIN", "pi")
+        "--pi-bin", default_factory=NativeArguments.configured_binary
     )
 
     @classmethod
@@ -1380,16 +1411,25 @@ class ContextCliCommand(CliCommand):
             return {"scope": "historical-imported-instructions; not current or recorded native context",
                     "sources": ImportedSessionMetadata.sources_for_owner(ctx.registry, owner)}
         if self.turn is not None or self.diff:
-            manifests = ctx.bus.log.context_manifests(self.thread, ctx.registry)
-            selected = tuple(
-                manifest for manifest in manifests
-                if self.turn is None or manifest.turn.matches_generation(self.turn)
-            )
+            selected = []
+            cursor = None
+            while True:
+                page = ctx.bus.log.context_manifest_page(self.thread, ctx.registry, cursor=cursor)
+                for resource in reversed(page.resources):
+                    manifest = resource.value
+                    if self.diff and selected:
+                        if not selected[0].turn.same_recording(manifest.turn):
+                            return selected[0].changed_since(manifest)
+                    elif self.turn is None or manifest.turn.matches_generation(self.turn):
+                        selected.append(manifest)
+                if not page.has_older():
+                    break
+                cursor = page.older
             if not selected:
                 raise ValueError("No original context manifest exists for the requested turn")
             if self.diff:
-                return selected[-1].changed_from_history(manifests)
-            return {"manifests": selected,
+                raise ValueError("No preceding recorded turn exists for comparison")
+            return {"manifests": tuple(reversed(selected)),
                     "text_recorded": all(manifest.public_text_recorded for manifest in selected)}
         import asyncio
         from .field_codec import FieldCodec

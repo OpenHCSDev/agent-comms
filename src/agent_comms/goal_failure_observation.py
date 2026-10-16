@@ -218,7 +218,7 @@ def read_failed_turn_projection(
     if failure := _preflight(path):
         return unavailable(failure)
     try:
-        with CoordinationStore.observing(path, lock_timeout=0.25) as conn:
+        with CoordinationStore.observing(path) as conn:
             from .goal_attempts import (
                 AttemptRecord,
                 Generation,

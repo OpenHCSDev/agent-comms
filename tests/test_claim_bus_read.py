@@ -9,7 +9,6 @@ the owner's event loop with the wire, bus and registry locks held.
 from __future__ import annotations
 
 import hashlib
-import json
 import os
 import sys
 from contextlib import contextmanager
@@ -24,7 +23,6 @@ from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.claim_admission import (
     publish_selected_resource_claim,
-    release_selected_resources,
     write_selected_claimed_file,
 )
 from agent_comms.cohort_schema import install_private_cohort_schema
@@ -34,9 +32,9 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
-from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.read_basis import DMDisplayScope
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.thread_identity import TurnId, TurnIdentity
 from agent_comms.threads import Thread
@@ -73,7 +71,7 @@ def record_context(comms: Comms, name: str, generation: int) -> None:
 @contextmanager
 def selected_turn():
     """Alice runs a selected turn for one message; context rows surround it."""
-    with TemporaryDirectory(prefix="ac-claim-read-", dir="/var/tmp") as dirname:
+    with TemporaryDirectory(prefix="ac-claim-read-") as dirname:
         root = Path(dirname) / "wire"
         root.mkdir(mode=0o700)
         worktree = Path(dirname) / "work"
@@ -136,6 +134,18 @@ def selected_turn():
             yield comms, store, admission, resource
 
 
+def settle_failed(store):
+    from agent_comms.attempt_states import AttemptFailedAttempt
+
+    with store.session.settlement() as boundary:
+        snapshot = store.snapshots.get("execution")
+        snapshot.attempt.advance(
+            store.session, type(snapshot.attempt.lifecycle), backend_done=True,
+            process_dead=True, progress=False, reason_code=None,
+        )
+        store.snapshots.get("execution").settle(store.session, AttemptFailedAttempt(), None, boundary)
+
+
 def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.MonkeyPatch) -> None:
     with selected_turn() as (comms, store, admission, resource):
         log = comms.bus.log
@@ -154,7 +164,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
             ) == claimed
             write_selected_claimed_file(comms, store, admission, "Alice", claimed, b"value = 2\n")
             record_context(comms, "Alice", 3)
-            release_selected_resources(comms, store, admission, "Alice", (claimed,))
+            settle_failed(store)
         assert resource.read_bytes() == b"value = 2\n"
         # The strict whole-bus reader agrees with what the claim path left.
         assert dict(log.claim_projection()) == {}
@@ -162,6 +172,21 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
             ((str(resource),), 0), ((), 1),
         ]
+        assert all(message.type is ClaimNoticeKind for message in claims)
+        snapshot = comms.registry.snapshot()
+        dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
+        assert comms.bus.conversation_page(dm_scope).messages == ()
+        raw_channel = comms.views.channel_history_page("#team").messages
+        assert [message.body for message in raw_channel] == [
+            "@Alice investigate", "Released files after a failed turn: module.py",
+        ]
+        channel = comms.views.channel_display_page("#team").messages
+        assert [message.body for message in channel] == ["@Alice investigate"]
+        assert all(message.notification_references() for message in channel)
+        with pytest.raises(ValueError, match="not generically sendable"):
+            comms.messaging.send_message(
+                "Alice", "sender", "Invented claim notice", ClaimNoticeKind
+            )
 
 
 def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
@@ -170,7 +195,8 @@ def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
             comms, store, admission, "Alice", ExistingFileClaim(resource)
         )
         assert dict(comms.bus.log.claim_projection()) == {str(resource): claimed}
-        release_selected_resources(comms, store, admission, "Alice", (claimed,))
+        comms.messaging.send_message("Alice", "sender", "Explicit release",
+                                     releases=(str(resource),))
         with pytest.raises(IdentityConflict, match="already consumed"):
             publish_selected_resource_claim(
                 comms, store, admission, "Alice", ExistingFileClaim(resource)
@@ -205,9 +231,7 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
             comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
             comms.messaging.send_message("sender", session, "Change the value")
             native.provider.tool_call = ("write", {"path": str(target), "content": "value = 2\n"})
-            native.provider.text = json.dumps(FieldCodec.encode(
-                (Message(session, "sender", "Changed it.", InfoKind, timestamp=0),)
-            ))
+            native.provider.text = "Changed it."
 
             def whole_bus(*_, **__):
                 raise AssertionError("the turn read every row of the bus")
@@ -224,7 +248,7 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
             ] == [
                 ("sender", session, "Change the value"),
                 (session, "sender", "Resource claim admitted"),
-                (session, "sender", "Completed coding tool claims released"),
                 (session, "sender", "Changed it."),
+                (session, "sender", "Released files after a completed turn: module.py"),
             ]
             assert dict(comms.bus.log.claim_projection()) == {}

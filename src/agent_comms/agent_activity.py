@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import time
-from abc import abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -14,6 +13,8 @@ from .registration import Registration
 from .native_input_owner import RegistryOwner
 
 if TYPE_CHECKING:
+    from .agent_events import RuntimeInfoObservation
+    from .notification_assignment import AssignmentProgress
     from .presentation import MessageNotification
 from .activity import (
     Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity,
@@ -39,9 +40,6 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return False
 
-    @abstractmethod
-    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification: ...
-
     def after_inbox_read(self, notification, source, reads, document, snapshot):
         return notification
 
@@ -50,24 +48,20 @@ class RecipientActivity(DeclaredFamily, affix="RecipientActivity"):
             source.message, notification.recipient_identity, snapshot, document=document
         )
 
-    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
-        if not self.turn_started_by(updated_at_ms):
-            return replace(notification, state="Paused", busy=False, priority=3,
-                detail="A response was selected, but no matching active turn is running. "
-                       "Outcome is unconfirmed; do not automatically retry.")
-        return notification
+    def selected_response(
+        self,
+        notification: MessageNotification,
+        updated_at_ms: int,
+        progress: AssignmentProgress,
+    ) -> MessageNotification:
+        return progress.selected_notification(
+            notification, busy=self.turn_started_by(updated_at_ms)
+        )
 
 
 @dataclass(frozen=True)
 class RecordedRecipientActivity(RecipientActivity):
     """Durable history supplies no current process, readiness or inbox check."""
-
-    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
-        return notification
-
-    def selected_response(self, notification: MessageNotification, updated_at_ms: int) -> MessageNotification:
-        return replace(notification, state="Response selected", busy=False, priority=3,
-            detail="The recorded assignment selected a response; completion is not recorded.")
 
     def displayed_recipient(self, notification, source, reads, document, snapshot):
         return reads.historical_displayed_recipient(
@@ -79,30 +73,24 @@ class RecordedRecipientActivity(RecipientActivity):
 class ExternalRecipientActivity(RecipientActivity):
     incarnation: ThreadIncarnation
 
-    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
-        from .presentation import MessageNotification
-
-        return MessageNotification(notification.recipient_identity, "Waiting for agent",
-            "External CLI participant checks its inbox; no native prompt transport is attached.",
-            priority=4)
-
     def after_inbox_read(self, notification, source, reads, document, snapshot):
         if self.incarnation.current(snapshot) and source.message.seq in reads.seen_sequences(
             self.incarnation.name, snapshot, document=document
         ):
-            return replace(notification, state="Checked by CLI",
-                           detail="The external participant acknowledged this original inbox message.",
-                           priority=2, busy=False)
+            return replace(
+                notification,
+                state="Acknowledged",
+                detail="",
+                priority=2,
+                busy=False,
+                changed=True,
+            )
         return notification
 
 
 @dataclass(frozen=True)
 class UnavailableRecipientActivity(RecipientActivity):
-    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
-        from .presentation import MessageNotification
-
-        return MessageNotification(notification.recipient_identity, "Waiting for agent",
-            "Agent is stopped; this message has not been checked.", priority=4)
+    pass
 
 
 @dataclass(frozen=True)
@@ -112,18 +100,6 @@ class LiveRecipientActivity(RecipientActivity):
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         return self.thread.turn_started_by(updated_at_ms)
-
-    def pending_notification(self, notification: MessageNotification, *, blocked_by_prior: bool) -> MessageNotification:
-        from .presentation import MessageNotification
-
-        if blocked_by_prior:
-            notification = MessageNotification(notification.recipient_identity,
-                "Queued behind current turn" if self.thread.executing else "Blocked by earlier turn",
-                "The agent is finishing an earlier turn; this message has not started."
-                if self.thread.executing else "An earlier turn has an unresolved outcome. This message "
-                "is saved and has not started; the earlier turn needs recovery, not a resend.")
-        return self.activity.readiness.pending_notification(notification)
-
 
 class AgentActivity:
     def __init__(self, root: Path, registry: Registration):
@@ -137,8 +113,7 @@ class AgentActivity:
         if state.retires_thread:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
         with _store_lock(self._wire_lock_path, shared=True):
-            canonical = self.registry.require(thread).name
-            self._emit_activity(Activity(thread=canonical, state=state, detail=detail))
+            self._emit_activity(Activity.create(thread, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot | None = None) -> ObservedActivity:
         snapshot = snapshot or self.registry.snapshot()
@@ -150,10 +125,7 @@ class AgentActivity:
     def _observed(self, participant: Thread, owner: OwnerIdentity,
                   event: Activity) -> ObservedActivity:
         activity = ObservedActivity.acquire(event, owner)
-        if participant.turn_state.busy:
-            phase = participant.turn_state.phase
-            return replace(activity, state=phase.activity_state, detail=phase.summary)
-        return activity
+        return participant.execution.project_activity(participant, activity)
 
     def all_activity(self, *, snapshot: RegistrySnapshot | None = None) -> Mapping[str, ObservedActivity]:
         snapshot = snapshot or self.registry.snapshot()
@@ -182,11 +154,15 @@ class AgentActivity:
         return observations
 
     def _emit_activity(self, activity: Activity) -> None:
-        current = self.activity_of(activity.thread)
-        self.activity.emit(replace(activity, diagnostic=current.readiness.source_diagnostic()))
+        snapshot = self.registry.snapshot()
+        owner = snapshot.owner_identity(activity.thread)
+        activity = replace(activity, thread=owner.incarnation.name)
+        self.activity.update(activity.thread, lambda current: replace(
+            activity, diagnostic=ObservedActivity.acquire(current, owner).readiness.source_diagnostic(),
+        ))
 
     def set_drain_diagnostic(
-        self, thread: str, owner: OwnerIdentity, diagnostic: DrainDiagnostic | None,
+        self, thread: str, owner: OwnerIdentity, diagnostic: DrainDiagnostic,
         *, source_error: BaseException | None = None,
     ) -> bool:
         """Persist one transition, fenced to the observer's exact owner incarnation."""
@@ -194,7 +170,9 @@ class AgentActivity:
             snapshot = self.registry.snapshot()
             if snapshot.owner_identity(thread) != owner:
                 return False
-            if diagnostic is not None and source_error is not None:
+            if diagnostic.owner != owner:
+                raise RelationViolationError("Drain diagnostic belongs to another owner.")
+            if source_error is not None:
                 from .diagnostics import record_drain_failure
 
                 path = record_drain_failure(
@@ -202,13 +180,42 @@ class AgentActivity:
                     thread=thread, diagnostic=diagnostic, source_error=source_error,
                 )
                 diagnostic = replace(diagnostic, reason=f"{source_error} · Diagnostic: {path}")
-            current = self.activity_of(thread)
-            if current.readiness.source_diagnostic() == diagnostic:
+            participant = snapshot.threads[owner.incarnation.name]
+
+            def record(event: Activity) -> Activity | None:
+                current = self._observed(participant, owner, event)
+                if current.readiness.source_diagnostic() == diagnostic:
+                    return None
+                return replace(current.source_event(), diagnostic=diagnostic, timestamp=time.time())
+
+            return self.activity.update(participant.name, record)
+
+    def recover_drain(
+        self, thread: str, owner: OwnerIdentity, observed: ObservedActivity,
+    ) -> bool:
+        """Clear only the original failure observed before a successful drain.
+
+        Another observer can record a different error while this drain awaits
+        work. A later occurrence of the same error also has its own original
+        observation time; neither may be cleared by this earlier operation.
+        """
+        expected = observed.readiness.source_diagnostic()
+        if expected is None or expected.owner != owner:
+            return False
+        with _store_lock(self._wire_lock_path, shared=True):
+            snapshot = self.registry.snapshot()
+            if snapshot.owner_identity(thread) != owner:
                 return False
-            self.activity.emit(
-                replace(current.source_event(), diagnostic=diagnostic, timestamp=time.time())
-            )
-            return True
+            participant = snapshot.threads[owner.incarnation.name]
+
+            def recover(event: Activity) -> Activity | None:
+                current = self._observed(participant, owner, event)
+                diagnostic = current.readiness.source_diagnostic()
+                if diagnostic != expected or diagnostic.recorded_at != expected.recorded_at:
+                    return None
+                return replace(current.source_event(), diagnostic=None, timestamp=time.time())
+
+            return self.activity.update(participant.name, recover)
 
     def begin_turn(
         self, name: str, turn_id: str, detail: str = "", routing: TurnRouting | None = None
@@ -219,19 +226,30 @@ class AgentActivity:
             lease = leased.turn_lease
             assert lease is not None
             try:
-                self.registry.transition_turn(lease, PreparingPhase(detail[:200]))
+                phase = PreparingPhase(detail)
+                self.registry.transition_turn(lease, phase)
+                self._record_turn_activity(leased.name, (phase,))
             except BaseException:
                 self.registry.release_turn(lease)
                 raise
             return RegistryOwner(thread=leased, admission_generation=lease.admission_generation)
 
+    def _record_turn_activity(self, name: str, phases: Iterable[TurnPhase]) -> None:
+        """Changed phases are real activity events, just like CLI status reports."""
+        for phase in phases:
+            self._emit_activity(phase.activity_event(name))
+
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, shared=True):
-            return self.registry.transition_turn(lease, phase)
+            effects = self.registry.transition_turn(lease, phase)
+            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
+            return effects
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, shared=True):
-            return self.registry.observe_native_phase(lease, phase)
+            effects = self.registry.observe_native_phase(lease, phase)
+            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
+            return effects
 
     def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:
         """Persist this lease's terminal identity before publishing idle activity."""
@@ -239,32 +257,14 @@ class AgentActivity:
             released, fence = self.registry.release_turn(lease)
             if not released:
                 return None
-            name = self.registry.canonical_name(lease.identity.incarnation.name)
-            self._emit_activity(Activity(name, ActivityState.IDLE))
+            self._emit_activity(Activity(lease.identity.incarnation.name, ActivityState.IDLE))
             return fence
 
-    def set_agent_info(
-        self,
-        thread: str,
-        *,
-        model: str | None = None,
-        session_name: str | None = None,
-        context_used: int | None = None,
-        context_size: int | None = None,
-    ) -> None:
-        """Record the latest model and context metadata for a thread."""
+    def observe_runtime_info(self, thread: str, observation: RuntimeInfoObservation) -> None:
+        """Serialize the original observation with thread rename/retirement."""
         with _store_lock(self._wire_lock_path, shared=True):
             canonical = self.registry.require(thread).name
-            self.runtime_info.set(
-                AgentRuntimeInfo(
-                    thread=canonical,
-                    timestamp=time.time(),
-                    model=model,
-                    session_name=session_name,
-                    context_used=context_used,
-                    context_size=context_size,
-                )
-            )
+            self.runtime_info.observe(canonical, time.time(), observation)
 
     def agent_info_of(self, thread: str) -> AgentRuntimeInfo | None:
         return self.runtime_info.read().get(self.registry.require(thread).name)

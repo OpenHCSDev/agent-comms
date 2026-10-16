@@ -13,6 +13,7 @@ from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 from test_backend_native_lifecycle import native_backend
+from stored_inputs import stored_inputs
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -23,9 +24,9 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
     native.provider.response_gate = release
     async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
         comms = owner._comms
-        store = owner.turns.goals.open_goal_store()
+        store = comms.goals.open_goal_store()
         goal = comms.goals.update_goal(
-            session, SetGoalAction(text="Finish native retry objective"), owner_store=store
+            session, SetGoalAction(text="Finish native retry objective")
         )
         reservation = store.reserve(goal.id, 1)
         store.claim_launch(reservation)
@@ -44,7 +45,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             admission=comms.registry.snapshot().admission_generations[session],
             target=session, text="Uncertain old native input must never replay",
         )
-        original = owner.inputs.dispositions.read().lookup("acp:old-native-unknown")
+        original = stored_inputs(owner.inputs.dispositions.root).lookup("acp:old-native-unknown")
         proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
         await proxy.subscribe()
         turn = asyncio.create_task(proxy.request(
@@ -89,7 +90,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             assert not owner.turns.turn_state(session).busy
             assert not owner.inputs.backend_inboxes
             assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
-            assert owner.inputs.dispositions.read().lookup(original.key) == original
+            assert stored_inputs(owner.inputs.dispositions.root).lookup(original.key) == original
             assert all(original.source_text not in json.dumps(request) for request in native.provider.requests)
         finally:
             release.set()

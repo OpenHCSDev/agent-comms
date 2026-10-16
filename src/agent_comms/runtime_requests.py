@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Self
 from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from .private_bus_checkpoint import ContextManifestReference
 from .goal_actions import GoalAction
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
@@ -142,7 +143,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
             ctx.name,
             client=ctx.client,
         )
-        await agent.turns.replay_turn_state(ctx.session_id, client=ctx.client)
+        await agent.turns.publish_turn_state(ctx.session_id, client=ctx.client)
         await agent.inputs.replay_unknown_inputs(ctx.session_id, client=ctx.client)
         async with agent.sessions.config.session_options(ctx.name) as config_options:
             metadata = await agent.sessions.metadata(ctx.name)
@@ -403,12 +404,13 @@ class ContextCoreSourceRuntimeRequest(ContextCoreRuntimeRequest):
 class RecordedContextRuntimeRequest(ResultRuntimeRequest):
     turn: RecordedContextTurn
     request_id: str
+    record: ContextManifestReference
     segment: int
 
     def read_manifest(self, ctx):
         comms = ctx.server.agent._comms
-        history = comms.bus.log.context_manifests(ctx.name, comms.registry)
-        return ContextManifest.for_request(history, self.turn, self.request_id)
+        manifest = self.record.read(comms.bus.log, ctx.name, comms.registry)
+        return ContextManifest.for_request((manifest,), self.turn, self.request_id)
 
     async def manifest(self, ctx):
         return await Coordination.run_worker(partial(self.read_manifest, ctx))

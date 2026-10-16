@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
-from .activity import ActivityState
+from .activity import Activity, ActivityState
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -20,6 +20,14 @@ class StallExempt:
         return self
 
 
+class LabeledActivity:
+    """A distinct operation includes its phase label in activity presentation."""
+
+    @property
+    def activity_detail(self) -> str:
+        return self.summary
+
+
 @dataclass(frozen=True)
 class TurnPhase(DeclaredFamily, affix="Phase"):
     """One phase owns watchdog behavior and its public control projection.
@@ -29,6 +37,9 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     """
     detail: str = ""
     stall_reason: ClassVar[str] = "model_no_progress"
+    # An excursion (tool, retry, compaction) runs without RPC events; an input
+    # queued behind it cannot start yet, so its start budget waits and the
+    # excursion's own backstop bounds the stall instead.
     pauses_input_clock: ClassVar[bool] = False
     busy: ClassVar[bool] = True
     accepts_prompt: ClassVar[bool] = False
@@ -37,6 +48,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     can_cancel: ClassVar[bool] = True
     # A turn released in this phase still owes the turn after its project change.
     keeps_project_resume: ClassVar[bool] = True
+    # Refusal reports wait while a retry excursion owns the turn's outcome.
+    holds_refusal_reports: ClassVar[bool] = False
     activity_state: ClassVar[ActivityState] = ActivityState.THINKING
     label: ClassVar[str] = "Waiting for model"
 
@@ -44,12 +57,21 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def summary(self) -> str:
         return self.detail or self.label
 
+    @property
+    def activity_detail(self) -> str:
+        return self.detail
+
+    def activity_event(self, thread: str) -> Activity:
+        """Record this phase's declared activity, without observation-only readiness."""
+        return Activity.create(thread, self.activity_state, self.activity_detail)
+
+    def project_activity(self, activity):
+        """Display this phase while preserving the acquired drain readiness."""
+        return activity.with_status(self.activity_state, self.activity_detail)
+
     def model_wait(self, backstop: float | None) -> float | None:
         """Core's no-event backstop for this phase; None where nothing bounds it here."""
         return backstop
-
-    def described(self, detail: str) -> TurnPhase:
-        return replace(self, detail=detail[:200])
 
     def input_started(self) -> TurnPhase:
         return ModelWaitPhase()
@@ -94,11 +116,17 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def model_progress(self) -> TurnPhase:
         return ModelWaitPhase()
 
+    def response_output(self) -> TurnPhase:
+        """Response deltas are progress evidence, not a persisted control phase."""
+        return self
+
     def stalled(self, accepted: bool) -> TurnPhase:
         return self if accepted else PromptAcceptancePhase()
 
 
 class Excursion(TurnPhase):
+    pauses_input_clock = True
+
     @classmethod
     @abstractmethod
     def starts(cls, event: pi.PiEvent) -> bool:
@@ -113,6 +141,10 @@ class PromptAcceptancePhase(TurnPhase):
 class PreparingPhase(TurnPhase):
     label = "Preparing input"
 
+    def project_activity(self, activity):
+        projected = super().project_activity(activity)
+        return projected.readiness.preparing_activity(projected)
+
 
 class IdlePhase(TurnPhase):
     busy = False
@@ -124,7 +156,7 @@ class IdlePhase(TurnPhase):
     label = "Ready"
 
 
-class CancellingPhase(TurnPhase):
+class CancellingPhase(LabeledActivity, TurnPhase):
     accepts_followup = False
     keeps_project_resume = False
     label = "Cancelling"
@@ -133,7 +165,7 @@ class CancellingPhase(TurnPhase):
     def observed(self, phase: TurnPhase) -> TurnPhase:
         return self
 
-class ShutdownPhase(TurnPhase):
+class ShutdownPhase(LabeledActivity, TurnPhase):
     """Native shutdown cannot admit follow-ups or resume model activity."""
 
     accepts_followup = False
@@ -145,7 +177,7 @@ class ShutdownPhase(TurnPhase):
         return self
 
 
-class PublishingPhase(TurnPhase):
+class PublishingPhase(LabeledActivity, TurnPhase):
     accepts_followup = False
     label = "Finishing turn"
     can_cancel = False
@@ -159,13 +191,13 @@ class ModelWaitPhase(TurnPhase):
         return self
 
 
-class SettlingStatsPhase(TurnPhase):
+class SettlingStatsPhase(LabeledActivity, TurnPhase):
     accepts_followup = False
     label = "Finishing native statistics"
 
 
 @dataclass(frozen=True)
-class CompactionPhase(StallExempt, Excursion):
+class CompactionPhase(LabeledActivity, StallExempt, Excursion):
     resume: TurnPhase = field(default_factory=ModelWaitPhase)
 
     @classmethod
@@ -180,7 +212,6 @@ class CompactionPhase(StallExempt, Excursion):
     def ends(self, event: pi.PiEvent) -> bool:
         from . import pi_events as pi
         return isinstance(event, pi.CompactionEnd)
-    pauses_input_clock = True
     activity_state = ActivityState.WORKING
     label = "Compacting context"
 
@@ -205,7 +236,7 @@ class CompactionPhase(StallExempt, Excursion):
         return self.resume
 
 
-class ProviderRetryPhase(StallExempt, Excursion):
+class ProviderRetryPhase(LabeledActivity, StallExempt, Excursion):
     @classmethod
     def starts(cls, event: pi.PiEvent) -> bool:
         from . import pi_events as pi
@@ -216,9 +247,12 @@ class ProviderRetryPhase(StallExempt, Excursion):
         return isinstance(event, pi.AutoRetryEnd)
     stall_reason = "retry_no_progress"
     label = "Provider retry"
+    # The recovery re-requests each refused empty response; its end event
+    # reports the outcome, so a retried refusal never reports interim.
+    holds_refusal_reports = True
 
 
-class SummarizationRetryPhase(StallExempt, Excursion):
+class SummarizationRetryPhase(LabeledActivity, StallExempt, Excursion):
     @classmethod
     def starts(cls, event: pi.PiEvent) -> bool:
         from . import pi_events as pi
@@ -232,7 +266,7 @@ class SummarizationRetryPhase(StallExempt, Excursion):
 
 
 @dataclass(frozen=True)
-class ToolRunningPhase(Excursion):
+class ToolRunningPhase(LabeledActivity, Excursion):
     tools: tuple[tuple[str, str], ...] = ()
     activity_state = ActivityState.WORKING
     label = "Running tool"
@@ -243,7 +277,7 @@ class ToolRunningPhase(Excursion):
 
     def tool_started(self, tool_id: str, title: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)
-        return replace(self, detail="", tools=(*retained, (tool_id, title[:200])))
+        return replace(self, detail="", tools=(*retained, (tool_id, title)))
 
     def tool_ended(self, tool_id: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)

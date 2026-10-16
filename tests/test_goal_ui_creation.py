@@ -1,6 +1,7 @@
 """A UI goal must acquire owner-private launch authority before it is visible."""
 
 from unittest.mock import AsyncMock
+from dataclasses import replace
 
 import os
 
@@ -8,12 +9,14 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition, SetGoalAction
+from agent_comms.goal_actions import BlockedGoalAction, GoalPrecondition
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import ReadyGeneration
+from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
+from agent_comms.tools import invoke_tool
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="ACP runtime uses Unix domain sockets")
 
@@ -52,22 +55,43 @@ async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, mon
         assert comms.registry.require(session).goal.id == goal["id"]
         generation = GoalAttemptStore(comms.root / "goal-private").snapshot(goal["id"])
         assert generation is not None and generation.lifecycle == ReadyGeneration()
-        assert owner.turns.goals.goal_store.ready_grant(goal["id"], generation.number)
+        assert comms.goals.open_goal_store().ready_grant(goal["id"], generation.number)
         assert session in wakes
     finally:
+        await owner.shutdown()
+
+
+async def test_model_goal_has_authority_before_tool_return_and_ui_retry(tmp_path, monkeypatch):
+    comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
+    monkeypatch.setenv("AGENT_COMMS_THREAD", session)
+    try:
+        result = invoke_tool(comms, "comms_set_goal", {"text": "Model-authored objective"})
+        goal = FieldCodec.decode(Goal, result["goal"])
+        store = comms.goals.open_goal_store()
+        assert store.require_generation(goal.id).lifecycle == ReadyGeneration()
+        blocked = comms.goals.update_goal(
+            session, BlockedGoalAction(expect=GoalPrecondition(goal_id=goal.id),
+                                       block_reason="Explicit user decision needed"),
+        )
+        resumed = await proxy.request("retry_goal", goal_id=goal.id,
+                                      expected_revision=blocked.revision)
+        assert resumed["goal"]["id"] == goal.id
+        assert FieldCodec.decode(Goal, resumed["goal"]).state.active
+        assert store.require_generation(goal.id).number == 2
+        assert wakes == [session]
+    finally:
+        await proxy.close()
         await owner.shutdown()
 
 
 async def test_explicit_retry_cannot_invent_missing_launch_authority(tmp_path, monkeypatch):
     comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
     try:
-        goal = comms.goals.update_goal(session, SetGoalAction(text="Goal without authority"))
-        blocked = comms.goals.update_goal(
-            session,
-            BlockedGoalAction(
-                expect=GoalPrecondition(goal_id=goal.id), progress="Goal attempt unresolved"
-            ),
-        )
+        # An explicitly retained historical row, not a new goal through the API.
+        blocked = Goal("Goal without authority", "historical-missing",
+                       state=BlockedGoal("Goal attempt unresolved"))
+        goal = blocked
+        comms.registry.register(replace(comms.registry.require(session), goal=blocked))
         store = GoalAttemptStore(comms.root / "goal-private")
         assert store.snapshot(goal.id) is None
         with pytest.raises(RuntimeError, match="Retry cannot create a grant"):

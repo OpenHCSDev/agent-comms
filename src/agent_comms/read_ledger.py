@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from .locked_store import LockedStore
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
+from .private_path import FileIdentity, FileRevision
 from .sealed import Sealed
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
@@ -33,6 +34,24 @@ class ReadDocument:
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[str, int] = field(default_factory=dict)
     notice: str | None = None
+
+    def seen_sequences(
+        self, viewer: str, snapshot: RegistryProvenance, source: FileIdentity | None
+    ) -> frozenset[int]:
+        """Project this document against the reader's actual source identity."""
+        viewer = snapshot.canonical_name(viewer)
+        thread = snapshot.threads[viewer]
+        recorded = FileIdentity(*self.bus_identity) if self.bus_identity is not None else None
+        if recorded != source:
+            return frozenset()
+        seen: set[int] = set()
+        for key, sequences in self.messages.items():
+            name, created, raw = json.loads(key)
+            if snapshot.canonical_name(name) == viewer and created == thread.created_at:
+                conversation = Conversation.from_wire(raw)
+                if conversation.current(snapshot):
+                    seen.update(sequences)
+        return frozenset(seen)
 
 
 class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
@@ -56,6 +75,10 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         except FileNotFoundError:
             return None
         return info.st_dev, info.st_ino
+
+    def revision(self) -> FileRevision | None:
+        """Identify the read state used while a display page is prepared."""
+        return FileRevision.capture(self.path)
 
     @staticmethod
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
@@ -120,22 +143,26 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
         self.update(advance)
 
+    def take_notice(self, shown: str | None) -> str | None:
+        """Clear the stored notice once it has been shown; return it when this call cleared it."""
+        taken = None
+
+        def take(document: ReadDocument) -> ReadDocument:
+            nonlocal taken
+            if shown is None or document.notice != shown:
+                return document
+            taken = shown
+            return replace(document, notice=None)
+
+        self.update(take)
+        return taken
+
     def seen_sequences(
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
     ) -> frozenset[int]:
-        viewer = snapshot.canonical_name(viewer)
-        thread = snapshot.threads[viewer]
-        seen: set[int] = set()
         document = self.read() if document is None else document
-        if document.bus_identity != self.bus_identity(self.path.with_name("bus.jsonl")):
-            return frozenset()
-        for key, sequences in document.messages.items():
-            name, created, raw = json.loads(key)
-            if snapshot.canonical_name(name) == viewer and created == thread.created_at:
-                conversation = Conversation.from_wire(raw)
-                if conversation.current(snapshot):
-                    seen.update(sequences)
-        return frozenset(seen)
+        revision = FileRevision.capture(self.path.with_name("bus.jsonl"))
+        return document.seen_sequences(viewer, snapshot, revision.identity if revision else None)
 
     def displayed_recipient(self, message, recipient, snapshot, *, document=None):
         """Return recorded human display evidence for this exact frozen recipient.

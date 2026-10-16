@@ -7,6 +7,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.view_unread import TranscriptReadState
+from native_unread_fixture import completed_counts, completed_snapshot
 from test_thread_unread import append
 
 
@@ -53,15 +54,15 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
     assert message.seq not in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
     comms.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=shown)
-    assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 1
+    assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 1
     document = comms.bus.reads.read()
     assert document.transcripts and not document.messages
     index_owner = comms.views.transcript_reads
     index_owner.close()
-    index_owner._index_path.unlink()
+    index_owner.index_path.unlink()
     rebuilt = TranscriptReadState(comms.bus.reads.path)
     try:
-        assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
+        assert completed_counts(rebuilt, viewer, {"worker": str(source)}).counts == {"worker": 1}
         assert comms.bus.reads.read() == document
         assert comms.bus.pending_count("receiver", "#team") == 1
         comms.views.mark_channel_view_read(
@@ -71,7 +72,8 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
         assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
         assert comms.bus.pending_count("receiver", "#team") == 1
         assert comms.bus.reads.read().transcripts == document.transcripts
-        comms.messaging.acknowledge("receiver")
+        references = tuple(message.reference for message in comms.bus.inbox("receiver"))
+        comms.messaging.acknowledge("receiver", references)
         assert comms.bus.pending_count("receiver", "#team") == 0
         assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
     finally:

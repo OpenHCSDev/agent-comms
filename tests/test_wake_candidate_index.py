@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import os
 import sqlite3
 import sys
@@ -37,8 +38,23 @@ def _manual_projection_only(monkeypatch: pytest.MonkeyPatch) -> None:
     # These tests own the explicit WAL maintenance schedule and fault points;
     # the production post-commit worker has separate integration coverage.
     monkeypatch.setattr(
-        "agent_comms.messaging.schedule_candidate_catchup", lambda *_: None
+        "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
     )
+
+
+def _maintain_in_process(root: str, root_id: str, through_bytes: int, start, results) -> None:
+    """One independent runtime connection bootstrapping the shared WAL."""
+    start.wait()
+    try:
+        index = WakeCandidateIndex(Comms(Path(root)).bus.log)
+        outcome = index.catch_up_committed_append(
+            index.notify_committed_append(root_id=root_id, through_bytes=through_bytes),
+            bootstrap_new=True, max_rows=256, max_bytes=8 * 1024 * 1024,
+        )
+    except BaseException as error:
+        results.put(("error", type(error).__name__, str(error)))
+    else:
+        results.put(("ok", outcome.caught_up))
 
 
 def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
@@ -61,12 +77,51 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
     return comms, root_id, lookup
 
 
+def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) -> None:
+    comms, root_id, _lookup = _private(tmp_path)
+    index = WakeCandidateIndex(comms.bus.log)
+    comms.messaging.send_initial_cohort("sender", "#team", "initial")
+    for number in range(128):
+        comms.messaging.send_initial_cohort(
+            "sender", "#team", f"{number:04d} " + "x" * 4096
+        )
+    expected_seq = comms.bus.log.latest_sequence()
+    expected_bytes = comms.bus.log.path.stat().st_size
+    context = multiprocessing.get_context("spawn")
+    start, results = context.Event(), context.Queue()
+    processes = [
+        context.Process(
+            target=_maintain_in_process,
+            args=(str(comms.root), root_id, expected_bytes, start, results),
+        )
+        for _ in range(2)
+    ]
+    for process in processes:
+        process.start()
+    start.set()
+    for process in processes:
+        process.join(timeout=15)
+        assert process.exitcode == 0
+    outcomes = [results.get(timeout=2) for _ in processes]
+    assert all(outcome[0] == "ok" for outcome in outcomes), outcomes
+    with sqlite3.connect(index.path) as db:
+        checkpoint = db.execute(
+            "SELECT last_seq, byte_offset FROM candidate_checkpoint WHERE singleton=1"
+        ).fetchone()
+        count, distinct_count = db.execute(
+            "SELECT count(*), count(DISTINCT source_seq || ':' || recipient_lookup) "
+            "FROM candidate"
+        ).fetchone()
+    assert checkpoint == (expected_seq, expected_bytes)
+    assert count == distinct_count
+
+
 def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
     tmp_path: Path,
 ) -> None:
     comms, root_id, lookup = _private(tmp_path)
     message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
-    index = WakeCandidateIndex(comms.bus)
+    index = WakeCandidateIndex(comms.bus.log)
     with pytest.raises(ProjectionUnavailableError):
         index.page(
             root_id=root_id,
@@ -142,7 +197,7 @@ def test_maintenance_limits_fail_before_schema_or_checkpoint(
     tmp_path: Path, limits: dict[str, object], expected: str
 ) -> None:
     comms, _, _ = _private(tmp_path)
-    index = WakeCandidateIndex(comms.bus)
+    index = WakeCandidateIndex(comms.bus.log)
     with pytest.raises(ValueError, match=expected):
         index.maintain(**limits)
     assert not index.path.exists()
@@ -152,7 +207,7 @@ def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path
     comms, root_id, lookup = _private(tmp_path)
     first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
     second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
-    index = WakeCandidateIndex(comms.bus)
+    index = WakeCandidateIndex(comms.bus.log)
     assert not index.maintain(rebuild=True, max_rows=1)
     with pytest.raises(ProjectionUnavailableError, match="stale"):
         index.page(
@@ -204,7 +259,7 @@ def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path
 def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
     message = comms.messaging.send_initial_cohort("sender", "Alice", "a" * 4096)
-    index = WakeCandidateIndex(comms.bus)
+    index = WakeCandidateIndex(comms.bus.log)
     # A batch budget smaller than the next record admits that one record
     # alone; it never publishes a partial candidate.
     assert index.maintain(rebuild=True, max_bytes=128)
@@ -248,7 +303,7 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     rows[1][PRIVATE_WIRE_FIELD] = {"version": 1, "response": {}}
     _replace_rows(comms, rows)
-    index = WakeCandidateIndex(comms.bus)
+    index = WakeCandidateIndex(comms.bus.log)
     with pytest.raises(ProjectionUnavailableError, match="candidate index maintenance unavailable"):
         index.maintain(rebuild=True)
     with pytest.raises(ProjectionUnavailableError):
@@ -285,7 +340,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
     response = rows[1][PRIVATE_WIRE_FIELD]["response"]
     response[corrupt] = "0" * 64 if corrupt == "envelope_digest" else "wrong"
     _replace_rows(comms, rows)
-    index = WakeCandidateIndex(comms.bus)
+    index = WakeCandidateIndex(comms.bus.log)
     with pytest.raises(ProjectionUnavailableError) as failure:
         index.maintain(rebuild=True)
     assert expected in str(failure.value.__cause__)
@@ -314,7 +369,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     rows[1:3] = [_as_response(row, root_id, "duplicate-execution") for row in rows[1:3]]
     _replace_rows(comms, rows)
-    index = WakeCandidateIndex(comms.bus)
+    index = WakeCandidateIndex(comms.bus.log)
     if first_batch_rows == 4:
         with pytest.raises(
             ProjectionUnavailableError, match="duplicate private response publication key"
@@ -364,7 +419,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
 def test_rewrite_and_incomplete_tail_omit_optional_projection(tmp_path: Path) -> None:
     comms, root_id, lookup = _private(tmp_path)
     message = comms.messaging.send_initial_cohort("sender", "Alice", "first")
-    index = WakeCandidateIndex(comms.bus)
+    index = WakeCandidateIndex(comms.bus.log)
     assert index.maintain(rebuild=True)
     source = comms.bus.log.path
     with source.open("ab") as output:

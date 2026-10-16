@@ -8,7 +8,12 @@ import threading
 
 import pytest
 
+from agent_comms.bus_activity_index import ActivityCheckpoint, BusActivityIndex
+from agent_comms.bus_projection import AppendCheckpoint
+from agent_comms.private_path import FileRevision
 from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.messages import Message
 
@@ -30,9 +35,11 @@ def test_one_pass_matches_dm_channel_broadcast_and_markers(wired, monkeypatch):
     wired.messaging.send("fixer", "#base", "tagged")
     wired.messaging.send("third", "#all", "global from third")
     assert _listed(wired) == _expected(wired)
-    assert wired.messaging.acknowledge("fixer", "PR111") == 1
+    references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+    assert wired.messaging.acknowledge("fixer", references) == 1
     assert _listed(wired) == _expected(wired)
-    wired.messaging.acknowledge("PR111")
+    messages = wired.bus.inbox("PR111")
+    wired.messaging.acknowledge("PR111", tuple(message.reference for message in messages))
     assert _listed(wired) == _expected(wired)
     wired.owners.stop("third")
     assert _listed(wired, active_only=True) == _expected(wired, active_only=True)
@@ -136,19 +143,148 @@ def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired,
     assert parsed == [appended.seq]
 
 
-def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(wired):
+@pytest.mark.parametrize("same_owner", [False, True])
+def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_owner):
+    first = wired.messaging.send_message("PR111", "#base", "first view activity")
+    viewer = wired.messaging.user_identity("/isolated-checkpoint-viewer").name
+    # Prepare both actual index owners before taking a cold observer's cut.
+    wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
+    captured = wired if same_owner else wire(wired.root)
+    with captured.views.presentation.snapshot(viewer=viewer) as (basis, source):
+        appended = wired.messaging.send_message("fixer", "#base", "later activity")
+        # B advances both index owners; A keeps the prefix read with its source.
+        wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
+        parsed = []
+        original = Message.from_wire
+
+        def measured(row):
+            parsed.append(row["seq"])
+            return original(row)
+
+        monkeypatch.setattr(Message, "from_wire", measured)
+        activity, unread = captured.views.presentation.display_view_metrics(source, basis)
+        clocks = captured.bus.last_sent_timestamps(source=source)
+        assert clocks["PR111"] == first.timestamp
+        assert clocks.get("fixer", 0) < appended.timestamp
+        assert activity["#base"].last_message == first.timestamp
+        assert parsed == []
+    # The historical reader did not overwrite the newer published checkpoint.
+    parsed.clear()
+    fresh = wire(wired.root)
+    assert fresh.bus.last_sent_timestamps()["fixer"] == appended.timestamp
+    assert parsed == []
+
+
+def test_computed_checkpoint_stays_with_the_same_opened_cut(wired, monkeypatch):
+    first = wired.messaging.send_message("PR111", "#base", "first exact-cut row")
+    viewer = wired.messaging.user_identity("/same-cut-viewer").name
+    with wired.views.presentation.snapshot(viewer=viewer) as (basis, source):
+        parsed = []
+        original = Message.from_wire
+
+        def measured(row):
+            parsed.append(row["seq"])
+            return original(row)
+
+        monkeypatch.setattr(Message, "from_wire", measured)
+        first_metrics = wired.views.presentation.display_view_metrics(source, basis)
+        first_clocks = wired.bus.last_sent_timestamps(source=source)
+        assert first.seq in parsed
+        parsed.clear()
+        assert wired.views.presentation.display_view_metrics(source, basis) == first_metrics
+        assert wired.bus.last_sent_timestamps(source=source) == first_clocks
+        assert parsed == []
+
+
+def test_display_index_registers_once_and_only_view_snapshots_capture_indexes(wired):
+    indexes = wired.bus.log._append_indexes
+    baseline = len(indexes)
+    first = wired.views.presentation.display_index("PR111")
+    assert len(indexes) == baseline + 1
+    assert wired.views.presentation.display_index("PR111") is first
+    assert len(indexes) == baseline + 1
+    with wired.bus.log._opened_wire_snapshot(need_sequence=False) as source:
+        assert source._append_checkpoints == {}
+    with wired.views.presentation.snapshot(viewer="PR111") as (_basis, source):
+        assert set(source._append_checkpoints) == set(indexes)
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file-lock observation")
+def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monkeypatch):
+    import fcntl
+    from agent_comms.bus_projection import BusAppendIndex
+
+    wired.messaging.send_message("PR111", "#base", "checkpoint lock scope")
+    reads, checks = [], []
+    read = BusAppendIndex._read
+    accepts = AppendCheckpoint.accepts
+
+    def unlocked():
+        for name in (".wire.lock", ".bus.jsonl.lock"):
+            with (wired.root / name).open("rb") as descriptor:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+    def observed_read(index):
+        unlocked()
+        reads.append(index.path)
+        return read(index)
+
+    def observed_accepts(record, revision, stream):
+        unlocked()
+        checks.append(record.offset)
+        return accepts(record, revision, stream)
+
+    monkeypatch.setattr(BusAppendIndex, "_read", observed_read)
+    monkeypatch.setattr(AppendCheckpoint, "accepts", observed_accepts)
+    wired.views.viewer_snapshot("/lock-scope-viewer")
+    assert reads and checks
+    # Later cuts start from the checkpoint each index holds; only a write
+    # still reads the saved file, to keep another process's farther prefix.
+    prepared = []
+    prepare = BusAppendIndex.prepare
+    monkeypatch.setattr(BusAppendIndex, "_read", read)
+    monkeypatch.setattr(
+        BusAppendIndex, "prepare", lambda index: prepared.append(index._held) or prepare(index)
+    )
+    wired.messaging.send_message("PR111", "#base", "later row")
+    wired.views.viewer_snapshot("/lock-scope-viewer")
+    assert prepared and None not in prepared
+
+
+def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix(wired):
+    wired.messaging.send_message("PR111", "#base", "first source row")
+    bus = wired.bus.log.path
+    index = BusActivityIndex(bus)
+    with bus.open("rb") as stream:
+        first_source = FileRevision.from_stat(os.fstat(stream.fileno()))
+        first = ActivityCheckpoint(
+            first_source, first_source.size,
+            AppendCheckpoint.fingerprint(stream, first_source.size), {}, {},
+        )
+    wired.messaging.send_message("PR111", "#base", "later source row")
+    index.write(first)
+    saved = index.prepare()
+    assert saved.offset == first.offset
+    with bus.open("rb") as stream:
+        latest_source = FileRevision.from_stat(os.fstat(stream.fileno()))
+        latest = ActivityCheckpoint(
+            latest_source, latest_source.size,
+            AppendCheckpoint.fingerprint(stream, latest_source.size), {}, {},
+        )
+    index.write(latest)
+    index.write(first)
+    saved = index.prepare()
+    assert saved.offset == latest.offset
+
+
+def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacement(wired):
     wired.messaging.send("PR111", "#base", "first")
     wired.messaging.send("fixer", "#base", "second")
     assert set(wired.views.coordination_snapshot().last_sent) == {"PR111", "fixer"}
-    bus_path = wired.bus.log.path
-    replacement = bus_path.with_name("replacement.jsonl")
-    replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
-    os.replace(replacement, bus_path)
-    assert set(wire(wired.root).views.coordination_snapshot().last_sent) == {"fixer"}
 
     checkpoint = wired.root / "bus_activity_latest.json"
     checkpoint.write_text("{damaged")
-    assert set(wire(wired.root).views.coordination_snapshot().last_sent) == {"fixer"}
+    assert set(wire(wired.root).views.coordination_snapshot().last_sent) == {"PR111", "fixer"}
 
     # A valid JSON file can also lose projection values after local damage.
     # The bus is still authoritative when the checkpoint shape survives.
@@ -160,8 +296,16 @@ def test_mounted_activity_rebuilds_after_bus_replacement_or_damaged_checkpoint(w
     assert reopened.views.coordination_snapshot().last_sent["fixer"] > 0.0
     assert reopened.bus.channel_activity()["#base"].last_message > 0.0
 
+    bus_path = wired.bus.log.path
+    replacement = bus_path.with_name("replacement.jsonl")
+    replacement.write_bytes(bus_path.read_bytes().splitlines(keepends=True)[-1])
+    os.chmod(replacement, 0o600)
+    os.replace(replacement, bus_path)
+    with pytest.raises(RelationViolationError, match="Private bus"):
+        wire(wired.root).views.coordination_snapshot()
 
-def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):
+
+def test_route_projection_refuses_atomic_bus_replacement(wired):
     wired.messaging.send("PR111", "fixer", "first")
     wired.messaging.send("PR111", "fixer", "second")
     assert _listed(wired)["fixer"] == 2
@@ -169,11 +313,13 @@ def test_route_projection_rebuilds_after_atomic_bus_replacement(wired):
     rows = bus_path.read_bytes().splitlines(keepends=True)
     replacement = bus_path.with_name("replacement.jsonl")
     replacement.write_bytes(rows[1])
+    os.chmod(replacement, 0o600)
     os.replace(replacement, bus_path)
-    assert _listed(wire(wired.root))["fixer"] == 1
+    with pytest.raises(RelationViolationError, match="Private bus"):
+        _listed(wire(wired.root))
 
 
-def test_route_projection_detects_rewrite_before_append(wired):
+def test_route_projection_refuses_rewrite_before_append(wired):
     wired.registry.declare(Thread(name="third", tags=frozenset(), worktree="/tmp/third"))
     wired.messaging.send("PR111", "fixer", "first")
     assert _listed(wired)["fixer"] == 1
@@ -181,10 +327,10 @@ def test_route_projection_detects_rewrite_before_append(wired):
     row = json.loads(bus_path.read_text())
     row["to"] = "third"
     bus_path.write_text(json.dumps(row) + "\n")
-    wired.messaging.send("PR111", "fixer", "second")
-    counts = _listed(wire(wired.root))
-    assert counts["fixer"] == 1
-    assert counts["third"] == 1
+    tampered = bus_path.read_bytes()
+    with pytest.raises(RelationViolationError, match="Private bus checkpoint prefix tail changed"):
+        wired.messaging.send("PR111", "fixer", "second")
+    assert bus_path.read_bytes() == tampered
 
 
 def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired):
@@ -194,7 +340,8 @@ def test_rename_alias_and_real_thread_named_broadcast_match_existing_scope(wired
     wired.messaging.send("PR111", "fixer", "old direct")
     wired.registry.rename("PR111", "renamed")
     assert _listed(wired) == _expected(wired)
-    wired.messaging.acknowledge("broadcast", "PR111")
+    references = tuple(message.reference for message in wired.bus.inbox("broadcast", "PR111"))
+    wired.messaging.acknowledge("broadcast", references)
     assert _listed(wired) == _expected(wired)
 
 

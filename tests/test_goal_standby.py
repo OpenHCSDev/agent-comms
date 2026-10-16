@@ -29,13 +29,17 @@ from goal_owner_fixture import canonical_goal_wire
 async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     tmp_path, monkeypatch, changed
 ):
-    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+    from agent_comms.native_arguments import NativeArguments
+
+    configured_model = NativeArguments.parse(NativeArguments.default).model
+    assert configured_model is not None
+    monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", configured_model)
     comms = canonical_goal_wire(tmp_path / "wire")
     agent = canonical_agent(comms, agent_bin="pi")
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     await agent.new_session(str(tmp_path / "parent"))
-    store = agent.turns.goals.open_goal_store()
-    goal = comms.goals.update_goal("parent", SetGoalAction(text="Work"), owner_store=store)
+    store = comms.goals.open_goal_store()
+    goal = comms.goals.update_goal("parent", SetGoalAction(text="Work"))
     owner = comms.registry.require("parent")
     admission = comms.registry.snapshot().admission_generations["parent"]
     if changed == "admission":
@@ -47,13 +51,14 @@ async def test_ready_recovery_rechecks_executing_owner_before_rotating(
     else:
         comms.registry.rename("parent", "renamed")
     old_grant = store.ready_grant(goal.id, 1)
+    comms.goals.goal_store = GoalAttemptStore(store.root)
     try:
         with (
             _store_lock(comms._wire_lock_path),
             pytest.raises(StaleAttemptError, match="owner changed") if changed != "rename" else nullcontext(),
         ):
-            agent.turns.goals.ready_goal_grant_locked(
-                owner, admission, GoalAttemptStore(store.root), store.snapshot(goal.id)
+            comms.goals.ready_goal_grant_locked(
+                owner, admission, store.snapshot(goal.id)
             )
         if changed != "rename":
             assert store.ready_grant(goal.id, 1) == old_grant
@@ -369,7 +374,8 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, ackn
     goal = comms.goals.update_goal("parent", SetGoalAction(text="Delegate work"))
     message = comms.messaging.send_message("child", "parent", "Finished immediately")
     if acknowledged:
-        comms.messaging.acknowledge("parent")
+        references = tuple(message.reference for message in comms.bus.inbox("parent"))
+        comms.messaging.acknowledge("parent", references)
     with pytest.raises(ValueError, match=f"Dependency reply {message.seq}.*pending or UNKNOWN"):
         comms.goals.update_goal(
             "parent",
@@ -377,4 +383,4 @@ def test_standby_refuses_canonical_reply_that_arrived_before_wait(tmp_path, ackn
         )
     assert comms.goals.goal_wait("parent") is None
     assert comms.registry.require("parent").goal == goal
-    assert not (tmp_path / "input_dispositions.json").exists()
+    assert not (tmp_path / "input_dispositions.sqlite3").exists()

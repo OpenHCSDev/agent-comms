@@ -10,6 +10,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
+from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
+from .coordination_errors import StaleFence
+from .errors import RelationViolationError
+from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
 from .bus_publication import stable_thread_lookup
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
@@ -17,7 +21,6 @@ from .registration import Registration
 
 if TYPE_CHECKING:
     from .agent_events import GoalChanged
-    from .goal_attempts import GoalAttemptStore
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
 from .goal_presentation import GoalExecution, GoalWaitTarget
@@ -37,17 +40,44 @@ class Goals:
         self.bus = bus
         self._wire_lock_path = root / "wire"
         self.waits = GoalWaits(root / GoalWaits.filename)
+        self.goal_store: GoalAttemptStore | None = None
+
+    def open_goal_store(self) -> GoalAttemptStore:
+        if self.goal_store is None:
+            private = self.root / "goal-private"
+            private.mkdir(mode=0o700, exist_ok=True)
+            self.goal_store = GoalAttemptStore.initialize(private)
+        return self.goal_store
+
+    def ready_goal_grant_locked(
+        self, owner: Thread, admission: int, generation: Generation
+    ) -> str:
+        """Caller holds wire; recover only this owner's original unused READY grant."""
+        try:
+            GoalLaunchOwner(thread=owner, admission_generation=admission).require_ready(
+                self.registry.snapshot(), generation.goal_id,
+            )
+        except (RelationViolationError, ValueError, StaleFence) as error:
+            raise StaleAttemptError(
+                "The executing goal owner changed before READY recovery."
+            ) from error
+        store = self.open_goal_store()
+        try:
+            return store.ready_grant(generation.goal_id, generation.number)
+        except UnresolvedAttemptError:
+            store.recover_unreserved_ready(generation.goal_id, generation.number)
+            return store.ready_grant(generation.goal_id, generation.number)
 
     def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
         from .input_disposition import InputDispositions
 
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             self.registry.require(name)
             rows = (
-                InputDispositions(self.root / InputDispositions.filename)
-                .read()
-                .unknown(self.registry.aliases_for(name))
+                InputDispositions(self.root)
+                .unresolved(aliases := self.registry.aliases_for(name))
+                .unknown(aliases)
             )
             return [row.public() for row in rows]
 
@@ -61,12 +91,12 @@ class Goals:
         """Project durable notices using current owner queue facts when available."""
         from .input_disposition import InputDispositions
 
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
             return (
-                InputDispositions(self.root / InputDispositions.filename)
-                .read()
+                InputDispositions(self.root)
+                .unresolved(aliases)
                 .delivery_overview(
                     aliases, include_history=include_history, awaiting_keys=awaiting_keys
                 )
@@ -81,13 +111,13 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             self.registry.require(name)
             aliases = self.registry.aliases_for(name)
-            return InputDispositions(self.root / InputDispositions.filename).dismiss_historical(
+            return InputDispositions(self.root).dismiss_historical(
                 aliases, awaiting_keys=awaiting_keys
             )
 
     def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
         """Project exact review eligibility for one current goal and dependency set."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             return self._goal_input_review(self.registry.require(name), goal_id, wait_for).public()
 
     def _goal_input_review(
@@ -105,8 +135,8 @@ class Goals:
             dict.fromkeys(GoalWaitTarget(target.name, target.created_at) for target in resolved)
         )
         owners = self.registry.aliases_for(thread.name)
-        document = InputDispositions(self.root / InputDispositions.filename).read()
-        unknown = {row.key: row for row in document.unknown(owners)}
+        dispositions = InputDispositions(self.root)
+        unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
         eligible = set()
         snapshot = self.registry.snapshot()
         from .input_attempt import ReservedInput
@@ -114,14 +144,13 @@ class Goals:
         lookup = stable_thread_lookup(thread.created_at)
         # Original certification supplies both sides of the reply. Display ACKs
         # and today's sender aliases cannot admit a different incarnation.
-        for original in self.bus.log.addressed_sources(lookup):
-            message = original.message
-            if not (
-                original.direct_for(lookup)
-                and any(target.sent(original) for target in targets)
-            ):
-                continue
-            key = InputDispositions.bus_key(message, thread)
+        replies = {
+            InputDispositions.bus_key(original.message, thread): original.message
+            for original in self.bus.log.addressed_sources(lookup)
+            if original.direct_for(lookup) and any(target.sent(original) for target in targets)
+        }
+        document = dispositions.read(tuple(replies))
+        for key, message in replies.items():
             row = document.lookup(key)
             if not row.exists:
                 # Read-only inspection of a canonical input. Only an
@@ -149,7 +178,7 @@ class Goals:
         self, name: str, *, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         """Read durable revisions for one thread incarnation and optional goal ID."""
-        with _store_lock(self._wire_lock_path):
+        with _store_lock(self._wire_lock_path, shared=True):
             return self.registry.goal_history(name, goal_id=goal_id)
 
     def goal_wait(self, name: str) -> GoalWait | None:
@@ -345,12 +374,11 @@ class Goals:
         action: GoalAction,
         *,
         actor: type = RuntimeInvocable,
-        owner_store: GoalAttemptStore | None = None,
     ) -> Goal | None:
         """Apply one declared command; external ingress owns decoding."""
         with _store_lock(self._wire_lock_path):
             return action.apply(
-                GoalActionContext(self, self.registry.require(name), actor, owner_store)
+                GoalActionContext(self, self.registry.require(name), actor)
             )
 
     def block_goal_after_failed_turn(

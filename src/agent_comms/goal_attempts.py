@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Literal, TypeVar
 from uuid import uuid4
 
+from .coordination_database import CoordinationStore
 from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
@@ -65,6 +66,16 @@ class ReservationConflictError(GoalAttemptError):
 
 class UnresolvedAttemptError(GoalAttemptError):
     """A blocked or in-flight attempt needs an explicit resolution."""
+
+
+class MissingGoalGenerationError(GoalAttemptError, ValueError):
+    """Historical goal has no launch record; Retry must not invent authority."""
+
+    def __init__(self, goal_id: str):
+        super().__init__(
+            f"Goal {goal_id} has no launch authority. Clear this goal and set it again. "
+            "Retry cannot create a grant."
+        )
 
 
 class StaleAttemptError(GoalAttemptError):
@@ -325,7 +336,7 @@ def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
             "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
         )
     )
-    if {row.name: row.sql for row in actual} != schema:
+    if SQLiteSchemaObject.differences(actual, schema):
         raise StorageUncertainError("Unsupported goal attempt schema; one-shot migration required.")
     if GoalAttemptSchema.select(conn) != [GoalAttemptSchema.current()]:
         raise StorageUncertainError("Unsupported goal attempt schema declaration.")
@@ -552,7 +563,7 @@ class GoalAttemptStore:
         else:
             os.close(fd)
         try:
-            with closing(sqlite3.connect(path, timeout=5, isolation_level=None)) as conn:
+            with closing(CoordinationStore.writer(path, isolation_level=None)) as conn:
                 conn.execute("PRAGMA journal_mode=DELETE")
                 conn.execute("PRAGMA synchronous=EXTRA")
                 conn.execute("PRAGMA foreign_keys=ON")
@@ -581,7 +592,7 @@ class GoalAttemptStore:
     def _connect(self) -> sqlite3.Connection:
         self._require_root()
         try:
-            conn = sqlite3.connect(self.path, timeout=5, isolation_level=None)
+            conn = CoordinationStore.writer(self.path, isolation_level=None)
             conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA synchronous=EXTRA")
             modes = SQLiteJournalMode.read(conn.execute("PRAGMA journal_mode"))
@@ -648,6 +659,12 @@ class GoalAttemptStore:
                 return Generation.read_in(conn, goal_id)
             except sqlite3.Error as error:
                 raise StorageUncertainError("Cannot read goal attempt state.") from error
+
+    def require_generation(self, goal_id: str) -> Generation:
+        generation = self.snapshot(goal_id)
+        if generation is None:
+            raise MissingGoalGenerationError(goal_id)
+        return generation
 
     def _is_generation(self, generation: Generation) -> bool:
         return self.snapshot(generation.goal_id) == generation

@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.threads import Thread
 
 
@@ -15,6 +15,52 @@ def prepared(root):
     for name, tags in (("alice", {"team"}), ("bob", set())):
         comms.registry.declare(Thread(name, frozenset(tags), str(root)))
     return comms
+
+
+def test_conversation_persisted_pairs_decode_once_without_an_encode_round_trip():
+    from unittest.mock import patch
+
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.read_basis import Conversation
+    from agent_comms.thread_identity import ThreadIncarnation
+
+    conversation = Conversation(participants=(ThreadIncarnation("alice", 1.0),))
+    encoded = conversation.to_wire()
+    assert encoded == {"target": "", "participants": [["alice", 1.0]]}
+    with patch.object(FieldCodec, "encode", side_effect=AssertionError("Already decoded")):
+        assert Conversation.from_wire(encoded) == conversation
+    assert encoded == {"target": "", "participants": [["alice", 1.0]]}
+
+
+@pytest.mark.parametrize("raw", [
+    {"target": "#team", "participants": [], "unknown": 1},
+    {"target": 2, "participants": []},
+    {"participants": [["alice", True]]},
+    {"participants": [["alice"]]},
+    {"participants": {}},
+])
+def test_conversation_pair_boundary_retains_strict_codec_validation(raw):
+    from agent_comms.read_basis import Conversation
+
+    with pytest.raises((TypeError, ValueError)):
+        Conversation.from_wire(raw)
+
+
+def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
+    comms = Comms(tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    notice = "Read positions were reset; reopen conversations to review them."
+    comms.bus.reads.replace(replace(comms.bus.reads.read(), notice=notice))
+    assert comms.bus.reads.take_notice(None) is None
+    assert comms.bus.reads.read().notice == notice
+
+    first = comms.views.presentation.roster(viewer)
+    assert first.read_marker_notice == notice
+    assert comms.bus.reads.read().notice is None
+
+    second = Comms(tmp_path).views.presentation.roster(viewer)
+    assert second.read_marker_notice is None
 
 
 def test_bounded_page_marks_only_shown_messages(tmp_path):
@@ -78,6 +124,39 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
         expected_display_basis=page.display_basis,
     )
     assert wire(tmp_path).bus.pending_count(viewer, "alice") == 0
+
+
+def test_agent_sent_dm_includes_independent_human_read(tmp_path):
+    from agent_comms.thread_identity import ThreadRole
+
+    comms = prepared(tmp_path)
+    comms.registry.declare(Thread("reader", frozenset(), str(tmp_path), role=ThreadRole.USER))
+    message = comms.messaging.send_message("alice", "reader", "painted agent DM")
+    snapshot = comms.registry.snapshot()
+    displayed = comms.bus.reads.capture(
+        "reader", (message,), snapshot, comms.bus.log.path
+    )
+    comms.bus.reads.mark_displayed("reader", displayed)
+    sender_view = comms.views.thread_presentation("alice")
+    assert sender_view is not None
+    outcome = next(
+        item for item in sender_view.sent_notifications
+        if item.message.reference == message.reference
+    )
+    assert outcome.displayed_to == (snapshot.require("reader").incarnation,)
+    assert outcome.changed
+
+    from types import SimpleNamespace
+    from agent_comms.selected_turn import SelectedPrompt
+
+    sent_outcome = outcome.sent_outcome()
+    assert sent_outcome is not None
+    selected = SelectedPrompt(SimpleNamespace(
+        comms=comms,
+        owner=SimpleNamespace(thread=comms.registry.require("alice")),
+        sent_outcomes=(sent_outcome,),
+    ))
+    assert [item.message.reference for item in selected.sent_outcomes()] == [message.reference]
 
 
 def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path):

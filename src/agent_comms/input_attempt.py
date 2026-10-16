@@ -11,12 +11,13 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, TextRepresentation, projected
 from .native_input_record import NativeInputIdText
+from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
 from .input_origin import InputOrigin, InputProvenance, UnattributedInputOrigin
 
 if TYPE_CHECKING:
+    from .message_reference import MessageReference
     from .registry_document import RegistrySnapshot
-    from .text_digest import TextDigest
     from .turn_lease import TurnLeaseFence
 
 
@@ -49,9 +50,10 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     accepts_reservation: ClassVar[bool] = False
     has_started: ClassVar[bool] = False
     has_native_binding: ClassVar[bool] = False
+    proves_no_native_send: ClassVar[bool] = False
     unresolved: ClassVar[bool] = False
     cancellation_feedback: ClassVar[str] = (
-        "Delivery unconfirmed — input not retried. Inspect delivery before deciding whether to send a new message."
+        "Delivery unconfirmed. Inspect delivery before deciding whether to send a new message."
     )
 
     @property
@@ -75,6 +77,9 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
     def require_started(self, admission: int) -> StartedInput:
         raise RelationViolationError("Input start lacks its original native disposition")
+
+    def context_provenance(self) -> InputProvenance:
+        raise RelationViolationError("Constraint lacks its original input")
 
     def bind(
         self, *, admission: int, turn_id: str, native_id: str, text: str
@@ -100,7 +105,11 @@ class InputAttempt(DeclaredFamily, affix="Input"):
     ) -> StartedInput | None:
         return None
 
-    def bound_bus_input(self) -> SentInput | None:
+
+    def delivered_in(
+        self, lease: TurnLeaseFence, root_id: str, snapshot: RegistrySnapshot
+    ) -> MessageReference | None:
+        """The bus message this input delivered into the lease's turn."""
         return None
 
 
@@ -157,8 +166,6 @@ class StoredInput(InputAttempt):
 
     @property
     def digest(self) -> TextDigest:
-        from .text_digest import TextDigest
-
         return TextDigest.of(self.source_text)
 
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
@@ -207,6 +214,7 @@ class StoredInput(InputAttempt):
 
 class ReservedInput(StoredInput):
     unresolved = True
+    proves_no_native_send = True
     public_status = "unknown"
 
     accepts_reservation = True
@@ -224,7 +232,7 @@ class ReservedInput(StoredInput):
         if self.admission != admission:
             return None
         return self._transition(
-            BoundUnknownInput, turn_id=turn_id, native_id=native_id, sent_text=text
+            BoundUnknownInput, turn_id=turn_id, native_id=native_id, sent_digest=TextDigest.of(text)
         )
 
     def finish_unbound(self) -> NotSentInput:
@@ -236,7 +244,8 @@ class SentInput(StoredInput):
     has_native_binding = True
     turn_id: str = field(metadata={"public_exclude": True, "wire_required": True})
     native_id: str = field(metadata={"public_exclude": True, "wire_required": True})
-    sent_text: str = field(metadata={"public_exclude": True, "wire_required": True})
+    # The native session owns the sent text; this row only proves which text it was.
+    sent_digest: TextDigest = field(metadata={"public_exclude": True, "wire_required": True})
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -245,16 +254,11 @@ class SentInput(StoredInput):
 
             TurnId.for_registration(self.turn_id)
             NativeInputIdText.decode(self.native_id)
-            if not FieldCodec.decode(str, self.sent_text):
-                raise ValueError("Native input text cannot be empty")
         except ValueError as error:
             raise ValueError("Invalid native input attempt") from error
 
     def matches_native(self, *, turn_id: str, native_id: str, text: str) -> bool:
-        return (self.turn_id, self.native_id, self.sent_text) == (turn_id, native_id, text)
-
-    def bound_bus_input(self) -> SentInput | None:
-        return self if self.sequence is not None else None
+        return (self.turn_id, self.native_id) == (turn_id, native_id) and self.sent_digest.matches(text)
 
 
 class BoundUnknownInput(SentInput):
@@ -272,12 +276,21 @@ class BoundUnknownInput(SentInput):
 class StartedInput(SentInput):
     has_started = True
     public_status = "started"
-    cancellation_feedback = "Native input started; turn cancelled — input not retried."
+    cancellation_feedback = "Native input started; turn cancelled."
 
     def require_started(self, admission: int) -> StartedInput:
         if not self.matches_admission(admission):
             raise RelationViolationError("Input start admission changed")
         return self
+
+    def delivered_in(self, lease, root_id, snapshot):
+        if (
+            lease.identity.incarnation.matches_recorded_name(self.owner, snapshot)
+            and self.matches_admission(lease.admission_generation)
+            and self.turn_id == lease.turn_id
+        ):
+            return self.origin.delivery_reference(root_id)
+        return None
 
     def started_for_native(
         self,
@@ -305,9 +318,10 @@ class StartedInput(SentInput):
 
 class NotSentInput(StoredInput):
     unresolved = True
+    proves_no_native_send = True
     public_status = "not_sent"
     cancellation_feedback = (
-        "Not sent — cancellation completed before native delivery. Input not retried."
+        "Not sent — cancellation completed before native delivery."
     )
 
 

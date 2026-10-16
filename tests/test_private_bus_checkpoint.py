@@ -84,7 +84,7 @@ def test_claim_barrier_retains_post_durability_marker_sample(tmp_path, monkeypat
         source.require_current()
 
 
-def test_public_identity_scan_keeps_retained_rows_without_delivery_pointers(tmp_path):
+def test_human_duplicate_check_includes_retained_rows_without_delivery_pointers(tmp_path):
     import json
     from agent_comms.bus_publication import HumanOrigin
     from agent_comms.messages import Message, HandoffKind, InfoKind
@@ -109,7 +109,6 @@ def test_public_identity_scan_keeps_retained_rows_without_delivery_pointers(tmp_
     with comms.bus.log.certified_read() as source:
         assert source.connection.execute(
             f'SELECT COUNT(*) FROM "{DeliverySources.declared_name}"').fetchone()[0] == 0
-        assert tuple(source.public_message_references()) == ((user.name, original.reference),)
     with pytest.raises(RelationViolationError, match='already exists'):
         comms.bus.publisher.publish_ordinary(original,
             _human_origin=HumanOrigin(user.name, user.created_at, user.worktree))
@@ -220,9 +219,13 @@ def test_claim_and_keyed_response_append_share_certificate(tmp_path: Path) -> No
         )
         assert claim.claim_transition is not None
         intent = prepare_fenced_response(
-            case.store, case.bus, case.fence, "done", owner_witness=case.witness
+            case.store, case.bus, case.fence, "done",
+            exact_target=case.reply_target, owner_witness=case.witness
         ).value
-        publish_fenced_response(case.store, case.bus, case.fence, owner_witness=case.witness)
+        publish_fenced_response(
+            case.store, case.bus, case.fence,
+            exact_target=case.reply_target, owner_witness=case.witness,
+        )
         response = case.bus.log.read_keyed_response(intent)
         assert response.seq == claim.seq + 1
         with comms.bus.log.certified_read() as source:
@@ -554,22 +557,3 @@ def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, m
     assert through == 2
     # Once repaired, a shared read succeeds without writing.
     assert asyncio.run(log.read_certified_async(lambda source: source.witness.through_seq)) == 2
-
-
-def test_message_references_skip_only_indexed_context_rows(tmp_path: Path) -> None:
-    from agent_comms.store_files import _iter_jsonl_stream
-    from agent_comms.wire_record import WireRecord
-
-    comms, _ = _root(tmp_path)
-    for body in ("one", "two", "three"):
-        comms.messaging.send_initial_cohort("sender", "Alice", body)
-    with comms.bus.log.certified_read() as source:
-        indexed = tuple(source.public_message_references())
-        source.stream.seek(0)
-        scanned = tuple(
-            reference
-            for row, _ in _iter_jsonl_stream(source.stream, boundary=source.witness.offset)
-            for reference in WireRecord.certified_public_references(row)
-        )
-    assert indexed == scanned
-    assert [reference.seq for _, reference in indexed] == [1, 2, 3]

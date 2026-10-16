@@ -16,6 +16,9 @@ from agent_comms.comms import Comms
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import WakeCandidateIndex
+from agent_comms.wake_policy import FullWake
+
+_SCHEDULE = maintenance.schedule_candidate_catchup
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus requires POSIX")
 
@@ -49,8 +52,8 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
     ) as dirname:
         comms, root_id = _wire(Path(dirname))
         monkeypatch.setattr(
-            "agent_comms.messaging.schedule_candidate_catchup",
-            maintenance.schedule_candidate_catchup,
+            "agent_comms.candidate_maintenance.schedule_candidate_catchup",
+            _SCHEDULE,
         )
         indexed = threading.Event()
         original = WakeCandidateIndex.catch_up_committed_append
@@ -64,7 +67,7 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
         monkeypatch.setattr(WakeCandidateIndex, "catch_up_committed_append", observe)
         message = comms.messaging.send_message("sender", "beta", "selected original")
         assert indexed.wait(timeout=5), "deferred checkpoint did not catch up"
-        page = WakeCandidateIndex(comms.bus).page(
+        page = WakeCandidateIndex(comms.bus.log).page(
             root_id=root_id,
             recipient_lookup=stable_thread_lookup(comms.registry.require("beta").created_at),
             after_seq=0,
@@ -72,10 +75,10 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
         )
         assert page.through_seq >= message.seq and len(page.entries) == 1
         assert page.entries[0].source_seq == message.seq
-        assert page.entries[0].wake_mode == "full"
+        assert page.entries[0].wake_mode is FullWake
 
 
-def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send(
+def test_notification_runs_after_wire_and_bus_locks_and_scheduler_defect_raises(
     monkeypatch, tmp_path
 ) -> None:
     with TemporaryDirectory(
@@ -84,11 +87,11 @@ def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send
         comms, _root_id = _wire(Path(dirname))
         witnessed: list[bool] = []
 
-        def observe(bus, seq):
+        def observe(log, through_bytes):
             def probe():
                 with (
                     _store_lock(comms._wire_lock_path, blocking=False),
-                    _store_lock(bus.log.path, blocking=False),
+                    log.locked(blocking=False),
                 ):
                     witnessed.append(True)
 
@@ -99,12 +102,29 @@ def test_notification_runs_after_wire_and_bus_locks_and_failure_cannot_fail_send
             raise OSError("synthetic derived projection failure")
 
         monkeypatch.setattr(
-            "agent_comms.messaging.schedule_candidate_catchup", observe
+            "agent_comms.candidate_maintenance.schedule_candidate_catchup", observe
         )
-        # Even an unexpected scheduler error after the durable bus commit
-        # cannot report the original send as failed or invite a retry.
-        committed = comms.messaging.send_message("sender", "beta", "still committed")
-        assert committed.seq == 1 and comms.bus.log.latest_sequence() == 1
+        with pytest.raises(OSError, match="synthetic derived projection failure"):
+            comms.messaging.send_message("sender", "beta", "still committed")
+        # The scheduler defect is visible only after physical lock release; the
+        # durable append exists and its caller must treat the outcome as unknown.
+        assert comms.bus.log.latest_sequence() == 1
+
+
+def test_failed_drain_is_named_and_retires_pending_state(monkeypatch, tmp_path, caplog) -> None:
+    comms, _root_id = _wire(tmp_path)
+    root = comms.bus.log.path.parent
+    maintenance._pending[root] = (comms.bus.log, 1)
+
+    def fail(*args, **kwargs):
+        raise ValueError("synthetic index failure")
+
+    monkeypatch.setattr(WakeCandidateIndex, "catch_up_committed_append", fail)
+    with pytest.raises(maintenance.CandidateMaintenanceFailed) as failed:
+        maintenance._drain_candidate(root)
+    assert failed.value.root == root
+    assert root not in maintenance._pending
+    assert "Candidate maintenance failed for" in caplog.text
 
 
 def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
@@ -115,7 +135,7 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
     ) as dirname:
         comms, root_id = _wire(Path(dirname))
         monkeypatch.setattr(
-            "agent_comms.messaging.schedule_candidate_catchup", lambda *_: None
+            "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
         )
         # A stalled index behind more oversized records than one bounded
         # 32-batch drain could previously cover: the background drain must
@@ -126,18 +146,16 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
                 "sender", "beta", f"{number:04d} " + "x" * (300 * 1024)
             )
         assert comms.bus.log.path.stat().st_size > 40 * 256 * 1024
-        index = WakeCandidateIndex(comms.bus)
+        index = WakeCandidateIndex(comms.bus.log)
+        with index.log.path.open("rb") as stream:
+            first_bytes = len(stream.readline())
         assert index.catch_up_committed_append(
-            index.notify_committed_append(root_id=root_id, through_seq=1),
+            index.notify_committed_append(root_id=root_id, through_bytes=first_bytes),
             bootstrap_new=True,
-        ).checkpoint_seq == 1
-        hint = index.notify_committed_append(
-            root_id=root_id, through_seq=comms.bus.log.full_history()[-1].seq
-        )
-        maintenance._pending[comms.bus.log.path.parent] = (
-            comms.bus,
-            comms.bus.log.full_history()[-1].seq,
-        )
+        ).checkpoint_bytes == first_bytes
+        through_bytes = index.log.path.stat().st_size
+        hint = index.notify_committed_append(root_id=root_id, through_bytes=through_bytes)
+        maintenance._pending[index.log.path.parent] = (index.log, through_bytes)
         maintenance._drain_candidate(comms.bus.log.path.parent)
         assert not maintenance._pending
         assert index.catch_up_committed_append(hint).caught_up

@@ -13,6 +13,7 @@ import pytest
 
 from agent_comms import store_files
 from agent_comms.activity import ActivityState
+from agent_comms.agent_events import AgentInfo
 from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
@@ -47,7 +48,7 @@ def _claim_thread(root: str, result_queue: Any, start: Event) -> None:
 def _write_runtime_state(root: str, name: str, start: Event) -> None:
     comms = wire(root)
     start.wait()
-    comms.agents.set_agent_info(name, model=f"provider/{name}", context_used=25, context_size=100)
+    comms.agents.observe_runtime_info(name, AgentInfo(model=f"provider/{name}", context_used=25, context_size=100))
     comms.agents.set_activity(name, ActivityState.WORKING, f"work-{name}")
     comms.ledger.merge({name: "ready"}, author=name)
 

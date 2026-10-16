@@ -40,7 +40,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
     assert progressed is not None
     before_history = comms.goals.goal_history("worker", goal_id=original.id)
     before_registry = (tmp_path / "registry.json").read_bytes()
-    monkeypatch.setenv("PI_AGENT_ID", "worker")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     tool = next(
         tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
     )
@@ -69,7 +69,7 @@ def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, mo
 
 def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monkeypatch):
     comms, original = _owner(tmp_path)
-    monkeypatch.setenv("PI_AGENT_ID", "worker")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     tool = next(
         tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
     )
@@ -151,10 +151,7 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
         "worker", PausedGoalAction(progress="Half verified by the owner")
     )
     assert progressed is not None
-    private = tmp_path / "goal-private"
-    private.mkdir(mode=0o700)
-    store = GoalAttemptStore.initialize(private)
-    store.create_goal(original.id)
+    store = comms.goals.open_goal_store()
     reservation = store.reserve(original.id, 1)
     reservation.fail(store, "Previous goal attempt failed")
 
@@ -169,7 +166,6 @@ def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_pat
                 expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()), goal_id=original.id)
             ),
             actor=OwnerInvocable,
-            owner_store=store,
         )
     reloaded = wire(tmp_path).registry.require("worker").goal
     assert reloaded is not None and reloaded.state.declared_name == "blocked"

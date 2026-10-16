@@ -17,7 +17,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordinated_runtime_schema import assert_native_runtime_schema
-from .coordination_errors import IdentityConflict
+from .coordination_database import StoreBusy
+from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import PublicationMeasurements, record_acquisition_progress, record_request_progress
 from .maintenance_barrier import MaintenanceBarrier
@@ -30,6 +31,7 @@ from .pi_vocabulary import ThinkingLevel
 from .private_path import FileRevision
 from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
+from .following_inputs import FollowingInputs
 from .tracked_turn import TrackedTurnSession
 from .turn_context import RenderedInput
 
@@ -60,6 +62,11 @@ class PrivateSendAdmission:
     @property
     def bus(self) -> MessageBus:
         return self.selected.bus
+
+    @property
+    def following_after_seq(self) -> int:
+        """The selected sources which cannot also become following input."""
+        return max(assignment.wire_seq for assignment in self.stage.assignments)
 
     @property
     def store_path(self) -> Path:
@@ -131,6 +138,7 @@ class PrivateSendAdmission:
         model: str,
         selected_tool_mode: NativeToolMode | None = None,
         observe_event: Callable[[PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
+        following: FollowingInputs = FollowingInputs(),
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
 
@@ -164,12 +172,18 @@ class PrivateSendAdmission:
                     prompt_send_boundary=self,
                     acquisition_measurements=self._measurements,
                     launch_owner=execution,
+                    following=following,
                 )
             except NativePiTerminalFailure as error:
                 self.verify(store, error.context)
-                self.stage.fail_terminal(
-                    store, self.participant, self.input_id, self.token_digest, error.context
+                settlement = self.stage.fail_terminal(
+                    store, self.participant, self.input_id, self.token_digest,
+                    error.context, error.failure,
                 )
+                try:
+                    await self.stage.continue_after_failure(settlement, error.failure)
+                except RetryScheduled as retry:
+                    raise retry from error
                 raise
             finally:
                 lease = self.owner.thread.turn_lease
@@ -196,7 +210,9 @@ class PrivateSendAdmission:
         with ExitStack() as authority:
             try:
                 with self._measurements.operation("coordinator_open"):
-                    store = authority.enter_context(Coordination(str(self.store_path), lock_timeout=0))
+                    store = authority.enter_context(
+                        Coordination(str(self.store_path), contention=StoreBusy())
+                    )
                 with self._measurements.operation("maintenance_ingress"):
                     authority.enter_context(MaintenanceBarrier(
                         self.bus._registry.store.path
@@ -207,13 +223,13 @@ class PrivateSendAdmission:
                     )
                 with self._measurements.operation("registry_snapshot"):
                     registry = document.snapshot()
-                with self._measurements.operation("coordinator_exclusive"):
-                    db = authority.enter_context(store.session.irreversible_admission())
                 with self._measurements.operation("prompt_binding"):
                     authority.enter_context(self.stage.bound_prompt(
                         store, self.input_id, self.participant, self.wire_root_id,
                         self.prompt.text, blocking=False,
                     ))
+                with self._measurements.operation("coordinator_exclusive"):
+                    db = authority.enter_context(store.session.transaction())
                 with self._measurements.operation("selected_source_admission"):
                     self.session.admit(identity, selected_runtime_revision)
             except BlockingIOError as error:

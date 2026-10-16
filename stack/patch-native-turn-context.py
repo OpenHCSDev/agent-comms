@@ -35,9 +35,10 @@ def extend_input_claim(session, rpc, core):
                      f'await session.{method}(command.message, command.images, command.inputId, command.contextContributions);')
     replace_once(rpc,'                    inputId: command.inputId,',
                  '                    inputId: command.inputId,\n                    contextContributions: command.contextContributions,')
-    replace_once(session,'        for (const { inputId, sessionEntryId } of tracked) {\n',
+    replace_once(session,'        for (const record of records) {\n            const { inputId, sessionEntryId } = record;\n',
         '''        const contributors=[];
-        for (const { inputId, sessionEntryId } of tracked) {
+        for (const record of records) {
+            const { inputId, sessionEntryId } = record;
             const claim=this._nativeInputClaims.get(inputId);
             if (claim) contributors.push({input_id:inputId,contributors:claim.observe(
                 llmContext.messages.find(message=>message.inputId===inputId),
@@ -229,11 +230,76 @@ def extend_system_sources(core):
         '    private _baseSystemPrompt: import("./turn-context.js").SystemLayerSegment;')
 
 
+def extend_native_run(core):
+    """The original native run owns production, refusal and its recovery budget."""
+    session = core/'agent-session.js'
+    session.write_text('import { InactiveNativeTurnRun, NativeTurnRun } from "./turn-recovery.js";\n'+session.read_text())
+    replace_once(session, '    _nativeRunHadTrackedInput = false;',
+                 '    _nativeRun = InactiveNativeTurnRun.shared;')
+    replace_once(session, '        if (event.type === "agent_end") this._lastAgentRunSignal = signal;',
+        '        this._nativeRun.observe(event, this._nativeInputClaims);\n'
+        '        if (event.type === "agent_end") this._lastAgentRunSignal = signal;')
+    replace_once(session, '''            // The newest user turn controls retry policy, even when it is
+            // queued behind a completed tracked turn in the same agent loop.
+            this._nativeRunHadTrackedInput = this._nativeInputClaims.has(event.message.inputId);
+''', '')
+    replace_once(session, '        if (this._nativeRunHadTrackedInput) return false;',
+                 '        if (this._nativeRun.tracked) return this._nativeRun.willRetry();')
+    replace_once(session, '''        this._nativeRunHadTrackedInput = messages.some((message) => message.role === "user" &&
+            this._nativeInputClaims.has(message.inputId));''',
+        '''        this._nativeRun = this._startNativeRun(messages);''')
+    replace_once(session, '    async _runAgentPrompt(messages) {',
+        '''    _startNativeRun(messages = []) {
+        return new NativeTurnRun(this.agent, event => this._emit(event),
+            message => this._isRetryableError(message))
+            .include(messages, this._nativeInputClaims);
+    }
+    async _runAgentPrompt(messages) {''')
+    replace_once(session, '''        const boundedStream = (model, context, options) => originalStream(model, context,
+            this._nativeRunHadTrackedInput ? { ...options, maxRetries: 0 } : options);''',
+        '''        const boundedStream = (model, context, options) =>
+            this._nativeRun.stream(originalStream, model, context, options);''')
+    replace_once(session, '            if (this._nativeRunHadTrackedInput && turn.message?.stopReason === "length") return true;',
+                 '            if (this._nativeRun.tracked && turn.message?.stopReason === "length") return true;')
+    replace_once(session, '            this._nativeRunHadTrackedInput = false;\n            this._systemPromptOverride',
+                 '            this._nativeRun.close();\n            this._nativeRun = InactiveNativeTurnRun.shared;\n            this._systemPromptOverride')
+    replace_once(session, '            this._nativeRunHadTrackedInput = true;',
+                 '            this._nativeRun.include(selected, this._nativeInputClaims);')
+    replace_once(session, '''        if (this._nativeRunHadTrackedInput) {
+            const overflow''',
+        '''        if (this._nativeRun.tracked) {
+            if (await this._nativeRun.recover(msg)) return true;
+            const overflow''')
+    replace_once(session, '            this._nativeRunHadTrackedInput = false;\n            return msg.stopReason',
+                 '            this._nativeRun.close();\n            this._nativeRun = this._startNativeRun();\n            return msg.stopReason')
+    replace_once(session, '    abortRetry() {\n',
+                 '    abortRetry() {\n        this._nativeRun.cancel();\n')
+    replace_once(session, '        return this._retryAbortController !== undefined;',
+                 '        return this._nativeRun.retrying || this._retryAbortController !== undefined;')
+    # Extend the one existing provider classifier, not a tracked-only list.
+    # AssistantMessage exposes errorMessage, not structured HTTP status/code.
+    retry = core.parent.parent/'node_modules/@earendil-works/pi-ai/dist/utils/retry.js'
+    replace_once(retry, 'const NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([',
+                 'const NON_RETRYABLE_PROVIDER_LIMIT_ERROR_PATTERN = buildProviderErrorPattern([\n    "\\\\b402\\\\b",')
+    replace_once(retry, '    "429",', '    "429",\n    "529",')
+    types = core/'agent-session.d.ts'
+    replace_once(types, '    private _retryAttempt;',
+                 '    private _retryAttempt;\n    private _nativeRun: import("./turn-recovery.js").NativeTurnRun | import("./turn-recovery.js").InactiveNativeTurnRun;\n    private _startNativeRun;')
+    replace_once(types, '    type: "auto_retry_start";',
+                 '    type: "auto_retry_start" | "native_retry_start";')
+    replace_once(types, '    type: "auto_retry_end";',
+                 '    type: "auto_retry_end" | "native_retry_end";')
+    if any('_nativeRunHadTrackedInput' in path.read_text() for path in (session, types)):
+        raise ValueError('Competing native tracked-run authority remains')
+
+
 def main(package):
     package=Path(package)
     core=package/'dist/core'
     (core/'turn-context.js').write_bytes(Path(__file__).with_name('native-turn-context.mjs').read_bytes())
     (core/'turn-context.d.ts').write_bytes(Path(__file__).with_name('native-turn-context.d.ts').read_bytes())
+    (core/'turn-recovery.js').write_bytes(Path(__file__).with_name('native-turn-recovery.mjs').read_bytes())
+    (core/'turn-recovery.d.ts').write_bytes(Path(__file__).with_name('native-turn-recovery.d.ts').read_bytes())
     session=core/'agent-session.js'
     replace_once(session, '        this.agent.onContextReady = async (context) => await this._commitNativeContext(context);',
         '''        this.agent.onContextReady = async (context, requestId) => {
@@ -242,10 +308,10 @@ def main(package):
         };''')
     source=session.read_text()
     session.write_text('import { TurnContext, NativeInputClaim, SystemLayerSegment } from "./turn-context.js";\n'+source)
-    replace_once(session, '''                llmContextDigest: digest });
+    replace_once(session, '''            this._emit(record);
         }
     }
-    get modelRuntime()''','''                llmContextDigest: digest });
+    get modelRuntime()''','''            this._emit(record);
         }
         return {request_generation:generation, context_digest:digest};
     }
@@ -289,6 +355,7 @@ def main(package):
 } | {''')
     extend_input_claim(session,rpc,core)
     extend_system_sources(core)
+    extend_native_run(core)
 
 
 if __name__=='__main__': main(sys.argv[1])

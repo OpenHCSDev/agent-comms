@@ -6,7 +6,7 @@ import hashlib
 import multiprocessing
 import sqlite3
 import threading
-from agent_comms.attempt_states import AttemptFailedAttempt, SucceededAttempt
+from agent_comms.attempt_states import AttemptFailedAttempt, SucceededAttempt, UnknownOutcomeAttempt
 from collections.abc import Callable
 from pathlib import Path
 
@@ -52,14 +52,14 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
 from agent_comms.coordination_tables.assignments import MessageAudience, WakeAssignment
-from agent_comms.coordination_tables.attempts import ReplayFact
+from agent_comms.coordination_tables.attempts import ReplayAssessments, ReplayFact
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
     canonical_publication_key,
 )
 from agent_comms.coordination_tables.recovery import ACPClientConnectivity, OwnerConnectivity
-from agent_comms.coordinator import Coordination
+from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,
@@ -71,6 +71,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.recovery_states import FailedRecovery, ModelStalledRecovery, RecoveredRecovery
+from agent_comms.turn_failure import ProviderRetryExhausted
 from agent_comms.wake_policy import BoundedTriageWake, FullWake, PassiveWake, WakePolicy
 
 
@@ -79,43 +80,62 @@ def db_path(tmp_path: Path) -> Path:
     return tmp_path / "coordination.sqlite3"
 
 
-def store(path: Path) -> Coordination:
-    return Coordination(str(path), clock_ms=lambda: 1_000)
+def store(path: Path) -> StandaloneCoordination:
+    return StandaloneCoordination(str(path), clock_ms=lambda: 1_000)
+
+
+def wire_source(db, assignment_id: str, original: Message, mode: WakePolicy):
+    from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+    from agent_comms.bus_publication import CommittedDelivery, decisions_digest, decisions_wire
+    from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
+    from agent_comms.selected_source_batch import SelectedSource
+    from agent_comms.wake import WakeDecision
+
+    audience = freeze_audience(original, (FrozenRecipient("owner", "Owner"),),
+                               "0" * 64, sender_lookup="sender",
+                               sender_name=original.sender)
+    decisions = (WakeDecision("owner", MessageAudience.DIRECT, mode),)
+    delivery = CommittedDelivery("0" * 32, original, audience, decisions,
+                                 decisions_digest(decisions_wire(decisions)), "ordinary",
+                                 RESOLVER_VERSION, POLICY_VERSION)
+    return SelectedSource(assignment_id, db.assignments, delivery)
 
 
 def ready(
     path: Path, *, origin: ExecutionOrigin = ExecutionOrigin.WIRE, max_attempts: int = 2
-) -> Coordination:
+) -> StandaloneCoordination:
     db = store(path)
+    sources = ()
     assert isinstance(db.participants.register("owner", "Owner", "thread", committed=True), Applied)
     if origin is ExecutionOrigin.WIRE:
+        original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
         db.assignments.accept(
             WakeAssignment(
                 assignment_id="claim",
                 recipient="Owner",
                 recipient_lookup="owner",
                 wire_seq=1,
-                message_id="message",
+                message_id=original.message_id,
                 audience=MessageAudience.DIRECT,
                 accepted_at_ms=1_000,
                 updated_at_ms=1_000,
                 lifecycle=FullPendingAssignment.load(FullWake(), None, None, None),
             )
         )
+        sources = (wire_source(db, "claim", original, FullWake()),)
     db.executions.create(
         "exec",
         origin,
         "owner",
         "thread",
         max_attempts,
-        assignment_ids=("claim",) if origin is ExecutionOrigin.WIRE else (),
-        exact_target="owner" if origin is ExecutionOrigin.WIRE else None,
+        sources=sources,
     )
     db.executions.mark_pending("exec", expected_revision=1)
     return db
 
 
-def started(db: Coordination) -> tuple[str, object]:
+def started(db: StandaloneCoordination) -> tuple[str, object]:
     token = prepare_fence_token()
     result = db.attempts.start(
         AttemptStart(
@@ -132,7 +152,7 @@ def started(db: Coordination) -> tuple[str, object]:
     return token, result.value.fence
 
 
-def final_evidence(db: Coordination, fence: object, pointer_revision: int = 1) -> object:
+def final_evidence(db: StandaloneCoordination, fence: object, pointer_revision: int = 1) -> object:
     from agent_comms.owner_fence import OwnerFence
 
     assert isinstance(fence, OwnerFence)
@@ -156,7 +176,7 @@ def _concurrent_registration(
     path: str, gate: multiprocessing.Event, output: multiprocessing.Queue
 ) -> None:
     try:
-        with Coordination(path, clock_ms=lambda: 1_000) as db:
+        with StandaloneCoordination(path, clock_ms=lambda: 1_000) as db:
             gate.wait(timeout=5)
             result = db.participants.register("owner", "Owner", "thread", committed=True)
             output.put(type(result).__name__)
@@ -168,14 +188,13 @@ def monitor_evidence(
     backend_done: bool,
     *,
     subprocess_dead: bool = True,
-    unknown_effects: bool = True,
 ) -> MonitorEvidence:
     return MonitorEvidence(
         subprocess_dead=subprocess_dead,
         backend_done=backend_done,
         reason_code="process_died",
         observed_at_ms=1_000,
-        unknown_effects=unknown_effects,
+        outcome=UnknownOutcomeAttempt(),
     )
 
 
@@ -184,7 +203,7 @@ def _concurrent_start(
     path: str, token: str, gate: multiprocessing.Event, output: multiprocessing.Queue
 ) -> None:
     try:
-        with Coordination(path, clock_ms=lambda: 1_000) as db:
+        with StandaloneCoordination(path, clock_ms=lambda: 1_000) as db:
             gate.wait(timeout=5)
             result = db.attempts.start(
                 AttemptStart(
@@ -259,17 +278,19 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
     assert type(snap.execution.lifecycle) is PendingExecution
     assert type(snap.assignments[0].lifecycle) is EngagedAssignment
     assert snap.links[0].ordinal == 0
-    assert snap.obligation is not None
+    assert len(snap.obligations) == 1
+    original = Message("owner", "Owner", "Original request", InfoKind, timestamp=1.0, seq=1)
     replay = db.executions.create(
         "exec",
         ExecutionOrigin.WIRE,
         "owner",
         "thread",
         2,
-        assignment_ids=("claim",),
-        exact_target="owner",
+        sources=(wire_source(db, "claim", original, FullWake()),),
     )
     assert isinstance(replay, AlreadyApplied)
+    different = Message("different", "Owner", "Original request", InfoKind,
+                        timestamp=1.0, seq=1)
     with pytest.raises(IdentityConflict):
         db.executions.create(
             "exec",
@@ -277,8 +298,7 @@ def test_claim_execution_idempotency_and_rollback(db_path: Path) -> None:
             "owner",
             "thread",
             2,
-            assignment_ids=("claim",),
-            exact_target="@different",
+            sources=(wire_source(db, "claim", different, FullWake()),),
         )
     db.close()
     with store(db_path) as reopened:
@@ -351,25 +371,28 @@ def test_claim_acceptance_requires_initial_mode_decision(db_path: Path) -> None:
 def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> None:
     with store(db_path) as db:
         db.participants.register("owner", "Owner", "thread", committed=True)
+        sources = []
         for index, disposition in (
             (1, TriagePendingAssignment),
             (2, PassiveAssignment),
         ):
+            mode = BoundedTriageWake() if index == 1 else PassiveWake()
+            original = Message("owner", "Owner", f"Original request {index}", InfoKind,
+                               timestamp=float(index), seq=index)
             db.assignments.accept(
                 WakeAssignment(
                     assignment_id=str(index),
                     recipient="Owner",
                     recipient_lookup="owner",
                     wire_seq=index,
-                    message_id=str(index),
+                    message_id=original.message_id,
                     audience=MessageAudience.DIRECT,
                     accepted_at_ms=1_000,
                     updated_at_ms=1_000,
-                    lifecycle=disposition.load(
-                        BoundedTriageWake() if index == 1 else PassiveWake(), None, None, None
-                    ),
+                    lifecycle=disposition.load(mode, None, None, None),
                 )
             )
+            sources.append(wire_source(db, str(index), original, mode))
         deferred = db.assignments.transition_preengagement(
             "1", DeferredAssignment, expected_revision=1
         )
@@ -383,8 +406,7 @@ def test_claim_preengagement_and_mixed_engagement_rollback(db_path: Path) -> Non
                 "owner",
                 "thread",
                 2,
-                assignment_ids=("1", "2"),
-                exact_target="owner",
+                sources=tuple(sources),
             )
         assert db.assignments.get("1").lifecycle.execution_id is None
         assert db.session._connection.execute("SELECT count(*) FROM executions").fetchone()[0] == 0
@@ -531,8 +553,8 @@ def test_settled_snapshot_encodes_recovery_kind_separately_from_table(db_path: P
         assert not observed.is_current and not observed.can_retry
 
 
-def test_nonpublication_silent_atomic_settlement(db_path: Path) -> None:
-    with ready(db_path) as db:
+def test_nonpublication_claimless_atomic_settlement(db_path: Path) -> None:
+    with ready(db_path, origin=ExecutionOrigin.ACP) as db:
         _, fence = started(db)
         fence = final_evidence(db, fence)
         settled = db.attempts.settle_nonpublication(
@@ -541,9 +563,8 @@ def test_nonpublication_silent_atomic_settlement(db_path: Path) -> None:
         assert type(settled.value.execution.lifecycle) is CompletedExecution
         assert settled.value.attempt is not None
         assert type(settled.value.attempt.lifecycle) is SucceededAttempt
-        assert settled.value.obligation is not None
-        assert settled.value.obligation.lifecycle.declared_name == "silent"
-        assert type(settled.value.assignments[0].lifecycle) is CompletedAssignment
+        assert settled.value.obligations == ()
+        assert settled.value.assignments == ()
         assert not settled.value.is_current
         assert settled.value.pointer_revision == 2
     with store(db_path) as reopened:
@@ -614,6 +635,28 @@ def test_retry_partition_and_generation_fence(db_path: Path) -> None:
         )
 
 
+def test_provider_failure_after_tool_start_is_terminal(db_path: Path) -> None:
+    with ready(db_path, max_attempts=3) as db:
+        _, fence = started(db)
+        with db.session.transaction() as connection:
+            ReplayAssessments.accumulate(
+                connection, "exec", ReplayFact.TOOL_CALL_STARTED
+            )
+        fence = final_evidence(db, fence)
+        outcome = db.attempts.settle_nonpublication(
+            fence,
+            expected_pointer_revision=1,
+            outcome=AttemptFailedAttempt(),
+            reason_code="provider_failed",
+            failure=ProviderRetryExhausted("controlled provider failure"),
+        )
+        assert type(outcome.value.execution.lifecycle) is FailedExecution
+        assert not outcome.value.can_retry
+        assert outcome.value.replay is not None
+        assert outcome.value.replay.facts == ReplayFact.TOOL_CALL_STARTED
+        assert outcome.value.replay.side_effects_possible
+
+
 @pytest.mark.parametrize("first_fact", ["process_dead", "backend_done"])
 def test_final_backend_fact_blocks_later_phase_progress_and_dead_lease(
     db_path: Path, first_fact: str
@@ -664,123 +707,66 @@ def test_final_backend_fact_blocks_later_phase_progress_and_dead_lease(
         assert type(outcome.value.execution.lifecycle) is FailedExecution
 
 
-def test_replay_safety_does_not_cross_retry_attempts(db_path: Path) -> None:
+@pytest.mark.parametrize(
+    "fact", [ReplayFact.ASSISTANT_OUTPUT, ReplayFact.TOOL_CALL_STARTED]
+)
+def test_provider_proof_carries_until_later_attempt_records_output(
+    db_path: Path, fact: ReplayFact
+) -> None:
     with ready(db_path, max_attempts=3) as db:
         _, first = started(db)
-        initial = db.attempts.observe_replay(
-            first,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.NONE,
-            replay_safe=True,
-            side_effects_possible=False,
-        )
-        assert initial.value.replay is not None
-        same = db.attempts.observe_replay(
-            first,
-            expected_pointer_revision=1,
-            expected_replay_revision=1,
-            facts=ReplayFact.NONE,
-            replay_safe=True,
-            side_effects_possible=False,
-        )
-        assert isinstance(same, AlreadyApplied)
         first = final_evidence(db, first)
         deferred = db.attempts.settle_nonpublication(
             first,
             expected_pointer_revision=1,
             outcome=AttemptFailedAttempt(),
-            reason_code="first_failed",
+            reason_code="provider_failed",
+            failure=ProviderRetryExhausted("controlled provider failure"),
         )
-        assert deferred.value.can_retry
+        proof = deferred.value.replay
+        assert deferred.value.can_retry and proof is not None and proof.allows_retry
         db.participants.advance_generation("owner", "thread", expected_generation=1)
-        second_token = prepare_fence_token()
         second = db.attempts.start(
             AttemptStart(
                 "exec",
                 2,
                 "thread",
                 2,
-                second_token,
+                prepare_fence_token(),
                 expected_execution_revision=4,
                 expected_pointer_revision=2,
             )
         )
-        assert second.value.snapshot.replay is not None
-        assert not second.value.snapshot.replay.replay_safe
-        assert second.value.snapshot.replay.revision == 2
-        replayed_start = db.attempts.start(
-            AttemptStart(
-                "exec",
-                2,
-                "thread",
-                2,
-                second_token,
-                expected_execution_revision=4,
-                expected_pointer_revision=2,
-            )
-        )
-        assert isinstance(replayed_start, AlreadyApplied)
-        assert db.snapshots.get("exec").replay == second.value.snapshot.replay
-        same_unsafe = db.attempts.observe_replay(
-            second.value.fence,
-            expected_pointer_revision=3,
-            expected_replay_revision=2,
-            facts=ReplayFact.NONE,
-            replay_safe=False,
-            side_effects_possible=False,
-        )
-        assert isinstance(same_unsafe, AlreadyApplied)
-        with pytest.raises(IdentityConflict):
-            db.attempts.observe_replay(
-                second.value.fence,
-                expected_pointer_revision=3,
-                expected_replay_revision=2,
-                facts=ReplayFact.NONE,
-                replay_safe=True,
-                side_effects_possible=False,
-            )
+        assert second.value.snapshot.replay == proof
+        with db.session.transaction() as connection:
+            ReplayAssessments.accumulate(connection, "exec", fact)
+        revoked = db.snapshots.get("exec").replay
+        assert revoked is not None
+        assert revoked.facts == fact and not revoked.allows_retry
+
         second_fence = final_evidence(db, second.value.fence, pointer_revision=3)
         outcome = db.attempts.settle_nonpublication(
             second_fence,
             expected_pointer_revision=3,
             outcome=AttemptFailedAttempt(),
-            reason_code="second_failed",
+            reason_code="provider_failed_after_output",
+            failure=ProviderRetryExhausted("controlled provider failure"),
         )
         assert type(outcome.value.execution.lifecycle) is FailedExecution
         assert not outcome.value.can_retry
-        assert outcome.value.replay is not None and not outcome.value.replay.replay_safe
-        with pytest.raises((StaleFence, IdentityConflict)):
-            db.attempts.start(
-                AttemptStart(
-                    "exec",
-                    3,
-                    "thread",
-                    3,
-                    prepare_fence_token(),
-                    expected_execution_revision=6,
-                    expected_pointer_revision=4,
-                )
-            )
+        assert outcome.value.replay == revoked
 
 
 def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path) -> None:
     with ready(db_path, max_attempts=3) as db:
         _, first = started(db)
-        db.attempts.observe_replay(
-            first,
-            expected_pointer_revision=1,
-            expected_replay_revision=None,
-            facts=ReplayFact.NONE,
-            replay_safe=True,
-            side_effects_possible=False,
-        )
         first = final_evidence(db, first)
         deferred = db.attempts.settle_nonpublication(
             first,
             expected_pointer_revision=1,
             outcome=AttemptFailedAttempt(),
-            reason_code="first_failed",
+            reason_code="provider_failed",
+            failure=ProviderRetryExhausted("controlled provider failure"),
         )
         assert deferred.value.can_retry
         db.participants.advance_generation("owner", "thread", expected_generation=1)
@@ -821,9 +807,7 @@ def test_retry_start_rollback_restores_prior_replay_authorization(db_path: Path)
             )
         )
         assert isinstance(second, Applied)
-        assert second.value.snapshot.replay is not None
-        assert not second.value.snapshot.replay.replay_safe
-        assert second.value.snapshot.replay.revision == 2
+        assert second.value.snapshot.replay == before.replay
 
 
 def test_ambiguity_forces_failed_partition(db_path: Path) -> None:
@@ -1054,12 +1038,16 @@ def test_monitor_requires_owner_loss_separate_from_child_exit(
     with ready(db_path) as db:
         _, fence = started(db)
         monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
-        for evidence, owner_loss in (
-            (monitor_evidence(True), None),
-            (monitor_evidence(True, subprocess_dead=False), object.__new__(VerifiedOwnerLoss)),
-            (monitor_evidence(True), object.__new__(VerifiedOwnerLoss)),
+        for evidence, owner_loss, error in (
+            (monitor_evidence(True), None, RecoveryBlocked),
+            (
+                monitor_evidence(True, subprocess_dead=False),
+                object.__new__(VerifiedOwnerLoss),
+                RecoveryBlocked,
+            ),
+            (monitor_evidence(True), object.__new__(VerifiedOwnerLoss), AttributeError),
         ):
-            with pytest.raises(RecoveryBlocked):
+            with pytest.raises(error):
                 monitor.terminalize_dead_attempt(
                     "exec",
                     1,
@@ -1085,7 +1073,7 @@ def test_monitor_production_verifier_remains_closed(db_path: Path) -> None:
         with pytest.raises(RecoveryBlocked):
             VerifiedOwnerLoss(execution_id="exec")
         monitor = RecoveryMonitorCapability(db, _grant=_MONITOR_GRANT)
-        with pytest.raises(RecoveryBlocked):
+        with pytest.raises(AttributeError):
             monitor.terminalize_dead_attempt(
                 "exec",
                 1,
@@ -1114,8 +1102,8 @@ def test_unstarted_failure_and_claim_requeue(db_path: Path) -> None:
         assert type(failed.value.execution.lifecycle) is FailedExecution
         assert failed.value.attempt is None
         assert type(failed.value.assignments[0].lifecycle) is FailedAssignment
-        assert failed.value.obligation is not None
-        assert failed.value.obligation.lifecycle.declared_name == "failed"
+        assert len(failed.value.obligations) == 1
+        assert failed.value.obligations[0].lifecycle.declared_name == "failed"
         with pytest.raises(IdentityConflict):
             db.attempts.start(
                 AttemptStart(
@@ -1272,32 +1260,13 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
         )
         intent = PublicationIntents(
             "exec",
-            "thread",
             "owner",
-            InfoKind,
-            False,
-            1.0,
-            "reply",
-            hashlib.sha256(b"reply").hexdigest(),
+            message,
             canonical_publication_key("exec", "owner"),
             message.message_id,
         )
         with db.session.transaction() as connection:
-            connection.execute(
-                "INSERT INTO publication_intents VALUES (?,?,?,?,?,?,?,?,?,?)",
-                (
-                    intent.execution_id,
-                    intent.sender,
-                    intent.exact_target,
-                    intent.message_type.value,
-                    int(intent.notice),
-                    intent.timestamp,
-                    intent.payload,
-                    intent.payload_digest,
-                    intent.publication_key,
-                    intent.expected_message_id,
-                ),
-            )
+            intent.insert(connection)
             connection.execute(
                 (
                     "UPDATE obligations SET lifecycle=json_object('kind','publishing'),revision=r"
@@ -1305,9 +1274,9 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
                 )
             )
         projected = db.snapshots.get("exec")
-        assert projected.publication_intent == intent
-        assert projected.obligation is not None
-        assert projected.obligation.lifecycle.declared_name == "publishing"
+        assert projected.publication_intents == (intent,)
+        assert len(projected.obligations) == 1
+        assert projected.obligations[0].lifecycle.declared_name == "publishing"
         with pytest.raises(PublicationUncertain):
             db.attempts.fail_unknown(fence, expected_pointer_revision=1)
         with pytest.raises(PublicationUncertain):
@@ -1320,9 +1289,10 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
         assert db.snapshots.get("exec").is_current
         assert db.snapshots.get("exec").attempt is not None
         assert not db.snapshots.get("exec").attempt.lifecycle.backend_done
-        assert db.snapshots.get("exec").publication_receipt is None
+        assert db.snapshots.get("exec").publication_receipts == ()
     with store(db_path) as reopened:
-        assert reopened.snapshots.get("exec").obligation.lifecycle.declared_name == "publishing"
+        obligations = reopened.snapshots.get("exec").obligations
+        assert len(obligations) == 1 and obligations[0].lifecycle.declared_name == "publishing"
 
 
 def test_concurrent_start_exactly_one_claims_pointer(db_path: Path) -> None:
@@ -1402,20 +1372,20 @@ def test_concurrent_registration_one_writer_one_replay(db_path: Path) -> None:
         )
 
 
-def _read_while_other_store_commits(
+def _read_while_other_store_waits(
     path: Path,
     first_table: str,
-    read: Callable[[Coordination], object],
-    write: Callable[[Coordination], None],
+    read: Callable[[StandaloneCoordination], object],
+    write: Callable[[StandaloneCoordination], None],
 ) -> object:
-    """Hold a reader after its first SELECT while a second connection tries COMMIT."""
+    """Hold a reader while a second connection waits for write admission."""
     first_read = threading.Event()
     writer_ready = threading.Event()
-    commit_started = threading.Event()
+    write_started = threading.Event()
     writer_done = threading.Event()
     errors: list[BaseException] = []
 
-    class PausedReader(Coordination):
+    class PausedReader(StandaloneCoordination):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             paused = False
@@ -1433,9 +1403,10 @@ def _read_while_other_store_commits(
                 if selected and not paused:
                     paused = True
                     first_read.set()
-                    assert commit_started.wait(timeout=5), "writer never reached COMMIT"
+                    assert write_started.wait(timeout=5), "writer never requested admission"
                     # A real SQLite row was read under the aggregate snapshot.
-                    # The second connection must remain blocked until its reader exits.
+                    # The second connection must remain blocked before changing state
+                    # until its reader exits.
                     writer_done.wait(timeout=0.3)
                 return result
 
@@ -1447,8 +1418,8 @@ def _read_while_other_store_commits(
             with store(path) as other:
 
                 def trace(statement: str) -> None:
-                    if statement == "COMMIT":
-                        commit_started.set()
+                    if statement == "BEGIN EXCLUSIVE":
+                        write_started.set()
 
                 other.session._connection.set_trace_callback(trace)
                 writer_ready.set()
@@ -1477,7 +1448,7 @@ def test_public_snapshot_is_one_committed_revision_during_settlement(db_path: Pa
         _, fence = started(db)
         fence = final_evidence(db, fence)
 
-    observed = _read_while_other_store_commits(
+    observed = _read_while_other_store_waits(
         db_path,
         "executions",
         lambda reader: reader.snapshots.get("exec"),
@@ -1500,7 +1471,7 @@ def test_public_participant_is_one_committed_revision_during_rename(db_path: Pat
     with store(db_path) as db:
         db.participants.register("owner", "Old", "thread", committed=True)
 
-    observed = _read_while_other_store_commits(
+    observed = _read_while_other_store_waits(
         db_path,
         "participants",
         lambda reader: reader.participants.get("owner"),
@@ -1544,12 +1515,12 @@ def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_pat
         "SELECT * FROM nonexistent_original_table",
     ):
         with pytest.raises(sqlite3.OperationalError):
-            with CoordinationStore.observing(db_path, lock_timeout=0.05) as reader:
+            with CoordinationStore.observing(db_path) as reader:
                 reader.execute(statement)
         with pytest.raises(sqlite3.ProgrammingError, match="closed"):
             reader.execute("SELECT 1")
     with pytest.raises(RuntimeError, match="consumer failed"):
-        with CoordinationStore.observing(db_path, lock_timeout=0.05) as reader:
+        with CoordinationStore.observing(db_path) as reader:
             raise RuntimeError("consumer failed")
     with pytest.raises(sqlite3.ProgrammingError, match="closed"):
         reader.execute("SELECT 1")

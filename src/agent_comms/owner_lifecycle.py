@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import shlex
+import shutil
 import sys
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
@@ -17,6 +18,7 @@ from .errors import RelationViolationError
 from .locked_store import LockedStore
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
+from .native_arguments import NativeArguments
 from .owner_launch import RestartEnvironment
 from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
 from .registration import Registration
@@ -182,8 +184,8 @@ class OwnerLifecycle:
             or not native_package.is_absolute()
         ):
             raise ValueError("private owner launch requires the validated absolute root/package")
-        with self.bus.log.locked():
-            marker = self.bus.log._private_marker_unlocked()
+        with self.bus.log.certified_read() as source:
+            marker = source.marker
             if marker.root_id != wire_root_id:
                 raise RelationViolationError("private owner launch root ID changed")
         self._private_nk_launch = PrivateNkLaunch(
@@ -208,7 +210,8 @@ class OwnerLifecycle:
             return owned
 
     def ensure_owner(
-        self, name: str, *, agent_bin: str = "pi", agent_args: Sequence[str] | None = None
+        self, name: str, *, agent_bin: str = NativeArguments.default_binary,
+        agent_args: Sequence[str] | None = None,
     ) -> Thread:
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
@@ -237,7 +240,7 @@ class OwnerLifecycle:
                     raise RelationViolationError("Stopped owner has not exited yet.")
                 return OwnerStartResult(thread.name, thread.pid, False)
             owner = self._launch_owner_unlocked(
-                thread, agent_bin or os.environ.get("AGENT_COMMS_AGENT_BIN", "pi"), agent_args
+                thread, NativeArguments.configured_binary(agent_bin), agent_args
             )
             return OwnerStartResult(owner.name, owner.pid, True)
 
@@ -306,8 +309,10 @@ class OwnerLifecycle:
             if not snapshot.statuses[thread.name].active:
                 return
             if thread.pid == os.getpid():
-                caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-                if caller and self.registry.require(caller).name == thread.name:
+                if RestartEnvironment.called_by(
+                    thread.name,
+                    canonicalize=lambda caller: self.registry.require(caller).name,
+                ):
                     self._release_current_owner_unlocked(thread.name)
                 else:
                     self.registry.unregister(thread.name)
@@ -318,6 +323,12 @@ class OwnerLifecycle:
             generation = snapshot.admission_generations[thread.name]
         self._stop_process(thread, generation)
         self._finish_stopped_owner(thread, generation)
+        # Stop is explicit abandonment of this exited local owner, not replay
+        # permission. The existing recovery owner checks its exact release and
+        # native-child absence before terminal settlement.
+        from .attempt_recovery import RecoveryMonitorCapability
+
+        RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
 
     def require_launch_authority(self) -> PrivateNkLaunch | None:
         """Check this lifecycle's launch authority without reserving a process.
@@ -327,11 +338,10 @@ class OwnerLifecycle:
         """
         private_launch = self._private_nk_launch
         if private_launch is None:
-            with self.bus.log.locked():
-                if self.bus.log.read_metadata_unlocked().private:
-                    raise PublicationActivationBlocked(
-                        "private owner launch requires explicit matching root and package"
-                    )
+            if self.bus.log.read_metadata_unlocked().private:
+                raise PublicationActivationBlocked(
+                    "private owner launch requires explicit matching root and package"
+                )
         else:
             private_launch.validate()
         return private_launch
@@ -363,6 +373,11 @@ class OwnerLifecycle:
                 # The default stock binary cannot attest native input IDs.
                 # Keep the owner on this installation's pinned Pi entrypoint.
                 agent_bin = self.native_entrypoint()
+            else:
+                # The owner process keeps the launcher selected at its start.
+                # A later PATH or installed-runtime symlink change cannot retarget
+                # drains already owned by this process.
+                agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
             # Explicit launch installs the current runtime before registering
             # this owner. Readers never create or repair runtime schemas.
             from .bus_publication import stable_thread_lookup
@@ -378,12 +393,11 @@ class OwnerLifecycle:
                 )
         env.update(
             {
-                "PI_AGENT_ID": thread.name,
-                "AGENT_COMMS_THREAD": thread.name,
+                RestartEnvironment.owner_key: thread.name,
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
-                "AGENT_COMMS_AGENT_BIN": agent_bin,
+                NativeArguments.binary_key: agent_bin,
             }
         )
         if private_launch is not None:
@@ -398,7 +412,7 @@ class OwnerLifecycle:
         if startup_input_key is not None:
             env["AGENT_COMMS_STARTUP_INPUT_KEY"] = startup_input_key
         if agent_args is not None:
-            env["AGENT_COMMS_AGENT_ARGS"] = shlex.join(agent_args)
+            env[NativeArguments.arguments_key] = shlex.join(agent_args)
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:
@@ -447,15 +461,11 @@ class OwnerLifecycle:
             if self._released_same_owner(snapshot, thread, admission_generation):
                 return  # An exact, durably attested release of the signaled owner.
             self._require_same_stop_owner(thread, admission_generation)
-            self.registry.unregister(thread.name)
+            self._retire_owner_unlocked(thread, admission_generation)
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
-        caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-        if not caller:
-            raise RelationViolationError(
-                "Voluntary release requires PI_AGENT_ID or AGENT_COMMS_THREAD."
-            )
+        caller = RestartEnvironment.calling_thread()
         with _store_lock(self._wire_lock_path):
             canonical = self.registry.require(name).name
             if self.registry.require(caller).name != canonical:
@@ -471,7 +481,12 @@ class OwnerLifecycle:
         ):
             raise RelationViolationError("Only the registered owner may release itself.")
         before = snapshot.admission_generations[canonical]
-        self.registry.unregister(canonical)
-        after = self.registry.snapshot().admission_generations[canonical]
-        receipt = OwnerReleaseReceipt(before, after, replace(owner, active_turn=None))
-        self.releases.update(lambda receipts: {**receipts, canonical: receipt})
+        self._retire_owner_unlocked(owner, before)
+
+    def _retire_owner_unlocked(self, thread: Thread, before: int) -> None:
+        """Share retirement only after the caller's distinct identity checks."""
+        self.registry.unregister(thread.name)
+        after = self.registry.snapshot()
+        receipt = OwnerReleaseReceipt(before, after.admission_generations[thread.name],
+                                      after.threads[thread.name])
+        self.releases.update(lambda receipts: {**receipts, thread.name: receipt})

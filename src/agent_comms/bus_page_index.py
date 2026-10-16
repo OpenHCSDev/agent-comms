@@ -8,15 +8,20 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 from collections.abc import Generator, Mapping
-from dataclasses import dataclass, field
-from hashlib import sha256
+from contextlib import contextmanager, nullcontext
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import BinaryIO, Literal
+from typing import TYPE_CHECKING, BinaryIO, Literal
 
+from .coordination_database import CoordinationStore
+from .bus_projection import AppendCheckpoint
+from .private_path import FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
-from .bus_projection import BusFileRevision
+from .wire_record import WireRecord, WireScan
+
+if TYPE_CHECKING:
+    from .wire_log import OpenedWireSnapshot
 
 
 class StaleBusPageIndexError(ValueError):
@@ -33,43 +38,45 @@ class PageIndexTable:
 
 @dataclass(frozen=True)
 class BusPageSource(PageIndexTable, TypedTable):
-    identity: tuple[int, int, int, int]
-    offset: int = field(metadata={"sql": Column(check="offset>=0")})
+    revision: FileRevision
     tail: str
     singleton: Literal[1] = field(default=1, metadata={"sql": Column(primary_key=True)})
 
-    def covers(self, stream: BinaryIO, source: BusFileRevision) -> bool:
+    def covers(self, stream: BinaryIO, source: FileRevision) -> bool:
         """A later append index may lend offsets within this original cut."""
-        opened = os.fstat(stream.fileno())
+        opened = FileRevision.from_stat(os.fstat(stream.fileno()))
         return (
-            source.opened_by(stream)
-            and self.identity[:2] == (opened.st_dev, source.inode)
-            and source.size <= self.offset <= opened.st_size
-            and self.tail == BusPageIndex._tail(stream, self.offset)
+            source.holds_cut(opened, source.size)
+            and self.revision.identity == opened.identity
+            and source.size <= self.revision.size <= opened.size
+            and self.tail == AppendCheckpoint.fingerprint(stream, self.revision.size)
         )
 
 
 @dataclass(frozen=True)
 class BusPageRow(PageIndexTable, TypedTable):
-    seq: int
+    seq: int = field(metadata={"sql": Column(primary_key=True)})
     offset: int
     sender: str
     target: str
-    id: int | None = field(default=None, metadata={"sql": Column(primary_key=True)})
-    indexes = (Index(("seq", "id")), Index(("target", "seq", "id")))
+    indexes = (Index(("target", "seq")),)
 
 
 class BusPageIndex:
+    batch_bytes = 4 * 1024 * 1024
+
     def __init__(self, bus_path: Path, *, readonly: bool = False):
         self.bus_path = bus_path
         self.path = bus_path.with_name("bus_page_index.sqlite3")
-        self.connection = sqlite3.connect(
-            self.path.as_uri() + "?mode=ro" if readonly else self.path,
-            uri=readonly, timeout=30,
+        self.connection = (
+            CoordinationStore.read_snapshot(self.path)
+            if readonly
+            else CoordinationStore.writer(self.path)
         )
-        self.connection.execute("PRAGMA query_only=ON" if readonly else "PRAGMA synchronous=FULL")
+        if not readonly:
+            self.connection.execute("PRAGMA synchronous=FULL")
         try:
-            with self.connection:
+            with nullcontext() if readonly else self.connection:
                 if not readonly:
                     self.connection.execute("BEGIN IMMEDIATE")
                 actual = SQLiteSchemaObject.read(
@@ -86,7 +93,7 @@ class BusPageIndex:
                 if not actual and not readonly:
                     for statement in schema.values():
                         self.connection.execute(statement)
-                elif {row.name: row.sql for row in actual} != schema:
+                elif SQLiteSchemaObject.differences(actual, schema):
                     raise StaleBusPageIndexError("Bus page index requires the quiet runtime reset")
         except BaseException:
             self.connection.close()
@@ -98,80 +105,99 @@ class BusPageIndex:
     def __exit__(self, *_error: object) -> None:
         self.connection.close()
 
-    @staticmethod
-    def _tail(stream: BinaryIO, offset: int) -> str:
-        start = max(0, offset - 4096)
-        stream.seek(start)
-        return sha256(stream.read(offset - start)).hexdigest()
+    @contextmanager
+    def snapshot(self):
+        """Pin coverage and offsets to one SQLite revision.
+
+        Read-only indexes arrive with their snapshot already acquired. A
+        writable index commits preparation first, then borrows this read
+        transaction while consumers validate coverage and select offsets.
+        """
+        borrowed = self.connection.in_transaction
+        try:
+            if not borrowed:
+                CoordinationStore.begin_snapshot(self.connection)
+            yield self
+        finally:
+            if not borrowed and self.connection.in_transaction:
+                self.connection.execute("ROLLBACK")
 
     def sync(self) -> bool:
         """Return false for an unfinished tail, which the caller scans normally."""
-        try:
-            stream = self.bus_path.open("rb")
-        except FileNotFoundError:
-            return False
-        with stream:
-            stat = os.fstat(stream.fileno())
-            size = stat.st_size
-            if size:
-                stream.seek(size - 1)
-                if stream.read(1) != b"\n":
-                    return False
-            identity = (stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns)
-            try:
-                saved = BusPageSource.one(self.connection, singleton=1)
-            except (ValueError, TypeError):
-                saved = None  # Rebuild damaged current-format derived evidence from its source.
-            offset = saved.offset if saved is not None else 0
-            valid = (
-                saved is not None
-                and 0 <= offset <= size
-                and saved.identity[:2] == identity[:2]
-                and (offset != size or saved.identity[2:] == identity[2:])
-                and saved.tail == self._tail(stream, offset)
-            )
-            if not valid:
-                offset = 0
-            if valid and offset == size:
+        from .wire_log import WireLog
+
+        with WireLog(self.bus_path)._opened_wire_snapshot(need_sequence=False) as source:
+            return self._sync_opened(source)
+
+    def _sync_opened(self, opened: OpenedWireSnapshot) -> bool:
+        while True:
+            prepared = self._prepare(opened)
+            if prepared is None:
+                return False
+            saved, source, offset, rows = prepared
+            if saved == source:
                 return True
             with self.connection:
-                if not valid:
+                self.connection.execute("BEGIN IMMEDIATE")
+                if BusPageSource.one(self.connection, singleton=1) != saved:
+                    continue
+                if offset == 0:
                     self.connection.execute(f"DELETE FROM {BusPageRow.declared_name}")
-                    last_sequence = None
-                else:
-                    last_rows = BusPageRow.read(
-                        self.connection.execute(
-                            f"SELECT {BusPageRow._column_list(BusPageRow.columns())} "
-                            f"FROM {BusPageRow.declared_name} ORDER BY id DESC LIMIT 1"
-                        )
-                    )
-                    last_sequence = last_rows[0].seq if last_rows else None
-                stream.seek(offset)
-                while stream.tell() < size:
-                    row_offset = stream.tell()
-                    raw = stream.readline()
-                    if not raw.endswith(b"\n"):
-                        return False
-                    if not raw.strip():
-                        continue
-                    record = json.loads(raw)
-                    if not isinstance(record, Mapping):
-                        raise ValueError("JSONL bus row must be an object.")
-                    # Full validation on the newly indexed segment. A warm
-                    # read validates each selected record again from the bus.
-                    from .wire_record import WireRecord
+                for row in rows:
+                    row.insert(self.connection)
+                source.upsert(self.connection)
 
-                    for message in WireRecord.public_from_wire(record).messages():
-                        if last_sequence is not None and message.seq <= last_sequence:
-                            # The page collector uses wire order. A cache sorted
-                            # by sequence must not hide malformed source order.
-                            raise StaleBusPageIndexError("Wire sequences are not increasing.")
-                        BusPageRow(message.seq, row_offset, message.sender, message.target).insert(
-                            self.connection
-                        )
-                        last_sequence = message.seq
-                BusPageSource(identity, size, self._tail(stream, size)).upsert(self.connection)
-            return True
+    def _prepare(self, opened: OpenedWireSnapshot) -> tuple[BusPageSource | None, BusPageSource, int, tuple[BusPageRow, ...]] | None:
+        """Read and decode the source before taking the SQLite writer lock."""
+        with self.snapshot():
+            saved = BusPageSource.one(self.connection, singleton=1)
+            last_rows = BusPageRow.read(self.connection.execute(
+                f"SELECT {BusPageRow._column_list(BusPageRow.columns())} "
+                f"FROM {BusPageRow.declared_name} ORDER BY seq DESC LIMIT 1"
+            ))
+        stream, revision = opened.stream, opened.revision
+        if stream is None:
+            return None
+        size = opened.boundary
+        if size:
+            stream.seek(size - 1)
+            if stream.read(1) != b"\n":
+                return None
+        if saved is not None and saved.covers(stream, revision):
+            return saved, saved, saved.revision.size, ()
+        offset = saved.revision.size if saved is not None else 0
+        valid = (
+            saved is not None
+            and saved.revision.holds_cut(revision, offset)
+            and saved.tail == AppendCheckpoint.fingerprint(stream, offset)
+        )
+        if not valid:
+            offset = 0
+        if valid and offset == size:
+            return saved, saved, offset, ()
+        rows: list[BusPageRow] = []
+        last_sequence = last_rows[0].seq if valid and last_rows else None
+        stream.seek(offset)
+        while stream.tell() < size and stream.tell() - offset < self.batch_bytes:
+            row_offset = stream.tell()
+            raw = stream.readline(min(WireScan.max_row_bytes + 1, size - row_offset))
+            if len(raw) > WireScan.max_row_bytes:
+                raise OversizedIndexedBusRowError("Bus row exceeds its declared byte limit")
+            if not raw.endswith(b"\n"):
+                return None
+            if not raw.strip():
+                continue
+            record = json.loads(raw)
+            if not isinstance(record, Mapping):
+                raise ValueError("JSONL bus row must be an object.")
+            for message in WireRecord.public_from_wire(record).messages():
+                if last_sequence is not None and message.seq <= last_sequence:
+                    raise StaleBusPageIndexError("Wire sequences are not increasing.")
+                rows.append(BusPageRow(message.seq, row_offset, message.sender, message.target))
+                last_sequence = message.seq
+        through = stream.tell()
+        source = BusPageSource(replace(revision, size=through), AppendCheckpoint.fingerprint(stream, through))
+        return saved, source, offset, tuple(rows)
 
     def current(self) -> bool:
         """Read-only warm-cache check; never rebuild the bus on a wake."""
@@ -187,9 +213,7 @@ class BusPageIndex:
             except (ValueError, TypeError):
                 return False  # Damaged derived evidence: the caller reads the source.
             return saved is not None and saved == BusPageSource(
-                (stat.st_dev, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns),
-                size,
-                self._tail(stream, size),
+                FileRevision.from_stat(stat), AppendCheckpoint.fingerprint(stream, size)
             )
 
     def offsets(
@@ -223,7 +247,7 @@ class BusPageIndex:
             f"SELECT {BusPageRow._column_list(BusPageRow.columns())} "
             f"FROM {BusPageRow.declared_name}"
             + where
-            + f" ORDER BY seq {direction}, id {direction}"
+            + f" ORDER BY seq {direction}"
         )
         rows = iter(BusPageRow.iterate(self.connection.execute(query, params)))
         while True:

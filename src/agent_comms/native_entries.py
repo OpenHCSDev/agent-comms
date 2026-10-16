@@ -162,7 +162,7 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
 
     @property
     def recorded_at(self) -> datetime | None:
-        """Pi's external ISO8601 time, decoded once; missing or invalid time is undated."""
+        """Pi's external ISO8601 time, decoded once for tolerant transcript display."""
         if self.timestamp is None:
             return None
         try:
@@ -200,8 +200,9 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
 class NativeEvidenceRead:
     """Decoded original entries live only inside the acquired file resource.
 
-    Every observation verifies all previously read bytes before decoding the
-    append. No context proof, disposition or owner authority is retained here.
+    The source owner verifies initial bytes, pinned revisions, and each append
+    before decoding it. No context proof, disposition or owner authority is
+    retained here.
     """
 
     def __init__(self, source):
@@ -254,7 +255,20 @@ class NativeEvidenceRead:
         self.entries = ()
 
     def observe(self):
-        from .native_pi import NativePiUnavailable, _private_session_dir
+        """Decode the captured cut."""
+        return self._observe(reverified=False)
+
+    def _reverify(self):
+        self.entries = ()
+        self.source.reverify_from_start()
+        return self._observe(reverified=True)
+
+    def _observe(self, *, reverified: bool):
+        from .native_pi import (
+            NativeEvidencePrefixChanged,
+            NativePiUnavailable,
+            _private_session_dir,
+        )
 
         try:
             _private_session_dir(self.source.path.parent)
@@ -264,6 +278,14 @@ class NativeEvidenceRead:
                 raise ValueError("Native Pi session header is invalid")
             entries[0].require_header()
             _private_session_dir(self.source.path.parent)
+        except NativeEvidencePrefixChanged:
+            if reverified:
+                self.close()
+                raise
+            # Replacement, truncation or a changed prior hash enters the
+            # source owner's named unverified state. Reopen once and decode
+            # from byte zero; no stale entry or offset survives the transition.
+            return self._reverify()
         except NativePiUnavailable:
             self.close()
             raise
@@ -274,7 +296,8 @@ class NativeEvidenceRead:
         return entries[0], entries
 
     def decode_rows(self, rows):
-        return (NativeEntry.from_evidence(row) for row in rows)
+        for row in rows:
+            yield NativeEntry.from_evidence(row)
 
 
 class NativeInputEvidenceRead(NativeEvidenceRead):
@@ -287,8 +310,10 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
     def decode_rows(self, rows):
         for index, row in enumerate(rows):
             # The first physical record must remain the original session header.
-            entry = (NativeEntry.from_evidence(row) if index == 0 and not self.entries
-                     else NativeEntry.wire_member(row).input_evidence(row))
+            if index == 0 and not self.entries:
+                yield NativeEntry.from_evidence(row)
+                continue
+            entry = NativeEntry.wire_member(row).input_evidence(row)
             if entry is not None:
                 yield entry
 

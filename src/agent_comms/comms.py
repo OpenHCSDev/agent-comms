@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from .active_route import CommsRoute
+from .active_route import CommsRoute, resolve_comms_route
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
@@ -17,14 +17,15 @@ from .owner_lifecycle import OwnerLifecycle
 from .registration import Registration
 from .relationships import ThreadRelationships
 from .thread_management import ThreadManagement
+from .thread_configuration import ThreadConfiguration
 from .transcripts import Transcripts
 
 
 class Comms:
     def __init__(
-        self, root: Path, *, private_initial_writes: bool = True, private_claim_writes: bool = True
+        self, root: CommsRoute | Path, *, private_initial_writes: bool = True, private_claim_writes: bool = True
     ) -> None:
-        self.root = Path(root).expanduser()
+        self.route = resolve_comms_route(root)
         if private_initial_writes or private_claim_writes:
             self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         self._wire_lock_path = self.root / "wire"
@@ -45,6 +46,7 @@ class Comms:
             self.root, self.registry, self.bus,
             ChannelCatalog(self.root / ChannelCatalog.filename), self.agents, self.owners, self.ledger
         )
+        self.configuration = ThreadConfiguration(self.root, self.registry, self.threads, self.agents)
         self.channels = ChannelManagement(self.root, self.registry, self.bus, self.threads)
         self.views = HistoryViews(
             self.root,
@@ -59,12 +61,14 @@ class Comms:
         )
         self.relationships = ThreadRelationships(self.root, self.registry, self.bus, self.views)
 
+    @property
+    def root(self) -> Path:
+        return self.route.root
+
 
 def wire(root: CommsRoute | Path | str | None = None) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
-    from .active_route import resolve_comms_route
-
     route = resolve_comms_route(root)
-    comms = Comms(route.root)
+    comms = Comms(route)
     route.bind_owners(comms.owners)
     return comms

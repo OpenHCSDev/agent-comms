@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import IdentityConflict
 
 from .typed_table import Column, SQLiteForeignKeys, SQLiteSchemaObject, TypedRow, TypedTable
@@ -173,7 +174,7 @@ def _read_snapshot(directory: _PinnedDirectory, name: str) -> tuple[bytes, os.st
 
 
 def _connect(raw: bytes | None) -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:", isolation_level=None)
+    connection = CoordinationStore.writer(":memory:", isolation_level=None)
     try:
         if raw is not None:
             connection.deserialize(raw)
@@ -230,7 +231,7 @@ def _verify_schema(connection: sqlite3.Connection, row_type: type[TypedTable]) -
     temporary = SQLiteSchemaObject.read(
         connection.execute("SELECT name,sql FROM sqlite_temp_master WHERE sql IS NOT NULL")
     )
-    if {row.name: row.sql for row in actual} != _schema(row_type) or temporary:
+    if SQLiteSchemaObject.differences(actual, _schema(row_type)) or temporary:
         raise IdentityConflict("Sidecar schema objects have drifted.")
     if SnapshotMeta.select(connection) != [SnapshotMeta(1, _digest(row_type))]:
         raise IdentityConflict("Sidecar schema declaration differs.")

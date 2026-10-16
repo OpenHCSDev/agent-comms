@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import turn_failure as failures
-from .acp_failure import FailureSource, UnrecordedFailureSource
+from .acp_failure import FailureSource, UnrecordedFailureSource, ProviderRetryResult
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -23,6 +23,9 @@ class TurnOutput:
     final_assistant_stop: bool = False
     diagnostic: dict[str, int] = field(default_factory=dict)
     preflight_failure: str | None = None
+    # The live turn owns the one privacy-safe decoded retry result. Completion
+    # and failure presentation retain this immutable value; they do not decode it.
+    retry_result: ProviderRetryResult | None = None
     _text: list[str] = field(default_factory=list, repr=False)
     _message: list[str] = field(default_factory=list, repr=False)
 
@@ -53,6 +56,19 @@ class TurnOutput:
         if self.failure is not None and self.failure.ends_with_request_retry:
             self.failure = None
         self.error_message = None
+
+    def raise_if_failed(self, proof, provider: str, model: str) -> None:
+        if self.failure is not None:
+            self.declared_failure.raise_native(proof, provider, model)
+
+    @property
+    def declared_failure(self) -> failures.TurnFailure:
+        failure = self.failure
+        if failure is None:
+            raise ValueError("Failed native terminal lacks its declared failure")
+        if self.retry_result is None:
+            return failure
+        return self.retry_result.refine_failure(failure)
 
     @property
     def failure_text(self) -> str:
@@ -90,6 +106,7 @@ class TurnOutput:
             text=self.terminal_text(success, stderr, session.native.proc.returncode),
             ok=success and session.native.attestation.trustworthy,
             reason_code=self.failure.code if self.failure else None,
+            retry_result=self.retry_result,
             diagnostic={
                 **self.diagnostic,
                 **({"reason": self.preflight_failure} if self.preflight_failure else {}),

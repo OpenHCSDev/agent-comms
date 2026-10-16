@@ -20,6 +20,7 @@ from native_backend_fixture import native_backend_fixture
 async def native_backend(tmp_path_factory, monkeypatch):
     if not os.environ.get("PI_COMPACTION_TEST_PACKAGE"):
         pytest.skip("Set PI_COMPACTION_TEST_PACKAGE to the immutable native bundle")
+    monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     # Native originals belong to the persistent run, even when a consuming
     # module supplies a separate auto-deleting sealed-bus tmp_path fixture.
     async with native_backend_fixture(tmp_path_factory.mktemp("saved-native-owner")) as owner:
@@ -57,6 +58,45 @@ async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(
     assert len({row[1] for row in owner.starts}) == 4
     proofs = read_proof_rows(owner.session)
     assert {row["inputId"] for row in proofs} == {row[1] for row in owner.starts}
+
+
+async def test_actual_native_failure_after_tool_keeps_terminal_and_effect_once(
+    native_backend, monkeypatch
+):
+    from acp import RequestError
+    from acp.schema import TextContentBlock
+
+    owner = native_backend
+    await owner.author_history()
+    effect = owner.project / "one-effect.txt"
+    owner.provider.tool_call = (
+        "bash", {"command": "printf 'effect\\n' >> one-effect.txt"}
+    )
+    chunks = owner.provider.response_chunks
+
+    def fail_after_tool():
+        yield from chunks()
+        owner.provider.status = 400
+        owner.provider.error_message = "controlled failure after actual tool effect"
+
+    monkeypatch.setattr(owner.provider, "response_chunks", fail_after_tool)
+    async with owner.open_owner(native_options=("--tools", "bash")) as (agent, session):
+        with pytest.raises(RequestError):
+            await agent.prompt(session, [TextContentBlock(
+                type="text", text="Distinct isolated native terminal verification."
+            )])
+        assert effect.read_text() == "effect\n"
+        journal = [json.loads(line) for line in owner.session.read_text().splitlines()]
+        messages = [row["message"] for row in journal if row.get("type") == "message"]
+        errors = [message for message in messages if message.get("stopReason") == "error"]
+        assert errors and "controlled failure" in errors[-1]["errorMessage"]
+        tools = [message for message in messages if message.get("role") == "toolResult"]
+        assert len(tools) == 1
+        assert len([message for message in messages if message.get("role") == "user"]) == 2
+        reports = list((owner.root / "diagnostics").glob("*.json"))
+        failures = [json.loads(path.read_text()) for path in reports]
+        assert len(failures) == 1
+        assert failures[0]["reason"] == "model_request_failed"
 
 
 @pytest.mark.parametrize("termination", ["cancel", "eof", "owner_stop"])

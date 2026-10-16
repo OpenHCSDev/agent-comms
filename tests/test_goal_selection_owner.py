@@ -103,7 +103,7 @@ def test_exact_cas_and_owner_pause_remain_strict(selected_goal):
 
 def test_model_edit_and_resume_use_current_goal_selection(selected_goal, monkeypatch):
     comms, original = selected_goal
-    monkeypatch.setenv("PI_AGENT_ID", "worker")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     edited = CommsEditGoalTool(goal_id=original.id, text="Edited objective").apply(comms)
     current = FieldCodec.decode(Goal, edited["goal"])
     assert current.id == original.id and current.revision > original.revision

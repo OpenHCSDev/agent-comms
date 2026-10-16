@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
 
 from .declared_family import DeclaredFamily
 
@@ -40,8 +41,21 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         session.usage.provisional = False
 
     @classmethod
+    def declared_failure(cls, message):
+        from .turn_failure import ModelRequestFailed
+
+        text = (message.error_message or "").strip() or cls.tracked_failure
+        return ModelRequestFailed.from_diagnostics(text, message.diagnostics)
+
+    @classmethod
     def tracked(cls, session, message):
-        session.fail_terminal(message.error_message or cls.tracked_failure)
+        session.output.record_failure(cls.declared_failure(message))
+
+    @classmethod
+    def require_failed_terminal(cls):
+        # A saved tool round cannot establish whether the live owner accepted it.
+        if cls.successful or cls.tool_round:
+            raise ValueError("Saved assistant message did not end its turn as a failure")
 
 
 class PendingStopReason(PiStopReason):
@@ -56,7 +70,19 @@ class StopStopReason(PiStopReason):
         session.accept_final_message(message)
 
 
-class LengthStopReason(PiStopReason):
+class FailedPiStop:
+    """An explicit failed terminal records the same failure on every live path."""
+
+    failed = True
+
+    @classmethod
+    async def apply(cls, session, message):
+        session.output.record_failure(cls.declared_failure(message))
+        async for event in super().apply(session, message):
+            yield event
+
+
+class LengthStopReason(FailedPiStop, PiStopReason):
     tracked_failure = "Model output limit reached"
 
 
@@ -69,19 +95,21 @@ class ToolUseStopReason(PiStopReason, declared_name="toolUse"):
             return super().tracked(session, message)
 
 
-class ErrorStopReason(PiStopReason):
-    failed = True
-
+class ErrorStopReason(FailedPiStop, PiStopReason):
     @classmethod
     def permits_progress(cls):
         return False
 
     @classmethod
     async def apply(cls, session, message):
-        if session.usage.provisional:
-            session.usage.used = session.usage.confirmed
-            session.usage.provisional = False
-            yield session.context_info()
+        async for event in super().apply(session, message):
+            yield event
+        if not (session.explicit_interrupt and cls.explicit_abort) and (
+            session.watchdog.phase.holds_refusal_reports
+        ):
+            # A refusal the recovery is re-requesting is interim evidence; the
+            # recovery's own end event reports the final outcome.
+            return
         from .acp_failure import NativeMessageFailureSource
 
         error = session.output.error(
@@ -89,9 +117,6 @@ class ErrorStopReason(PiStopReason):
             message.diagnostics, source=NativeMessageFailureSource(message),
         )
         if not (session.explicit_interrupt and cls.explicit_abort):
-            from .turn_failure import ModelRequestFailed
-
-            session.output.record_failure(ModelRequestFailed(error.text))
             yield error
 
 
@@ -135,6 +160,16 @@ class ThresholdCompactionReason(CompactionReason):
 
 class UnknownCompactionReason(CompactionReason):
     pass
+
+
+class ServiceTier(StrEnum):
+    """Provider request service selected with a thread's model configuration."""
+
+    STANDARD = "standard"
+    PRIORITY = "priority"
+
+
+SERVICE_TIER_ENVIRONMENT = "AGENT_COMMS_SERVICE_TIER"
 
 
 class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
