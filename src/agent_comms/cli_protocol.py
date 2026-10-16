@@ -10,7 +10,7 @@ from graphlib import TopologicalSorter
 from typing import TYPE_CHECKING, Annotated, ClassVar, Never, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
-from pydantic import BaseModel, ConfigDict, Discriminator, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field
+from pydantic import BaseModel, ConfigDict, Discriminator, InstanceOf, PlainSerializer, PlainValidator, Tag, TypeAdapter, computed_field
 
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
@@ -183,7 +183,7 @@ class FailedCoreError(CoreError):
 class ArrivedMessage(WatchLine):
     """One decoded message; its journal retains canonical Message wire."""
     wire_tag = 'message'
-    message: Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(Message.to_wire)]
+    message: InstanceOf[Annotated[Message, PlainValidator(Message.from_wire), PlainSerializer(Message.to_wire)]]
 
     @property
     def payload(self) -> str:
