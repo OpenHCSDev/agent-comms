@@ -284,7 +284,7 @@ class WireLog:
 
     def register_append_index(self, index: BusAppendIndex[Checkpoint]) -> BusAppendIndex[Checkpoint]:
         """Register one index owner for automatic capture with every opened cut."""
-        if index.bus_path != self.path:
+        if index.source_path != self.path:
             raise ValueError("Append index belongs to another bus")
         if index not in self._append_indexes:
             self._append_indexes.append(index)
