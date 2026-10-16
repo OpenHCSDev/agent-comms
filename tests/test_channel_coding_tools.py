@@ -19,6 +19,8 @@ from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 from agent_comms.threads import Thread
+from agent_comms.tool_declaration import ToolArguments
+from agent_comms.recorded_time import UnrecordedEventTime
 
 
 def test_create_claim_competes_before_file_exists_and_releases_without_creation():
@@ -105,12 +107,12 @@ def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments)
 ])
 def test_pi_argument_fields_own_roundtrip_and_display(name, arguments):
     from dataclasses import fields
-    from agent_comms.tool_declaration import ToolDeclaration
 
     call = CodingCall.decode("typed-argument-shape", name, arguments)
     assert "arguments" not in {item.name for item in fields(call.tool)}
     assert call.tool.arguments == arguments
-    assert call.tool.detail in ToolDeclaration.start("typed", name, arguments, detail=call.tool.detail).title
+    assert call.tool.detail in ToolArguments.build_call(
+        UnrecordedEventTime(), "typed", name, arguments).title
 
 
 @pytest.mark.asyncio

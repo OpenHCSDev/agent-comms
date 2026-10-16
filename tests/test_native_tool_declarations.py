@@ -11,7 +11,7 @@ from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
-from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
+from agent_comms.tool_declaration import ToolArguments, ToolCall, ToolDeclaration, UndeclaredTool
 from agent_comms.recorded_time import UnrecordedEventTime
 from agent_comms.pi_payloads import ToolCallContent
 from delivery_owner_fixture import canonical_agent
@@ -24,8 +24,9 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         acp_kind = "search"
         label = "Inspect"
 
-    event = ToolDeclaration.start("case", "inspect_fixture", {"query": "new declaration"},
-                                  detail="new declaration")
+    event = events.ToolStart.from_call(ToolArguments.build_call(
+        UnrecordedEventTime(), "case", "inspect_fixture", {"query": "new declaration"},
+        detail="new declaration"))
     assert (event.title, event.kind) == ("Inspect new declaration", "search")
     owner, received = acp_tools
     await owner._emit_event("declared-tool", event, owner.sessions.client)
@@ -45,10 +46,12 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
     for tool in examples:
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
-        event = ToolCallContent.start_event("case", tool.declared_name, call.tool.arguments)
+        event = events.ToolStart.from_call(ToolArguments.build_call(
+            UnrecordedEventTime(), "case", tool.declared_name, call.tool.arguments))
         assert event.kind == tool.acp_kind and event.args == tool.arguments
         assert call.tool == tool and tool.detail in event.title
-    unknown = ToolDeclaration.start("unknown", "external_extension", {"private": "preserved"})
+    unknown = events.ToolStart.from_call(ToolArguments.build_call(
+        UnrecordedEventTime(), "unknown", "external_extension", {"private": "preserved"}))
     assert (unknown.title, unknown.kind, unknown.args) == (
         "external_extension",
         "other",
@@ -72,7 +75,7 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
     end = ToolEndTranscript(tool_call_id="saved", tool_name=name, text="saved result")
     assert (start.title, start.kind, start.raw_input) == (caption, kind, foreign)
     assert (end.title, end.kind) == (label, kind)
-    assert ToolDeclaration.start("saved", name, foreign, path=declared_path).title == caption
+    assert ToolCall(UnrecordedEventTime(), "saved", name, foreign, path=declared_path).title == caption
     assert ToolStartTranscript(tool_call_id="scalar", tool_name=name, raw_input=17).title == label
     with pytest.raises(SelectedToolDenied):
         CodingCall.decode("execution", name, foreign)
@@ -83,12 +86,12 @@ def test_input_caption_is_bounded_and_never_parses_an_execution_request(monkeypa
         pytest.fail('Presentation must not decode an executable coding request')
 
     monkeypatch.setattr(CodingTool, 'parse_arguments', forbidden)
-    arguments = {'file_path': 'foreign.txt', 'payload': 'x' * 1_000_000}
-    caption = ToolDeclaration.start('opaque', 'read', arguments, path='foreign.txt').title
+    arguments = {'path': 'foreign.txt', 'payload': 'x' * 1_000_000}
+    caption = ToolArguments.build_call(UnrecordedEventTime(), 'opaque', 'read', arguments).title
     assert 'foreign.txt' in caption and len(caption) < 200
     assert arguments['payload'] == 'x' * 1_000_000
-    assert len(ToolCallContent.start_event('command', 'bash', {'command': 'x' * 1_000_000}).title) <= ToolDeclaration.CAPTION_CHARS
-    plain = ToolCallContent.start_event('plain', 'bash', {'command': 'echo "hello"\nnext line'}).title
+    assert len(ToolArguments.build_call(UnrecordedEventTime(), 'command', 'bash', {'command': 'x' * 1_000_000}).title) <= ToolDeclaration.CAPTION_CHARS
+    plain = ToolArguments.build_call(UnrecordedEventTime(), 'plain', 'bash', {'command': 'echo "hello"\nnext line'}).title
     assert plain == 'Run echo "hello" next line'
 
 

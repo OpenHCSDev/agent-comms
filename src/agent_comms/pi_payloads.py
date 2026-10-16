@@ -19,7 +19,9 @@ from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
 from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
-from .transcript_events import SentTranscript
+from .transcript_events import SentTranscript, ToolStartTranscript
+from .tool_declaration import ToolArguments, ToolDeclaration
+from .recorded_time import UnrecordedEventTime
 
 
 def wire_field(name: str, default=None):
@@ -309,35 +311,14 @@ class ThinkingContent(PiContent):
 
 
 @dataclass(frozen=True)
-class PiFileArguments(PiPayload):
-    path: str
-
-
-@dataclass(frozen=True)
-class PiCommandArguments(PiPayload):
-    command: str
-
-
-@dataclass(frozen=True)
 class ToolCallContent(PiContent, declared_name="toolCall"):
-    @staticmethod
-    def start_event(call_id: str, name: str, arguments: dict[str, Any]):
-        from .tool_declaration import ToolDeclaration
-
-        declaration = ToolDeclaration.for_name(name)
-        return ToolDeclaration.start(call_id, name, arguments,
-            path=declaration.file_location(lambda: PiFileArguments.from_wire(arguments).path),
-            detail=declaration.command_detail(lambda: PiCommandArguments.from_wire(arguments).command))
-
     def tool_calls(self) -> tuple[ToolCallContent, ...]:
         return (self,)
 
     def assistant_transcript(self):
-        from .transcript_events import ToolStartTranscript
-
-        start = self.start_event(self.id, self.name, self.arguments)
+        call = ToolArguments.build_call(UnrecordedEventTime(), self.id, self.name, self.arguments)
         return [ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=self.arguments, path=start.path, detail=start.detail)]
+                                    raw_input=self.arguments, path=call.path, detail=call.detail)]
 
     id: str
     name: str
@@ -763,7 +744,6 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 
     def transcript_events(self, context):
-        from .tool_declaration import ToolDeclaration
         from .transcript_events import ToolEndTranscript
 
         if not self.parts:

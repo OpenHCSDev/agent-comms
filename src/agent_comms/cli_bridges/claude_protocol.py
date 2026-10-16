@@ -14,7 +14,7 @@ from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_valid
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.tool_declaration import ToolArguments
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -222,12 +222,8 @@ class ThinkingBlock(RedactedThinking):
             record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp),)))
 
 
-class ClaudeFileArguments(WireModel):
-    file_path: str
-
-
-class ClaudeCommandArguments(WireModel):
-    command: str
+class ClaudeToolArguments(ToolArguments):
+    path: str | None = Field(default=None, alias='file_path')
 
 
 class ToolUse(AssistantBlock):
@@ -237,13 +233,9 @@ class ToolUse(AssistantBlock):
     input: JsonValue
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        declaration = ToolDeclaration.for_name(self.name)
-        call = ToolCall(RecordedEventTime(record.timestamp), self.id, self.name,
-                        self.input,
-                        detail=declaration.command_detail(
-                            lambda: ClaudeCommandArguments.model_validate(self.input).command),
-                        path=declaration.file_location(
-                            lambda: ClaudeFileArguments.model_validate(self.input).file_path))
+        call = ClaudeToolArguments.build_call(RecordedEventTime(record.timestamp),
+                                               self.id, self.name, self.input,
+                                               call_type=ToolCall)
         return (session.started(call),)
 
 

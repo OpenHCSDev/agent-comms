@@ -11,11 +11,10 @@ from pydantic import Field, JsonValue
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
-from agent_comms.tool_declaration import ToolDeclaration
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TextTranscript, TranscriptEvent
+from agent_comms.tool_declaration import ToolArguments as RecordedToolArguments
+from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TextTranscript
 
 from .shared import (
-    ActiveItem,
     CompletedItem,
     StartedItem,
     TextDraft,
@@ -127,13 +126,8 @@ class StatusHeader(WireHeader):
     type: str = Field(alias='status')
 
 
-class ToolArguments(WireModel):
-    """OpenCode owns this input spelling; shared code only sees the path."""
-    filePath: str
-
-
-class CommandArguments(WireModel):
-    command: str
+class ToolArguments(RecordedToolArguments):
+    path: str | None = Field(default=None, alias='filePath')
 
 
 class ToolState(TaggedWire, ABC):
@@ -147,13 +141,8 @@ class ToolState(TaggedWire, ABC):
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
 
     def call(self, part: ToolPart) -> ToolCall:
-        declaration = ToolDeclaration.for_name(part.tool)
-        return ToolCall(UnrecordedEventTime(), part.callID, part.tool,
-                        self.input,
-                        detail=declaration.command_detail(
-                            lambda: CommandArguments.model_validate(self.input).command),
-                        path=declaration.file_location(
-                            lambda: ToolArguments.model_validate(self.input).filePath))
+        return ToolArguments.build_call(UnrecordedEventTime(), part.callID, part.tool,
+                                        self.input, call_type=ToolCall)
 
 
 class PendingTool(ToolState):

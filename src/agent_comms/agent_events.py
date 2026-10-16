@@ -21,6 +21,7 @@ from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveReceipt, PiDiagnostic, PiUsage
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .tool_results import ToolDiff
+from .tool_declaration import ToolCall
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
@@ -125,6 +126,11 @@ class ToolStart(ToolEvent):
     kind: str = "other"
     path: str | None = None
     detail: str = ""
+
+    @classmethod
+    def from_call(cls, call: ToolCall) -> ToolStart:
+        return cls(call.id, call.name, call.title, call.arguments, call.kind,
+                   path=call.path, detail=call.detail)
 
 
 @dataclass(frozen=True)

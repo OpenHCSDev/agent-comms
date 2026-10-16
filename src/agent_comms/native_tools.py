@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, ClassVar
+from typing import ClassVar
 
 from .tool_declaration import ToolDeclaration, PathTool
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
@@ -49,6 +49,10 @@ class NativeRequestTools:
 
 class ArgumentTool(ToolDeclaration):
     """One declared execution record supplies validation and native serialization."""
+
+    @classmethod
+    def recorded_arguments(cls, schema, raw):
+        return schema.model_validate(raw)
 
     @classmethod
     def parse_arguments(cls, arguments: dict[str, object]):
@@ -118,8 +122,8 @@ class BashTool(CodingTool):
         return self.command
 
     @classmethod
-    def command_detail(cls, decode: Callable[[], str]) -> str:
-        return decode()
+    def command_detail(cls, command: str) -> str:
+        return command
 
     def _parse_resource(self) -> None:
         return None

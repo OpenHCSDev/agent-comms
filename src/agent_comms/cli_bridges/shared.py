@@ -18,7 +18,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar
 
-from pydantic import JsonValue, TypeAdapter, Field, model_validator
+from pydantic import TypeAdapter, Field, model_validator
 from metaclass_registry import RegistryConfig
 
 from agent_comms.activity import ActivityState
@@ -35,7 +35,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.thread_identity import ThreadRole
-from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms import tool_declaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent, NoticeTranscript
 from agent_comms.typed_table import Column, TypedTable
@@ -104,17 +104,8 @@ class SnapshotDraft(DraftAccumulator, ABC):
 
 
 @dataclass(frozen=True)
-class ToolCall(SnapshotDraft):
-    """The same invocation owns its pending preview and completed history."""
-    id: str
-    name: str
-    arguments: JsonValue
-    detail: str = ""
-    path: str | None = None
-
-    @property
-    def title(self) -> str:
-        return ToolDeclaration.caption(self.name, detail=self.detail, path=self.path)
+class ToolCall(tool_declaration.ToolCall, SnapshotDraft):
+    """Compose CLI snapshot lifetime onto the shared decoded invocation."""
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:

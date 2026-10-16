@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from .declared_family import DeclaredFamily
+from .tool_declaration import ToolDeclaration
 from .message_reference import MessageReference
 from .routing import MessageRoute, TurnRouting
 from .tool_results import ToolDiff, ToolText
@@ -179,14 +180,10 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
 
     @property
     def title(self) -> str:
-        from .tool_declaration import ToolDeclaration
-
         return ToolDeclaration.for_name(self.tool_name).label
 
     @property
     def kind(self) -> str:
-        from .tool_declaration import ToolDeclaration
-
         return ToolDeclaration.for_name(self.tool_name).acp_kind
 
 
@@ -198,8 +195,6 @@ class ToolStartTranscript(ToolTranscript):
 
     @property
     def title(self) -> str:
-        from .tool_declaration import ToolDeclaration
-
         return ToolDeclaration.caption(self.tool_name, detail=self.detail, path=self.path)
 
 

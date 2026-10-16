@@ -1,12 +1,15 @@
-"""Shared tool names and presentation; execution capabilities select their own view."""
+"""Tool declarations and boundary-decoded arguments own recorded presentation."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, ClassVar
+from typing import ClassVar, TypeVar
 
-from .agent_events import ToolStart
+from pydantic import JsonValue
+
+from .cli_protocol import WireModel
 from .declared_family import DeclaredFamily
+from .recorded_time import EventTime
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
@@ -16,7 +19,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
     @classmethod
     def _member_declarations(cls):
-        # These existing owners share this registry; imports acquire declarations.
+        # Registry discovery acquires the modules declaring this family's members.
         from . import native_tools, tools
 
         return super()._member_declarations()
@@ -41,24 +44,20 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         return caption if len(caption) <= limit else caption[:limit - 1] + '…'
 
     @classmethod
-    def file_location(cls, decode: Callable[[], str]) -> str | None:
-        """Opaque extensions never interpret a known tool's argument schema."""
+    def recorded_arguments(cls, schema: type[ToolArguments], raw: JsonValue) -> ToolArguments:
+        """An extension's opaque arguments are not a known coding-tool schema."""
+        return schema()
+
+    @classmethod
+    def file_location(cls, path: str | None) -> str | None:
         return None
 
     @classmethod
-    def command_detail(cls, decode: Callable[[], str]) -> str:
+    def command_detail(cls, command: str) -> str:
         return ""
 
     @classmethod
-    def start(cls, call_id: str, name: str, arguments: dict[str, object], *,
-              detail: str = "", path: str | None = None) -> ToolStart:
-        declaration = cls.for_name(name)
-        return ToolStart(call_id, name, cls.caption(name, detail=detail, path=path),
-                         arguments, declaration.acp_kind, path=path, detail=detail)
-
-    @classmethod
     def result_diff(cls, result, ok):
-        """Opaque metadata cannot invent edit evidence."""
         return None
 
 
@@ -75,22 +74,58 @@ class PathTool:
     def bounded_caption(cls, caption: str, limit: int) -> str:
         if len(caption) <= limit:
             return caption
-        # File identity is at the end; clipping the prefix must not hide it.
         tail = limit - len(cls.label) - 2
         return cls.label + ' …' + caption[-tail:]
 
     @classmethod
-    def file_location(cls, decode: Callable[[], str]) -> str:
-        return decode()
+    def file_location(cls, path: str | None) -> str:
+        if path is None:
+            raise ValueError('File tool input has no declared path')
+        return path
 
 
 @dataclass(frozen=True)
 class UndeclaredTool(ToolDeclaration):
-    """An external name is visible as supplied, without becoming a declaration."""
-
     declared_name = None
     name: str
 
     @property
     def label(self) -> str:
         return self.name
+
+
+@dataclass(frozen=True)
+class ToolCall:
+    """A decoded invocation; CLI drafts compose their lifetime onto this value."""
+    started_at: EventTime
+    id: str
+    name: str
+    arguments: JsonValue
+    detail: str = ""
+    path: str | None = None
+
+    @property
+    def title(self) -> str:
+        return ToolDeclaration.caption(self.name, detail=self.detail, path=self.path)
+
+    @property
+    def kind(self) -> str:
+        return ToolDeclaration.for_name(self.name).acp_kind
+
+
+Call = TypeVar('Call', bound=ToolCall)
+
+
+class ToolArguments(WireModel):
+    """One decoding/build algorithm; foreign boundaries declare only aliases."""
+    path: str | None = None
+    command: str = ""
+
+    @classmethod
+    def build_call(cls, started_at: EventTime, call_id: str, name: str, raw: JsonValue, *,
+                   call_type: type[Call] = ToolCall, detail: str | None = None) -> Call:
+        declaration = ToolDeclaration.for_name(name)
+        arguments = declaration.recorded_arguments(cls, raw)
+        return call_type(started_at, call_id, name, raw,
+                         detail=declaration.command_detail(arguments.command) if detail is None else detail,
+                         path=declaration.file_location(arguments.path))
