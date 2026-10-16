@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.owner_launch import LaunchRuntime
 from agent_comms.child_process import ObservedProcess, ParentedProcess
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
@@ -325,7 +326,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
         monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", "--thinking high")
         monkeypatch.setenv("BATCH_OWNER_CREDENTIAL", "operator-only")
         target_binary = tmp_path / "target-pi-comms-native"
-        target_binary.symlink_to(comms.owners.native_entrypoint())
+        target_binary.symlink_to(LaunchRuntime.current().native_entrypoint)
         receipts = comms.owners.restart_owners(
             selected, agent_bin=str(target_binary), cutover=cutover
         )
