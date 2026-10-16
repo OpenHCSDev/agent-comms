@@ -33,6 +33,7 @@ from agent_comms.acp_extension import (
     encode_updates,
 )
 from agent_comms.acp_failure import BackendDeliveryFailure
+from agent_comms.context_reading import UnmeasuredContext
 from agent_comms.agent_events import CompactionStart
 from agent_comms.pi_payloads import McpLiveReceipt
 from agent_comms.thread_identity import AdmissionIdentity, ThreadIncarnation
@@ -70,11 +71,10 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
             "/home/ts/wt/pilot",
             123,
             "/home/ts/wt/pilot",
-            None,
+            "openai-codex/gpt-6.1-sol",
             None,
             "Pilot",
-            None,
-            "",
+            UnmeasuredContext(),
         ),
         GoalChangedUpdate(None, None),
         CompactionChangedUpdate(CompactionStart()),

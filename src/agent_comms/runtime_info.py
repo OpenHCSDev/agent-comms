@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .locked_store import LockedStore
@@ -14,7 +15,6 @@ from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
-    from .acp_extension import ContextUsage, CoordinationChangedUpdate
     from .threads import Thread
 
 
@@ -23,17 +23,11 @@ class RuntimeInfo(ABC):
 
     __slots__ = ()
 
-    @property
     @abstractmethod
-    def status_label(self) -> str: ...
+    def context_reading(self) -> ContextReading: ...
 
     @abstractmethod
-    def model_or(self, default: str | None) -> str | None: ...
-
-    @abstractmethod
-    def configuration_update(
-        self, create: Callable[[ContextUsage | None, str], CoordinationChangedUpdate]
-    ) -> CoordinationChangedUpdate: ...
+    def model_or(self, default: str) -> str: ...
 
 
 class UnobservedRuntimeInfo(RuntimeInfo):
@@ -41,17 +35,11 @@ class UnobservedRuntimeInfo(RuntimeInfo):
 
     __slots__ = ()
 
-    @property
-    def status_label(self) -> str:
-        return ""
+    def context_reading(self) -> ContextReading:
+        return UnmeasuredContext()
 
-    def model_or(self, default: str | None) -> str | None:
+    def model_or(self, default: str) -> str:
         return default
-
-    def configuration_update(
-        self, create: Callable[[ContextUsage | None, str], CoordinationChangedUpdate]
-    ) -> CoordinationChangedUpdate:
-        return create(None, self.status_label)
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,31 +68,13 @@ class AgentRuntimeInfo(RuntimeInfo):
             return None
         return self.context_used / self.context_size * 100
 
-    @property
-    def context_usage(self) -> ContextUsage | None:
+    def context_reading(self) -> ContextReading:
         if self.context_used is None or not self.context_size:
-            return None
-        from .acp_extension import ContextUsage
-
+            return UnmeasuredContext()
         return ContextUsage(self.context_used, self.context_size)
 
-    @property
-    def status_label(self) -> str:
-        parts = []
-        if self.model:
-            parts.append(self.model)
-        usage = self.context_usage
-        if usage is not None:
-            parts.append(usage.label)
-        return " · ".join(parts)
-
-    def model_or(self, default: str | None) -> str | None:
+    def model_or(self, default: str) -> str:
         return self.model or default
-
-    def configuration_update(
-        self, create: Callable[[ContextUsage | None, str], CoordinationChangedUpdate]
-    ) -> CoordinationChangedUpdate:
-        return create(self.context_usage, self.status_label)
 
 
 @dataclass(frozen=True, slots=True)

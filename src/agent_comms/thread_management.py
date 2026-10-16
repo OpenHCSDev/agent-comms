@@ -32,6 +32,7 @@ from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
 from .native_session_files import NativeSessionFiles
 from .owner_launch import RestartEnvironment
 from .owner_lifecycle import OwnerLifecycle
@@ -541,7 +542,7 @@ class ThreadManagement:
                 self.registry.register(updated, self.registry.status(thread.name))
             return updated
 
-    def resolve_thread_model(self, name: str, default: str | None = None) -> str | None:
+    def resolve_thread_model(self, name: str, default: str = NativeThreadDefaults.model) -> str:
         """Prefer a saved selection, then the resumed session's last model."""
         thread = self.registry.require(name)
         if thread.model is not None:
