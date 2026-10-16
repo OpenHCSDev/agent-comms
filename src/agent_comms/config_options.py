@@ -43,7 +43,8 @@ class CatalogSelection(Protocol):
 @dataclass(frozen=True)
 class ConfigChoice:
     value: str
-    label: str
+    name: str
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -139,7 +140,7 @@ class ModelConfigOption(CatalogConfigOption):
             self.comms, self.comms.settings.arguments,
         )
         values = [model.display_name for model in data.models if model.provider and model.id]
-        return [ConfigChoice(value=value, label=value) for value in dict.fromkeys(values)]
+        return [ConfigChoice(value=value, name=value) for value in dict.fromkeys(values)]
 
     async def apply(self, owner: ConfigOptions, thread: Thread, value: str) -> None:
         provider, model = value.split("/", 1)
@@ -158,7 +159,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         data = await GetAvailableThinkingLevels().discover(
             self.comms, self.comms.settings.parsed_arguments.with_model(thread.model).argv
         )
-        return [ConfigChoice(value=member.declared_name, label=member.declared_name.title())
+        return [ConfigChoice(value=member.declared_name, name=member.declared_name.title())
                 for member in data.levels]
 
     async def apply(self, owner: ConfigOptions, thread: Thread, value: str) -> None:
