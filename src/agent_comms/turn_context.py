@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -15,7 +16,7 @@ from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
-from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance, Visible
+from .peer_relevance import GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .thread_status import ThreadStatus
 
@@ -430,6 +431,10 @@ class ContextSegment(
     def public_text(self) -> str:
         return self.text()
 
+    def peer_identities(self) -> tuple[ThreadIncarnation, ...]:
+        """Peers selected by this contribution, not a separate inventory."""
+        return ()
+
     def source_ranges(self) -> tuple[ContributionCoordinates, ...]:
         return (ContributionCoordinates.capture(
             type(self), self.provenance, 0, self.public_text()),)
@@ -804,7 +809,7 @@ class UserFollowupSegment(TypedUserInputSegment):
 class PeerState:
     """One listed peer: its roster state, how relevant it is, why, and what it works on."""
 
-    name: str
+    identity: ThreadIncarnation
     status: type[ThreadStatus]
     activity: str
     activity_detail: str
@@ -812,11 +817,15 @@ class PeerState:
     note: str
     goal: str | None
 
+    @property
+    def name(self) -> str:
+        return self.identity.name
+
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation) -> PeerState:
         goal = view.thread.active_goal if relation.relevance.grants(GoalShown) else None
         return cls(
-            view.thread.name,
+            view.thread.incarnation,
             type(view.status),
             view.activity.state.value,
             view.activity.detail,
@@ -827,63 +836,75 @@ class PeerState:
 
     @classmethod
     def listed(
-        cls, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], slots: int
+        cls, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...], slots: int,
+        *, senders: tuple[str, ...] = (), now: float | None = None,
     ) -> tuple[PeerState, ...]:
-        """Peers in the order their relations arrive; only other visible peers compete for slots."""
-        viewed = {view.thread.incarnation: view for view in views}
-        visible = tuple(
+        """Senders first, then goal contacts and recent collaborators, all bounded."""
+        now = time.time() if now is None else now
+        viewed = {
+            view.thread.incarnation: view for view in views
+            if view.status.active and view.thread.role.executable
+        }
+        relevant = (
             relation for relation in relations
-            if relation.peer in viewed and relation.relevance.grants(Visible)
+            if relation.peer in viewed
+            and (relation.peer.name in senders or any(
+                record.relevance.in_prompt(viewed[relation.peer], now=now)
+                for record in relation.records
+            ))
         )
-        always = tuple(r for r in visible if r.relevance.grants(AlwaysListed))
-        others = tuple(
-            r for r in visible
-            if not r.relevance.grants(AlwaysListed) and viewed[r.peer].status.active
-        )
-        return tuple(
-            cls.from_view(viewed[relation.peer], relation)
-            for relation in (*always, *others[: max(0, slots - len(always))])
-        )
+        selected = sorted(relevant, key=lambda relation: relation.peer.name not in senders)[:slots]
+        return tuple(cls.from_view(viewed[relation.peer], relation) for relation in selected)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CoordinationSegment(InstructionSegment):
+class SessionCoordinationSegment(InstructionSegment):
     response_instruction: InstructionFile
     owner: ThreadIncarnation
     parent: str | None
     project: str
+
+    @classmethod
+    def capture(cls, owner: Thread) -> SessionCoordinationSegment:
+        from .wake_policy import WakePolicy
+
+        instruction = InstructionFile.read("coordination.md")
+        response_instruction = WakePolicy.relevance_instruction()
+        return cls(
+            provenance=(OwnerProvenance(owner.incarnation, owner.worktree), instruction.source,
+                        response_instruction.source),
+            instruction=instruction, response_instruction=response_instruction,
+            owner=owner.incarnation, parent=owner.parent, project=owner.worktree,
+        )
+
+    def values(self) -> dict[str, object]:
+        return dict(response_instruction=self.response_instruction.content,
+                    name=self.owner.name, parent=self.parent, project=self.project)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CoordinationSegment(InstructionSegment):
     peers: tuple[PeerState, ...]
     PEER_SLOTS: ClassVar[int] = 8
 
     @classmethod
     def capture(
-        cls, owner: Thread, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...]
+        cls, owner: Thread, views: tuple[ThreadView, ...], relations: tuple[PeerRelation, ...],
+        *, senders: tuple[str, ...] = (),
     ) -> CoordinationSegment:
-        from .wake_policy import WakePolicy
-
-        instruction = InstructionFile.read("coordination.md")
-        response_instruction = WakePolicy.relevance_instruction()
-        peers = PeerState.listed(views, relations, cls.PEER_SLOTS)
+        instruction = InstructionFile.read("peers.md")
+        peers = PeerState.listed(views, relations, cls.PEER_SLOTS, senders=senders)
         revision = hashlib.sha256(json.dumps(FieldCodec.encode(peers)).encode()).hexdigest()
         return cls(
-            provenance=(OwnerProvenance(owner.incarnation, revision), instruction.source,
-                        response_instruction.source),
-            instruction=instruction,
-            response_instruction=response_instruction,
-            owner=owner.incarnation,
-            parent=owner.parent,
-            project=owner.worktree,
-            peers=peers,
+            provenance=(OwnerProvenance(owner.incarnation, revision), instruction.source),
+            instruction=instruction, peers=peers,
         )
 
+    def peer_identities(self) -> tuple[ThreadIncarnation, ...]:
+        return tuple(peer.identity for peer in self.peers)
+
     def values(self) -> dict[str, object]:
-        return dict(
-            response_instruction=self.response_instruction.content,
-            name=self.owner.name,
-            parent=self.parent,
-            project=self.project,
-            peers=json.dumps(FieldCodec.encode(self.peers), separators=(",", ":")),
-        )
+        return dict(peers=json.dumps(FieldCodec.encode(self.peers), separators=(",", ":")))
 
 @dataclass(frozen=True, kw_only=True)
 class GoalSegment(InstructionSegment):
@@ -1090,6 +1111,8 @@ class TurnContext:
         from .context_segments.partner_activity import PartnerActivitySegment
         from .context_segments.relationships import RelationshipsSegment
 
+        selected = {peer for segment in self.segments for peer in segment.peer_identities()}
+        relations = tuple(relation for relation in relations if relation.peer in selected)
         context = self
         for segment in (
             *RelationshipsSegment.capture(owner, relations),
@@ -1128,21 +1151,27 @@ class TurnContext:
         relations: tuple[PeerRelation, ...],
         origins: tuple[MessageReference, ...] = (),
         inputs: tuple[StoredInput, ...] = (),
+        *, senders: tuple[str, ...] = (),
     ) -> TurnContext:
         source = tuple(WireProvenance(ref) for ref in origins) or (
             OwnerProvenance(owner.incarnation, turn.source_revision(owner)),
         )
         source += tuple(row.context_provenance() for row in inputs)
-        from .context_segments.doctrine import DoctrineSegment
         return cls(
             owner.incarnation,
             turn,
             (
-                DoctrineSegment.capture(),
-                CoordinationSegment.capture(owner, views, relations),
+                CoordinationSegment.capture(owner, views, relations, senders=senders),
                 UserInputSegment(provenance=source, content=task),
             ),
         )
+
+    @staticmethod
+    def session_segments(owner: Thread) -> tuple[ContextSegment, ...]:
+        """The native system layer survives compaction and is rebuilt on reopen."""
+        from .context_segments.doctrine import DoctrineSegment
+
+        return (DoctrineSegment.capture(), SessionCoordinationSegment.capture(owner))
 
     def prepend(self, segment: ContextSegment) -> TurnContext:
         return replace(self, segments=(segment, *self.segments))

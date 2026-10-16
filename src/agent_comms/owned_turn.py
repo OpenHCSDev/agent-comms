@@ -220,6 +220,7 @@ class OwnedTurn:
             self.relations,
             tuple(origin.reference for origin in self.origins),
             batch.originals,
+            senders=tuple(origin.sender for origin in self.origins),
         )
         if self.goal_permit is not None:
             for segment in self.thread.context_goal_segments():

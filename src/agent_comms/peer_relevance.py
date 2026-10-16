@@ -21,10 +21,6 @@ class Visible(RelevanceCapability):
     """The peer appears in the peer list while slots remain."""
 
 
-class AlwaysListed(RelevanceCapability):
-    """The peer is in the peer list whatever its name and however many threads exist."""
-
-
 class GoalShown(RelevanceCapability):
     """The peer list says what the peer is working on now."""
 
@@ -53,6 +49,11 @@ class PeerRelevance(DeclaredFamily, affix="Relevance"):
         return issubclass(cls, capability)
 
     @classmethod
+    def in_prompt(cls, view, *, now: float) -> bool:
+        """Shared channels alone do not make a peer relevant to this turn."""
+        return False
+
+    @classmethod
     def most_derived(cls, granted: Sequence[type[PeerRelevance]]) -> type[PeerRelevance]:
         for member in granted:
             if all(issubclass(member, other) for other in granted):
@@ -68,9 +69,19 @@ class ChannelmateRelevance(StrangerRelevance, Visible):
     """A peer that shares a tag channel."""
 
 
-class GoalContactRelevance(ChannelmateRelevance, AlwaysListed, GoalShown, Prioritized):
+class GoalContactRelevance(ChannelmateRelevance, GoalShown, Prioritized):
     """A peer bound to an active goal by a mention."""
+
+    @classmethod
+    def in_prompt(cls, view, *, now: float) -> bool:
+        return True
 
 
 class CollaboratorRelevance(GoalContactRelevance, Informed):
-    """A peer in an explicit collaboration."""
+    """An explicit contact enters prompts while recently active."""
+
+    recent_seconds = 15 * 60
+
+    @classmethod
+    def in_prompt(cls, view, *, now: float) -> bool:
+        return now - cls.recent_seconds <= view.activity.timestamp <= now

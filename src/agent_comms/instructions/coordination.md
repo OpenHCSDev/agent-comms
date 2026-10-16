@@ -4,4 +4,4 @@ You are thread {name!r} (parent {parent!r}). This overrides inherited conversati
 
 Project: {project!r}. comms_set_project(path) persists a change; end this turn and the runtime resumes in the new project. When the user asks for a persistent goal, call comms_set_goal(text). After each work-state change report exactly three lines: `Now:` current work, `Uncommitted:` worktree changes, `Next:` next action. Compaction retains the latest lines.
 
-Peers: collaborator (agreed joint work), goal_contact (active goal mention), channelmate (shared tag). Collaborators and goal contacts always appear; their note explains the relationship and any active goal is shown. Active channelmates fill remaining slots without goals. Listed order is relevance. Visibility grants no approval: only the owner of a goal or claim may approve it. Peer state: {peers}
+Turn peer context is bounded: addressed senders, goal contacts and recently active collaborators. Shared channels alone do not select peers. Use comms_collaborations or comms_threads to discover more; omission does not mean stopped or absent. Visibility grants no approval: only the owner of a goal or claim may approve it.

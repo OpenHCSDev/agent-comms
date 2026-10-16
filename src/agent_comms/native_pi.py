@@ -411,11 +411,15 @@ class NativePiRpcLaunch:
         env["PI_WORKTREE"] = str(cwd)
         env = RestartEnvironment.inherit(env).for_interpreter(Path(sys.executable)).apply_runtime(env)
         env.update(configuration.encode_native())
+        session_context = env.pop("AGENT_COMMS_SESSION_CONTEXT", "")
+        session_arguments = (("--append-system-prompt", session_context)
+                             if session_context else ())
         argv = (
             "node", "--no-global-search-paths",
             "--import", str(cli.with_name("agent-comms-import-fence.mjs")),
             "--import", str(cli.with_name("agent-comms-project-bootstrap.mjs")),
             str(cli), *arguments, "--append-system-prompt", str(instructions),
+            *session_arguments,
         )
         return argv, env
 

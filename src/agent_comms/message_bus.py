@@ -269,11 +269,9 @@ class MessageBus:
     ):
         """Bounded pointers to addressed sources, independent of UI read state.
 
-        Pointers from peers whose relevance grants ``Prioritized`` come first;
-        which messages are in the window does not depend on relevance.
-
-        Current canonical checkpoint rows own the pointers. Repeated reminders
-        are intentional: neither displaying nor composing them proves model read.
+        Only this turn's selected peers contribute optional pointers. The
+        canonical checkpoint still owns the bounded source window; selection
+        neither advances a cursor nor claims model read or delivery.
         Input preparation may omit this optional supplement on contention;
         inspection waits in its existing resource worker for the actual read.
         """
@@ -281,7 +279,6 @@ class MessageBus:
         from .errors import RelationViolationError
         from .private_bus_checkpoint import addressed_source_pointers_unlocked
         from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
-        from .peer_relevance import Prioritized
 
         try:
             with self.log.certified_read(blocking=blocking) as source:
@@ -295,13 +292,9 @@ class MessageBus:
             return (UnavailableAwarenessSegment.capture(),)
         if not rows:
             return ()
-        first = {
-            stable_thread_lookup(relation.peer.created_at)
-            for relation in relations
-            if relation.relevance.grants(Prioritized)
-        }
-        rows = tuple(sorted(rows, key=lambda row: row.sender_lookup not in first))
-        return (AwarenessSegment.capture(self.log.path, marker.root_id, rows),)
+        selected = {stable_thread_lookup(relation.peer.created_at) for relation in relations}
+        rows = tuple(row for row in rows if row.sender_lookup in selected)
+        return (AwarenessSegment.capture(self.log.path, marker.root_id, rows),) if rows else ()
 
     def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:
         """A bounded delivery stream independent of UI read acknowledgments."""
