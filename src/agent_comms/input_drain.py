@@ -352,8 +352,8 @@ class InputObservation:
                     and revision.coordination == settled.revision.coordination
                 )
                 if idle and shared_unchanged:
-                    settled = SettledTick(
-                        revision, entry, settled.admission_after_seq, settled.through_seq, token,
+                    settled = replace(
+                        settled, revision=revision, entry=entry, change_token=token,
                     )
                     continue
                 if idle and not shared_unchanged:
@@ -402,8 +402,9 @@ class InputObservation:
                         if not current.executing and self._quiescent(session_id):
                             marker = await Coordination.run_worker(self._bus_marker)
                             settled = SettledTick(
-                                revision, entry, marker.admission_after_seq, marker.last_seq, token,
+                                revision, entry, marker.admission_after_seq, marker.last_seq,
                             )
+                            settled = replace(settled, change_token=token)
                         elif self._repeat_observation_ready(session_id, drained):
                             # The first empty private observation may advance its
                             # own durable cursor. Re-read that transition now;
