@@ -1,5 +1,10 @@
+import gc
 import json
+import multiprocessing
 import sqlite3
+import subprocess
+import sys
+import weakref
 from contextlib import ExitStack
 from dataclasses import replace
 from pathlib import Path
@@ -430,6 +435,52 @@ def test_oversized_native_record_is_counted_without_truncation_or_input_limit(tm
         assert completed_counts(state, "viewer", {"worker": str(source)}).counts == {"worker": 1}
     finally:
         state.close()
+
+
+def test_wire_without_transcript_reads_allocates_no_native_worker_signal(tmp_path):
+    context = multiprocessing.get_context('spawn')
+    with patch.object(context, 'Event', wraps=context.Event) as events:
+        comms = wire(tmp_path / 'wire')
+        assert not events.called
+        state = comms.views.transcript_reads
+        try:
+            assert events.call_count == 1
+            assert wire(comms.root).views.transcript_reads is state
+            assert events.call_count == 1
+        finally:
+            state.close()
+
+
+def test_collected_reader_releases_actual_worker_and_database(tmp_path):
+    source = tmp_path / 'session.jsonl'
+    append(source)
+    state = TranscriptReadState(tmp_path / 'read_ledger.json')
+    assert state.counts('viewer', {'worker': str(source)}).pending == {'worker'}
+    database, signal, preparation = state._connection, state._cancelled, state.preparation
+    original = weakref.ref(state)
+    del state
+    gc.collect()
+    assert original() is None
+    assert signal.is_set()
+    assert preparation.done()
+    with pytest.raises(sqlite3.ProgrammingError, match='closed'):
+        database.execute('SELECT 1')
+
+
+@pytest.mark.parametrize('mode', ('unused', 'active'))
+def test_retained_reader_closes_before_interpreter_teardown(tmp_path, mode):
+    output = tmp_path / mode
+    result = subprocess.run(
+        [sys.executable, str(Path(__file__).with_name('transcript_reader_exit.py')),
+         str(output), mode],
+        text=True, capture_output=True, timeout=15,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stderr == ''
+    assert json.loads((output / 'exit.json').read_text()) == {
+        'cancelled': True, 'database_closed': True,
+        'preparation_done': True, 'active_children': 0,
+    }
 
 
 def test_reopen_wire_does_not_reuse_cancelled_index_owner(tmp_path):
