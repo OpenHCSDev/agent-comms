@@ -423,11 +423,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             bus, wire_root_id, store_path, stable_thread_lookup(owner.created_at), 0,
             owner_name=owner.name, acquire_package=execution.validate,
         )
-        if (
-            session_id in self.turns.turn_tasks
-            or owner.turn_state.busy
-            or session_id in self.inputs.backend_inboxes
-        ):
+        if self.inputs.owns_execution(session_id, owner):
             # A running turn takes its owner's pending messages as inputs;
             # whatever it cannot take wakes this owner once the turn ends.
             await DeliveredInput.deliver_pending(

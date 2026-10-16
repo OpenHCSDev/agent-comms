@@ -68,6 +68,7 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, 
         finish.set()
     with pytest.raises(asyncio.CancelledError):
         await task
+
     with log.certified_read(blocking=False) as source:
         source.require_current()
 
@@ -113,6 +114,33 @@ async def test_certified_observation_waits_and_joins_its_owned_worker(tmp_path, 
     assert raised.value is failure
     with log.certified_read(blocking=False) as source:
         source.require_current()
+
+
+@pytest.mark.asyncio
+async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
+    from agent_comms.queued_input import DeliveredInput
+
+    comms, agent, root_id = _covered_session(tmp_path)
+    entered, release = threading.Event(), threading.Event()
+
+    def writer():
+        with _store_lock(comms._wire_lock_path):
+            entered.set()
+            assert release.wait(5)
+
+    writer_thread = threading.Thread(target=writer)
+    writer_thread.start()
+    assert entered.wait(2)
+    task = asyncio.create_task(DeliveredInput.recover_interrupted(agent.inputs, "beta", root_id))
+    try:
+        # The real write lock is held; an empty recovery must finish without it.
+        done, _ = await asyncio.wait({task}, timeout=1)
+        assert task in done
+        assert task.result() == 0
+    finally:
+        release.set()
+        writer_thread.join(5)
+        await task
 
 
 @pytest.mark.asyncio

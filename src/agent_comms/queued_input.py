@@ -7,7 +7,7 @@ incarnation birth and admission; the registry resolves its name before compariso
 from __future__ import annotations
 
 import os
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from functools import partial
 from dataclasses import dataclass, fields, replace
@@ -36,7 +36,7 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from asyncio import Queue
-    from .agent_backend import InputContent, InputRequest, SendNow, TurnInboxItem
+    from .agent_backend import InputContent, TurnInboxItem
     from .bus_publication import CommittedDelivery
     from .message_bus import MessageBus
     from .coordination_tables.assignments import WakeAssignment
@@ -400,18 +400,6 @@ class DeliveredInput(QueuedInput):
             await item.not_started(inputs)
 
     @classmethod
-    async def recover_before_drain(
-        cls,
-        inputs: InputDrain,
-        session_id: str,
-        root_id: str,
-        drain: Callable[[str, str], Awaitable[int]],
-    ) -> int:
-        """Restore positively unsent delivery before the ordinary selector reads work."""
-        await cls.recover_interrupted(inputs, session_id, root_id)
-        return await drain(session_id, root_id)
-
-    @classmethod
     async def recover_interrupted(
         cls, inputs: InputDrain, session_id: str, root_id: str,
     ) -> int:
@@ -438,6 +426,11 @@ class DeliveredInput(QueuedInput):
         name: str, root_id: str, live_keys: frozenset[str],
     ) -> int:
         """Acquire, recover and release entirely inside the joined worker."""
+        owner = comms.registry.require(name)
+        document = dispositions.unresolved(comms.registry.aliases_for(owner.name))
+        if not any(row.key not in live_keys
+                   for row in document.unbound_wire_inputs(root_id).values()):
+            return 0
         with _store_lock(comms._wire_lock_path):
             snapshot = comms.registry.snapshot()
             owner = snapshot.require(name)
