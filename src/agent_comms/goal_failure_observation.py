@@ -22,7 +22,7 @@ from .field_codec import FieldCodec
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goals import Goal
 from .recovery_projection import _preflight
-from .thread_identity import AdmissionIdentity, ThreadIncarnation, TurnIdentity
+from .thread_identity import AdmissionIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnIdentity
 from .thread_status import ThreadStatus
 from .threads import Thread
 from .turn_lease import TurnFence, TurnLeaseFence
@@ -85,7 +85,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
 
     @property
     def incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.owner, self.owner_created_at)
+        return RecordedThreadIncarnation(self.owner, self.owner_created_at)
 
     @property
     def admission_identity(self) -> AdmissionIdentity:

@@ -5,6 +5,7 @@ from dataclasses import fields
 
 import pytest
 
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
@@ -155,7 +156,6 @@ def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):
 
 def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypatch):
     from contextlib import contextmanager
-    from agent_comms.bus_publication import stable_thread_lookup
     from agent_comms.coordination_database import CoordinationStore, StoreBusy
     from agent_comms.coordination_response import install_private_response_schema
     from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
@@ -165,7 +165,7 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     root = tmp_path / "wire"
     comms = wire(root)
     thread = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
-    lookup = stable_thread_lookup(thread.created_at)
+    lookup = RecordedThreadIncarnation("fixture", thread.created_at).lookup
     database = root / "coordination.sqlite3"
     with Coordination(str(database)) as store:
         install_native_runtime_schema(store)

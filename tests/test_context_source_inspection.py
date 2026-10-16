@@ -11,7 +11,8 @@ from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
 from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegmentRuntimeRequest,
     ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
-from agent_comms.thread_identity import ThreadIncarnation, TurnId, TurnIdentity
+from agent_comms.thread_identity import TurnId, TurnIdentity
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.turn_context import (
     ContextManifest, ContextSourceText, FileProvenance, JournalProvenance,
     NativeProvenance, PreviewProvenance, RecordedContextTurn, SegmentManifest,
@@ -31,7 +32,7 @@ def identity(tmp_path):
 
 
 def recorded(segments):
-    owner = ThreadIncarnation("original-owner", 17002.0)
+    owner = RecordedThreadIncarnation("original-owner", 17002.0)
     turn = RecordedContextTurn(TurnId("original-turn"), TurnIdentity(owner, 2))
     return ContextManifest(owner, turn, tuple(segments), "pi.estimateTokens", "request-one")
 
@@ -294,7 +295,7 @@ def test_cold_client_acquires_current_and_recorded_contributor_declarations():
     contributor = UnavailableAwarenessSegment(
         provenance=(source,), instruction=InstructionFile(original, source))
     from agent_comms.turn_context import NextContextTurn
-    payload = FieldCodec.encode(TurnContext(ThreadIncarnation("original-owner", 17002.0),
+    payload = FieldCodec.encode(TurnContext(RecordedThreadIncarnation("original-owner", 17002.0),
                                          NextContextTurn(), (contributor,)))
     result = subprocess.run([sys.executable, "-c", '''
 import hashlib, json, sys

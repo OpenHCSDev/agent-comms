@@ -38,7 +38,7 @@ from .private_path import FileRevision
 from .registry_document import RegistrySnapshot
 from .routing import DeliveryScope
 from .store_files import _store_lock
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
 
@@ -149,11 +149,11 @@ class CollaborationRevision(MutualThreadRelation):
 
     @property
     def owner_incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.owner, self.owner_created)
+        return RecordedThreadIncarnation(self.owner, self.owner_created)
 
     @property
     def peer_incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.peer, self.peer_created)
+        return RecordedThreadIncarnation(self.peer, self.peer_created)
 
     def oriented(self, thread: Thread):
         if self.owner_incarnation == thread.incarnation:
@@ -222,11 +222,11 @@ class GoalDerivedContact(MutualThreadRelation):
 
     @property
     def owner_incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.owner, self.owner_created_at)
+        return RecordedThreadIncarnation(self.owner, self.owner_created_at)
 
     @property
     def peer_incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.peer, self.peer_created_at)
+        return RecordedThreadIncarnation(self.peer, self.peer_created_at)
 
 
 @dataclass(frozen=True, slots=True)
@@ -497,7 +497,7 @@ class RelationshipOrder:
 
     @property
     def incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.owner, self.owner_created)
+        return RecordedThreadIncarnation(self.owner, self.owner_created)
 
     @property
     def identity(self) -> tuple[ThreadIncarnation, type[SortableRelationshipGroup]]:

@@ -5,10 +5,11 @@ import json
 
 import pytest
 
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.checkpoint_seals import FinalSeal, PendingSeal
 from agent_comms.errors import RelationViolationError
 from agent_comms.wire_log import WireLog
-from test_private_bus_checkpoint import _page, _root, stable_thread_lookup
+from test_private_bus_checkpoint import _page, _root
 
 
 @pytest.mark.parametrize(
@@ -116,13 +117,13 @@ def test_uncertain_seal_publication_recovers_exact_committed_suffix(tmp_path, mo
         with pytest.raises(RelationViolationError, match="UNKNOWN"):
             comms.messaging.send_initial_cohort("sender", "Alice", "durable bus, uncertain seal")
     bus = comms.bus.log.path.read_bytes()
-    witness, rows, more = _page(comms, stable_thread_lookup(17002.0))
+    witness, rows, more = _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
     assert [row.message.seq for row in rows] == [1, 2] and not more
     assert witness.through_seq == 2
     assert comms.bus.log.path.read_bytes() == bus
     assert isinstance(comms.bus.log._private_marker_unlocked().seal, FinalSeal)
     # Reopened canonical readers agree; no replay or new publication.
-    assert [row.message.seq for row in _page(comms, stable_thread_lookup(17002.0))[1]] == [1, 2]
+    assert [row.message.seq for row in _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)[1]] == [1, 2]
 
 
 def test_absent_public_marker_never_substitutes_for_required_or_redirected_marker(tmp_path):

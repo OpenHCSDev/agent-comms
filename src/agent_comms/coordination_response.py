@@ -24,7 +24,6 @@ from functools import partial
 from pathlib import Path
 from typing import Literal, Type
 
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import assert_cohort_schema
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -307,7 +306,7 @@ class LiveResponseOwner(RegistryOwner):
 
     @property
     def recipient_lookup(self) -> str:
-        return stable_thread_lookup(self.thread.created_at)
+        return self.thread.incarnation.lookup
 
     def require_live(self, snapshot: RegistrySnapshot, fence: OwnerFence) -> None:
         self.require_snapshot(snapshot, "response owner turn stopped or changed before publication")

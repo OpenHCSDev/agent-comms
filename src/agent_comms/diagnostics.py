@@ -35,11 +35,9 @@ def owner_process_output(root: Path, thread: Thread):
     capture. Each launch gets its own private file, without changing thread or
     input disposition state.
     """
-    from .bus_publication import stable_thread_lookup
-
     directory = root / "diagnostics"
     directory.mkdir(mode=0o700, exist_ok=True)
-    path = directory / f"owner-{stable_thread_lookup(thread.created_at)}-{uuid4().hex}.log"
+    path = directory / f"owner-{thread.incarnation.lookup}-{uuid4().hex}.log"
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "w") as output:
         output.write(f"Owner launch: {thread.name}\n")

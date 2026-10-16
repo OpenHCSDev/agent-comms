@@ -224,7 +224,6 @@ class RecoveryMonitorCapability:
     @classmethod
     def recover_owner(cls, root: Path, owner) -> None:
         """Resolve an exited predecessor once, before this worker begins draining."""
-        from .bus_publication import stable_thread_lookup
         from .coordination_response import PublicationAppendDispatches
         from .coordination_tables.executions import CurrentExecutions
 
@@ -232,13 +231,12 @@ class RecoveryMonitorCapability:
         if not path.exists():
             return
         with Coordination(str(path)) as store:
-            lookup = stable_thread_lookup(owner.created_at)
+            lookup = owner.incarnation.lookup
             pointer = CurrentExecutions.one(store.session._connection, owner_lookup=lookup)
             if pointer is None or not pointer.unresolved:
                 return
-            # A frozen response may already exist on the bus. The released
-            # owner proves exclusion; the original keyed dispatch proves this
-            # exact publication. Resolve it before considering UNKNOWN input.
+            # The released owner and exact keyed dispatch prove an existing
+            # frozen reply before any attempt is marked uncertain.
             with VerifiedOwnerLoss.observe_native_release(store, pointer.execution_id) as loss:
                 loss.require_native_exit()
                 PublicationAppendDispatches.resolve_retained(

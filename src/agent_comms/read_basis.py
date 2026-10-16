@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Collection
-from dataclasses import astuple, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,7 +18,7 @@ from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
 from .store_files import _store_lock
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadIncarnationRecord
 
 class WatchAcknowledgment(DeclaredFamily, affix="WatchAcknowledgment"):
     """Who confirms that a streamed message reached its receiver."""
@@ -62,7 +62,9 @@ class Conversation:
     def to_wire(self) -> dict:
         """Encode the persisted participant pair format."""
         data = FieldCodec.encode(replace(self, participants=()))
-        data["participants"] = FieldCodec.encode(tuple(astuple(p) for p in self.participants))
+        data["participants"] = FieldCodec.encode(
+            tuple((p.name, p.created_at) for p in self.participants)
+        )
         return data
 
     @classmethod
@@ -72,7 +74,7 @@ class Conversation:
         pairs = FieldCodec.decode(tuple[tuple[str, float], ...], data.pop("participants"))
         return replace(
             FieldCodec.decode(cls, data),
-            participants=tuple(ThreadIncarnation(*pair) for pair in pairs),
+            participants=tuple(ThreadIncarnationRecord.decode(*pair) for pair in pairs),
         )
 
 
@@ -91,7 +93,7 @@ class DisplayBasis:
 
     @property
     def viewer_identity(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.viewer, self.viewer_created_at)
+        return RecordedThreadIncarnation(self.viewer, self.viewer_created_at)
 
     def select(self, sequences: Collection[int]) -> DisplayBasis:
         """Retain painted members of this proof; never introduce new sequences."""

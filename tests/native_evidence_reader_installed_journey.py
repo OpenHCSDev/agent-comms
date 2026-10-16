@@ -8,13 +8,13 @@ from unittest.mock import patch
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO/'tests'))
 from compaction_loopback import LoopbackProvider
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordinated_runtime import SelectedExecution
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.selected_turn import SelectedPrompt, SelectedAttempt, SelectedConsideration
 from agent_comms.selected_request import SelectedRequest
 from agent_comms.selected_session import SelectedSession
@@ -141,7 +141,7 @@ async def main():
         for audience in initial.audience.recipients:
             store.participants.register(audience.recipient_lookup,audience.canonical_thread,audience.canonical_thread,committed=True)
         accept_delivery_cohort(comms.bus,rid,message.seq,store)
-    owner=comms.registry.require('beta');directory=root/'native-sessions'/stable_thread_lookup(owner.created_at)
+    owner=comms.registry.require('beta');directory=root/'native-sessions'/RecordedThreadIncarnation("fixture", owner.created_at).lookup
     directory.mkdir(parents=True,mode=0o700);saved=directory/SOURCE.name;shutil.copyfile(SOURCE,saved);saved.chmod(0o600)
     with sqlite3.connect(Path(str(SOURCE)+'.input-proof').as_uri()+'?mode=ro',uri=True) as original:
         with sqlite3.connect(str(saved)+'.input-proof') as target:original.backup(target)

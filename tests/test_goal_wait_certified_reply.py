@@ -8,13 +8,14 @@ from dataclasses import replace
 from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
 from test_backend_native_lifecycle import native_backend as native_backend
 
-from agent_comms.bus_publication import stable_thread_lookup
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.threads import Thread
 from goal_owner_fixture import canonical_goal_wire
 from stored_inputs import stored_inputs
+from agent_comms.goal_waits import NoGoalWait
 
 
 def register(comms, name):
@@ -24,9 +25,15 @@ def register(comms, name):
     return comms.registry.require(name)
 
 
-def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
+def test_thread_without_goal_has_no_wait(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     register(comms, "owner")
+    assert isinstance(comms.goals.goal_wait("owner"), NoGoalWait)
+
+
+def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
+    comms = canonical_goal_wire(tmp_path / "wire")
+    owner = register(comms, "owner")
     peer = register(comms, "peer")
     lease = comms.agents.begin_turn("peer", "original-work").turn_lease
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for original peer"))
@@ -37,8 +44,8 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     reply = comms.messaging.send_message("peer", "owner", "Original dependency reply")
     with comms.bus.log.certified_read() as source:
         original = source.delivery(reply.seq)
-        assert wait.matches(original)
-        assert original.audience.sender_lookup == stable_thread_lookup(peer.created_at)
+        assert wait.matches(original, owner.incarnation.require_recorded())
+        assert original.audience.sender_lookup == RecordedThreadIncarnation("fixture", peer.created_at).lookup
 
     comms.agents.finish_turn(lease)
     comms.registry.unregister("peer")
@@ -47,13 +54,13 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     assert peer.created_at != replacement.created_at
     with comms.bus.log.certified_read() as source:
         original = source.delivery(reply.seq)
-        assert wait.matches(original)
+        assert wait.matches(original, owner.incarnation.require_recorded())
         replacement_wait = replace(
-            wait, targets=(GoalWaitTarget(replacement.name, replacement.created_at),)
+            wait, targets=(GoalWaitTarget(replacement.incarnation.require_recorded()),)
         )
-        assert not replacement_wait.matches(original)
-    assert wait.has_reply(comms.bus.log)
-    assert not replacement_wait.has_reply(comms.bus.log)
+        assert not replacement_wait.matches(original, owner.incarnation.require_recorded())
+    assert wait.has_reply(comms.bus.log, owner.incarnation.require_recorded())
+    assert not replacement_wait.has_reply(comms.bus.log, owner.incarnation.require_recorded())
     review = comms.goals.goal_input_review("owner", goal.id, ["peer"])
     assert review["reviewed_inputs"] == []
 
@@ -73,15 +80,15 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     notice = comms.messaging.send_message("peer", "owner", "Diagnostic only", notice=True)
     reply = comms.messaging.send_message("peer", "owner", "Original addressed reply")
     with comms.bus.log.certified_read() as source:
-        assert not wait.matches(source.delivery(wrong.seq))
-        assert not wait.matches(source.delivery(notice.seq))
+        assert not wait.matches(source.delivery(wrong.seq), owner.incarnation.require_recorded())
+        assert not wait.matches(source.delivery(notice.seq), owner.incarnation.require_recorded())
         original = source.delivery(reply.seq)
-        assert wait.matches(original)
-        assert not replace(wait, after_seq=reply.seq).matches(original)
+        assert wait.matches(original, owner.incarnation.require_recorded())
+        assert not replace(wait, after_seq=reply.seq).matches(original, owner.incarnation.require_recorded())
 
     comms.registry.rename("owner", "renamed-owner")
     comms.registry.rename("peer", "renamed-peer")
-    assert wait.has_reply(comms.bus.log)
+    assert wait.has_reply(comms.bus.log, owner.incarnation.require_recorded())
     assert comms.goals.goal_input_review("renamed-owner", goal.id, ["renamed-peer"])[
         "reviewed_inputs"
     ] == [f"bus:{reply.seq}"]
@@ -90,8 +97,12 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     replacement = register(comms, "owner")
     assert owner.created_at != replacement.created_at
     with comms.bus.log.certified_read() as source:
-        assert not replace(wait, owner_created_at=replacement.created_at).matches(source.delivery(reply.seq))
-    assert not replace(wait, owner_created_at=replacement.created_at).has_reply(comms.bus.log)
+        assert not replace(wait, owner_created_at=replacement.created_at).matches(
+            source.delivery(reply.seq), replacement.incarnation.require_recorded()
+        )
+    assert not replace(wait, owner_created_at=replacement.created_at).has_reply(
+        comms.bus.log, replacement.incarnation.require_recorded()
+    )
 
 
 async def test_native(retained_native_acp_owner):
@@ -134,7 +145,7 @@ async def test_native(retained_native_acp_owner):
     })
     original = comms.bus.log.message_by_id(sent["id"])
     with comms.bus.log.certified_read() as source:
-        assert wait.matches(source.delivery(original.seq))
+        assert wait.matches(source.delivery(original.seq), owner.incarnation.require_recorded())
         root_id = source.marker.root_id
     turn = asyncio.create_task(agent.inputs.drain_inbox(sid))
     try:
@@ -158,7 +169,7 @@ async def test_native(retained_native_acp_owner):
         native.provider.response_gate = None
         async with asyncio.timeout(30):
             assert await turn == 1
-        assert comms.goals.goal_wait(sid) is None
+        assert isinstance(comms.goals.goal_wait(sid), NoGoalWait)
         assert comms.registry.require(sid).goal == parked_goal
         assert comms.registry.require(sid).active_turn is None
         handled = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
@@ -174,7 +185,7 @@ async def test_native(retained_native_acp_owner):
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             proofs = read_historical_native_inputs(
                 store, wire_root_id=root_id,
-                recipient_lookup=stable_thread_lookup(owner.created_at),
+                recipient_lookup=RecordedThreadIncarnation("fixture", owner.created_at).lookup,
                 source_seq=original.seq,
             )
             assert len(proofs) == 1 and isinstance(proofs[0].execution, FullNativeExecution)
@@ -185,7 +196,7 @@ async def test_native(retained_native_acp_owner):
         from agent_comms.comms import Comms
 
         reopened = Comms(comms.root, private_initial_writes=False, private_claim_writes=False)
-        assert reopened.goals.goal_wait(sid) is None
+        assert isinstance(reopened.goals.goal_wait(sid), NoGoalWait)
         assert reopened.registry.require(sid).goal == parked_goal
         assert reopened.bus.log.message_by_id(original.message_id).reference == original.reference
         assert stored_inputs(comms.root).lookup(old_key) == old
