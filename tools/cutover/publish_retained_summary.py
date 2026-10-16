@@ -18,7 +18,7 @@ import time
 from typing import Annotated, ClassVar
 from urllib.parse import unquote, urlsplit
 
-from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked, guard_default_route_write
+from agent_comms.active_route import ActiveRoute, active_route_path, read_active_route, _publish_active_route_locked, guard_default_route_write, acquire_exclusive_route_lock
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.declared_family import DeclaredFamily
@@ -779,7 +779,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_
         RetainedOwnerLaunch.capture(original, snapshot)
     directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        acquire_exclusive_route_lock(directory)
         operation = PublishRetainedSummary(cohort, audience, owners, task_carry,
                                           runtime_installation, directory, receipt)
         operation.require_selection(snapshot, owners)
