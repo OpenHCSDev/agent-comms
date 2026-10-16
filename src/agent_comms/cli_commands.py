@@ -42,7 +42,6 @@ from .exporting import (
 )
 from .importing import ImportFormat, ImportLimits
 from .turn_context import ContextSegment
-from .turn_digests import ThreadTurns, TurnDigestRead
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
@@ -990,16 +989,6 @@ class StatusCliCommand(CliCommand):
                 )
             ]
         }
-
-
-@dataclass(frozen=True, kw_only=True)
-class TurnsCliCommand(CliCommand):
-    help = "Read a unit's recent turns with ordered original transcript facts"
-    thread: str = option("--thread")
-    last: int = option("--last", default=TurnDigestRead.last)
-
-    def apply(self, ctx: Comms) -> ThreadTurns:
-        return ctx.transcripts.turns(self.thread, last=self.last)
 
 
 @dataclass(frozen=True, kw_only=True)

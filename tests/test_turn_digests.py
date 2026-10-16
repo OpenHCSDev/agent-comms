@@ -25,17 +25,11 @@ def prepared(tmp_path):
 def endpoint(comms, name, last):
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(('AGENT_COMMS_', 'PI_SESSION_', 'OPENCODE_SERVER_'))}
-    base = [sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root)]
-    commands = [
-        ['turns', '--thread', name, '--last', str(last)],
-        ['invoke', '--tool', 'comms_turns', '--arguments', json.dumps(dict(thread=name, last=last))],
-    ]
-    results = [subprocess.run([*base, *command], env=environment, text=True,
-                              capture_output=True, timeout=15, check=True)
-               for command in commands]
-    cli, tool = [json.loads(result.stdout) for result in results]
-    assert cli == tool
-    return cli
+    command = [sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root), 'invoke',
+               '--tool', 'comms_turns', '--arguments', json.dumps(dict(thread=name, last=last))]
+    result = subprocess.run(command, env=environment, text=True, capture_output=True,
+                            timeout=15, check=True)
+    return json.loads(result.stdout)
 
 
 def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_path):
