@@ -12,6 +12,7 @@ from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
     from .presentation import MessageNotification
+    from .read_ledger import ReadDocument
     from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
 
 
@@ -187,7 +188,9 @@ class ThreadPresentation:
             return original is current
         return original.thread == current.thread and original.same_snapshot(current)
 
-    def with_sources(self, window: TranscriptSourceWindow) -> ThreadPresentation:
+    def with_sources(
+        self, window: TranscriptSourceWindow, *, document: ReadDocument
+    ) -> ThreadPresentation:
         """Incoming and sent outcomes are views of one captured notification window."""
         from .bus_publication import stable_thread_lookup
         from .notification_assignment import NotificationAssignment
@@ -198,7 +201,7 @@ class ThreadPresentation:
                          for source in (*window.sources, *window.sent_sources)}.values())
         projected = MessageNotification.delivery_window(
             transcripts.root, transcripts.registry, sources,
-            NotificationAssignment.read(transcripts.root, sources),
+            NotificationAssignment.read(transcripts.root, sources), document=document,
             owner_lookup=stable_thread_lookup(window.read.identity.thread.created_at),
         )
         incoming, sent = (

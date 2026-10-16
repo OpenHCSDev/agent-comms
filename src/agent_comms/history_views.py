@@ -17,6 +17,7 @@ from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
+    from .read_ledger import ReadDocument
     from .registry_document import RegistrySnapshot
     from .wire_log import OpenedWireSnapshot
 from .agent_activity import AgentActivity
@@ -77,6 +78,7 @@ class ThreadPresentations:
     views: Mapping[str, ThreadView]
     transcripts: Transcripts
     sent_source_limit: int
+    read_document: ReadDocument
 
     def read(self, name: str) -> ThreadPresentation | None:
         view = self.views.get(self.snapshot.canonical_name(name))
@@ -88,7 +90,7 @@ class ThreadPresentations:
         owner = captured.read.identity.thread
         if not owner.incarnation.current(self.snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
-        return view.presentation.with_sources(captured)
+        return view.presentation.with_sources(captured, document=self.read_document)
 
 
 class HistoryViews:
@@ -366,8 +368,13 @@ class HistoryViews:
             show_stopped=True,
             show_archived=False,
         )
+        reads = self.transcripts.bus.reads
         return ThreadPresentations(
-            snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
+            snapshot,
+            {view.thread.name: view for view in views},
+            self.transcripts,
+            sent_source_limit,
+            reads.read() if views else reads.empty(),
         )
 
     def require_thread_presentation(self, name: str) -> ThreadPresentation:
