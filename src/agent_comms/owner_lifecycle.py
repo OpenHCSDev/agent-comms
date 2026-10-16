@@ -22,11 +22,10 @@ from .native_arguments import NativeArguments
 from .owner_launch import RestartEnvironment
 from .private_nk_entrypoint import PACKAGE_ENV, ROOT_ID_ENV, PrivateNkLaunch
 from .registration import Registration
-from .registry_document import RegistryEntry, RegistrySnapshot
+from .registry_document import RegistrySnapshot
 from .store_files import _store_lock
 from .threads import Thread
 from .thread_identity import OwnerIdentity, AdmissionIdentity
-from .thread_presentation import LiveThreadOwnerBinding
 from .thread_owned_state import ThreadOwnedState
 from .restart_refusals import (
     OwnerSelectionChangedRefusal,
@@ -216,8 +215,8 @@ class OwnerLifecycle:
             validated_root, wire_root_id, native_package, None
         )
 
-    def acquire_thread(self, name: str, *, owner_pid: int) -> RegistryEntry:
-        """Acquire this process and return its original thread and lease together."""
+    def acquire_thread(self, name: str, *, owner_pid: int) -> Thread:
+        """Bind only this calling process; stored birth time is signal authority."""
         if owner_pid != os.getpid():
             raise RelationViolationError("An owner may acquire only its own process identity.")
         identity = ProcessIdentity.capture(owner_pid)
@@ -227,10 +226,11 @@ class OwnerLifecycle:
             thread.execution.require_native()
             if not thread.role.executable:
                 raise RelationViolationError("A human participant cannot become an executor.")
-            if not thread.process_alive:
-                owned = replace(thread, process_identity=identity, active_turn=None)
-                self.registry.register(owned, new_owner=True)
-            return self.registry.entry(thread.name).entry
+            if thread.process_alive:
+                return thread
+            owned = replace(thread, process_identity=identity, active_turn=None)
+            self.registry.register(owned, new_owner=True)
+            return owned
 
     def ensure_owner(
         self, name: str, *, agent_bin: str = NativeArguments.default_binary,
@@ -486,22 +486,6 @@ class OwnerLifecycle:
                 return  # An exact, durably attested release of the signaled owner.
             self._require_same_stop_owner(thread, admission_generation)
             self._retire_owner_unlocked(thread, admission_generation)
-
-    def release_owner(self, binding: LiveThreadOwnerBinding) -> None:
-        """Retire only the acquired lease, never a removed or replacement owner."""
-        with _store_lock(self._wire_lock_path):
-            snapshot = self.registry.snapshot()
-            original = binding.owner.incarnation
-            if not original.current(snapshot):
-                return
-            canonical = snapshot.canonical_name(original.name)
-            if snapshot.owner_generations[canonical] != binding.owner.generation:
-                return
-            thread = snapshot.threads[canonical]
-            if thread.process_identity != binding.process:
-                return
-            thread.require_local_process(ProcessIdentity.capture(os.getpid()))
-            self._retire_owner_unlocked(thread, snapshot.admission_generations[canonical])
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
