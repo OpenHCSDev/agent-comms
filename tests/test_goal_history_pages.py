@@ -8,10 +8,15 @@ import subprocess
 import sys
 
 import pytest
+import agent_comms
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryError, GoalHistoryQuery, GoalHistoryStore
+from agent_comms.goal_history import (
+    AllGoals, Before, GoalHistoryEntry, GoalHistoryError, GoalHistoryQuery,
+    GoalHistoryStore, Newest, NoHistory, OneGoal, ThroughSequence,
+)
+from agent_comms.goal_history_state import Aborted, Committed, Pending, Uncertain
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration
 from agent_comms.runtime_requests import RuntimeRequest
@@ -31,7 +36,7 @@ def authored_history(root: Path, count: int = 250):
         for ordinal in range(1, count):
             following = replace(current, revision=current.revision + 1, reported_turn=None)
             GoalHistoryEntry(None, "transition", float(ordinal), current, following,
-                             owner_created_at=thread.created_at, state="committed").insert(connection)
+                             owner_created_at=thread.created_at, state=Committed).insert(connection)
             current = following
     status = registry.status(thread.name)
     with registry.store.editing() as edit:
@@ -45,8 +50,8 @@ def test_pages_are_newest_first_bounded_and_do_not_follow_a_later_append(tmp_pat
     registry = authored_history(tmp_path / "journal")
     captured = registry.goal_history("owner")
     first = captured.entries()
-    second = captured.entries(GoalHistoryQuery(before_sequence=first[-1].sequence))
-    third = captured.entries(GoalHistoryQuery(before_sequence=second[-1].sequence))
+    second = captured.entries(GoalHistoryQuery(cursor=Before(first[-1].sequence)))
+    third = captured.entries(GoalHistoryQuery(cursor=Before(second[-1].sequence)))
     assert [len(first), len(second), len(third)] == [100, 100, 50]
     assert [row.sequence for row in (*first, *second, *third)] == list(range(250, 0, -1))
     current = registry.require("owner")
@@ -54,7 +59,7 @@ def test_pages_are_newest_first_bounded_and_do_not_follow_a_later_append(tmp_pat
     registry.register(replace(current, goal=following))
     assert captured.entries() == first
     assert registry.goal_history("owner").entries(GoalHistoryQuery(limit=1))[0].after == following
-    assert captured.entries(GoalHistoryQuery(before_sequence=1)) == ()
+    assert captured.entries(GoalHistoryQuery(cursor=Before(1))) == ()
 
 
 def test_exact_report_query_is_not_limited_to_the_display_page(tmp_path):
@@ -76,7 +81,7 @@ def test_page_decoding_runs_after_another_process_can_take_the_registry_lock(tmp
             "store=RegistryStore(Path(sys.argv[1])); "
             "lock=store.locked(); lock.__enter__(); lock.__exit__(None,None,None)",
             str(registry.store.path),
-        ], env=dict(os.environ, PYTHONPATH=str(Path(__file__).parents[1] / "src")),
+        ], env=dict(os.environ, PYTHONPATH=str(Path(agent_comms.__file__).parent.parent)),
            capture_output=True, text=True, timeout=5)
         assert result.returncode == 0, result.stderr
         return original(query, connection, owner_created_at, through_sequence)
@@ -110,7 +115,7 @@ def test_aborted_tail_uses_indexed_last_committed_entry(tmp_path, monkeypatch):
         for ordinal in range(500):
             GoalHistoryEntry(None, "transition", float(ordinal), thread.goal,
                              replace(thread.goal, revision=thread.goal.revision + 1),
-                             owner_created_at=thread.created_at, state="aborted").insert(connection)
+                             owner_created_at=thread.created_at, state=Aborted).insert(connection)
     original = GoalHistoryEntry._decode_row.__func__
     decoded = []
 
@@ -156,13 +161,13 @@ def test_every_pending_decision_is_reconciled_without_a_page_or_cardinality_cap(
     journal = GoalHistoryStore(registry.store.path)
     other = replace(thread.goal, text="Another endpoint")
     distinct = replace(thread.goal, text="An unrelated endpoint")
-    cases = ((other, thread.goal, "committed"), (thread.goal, other, "aborted"),
-             (other, distinct, "uncertain"))
+    cases = ((other, thread.goal, Committed), (thread.goal, other, Aborted),
+             (other, distinct, Uncertain))
     with journal._transaction() as connection:
         for ordinal in range(pending_count):
             before, after, _ = cases[ordinal % len(cases)]
             GoalHistoryEntry(None, "transition", float(ordinal), before, after,
-                             owner_created_at=thread.created_at, state="pending").insert(connection)
+                             owner_created_at=thread.created_at, state=Pending).insert(connection)
     original = GoalHistoryStore.acquire_read_only(registry.store.path)
     registry.goal_history("owner")
     reconciled = GoalHistoryStore.acquire_read_only(registry.store.path)
@@ -187,16 +192,18 @@ def test_absent_committed_history_is_distinct_from_committed_after_none(tmp_path
         GoalHistoryEntry(None, "transition", 1.0, Goal("Prior", "prior"),
                          None if committed_after_none else Goal("Other", "other"),
                          owner_created_at=thread.created_at,
-                         state="committed" if committed_after_none else "pending").insert(connection)
+                         state=Committed if committed_after_none else Pending).insert(connection)
     captured = registry.goal_history("owner")
     rows = GoalHistoryStore.acquire_read_only(registry.store.path)
     assert len(rows) == 1
     if committed_after_none:
+        assert isinstance(captured, ThroughSequence)
         assert captured.through_sequence == rows[0].sequence
         assert captured.entries() == rows and rows[0].after is None
     else:
-        assert captured.through_sequence is None and captured.entries() == ()
-        assert rows[0].state == "uncertain"
+        assert isinstance(captured, NoHistory) and captured.entries() == ()
+        assert not captured.reports_turn("absent")
+        assert rows[0].state is Uncertain
 
 
 def test_query_filters_both_replacement_endpoints_without_duplicates(tmp_path):
@@ -205,9 +212,9 @@ def test_query_filters_both_replacement_endpoints_without_duplicates(tmp_path):
     replacement = replace(thread.goal, id="replacement")
     registry.register(replace(thread, goal=replacement))
     captured = registry.goal_history("owner")
-    assert [row.sequence for row in captured.entries(GoalHistoryQuery(goal_id="goal"))] == [3, 2, 1]
-    assert [row.sequence for row in captured.entries(GoalHistoryQuery(goal_id="replacement"))] == [3]
-    assert captured.entries(GoalHistoryQuery(goal_id="absent")) == ()
+    assert [row.sequence for row in captured.entries(GoalHistoryQuery(scope=OneGoal("goal")))] == [3, 2, 1]
+    assert [row.sequence for row in captured.entries(GoalHistoryQuery(scope=OneGoal("replacement")))] == [3]
+    assert captured.entries(GoalHistoryQuery(scope=OneGoal("absent"))) == ()
 
 
 def test_goal_filtered_sql_seeks_each_endpoint_index(tmp_path):
@@ -216,7 +223,7 @@ def test_goal_filtered_sql_seeks_each_endpoint_index(tmp_path):
     with closing(CoordinationStore.read_snapshot(captured.path)) as connection:
         statements = []
         connection.set_trace_callback(statements.append)
-        rows = GoalHistoryQuery(goal_id="goal", limit=7).read(
+        rows = GoalHistoryQuery(scope=OneGoal("goal"), limit=7).read(
             connection, captured.owner_created_at, captured.through_sequence,
         )
         connection.set_trace_callback(None)
@@ -235,16 +242,23 @@ def test_goal_filtered_sql_seeks_each_endpoint_index(tmp_path):
 
 
 def test_request_boundaries_share_query_decoding_and_bounds():
-    request = RuntimeRequest.from_wire({"action": "goal_history", "thread": "owner",
-                                       "goal_id": " goal ", "limit": 7, "before_sequence": 20})
-    assert (request.goal_id, request.limit, request.before_sequence) == ("goal", 7, 20)
-    tool = FieldCodec.decode(CommsGoalHistoryTool, {"tool": "comms_goal_history", "limit": 7})
-    assert tool.limit == request.limit
+    query = GoalHistoryQuery(scope=OneGoal("goal"), cursor=Before(20), limit=7)
+    payload = FieldCodec.encode(query)
+    payload["scope"]["goal_id"] = " goal "  # The canonical family decodes this boundary value.
+    request = RuntimeRequest.from_wire({"action": "goal_history", "thread": "owner", **payload})
+    assert (request.scope, request.limit, request.cursor) == (OneGoal("goal"), 7, Before(20))
+    tool = FieldCodec.decode(CommsGoalHistoryTool, {"tool": "comms_goal_history", **payload})
+    assert (tool.scope, tool.limit, tool.cursor) == (request.scope, request.limit, request.cursor)
+    assert GoalHistoryQuery().scope == AllGoals() and GoalHistoryQuery().cursor == Newest()
     for limit in (0, 101):
         with pytest.raises(ValueError, match="limit"):
             RuntimeRequest.from_wire({"action": "goal_history", "thread": "owner", "limit": limit})
     with pytest.raises(ValueError, match="positive"):
-        GoalHistoryQuery(before_sequence=0)
+        Before(0)
+    with pytest.raises(ValueError, match="goal ID"):
+        OneGoal(" ")
+    with pytest.raises(ValueError):
+        RuntimeRequest.from_wire({"action": "goal_history", "thread": "owner", "goal_id": "goal"})
 
 
 def test_index_installation_is_explicit_and_never_rewrites_journal_rows(tmp_path):
@@ -279,3 +293,24 @@ def test_index_tool_refuses_foreign_schema_without_changes(tmp_path):
         with pytest.raises(GoalHistoryError, match="differs"):
             install_indexes(registry.store.path, apply=apply)
         assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("failure", [ValueError, TypeError])
+def test_decode_bugs_propagate_from_every_read_boundary(tmp_path, monkeypatch, failure):
+    registry = authored_history(tmp_path / "journal", 1)
+    captured = registry.goal_history("owner")
+    injected = failure("authored decoder defect")
+
+    def invalid(cls, *args, **kwargs):
+        raise injected
+
+    monkeypatch.setattr(GoalHistoryEntry, "_decode_row", classmethod(invalid))
+    for read in (
+        captured.entries,
+        lambda: captured.reports_turn("old-turn"),
+        lambda: GoalHistoryStore.acquire_read_only(registry.store.path),
+        lambda: registry.goal_history("owner"),
+    ):
+        with pytest.raises(failure) as error:
+            read()
+        assert error.value is injected

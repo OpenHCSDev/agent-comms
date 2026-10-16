@@ -16,7 +16,8 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.goal_history import GoalHistoryError, GoalHistoryQuery, GoalHistoryStore
+from agent_comms.field_codec import FieldCodec
+from agent_comms.goal_history import GoalHistoryError, GoalHistoryQuery, GoalHistoryStore, OneGoal
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
@@ -65,15 +66,18 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     assert entries[5].after.text == "Ask @reviewer about the release"
     assert entries[1].before == completed
     assert entries[0].before == second
-    assert reopened.goals.goal_history("reviewer", query=GoalHistoryQuery(goal_id=first.id)) == entries[1:]
-    assert reopened.goals.goal_history("reviewer", query=GoalHistoryQuery(goal_id=second.id)) == entries[:2]
+    assert reopened.goals.goal_history("reviewer", query=GoalHistoryQuery(scope=OneGoal(first.id))) == entries[1:]
+    assert reopened.goals.goal_history("reviewer", query=GoalHistoryQuery(scope=OneGoal(second.id))) == entries[:2]
 
     history_tool = next(
         tool
         for tool in ToolRequest.members_with(ToolRequest)
         if tool.declared_name == "comms_goal_history"
     )
-    result = history_tool.invoke(reopened, {"goal_id": first.id}, caller=ThreadCaller("worker"))
+    result = history_tool.invoke(
+        reopened, FieldCodec.encode(GoalHistoryQuery(scope=OneGoal(first.id))),
+        caller=ThreadCaller("worker"),
+    )
     assert [row["after"]["revision"] for row in result["history"] if row["after"]] == [
         1,
         4,

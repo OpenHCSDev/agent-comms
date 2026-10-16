@@ -9,6 +9,7 @@ from pathlib import Path
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_history import GoalHistoryEntry, GoalHistoryStore
+from agent_comms.goal_history_state import Committed, Pending, Uncertain
 from agent_comms.owner_lifecycle import OwnerReleaseReceipt
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.threads import Thread
@@ -31,9 +32,9 @@ class GoalReportMemberRetirement:
     def require_carrier(self, thread: Thread, *, current: bool) -> None:
         """Match this original carrier to its own incarnation's full history."""
         rows = tuple(row for row in self.history if row.owner_created_at == thread.created_at)
-        if any(row.state in ('pending', 'uncertain') for row in rows):
+        if any(row.state in (Pending, Uncertain) for row in rows):
             raise RelationViolationError('Original goal report has unresolved journal evidence')
-        committed = tuple(row for row in rows if row.state == 'committed')
+        committed = tuple(row for row in rows if row.state is Committed)
         goal = None
         report = None
         matched = thread.goal is None and thread.last_goal_report_turn is None
