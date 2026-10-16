@@ -65,25 +65,23 @@ class PiSessionChild:
     @property
     def retired(self) -> bool:
         """Receipt for the whole child lifecycle, not merely process death."""
-        if not self.proc.cleanup_complete:
-            return False
         task = self._resource_retirement
         if task is None or not task.done():
             return False
-        return not task.cancelled() and task.exception() is None
+        return self.proc.cleanup_complete and not task.cancelled() and task.exception() is None
 
     async def close(self) -> None:
         try:
             await self.proc.stop()
         except BaseException as error:
-            if not self.proc.retired:
-                raise  # Live or uncertain process custody still needs these resources.
-            try:
-                await self._join_resources()
-            except asyncio.CancelledError:
-                raise  # New caller cancellation still outranks an earlier failure.
-            except BaseException as cleanup_error:
-                raise error from cleanup_error
+            if self.proc.retired:
+                try:
+                    await self._join_resources()
+                except asyncio.CancelledError:
+                    raise  # New caller cancellation still outranks an earlier failure.
+                except BaseException as cleanup_error:
+                    raise error from cleanup_error
+            # Physical retirement permits resource cleanup, not a successful stop receipt.
             raise
         else:
             await self._join_resources()
