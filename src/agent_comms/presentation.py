@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
@@ -691,24 +691,28 @@ class ThreadView:
         cls,
         snapshot: RegistrySnapshot,
         agents: AgentActivity,
-        activities: Mapping[str, ObservedActivity],
+        activities: Mapping[str, ObservedActivity] | None,
         goal_waits: GoalWaits,
         *,
         show_stopped: bool,
         show_archived: bool,
+        names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
+        selected = None if names is None else {snapshot.canonical_name(name) for name in names}
+        threads = tuple(
+            thread for name, thread in snapshot.threads.items()
+            if (selected is None or name in selected)
+            and cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+        )
+        if not threads:
+            return ()
         runtime = agents.runtime_info.read()
         waits = goal_waits.read()
+        if activities is None:
+            activities = agents.all_activity(snapshot=snapshot)
         return tuple(
-            cls.capture(
-                thread,
-                snapshot,
-                activities[name],
-                runtime.get(name),
-                waits,
-            )
-            for name, thread in snapshot.threads.items()
-            if cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+            cls.capture(thread, snapshot, activities[thread.name], runtime.get(thread.name), waits)
+            for thread in threads
         )
 
     @property

@@ -744,7 +744,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
     details: NativeToolDetails = field(default_factory=lambda: NoToolDetails())
 
     def transcript_events(self, context):
-        from .native_tools import NativeTool
+        from .tool_declaration import ToolDeclaration
         from .transcript_events import ToolEndTranscript
 
         if not self.parts:
@@ -757,7 +757,7 @@ class ToolResultMessage(ToolDetailsPayload, PiMessage, declared_name="toolResult
                 tool_call_id=self.tool_call_id,
                 tool_name=self.tool_name,
                 ok=not self.is_error,
-                diff=NativeTool.for_name(self.tool_name).result_diff(result, not self.is_error),
+                diff=ToolDeclaration.for_name(self.tool_name).result_diff(result, not self.is_error),
                 sent_message=result.sent_message(not self.is_error),
             )
         ]

@@ -49,6 +49,19 @@ def test_golden_names_decode_capability_and_slots_identity():
         HTTPReadyCase.decode("external-v1")
 
 
+def test_explicit_unnamed_concrete_state_uses_existing_registry_exclusion():
+    class UnnamedCase(SampleFamily):
+        declared_name = None
+
+        def execute(self):
+            return 2
+
+    assert UnnamedCase().execute() == 2
+    assert SampleFamily.names() == ("http_ready", "external-v1")
+    with pytest.raises(ValueError):
+        SampleFamily.decode("unnamed")
+
+
 def test_slots_root_keeps_its_declared_affix():
     @dataclass(frozen=True, slots=True)
     class Limits(DeclaredFamily, affix="Limit"):
