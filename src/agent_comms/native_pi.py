@@ -26,6 +26,7 @@ from .native_session_files import NativeSessionFiles
 from .native_package import OWNER_INSTRUCTIONS
 from .owner_launch import RestartEnvironment
 from .field_codec import FieldCodec
+from .pi_rpc import unique_fields
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
@@ -646,15 +647,6 @@ class NativePiRpcLaunch:
         return cls._build(cli, tuple(arguments), worktree, env, session, package, configuration)
 
 
-def _unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in pairs:
-        if key in result:
-            raise NativePiUnavailable("Ambiguous native Pi JSON object")
-        result[key] = value
-    return result
-
-
 def _read_private_file(path: Path):
     """Yield strict private evidence rows, checking the same opened revision.
 
@@ -888,7 +880,7 @@ class PrivateEvidenceRead:
     @staticmethod
     def _decode_row(raw):
         try:
-            row = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=_unique)
+            row = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=unique_fields)
         except (UnicodeError, ValueError) as error:
             raise NativePiUnavailable("Native Pi evidence JSON is invalid") from error
         if type(row) is not dict:

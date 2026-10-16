@@ -290,8 +290,15 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
             await tick()
         settled = len(drains)
         assert settled <= 3
+        activity_of = comms.agents.activity_of
+
+        def no_idle_activity(*_args, **_kwargs):
+            raise AssertionError("an unchanged tick reread activity and the registry")
+
+        monkeypatch.setattr(comms.agents, "activity_of", no_idle_activity)
         for _ in range(20):
             await tick()
+        monkeypatch.setattr(comms.agents, "activity_of", activity_of)
         assert len(drains) == settled, "an unchanged tick re-read the stores"
         assert len(syncs) == settled
         # Another thread's declaration, change, stop, coordination row and removal
@@ -393,8 +400,14 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         # Process-local work waiting on the next tick is never skipped.
         for _ in range(2):
             await tick()
+        from agent_comms.routing import ScheduledTurn
+        from agent_comms.schedule_rules import WakeScheduleCheck
+
+        # The observer owns this check; a real queued turn is dispatched by
+        # another owner, whose separate tests exercise the provider path.
+        monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         before = len(drains)
-        agent.inputs.pending_turns["beta"] = [object()]
+        agent.inputs.pending_turns["beta"] = [ScheduledTurn("queued locally")]
         await tick()
         assert len(drains) == before + 1
     finally:
@@ -566,9 +579,9 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
 async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     tmp_path, monkeypatch
 ) -> None:
-    """A foreign append decodes only bytes after the owner's settled offset."""
+    """A foreign append consults the address owner without decoding bus rows."""
     from agent_comms import input_drain
-    from agent_comms.wire_log import OpenedWireSnapshot
+    from agent_comms.private_bus_checkpoint import Addressed
 
     comms, agent, _root_id = _session(tmp_path)
     comms.registry.declare(
@@ -598,15 +611,15 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     async def no_catalog(session_id):
         pass
 
-    tails = []
-    appended_records = OpenedWireSnapshot.appended_records
+    address_reads = []
+    observed_after = Addressed.observed_after.__func__
 
-    def measured_tail(self, previous, previous_sequence):
-        tails.append(self.boundary - previous.size)
-        return appended_records(self, previous, previous_sequence)
+    def measured_address(cls, bus, revision, source, marker_revision, lookup, after_seq):
+        address_reads.append((lookup, after_seq, revision))
+        return observed_after(cls, bus, revision, source, marker_revision, lookup, after_seq)
 
     monkeypatch.setattr(input_drain.WireWatch, "observations", staticmethod(observations))
-    monkeypatch.setattr(OpenedWireSnapshot, "appended_records", measured_tail)
+    monkeypatch.setattr(Addressed, "observed_after", classmethod(measured_address))
     monkeypatch.setattr(agent.inputs, "drain_inbox", counted)
     monkeypatch.setattr(agent.sessions.config, "sync_thread", no_catalog)
     observer = asyncio.create_task(agent.inputs.observe("beta"))
@@ -626,7 +639,7 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
         comms.messaging.send_message("sender", "gamma", "another for gamma")
         await tick()
         assert len(drains) == settled
-        assert tails and tails[-1] < comms.bus.log.path.stat().st_size
+        assert address_reads
         comms.messaging.send_message("sender", "beta", "for beta")
         await tick()  # the address record has an unadmitted row for beta: full tick
         assert len(drains) == settled + 1, "a delivered row for the owner did not wake it"
