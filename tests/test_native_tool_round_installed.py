@@ -219,21 +219,24 @@ async def test_actual_native_requested_answer_and_following_input(native_backend
         replies = [message for line in comms.bus.log.path.read_text().splitlines()
                    for message in WireRecord.public_from_wire(json.loads(line)).messages()
                    if message.sender == session]
+        notices = [message for message in replies if message.notice]
+        replies = [message for message in replies if not message.notice]
         if following == "provider_error":
-            assert not replies and len(failures) == 1
+            assert not replies and len(notices) == len(failures) == 1
             assert isinstance(failures[0], NativePiTerminalFailure)
             assert isinstance(failures[0].failure, ModelRequestFailed)
             assert native.provider.error_message in str(failures[0])
         elif following in {"empty_original", "empty_original_notice"}:
-            assert not replies and len(failures) == 1
+            assert not replies and len(notices) == len(failures) == 1
             assert "no unique authoritative completed response" in str(failures[0])
         else:
-            assert not failures
+            assert not failures and not notices
             assert [message.body for message in replies] == [
                 "Revised requested answer" if following == "steering" else "Requested answer"]
         print("installed_native_following_result=" + json.dumps({
             "following": following, "provider_requests": native.provider.posts,
             "new_inputs": len(users), "routed_replies": [message.body for message in replies],
+            "failure_notices": len(notices),
             "original_fixture_history_preserved": True,
             "installed_module": str(Path(__import__("agent_comms").__file__).resolve()),
         }))
