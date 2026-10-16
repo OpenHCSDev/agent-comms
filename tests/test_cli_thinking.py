@@ -1,5 +1,7 @@
 """Stopped-thread configuration uses the session's model-specific catalog."""
 
+from agent_comms.tool_caller import NoThreadCaller
+
 import pytest
 
 from agent_comms.cli_commands import ConfigureCliCommand
@@ -58,7 +60,7 @@ def test_configure_refuses_model_outside_catalog_without_writing(comms, tmp_path
     original = comms.registry.require("worker")
 
     with pytest.raises(ValueError, match="Model 'fixture/plain' is unavailable"):
-        ConfigureCliCommand(name="worker", model="fixture/plain").apply(comms)
+        ConfigureCliCommand(name="worker", model="fixture/plain").apply(comms, caller=NoThreadCaller())
     assert comms.registry.require("worker") == original
 
 
@@ -77,7 +79,7 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     monkeypatch.setattr(GetAvailableThinkingLevels, "discover", discover_levels)
     result = ConfigureCliCommand(
         name="worker", thinking="high", service_tier=ServiceTier.STANDARD
-    ).apply(comms)
+    ).apply(comms, caller=NoThreadCaller())
     assert result["thinking_level"] == "high"
     assert result["service_tier"] == "standard"
     configured = comms.registry.require("worker")

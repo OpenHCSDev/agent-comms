@@ -1,5 +1,7 @@
 """Report-authoring helper and current-runtime replacement fixture."""
 
+from agent_comms.tool_caller import NoThreadCaller
+
 from agent_comms.runtime_socket import RuntimeSocket
 import asyncio
 from dataclasses import replace
@@ -84,7 +86,7 @@ def runtime_owners(root, package):
     finally:
         for name in names:
             if name in service.registry.snapshot().threads:
-                service.owners.stop(name)
+                service.owners.stop(name, caller=NoThreadCaller())
 
 
 if __name__ == '__main__':

@@ -1,5 +1,7 @@
 """Actual native owner survives client loss; a loopback provider gates completion."""
 
+from agent_comms.tool_caller import NoThreadCaller
+
 import asyncio
 import json
 import os
@@ -130,7 +132,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
             name = "project"
             owner = comms.registry.require(name).pid
         if name is not None:
-            comms.owners.stop(name)
+            comms.owners.stop(name, caller=NoThreadCaller())
         if owner is not None:
             with suppress(ChildProcessError):
                 await asyncio.to_thread(os.waitpid, owner, 0)

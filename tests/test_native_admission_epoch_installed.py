@@ -50,6 +50,7 @@ def released_native_owner(directory, package, output, exit_allowed):
             async with configured_native_journey(owned, Path(directory) / "owner-config", patch):
                 await owned.seed()
                 before = {row.input_id for row in owned.records()}
+                caller = comms.registry.require("beta").incarnation
                 owned.send("Independent fixture input with uncertain provider completion")
                 provider = LoopbackProvider(status=0)
                 owned.replies.append(provider)
@@ -57,8 +58,7 @@ def released_native_owner(directory, package, output, exit_allowed):
                 try:
                     while not provider.posts:
                         await asyncio.sleep(0.02)
-                    patch.setenv("AGENT_COMMS_THREAD", "beta")
-                    comms.owners.release("beta")
+                    comms.owners.release("beta", caller=caller)
                     await owned.children[-1].stop()
                     with pytest.raises(NativePiUnavailable) as error:
                         await task

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.tool_caller import NoThreadCaller
+
 from agent_comms.runtime_socket import RuntimeSocket
 
 import os
@@ -81,7 +83,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         assert not replacement.process_alive
         replacement = comms.registry.require("worker")
         assert replacement.process_alive and replacement.pid == installed.pid
-        comms.owners.stop("worker")
+        comms.owners.stop("worker", caller=NoThreadCaller())
         assert not replacement.process_alive
         assert comms.registry.status("worker").stopped
         assert comms.registry.require("worker").created_at == declared.created_at
@@ -107,7 +109,7 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
         with pytest.raises(RelationViolationError, match="another live owner"):
             comms.owners.restart_owners(["stale"])
         assert child.alive()
-        comms.owners.stop("stale")
+        comms.owners.stop("stale", caller=NoThreadCaller())
         assert child.alive()
         assert comms.registry.status("stale").stopped
     finally:
@@ -541,7 +543,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
             except KeyError:
                 continue
             if owner.process_alive:
-                comms.owners.stop(owner.name)
+                comms.owners.stop(owner.name, caller=NoThreadCaller())
         assert all(not owner.process_alive for owner in originals)
 
 

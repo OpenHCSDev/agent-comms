@@ -1,3 +1,5 @@
+
+from agent_comms.tool_caller import NoThreadCaller
 import os
 from dataclasses import replace
 from unittest.mock import patch
@@ -483,7 +485,6 @@ def test_thread_presentation_owns_lifecycle_precedence(tmp_path):
 
 
 def test_none_membership_and_independent_channel_order(tmp_path):
-    from agent_comms.display_order import ThreadSort
 
     comms = setup_wire(tmp_path)
     comms.messaging.send("a", "#none", "for untagged agents")
@@ -573,7 +574,7 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     assert [
         person.thread.name for person in comms.views.coordination_snapshot().participants("#api")
     ] == ["peer"]
-    comms.owners.stop("peer")
+    comms.owners.stop("peer", caller=NoThreadCaller())
     assert not comms.views.coordination_snapshot().participants("#api")
 
 

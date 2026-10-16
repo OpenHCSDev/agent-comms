@@ -1,5 +1,8 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
 
+from agent_comms.tool_caller import NoThreadCaller
+from stored_inputs import stored_inputs
+
 from agent_comms.runtime_socket import RuntimeSocket
 
 import os
@@ -208,7 +211,7 @@ def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
     child.force()
     child.reap()
     assert not original.process_alive
-    comms.owners.stop("worker")
+    comms.owners.stop("worker", caller=NoThreadCaller())
     snapshot = comms.registry.snapshot()
     receipt = comms.owners.releases.read()["worker"]
     assert receipt.current(snapshot, original, receipt.before)
@@ -224,7 +227,7 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
         snapshot = comms.registry.snapshot()
         arguments["expected"] = OwnerRestartSelection.capture(snapshot, "worker")
     if mode == "stop":
-        comms.owners.stop("worker")
+        comms.owners.stop("worker", caller=NoThreadCaller())
     else:
         (result,) = comms.owners.restart_owners(
             ["worker"], agent_bin=sys.executable, agent_args=["-c", "print('local')"], **arguments

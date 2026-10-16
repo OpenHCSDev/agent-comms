@@ -1,4 +1,6 @@
 """Installed snapshot values, original notification receipts and real sidebar rows."""
+
+from agent_comms.tool_caller import NoThreadCaller
 import argparse
 import asyncio
 from importlib.resources import files
@@ -45,8 +47,8 @@ async def main():
         source = root / (name + '.jsonl')
         source.touch()
         comms.registry.declare(Thread(name, frozenset({'team'}), str(root), session_file=str(source)))
-    comms.owners.stop('stopped')
-    comms.owners.stop('archived')
+    comms.owners.stop('stopped', caller=NoThreadCaller())
+    comms.owners.stop('archived', caller=NoThreadCaller())
     comms.threads.archive('archived')
     message = comms.messaging.send_initial_cohort(owner, '#team', 'Original metadata receipt')
     original_wire = comms.bus.log.path.read_bytes()

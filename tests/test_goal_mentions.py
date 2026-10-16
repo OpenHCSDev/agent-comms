@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.tool_caller import NoThreadCaller
+
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -145,7 +147,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
     renamed_rows, _ = _rows(comms, "owner")
     assert renamed_rows[0].target == "reviewer"
     assert _rows(comms, "reviewer")[0][0].target == "owner"
-    comms.owners.stop("reviewer")
+    comms.owners.stop("reviewer", caller=NoThreadCaller())
     comms.registry.remove("reviewer")
     comms.registry.declare(Thread("peer", frozenset(), str(tmp_path), created_at=18002.0))
     # The old token must not grant a link to a new peer with the same spelling.
@@ -276,7 +278,7 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
     comms = _wire(tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
     assert goal is not None
-    comms.owners.stop("owner")
+    comms.owners.stop("owner", caller=NoThreadCaller())
     comms.registry.remove("owner")
     comms.registry.declare(
         Thread("owner", frozenset(), str(tmp_path), goal=goal, created_at=18001.0)

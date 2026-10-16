@@ -6,6 +6,8 @@ root, setting, native journal or historical input is changed.
 """
 from __future__ import annotations
 
+from agent_comms.tool_caller import NoThreadCaller
+
 from agent_comms.runtime_socket import RuntimeSocket
 
 import argparse
@@ -197,7 +199,7 @@ async def run(stage, package, models, ui, menu_contention=False):
                 **visible,
             })
         finally:
-            service.owners.stop(name)
+            service.owners.stop(name, caller=NoThreadCaller())
         assert not owner.process_alive
     receipt = {'models': rows, 'real_worker_socket_catalog': True,
                'prompt_commands': 0, 'provider_calls': 0,

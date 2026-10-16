@@ -4,6 +4,8 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from agent_comms.tool_caller import NoThreadCaller
+
 from agent_comms.runtime_socket import RuntimeSocket
 
 from unittest.mock import AsyncMock
@@ -378,7 +380,7 @@ class TestHandlers:
     async def test_same_cwd_allocates_distinct_threads(self, tmp_path):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.owners.stop("proj")
+        agent._comms.owners.stop("proj", caller=NoThreadCaller())
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         names = list(agent._comms.registry.all_threads())
         assert names == ["proj", "proj-2"]
@@ -1484,7 +1486,7 @@ class TestWireProtocol:
                 owner = comms.registry.require("proj").pid
                 assert owner != proc.pid
                 assert comms.registry.require("proj").process_alive
-                comms.owners.stop("proj")
+                comms.owners.stop("proj", caller=NoThreadCaller())
         responses = {
             m.get("id"): m for m in (json.loads(line) for line in out_lines if line.strip())
         }
