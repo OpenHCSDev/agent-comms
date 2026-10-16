@@ -145,8 +145,11 @@ def test_only_receipt_bound_cutover_may_retire_during_draining(tmp_path: Path) -
     cutover.maintenance_receipt = receipt
     with _store_lock(comms.root / 'wire'):
         cutover.require_restart_admission(comms.owners)
-        with pytest.raises(RelationViolationError, match='Maintenance admission closed'):
+        from agent_comms.restart_refusals import OwnerMaintenancePendingRefusal
+
+        with pytest.raises(OwnerMaintenancePendingRefusal, match='Maintenance is holding') as refused:
             PreserveOwnerRuntime().require_restart_admission(comms.owners)
+        assert refused.value.queue_state().pending  # Idle reload remains queued, not UNKNOWN.
     comms.owners.maintenance.clear(receipt)
     with _store_lock(comms.root / 'wire'):
         with pytest.raises(RelationViolationError, match='phase changed'):

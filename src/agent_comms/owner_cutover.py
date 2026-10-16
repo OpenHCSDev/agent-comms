@@ -40,7 +40,11 @@ class OwnerCutover(ABC):
 
     def require_restart_admission(self, lifecycle: OwnerLifecycle) -> None:
         """Ordinary restarts require READY; maintained cutovers bind their receipt."""
-        lifecycle.maintenance.assert_open_unlocked()
+        from .restart_refusals import OwnerMaintenancePendingRefusal
+
+        receipt = lifecycle.maintenance.current_unlocked()
+        if receipt is not None and receipt.phase.turn_pending:
+            raise OwnerMaintenancePendingRefusal()
 
     @abstractmethod
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
