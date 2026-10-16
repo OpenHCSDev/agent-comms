@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import projected
 from .messages import Message
-from .presentation import ThreadView
+from .activity import ObservedActivity
+from .threads import Thread
+from .goal_progress import WorksInApp
 from .tool_activity import ToolActivity
 
 
@@ -23,18 +25,18 @@ class KnownUnreadCount(UnreadCount):
 
 
 @dataclass(frozen=True)
-class UnavailableUnreadCount(UnreadCount):
-    reason: str
-
-
-class SentMessages(DeclaredFamily, affix="SentMessages"):
-    @property
-    def timestamps(self) -> tuple[float, ...]:
-        return ()
+class UnreadStoreBusy(UnreadCount):
+    pass
 
 
 @dataclass(frozen=True)
-class KnownSentMessages(SentMessages):
+class UnreadProjectionRebuilding(UnreadCount):
+    through: int
+    size: int
+
+
+@dataclass(frozen=True)
+class SentMessages:
     messages: tuple[Message, ...]
 
     @property
@@ -43,21 +45,15 @@ class KnownSentMessages(SentMessages):
 
 
 @dataclass(frozen=True)
-class UnavailableSentMessages(SentMessages):
-    reason: str
-
-
-@dataclass(frozen=True)
-class FleetEntry:
-    view: ThreadView
+class UnitObservation:
+    thread: Thread
+    activity: ObservedActivity
     tool: ToolActivity
-    unread: UnreadCount
-    sent: SentMessages
     observed_at: float
 
     @property
     def goal(self):
-        return self.view.thread.goal
+        return self.thread.goal
 
     @property
     def open_goal(self):
@@ -65,52 +61,44 @@ class FleetEntry:
 
     @property
     def busy_since(self):
-        turn = self.view.thread.active_turn
-        return turn.started_at if turn is not None else self.view.activity.timestamp
+        return self.thread.execution.busy_time(self.thread, self.activity)
 
-    @property
-    def last_activity(self):
-        return max((self.view.activity.timestamp, self.view.last_seen,
-                    *self.tool.timestamps, *self.sent.timestamps))
-
-    @property
-    def progress(self):
+    @projected(view="wire")
+    def progress(self) -> UnitProgress:
         return UnitProgress.select(self)
 
-    def to_wire(self):
-        progress = self.progress
-        return {
-            "thread": self.view.thread.name,
-            "goal": FieldCodec.encode(self.goal),
-            "progress": {**FieldCodec.encode(progress), "summary": progress.summary},
-            "activity": {
-                "state": self.view.activity.state.value,
-                "since": self.view.activity.timestamp,
-                "detail": self.view.activity.detail,
-                "inbox": FieldCodec.encode(self.view.activity.readiness),
-            },
-            "last_tool": {**FieldCodec.encode(self.tool), "detail": self.tool.description},
-            "unread": FieldCodec.encode(self.unread),
-            "last_sent": FieldCodec.encode(self.sent),
-        }
+
+@dataclass(frozen=True)
+class FleetEntry(UnitObservation):
+    unread: UnreadCount
+    sent: SentMessages
+    last_seen: float
+
+    @projected(view="wire")
+    def last_activity(self) -> float:
+        return max((self.activity.timestamp, self.last_seen,
+                    *self.tool.timestamps, *self.sent.timestamps))
 
 
 @dataclass(frozen=True)
 class UnitProgress(DeclaredFamily, affix="UnitProgress"):
-    tool: ToolActivity
     priority: ClassVar[int]
     notifies_commander: ClassVar[bool] = False
     summary: ClassVar[str]
 
-    @classmethod
-    @abstractmethod
-    def matches(cls, entry: FleetEntry) -> bool: ...
+    @projected(view="wire", name="summary")
+    def display_summary(self) -> str:
+        return self.summary
 
     @classmethod
-    def select(cls, entry: FleetEntry):
+    @abstractmethod
+    def matches(cls, entry: UnitObservation) -> bool: ...
+
+    @classmethod
+    def select(cls, entry: UnitObservation):
         for member in sorted(cls.members_with(cls), key=lambda member: member.priority):
             if member.matches(entry):
-                return member(entry.tool)
+                return member()
         raise RuntimeError("UnitProgress has no matching declaration")
 
 
@@ -120,7 +108,8 @@ class DoneUnitProgress(UnitProgress):
 
     @classmethod
     def matches(cls, entry):
-        return (entry.goal is not None and entry.goal.progress.works_in_app
+        return (entry.goal is not None
+                and any(isinstance(delivery, WorksInApp) for delivery in entry.goal.progress.deliveries)
                 and entry.goal.author.has_report(entry.goal.report_time))
 
 
@@ -131,8 +120,7 @@ class OverdueUnitProgress(UnitProgress):
 
     @classmethod
     def matches(cls, entry):
-        return (entry.open_goal and entry.goal.deadline.overdue(entry.observed_at)
-                and not entry.goal.author.has_report(entry.goal.report_time))
+        return entry.open_goal and entry.goal.deadline.overdue(entry.observed_at, entry.goal.report_time)
 
 
 class ToolSilentUnitProgress(UnitProgress):
@@ -143,7 +131,7 @@ class ToolSilentUnitProgress(UnitProgress):
 
     @classmethod
     def matches(cls, entry):
-        return (entry.open_goal and entry.view.activity.state.busy
+        return (entry.open_goal and entry.activity.state.busy
                 and entry.tool.silent_since(entry.busy_since, entry.observed_at, cls.seconds))
 
 
@@ -162,7 +150,7 @@ class MovingUnitProgress(UnitProgress):
 
     @classmethod
     def matches(cls, entry):
-        return entry.view.activity.state.busy
+        return entry.activity.state.busy
 
 
 class IdleWithOpenGoalUnitProgress(UnitProgress):

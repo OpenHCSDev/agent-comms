@@ -12,8 +12,6 @@ from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
 
 @dataclass(frozen=True)
 class Delivery(DeclaredFamily):
-    works_in_app: ClassVar[bool] = False
-
     def __post_init__(self) -> None:
         for item in fields(self):
             value = getattr(self, item.name)
@@ -59,8 +57,6 @@ class Installed(Delivery):
 @dataclass(frozen=True)
 class WorksInApp(Delivery):
     evidence: str
-    works_in_app = True
-
     def require_completion(self) -> None:
         pass
 
@@ -119,8 +115,8 @@ class GoalProgress(DeclaredFamily, JsonShapeFamily, affix="GoalProgress"):
     def block_reason(self) -> str: ...
 
     @property
-    def works_in_app(self) -> bool:
-        return False
+    def deliveries(self) -> tuple[Delivery, ...]:
+        return ()
 
     def require_report(self) -> GoalReport:
         raise ValueError("A commanded goal requires stupid, deleted, delivery and next.")
@@ -163,8 +159,8 @@ class ReportedGoalProgress(GoalProgress, JsonShapeMember):
     value: GoalReport
 
     @property
-    def works_in_app(self) -> bool:
-        return self.value.delivery.works_in_app
+    def deliveries(self) -> tuple[Delivery, ...]:
+        return (self.value.delivery,)
 
     def require_report(self) -> GoalReport:
         return self.value

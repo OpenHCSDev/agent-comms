@@ -13,6 +13,8 @@ from .thread_identity import ThreadIncarnation
 from .field_codec import FieldCodec
 from .goal_states import ActiveGoal, GoalState
 from .goal_progress import GoalProgress, TextGoalProgress
+from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .message_reference import MessageReference
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -130,11 +132,22 @@ class GoalAuthor(DeclaredFamily, affix="GoalAuthor"):
     def revised(self, author: ThreadIncarnation, registry, now: float): ...
 
     @abstractmethod
-    def has_report(self, recorded: GoalReportTime) -> bool: ...
+    def has_report(self, recorded: EventTime) -> bool: ...
 
     @property
     @abstractmethod
     def revision_count(self) -> int: ...
+
+    @abstractmethod
+    def notification_targets(self, registry) -> tuple[ThreadIncarnation, ...]: ...
+
+    @property
+    @abstractmethod
+    def issued_times(self) -> tuple[float, ...]: ...
+
+    @property
+    @abstractmethod
+    def instruction(self) -> str: ...
 
 
 @dataclass(frozen=True)
@@ -154,6 +167,17 @@ class SelfDirectedGoalAuthor(GoalAuthor):
     @property
     def revision_count(self):
         return 0
+
+    def notification_targets(self, registry):
+        return ()
+
+    @property
+    def issued_times(self):
+        return ()
+
+    @property
+    def instruction(self):
+        return ""
 
 
 @dataclass(frozen=True)
@@ -177,6 +201,28 @@ class CommandedGoalAuthor(GoalAuthor):
     @property
     def revision_count(self):
         return self.revisions
+
+    def notification_targets(self, registry):
+        return (self.thread,) if self.thread.current(registry) else ()
+
+    @property
+    def issued_times(self):
+        return (self.issued_at,)
+
+    @property
+    def instruction(self):
+        return (
+            f"This is an order from {self.thread.name} (original identity "
+            f"{self.thread.created_at}); commander send-backs: {self.revisions}. "
+            "comms_goal progress must be a complete object with nonempty stupid, "
+            "deleted, delivery and next fields, not free text. Delivery is a declared "
+            "object, for example {\"kind\":\"not_merged\"}, "
+            "{\"kind\":\"merged\",\"sha\":\"...\"}, "
+            "{\"kind\":\"installed\",\"runtime\":\"...\"}, "
+            "{\"kind\":\"works_in_app\",\"evidence\":\"...\"}, or "
+            "{\"kind\":\"broken\",\"reason\":\"...\"}. "
+            "Only works_in_app evidence permits completed."
+        )
 
     def revised(self, author, registry, now):
         if self.thread.resolved(registry) != author:
@@ -262,12 +308,12 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
 
 class GoalDeadline(DeclaredFamily):
     @abstractmethod
-    def overdue(self, now: float) -> bool: ...
+    def overdue(self, now: float, report: EventTime) -> bool: ...
 
 
 @dataclass(frozen=True)
 class NoDeadline(GoalDeadline):
-    def overdue(self, now: float) -> bool:
+    def overdue(self, now: float, report: EventTime) -> bool:
         return False
 
 
@@ -279,26 +325,40 @@ class Deadline(GoalDeadline):
         if type(self.at) not in (int, float) or not isfinite(self.at) or self.at <= 0:
             raise ValueError("A goal deadline requires a positive finite Unix timestamp.")
 
-    def overdue(self, now: float) -> bool:
-        return now > self.at
+    def overdue(self, now: float, report: EventTime) -> bool:
+        return now > self.at and not report.since(self.at)
 
 
-class GoalReportTime(DeclaredFamily, affix="GoalReportTime"):
-    def since(self, at: float) -> bool:
-        return False
-
-
-@dataclass(frozen=True)
-class NeverReportedGoalReportTime(GoalReportTime):
-    pass
+class GoalNotice(DeclaredFamily, affix="GoalNotice"):
+    @property
+    @abstractmethod
+    def summary(self) -> str: ...
 
 
 @dataclass(frozen=True)
-class RecordedGoalReportTime(GoalReportTime):
-    at: float
+class NoGoalNotice(GoalNotice):
+    @property
+    def summary(self):
+        return "No commander notice recorded"
 
-    def since(self, at: float) -> bool:
-        return self.at >= at
+
+@dataclass(frozen=True)
+class SentGoalNotice(GoalNotice):
+    message: MessageReference
+
+    @property
+    def summary(self):
+        return "Commander notified"
+
+
+@dataclass(frozen=True)
+class UnconfirmedGoalNotice(GoalNotice):
+    target: ThreadIncarnation
+    reason: str
+
+    @property
+    def summary(self):
+        return f"Commander notice unconfirmed: {self.reason}; no automatic resend"
 
 
 @dataclass(frozen=True)
@@ -315,9 +375,14 @@ class Goal:
     deadline: GoalDeadline = field(
         default_factory=NoDeadline, metadata={"wire_omit_default": True}
     )
-    report_time: GoalReportTime = field(
-        default_factory=NeverReportedGoalReportTime, metadata={"wire_omit_default": True}
+    report_time: EventTime = field(
+        default_factory=UnrecordedEventTime, metadata={"wire_omit_default": True}
     )
+    work_time: EventTime = field(
+        default_factory=UnrecordedEventTime, metadata={"wire_omit_default": True}
+    )
+    notice: GoalNotice = field(default_factory=NoGoalNotice,
+                               metadata={"wire_omit_default": True})
 
     @property
     def author(self) -> GoalAuthor:

@@ -603,9 +603,7 @@ class CommsFleetTool(ToolRequest):
     description = "Running threads, goals, deadlines and latest original tool/message activity, newest first."
 
     def apply(self, comms: Comms) -> JsonObject:
-        from .cli_commands import FleetCliCommand
-
-        return FleetCliCommand().apply(comms)
+        return {"threads": FieldCodec.encode(comms.views.fleet())}
 
 
 @dataclass(frozen=True, kw_only=True)

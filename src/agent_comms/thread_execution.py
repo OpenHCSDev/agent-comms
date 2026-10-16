@@ -69,6 +69,10 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return activity
 
     @classmethod
+    def busy_time(cls, thread: Thread, activity):
+        return activity.state.busy_time(activity)
+
+    @classmethod
     def latest_tool(cls, root, thread: Thread):
         from .external_transcript import ExternalTranscript
 
@@ -76,6 +80,10 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
 
 class NativeThreadExecution(ThreadExecution):
+    @classmethod
+    def busy_time(cls, thread: Thread, activity):
+        return thread.turn_state.busy_time
+
     @classmethod
     def latest_tool(cls, root, thread: Thread):
         from pathlib import Path

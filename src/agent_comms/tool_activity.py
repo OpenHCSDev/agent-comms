@@ -6,6 +6,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from .declared_family import DeclaredFamily
 from .transcript_events import ToolStartTranscript
+from .recorded_time import EventTime, RecordedEventTime
+from .field_codec import projected
 
 
 class ToolActivity(DeclaredFamily, affix="ToolActivity"):
@@ -19,12 +21,16 @@ class ToolActivity(DeclaredFamily, affix="ToolActivity"):
     def timestamps(self) -> tuple[float, ...]:
         return ()
 
+    @projected(view="wire", name="detail")
+    def display_detail(self) -> str:
+        return self.description
+
     @property
     @abstractmethod
     def description(self) -> str: ...
 
     @abstractmethod
-    def silent_since(self, busy_since: float, now: float, seconds: float) -> bool:
+    def silent_since(self, busy_since: EventTime, now: float, seconds: float) -> bool:
         """Only a known source can establish the absence of a recent tool."""
 
 
@@ -35,7 +41,7 @@ class NoToolActivity(ToolActivity):
         return "No tool call recorded"
 
     def silent_since(self, busy_since, now, seconds):
-        return now - busy_since >= seconds
+        return busy_since.elapsed(now, seconds)
 
 
 @dataclass(frozen=True)
@@ -53,16 +59,15 @@ class RecordedToolActivity(ToolActivity):
     def silent_since(self, busy_since, now, seconds):
         # Missing external timestamps are unrecorded, never the time of this read.
         return (self.call.timestamp is not None
-                and now - max(busy_since, self.call.timestamp) >= seconds)
+                and busy_since.latest(RecordedEventTime(self.call.timestamp)).elapsed(now, seconds))
 
 
 @dataclass(frozen=True)
-class UnavailableToolActivity(ToolActivity):
-    reason: str
+class NativeToolSelectorUnavailable(ToolActivity):
 
     @property
     def description(self):
-        return f"Tool history unavailable: {self.reason}"
+        return "Native exact tool selector is not implemented"
 
     def silent_since(self, busy_since, now, seconds):
         return False

@@ -1124,7 +1124,7 @@ class FleetCliCommand(CliCommand):
     help = "Running threads, original goals and latest activity, newest first"
 
     def apply(self, ctx: Comms) -> Any:
-        return {"threads": ctx.views.fleet()}
+        return {"threads": FieldCodec.encode(ctx.views.fleet())}
 
 
 @dataclass(frozen=True, kw_only=True)

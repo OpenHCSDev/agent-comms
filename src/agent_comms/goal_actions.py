@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from contextlib import ExitStack
 from typing import TYPE_CHECKING, ClassVar
 import time
 from uuid import uuid4
@@ -25,10 +26,11 @@ from .goal_states import (
 )
 from .goal_waits import GoalWait, GoalWaits
 from .goals import (
-    Goal, GoalDeadline, NoDeadline, CommandedGoalAuthor, RecordedGoalReportTime,
+    Goal, GoalDeadline, NoDeadline, CommandedGoalAuthor,
     SelfDirectedGoalAuthor,
 )
 from .goal_progress import GoalProgress
+from .recorded_time import RecordedEventTime
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -84,6 +86,7 @@ class GoalActionContext:
     goals: Goals
     thread: Thread
     actor: type = RuntimeInvocable
+    completed: ExitStack = field(kw_only=True)
 
     @property
     def report_turn(self) -> str:
@@ -140,13 +143,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             raise ValueError("This goal was already reported in this turn.")
         goal = self.change(ctx)
         self.before_publish(goal, ctx)
-        ctx.goals.registry.register(
-            replace(
-                ctx.thread,
-                goal=goal,
-            ),
-            ctx.goals.registry.status(ctx.thread.name),
-        )
+        goal = ctx.goals.write_goal(ctx.thread, goal, ctx.completed)
         if not self.preserve_wait and ctx.thread.goal is not None:
             ctx.goals.waits.clear(ctx.thread.goal.id)
         return goal
@@ -182,7 +179,7 @@ class TransitionGoalAction(GoalAction):
             revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
             reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn,
-            report_time=(RecordedGoalReportTime(time.time()) if ctx.model_report
+            report_time=(RecordedEventTime(time.time()) if ctx.model_report
                          else goal.report_time),
         )
 
@@ -214,9 +211,7 @@ class ActiveGoalAction(
                 progress=goal.progress,
                 revision=goal.revision + 1,
             )
-            ctx.goals.registry.register(
-                replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
-            )
+            ctx.goals.write_goal(thread, blocked, ctx.completed)
             raise ValueError(refusal)
         elif not generation.lifecycle.allows_resume(thread.executing):
             raise ValueError("The goal attempt is unresolved; inspect it before Retry.")

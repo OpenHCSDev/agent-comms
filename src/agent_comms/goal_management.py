@@ -6,6 +6,8 @@ import logging
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import replace
+from contextlib import contextmanager, ExitStack
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -34,13 +36,109 @@ _LOG = logging.getLogger(__name__)
 
 
 class Goals:
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus):
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus, agents):
         self.root = root
         self.registry = registry
         self.bus = bus
+        self.agents = agents
         self._wire_lock_path = root / "wire"
         self.waits = GoalWaits(root / GoalWaits.filename)
         self.goal_store: GoalAttemptStore | None = None
+
+    @contextmanager
+    def writing(self, *, shared=False):
+        # Publication runs after physical custody ends, also on exceptional exits.
+        with ExitStack() as completed:
+            with _store_lock(self._wire_lock_path, shared=shared):
+                yield completed
+
+    def _observation(self, snapshot, thread, event, at):
+        from .fleet import UnitObservation
+
+        owner = snapshot.owner_identity(thread.name)
+        return UnitObservation(thread, self.agents._observed(thread, owner, event),
+                               thread.execution.latest_tool(self.root, thread), at)
+
+    def _previous_at(self, goal, event):
+        return max((event.timestamp, *goal.work_time.timestamps,
+                    *goal.report_time.timestamps, *goal.author.issued_times))
+
+    def write_goal(self, thread, goal, completed):
+        """The work-goal writer; callers hold writing() custody."""
+        from .recorded_time import RecordedEventTime
+
+        if goal is not None:
+            goal = replace(goal, work_time=RecordedEventTime(time.time()))
+        snapshot = self.registry.snapshot()
+        event = self.agents.activity.current(thread.name, active=True)
+        self.registry.register(replace(thread, goal=goal), self.registry.status(thread.name))
+        if (goal is not None and goal.mention_source is not None
+                and goal.author.notification_targets(snapshot)):
+            before = self._observation(snapshot, thread, event,
+                                       self._previous_at(thread.goal, event)
+                                       if thread.goal is not None else event.timestamp)
+            after = self._observation(snapshot, replace(thread, goal=goal), event,
+                                      max(goal.work_time.timestamps))
+            completed.callback(self._notify_transition, before, after)
+        return goal
+
+    def activity_written(self, snapshot, change):
+        if change is None:
+            return
+        before_event, after_event = change
+        thread = snapshot.threads[after_event.thread]
+        goal = thread.goal
+        if (goal is None or goal.mention_source is None
+                or not goal.author.notification_targets(snapshot)):
+            return
+        from .fleet import UnitObservation
+        from .activity import ObservedActivity
+
+        # The original event owns the previous phase. Projecting it through
+        # the just-finished native lease would rewrite busy history as idle.
+        before = UnitObservation(
+            thread, ObservedActivity.acquire(before_event, snapshot.owner_identity(thread.name)),
+            thread.execution.latest_tool(self.root, thread), self._previous_at(goal, before_event),
+        )
+        after = self._observation(snapshot, thread, after_event, after_event.timestamp)
+        self._notify_transition(before, after)
+
+    def _notify_transition(self, before, after):
+        from .goals import SentGoalNotice, UnconfirmedGoalNotice
+        from .messages import Message, AlertKind
+
+        progress = after.progress
+        if not progress.notifies_commander or type(before.progress) is type(progress):
+            return
+        original = after.thread.incarnation
+        with _store_lock(self._wire_lock_path):
+            snapshot = self.registry.snapshot()
+            if not original.current(snapshot):
+                return
+            unit = snapshot.require(original.name)
+            for target in after.goal.author.notification_targets(snapshot):
+                commander = snapshot.require(target.name)
+                message = Message(
+                    sender=unit.name, target=commander.name, type=AlertKind,
+                    timestamp=after.observed_at,
+                    body=f"{unit.name}: {progress.summary}. Goal {after.goal.id}: {after.goal.text}",
+                )
+                try:
+                    # A Core notice must not implicitly answer the unit's input.
+                    published = self.bus.publisher.publish_ordinary(message)
+                    result = SentGoalNotice(published.reference)
+                except Exception as error:
+                    result = UnconfirmedGoalNotice(target, f"{type(error).__name__}: {error}")
+                    _LOG.exception("State saved; commander notice unconfirmed; no automatic resend")
+                current = self.registry.require(unit.name)
+                if current.goal is not None and current.goal.id == after.goal.id:
+                    # Communication receipts do not reset the work clock.
+                    try:
+                        self.registry.register(replace(current, goal=replace(
+                            current.goal, notice=result, revision=current.goal.revision + 1,
+                        )), self.registry.status(current.name))
+                    except Exception:
+                        _LOG.exception("Commander notice outcome could not be recorded; state remains saved")
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
@@ -192,7 +290,7 @@ class Goals:
         scheduler pass may continue the still-active goal only if its private
         attempt ledger has a fresh READY grant.
         """
-        with _store_lock(self._wire_lock_path):
+        with self.writing() as completed:
             snapshot = self.registry.snapshot()
             canonical = snapshot.canonical_name(name)
             owner = snapshot.threads.get(canonical)
@@ -222,10 +320,8 @@ class Goals:
                 "Standby was released; inspect dependencies and continue useful work."
             )
             progress = goal.progress.noted(note)
-            self.registry.register(
-                replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
-                snapshot.statuses[canonical],
-            )
+            self.write_goal(owner, replace(goal, progress=progress, revision=goal.revision + 1),
+                            completed)
             if not waits.clear(goal.id, wait_id=wait.wait_id):
                 return ()
             return closed
@@ -239,7 +335,7 @@ class Goals:
         """
         if type(fence) is not FinishedTurnFence:
             return ()
-        with _store_lock(self._wire_lock_path):
+        with self.writing() as completed:
             snapshot = self.registry.snapshot()
             canonical = snapshot.canonical_name(fence.identity.incarnation.name)
             source = snapshot.threads.get(canonical)
@@ -300,9 +396,7 @@ class Goals:
                 # between these writes leaves the active goal in standby;
                 # the periodic closed-wait check can release it later.
                 continued_goal = replace(goal, progress=progress, revision=goal.revision + 1)
-                self.registry.register(
-                    replace(owner, goal=continued_goal), snapshot.statuses[owner.name]
-                )
+                self.write_goal(owner, continued_goal, completed)
                 self.waits.clear(goal.id, wait_id=wait.wait_id)
                 released.append(owner.name)
             return tuple(released)
@@ -376,10 +470,11 @@ class Goals:
         actor: type = RuntimeInvocable,
     ) -> Goal | None:
         """Apply one declared command; external ingress owns decoding."""
-        with _store_lock(self._wire_lock_path):
-            return action.apply(
-                GoalActionContext(self, self.registry.require(name), actor)
+        with self.writing() as completed:
+            action.apply(
+                GoalActionContext(self, self.registry.require(name), actor, completed=completed)
             )
+        return self.registry.require(name).goal
 
     def block_goal_after_failed_turn(
         self,
@@ -390,7 +485,7 @@ class Goals:
         diagnostic: str,
     ) -> Goal | None:
         """Make an unresolved same-ID attempt visible without losing newer progress."""
-        with _store_lock(self._wire_lock_path):
+        with self.writing() as completed:
             thread = self.registry.require(name)
             current = thread.goal_for(started_goal.id)
             if thread.worktree != expected_worktree or current is None:
@@ -398,8 +493,7 @@ class Goals:
             blocked = current.after_failed_turn(diagnostic)
             if blocked is current:
                 return current
-            self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
-            return blocked
+            return self.write_goal(thread, blocked, completed)
 
     def block_unverified_goal_completion(
         self,
@@ -410,7 +504,7 @@ class Goals:
         diagnostic: str,
     ) -> Goal | None:
         """Revoke a provisional completion after the provider turn failed."""
-        with _store_lock(self._wire_lock_path):
+        with self.writing() as completed:
             thread = self.registry.require(name)
             current = thread.goal
             if thread.worktree != expected_worktree or current is None or current != expected_goal:
@@ -418,5 +512,4 @@ class Goals:
             blocked = current.after_unverified_completion(diagnostic)
             if blocked is current:
                 return current
-            self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
-            return blocked
+            return self.write_goal(thread, blocked, completed)

@@ -140,12 +140,10 @@ class NativeTranscript(TranscriptSource):
 
     def latest_tool(self):
         from .session_revision import SessionRevision
-        from .tool_activity import UnavailableToolActivity
+        from .tool_activity import NativeToolSelectorUnavailable
 
         SessionRevision.observe(str(self.path)).require_available()
-        return UnavailableToolActivity(
-            "The native session reader has no exact bounded tool selector yet."
-        )
+        return NativeToolSelectorUnavailable()
 
     def imported_sources(self):
         """Read original metadata before conversation, including native configuration.

@@ -46,6 +46,11 @@ class ThreadIncarnation:
     def has_recorded_birth(self) -> bool:
         return self.created_at > 0
 
+    def stable_thread_lookup(self) -> str:
+        from .bus_publication import stable_thread_lookup
+
+        return stable_thread_lookup(self.created_at)
+
     def require_recorded(self) -> None:
         if not self.has_recorded_birth:
             raise ValueError("Thread incarnation requires a positive recorded birth")
