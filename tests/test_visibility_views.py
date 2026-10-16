@@ -22,15 +22,15 @@ def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
     def members(snapshot):
         return next(view.members for view in snapshot.channels if view.channel.name == "#team")
 
-    default = comms.views.viewer_snapshot(str(tmp_path))
+    default = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     assert names(default) == {"active", "stopped"}
     assert set(members(default)) == {"active", "stopped"}
     assert default.show_stopped and not default.show_archived
-    running = comms.views.viewer_snapshot(str(tmp_path), show_stopped=False)
+    running = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)), show_stopped=False)
     assert names(running) == set(members(running)) == {"active"}
-    both = comms.views.viewer_snapshot(str(tmp_path), show_archived=True)
+    both = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)), show_archived=True)
     assert names(both) == set(members(both)) == {"active", "stopped", "archived"}
-    archived_only = comms.views.viewer_snapshot(str(tmp_path), show_stopped=False, show_archived=True)
+    archived_only = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)), show_stopped=False, show_archived=True)
     assert names(archived_only) == set(members(archived_only)) == {"active", "archived"}
     archived = next(view for view in archived_only.threads if view.thread.name == "archived")
     assert archived.status == ArchivedThreadStatus()

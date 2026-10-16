@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.read_ledger import ReadLedger
 import os
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -64,7 +65,7 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
     comms.messaging.send("peer", viewer, "before rename")
     old = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     comms.threads.rename_managed_thread("peer", "renamed", owner_pid=os.getpid())
-    markers = tmp_path / "read_ledger.json"
+    markers = tmp_path / ReadLedger.filename
     marker_before = markers.read_bytes() if markers.exists() else None
     with pytest.raises(ValueError, match="incarnation changed"):
         _mark(comms, "peer", tmp_path, old)
@@ -93,7 +94,7 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     comms.registry.declare(_peer(tmp_path, "peer"))
     comms.messaging.send("peer", viewer, "new peer unseen")
     before = comms.bus.pending_count(viewer, "peer")
-    markers = tmp_path / "read_ledger.json"
+    markers = tmp_path / ReadLedger.filename
     marker_before = markers.read_bytes() if markers.exists() else None
     assert before == 1
     with pytest.raises(ValueError, match="incarnation changed"):
@@ -146,7 +147,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     comms.messaging.send("peer", "new_user", "new viewer unseen")
     before = comms.bus.pending_count("new_user", "peer")
     assert before == 1
-    marker_path = tmp_path / "read_ledger.json"
+    marker_path = tmp_path / ReadLedger.filename
     marker_before = marker_path.read_bytes() if marker_path.exists() else None
     with pytest.raises(ValueError, match="registry changed|viewer/peer incarnation changed"):
         _mark(comms, "peer", tmp_path, page)

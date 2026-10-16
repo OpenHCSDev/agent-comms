@@ -28,8 +28,8 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
-from .presentation import MessageNotification
-from .read_ledger import ReadSource, SentMessageOutcome
+from .presentation import MessageNotification, SentMessageOutcome
+from .read_ledger import ReadSource
 from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread

@@ -1,3 +1,4 @@
+from agent_comms.read_ledger import ReadLedger
 import json
 import sqlite3
 from contextlib import ExitStack
@@ -58,11 +59,11 @@ def test_idle_observation_does_not_reparse_transcripts_and_append_is_incremental
         append(source)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 50
     state = comms.views.transcript_reads
-    assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 50
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).thread_unread["worker"] == 50
     assert state.preparation is None
     through = source.stat().st_size
     append(source)
-    assert comms.views.viewer_snapshot(str(tmp_path)).unread_pending == {"worker"}
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).unread_pending == {"worker"}
     batch = state.preparation.result(timeout=10)
     assert len(batch.updates) == 1
     assert batch.updates[0].before.through == through
@@ -116,12 +117,12 @@ def test_sidebar_native_counts_use_the_original_captured_read_document(tmp_path)
         patch.object(CoordinationSnapshot, "capture", side_effect=painted_after_capture),
         patch.object(ReadLedger, "read", side_effect=AssertionError("Must not reopen captured ledger")),
     ):
-        assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 1}
-    assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 0}
+        assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).thread_unread == {"worker": 1}
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).thread_unread == {"worker": 0}
 
 
 def test_ready_native_sources_share_bulk_rows_and_one_predecessor_snapshot(tmp_path):
-    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    state = TranscriptReadState(tmp_path / ReadLedger.filename)
     sources = {}
     for number in range(20):
         source = tmp_path / f"session-{number}.jsonl"
@@ -155,7 +156,7 @@ def test_ready_native_sources_share_bulk_rows_and_one_predecessor_snapshot(tmp_p
 def test_native_preparation_releases_sqlite_and_losing_commit_keeps_original_ordinals(tmp_path):
     source = tmp_path / "source.jsonl"
     append(source)
-    path = tmp_path / "read_ledger.json"
+    path = tmp_path / ReadLedger.filename
     first, other = TranscriptReadState(path), TranscriptReadState(path)
     sources = {"worker": str(source)}
     try:
@@ -248,13 +249,13 @@ def test_open_views_share_one_incremental_index_without_sharing_markers(tmp_path
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 30
     second = wire(comms.root)
     assert second.views.transcript_reads is comms.views.transcript_reads
-    assert second.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 30
+    assert second.views.viewer_snapshot(second.messaging.user_identity(str(tmp_path))).thread_unread["worker"] == 30
     assert second.views.transcript_reads.preparation is None
     append(source)
     assert completed_snapshot(second, str(tmp_path)).thread_unread["worker"] == 31
     checkpoint = second.transcripts.transcript_checkpoint("worker")
     second.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=checkpoint)
-    assert comms.views.viewer_snapshot(str(tmp_path)).thread_unread["worker"] == 0
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).thread_unread["worker"] == 0
 
 
 def test_partial_tail_and_replaced_source_do_not_lose_replies(tmp_path):
@@ -309,7 +310,7 @@ def test_bounded_batches_resume_after_process_exit_and_preserve_read_cursor(tmp_
     source = tmp_path / "large.jsonl"
     for _ in range(1200):
         append(source)
-    path = tmp_path / "read_ledger.json"
+    path = tmp_path / ReadLedger.filename
     first = TranscriptReadState(path)
     first.mark_read("viewer", str(source), source.stat().st_size)
     sources = {"worker": str(source)}
@@ -335,7 +336,7 @@ def test_large_first_source_does_not_starve_other_sources(tmp_path):
         for _ in range(600):
             append(source)
         sources[str(number)] = str(source)
-    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    state = TranscriptReadState(tmp_path / ReadLedger.filename)
     completed = set()
     try:
         for _ in range(40):
@@ -356,7 +357,7 @@ def test_close_cancels_executor_without_scanning_rest_of_native_file(tmp_path):
     source = tmp_path / "large.jsonl"
     for _ in range(5000):
         append(source, content="real native record " * 100)
-    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    state = TranscriptReadState(tmp_path / ReadLedger.filename)
     started = monotonic()
     assert state.counts("viewer", {"worker": str(source)}).pending == {"worker"}
     pool = state._pool
@@ -372,7 +373,7 @@ def test_close_cancels_executor_without_scanning_rest_of_native_file(tmp_path):
 def test_busy_index_is_not_discarded(tmp_path):
     source = tmp_path / "source.jsonl"
     append(source)
-    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    state = TranscriptReadState(tmp_path / ReadLedger.filename)
     assert completed_counts(state, "viewer", {"worker": str(source)}).counts == {"worker": 1}
     inode = state.index_path.stat().st_ino
     append(source)
@@ -396,7 +397,7 @@ def test_pending_publication_does_not_erase_other_committed_counts(tmp_path, bus
     sources = {name: str(tmp_path / f"{name}.jsonl") for name in ("ready", "growing")}
     for source in sources.values():
         append(Path(source))
-    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    state = TranscriptReadState(tmp_path / ReadLedger.filename)
     try:
         assert completed_counts(state, "viewer", sources).counts == {"ready": 1, "growing": 1}
         append(Path(sources["growing"]))
@@ -423,7 +424,7 @@ def test_pending_publication_does_not_erase_other_committed_counts(tmp_path, bus
 def test_oversized_native_record_is_counted_without_truncation_or_input_limit(tmp_path):
     source = tmp_path / "oversized.jsonl"
     append(source, content="Actual text " * 200000)
-    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    state = TranscriptReadState(tmp_path / ReadLedger.filename)
     try:
         first = state.counts("viewer", {"worker": str(source)})
         assert first.pending == {"worker"} and not first.counts
@@ -439,7 +440,7 @@ def test_reopen_wire_does_not_reuse_cancelled_index_owner(tmp_path):
     comms.views.transcript_reads.close()
     fresh = wire(comms.root)
     assert fresh.views.transcript_reads is not comms.views.transcript_reads
-    assert fresh.views.viewer_snapshot(str(tmp_path)).thread_unread == {"worker": 1}
+    assert fresh.views.viewer_snapshot(fresh.messaging.user_identity(str(tmp_path))).thread_unread == {"worker": 1}
 
 
 def test_two_processes_indexing_one_growing_transcript_count_each_reply_once(tmp_path):
@@ -447,7 +448,7 @@ def test_two_processes_indexing_one_growing_transcript_count_each_reply_once(tmp
 
     source = tmp_path / "session.jsonl"
     source.touch()
-    index = tmp_path / "wire" / "read_ledger.json"
+    index = tmp_path / "wire" / ReadLedger.filename
     index.parent.mkdir()
     states = [TranscriptReadState(index), TranscriptReadState(index)]
     failures = []
@@ -484,7 +485,7 @@ def test_two_processes_indexing_one_growing_transcript_count_each_reply_once(tmp
 def test_deleted_source_withdraws_the_original_preparation_without_resurrection(tmp_path):
     source = tmp_path / "source.jsonl"
     append(source)
-    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    state = TranscriptReadState(tmp_path / ReadLedger.filename)
     try:
         assert state.counts("viewer", {"worker": str(source)}).pending == {"worker"}
         state.preparation.result(timeout=10)
@@ -498,7 +499,7 @@ def test_deleted_source_withdraws_the_original_preparation_without_resurrection(
 def test_append_commit_does_not_scan_or_delete_historical_reply_rows(tmp_path):
     source = tmp_path / "source.jsonl"
     append(source)
-    state = TranscriptReadState(tmp_path / "read_ledger.json")
+    state = TranscriptReadState(tmp_path / ReadLedger.filename)
     sources = {"worker": str(source)}
     try:
         assert completed_counts(state, "viewer", sources).counts == {"worker": 1}

@@ -1,6 +1,6 @@
 """S5 identity boundaries: process, turn, provenance and saved-data preservation."""
 
-import json
+from tests.read_membership import read_mask
 import os
 from dataclasses import replace
 
@@ -206,11 +206,10 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
         through=message.seq,
         expected_display_basis=page.display_basis,
     )
-    path = comms.bus.reads.path
     from agent_comms.read_ledger import ConversationKey
     assert all(isinstance(key, ConversationKey) for key in comms.bus.reads.read().messages)
     reopened = Comms(tmp_path)
-    assert reopened.bus.reads.membership(viewer, reopened.registry.snapshot()).contains(message)
+    assert read_mask(reopened, viewer, reopened.registry.snapshot()).contains(message)
     next_message = reopened.messaging.send_message("owner", viewer, "new paint")
     page = reopened.views.dm_display_page("owner", worktree=str(tmp_path))
     reopened.views.mark_dm_view_read(
@@ -219,7 +218,7 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
         through=next_message.seq,
         expected_display_basis=page.display_basis,
     )
-    mask = reopened.bus.reads.membership(viewer, reopened.registry.snapshot())
+    mask = read_mask(reopened, viewer, reopened.registry.snapshot())
     assert mask.contains(message) and mask.contains(next_message)
 
 

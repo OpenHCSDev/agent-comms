@@ -115,13 +115,13 @@ def test_single_captured_basis_survives_mode_change_during_snapshot(tmp_path):
                 assert finished.is_set()
 
     with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=toggle_after_boundary):
-        first = comms.views.viewer_snapshot(str(tmp_path))
+        first = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     old = next(view for view in first.channels if view.channel.name == "#api")
     assert not old.channel.any_mode
     assert old.last_activity == 0
     assert first.channel_unread["#api"] == 0
 
-    second = comms.views.viewer_snapshot(str(tmp_path))
+    second = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     new = next(view for view in second.channels if view.channel.name == "#api")
     assert new.channel.any_mode
     assert new.last_activity > 0
@@ -135,18 +135,18 @@ def test_opt_in_user_input_activity_uses_same_member_scope(tmp_path):
     comms.messaging.send_user_message("alice", "human input to member", worktree=str(tmp_path))
     off = next(
         view
-        for view in comms.views.viewer_snapshot(str(tmp_path)).channels
+        for view in comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channels
         if view.channel.name == "#api"
     )
     assert off.last_user_input == 0
     comms.channels.set_channel_any_mode("#api", True)
     on = next(
         view
-        for view in comms.views.viewer_snapshot(str(tmp_path)).channels
+        for view in comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channels
         if view.channel.name == "#api"
     )
     assert on.last_user_input > 0
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 0
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#api"] == 0
     assert bodies(comms.views.channel_display_page("#api")) == ["human input to member"]
     assert bodies(comms.views.channel_history_page("#api")) == []
 
@@ -158,7 +158,7 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     high_water = comms.bus.log.latest_sequence()
     assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
     initial = {
-        view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels
+        view.channel.name: view for view in comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channels
     }
     assert initial["#api"].last_activity > 0
 
@@ -172,7 +172,7 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     assert comms.bus.log.latest_sequence() == high_water
     assert bodies(comms.views.channel_display_page("#api")) == []
     after = {
-        view.channel.name: view for view in comms.views.viewer_snapshot(str(tmp_path)).channels
+        view.channel.name: view for view in comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channels
     }
     assert after["#api"].last_activity < initial["#api"].last_activity
 
@@ -195,20 +195,20 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send_user_message("#api", "owned before rename", worktree=str(tmp_path))
     comms.registry.rename(viewer, "human")
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 0
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#api"] == 0
     comms.messaging.send("alice", "bob", "before threshold")
     comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
     comms.channels.set_channel_any_mode("#api", True)
     # The previously hidden DM was never painted, so enabling the broader
     # projection must expose it as unread despite the exact-channel marker.
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#api"] == 1
     comms.messaging.send("bob", "alice", "after threshold")
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 2
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#api"] == 2
     # The old user sender is still an alias of the current human viewer.
     comms.messaging.send_user_message("#api", "human owned", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 2
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#api"] == 2
     comms.views.mark_channel_view_read("#api", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 0
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#api"] == 0
 
 
 def test_page_boundaries_and_byte_budget_match_target_pager(tmp_path):
@@ -359,10 +359,10 @@ def test_direct_rename_and_own_send_do_not_inflate_unread(tmp_path):
             yield snapshot
 
     with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=rename_and_send_before_open):
-        raced = comms.views.viewer_snapshot(str(tmp_path))
+        raced = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     assert changed
     assert raced.channel_unread["#api"] == 1
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#api"] == 1
 
 
 def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
@@ -393,8 +393,8 @@ def test_public_mark_read_and_append_share_one_viewer_boundary(tmp_path):
                 assert finished.is_set()
 
     with patch.object(comms.bus.log, "_opened_wire_snapshot", side_effect=concurrent_public_mark):
-        assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#api"] == 1
+        assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#api"] == 1
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#api"] == 1
 
 
 def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_path):

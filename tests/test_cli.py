@@ -514,14 +514,14 @@ class TestSelectedTargetActions:
         comms.messaging.send('alpha', 'beta', 'Executor message')
         comms.messaging.send('alpha', viewer, 'Human DM')
         comms.messaging.send('alpha', '#team', 'Channel message')
-        before = comms.views.viewer_snapshot(str(tmp_path))
+        before = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
         assert before.thread_unread['alpha'] == before.unread['alpha'] == 1
         # The canonical tag change also publishes its membership notification.
         assert before.channel_unread['#team'] == 2
         result = TargetEdit(ReadTargetCliCommand, ('alpha', '#team'),
                             {}, project=str(tmp_path)).apply(comms)
         assert result.successful and tuple(item.result.read for item in result.outcomes) == ('alpha', '#team')
-        after = comms.views.viewer_snapshot(str(tmp_path))
+        after = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
         assert after.thread_unread['alpha'] == after.unread.get('alpha', 0) == 0
         assert after.channel_unread['#team'] == 0
         assert comms.bus.pending_count('beta', 'alpha') == 1

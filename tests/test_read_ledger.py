@@ -1,5 +1,6 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
+from tests.read_membership import read_mask
 import random
 from dataclasses import replace
 
@@ -75,7 +76,7 @@ def test_bounded_page_marks_only_shown_messages(tmp_path):
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path), through=page.newest_seq, expected_scope=page.display_scope
     )
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+    assert wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 3
 
 
 def test_displayed_message_is_read_in_every_projection(tmp_path):
@@ -85,7 +86,7 @@ def test_displayed_message_is_read_in_every_projection(tmp_path):
     comms.views.mark_channel_view_read(
         "#team", worktree=str(tmp_path), through=page.newest_seq, expected_scope=page.display_scope
     )
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
+    assert wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path))).channel_unread["#any"] == 0
 
 
 def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp_path):
@@ -104,7 +105,7 @@ def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp
     viewer = reopened.messaging.user_identity(str(tmp_path)).name
     seen = displayed_sequences(reopened, viewer)
     assert hidden.seq not in seen and shown.seq in seen
-    assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
+    assert reopened.views.viewer_snapshot(reopened.messaging.user_identity(str(tmp_path))).channel_unread["#team"] >= 1
 
 
 def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path):
@@ -192,7 +193,7 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     comms.registry.remove("alice")
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     fresh = comms.messaging.send_message("alice", viewer, "new incarnation unseen")
-    assert not comms.bus.reads.membership(viewer, comms.registry.snapshot()).contains(old)
+    assert not read_mask(comms, viewer, comms.registry.snapshot()).contains(old)
     assert comms.bus.pending_count(viewer, "alice") == 1
     assert [row.seq for row in comms.bus.inbox(viewer, "alice")] == [fresh.seq]
 
@@ -247,7 +248,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
         viewer, page.messages, comms.registry.snapshot(), comms.bus.log.path
     )
     comms.bus.reads.mark_displayed(viewer, basis, snapshot=comms.registry.snapshot())
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 3
     assert displayed_sequences(comms, viewer) == {2, 4, 6}
 
 
@@ -266,8 +267,12 @@ def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
     from agent_comms.errors import RelationViolationError
 
     with pytest.raises(RelationViolationError, match="checkpoint root/inode/size changed"):
-        comms.views.viewer_snapshot(str(tmp_path))
-    assert not comms.bus.reads.membership(viewer, comms.registry.snapshot()).conversations
+        comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
+    from agent_comms.private_path import FileRevision
+    from agent_comms.read_ledger import ReadSource
+    with comms.bus.log.path.open('rb') as source:
+        identity = ReadSource.from_revision(FileRevision.from_file(source))
+        assert not comms.bus.reads.membership(viewer, comms.registry.snapshot(), identity).conversations
 
 
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
@@ -295,7 +300,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
         messages[2].seq,
         messages[4].seq,
     }
-    assert reopened.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+    assert reopened.views.viewer_snapshot(reopened.messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 3
 
 
 @pytest.mark.parametrize("seed", [7, 31, 99])

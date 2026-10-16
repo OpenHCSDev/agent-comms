@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
+from agent_comms.read_ledger import ReadLedger
 import os
-import stat
-import tempfile
+import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from agent_comms import locked_store
 from agent_comms.comms import wire
 from agent_comms.read_basis import DMDisplayBasis
 from agent_comms.child_process import ProcessIdentity
@@ -31,8 +30,8 @@ def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_pa
     assert len(page.messages) == 5 and page.has_older
     assert page.display_basis is not None and page.display_basis.older_unread
     before = (
-        (tmp_path / "read_ledger.json").read_bytes()
-        if (tmp_path / "read_ledger.json").exists()
+        (tmp_path / ReadLedger.filename).read_bytes()
+        if (tmp_path / ReadLedger.filename).exists()
         else None
     )
     with pytest.raises(ValueError, match="contiguous"):
@@ -43,8 +42,8 @@ def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_pa
             expected_display_basis=page.display_basis,
         )
     after = (
-        (tmp_path / "read_ledger.json").read_bytes()
-        if (tmp_path / "read_ledger.json").exists()
+        (tmp_path / ReadLedger.filename).read_bytes()
+        if (tmp_path / ReadLedger.filename).exists()
         else None
     )
     assert before == after
@@ -107,7 +106,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
     comms.registry.remove("peer")
     comms.threads.rename_managed_thread("other", "peer", owner_pid=os.getpid())
     before = comms.bus.pending_count(viewer, "peer")
-    marker_path = tmp_path / "read_ledger.json"
+    marker_path = tmp_path / ReadLedger.filename
     markers_before = marker_path.read_bytes() if marker_path.exists() else None
     assert before == 3
     with pytest.raises(ValueError, match="registry changed|incarnation changed"):
@@ -165,62 +164,35 @@ def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path)
     assert comms.bus.pending_count(viewer, "peer") == 1
 
 
-@pytest.fixture
-def durable_root():
-    with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
-        yield Path(directory)
-
-
-@pytest.mark.skipif(os.name != "posix", reason="POSIX directory fsync")
-def test_scoped_marker_fsyncs_parent_and_sync_denial_is_not_success(durable_root, monkeypatch):
-    tmp_path = durable_root
+def test_scoped_marker_sql_commit_denial_is_not_success(tmp_path, monkeypatch):
     comms = wire(tmp_path)
-    comms.registry.declare(_thread(tmp_path, "peer"))
+    comms.registry.declare(_thread(tmp_path, 'peer'))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    comms.messaging.send("peer", viewer, "painted")
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    comms.messaging.send('peer', viewer, 'painted')
+    page = comms.views.dm_display_page('peer', worktree=str(tmp_path))
     assert page.display_basis is not None
-    original = os.fsync
-    parent_fd_seen: list[int] = []
+    comms.views.mark_dm_view_read('peer', worktree=str(tmp_path), through=page.newest_seq,
+                                 expected_display_basis=page.display_basis)
+    assert comms.bus.pending_count(viewer, 'peer') == 0
+    with comms.bus.reads.snapshot() as database:
+        assert database.execute('PRAGMA synchronous').fetchone()[0] == 2
+    comms.messaging.send('peer', viewer, 'next painted')
+    next_page = comms.views.dm_display_page('peer', worktree=str(tmp_path))
+    before = comms.bus.reads.read()
+    original = ReadLedger.writing
 
-    def observe(fd: int) -> None:
-        metadata = os.fstat(fd)
-        if stat.S_ISDIR(metadata.st_mode) and metadata.st_ino == tmp_path.stat().st_ino:
-            parent_fd_seen.append(fd)
-        original(fd)
+    @contextmanager
+    def deny_commit(ledger):
+        with original(ledger) as database:
+            database.set_authorizer(lambda action, name, *_:
+                sqlite3.SQLITE_DENY if action == sqlite3.SQLITE_TRANSACTION and name == 'COMMIT'
+                else sqlite3.SQLITE_OK)
+            yield database
 
-    monkeypatch.setattr(locked_store, "os", SimpleNamespace(**(vars(os) | {"fsync": observe})))
-    comms.views.mark_dm_view_read(
-        "peer",
-        worktree=str(tmp_path),
-        through=page.newest_seq,
-        expected_display_basis=page.display_basis,
-    )
-    assert parent_fd_seen and comms.bus.pending_count(viewer, "peer") == 0
-
-    comms.messaging.send("peer", viewer, "next painted")
-    next_page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert next_page.display_basis is not None
-
-    def deny_parent(fd: int) -> None:
-        metadata = os.fstat(fd)
-        if stat.S_ISDIR(metadata.st_mode) and metadata.st_ino == tmp_path.stat().st_ino:
-            raise OSError("injected parent fsync denial")
-        original(fd)
-
-    marker_before = (tmp_path / "read_ledger.json").read_bytes()
-    monkeypatch.setattr(
-        locked_store, "os", SimpleNamespace(**(vars(os) | {"fsync": deny_parent}))
-    )
-    with pytest.raises(OSError, match="injected parent fsync denial"):
-        comms.views.mark_dm_view_read(
-            "peer",
-            worktree=str(tmp_path),
-            through=next_page.newest_seq,
-            expected_display_basis=next_page.display_basis,
-        )
-    assert (tmp_path / "read_ledger.json").read_bytes() == marker_before
-    monkeypatch.setattr(locked_store, "os", os)
-    assert comms.bus.pending_count(viewer, "peer") == 1
-    # A failure at the *final* post-replace sync remains UNKNOWN: absent a
-    # separate durable marker commit witness, the row may already be visible.
+    with monkeypatch.context() as denied:
+        denied.setattr(ReadLedger, 'writing', deny_commit)
+        with pytest.raises(sqlite3.DatabaseError, match='not authorized'):
+            comms.views.mark_dm_view_read('peer', worktree=str(tmp_path), through=next_page.newest_seq,
+                                         expected_display_basis=next_page.display_basis)
+    assert comms.bus.reads.read() == before
+    assert comms.bus.pending_count(viewer, 'peer') == 1

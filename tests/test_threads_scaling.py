@@ -13,7 +13,6 @@ from agent_comms.bus_projection import AppendCheckpoint
 from agent_comms.private_path import FileRevision
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.messages import Message
 
@@ -148,12 +147,12 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
     first = wired.messaging.send_message("PR111", "#base", "first view activity")
     viewer = wired.messaging.user_identity("/isolated-checkpoint-viewer").name
     # Prepare both actual index owners before taking a cold observer's cut.
-    wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
+    wired.views.viewer_snapshot(wired.messaging.user_identity("/isolated-checkpoint-viewer"))
     captured = wired if same_owner else wire(wired.root)
     with captured.views.presentation.snapshot(viewer=viewer) as (basis, source):
         appended = wired.messaging.send_message("fixer", "#base", "later activity")
         # B advances both index owners; A keeps the prefix read with its source.
-        wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
+        wired.views.viewer_snapshot(wired.messaging.user_identity("/isolated-checkpoint-viewer"))
         parsed = []
         original = Message.from_wire
 
@@ -236,7 +235,7 @@ def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monk
 
     monkeypatch.setattr(BusAppendIndex, "_read", observed_read)
     monkeypatch.setattr(AppendCheckpoint, "accepts", observed_accepts)
-    wired.views.viewer_snapshot("/lock-scope-viewer")
+    wired.views.viewer_snapshot(wired.messaging.user_identity("/lock-scope-viewer"))
     assert reads and checks
     # Later cuts start from the checkpoint each index holds; only a write
     # still reads the saved file, to keep another process's farther prefix.
@@ -247,7 +246,7 @@ def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monk
         BusAppendIndex, "prepare", lambda index: prepared.append(index._held) or prepare(index)
     )
     wired.messaging.send_message("PR111", "#base", "later row")
-    wired.views.viewer_snapshot("/lock-scope-viewer")
+    wired.views.viewer_snapshot(wired.messaging.user_identity("/lock-scope-viewer"))
     assert prepared and None not in prepared
 
 

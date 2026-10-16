@@ -50,7 +50,7 @@ async def main():
     message = comms.messaging.send_initial_cohort(owner, '#team', 'Original metadata receipt')
     original_wire = comms.bus.log.path.read_bytes()
     actor = comms.views.coordination_snapshot('stopped')
-    human = comms.views.viewer_snapshot(str(root))
+    human = comms.views.viewer_snapshot(comms.messaging.user_identity(str(root)))
     assert {view.thread.name for view in actor.threads} == {owner, 'stopped'}
     assert actor.channel_unread['#team'] == human.channel_unread['#team'] == 1
     assert comms.views.coordination_snapshot('stopped') == actor
@@ -61,7 +61,7 @@ async def main():
     page = comms.views.channel_display_page('#team', worktree=str(root))
     comms.views.mark_channel_view_read('#team', worktree=str(root), through=page.newest_seq,
                                       expected_scope=page.display_scope)
-    assert comms.views.viewer_snapshot(str(root)).channel_unread['#team'] == 0
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(root))).channel_unread['#team'] == 0
     assert comms.views.coordination_snapshot('stopped').channel_unread['#team'] == 1
     checks = ['full original snapshot value equality', 'original bounded reference notification windows',
               'human display acknowledgement leaves actor delivery pending']
@@ -83,7 +83,7 @@ async def main():
             await group.reveal_members()
             await pilot.pause()
             assert set(group._members) == expected
-            snapshot = comms.views.viewer_snapshot(str(root), show_stopped=show_stopped,
+            snapshot = comms.views.viewer_snapshot(comms.messaging.user_identity(str(root)), show_stopped=show_stopped,
                                                   show_archived=show_archived)
             assert set(group._members) == {view.thread.name for view in snapshot.threads}
         checks.append('real sidebar filtered cohorts agree with original registry status')

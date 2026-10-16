@@ -1,5 +1,6 @@
 """A new history declaration crosses real current and retained-source boundaries."""
 
+from agent_comms.read_ledger import ReadLedger
 from agent_comms.comms import Comms
 from agent_comms.historical_views import HistoryView
 from agent_comms.message_page import MessagePageRequest
@@ -46,7 +47,7 @@ def test_new_history_case_owns_both_source_interpretations_without_reader_dispat
     assert page.historical_display is None
     assert prior.bus.log.path.read_bytes() == original
     assert current.bus.log.latest_sequence() == 6
-    assert not (prior.root / "read_ledger.json").exists()
+    assert not (prior.root / ReadLedger.filename).exists()
 
 
 def test_ordinary_coordination_snapshot_exposes_actual_active_channel_participant(tmp_path):

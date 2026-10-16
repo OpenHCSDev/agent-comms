@@ -49,14 +49,14 @@ def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp
     first = comms.messaging.send_message("bob", "#team", "first")
     comms.messaging.send_message("bob", "#team", "second")
     comms.messaging.send_message("bob", viewer, "direct")
-    before = comms.views.viewer_snapshot(str(tmp_path))
+    before = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     comms.bus.reads.mark_displayed(
         viewer,
         comms.bus.reads.capture(viewer, (first,), comms.registry.snapshot(), comms.bus.log.path),
         snapshot=comms.registry.snapshot(),
     )
     comms.channels.set_channel_any_mode("#extra", True)
-    after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    after = wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path)))
     assert after.channel_unread["#team"] == 1
     assert after.channel_unread["#extra"] == 2
     def clock(snapshot):
@@ -125,7 +125,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         # The refused mark never happened. Once the resource is repaired, a
         # fresh exact mark succeeds; the retained selection above stays frozen.
         mark_channel()
-    latest = comms.views.viewer_snapshot(str(tmp_path))
+    latest = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     assert latest.unread == {"renamed-bob": 1}
     assert "renamed-bob" in latest.last_sent and "bob" not in latest.last_sent
 
@@ -138,7 +138,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send_message("bob", viewer.name, "direct")
     comms.messaging.send_message("bob", "#team", "channel")
-    expected = comms.views.viewer_snapshot(str(tmp_path))
+    expected = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
 
     bus_path = comms.bus.log.path
     original = bus_path.read_bytes()
@@ -266,7 +266,7 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
             yield source
 
     monkeypatch.setattr(comms.bus.log, "_opened_wire_snapshot", observed)
-    snapshot = comms.views.viewer_snapshot(str(tmp_path))
+    snapshot = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     assert snapshot.unread == {"bob": 1}
     assert snapshot.channel_unread["#team"] == 1
     assert snapshot.last_sent["bob"] > 0
@@ -334,25 +334,25 @@ def test_reopened_viewer_snapshot_decodes_only_appended_rows(tmp_path):
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     for number in range(100):
         comms.messaging.send("bob", "#team", f"message {number}")
-    expected = comms.views.viewer_snapshot(str(tmp_path))
+    expected = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     assert expected.channel_unread["#team"] == 100
 
     fresh = wire(tmp_path)
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
-        assert fresh.views.viewer_snapshot(str(tmp_path)) == expected
+        assert fresh.views.viewer_snapshot(fresh.messaging.user_identity(str(tmp_path))) == expected
         assert decode.call_count == 0
 
     comms.messaging.send("bob", "#team", "one new message")
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
-        latest = fresh.views.viewer_snapshot(str(tmp_path))
+        latest = fresh.views.viewer_snapshot(fresh.messaging.user_identity(str(tmp_path)))
         assert latest.channel_unread["#team"] == 101
         # Every decode belongs to the appended row; retained history is not replayed.
         assert decode.call_count > 0
         assert all(call.args[0]["text"] == "one new message" for call in decode.call_args_list)
 
     comms.channels.set_channel_any_mode("#team", True)
-    assert (fresh.views.viewer_snapshot(str(tmp_path))
-            == wire(tmp_path).views.viewer_snapshot(str(tmp_path)))
+    assert (fresh.views.viewer_snapshot(fresh.messaging.user_identity(str(tmp_path)))
+            == wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path))))
 
 
 def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
@@ -361,7 +361,7 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path / "bob")))
     comms.messaging.send("bob", "#team", "first")
     comms.messaging.send("bob", "#team", "second")
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 2
 
     checkpoint = BusDisplayIndex(
         comms.bus.log.path, comms.messaging.user_identity(str(tmp_path)).name
@@ -369,7 +369,7 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
     cached = json.loads(checkpoint.read_text())
     cached["counts"]["#team"] = 0
     checkpoint.write_text(json.dumps(cached))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
+    assert wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 2
 
     bus_path = comms.bus.log.path
     replacement = bus_path.with_name("replacement.jsonl")
@@ -377,7 +377,7 @@ def test_display_checkpoint_rebuilds_but_bus_replacement_is_refused(tmp_path):
     replacement.chmod(0o600)
     os.replace(replacement, bus_path)
     with pytest.raises(RelationViolationError, match="checkpoint root/inode/size changed"):
-        wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+        wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path)))
 
 
 def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
@@ -388,7 +388,7 @@ def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
     messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
                 for n in range(100)]
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    before = comms.views.viewer_snapshot(str(tmp_path))
+    before = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     # The real page owner builds the already-existing disposable offset index.
     page = comms.views.presentation.channel_page("#team", viewer=viewer)
     assert len(page.messages) == 100
@@ -398,7 +398,7 @@ def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
         snapshot=comms.registry.snapshot(),
     )
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
-        after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+        after = wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path)))
         assert after.channel_unread["#team"] == 98
         assert decode.call_count == 2
         assert {call.args[0]["seq"] for call in decode.call_args_list} == {
@@ -407,7 +407,7 @@ def test_display_read_progress_decodes_only_changed_sparse_rows(tmp_path):
     assert after.channels == before.channels
     # A new row still contributes once, after the rebased old prefix.
     comms.messaging.send_message("bob", "#team", "appended")
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 99
+    assert wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 99
 
 
 def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
@@ -416,7 +416,7 @@ def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
     messages = [comms.messaging.send_message("bob", "#team", f"message {n}")
                 for n in range(10)]
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    before = comms.views.viewer_snapshot(str(tmp_path))
+    before = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     comms.bus.reads.mark_displayed(
         viewer, comms.bus.reads.capture(viewer, (messages[3],),
                                        comms.registry.snapshot(), comms.bus.log.path),
@@ -426,7 +426,7 @@ def test_display_read_changes_fall_back_when_page_coverage_is_absent(tmp_path):
     assert not index_path.exists()
 
     with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
-        after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+        after = wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path)))
         assert after.channel_unread["#team"] == 9
         assert decode.call_count == 10
     assert after.channels == before.channels
@@ -441,18 +441,18 @@ def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
     message = comms.messaging.send_message("bob", "#team", "retained")
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.views.presentation.channel_page("#team", viewer=viewer.name)
-    comms.views.viewer_snapshot(str(tmp_path))
+    comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     comms.bus.reads.mark_displayed(
         viewer.name, comms.bus.reads.capture(viewer.name, (message,),
                                             comms.registry.snapshot(), comms.bus.log.path),
         snapshot=comms.registry.snapshot(),
     )
-    read = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    read = wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path)))
     assert read.channel_unread["#team"] == 0
     # Metadata updates preserve identity; removal and a new declaration do not.
     comms.registry.remove(viewer.name)
     comms.registry.register(replace(viewer, created_at=viewer.created_at + 1))
-    returned = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
+    returned = wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path)))
     assert returned.channel_unread["#team"] == 1
     assert returned.channels == read.channels
 
@@ -477,7 +477,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
             yield boundary
 
     monkeypatch.setattr(comms.bus.log, '_opened_wire_snapshot', append_before_open)
-    snapshot = comms.views.viewer_snapshot(str(tmp_path))
+    snapshot = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     team = next(view for view in snapshot.channels if view.channel.name == "#team")
     assert snapshot.channel_unread["#team"] == 2
     assert team.last_activity == appended[0].timestamp
@@ -498,7 +498,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         for number in range(6)
     ]
     comms.messaging.send_user_message("bob", "own outgoing message", worktree=str(tmp_path))
-    comms.views.viewer_snapshot(str(tmp_path))
+    comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     comms.bus.reads.mark_displayed(
         viewer,
         comms.bus.reads.capture(
@@ -585,9 +585,9 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
         first.message_id, second.message_id
     ]
 
-    comms.views.viewer_snapshot(str(tmp_path))
+    comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     comms.channels.set_channel_any_mode('#team', True)
-    comms.views.viewer_snapshot(str(tmp_path))
+    comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     checkpoint = BusDisplayIndex(comms.bus.log.path, viewer).path
     current = json.loads(checkpoint.read_text())

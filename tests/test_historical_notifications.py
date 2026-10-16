@@ -1,5 +1,6 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
+from tests.read_membership import read_mask
 from dataclasses import replace
 from pathlib import Path
 import sqlite3
@@ -75,8 +76,8 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     unpainted, = results[messages[2].seq, messages[2].message_id]
     assert painted.displayed_to == (source.provenance.require("reader").incarnation,)
     assert unpainted.displayed_to == ()
-    assert not live.bus.reads.membership('reader', live.registry.snapshot()).conversations
-    ledger = ReadLedger(Path(source.root) / ReadLedger.filename)
+    assert not read_mask(live, 'reader', live.registry.snapshot()).conversations
+    ledger = ReadLedger(Path(source.root))
     document = ledger.read()
     reused = replace(basis, viewer_created_at=111.0)
     with pytest.raises(ValueError, match="viewer changed"):

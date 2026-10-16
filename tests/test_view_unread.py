@@ -18,25 +18,25 @@ def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
     comms.messaging.send("sender", "#ci", "first")
     messages = comms.bus.inbox("receiver")
     comms.messaging.acknowledge("receiver", tuple(message.reference for message in messages))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 1
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#ci"] == 1
     comms.views.mark_channel_view_read("#ci", worktree=str(tmp_path))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
+    assert wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path))).channel_unread["#ci"] == 0
     comms.messaging.send("sender", "#ci", "second")
     comms.messaging.send("sender", "#docs", "docs")
-    snapshot = comms.views.viewer_snapshot(str(tmp_path))
+    snapshot = comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
     assert snapshot.channel_unread["#ci"] == snapshot.channel_unread["#docs"] == 1
     comms.views.mark_channel_view_read("#ci", worktree=str(tmp_path))
     assert comms.bus.pending_count("receiver", "#ci") == 1
     comms.messaging.send_user_message("#ci", "my own message", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#docs"] == 1
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#ci"] == 0
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#docs"] == 1
     comms.messaging.send("sender", "receiver", "agent-to-agent DM in the aggregate feed")
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 2
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#any"] == 2
     comms.views.mark_channel_view_read("#any", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#docs"] == 0
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#any"] == 0
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#docs"] == 0
     with patch.object(comms.bus.log, '_iter_log_unlocked', side_effect=AssertionError("idle rescan")):
-        comms.views.viewer_snapshot(str(tmp_path))
+        comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path)))
 
 
 def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
@@ -44,11 +44,11 @@ def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(tmp_path)))
     comms.registry.declare(Thread("bob", frozenset({"team"}), str(tmp_path)))
     comms.messaging.send("alice", "bob", "hidden until any-mode")
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 0
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 0
     comms.views.mark_channel_view_read("#team", worktree=str(tmp_path))
     comms.channels.set_channel_any_mode("#team", True)
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 1
+    assert wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 1
 
 
 def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
@@ -60,14 +60,14 @@ def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
     comms.channels.set_channel_any_mode("#team", True)
     comms.messaging.send_message("carol", "dave", "unpainted older DM")
     comms.messaging.send_message("alice", "bob", "painted DM")
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 1
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 1
     comms.views.mark_channel_view_read("#team", worktree=str(tmp_path))
-    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 0
+    assert comms.views.viewer_snapshot(comms.messaging.user_identity(str(tmp_path))).channel_unread["#team"] == 0
 
     # Carol's old DM becomes visible only after joining the channel. The
     # previous painted basis cannot acknowledge this newly included history.
     comms.channels.update_tags("carol", add=frozenset({"team"}))
-    assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] >= 1
+    assert wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path))).channel_unread["#team"] >= 1
 
 
 def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
@@ -83,7 +83,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
     assert [message.seq for message in painted.messages] == [2]
 
     comms.channels.update_tags("carol", add=frozenset({"team"}))
-    unread_after_join = wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"]
+    unread_after_join = wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path))).channel_unread["#team"]
     with pytest.raises(ValueError, match="display.*changed"):
         comms.views.mark_channel_view_read(
             "#team",
@@ -92,7 +92,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
             expected_scope=painted.display_scope,
         )
     assert (
-        wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == unread_after_join
+        wire(tmp_path).views.viewer_snapshot(wire(tmp_path).messaging.user_identity(str(tmp_path))).channel_unread["#team"] == unread_after_join
     )
 
 
@@ -119,4 +119,4 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
         reopened = wire(root)
         reopened.channels.set_channel_any_mode("#team", True)
         assert [message.seq for message in reopened.views.full_history()] == [1, 2]
-        assert reopened.views.viewer_snapshot(str(root)).channel_unread["#team"] == 2
+        assert reopened.views.viewer_snapshot(reopened.messaging.user_identity(str(root))).channel_unread["#team"] == 2

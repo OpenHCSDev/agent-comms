@@ -14,7 +14,7 @@ def completed_counts(state, viewer, sources):
 
 def completed_snapshot(comms, worktree, **options):
     for _ in range(50):
-        snapshot = comms.views.viewer_snapshot(worktree, **options)
+        snapshot = comms.views.viewer_snapshot(comms.messaging.user_identity(worktree), **options)
         if not snapshot.unread_pending:
             return snapshot
         preparation = comms.views.transcript_reads.preparation
