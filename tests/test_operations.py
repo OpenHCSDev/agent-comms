@@ -537,16 +537,17 @@ class TestPollAndWire:
         assert snap["peers"][0]["activity"] == "idle"
         assert "ledger" in snap
 
-    def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+    def test_poll_requires_subject_despite_environment(self, wired, monkeypatch, tmp_path):
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        snap = wired.views.poll()
-        assert snap["thread"]["name"] == "fixer"
+        with pytest.raises(TypeError):
+            wired.views.poll()
+        assert wired.views.poll("fixer")["thread"]["name"] == "fixer"
 
-    def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
-        monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        thread = comms.threads.adopt_current()
+    def test_acquire_uses_original_record_not_environment(self, comms, monkeypatch, tmp_path):
+        original = comms.registry.declare(Thread(name="me", tags=frozenset(), worktree=str(tmp_path)))
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "wrong-owner")
+        thread = comms.owners.acquire_thread(original.incarnation, owner_pid=os.getpid())
         assert thread.name == "me"
         assert comms.registry.status("me").declared_name == "running"
 
@@ -612,10 +613,11 @@ class TestReDeclarationPreservesProvenance:
         wired.messaging.send("PR111", "#auth", "only tagged fixer sees this")
         assert wired.bus.pending_count("fixer") == 1
 
-    def test_current_thread_reads_agent_comms_tags(self, monkeypatch, tmp_path):
-        from agent_comms.threads import current_thread
+    def test_recorded_subject_keeps_registry_tags(self, comms, monkeypatch, tmp_path):
+        from agent_comms.tool_caller import ThreadCaller
 
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-        monkeypatch.setenv("AGENT_COMMS_TAGS", "ci, docs")
-        monkeypatch.chdir(tmp_path)
-        assert current_thread().tags == frozenset({"ci", "docs"})
+        original = comms.registry.declare(Thread(name="worker", tags=frozenset({"ci", "docs"}), worktree=str(tmp_path)))
+        monkeypatch.setenv("AGENT_COMMS_THREAD", "wrong-owner")
+        monkeypatch.setenv("AGENT_COMMS_TAGS", "wrong-tags")
+        caller = ThreadCaller(original.incarnation)
+        assert comms.registry.require(caller.subject("")).tags == frozenset({"ci", "docs"})

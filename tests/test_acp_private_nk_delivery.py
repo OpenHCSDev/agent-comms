@@ -254,7 +254,7 @@ async def test_headless_owner_start_launches_no_catalog_discovery(tmp_path, monk
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", drains.append)
     comms.registry.unregister("beta")
     comms.registry.heartbeat("beta")
-    await agent.sessions.start_owner(str(tmp_path), "beta")
+    await agent.sessions.start_owner(str(tmp_path), agent._comms.registry.require("beta").incarnation)
     assert drains == ["beta"]
     assert comms.registry.require("beta").pid == os.getpid()
     assert comms.registry.status("beta").active

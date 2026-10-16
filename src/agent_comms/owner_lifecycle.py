@@ -203,14 +203,17 @@ class OwnerLifecycle:
             validated_root, wire_root_id, native_package, None
         )
 
-    def acquire_thread(self, name: str, *, owner_pid: int) -> Thread:
-        """Bind only this calling process; stored birth time is signal authority."""
+    def acquire_thread(self, incarnation: RecordedThreadIncarnation, *, owner_pid: int) -> Thread:
+        """Acquire the original declaration; a reused name grants no process custody."""
         if owner_pid != os.getpid():
             raise RelationViolationError("An owner may acquire only its own process identity.")
         identity = ProcessIdentity.capture(owner_pid)
         with _store_lock(self._wire_lock_path):
             self.maintenance.assert_open_unlocked()
-            thread = self.registry.require(name)
+            snapshot = self.registry.snapshot()
+            if not incarnation.current(snapshot):
+                raise RelationViolationError("The selected thread incarnation is no longer current")
+            thread = snapshot.threads[incarnation.resolved(snapshot).name]
             thread.execution.require_native()
             if not thread.role.executable:
                 raise RelationViolationError("A human participant cannot become an executor.")

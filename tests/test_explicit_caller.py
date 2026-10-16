@@ -10,6 +10,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli import main
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import CallingThreadUnavailable
+from agent_comms.errors import RelationViolationError
 from agent_comms.native_project import NativeProject, ManagedNativeProject
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
@@ -51,6 +52,14 @@ def test_caller_relative_subject_requires_an_explicit_owner(comms):
     with pytest.raises(CallingThreadUnavailable):
         NoThreadCaller().subject("")
     assert ThreadCaller(owner.incarnation).subject("") == owner.name
+
+
+def test_acquisition_rejects_a_different_birth_without_taking_process_custody(comms, tmp_path):
+    original = comms.registry.declare(Thread(name="original", tags=frozenset(), worktree=str(tmp_path)))
+    stale = RecordedThreadIncarnation(original.name, original.created_at + 1)
+    with pytest.raises(RelationViolationError, match="no longer current"):
+        comms.owners.acquire_thread(stale, owner_pid=os.getpid())
+    assert comms.registry.require(original.name).process_identity is None
 
 
 def project_owner(comms, tmp_path):
