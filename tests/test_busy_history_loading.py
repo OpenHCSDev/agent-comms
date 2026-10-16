@@ -304,3 +304,22 @@ def test_local_pipe_corruption_is_not_peer_retirement(comms):
         with pytest.raises(OSError, match="handle is closed"):
             service.send(ReadAnswered(1, None))
         assert not service.closed
+
+
+def test_other_write_errors_are_not_reclassified_as_peer_retirement(comms, monkeypatch):
+    import multiprocessing
+
+    from agent_comms.ui_model.observation import ObservationService, ReadAnswered
+
+    connection, viewer = multiprocessing.get_context("spawn").Pipe()
+    with connection, viewer:
+        service = ObservationService(comms, connection)
+        error = ConnectionResetError("not the observation pipe's EPIPE")
+
+        def failed_write(_result):
+            raise error
+
+        monkeypatch.setattr(connection, "send", failed_write)
+        with pytest.raises(ConnectionResetError) as raised:
+            service.send(ReadAnswered(1, None))
+        assert raised.value is error and not service.closed

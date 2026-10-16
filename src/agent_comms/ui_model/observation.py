@@ -811,7 +811,7 @@ class ObservationService:
             return
         try:
             self.connection.send(result)
-        except (BrokenPipeError, ConnectionResetError):
+        except BrokenPipeError:
             self.retire()
 
     def receive(self) -> None:
