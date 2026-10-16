@@ -11,9 +11,13 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .bus_page_index import BusPageIndex
+from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, DMDisplayBasis, DMDisplayScope, MessageDisplayScope
+from .read_basis import (
+    ChannelDisplayScope, DisplaySelection, DMDisplayBasis, DMDisplayScope,
+    MessageDisplayScope, NoDisplaySelection,
+)
 from .wire_log import OpenedWireSnapshot
 
 if TYPE_CHECKING:
@@ -36,6 +40,17 @@ class MessagePage:
     display_basis: DMDisplayBasis | None = None
     historical_display: HistoricalDisplay | None = None
     history_revision: FileRevision | None = None
+
+    @property
+    def selection(self) -> DisplaySelection:
+        """Derive the selected conversation from this page's original evidence."""
+        if self.historical_display is not None:
+            return self.historical_display.selection(self.history_revision)
+        if self.display_basis is not None:
+            return self.display_basis.selection(self.history_revision)
+        if self.display_scope is not None:
+            return self.display_scope.selection(self.history_revision)
+        return NoDisplaySelection()
 
     @property
     def oldest_cursor(self) -> int | HistoryCursor | None:
@@ -281,6 +296,30 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
                     break
                 self.traversal.append(window, message, size)
         return self.traversal.result(window, more, opposite)
+
+
+@dataclass(frozen=True, slots=True)
+class ReferencedMessagesRequest(MessageReadRequest[tuple[Message, ...]]):
+    """Exactly the named messages of a scope, found by sequence in the page index."""
+
+    references: frozenset[MessageReference]
+
+    def includes(self, message: Message) -> bool:
+        return message.reference in self.references and self.scope.includes(message)
+
+    def empty(self) -> tuple[Message, ...]:
+        return ()
+
+    def indexed(self, index, source: OpenedWireSnapshot) -> tuple[Message, ...]:
+        if not self.references:
+            return ()
+        sequences = frozenset(reference.seq for reference in self.references)
+        with closing(self.scope.offsets(
+            index, lower=min(sequences) - 1, upper=max(sequences) + 1,
+            descending=False, before_offset=source.boundary,
+        )) as rows:
+            named = (row for row in rows if row.seq in sequences)
+            return tuple(message for message, _ in self.indexed_records(index, source, named))
 
 
 @dataclass(frozen=True, slots=True)

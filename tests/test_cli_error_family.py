@@ -13,6 +13,7 @@ from pydantic import ValidationError
 from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.cli import _fail, main
 from agent_comms.cli_bridges.shared import (
+    ArrivedMessage,
     Binding,
     DeliveryJournal,
     DeliveryRow,
@@ -257,10 +258,10 @@ async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys
             subscriptions.append(state)
             try:
                 if len(subscriptions) == 1:
-                    yield message, json.dumps(message.to_wire())
+                    yield ArrivedMessage(message, json.dumps(message.to_wire()))
                     yield UnavailableCoreError(error='Route index covers 1 of 100 bytes')
                 else:
-                    yield message, json.dumps(message.to_wire())
+                    yield ArrivedMessage(message, json.dumps(message.to_wire()))
                     delivered.set_result(True)
                     await waiting.wait()
             finally:
@@ -278,7 +279,9 @@ async def test_watch_resubscribes_only_for_declared_unavailable(tmp_path, capsys
             await task
         journal.close()
     assert len(closed) == 2
-    assert capsys.readouterr().out.count('one delivery') == 1
+    output = capsys.readouterr()
+    assert output.out.count('one delivery') == 1
+    assert output.err.count('Core watch unavailable: Route index covers 1 of 100 bytes') == 1
 
 
 @pytest.mark.asyncio

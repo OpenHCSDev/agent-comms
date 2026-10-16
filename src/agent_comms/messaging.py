@@ -211,9 +211,18 @@ class Messaging:
     def acknowledge(
         self, name: str, references: Sequence[MessageReference]
     ) -> int:
-        """Mark only the returned message references delivered."""
-        with _store_lock(self._wire_lock_path):
-            return self.bus.mark_delivered(name, references)
+        """Mark only the returned message references delivered.
+
+        Reading the named messages takes no wire lock, like every inbox read.
+        The shared lock covers only the read-ledger update: it keeps exclusive
+        wire writers such as a maintenance cutover out of that one write, while
+        page readers proceed. The ledger merges sequences under its own lock and
+        rejects a replaced bus, so another reader or acknowledgment loses nothing.
+        """
+        basis = self.bus.delivered(name, references)
+        with _store_lock(self._wire_lock_path, shared=True):
+            self.bus.reads.mark_displayed(basis.viewer, basis)
+        return basis.message_count
 
     def acknowledge_through(self, name: str, sequence: int) -> None:
         with _store_lock(self._wire_lock_path):

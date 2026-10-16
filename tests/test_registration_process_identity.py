@@ -9,6 +9,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.registry_document import RegistryDocument
+from agent_comms.runtime_requests import ProjectRuntimeRequest
 from agent_comms.threads import Thread
 
 
@@ -21,12 +22,12 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     assert owner.process_identity == identity
     session = tmp_path / "session.jsonl"
     session.write_text('{"type":"session","id":"fixture"}\n')
-    attached = comms.threads.attach_session(owner.name, str(session))
+    attached = comms.threads.attach_session(owner, str(session))
     assert attached.process_identity == identity
     assert wire(tmp_path).registry.require(owner.name) == attached
-    unbound = comms.threads.attach_session(owner.name, str(session), pid=0)
+    unbound = comms.threads.attach_session(attached, str(session), pid=0)
     assert unbound.process_identity is None and unbound.pid == 0
-    rebound = comms.threads.attach_session(owner.name, str(session), pid=os.getpid())
+    rebound = comms.threads.attach_session(unbound, str(session), pid=os.getpid())
     assert rebound.process_identity == identity
     restored = RegistryDocument()
     restored.restore_stopped(comms.registry.snapshot(), (owner.name,))
@@ -54,6 +55,24 @@ def test_same_pid_different_birth_advances_both_authority_domains(tmp_path):
     with pytest.raises(RelationViolationError, match="does not own"):
         comms.threads.rename_managed_thread(owner.name, "renamed", owner_pid=os.getpid())
     assert identity.alive()
+
+
+def test_project_request_entry_retains_original_birth_across_rename(tmp_path):
+    comms = wire(tmp_path)
+    owner = Thread("owner", frozenset(), str(tmp_path),
+                   process_identity=ProcessIdentity.capture(os.getpid()))
+    comms.registry.declare(owner)
+    request = ProjectRuntimeRequest.for_native(
+        comms.registry.snapshot(), comms.registry.require("owner")
+    )
+    assert request.require_original(comms.registry.entry("owner").entry).name == "owner"
+    comms.registry.rename("owner", "renamed")
+    current = comms.registry.entry("renamed").entry
+    assert request.require_original(current).name == "renamed"
+    with pytest.raises(ValueError, match="another original"):
+        replace(request, thread="stranger").require_original(current)
+    with pytest.raises(RelationViolationError, match="lease changed"):
+        request.require_original(replace(current, owner_generation=current.owner_generation + 1))
 
 
 def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path):

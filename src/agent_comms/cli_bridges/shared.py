@@ -24,7 +24,7 @@ from metaclass_registry import RegistryConfig
 from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_protocol import CORE_ERROR, CoreError, TaggedWire, WireModel
+from agent_comms.cli_protocol import CORE_ERROR, TaggedWire, WatchItem, WireModel
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.comms import Comms
@@ -568,6 +568,28 @@ class DeliveryJournal:
     def close(self) -> None:
         self.db.close()
 
+@dataclass(frozen=True)
+class ArrivedMessage(WatchItem):
+    """An unread message, with the exact Core line the journal retains."""
+    message: Message
+    payload: str
+
+    async def handle(self, bridge: CliBridge) -> None:
+        message = self.message
+        conversation = message.type.conversation_message
+        outcome = UnconfirmedOutcome if conversation else FilteredOutcome
+        if not bridge.journal.begin(message, self.payload, outcome):
+            await bridge.journal.outcome(message).acknowledge(bridge.core, message)
+            return
+        if not conversation:
+            await bridge.finish_delivery(message, outcome)
+            return
+        result = await bridge.deliver(message)
+        await bridge.settle(message, result)
+        print(f'{result.declared_name}: {message.message_id} from {message.sender}',
+              file=sys.stderr, flush=True)
+
+
 class CoreConnection:
     """Core owns publication; its CLI owns the long-lived watch stream."""
 
@@ -584,7 +606,7 @@ class CoreConnection:
             self.comms.messaging.send, self.binding.bus, target, body, kind)
         return SendResult(id=message_id)
 
-    async def watch(self, state: Path) -> AsyncIterator[tuple[Message, str] | CoreError]:
+    async def watch(self, state: Path) -> AsyncIterator[WatchItem]:
         with (state / 'watch.stderr.log').open('a') as errors:
             child = await asyncio.create_subprocess_exec(
                 self.executable, '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
@@ -596,7 +618,7 @@ class CoreConnection:
                     if isinstance(wire, dict) and 'error' in wire:
                         yield CORE_ERROR.validate_python(wire)
                         return
-                    yield Message.from_wire(wire), line.decode()
+                    yield ArrivedMessage(Message.from_wire(wire), line.decode())
                 raise RuntimeError(f'Core watch ended, exit {await child.wait()}')
             finally:
                 await self.join(child)
@@ -773,27 +795,10 @@ class CliBridge(ABC, Generic[BridgeOptions]):
         self.journal.report_unconfirmed()
         print(f'Watching {self.binding.bus} → {self.binding.thread}', file=sys.stderr, flush=True)
         while True:
+            # Core ends a stream after an unavailable item; the next one reopens it.
             async with aclosing(self.core.watch(self.options.state)) as stream:
                 async for item in stream:
-                    if isinstance(item, CoreError):
-                        delay = item.watch_delay()
-                        print(f'Core watch unavailable: {item.error}; reconnecting read stream',
-                              file=sys.stderr, flush=True)
-                        await asyncio.sleep(delay)
-                        break
-                    message, payload = item
-                    conversation = message.type.conversation_message
-                    outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-                    if not self.journal.begin(message, payload, outcome):
-                        await self.journal.outcome(message).acknowledge(self.core, message)
-                        continue
-                    if not conversation:
-                        await self.finish_delivery(message, outcome)
-                        continue
-                    result = await self.deliver(message)
-                    await self.settle(message, result)
-                    print(f'{result.declared_name}: {message.message_id} from {message.sender}',
-                          file=sys.stderr, flush=True)
+                    await item.handle(self)
 
     async def run(self) -> None:
         try:

@@ -10,6 +10,14 @@ import pytest
 
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.field_codec import FieldCodec
+from agent_comms.owner_protocol import (
+    IncompatibleOwner,
+    OtherCoreOwner,
+    OwnerAnnouncement,
+    UnannouncedOwner,
+)
+from agent_comms.session_load import FailedSessionLoadPlan
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
 
@@ -64,7 +72,15 @@ async def test_unsent_attachment_ends_with_actual_lifetime(tmp_path, ending):
         await process.stop()
 
 
-@pytest.mark.parametrize("ending", ["invalid_ready", "cancel"])
+# The 496609b95 owner's first line: an update whose context_usage predates
+# the ContextReading family. A frontend must never decode it.
+_UNANNOUNCED_FIRST_LINE = {"update": {"_meta": {"agentComms": {"updates": [
+    {"kind": "coordination_changed", "context_usage": {"used": 1, "size": 2}},
+]}}}}
+_OTHER_COMMIT = "496609b95" + "0" * 31
+
+
+@pytest.mark.parametrize("ending", ["invalid_ready", "cancel", "unannounced", "other_core"])
 async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending):
     """Exercise lifecycle cleanup at the actual subscription protocol boundary."""
     import json
@@ -86,7 +102,15 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
             assert request["action"] == "subscribe"
             entered.set()
             if ending == "invalid_ready":
+                writer.write((json.dumps(FieldCodec.encode(OwnerAnnouncement())) + "\n").encode())
                 writer.write(b'{"ready": {}}\n')
+                await writer.drain()
+            elif ending == "unannounced":
+                writer.write((json.dumps(_UNANNOUNCED_FIRST_LINE) + "\n").encode())
+                await writer.drain()
+            elif ending == "other_core":
+                other = FieldCodec.encode(OwnerAnnouncement(_OTHER_COMMIT))
+                writer.write((json.dumps(other) + "\n").encode())
                 await writer.drain()
             assert await reader.read() == b""
         except BaseException as error:
@@ -108,8 +132,20 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
                 with pytest.raises(asyncio.CancelledError):
                     await loading
             else:
-                with pytest.raises(RequestError):
+                with pytest.raises(RequestError) as raised:
                     await loading
+                owner = IncompatibleOwner.from_failure(raised.value.data)
+                if ending == "invalid_ready":
+                    assert owner is None
+                else:
+                    expected = (
+                        UnannouncedOwner(thread="owner")
+                        if ending == "unannounced"
+                        else OtherCoreOwner(thread="owner", core_commit=_OTHER_COMMIT)
+                    )
+                    assert owner == expected
+                    assert raised.value.data["reason"] == expected.line()
+                    assert FailedSessionLoadPlan.from_failure(raised.value.data) is not None
             await closed
         assert not agent.sessions.proxies
     finally:

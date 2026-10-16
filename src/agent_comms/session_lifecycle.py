@@ -39,9 +39,10 @@ from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistryEntry
 from .transcript_updates import TranscriptReplay
-from .session_load import SessionLoadAdmission, ExistingSessionLoadAdmission, FailedSessionLoadAdmission
+from .owner_protocol import IncompatibleOwnerError
+from .session_load import SessionLoadPlan, ExistingSessionLoadPlan, FailedSessionLoadPlan
 
 
 class SessionLifecycle:
@@ -126,15 +127,15 @@ class SessionLifecycle:
             raise RequestError.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
         return name
 
-    def require_owned_session(self, thread: Thread, snapshot: RegistrySnapshot) -> str:
+    def require_owned_session(self, entry: RegistryEntry) -> str:
         """Resolve an original loaded resource; registration grants no attachment."""
         for session_id, name in self.bindings.items():
-            if snapshot.canonical_name(name) == thread.name:
+            if entry.matches_name(name):
                 return session_id
         raise RequestError.invalid_params({
-            "reason": f"Registered owner {thread.name!r} has no loaded ACP session. "
+            "reason": f"Registered owner {entry.thread.name!r} has no loaded ACP session. "
                       "PID registration does not attach a session.",
-            "owner": thread.name,
+            "owner": entry.thread.name,
         })
 
     @staticmethod
@@ -251,19 +252,23 @@ class SessionLifecycle:
         await Coordination.run_worker(partial(self.comms.threads.heartbeat, thread.name))
         await self.bind_owned(thread, session_id)
         await self.transcript.replay(session_id, thread.name)
-        await self.effects.inputs.replay_unknown_inputs(session_id)
+        await self.effects.inputs.emit_input_delivery_changed(session_id)
 
     async def attach_owner(self, thread: Thread, session_id: str) -> LoadSessionResponse:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
             snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
             binding = snapshot.owner_binding(thread.name)
-            failed_command = FailedSessionLoadAdmission(binding)
+            failed_command = FailedSessionLoadPlan(binding)
             proxy = await Coordination.run_worker(partial(self.effects._create_runtime_proxy, thread, session_id))
             try:
                 snapshot.require_owner_process(snapshot.owner_identity(thread.name), thread.require_process())
                 metadata = await proxy.subscribe()
                 self.proxies[session_id] = proxy
+            except IncompatibleOwnerError as error:
+                raise RequestError.invalid_params(
+                    {**error.owner.failure_metadata(), **failed_command.failure_metadata()}
+                ) from error
             except (OSError, RuntimeError, TypeError, ValueError) as error:
                 raise RequestError.invalid_params(
                     {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}",
@@ -274,7 +279,7 @@ class SessionLifecycle:
                     await proxy.close()
             return LoadSessionResponse(
                 config_options=metadata.pop("configOptions", []),
-                field_meta={**metadata, **ExistingSessionLoadAdmission(binding).metadata()},
+                field_meta={**metadata, **ExistingSessionLoadPlan(binding).metadata()},
             )
 
     async def sync_identity(self, session_id: str) -> str:
@@ -416,8 +421,8 @@ class AttachedSessionLifecycle(SessionLifecycle):
         self.reject_foreign_mcp(mcp_servers)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         try:
-            admission = SessionLoadAdmission.at_ingress(kwargs.get("agentCommsLoad"))
-            owner = await admission.resolve(self, thread)
+            plan = SessionLoadPlan.at_ingress(kwargs.get("agentCommsLoad"))
+            owner = await plan.resolve(self, thread)
         except (OSError, RuntimeError, TypeError, ValueError) as error:
             raise RequestError.invalid_params(
                 {"reason": f"Session load not admitted for {thread.name!r}: {error}"}
