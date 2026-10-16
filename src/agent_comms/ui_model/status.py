@@ -11,7 +11,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.thread_presentation import ThreadPresentation
+from agent_comms.thread_presentation import (
+    IdleThreadPresentationStatus,
+    ThreadPresentation,
+    ThreadPresentationStatus,
+)
 from agent_comms.ui_model.changes import KeyedModel
 
 if TYPE_CHECKING:
@@ -27,16 +31,14 @@ class ThreadStatusModel:
     name: str
     shown: bool
     lines: tuple[str, ...]
-    working: bool
-    attention: bool
-    available: bool = True
+    status: ThreadPresentationStatus
     summary: tuple[str, ...] = ()
     """Overview parts for a collapsed status: first summary line, latest inbound, recent count."""
 
     @classmethod
     def known(cls, name: str, presentation: ThreadPresentation | None) -> ThreadStatusModel:
         if presentation is None:
-            return cls(name, False, ("",), False, False)
+            return cls(name, False, ("",), IdleThreadPresentationStatus())
         lines = [presentation.summary]
         excerpts = []
         for receipt in presentation.notifications:
@@ -55,13 +57,13 @@ class ThreadStatusModel:
             summary.append(f"Latest inbound {latest.message.target} from @{latest.message.sender}: {latest.state}")
         if len(presentation.notifications) > 1:
             summary.append(f"{len(presentation.notifications)} recent")
-        return cls(name, True, tuple(lines), presentation.busy, presentation.attention,
+        return cls(name, True, tuple(lines), presentation.status,
                    summary=tuple(summary))
 
     @classmethod
     def unavailable(cls, name: str, reason: str = "Agent status unavailable") -> ThreadStatusModel:
-        return cls(name, True, (reason,), False, True,
-                   available=False, summary=(reason.partition("\n")[0],))
+        return cls(name, True, (reason,), IdleThreadPresentationStatus().with_attention(),
+                   summary=(reason.partition("\n")[0],))
 
 
 class OpenThreadStatus:
