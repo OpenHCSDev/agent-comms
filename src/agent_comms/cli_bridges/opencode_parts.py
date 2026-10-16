@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from typing import ClassVar, Literal
 
 from metaclass_registry import RegistryConfig
-from pydantic import ConfigDict, Field, JsonValue
+from pydantic import Field, JsonValue
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
@@ -122,13 +122,6 @@ class ReasoningPart(TextualPart):
     detail = ''
 
 
-class ToolArguments(WireModel):
-    """Retain arbitrary tool inputs, declaring OpenCode's native path spelling."""
-    model_config = ConfigDict(strict=True, extra='allow')
-    __pydantic_extra__: dict[str, JsonValue] = Field(init=False)
-    filePath: str | None = None
-
-
 class StatusHeader(WireHeader):
     type: str = Field(alias='status')
 
@@ -137,15 +130,14 @@ class ToolState(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     header = StatusHeader
-    input: ToolArguments
+    input: dict[str, JsonValue]
     finished: ClassVar[bool] = False
 
     @abstractmethod
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
 
     def call(self, part: ToolPart) -> ToolCall:
-        return ToolCall(UnrecordedEventTime(), part.callID, part.tool,
-                        self.input.model_dump(exclude_unset=True), self.input.filePath or '')
+        return ToolCall(UnrecordedEventTime(), part.callID, part.tool, self.input)
 
 
 class PendingTool(ToolState):

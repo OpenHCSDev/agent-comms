@@ -17,6 +17,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
+    ContextTranscript,
     ThinkingTranscript,
     TranscriptEvent,
     UserTranscript,
@@ -156,6 +157,8 @@ class ClaudeHeader(WireHeader):
         # Local slash commands (/login, /cost) are written as user records
         # without a prompt; they never reach the model. Decode that shape here.
         if value.get('type') == 'user':
+            if value.get('isCompactSummary') is True:
+                return {'type': CompactUserRecord.wire_tag}
             if value.get('origin', {}).get('kind') == TaskNotification.wire_tag:
                 return {'type': TaskUserRecord.wire_tag}
             if 'promptId' not in value:
@@ -344,7 +347,7 @@ class TaskEnvelope(WireModel, ABC):
         root = ElementTree.fromstring(text)  # Malformed matching XML fails at ingress.
         event = root.find('event')
         if event is None:
-            return ForeignTaskNotification(text=text)
+            return ForeignTaskNotification(text='\n'.join(root.itertext()).strip())
         return MonitorTaskNotification(frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
 
     @abstractmethod
@@ -355,16 +358,19 @@ class ForeignTaskNotification(TaskEnvelope):
     text: str
 
     def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
-        return ()
+        return (FinishedItem(record.uuid, record.uuid,
+                             (NoticeTranscript(self.text, timestamp=record.timestamp),)),)
 
 
 class MonitorTaskNotification(TaskEnvelope):
     frames: tuple[MonitorFrame, ...]
 
     def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
-        return tuple(MonitorObservation(frame,
-                                        ObservedMonitor(record.uuid, record.timestamp))
-                     for frame in self.frames)
+        observations = tuple(MonitorObservation(frame,
+                                                ObservedMonitor(record.uuid, record.timestamp))
+                             for frame in self.frames)
+        events = tuple(event for frame in self.frames for event in frame.events(record.timestamp))
+        return observations + ((FinishedItem(record.uuid, record.uuid, events),) if events else ())
 
 
 class TaskContent(WireModel):
@@ -391,17 +397,23 @@ class TaskMessage(ContentBlocks):
         return tuple(update for block in self.content for update in block.updates(record))
 
 
-class ToolResult(UserBlock, ContentBlocks):
+class ResultMessage(ContentBlocks):
+    content: list[ResultPart.declared_union()]
+
+    def result_text(self) -> str:
+        return '\n'.join(part.result_text() for part in self.content)
+
+
+class ToolResult(UserBlock, ResultMessage):
     wire_tag = 'tool_result'
     tool_use_id: str
-    content: list[ResultPart.declared_union()]
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         call = session.result_for(self.tool_use_id)
         if call is None:
             return ()  # Only an initial window may lack the original tool start.
-        text = '\n'.join(part.result_text() for part in self.content)
+        text = self.result_text()
         return (CompletedItem(session.turn, self.tool_use_id, call.finished(text, not self.is_error)),
                 TurnStarted())
 
@@ -410,18 +422,33 @@ class UserMessage(ContentBlocks):
     content: list[UserBlock.declared_union()]
 
 
-class UserRecord(ClaudeRecord, TimedRecord):
-    wire_tag = 'user'
+class PromptRecord(ClaudeRecord, TimedRecord, ABC):
     promptId: str
-    message: UserMessage
-    origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
     isMeta: bool = False
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         session.turn = self.promptId
-        if self.isMeta:
-            return ()
+        return () if self.isMeta else self.present(session)
+
+    @abstractmethod
+    def present(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]: ...
+
+
+class UserRecord(PromptRecord):
+    wire_tag = 'user'
+    message: UserMessage
+    origin: PromptOrigin.declared_union() = Field(default_factory=HumanPrompt)
+
+    def present(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return tuple(update for block in self.message.content for update in block.updates(self, session))
+
+
+class CompactUserRecord(PromptRecord):
+    wire_tag = 'compact-user'
+    message: ResultMessage
+
+    def present(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return session.finished(self.uuid, (ContextTranscript(self.message.result_text(), timestamp=self.timestamp),))
 
 
 class TaskUserRecord(ClaudeRecord, TimedRecord):

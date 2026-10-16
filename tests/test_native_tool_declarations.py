@@ -49,17 +49,17 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         assert call.tool == tool and tool.detail in event.title
     unknown = ToolDeclaration.start("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
-        "external_extension {'private': 'preserved'}",
+        "external_extension",
         "other",
         {"private": "preserved"},
     )
 
 
-@pytest.mark.parametrize("name,label,kind", [
-    ("read", "Read", "read"), ("bash", "Run", "execute"),
-    ("edit", "Edit", "edit"), ("write", "Write", "edit"),
+@pytest.mark.parametrize("name,label,kind,caption", [
+    ("read", "Read", "read", "Read external.txt"), ("bash", "Run", "execute", "Run"),
+    ("edit", "Edit", "edit", "Edit external.txt"), ("write", "Write", "edit", "Write external.txt"),
 ])
-def test_recorded_metadata_does_not_require_an_executable_request(name, label, kind):
+def test_recorded_metadata_does_not_require_an_executable_request(name, label, kind, caption):
     from agent_comms.channel_coding_tools import CodingCall
     from agent_comms.native_tool_call import SelectedToolDenied
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
@@ -67,11 +67,10 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
     foreign = {"file_path": "external.txt"}
     start = ToolStartTranscript(tool_call_id="saved", tool_name=name, raw_input=foreign)
     end = ToolEndTranscript(tool_call_id="saved", tool_name=name, text="saved result")
-    caption = label + " {'file_path': 'external.txt'}"
     assert (start.title, start.kind, start.raw_input) == (caption, kind, foreign)
     assert (end.title, end.kind) == (label, kind)
     assert ToolDeclaration.start("saved", name, foreign).title == caption
-    assert ToolStartTranscript(tool_call_id="scalar", tool_name=name, raw_input=17).title == label + ' 17'
+    assert ToolStartTranscript(tool_call_id="scalar", tool_name=name, raw_input=17).title == label
     with pytest.raises(SelectedToolDenied):
         CodingCall.decode("execution", name, foreign)
 
@@ -85,6 +84,7 @@ def test_input_caption_is_bounded_and_never_parses_an_execution_request(monkeypa
     caption = ToolDeclaration.start('opaque', 'read', arguments).title
     assert 'foreign.txt' in caption and len(caption) < 200
     assert arguments['payload'] == 'x' * 1_000_000
+    assert len(ToolDeclaration.start('command', 'Bash', {'command': 'x' * 1_000_000}).title) < 200
 
 
 def test_foreign_protocol_owners_supply_their_own_recorded_detail():
@@ -107,7 +107,7 @@ def test_foreign_protocol_owners_supply_their_own_recorded_detail():
     recorded, _ = call.finished("saved", True)
     assert recorded.title == call.title and recorded.raw_input == {"filePath": "open-code.txt"}
     scalar, _ = ToolCall(UnrecordedEventTime(), "opaque", "external_custom", ["not", "Pi"]).finished("saved", True)
-    assert scalar.title == "external_custom ['not', 'Pi']" and scalar.raw_input == ["not", "Pi"]
+    assert scalar.title == "external_custom" and scalar.raw_input == ["not", "Pi"]
 
 
 def test_core_commands_share_native_identity_without_changing_external_decode():

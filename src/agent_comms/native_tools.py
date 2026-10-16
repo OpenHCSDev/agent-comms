@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from .tool_declaration import ToolDeclaration
+from .tool_declaration import ToolDeclaration, PathTool
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 from .native_tool_call import SelectedToolDenied
@@ -73,15 +73,6 @@ class ArgumentTool(ToolDeclaration):
 
 
 @dataclass(frozen=True, kw_only=True)
-class PathTool:
-    path: str
-
-    @property
-    def detail(self) -> str:
-        return self.path
-
-
-@dataclass(frozen=True, kw_only=True)
 class CodingTool(ArgumentTool, NativeExecutableTool):
     """Typed Pi fields own mutation paths; the existing SDK executes the tools."""
 
@@ -125,6 +116,10 @@ class BashTool(CodingTool):
     @property
     def detail(self) -> str:
         return self.command
+
+    @classmethod
+    def input_preview(cls, arguments: object) -> str:
+        return cls.argument_text(arguments, 'command')
 
     def _parse_resource(self) -> None:
         return None

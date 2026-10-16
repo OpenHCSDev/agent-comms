@@ -30,22 +30,54 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             return UndeclaredTool(name)
 
     @classmethod
-    def caption(cls, name: str, detail: str = "", *, arguments: object = None) -> str:
+    def caption(cls, name: str, arguments: object, *, detail: str = "") -> str:
         declaration = cls.for_name(name)
-        # Opaque external arguments stay opaque. reprlib bounds their display;
-        # captioning must not parse execution records or resolve file claims.
-        preview = detail.strip() or (reprlib.repr(arguments) if arguments is not None else "")
+        preview = detail.strip() or declaration.input_preview(arguments)
+        # Bound the declared text, not a dump of opaque arguments.
+        preview = reprlib.repr(preview)[1:-1] if preview else ''
         return declaration.label + (" " + preview if preview else "")
+
+    @classmethod
+    def input_preview(cls, arguments: object) -> str:
+        """Unknown metadata has no declared preview; never dump raw input."""
+        return ""
+
+    @staticmethod
+    def argument_text(arguments: object, name: str) -> str:
+        if not isinstance(arguments, dict):
+            return ""
+        value = arguments.get(name)
+        return value if isinstance(value, str) else ""
 
     @classmethod
     def start(cls, call_id: str, name: str, arguments: dict[str, object], *, detail: str = "") -> ToolStart:
         declaration = cls.for_name(name)
-        return ToolStart(call_id, name, cls.caption(name, detail, arguments=arguments), arguments, declaration.acp_kind)
+        return ToolStart(call_id, name, cls.caption(name, arguments, detail=detail), arguments, declaration.acp_kind)
 
     @classmethod
     def result_diff(cls, result, ok):
         """Opaque metadata cannot invent edit evidence."""
         return None
+
+
+@dataclass(frozen=True, kw_only=True)
+class PathTool:
+    """Declared file input shared by execution and recorded presentation."""
+    path: str
+
+    @property
+    def detail(self) -> str:
+        return self.path
+
+    @classmethod
+    def recorded_path(cls, arguments: object) -> str:
+        # These are the current Pi, Claude and OpenCode input spellings.
+        return next((value for name in ('path', 'file_path', 'filePath')
+                     if (value := ToolDeclaration.argument_text(arguments, name))), '')
+
+    @classmethod
+    def input_preview(cls, arguments: object) -> str:
+        return cls.recorded_path(arguments)
 
 
 @dataclass(frozen=True)

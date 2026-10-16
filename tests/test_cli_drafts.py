@@ -7,7 +7,7 @@ from agent_comms.cli_bridges.shared import (
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolStartTranscript, ToolEndTranscript
+from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, ToolStartTranscript, ToolEndTranscript, UserTranscript, ContextTranscript
 from agent_comms.cli_bridges.claude_protocol import CLAUDE_RECORD, ClaudeSession
 from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
 from agent_comms.cli_bridges.opencode_parts import AssistantMessage, ToolPart
@@ -210,6 +210,19 @@ def test_every_adapter_shows_the_tool_before_result_and_closes_its_prefix(tmp_pa
     assert output.transcript.current_draft() is None
     output.publish_batch([AllTurnsEnded()])
     assert not output.drafts
+
+
+@pytest.mark.parametrize('compact,event_type', [(False, UserTranscript), (True, ContextTranscript)])
+def test_claude_missing_origin_is_human_but_compaction_is_context(compact, event_type):
+    payload = dict(type='user', uuid='input', timestamp='2026-10-16T16:40:05.123Z',
+                   promptId='prompt', isCompactSummary=compact, message=dict(content='actual input text'))
+    session = ClaudeSession()
+    updates = CLAUDE_RECORD.validate_python(payload).updates(session)
+    events = tuple(event for update in updates if isinstance(update, FinishedItem) for event in update.events)
+    assert len(events) == 1 and isinstance(events[0], event_type)
+    assert events[0].text == 'actual input text' and session.turn == 'prompt'
+    payload['isMeta'] = True
+    assert CLAUDE_RECORD.validate_python(payload).updates(ClaudeSession()) == ()
 
 
 def test_claude_turn_end_releases_tool_lookup_and_shared_prefix(tmp_path):

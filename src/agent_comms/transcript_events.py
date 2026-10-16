@@ -181,7 +181,7 @@ class ToolTranscript(SilentTranscript, TranscriptEvent):
     def title(self) -> str:
         from .tool_declaration import ToolDeclaration
 
-        return ToolDeclaration.caption(self.tool_name)
+        return ToolDeclaration.for_name(self.tool_name).label
 
     @property
     def kind(self) -> str:
@@ -199,7 +199,7 @@ class ToolStartTranscript(ToolTranscript):
     def title(self) -> str:
         from .tool_declaration import ToolDeclaration
 
-        return ToolDeclaration.caption(self.tool_name, self.detail, arguments=self.raw_input)
+        return ToolDeclaration.caption(self.tool_name, self.raw_input, detail=self.detail)
 
 
 @dataclass(frozen=True, kw_only=True)

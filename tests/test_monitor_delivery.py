@@ -97,7 +97,11 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
         sessionId='session',promptId='prompt',origin=dict(kind='task-notification'),
         message=dict(content='Another task producer')))
     assert isinstance(record.message.content[0].text,ForeignTaskNotification)
-    assert record.updates(ClaudeSession())==()
+    notice, = record.updates(ClaudeSession())
+    assert notice.events[0].text == 'Another task producer'
+    observed, rendered = notification('ordinary monitor output').updates(ClaudeSession())
+    assert isinstance(observed.frame, ForeignMonitorFrame)
+    assert rendered.events[0].text == 'ordinary monitor output'
     from xml.etree.ElementTree import ParseError
     with pytest.raises(ParseError):
         CLAUDE_RECORD.validate_python(dict(type='user',uuid='record',timestamp='2026-10-16T16:40:05.123Z',
