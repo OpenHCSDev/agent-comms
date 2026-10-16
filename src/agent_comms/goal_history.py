@@ -32,19 +32,23 @@ class GoalHistoryError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class GoalHistoryEntry(TypedTable):
-    # The durable kind field is a journal fact, not the TypedTable family tag.
-    family_discriminator = "row"
+class GoalHistoryRevision:
+    """The public revision shared by storage and decoded history consumers."""
 
     sequence: int | None = field(metadata={"sql": Column(primary_key=True)})
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
     before: Goal | None
     after: Goal | None
-    owner_created_at: float = field(kw_only=True, metadata={"history_exclude": True})
-    state: type[GoalHistoryState] = field(
-        kw_only=True, metadata={"history_exclude": True}
-    )
+
+
+@dataclass(frozen=True)
+class GoalHistoryEntry(GoalHistoryRevision, TypedTable):
+    # The durable kind field is a journal fact, not the TypedTable family tag.
+    family_discriminator = "row"
+
+    owner_created_at: float = field(kw_only=True)
+    state: type[GoalHistoryState] = field(kw_only=True)
     BEFORE_GOAL_ID: ClassVar[str] = 'json_extract("before", \'$.id\')'
     AFTER_GOAL_ID: ClassVar[str] = 'json_extract("after", \'$.id\')'
     REPORTED_TURN: ClassVar[str] = 'json_extract("after", \'$.reported_turn\')'
@@ -70,12 +74,10 @@ class GoalHistoryEntry(TypedTable):
         return self.after is not None and self.after.reported_turn == turn_id
 
     def to_wire(self) -> dict[str, object]:
-        # Preserve nested Goal family tags while projecting only public entry fields.
-        return {
-            item.name: FieldCodec.encode(getattr(self, item.name))
-            for item in fields(self)
-            if not item.metadata.get("history_exclude")
-        }
+        public = GoalHistoryRevision(**{
+            item.name: getattr(self, item.name) for item in fields(GoalHistoryRevision)
+        })
+        return FieldCodec.encode(public)
 
 
 class GoalHistoryScope(DeclaredFamily):
