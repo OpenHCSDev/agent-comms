@@ -22,6 +22,11 @@ if TYPE_CHECKING:
 class NativeProject(JsonFlagRecord, DeclaredFamily, affix="NativeProject"):
     value_flag: ClassVar[str] = "--native-project"
 
+    @classmethod
+    def native_extension(cls, package: Path) -> Path:
+        """Project synchronization is part of the native binding, not user discovery."""
+        return package / "agent-comms-extensions/global-project-sync/index.mjs"
+
     @abstractmethod
     def bound_arguments(self): ...
 

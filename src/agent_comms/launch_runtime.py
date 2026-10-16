@@ -26,6 +26,7 @@ class LaunchRuntime:
     """One selected installation for a worker and its native executable."""
 
     interpreter: Annotated[Path, PathText]
+    interpreter_arguments: ClassVar[tuple[str, ...]] = ("-I",)
 
     @classmethod
     def current(cls) -> LaunchRuntime:
@@ -43,9 +44,9 @@ class LaunchRuntime:
         """Identify the decoder already running, for watcher checks and restoration."""
         return cls(Path(sys.prefix) / "bin/python")
 
-    @property
-    def native_entrypoint(self) -> str:
-        return str(self.interpreter.with_name("pi-comms-native"))
+    def command(self, *arguments: str) -> tuple[str, ...]:
+        """Execute this installation without importing a task directory or PYTHONPATH."""
+        return (str(self.interpreter), *self.interpreter_arguments, *arguments)
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
         configuration = replace(
@@ -61,6 +62,8 @@ class LaunchRuntime:
 
 class RestoredRuntime(LaunchRuntime):
     """Original-process recovery preserves its original import environment too."""
+
+    interpreter_arguments = ()
 
     def environment(self, source: Mapping[str, str]) -> dict[str, str]:
         return dict(source)

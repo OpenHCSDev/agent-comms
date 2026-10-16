@@ -45,6 +45,8 @@ def build_parser(settings: NativeThreadDefaults) -> argparse.ArgumentParser:
         default=None,
         help="Comms root directory (default $AGENT_COMMS_ROOT, active route, or ~/.agent-comms)",
     )
+    NativeThreadDefaults.add_cli_arguments(parser, required=False, dest="native_settings")
+    parser.set_defaults(native_settings=settings)
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
         declaration.add_parser(subparsers, settings)
@@ -65,7 +67,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             command = CliCommand.from_namespace(args)
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.admit_client())
-            comms = Comms(route, runtime=runtime)
+            comms = Comms(route, runtime=runtime, settings=args.native_settings)
             return command.run(comms, sys.stdout, caller=caller)
     except KeyboardInterrupt:
         return 130

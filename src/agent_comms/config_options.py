@@ -153,7 +153,7 @@ class ModelConfigOption(CatalogConfigOption):
 
     async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
         data = await GetAvailableModels().discover(
-            self.comms.runtime, self.comms.settings.arguments,
+            self.comms, self.comms.settings.arguments,
         )
         values = [model.display_name for model in data.models if model.provider and model.id]
         return [
@@ -179,7 +179,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
 
     async def discover(self, thread: Thread) -> list[SessionConfigSelectOption]:
         data = await GetAvailableThinkingLevels().discover(
-            self.comms.runtime, self.comms.settings.parsed_arguments.with_model(thread.model).argv
+            self.comms, self.comms.settings.parsed_arguments.with_model(thread.model).argv
         )
         levels = [member.declared_name for member in data.levels]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
@@ -300,7 +300,7 @@ class SessionConfigOptions(ConfigOptions):
             ThinkingLevel.optional_name(thread.thinking_level)
         )
         state = await command.configure(
-            self.comms.runtime, arguments.argv, worktree=Path(thread.worktree),
+            self.comms, arguments.argv, worktree=Path(thread.worktree),
         )
         model = state.model.display_name
         level = ThinkingLevel.optional_name(state.thinking_level)

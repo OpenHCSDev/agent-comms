@@ -44,6 +44,7 @@ from .private_path import (
 )
 from .registry_store import RegistryStore
 from .native_project import NativeProject, ManagedNativeProject, UnmanagedNativeProject
+from .native_tools import NativeRequestTools
 from .selected_session import SavedSelectedSession, SelectedSession
 from .selected_tool_broker import NativeToolMode
 from .thread_identity import ThreadIncarnation
@@ -104,6 +105,7 @@ def main() -> int:
         raise NativePiUnavailable("Native launch belongs to a different thread incarnation")
     session_context = TurnContext.session_segments(owner)
     environment = dict(os.environ)
+    project = ManagedNativeProject.from_entry(launch.validated_root, entry)
     argv, environment = NativePiRpcLaunch.bootstrap(
         cli,
         tuple(arguments),
@@ -111,9 +113,8 @@ def main() -> int:
         environment,
         RestartEnvironment.inherit(environment),
         LaunchRuntime.current(),
-        session_context=session_context,
+        session_context=session_context, project=project,
     )
-    project = ManagedNativeProject.from_entry(launch.validated_root, entry)
     os.execvpe(argv[0], [*argv, *project.cli_arguments], environment)
     return 0
 
@@ -434,8 +435,9 @@ class NativePiRpcLaunch:
     def bootstrap(
         cls, cli, arguments, cwd, environment, configuration: RestartEnvironment,
         runtime: LaunchRuntime, *, session_context: tuple[ContextSegment, ...],
+        project: NativeProject,
     ):
-        """Render required context using the held native launch configuration."""
+        """Load required integration independently of optional user discovery."""
         context_text = TurnContext.render_segments(session_context).text
         if not context_text.strip():
             raise NativePiUnavailable("Native launch requires nonempty session context")
@@ -458,6 +460,8 @@ class NativePiRpcLaunch:
             "--import",
             str(cli.with_name("agent-comms-project-bootstrap.mjs")),
             str(cli),
+            "-e", str(NativeRequestTools.native_extension(cli.parent.parent)),
+            "-e", str(project.native_extension(cli.parent.parent)),
             *arguments,
             *(argument for segment in session_context for argument in segment.native_arguments()),
             "--append-system-prompt",
@@ -472,31 +476,24 @@ class NativePiRpcLaunch:
                runtime: LaunchRuntime, *, session_context: tuple[ContextSegment, ...],
                project: NativeProject):
         argv, env = cls.bootstrap(cli, arguments, cwd, environment, configuration, runtime,
-                                 session_context=session_context)
+                                 session_context=session_context, project=project)
         return cls(argv, cwd, env, session, package, configuration=configuration, runtime=runtime,
                    project=project)
 
     @classmethod
-    def _package_selection(cls):
-        route = PrivateNkLaunch.current()
-        if route is None:
-            raise NativePiUnavailable("Native execution requires its configured package")
-        return route.native_package, route
-
-    @classmethod
-    def package_for_runtime(cls, runtime: LaunchRuntime) -> Path:
-        """The selected runtime executes against the route's verified native package."""
+    def package_for_runtime(cls, runtime: LaunchRuntime, package: Path) -> Path:
+        """Acquire the explicitly selected installation and SDK artifact."""
         runtime.require_available()
-        package, route = cls._package_selection()
-        route.validate()
+        package = Path(package).absolute()
+        _trusted_package(package)
         return package
 
     @classmethod
     def login(
-        cls, runtime: LaunchRuntime, *, worktree: Path, environment: dict[str, str]
+        cls, runtime: LaunchRuntime, *, package: Path, worktree: Path, environment: dict[str, str]
     ) -> NativePiRpcLaunch:
         """Explicit provider UI has doctrine, not an invented registered owner."""
-        package = cls.package_for_runtime(runtime)
+        package = cls.package_for_runtime(runtime, package)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
@@ -530,6 +527,7 @@ class NativePiRpcLaunch:
         runtime: LaunchRuntime,
         arguments: tuple[str, ...],
         *,
+        package: Path,
         worktree: Path,
     ) -> NativePiRpcLaunch:
         """Metadata-only RPC owns an in-memory session, never a saved selection.
@@ -542,7 +540,7 @@ class NativePiRpcLaunch:
             arguments = NativeArguments.parse(arguments).rpc()
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
-        package = cls.package_for_runtime(runtime)
+        package = cls.package_for_runtime(runtime, package)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
@@ -556,6 +554,7 @@ class NativePiRpcLaunch:
         runtime: LaunchRuntime,
         arguments: tuple[str, ...],
         *,
+        package: Path,
         worktree: Path,
         session_context: tuple[ContextSegment, ...],
         project: NativeProject,
@@ -567,7 +566,7 @@ class NativePiRpcLaunch:
             arguments = NativeArguments.parse(arguments).rpc()
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
-        package = cls.package_for_runtime(runtime)
+        package = cls.package_for_runtime(runtime, package)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
@@ -600,6 +599,7 @@ class NativePiRpcLaunch:
         runtime: LaunchRuntime,
         arguments: tuple[str, ...],
         *,
+        package: Path,
         worktree: Path,
         environment: dict[str, str] | None,
         session_file: str | None,
@@ -612,7 +612,6 @@ class NativePiRpcLaunch:
         launch/auth key and checking its actual saved-source revision/liveness.
         A different package or selected file needs its own fresh acquisition.
         """
-        package, _ = self._package_selection()
         saved = Path(session_file).absolute() if session_file is not None else None
         if runtime != self.runtime or package != self.package or saved != self.session.path:
             return None

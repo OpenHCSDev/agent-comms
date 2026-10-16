@@ -146,9 +146,7 @@ class CodingToolMode(NativeToolMode):
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
         declarations = NativeExecutableTool.members_with(NativeExecutableTool)
         extensions = tuple(dict.fromkeys(tool.native_extension(package) for tool in declarations))
-        # The native package manifest verifies each declaration's extension bytes.
-        if any(not extension.is_file() for extension in extensions):
-            raise SelectedToolDenied("Native tool extension is not installed")
+        # Package acquisition verifies each declaration's extension bytes.
         return ("--tools", ",".join(tool.declared_name for tool in declarations),
                 *(argument for extension in extensions for argument in ("-e", str(extension))))
 

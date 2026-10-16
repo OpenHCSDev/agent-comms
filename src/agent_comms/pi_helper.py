@@ -53,7 +53,7 @@ class RuntimeHelper:
     @classmethod
     def launch(cls, request, environment: dict[str, str]):
         request.runtime.require_available()
-        return ((str(request.runtime.interpreter), "-m", cls.module),
+        return (request.runtime.command("-m", cls.module),
                 request.runtime.environment(environment))
 
 

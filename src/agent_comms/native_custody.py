@@ -156,9 +156,10 @@ class NativeCustody(ABC):
 
     retained = False
 
-    def managed_launch(self, runtime, arguments, *, worktree, environment, session_file,
+    def managed_launch(self, comms, arguments, *, worktree, environment, session_file,
                        session_context: tuple[ContextSegment, ...], project: NativeProject):
-        return NativePiRpcLaunch.managed(runtime, arguments, worktree=worktree,
+        return NativePiRpcLaunch.managed(comms.runtime, arguments,
+            package=comms.owners.native_package, worktree=worktree,
             environment=environment, session_file=session_file, session_context=session_context,
             project=project)
 
@@ -287,18 +288,18 @@ class RetainedNative(ChildNative):
             return self.child
         return None
 
-    def managed_launch(self, runtime, arguments, *, worktree, environment, session_file,
+    def managed_launch(self, comms, arguments, *, worktree, environment, session_file,
                        session_context: tuple[ContextSegment, ...], project: NativeProject):
         if self.current:
             original, authentication = self.child.key
-            candidate = original.retained_managed(runtime, arguments,
-                worktree=worktree, environment=environment, session_file=session_file,
+            candidate = original.retained_managed(comms.runtime, arguments,
+                package=comms.owners.native_package, worktree=worktree, environment=environment, session_file=session_file,
                 session_context=session_context, project=project)
             if candidate is not None and (candidate, candidate.configuration.auth_revision()) == (
                 original, authentication
             ):
                 return original
-        return super().managed_launch(runtime, arguments, worktree=worktree,
+        return super().managed_launch(comms, arguments, worktree=worktree,
             environment=environment, session_file=session_file, session_context=session_context,
             project=project)
 

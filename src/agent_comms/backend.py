@@ -43,7 +43,6 @@ from .native_attestation import AttestationError
 from .native_custody import PiSessionChild
 from .native_project import NativeProject
 from .native_pi import NativePiRpcLaunch
-from .launch_runtime import LaunchRuntime
 from .native_errors import NativePiUnavailable
 from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
@@ -58,6 +57,7 @@ from .turn_usage import UsageAccount
 from .turn_watchdog import ProgressWatchdog, TurnWaitExpired
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .pi_native_backend import PersistentPiSession
     from .turn_context import ContextSegment
 
@@ -111,7 +111,7 @@ async def _maintenance_send_boundary(
 
 
 async def stream_agent_events(
-    runtime: LaunchRuntime,
+    comms: Comms,
     agent_args: Sequence[str],
     task: str,
     cwd: str,
@@ -152,7 +152,7 @@ async def stream_agent_events(
             try:
                 launch = await Coordination.run_worker(partial(
                     persistent_session.custody.managed_launch,
-                    runtime,
+                    comms,
                     tuple(agent_args),
                     worktree=Path(cwd),
                     environment=env_extra,

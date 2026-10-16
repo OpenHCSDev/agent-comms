@@ -13,13 +13,13 @@ from . import agent_events as events
 from . import backend
 from .native_errors import NativePiUnavailable
 from .native_project import NativeProject
-from .launch_runtime import LaunchRuntime
 from .coordinator import Coordination
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence
 from .turn_admission import UnwrittenPrompt
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .pi_native_backend import PersistentPiSession
     from .turn_context import ContextSegment
 
@@ -66,7 +66,7 @@ class NativeSessionPreparation(backend.TurnSession):
     async def open(
         cls,
         persistent: PersistentPiSession,
-        runtime: LaunchRuntime,
+        comms: Comms,
         agent_args: Sequence[str],
         *,
         worktree: str,
@@ -77,13 +77,13 @@ class NativeSessionPreparation(backend.TurnSession):
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         async with persistent.lock:
-            return await cls.open_acquired(persistent, runtime, agent_args,
+            return await cls.open_acquired(persistent, comms, agent_args,
                 worktree=worktree, environment=environment, session_file=session_file,
                 session_context=session_context, project=project, observe=observe)
 
     @classmethod
     async def open_acquired(
-        cls, persistent: PersistentPiSession, runtime: LaunchRuntime, agent_args: Sequence[str], *,
+        cls, persistent: PersistentPiSession, comms: Comms, agent_args: Sequence[str], *,
         worktree: str, environment: dict[str, str], session_file: str,
         session_context: tuple[ContextSegment, ...],
         project: NativeProject,
@@ -93,7 +93,7 @@ class NativeSessionPreparation(backend.TurnSession):
         owner = asyncio.current_task()
         launch = await Coordination.run_worker(partial(
             persistent.custody.managed_launch,
-            runtime, tuple(agent_args), worktree=Path(worktree),
+            comms, tuple(agent_args), worktree=Path(worktree),
             environment=environment, session_file=session_file,
             session_context=session_context,
             project=project,

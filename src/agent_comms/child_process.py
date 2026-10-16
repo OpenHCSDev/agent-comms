@@ -687,13 +687,8 @@ class PosixLaunch(ChildLaunch):
     @property
     def argv(self) -> tuple[str, ...]:
         # The exec gate runs this decoder's code before exec of the selected command.
-        return (
-            str(LaunchRuntime.running().interpreter),
-            "-c",
-            _EXEC_GATE,
-            str(self.read_fd),
-            str(self.error_writer.fileno()),
-            *self.command,
+        return LaunchRuntime.running().command(
+            "-c", _EXEC_GATE, str(self.read_fd), str(self.error_writer.fileno()), *self.command,
         )
 
     @property
@@ -1378,10 +1373,8 @@ class ChildCommand(DeclaredFamily, affix="Command"):
 
     def argv(self) -> tuple[str, ...]:
         # Decode this process's private command with the same declarations that encoded it.
-        return (
-            str(LaunchRuntime.running().interpreter),
-            "-c",
-            "from agent_comms.child_process import ChildCommand; ChildCommand.main()",
+        return LaunchRuntime.running().command(
+            "-c", "from agent_comms.child_process import ChildCommand; ChildCommand.main()",
             json.dumps(FieldCodec.encode(self)),
         )
 

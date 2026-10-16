@@ -292,6 +292,13 @@ class OwnerLifecycle:
 
         RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
 
+    @property
+    def native_package(self) -> Path:
+        """The configured SDK artifact, without granting a worker launch."""
+        if self._private_nk_launch is None:
+            raise PublicationActivationBlocked("Native execution requires a configured package")
+        return self._private_nk_launch.native_package
+
     def require_launch_authority(self) -> PrivateNkLaunch | None:
         """Check this lifecycle's launch authority without reserving a process.
 
@@ -372,7 +379,7 @@ class OwnerLifecycle:
 
         with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
-                (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
+                (*launch_runtime.command("-m", "agent_comms.worker"),
                  *native.cli_arguments, *thread.incarnation.cli_arguments),
                 env=env,
                 cwd=thread.worktree,

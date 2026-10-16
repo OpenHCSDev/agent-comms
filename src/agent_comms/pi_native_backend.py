@@ -214,7 +214,7 @@ class PiNativeBackend(
         ))
         return await open_native(
             self,
-            self.comms.runtime,
+            self.comms,
             self.arguments(thread),
             worktree=thread.worktree,
             environment={"AGENT_COMMS_ROOT": str(self.comms.root)},
@@ -243,7 +243,7 @@ class PiNativeBackend(
         ))
         images = {"images": content.images} if content.images else {}
         async for event in backend.stream_agent_events(
-            self.comms.runtime,
+            self.comms,
             self.arguments(thread),
             content.text,
             delivery.worktree,
@@ -335,9 +335,9 @@ class PiNativeBackend(
     # -- Forks ------------------------------------------------------------
 
     @classmethod
-    async def fork(cls, parent: Thread, runtime: LaunchRuntime) -> PiSessionFile:
+    async def fork(cls, parent: Thread, comms: Comms) -> PiSessionFile:
         """The selected child installation copies the saved session with its SDK."""
-        identity = await fork_native_session(parent.require_saved_session(), parent.worktree, runtime)
+        identity = await fork_native_session(parent.require_saved_session(), parent.worktree, comms)
         return PiSessionFile(identity.session_file)
 
     # -- RecoversAfterCrash -----------------------------------------------
@@ -357,7 +357,7 @@ class PiNativeBackend(
     async def models(self, thread: Thread) -> tuple[str, ...]:
         from .pi_commands import GetAvailableModels
 
-        data = await GetAvailableModels().discover(self.comms.runtime, self.comms.settings.arguments)
+        data = await GetAvailableModels().discover(self.comms, self.comms.settings.arguments)
         return tuple(dict.fromkeys(
             model.display_name for model in data.models if model.provider and model.id
         ))
@@ -377,7 +377,7 @@ class PiNativeBackend(
             raise ValueError("A configuration change names a model or a thinking level")
         arguments = self.arguments(thread)
         for command in commands:
-            state = await command.configure(self.comms.runtime, arguments, worktree=Path(thread.worktree))
+            state = await command.configure(self.comms, arguments, worktree=Path(thread.worktree))
             arguments = self.comms.settings.parsed_arguments.with_model(state.model.display_name).with_thinking(
                 ThinkingLevel.optional_name(state.thinking_level)
             ).argv

@@ -1,87 +1,71 @@
-# Explicit native launch settings — unfinished replacement
+# Native runtime and settings ownership (P18, P40, P41)
 
-Owner: core-goal-retry. Draft #984 supersedes #978 without rewriting its
-published checkpoints. Neither is merged or the default installation.
+Owner: core-native-runtime. Draft #1007 is unfinished; source checkpoints are
+not installation or provider acceptance. P55 owns the forms and ACP/Core split.
+Shepherd owns the separately published caller/acquisition/shutdown changes.
 
-## Ownership and deletion
+## Facts and consumers
 
-`NativeThreadDefaults` owns binary, tuple argv, model and thinking defaults.
-The only process transport is `--native-settings JSON`, encoded and decoded by
-FieldCodec. The FD flag, sealed payload machinery, temporary payload files,
-Linux constants, added pass_fds parameter and constructor type rechecks are
-deleted. No environment reader or legacy fallback replaces them.
+| Fact | Owner | Consumers and removed choices |
+| --- | --- | --- |
+| Selected installation | `Comms.runtime`, implemented by `LaunchRuntime` | Worker launch, native launch, metadata/configuration, fork transport. No settings binary, `sys.executable`, executable-name allowlist or source-stack launcher fallback. |
+| Native arguments and creation defaults | `Comms.settings: NativeThreadDefaults` | Thread management, configuration catalogs, worker construction and CLI. Removed copied native records from CommsAgent, TurnRunner and SessionLifecycle. |
+| Configured native SDK artifact | OwnerLifecycle's existing explicit launch selection | Metadata/native factories and the fork request receive its package explicitly, not another ambient-route lookup. Copying verifies the artifact inside the selected installation. |
+| Python import isolation | `LaunchRuntime.command` | Worker, runtime helper, exec gate and internal child commands use its command. RestoredRuntime preserves its deliberately original import environment. |
+| Fork operation | PiNativeBackend and the existing PiHelper machinery | RuntimeHelper composes the transport with ForkSessionHelper through C3 MRO. The selected installation imports the copying module and runs its SDK. The caller does not run its own copying implementation first. |
+| FULL turn entry | `SelectedExecution.full` | Both direct FULL and TRIAGE→FULL enter it. It alone calls the action/tool selector. The execution owns its attempt limit. |
+| Required integration | NativeRequestTools and NativeProject declarations | NativePiRpcLaunch loads their immutable entries even with discovery disabled. Tool restriction remains the selected mode's existing native arguments. |
+| Extension identity | Native import-fence declarations | Source aliases and packaged entries resolve to one entry. The SDK loader uses its existing loaded-extension collection to avoid initializing one extension twice. No second startup catalog subprocess or new cache. |
 
-Parser construction supplies its typed default explicitly. Namespace lookup
-has no hasattr/default fallback. Comms consumes a decoded CommsRoute and required
-LaunchRuntime, then derives its native defaults; for_runtime, bound and wire
-forwarding factories are deleted. The
-route owns binding, with PinnedRoute sharing the environment/publication facts.
-Read-only recovery/response consumers use their actual bus, release and Goals
-owners instead of constructing launch defaults. SelectedExecution receives its
-caller's Comms rather than reconstructing its configuration from a path.
+A worker identifies the installation already selected by its parent using
+`LaunchRuntime.running()`. It must not follow a changed current pointer. Parent
+exec gates/watchers identify their own installation for a different reason;
+those identities are not merged with the selected native child's identity.
+`running()` identifies `sys.prefix`, not `sys.executable`.
 
-ACP receives a required NativeThreadDefaults instead of optional binary/argv.
-Its callers bind an explicit record; no optional scalar compatibility reader
-remains in CommsAgent. The argument parser's two forwarding configuration
-methods are deleted; consumers read the record and use NativeArguments.parse.
+Settings JSON belongs to the existing JsonFlagRecord/FieldCodec implementation.
+The CLI constructs Comms with its settings at the boundary; Start does not
+replace them. Restart's explicit KeepRecorded/Replace target choice remains
+separate from creation defaults. No FD transport, second codec, environment
+switch, binary override or nullable native constructor argument replaces it.
 
-## Source evidence and checks
+## Source evidence
 
-The initial census had 48 references to the two removed environment keys;
-production/tests/tools now have zero. NRA's pre-change inventories include
-production, tests, tools, paired Toad and the actual metaclass registry:
-1,072 parsed modules, no omissions. One-use byte editors perform the recorded
-constructor migrations; they are not behavioral proof or another audit tool.
-Embedded programs and the paired consumer still require final reconciliation.
+- Initial Python inventory: `.artifacts/native-before-ast.txt`, 1,068 modules,
+  no omissions. The later integration inventory:
+  `.artifacts/native-integration-before-ast.txt`, 1,075 modules, no omissions.
+  Roots include Core production/tests/tools, paired Toad and metaclass_registry.
+- JavaScript inventory: `.artifacts/native-javascript-before-ast.txt` uses Node's
+  existing Acorn parser/visitor for the import fence, SDK loader and resource
+  loader. It enumerates declarations, imports, writes, conditions and consumers.
+- Syntax does not resolve arbitrary callbacks, lazy registry loading or dynamic
+  MRO. Import/parser/MRO checks passed; full focused and installed checks remain.
+- Required uniqueness searches: `rg 'sys.executable|native_defaults|settings.binary|self.agent_bin|self.agent_args|NativeThreadDefaults.from_runtime' src/agent_comms`
+  and `rg 'def full|execution.action\(|max_attempts' src/agent_comms/coordinated_runtime.py src/agent_comms/selected_triage.py`.
+  The first has no matches; the second identifies the shared entry and one
+  attempt-limit declaration. The integration entries' production paths are
+  declared by NativeRequestTools and NativeProject respectively.
 
-The superseded FD checkpoint started an installed worker and loaded it over
-actual official ACP, with zero inputs and exact launch values; its processes
-were retired. That result is retained but does not accept the replacement.
-A real source CLI invocation with explicit JSON settings returned the normal
-tool catalog on an isolated root after the FD deletion.
+Adding a declared executable tool still changes its declaration, not another
+FULL/TRIAGE tool roster. A new native binding supplies its own behavior through
+the existing NativeProject family. Python and Node helper transports share the
+existing bounded exchange and result decoder rather than copying it.
 
-The earlier focused batch had 51 passes and two fixture failures: an obsolete
-SystemExit expectation (the parser raises ValueError) and a direct Unix connect
-that bypasses PrivateSocketRole.address for a long root. Final focused checks,
-ratchet, private wheel and actual JSON-channel native start are unfinished.
+## Remaining acceptance
 
-## Integrated source checkpoint, not installation acceptance
+1. Integrate published caller/acquisition/shutdown and P55 checkpoints normally.
+2. Migrate the affected fixtures without discarding fsync, failed-launch,
+   unsafe-source or explicit offline restrictions; batch focused checks/ratchet.
+3. Rebuild the native artifact for alias identity, then verify the exact wheel.
+4. On fresh isolated roots: saved-history fork using the selected installation;
+   actual TRIAGE→FULL with tools and a nonempty response; default and disabled
+   discovery without duplicate Core initialization; distinct settings across
+   restart and ACP startup. Capture actual process identity/liveness before
+   retained-owner capture. A socket file is not readiness.
 
-The fresh branch includes Codex's checked 0532d3b3 runtime implementation.
-LaunchRuntime/RestartEnvironment live in launch_runtime.py, without re-exports.
-NativeThreadDefaults.from_runtime(runtime) consumes the selected value; the
-sys.executable-based getter is deleted. Workers use running(), not current(),
-and receive a recorded ThreadIncarnation through its declared JSON flag.
-The identity API is based on #965's family at 2979497b plus b38b608c. Later #965
-heads remain to be integrated after review; no competing identity definition
-was retained. The API checkout /home/ts/wt/core-thread-launch-api is retained
-for the active shepherd/#965 consumers.
-
-RestartTarget names selection and complete settings. NativeChoice owns
-KeepRecorded/Replace behavior; normal restart resolves each original's exact
-settings, while explicit flags construct Replace at the CLI boundary. Start
-and creation require complete native values. CliOption extends dataclasses.Field
-and owns its former parser projection; CliRecord composes nested field updates
-through the same option declarations. The overrides dictionary, apply_cli
-wrappers, anonymous target pairs and scalar nullable launch overrides are deleted.
-RegistrySnapshot owns live restart selection instead of six empty requests.
-
-NRA's CLI/restart inventories parse 1,388 modules with no omissions. A source
-application parser check passes KeepRecorded, explicit binary/argv Replace,
-Start's typed default and empty-binary refusal. The source catalog invocation
-reached the normal CLI error boundary but refused an uninitialized private bus
-(no durable marker); its isolated root is preserved. No worker input was sent.
-The old installed FD run does not verify this checkpoint.
-
-Remaining: reconcile the eight explicit-record installed/native fixtures and
-new required start/create signatures, embedded programs, paired Toad, the latest
-#965 family and shepherd's login factory; then final focused checks, ratchet,
-private wheel and actual JSON worker/ACP start. Do not run the unreconciled
-native fixtures: losing their explicit offline/context flags is unsafe.
-The migration helper write returned tool admission UNKNOWN; its destination
-was subsequently absent. That uncertain write was not retried. A separate
-source edit migrated 234 files/820 constructor sites. These are source edits,
-not behavioral proof or a default installation.
-
-#958/#689 GoalDetails remains paused. No uncertain input was replayed; preserved
-sessions, failed roots and original evidence are unchanged.
+The failed 693f root remains immutable and had zero submitted inputs. Its
+original worker exit cause is not proved; the transcript observer fix is a
+separate repair. Parent core-goal-retry owns that diagnosis. UNKNOWN provider,
+wire and file attempts are not replayed. The old FD success does not accept the
+JSON replacement. No default installation or successful provider journey is
+claimed by these source edits.

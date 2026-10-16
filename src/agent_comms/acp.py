@@ -22,6 +22,7 @@ from .runtime_socket import RuntimeSocket
 import asyncio
 import dataclasses
 import json
+import logging
 import os
 import re
 import sys
@@ -58,6 +59,9 @@ from .agent_event_updates import AcpEventConsumer
 from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms
+from .active_route import resolve_comms_route
+from .login import run_login
+from .private_nk_entrypoint import private_nk_from_environment
 from .native_settings import NativeThreadDefaults
 from .launch_runtime import LaunchRuntime
 from .coordination_cohort import next_sealed_assignment
@@ -518,19 +522,11 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    from .active_route import resolve_comms_route
     runtime = LaunchRuntime.current()
     native = NativeThreadDefaults.from_arguments(sys.argv[1:], NativeThreadDefaults())
     with resolve_comms_route().admit_client():
-        if "--login" in sys.argv[1:]:
-            from .login import run_login
-
-            index = sys.argv.index("--login")
-            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "", runtime=runtime)
         debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
         if debug_path:
-            import logging
-
             logging.basicConfig(
                 level=logging.DEBUG,
                 format="%(asctime)s %(name)s %(levelname)s %(message)s",
@@ -539,8 +535,6 @@ def main() -> int:
         # The stdio ACP client only attaches to a separately owned worker. An
         # explicit private launch must be checked before it can create a wire or
         # request an owner; the worker independently repeats the same preflight.
-        from .private_nk_entrypoint import private_nk_from_environment
-
         private_nk = private_nk_from_environment()
         comms = Comms(resolve_comms_route(private_nk.validated_root if private_nk is not None else None),
                             runtime=runtime, settings=native)
@@ -548,6 +542,9 @@ def main() -> int:
             comms.owners.pin_private_nk_launch(
                 private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
             )
+        if "--login" in sys.argv[1:]:
+            index = sys.argv.index("--login")
+            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "", comms=comms)
 
         async def run() -> None:
             if os.environ.get("AGENT_COMMS_DEBUG_LOG"):

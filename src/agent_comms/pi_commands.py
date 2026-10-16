@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
 
 from .turn_phase import ShutdownPhase
-from .launch_runtime import LaunchRuntime
 
 from .native_turn_context import NativeContextData
 from . import agent_events as events
@@ -34,6 +33,7 @@ from .pi_payloads import (
 )
 
 if TYPE_CHECKING:
+    from .comms import Comms
     from .backend import TurnSession
     from .pi_events import Response
     from .pi_rpc import PiRpcChannel
@@ -257,7 +257,7 @@ class CatalogQuery(NativeQuery):
 
     @asynccontextmanager
     async def catalog(
-        self, runtime: LaunchRuntime, arguments: Sequence[str], *, worktree: Path | None = None,
+        self, comms: Comms, arguments: Sequence[str], *, worktree: Path | None = None,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .child_process import BoundedRun
@@ -268,8 +268,9 @@ class CatalogQuery(NativeQuery):
         try:
             launch = await asyncio.to_thread(
                 NativePiRpcLaunch.catalog,
-                runtime,
+                comms.runtime,
                 tuple(arguments),
+                package=comms.owners.native_package,
                 worktree=Path.cwd() if worktree is None else worktree,
             )
             async with BoundedRun.session(
@@ -283,16 +284,16 @@ class CatalogQuery(NativeQuery):
                     await asyncio.gather(stderr, return_exceptions=True)
         except TimeoutError as error:
             raise NativePiUnavailable(
-                f"Native catalog discovery timed out for {runtime.interpreter}: "
+                f"Native catalog discovery timed out for {comms.runtime.interpreter}: "
                 f"within {CATALOG_TIMEOUT} s"
             ) from error
         except (EOFError, ValueError, OSError) as error:
             raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
 
-    async def discover(self, runtime: LaunchRuntime, arguments: Sequence[str]) -> PiResponseData:
+    async def discover(self, comms: Comms, arguments: Sequence[str]) -> PiResponseData:
         from .native_errors import NativePiUnavailable
 
-        async with self.catalog(runtime, arguments) as (channel, writer):
+        async with self.catalog(comms, arguments) as (channel, writer):
             response = await self.exchange(channel, writer)
             if response.success is True:
                 return response.data.require_payload()
@@ -338,7 +339,7 @@ class SettingCommand(CatalogQuery):
     error_message: ClassVar[str]
 
     async def configure(
-        self, runtime: LaunchRuntime, arguments: Sequence[str], *, worktree: Path,
+        self, comms: Comms, arguments: Sequence[str], *, worktree: Path,
     ) -> StateData:
         """Let native settings own validation/defaults, then observe their result.
 
@@ -347,7 +348,7 @@ class SettingCommand(CatalogQuery):
         """
         from .native_errors import NativePiUnavailable
 
-        async with self.catalog(runtime, arguments, worktree=worktree) as (channel, writer):
+        async with self.catalog(comms, arguments, worktree=worktree) as (channel, writer):
             response = await self.exchange(channel, writer)
             if response.success is not True:
                 raise NativePiUnavailable(response.error or self.error_message)

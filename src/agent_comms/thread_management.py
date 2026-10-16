@@ -87,7 +87,7 @@ class NewThreadSpec:
         return self.task if self.prompt is None else self.prompt
 
     @contextmanager
-    def prepared(self, threads: ThreadManagement, runtime: LaunchRuntime) -> Iterator[Thread]:
+    def prepared(self, threads: ThreadManagement) -> Iterator[Thread]:
         from .fresh_private_session import create_fresh_private_session
 
         project = Path(self.project).expanduser().resolve(strict=True)
@@ -134,11 +134,11 @@ class ForkSpec(NewThreadSpec):
         return parent
 
     @contextmanager
-    def prepared(self, threads: ThreadManagement, runtime: LaunchRuntime) -> Iterator[Thread]:
+    def prepared(self, threads: ThreadManagement) -> Iterator[Thread]:
         # Copy saved history outside the wire lock, retaining writer→wire order.
         parent = self._parent(threads)
         threads.registry.require_declaration_available(self.child(parent, parent.require_saved_session()))
-        location = asyncio.run(parent.backend.fork(parent, runtime))
+        location = asyncio.run(parent.backend.fork(parent, threads.comms))
         with _store_lock(threads._wire_lock_path):
             current = self._parent(threads)
             if current.incarnation != parent.incarnation or current.session_file != parent.session_file:
@@ -632,7 +632,7 @@ class ThreadManagement:
         """The selected Comms runtime prepares the copy and starts the child."""
         runtime = self.comms.runtime
         runtime.require_available()
-        with spec.prepared(self, runtime) as child:
+        with spec.prepared(self) as child:
             # A new incarnation's inbox already starts at its creation time
             # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
             child = self.registry._declare_unlocked(child)

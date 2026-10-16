@@ -113,7 +113,8 @@ def main() -> int:
     NativeThreadDefaults.add_cli_arguments(parser, required=True, dest="native_settings")
     ThreadIncarnation.add_cli_arguments(parser, required=True, dest="thread_incarnation")
     namespace = parser.parse_args()
-    runtime = LaunchRuntime.current()
+    # The parent selected this installation before spawning; never reselect the pointer.
+    runtime = LaunchRuntime.running()
     with suppress(KeyboardInterrupt):
         asyncio.run(run(namespace.native_settings, namespace.thread_incarnation, runtime))
     return 0

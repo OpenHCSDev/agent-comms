@@ -7,14 +7,17 @@ import json
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import Annotated, ClassVar, TYPE_CHECKING
 
 from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
 from .native_session_reopen import NativeSessionIdentity
-from .field_codec import FieldCodec
-from .private_nk_entrypoint import PrivateNkLaunch
+from .field_codec import FieldCodec, PathText
+from .native_package import verify_native_package
 from .launch_runtime import LaunchRuntime
 from .pi_helper import PiHelper, PiHelperFailed, RuntimeHelper, SessionHelperRequest
+
+if TYPE_CHECKING:
+    from .comms import Comms
 
 
 @dataclass(frozen=True)
@@ -64,15 +67,13 @@ class RuntimeForkRequest:
     file: str
     cwd: str
     runtime: LaunchRuntime
+    package: Annotated[Path, PathText]
     directory: str | None = None
 
     async def copy(self) -> NativeSessionIdentity:
-        route = PrivateNkLaunch.current()
-        if route is None:
-            raise ValueError("Fork copying requires its configured native package")
-        route.validate()
+        verify_native_package(self.package)
         return await ForkSessionHelper.run(
-            ForkSessionRequest(str(route.native_package), self.file, self.cwd, self.directory),
+            ForkSessionRequest(str(self.package), self.file, self.cwd, self.directory),
             cwd=Path(self.cwd),
         )
 
@@ -85,14 +86,15 @@ class RuntimeForkHelper(RuntimeHelper, ForkSessionHelper):
 
 
 async def fork_native_session(
-    file: str, worktree: str, runtime: LaunchRuntime,
+    file: str, worktree: str, comms: Comms,
 ) -> NativeSessionIdentity:
     """Copy once in the child's installation before entering a wire lock.
 
     A failed helper may have copied bytes or held a native writer lock. Preserve
     that result and the files; never infer success or repeat the request.
     """
-    return await RuntimeForkHelper.run(RuntimeForkRequest(file, worktree, runtime), cwd=Path(worktree))
+    request = RuntimeForkRequest(file, worktree, comms.runtime, comms.owners.native_package)
+    return await RuntimeForkHelper.run(request, cwd=Path(worktree))
 
 
 def main() -> int:

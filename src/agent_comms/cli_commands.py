@@ -1498,8 +1498,6 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
 
 @dataclass(frozen=True, kw_only=True)
 class StartCliCommand(CliCommand):
-    native: NativeThreadDefaults = option(NativeThreadDefaults.value_flag,
-        setting=lambda settings: settings, type=NativeThreadDefaults.from_json, normalize=FieldCodec.encode)
     help = 'Start thread'
     multiple_targets = True
     name: str = option('--name', target_bound=True)
@@ -1507,7 +1505,7 @@ class StartCliCommand(CliCommand):
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         from .tools import CommsStartTool
-        return (cls(name=thread.name, native=comms.settings),) if CommsStartTool.available_for_thread(thread, status) else ()
+        return (cls(name=thread.name),) if CommsStartTool.available_for_thread(thread, status) else ()
 
     @classmethod
     def channel_bindings(cls, comms, channel, *, snapshot=None):
@@ -1520,7 +1518,6 @@ class StartCliCommand(CliCommand):
         return (result.thread,) if result.launched else ()
 
     def apply(self, ctx: Comms, *, caller: ToolCaller) -> Any:
-        ctx.settings = self.native
         return ctx.owners.start(self.name)
 
 

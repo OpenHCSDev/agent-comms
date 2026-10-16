@@ -32,7 +32,7 @@ def main():
     service.views.dm_display_page('phase-alpha', worktree=str(root), limit=1)
     # The ACP configuration owner has another ordinary metadata writer. No
     # backend, session attachment or native operation is started by this call.
-    client = CommsAgent(service, native=service.owners.native_defaults)
+    client = CommsAgent(service)
     config = client.sessions.config
     option = config.catalog_for(ThinkingLevelConfigOption)
     option.persist(config, service.registry.require('phase-alpha'), 'high')
