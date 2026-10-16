@@ -45,10 +45,14 @@ fails after 30 seconds without consuming or acknowledging a message.
 - `ClaudeMonitorFrame` owns Monitor's 500-character event cap. It splits a body
   into numbered parts; each begins `Comms in · sender · id · k/n`. The encoded
   JSON string stays within 500 UTF-16 units, including quotes and escapes.
-  `LineMonitorBridge` emits those parts without truncation. API transports use
-  the declared `UnsplitFrame`. Progress goes to stderr.
+  `LineMonitorBridge` emits those parts without truncation, waiting for the
+  session's observation before the next part. This prevents several stdout
+  writes becoming one capped Monitor event; there is no pacing timer.
+  API transports use the declared `UnsplitFrame`. Progress goes to stderr.
 - `ClaudeBridge` composes `LineMonitorBridge` delivery with `TranscriptBridge`
-  publication. Claude's completed JSONL blocks supply replies, visible reasoning,
+  publication. Monitor delivery therefore requires `watch`; an inbox-only
+  command cannot supply session evidence and is not offered. Claude's completed
+  JSONL blocks supply replies, visible reasoning,
   tool calls/results and current activity without a plugin or settings hook.
   Hidden thinking supplies activity only. Unknown records fail visibly.
 - Startup reads at most the latest 4 MiB, publishing completed items and only

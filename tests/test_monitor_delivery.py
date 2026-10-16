@@ -73,12 +73,14 @@ async def test_parts_require_matching_session_and_complete_exact_body_then_reope
 
 
 @pytest.mark.parametrize('body', ['x'*3000, ('\n"\\😀\t')*500, 'short'])
-def test_frame_cap_and_exact_reconstruction(body):
-    message=Message(sender='claude-code',target='viewer',type=InfoKind,body=body,timestamp=1.,seq=1)
+@pytest.mark.parametrize('sender', ['claude-code', 'a · b " 😀'])
+def test_frame_cap_and_exact_reconstruction(body, sender):
+    message=Message(sender=sender,target='viewer',type=InfoKind,body=body,timestamp=1.,seq=1)
     frame=ClaudeMonitorFrame(message)
     decoded=[ClaudeMonitorFrame.decode_line(json.dumps(part,ensure_ascii=False)) for part in frame.parts]
     assert all(isinstance(part,MonitorPart) for part in decoded)
     assert ''.join(part.body for part in decoded)==body
+    assert all(part.sender==sender for part in decoded)
     assert all(frame.event_size(part)<=frame.EVENT_CHARS for part in frame.parts)
     assert [part.number for part in decoded]==list(range(1,len(decoded)+1))
 

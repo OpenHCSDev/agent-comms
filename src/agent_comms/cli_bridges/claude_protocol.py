@@ -87,15 +87,15 @@ class ClaudeMonitorFrame(IncomingFrame):
         raw_header, separator, _ = line.partition(r'\n')
         if not separator or not line.endswith('"'):
             return ForeignMonitorFrame(text=line)
-        columns = raw_header[1:].split(' · ')
-        if len(columns) != 4:
+        columns = raw_header[1:].rsplit(' · ', 2)
+        if len(columns) != 3:
             return ForeignMonitorFrame(text=line)
         number, slash, total = columns[-1].partition('/')
         if not slash or not number.isdecimal() or not total.isdecimal():
             return ForeignMonitorFrame(text=line)
         decoded = cls.JSON_TEXT.validate_json(line)
         header, _, body = decoded.partition('\n')
-        _, sender, message_id, _ = header.split(' · ')
+        sender, message_id, _ = header.removeprefix(cls.HEADER + ' · ').rsplit(' · ', 2)
         return MonitorPart(id=message_id, sender=sender, number=int(number),
                            total=int(total), body=body)
 
