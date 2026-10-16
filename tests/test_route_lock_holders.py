@@ -1,45 +1,66 @@
-"""A contended scratch route reports the real flock owner without stopping it."""
+"""The installer names all scratch-route readers and waits for both to leave."""
+import asyncio
+import fcntl
 import os
+from contextlib import AsyncExitStack
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-import subprocess
 import sys
+import threading
 
-import pytest
+from agent_comms import active_route, cohort_foreground
+from agent_comms.child_process import AttachedChild
+from agent_comms.comms import Comms
 
-from agent_comms.active_route import acquire_exclusive_route_lock
-from agent_comms.errors import RelationViolationError
 
-
-@pytest.mark.skipif(sys.platform != 'linux', reason='/proc/locks is Linux-specific')
-def test_exclusive_route_lock_names_shared_holder(tmp_path: Path):
-    path = tmp_path / 'route'
-    path.mkdir()
-    script = (
+async def test_route_installer_names_and_waits_for_every_reader(tmp_path: Path, monkeypatch, capsys):
+    comms = Comms(tmp_path / 'wire')
+    root_id = comms.messaging.initialize_private_initial_protocol()
+    route = active_route.ActiveRoute(comms.root, root_id, tmp_path)
+    path = tmp_path / 'route-state' / 'active-route.json'
+    path.parent.mkdir(mode=0o700)
+    # This case exercises the real publisher and kernel locks, not SDK trust.
+    monkeypatch.setattr(cohort_foreground, '_trusted_package', lambda _: None)
+    script = tmp_path / 'bridge-watcher.py'
+    script.write_text(
         'import fcntl, os, sys\n'
         'fd = os.open(sys.argv[1], os.O_RDONLY | os.O_DIRECTORY)\n'
         'fcntl.flock(fd, fcntl.LOCK_SH)\n'
         'sys.stdout.write("locked\\n"); sys.stdout.flush()\n'
         'sys.stdin.read(1)\n'
     )
-    process = subprocess.Popen(
-        [sys.executable, '-c', script, str(path)], stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE, text=True,
-    )
-    try:
-        assert process.stdout.readline() == 'locked\n'
-        directory = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            with pytest.raises(RelationViolationError, match=rf'PID {process.pid}: .*python'):
-                acquire_exclusive_route_lock(directory)
-        finally:
-            os.close(directory)
-    finally:
-        process.stdin.write('x')
-        process.stdin.close()
-        process.wait(timeout=5)
-    assert process.returncode == 0
-    directory = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
-    try:
-        acquire_exclusive_route_lock(directory)
-    finally:
-        os.close(directory)
+    waiting = threading.Event()
+    original_flock = fcntl.flock
+    identity = path.parent.stat()
+
+    def observed_flock(descriptor, operation):
+        current = os.fstat(descriptor)
+        if (operation == fcntl.LOCK_EX
+                and (current.st_dev, current.st_ino) == (identity.st_dev, identity.st_ino)):
+            waiting.set()
+        return original_flock(descriptor, operation)
+
+    monkeypatch.setattr(active_route.fcntl, 'flock', observed_flock)
+    # Children retire before the executor joins even if an assertion fails.
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        async with AsyncExitStack() as lifetime:
+            watchers = []
+            for _ in range(2):
+                watcher = await AttachedChild.start((sys.executable, str(script), str(path.parent)))
+                lifetime.push_async_callback(watcher.stop)
+                assert await asyncio.wait_for(watcher.stdout.readline(), 5) == b'locked\n'
+                watchers.append(watcher)
+            publishing = executor.submit(active_route.publish_active_route, route, path)
+            assert await asyncio.to_thread(waiting.wait, 5)
+            names = capsys.readouterr().err
+            for watcher in watchers:
+                assert f'PID {watcher.identity.pid}:' in names
+            assert 'bridge-watcher.py' in names
+            assert not publishing.done() and not path.exists()
+            await watchers[0].write(b'x')
+            assert (await asyncio.wait_for(watchers[0].wait(), 5)).successful
+            assert not publishing.done() and not path.exists()
+            await watchers[1].write(b'x')
+            assert (await asyncio.wait_for(watchers[1].wait(), 5)).successful
+            publishing.result(timeout=5)
+            assert active_route.read_active_route(path) == route

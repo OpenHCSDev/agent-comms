@@ -21,6 +21,7 @@ from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
+from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
@@ -81,7 +82,7 @@ class MessageNotification:
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
     answer: MessageReference | None = None
-    read_at_ms: int | None = None
+    progress: DeliveryProgress = field(kw_only=True)
     answered_at_ms: int | None = None
     changed: bool = False
 
@@ -100,11 +101,27 @@ class MessageNotification:
             self.answer,
         )
 
+    @classmethod
+    def ordered(cls, notifications: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
+        return tuple(sorted(notifications, key=lambda item: (item.priority, item.recipient.casefold())))
+
+    @classmethod
+    def summary(cls, notifications: Iterable[MessageNotification]) -> str:
+        """One message's state and totals; clients never classify or count agents."""
+        ordered = cls.ordered(notifications)
+        if not ordered:
+            return "No recorded notification result"
+        delivered = sum(notification.progress.delivered for notification in ordered)
+        read = sum(notification.progress.read for notification in ordered)
+        total = len(ordered)
+        return (f"{ordered[0].state} · Delivered {delivered}/{total}"
+                f" · {ReadDelivery.label} {read}/{total}")
+
     @staticmethod
-    def receipt_state(label: str, timestamp_ms: int | None) -> str:
-        """Format a required durable receipt in the viewer's local time."""
+    def timed_state(label: str, timestamp_ms: int | None) -> str:
+        """Format a recorded event in the viewer's local time."""
         if timestamp_ms is None:
-            raise ValueError(f"{label} notification requires a durable receipt time")
+            raise ValueError(f"{label} notification requires a recorded time")
         recorded = datetime.fromtimestamp(timestamp_ms / 1000).astimezone()
         now = datetime.now().astimezone()
         when = recorded.strftime("%H:%M")
@@ -279,10 +296,11 @@ class MessageNotification:
             return None
         return cls(
             recipient,
-            "Read",
+            HumanReadProgress.label,
             "",
             priority=2,
             displayed_to=displayed_to,
+            progress=HumanReadProgress(),
             changed=True,
         )
 
@@ -476,9 +494,7 @@ class BusPresentation:
             raise ValueError(f"{target!r} is not a channel target.")
         with ExitStack() as resources:
             with _store_lock(self._wire_lock_path, shared=True):
-                marker, _, source, stream, records = resources.enter_context(
-                    self.bus.log.page_snapshot()
-                )
+                source = resources.enter_context(self.bus.log._opened_wire_snapshot())
                 with DisplaySelection.reading(
                     self.registry, self.catalog, self.bus.reads, viewer
                 ) as basis:
@@ -487,7 +503,7 @@ class BusPresentation:
             # DM and channel pages borrow the same original reader and source cut.
             page = ConversationMessagePageRequest.capture(
                 scope, before=before, after=after, limit=limit, max_bytes=max_bytes
-            ).read_opened(self.bus.log, marker, source, stream, records)
+            ).read_opened(source)
             if viewer is not None:
                 scope = replace(
                     scope,
@@ -508,9 +524,7 @@ class BusPresentation:
         with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
             if through is None:
                 # Open the bus cut before the registry, as sending a message does.
-                marker, _, source, stream, records = stack.enter_context(
-                    self.bus.log.page_snapshot()
-                )
+                source = stack.enter_context(self.bus.log._opened_wire_snapshot())
             with DisplaySelection.reading(
                 self.registry, self.catalog, self.bus.reads, viewer
             ) as basis:
@@ -529,9 +543,7 @@ class BusPresentation:
             # Explicit Mark Read selects the channel's messages in this whole
             # cut. The page index reads them once the registry is released,
             # because it takes the bus lock.
-            page = MessagePageRequest.every(current).read_opened(
-                self.bus.log, marker, source, stream, records
-            )
+            page = MessagePageRequest.every(current).read_opened(source)
             self.bus.reads.mark_displayed(
                 viewer,
                 self.bus.reads.capture(viewer, page.messages, basis.registry, self.bus.log.path),
@@ -731,7 +743,7 @@ class ThreadView:
                        binding=self.binding)
 
     def _display_presentation(self) -> ThreadPresentation:
-        ordinary = self.status.presentation(self.thread.title or self.thread.name, self.activity)
+        ordinary = self.status.presentation(self.thread.display_title, self.activity)
         if self.status.active:
             return ordinary.status.when_idle(ordinary, self._idle_presentation)
         return ordinary

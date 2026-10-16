@@ -225,6 +225,10 @@ class ThreadProvenance:
     session_file: str | None = None
     title: str | None = None
 
+    @property
+    def display_title(self) -> str:
+        return self.name if self.title is None else self.title
+
     def make_incarnation(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.name, self.created_at)
 

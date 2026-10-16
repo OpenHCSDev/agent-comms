@@ -678,7 +678,10 @@ class ImportThreadCliCommand(CliCommand, declared_name="import-thread"):
 
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand):
-    help = "Invoke one declared adapter tool"
+    help = "Invoke one declared adapter tool, as --from THREAD when given"
+    caller: str | None = option(
+        "--from", default=None, help="Calling thread; omit for tools that need no thread"
+    )
     tool: str = option("--tool")
     arguments: dict[str, Any] = option(
         "--arguments",
@@ -693,7 +696,7 @@ class InvokeCliCommand(CliCommand):
 
         from .tool_caller import ToolCaller
 
-        return invoke_tool(ctx, self.tool, self.arguments, caller=ToolCaller.from_environment(os.environ))
+        return invoke_tool(ctx, self.tool, self.arguments, caller=ToolCaller.from_actor(self.caller))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1346,14 +1349,15 @@ class DeleteCliCommand(CliCommand, declared_name="delete"):
 @dataclass(frozen=True, kw_only=True)
 class RenameSelfCliCommand(CliCommand, declared_name="rename-self"):
     help = "Rename your own running thread"
+    caller: str = option("--from")
     new_name: str = option("--to")
 
     def apply(self, ctx: Comms) -> Any:
         from .tools import CommsRenameSelfTool
-        from .tool_caller import ToolCaller
+        from .tool_caller import ThreadCaller
 
         return CommsRenameSelfTool.invoke(ctx, {"new_name": self.new_name},
-                                         caller=ToolCaller.from_environment(os.environ))
+                                         caller=ThreadCaller(self.caller))
 
 
 @dataclass(frozen=True, kw_only=True)

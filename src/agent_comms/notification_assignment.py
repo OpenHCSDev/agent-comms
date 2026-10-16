@@ -1,4 +1,4 @@
-"""Read-only assignment receipt projection; never an execution or ACK authority."""
+"""Read-only assignment display; never executes or acknowledges work."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from .audience_manifest import FrozenRecipient
 from .coordination_schema import COORDINATION_SCHEMA_VERSION
@@ -16,6 +16,7 @@ from .coordination_tables.publications import PublicationReceipts
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
+from .notification_progress import AssignmentProgress, QueuedProgress, SentProgress, ShownToModelProgress
 from .typed_table import BooleanStorage, SQLiteUserVersion, TypedRow, sql_literal
 
 if TYPE_CHECKING:
@@ -23,105 +24,6 @@ if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
     from .presentation import MessageNotification
     from .wake import NoWakeDecision, WakeDecision
-
-
-class AssignmentProgress(DeclaredFamily, affix="Progress"):
-    """The original model-context receipt owns the displayed read fact."""
-
-    label: ClassVar[str]
-    answered_label: ClassVar[str] = "Answered"
-
-    @property
-    @abstractmethod
-    def at_ms(self) -> int: ...
-
-    def read_fields(self) -> dict[str, int]:
-        """Read facts every notification derived from this progress carries."""
-        return {}
-
-    def labelled(self, notification: MessageNotification, **fields) -> MessageNotification:
-        return replace(
-            notification,
-            state=notification.receipt_state(self.label, self.at_ms),
-            detail="",
-            **self.read_fields(),
-            **fields,
-        )
-
-    @abstractmethod
-    def selected_notification(
-        self, notification: MessageNotification, *, busy: bool
-    ) -> MessageNotification: ...
-
-    @abstractmethod
-    def interrupted_notification(self, notification: MessageNotification) -> MessageNotification: ...
-
-    @abstractmethod
-    def read_notification(self, notification: MessageNotification) -> MessageNotification: ...
-
-    def answered_notification(
-        self, notification: MessageNotification, reference: MessageReference, answered_at_ms: int
-    ) -> MessageNotification:
-        return replace(
-            notification,
-            state=notification.receipt_state(self.answered_label, answered_at_ms),
-            detail="",
-            answer=reference,
-            answered_at_ms=answered_at_ms,
-            **self.read_fields(),
-        )
-
-
-@dataclass(frozen=True)
-class SentProgress(AssignmentProgress):
-    sent_at_ms: int
-
-    label = "Sent"
-    interrupted_label: ClassVar[str] = "Interrupted before read"
-
-    @property
-    def at_ms(self):
-        return self.sent_at_ms
-
-    def selected_notification(self, notification, *, busy):
-        return self.labelled(notification, busy=busy, priority=notification.priority if busy else 3)
-
-    def interrupted_notification(self, notification):
-        return replace(notification, state=self.interrupted_label, detail="", busy=False, priority=3)
-
-    def read_notification(self, notification):
-        raise ValueError("Read notification has no model-context receipt")
-
-
-@dataclass(frozen=True)
-class QueuedProgress(SentProgress):
-    label = "Queued"
-
-    def selected_notification(self, notification, *, busy):
-        return self.labelled(notification, busy=False)
-
-
-@dataclass(frozen=True)
-class ShownToModelProgress(AssignmentProgress):
-    read_at_ms: int
-
-    label = "Read"
-
-    @property
-    def at_ms(self):
-        return self.read_at_ms
-
-    def read_fields(self):
-        return {"read_at_ms": self.read_at_ms}
-
-    def selected_notification(self, notification, *, busy):
-        return self.labelled(notification, busy=busy)
-
-    def interrupted_notification(self, notification):
-        return self.labelled(notification, busy=False, priority=3)
-
-    def read_notification(self, notification):
-        return self.labelled(notification, busy=False, priority=2)
 
 
 class AssignmentContextEvidence(DeclaredFamily, affix="ContextEvidence"):
@@ -192,10 +94,10 @@ class UnansweredResponse(AssignmentResponse):
     def delivered_notification(self, notification, delivered_at_ms):
         return replace(
             notification,
-            state=notification.receipt_state("Read", delivered_at_ms),
+            state=notification.timed_state(ShownToModelProgress.label, delivered_at_ms),
             detail="",
             busy=False,
-            read_at_ms=delivered_at_ms,
+            progress=ShownToModelProgress(delivered_at_ms),
         )
 
 
@@ -212,11 +114,11 @@ class AnsweredResponse(AssignmentResponse):
     def delivered_notification(self, notification, delivered_at_ms):
         return replace(
             notification,
-            state=notification.receipt_state("Answered", self.received_at_ms),
+            state=notification.timed_state(AssignmentProgress.answered_label, self.received_at_ms),
             detail="",
             busy=False,
             answer=self.reference,
-            read_at_ms=delivered_at_ms,
+            progress=ShownToModelProgress(delivered_at_ms),
             answered_at_ms=self.received_at_ms,
         )
 
