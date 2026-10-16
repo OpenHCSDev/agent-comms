@@ -9,9 +9,9 @@ from acp.schema import ToolCallStart
 
 from agent_comms import agent_events as events
 from agent_comms import backend
-from agent_comms.comms import wire
+from agent_comms.comms import Comms
 from agent_comms.native_tools import CodingTool
-from agent_comms.tool_declaration import ToolDeclaration
+from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
 from delivery_owner_fixture import canonical_agent
 
 pytest_plugins = ("test_backend_native_lifecycle",)
@@ -23,8 +23,8 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         label = "Inspect"
 
         @classmethod
-        def detail(cls, arguments):
-            return arguments["query"]
+        def detail(cls, arguments) -> str:
+            return str(arguments["query"])
 
     event = ToolDeclaration.start("case", "inspect_fixture", {"query": "new declaration"})
     assert (event.title, event.kind) == ("Inspect new declaration", "search")
@@ -46,10 +46,34 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         assert event.kind == member.acp_kind and event.args == call.tool.arguments
     unknown = ToolDeclaration.start("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
-        "External Extension",
+        "external_extension",
         "other",
         {"private": "preserved"},
     )
+
+
+def test_core_commands_share_native_identity_without_changing_external_decode():
+    from agent_comms.channel_coding_tools import CodingCall
+    from agent_comms.native_tools import NativeExecutableTool
+    from agent_comms.tools import CommsSendTool, ToolRequest
+
+    assert ToolRequest.__registry__ is CodingTool.__registry__ is ToolDeclaration.__registry__
+    assert isinstance(ToolDeclaration.for_name("EXTERNAL_UNKNOWN"), UndeclaredTool)
+    assert ToolDeclaration.for_name("EXTERNAL_UNKNOWN").label == "EXTERNAL_UNKNOWN"
+    assert "undeclared" not in ToolDeclaration.names()
+    assert all(isinstance(member.label, str) for member in ToolDeclaration.members_with(ToolDeclaration))
+    assert set(NativeExecutableTool.members_with(NativeExecutableTool)) == (
+        set(CodingTool.members_with(CodingTool)) | set(ToolRequest.members_with(ToolRequest))
+    )
+    for request in ToolRequest.members_with(ToolRequest):
+        arguments = {"from": "source", "to": "destination", "body": "decode-only"}
+        call = CodingCall.decode("isolated-call", request.declared_name, arguments)
+        assert call.tool is request and call.arguments == arguments
+        assert call.tool.claim is None
+    assert isinstance(ToolRequest.from_payload({"tool": "comms_send", "from": "source",
+        "to": "destination", "body": "decode-only"}), CommsSendTool)
+    with pytest.raises(ValueError):
+        ToolRequest.decode("read")
 
 
 async def test_actual_native_read_tool_reaches_official_acp_with_declared_presentation(
@@ -143,10 +167,8 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     starts = [event for event in records if isinstance(event, events.ToolStart)]
     ends = [event for event in records if isinstance(event, events.ToolEnd)]
     assert len(starts) == len(ends) == 1
-    # Activity captions have an existing 120-character detail budget. The
-    # external rawInput must still retain the entire native argument below.
-    detail = str(source)
-    expected_title = "Read " + detail[:120] + ("…" if len(detail) > 120 else "")
+    # The declared label/detail own the title; rawInput retains the native argument.
+    expected_title = "Read " + str(source)
     assert starts[0].kind == "read" and starts[0].title == expected_title
     assert ends[0].ok and "ACTUAL_READ_CONTENT" in ends[0].output
     assert len(native.starts) == len(native.saved_inputs()) == 1
@@ -166,7 +188,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
 
 @pytest.fixture
 async def acp_tools(tmp_path):
-    owner = canonical_agent(wire(tmp_path / "sdk-wire"), auto_wake=False)
+    owner = canonical_agent(Comms(tmp_path / "sdk-wire"), auto_wake=False)
     received = asyncio.Queue()
 
     class Client(acp.Client):

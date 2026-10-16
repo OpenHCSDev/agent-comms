@@ -79,7 +79,6 @@ def tool_field(
 @dataclass(frozen=True, kw_only=True)
 class ToolRequest(NativeRequestTools, Command, NativeExecutableTool):
     family_discriminator = "tool"
-    label: ClassVar[str]
     description: ClassVar[str]
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None

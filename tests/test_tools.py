@@ -148,7 +148,9 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
 
     from agent_comms.tools import SubjectBinding, ToolRequest, tool_field
 
-    monkeypatch.setattr(ToolRequest, "__registry__", dict(ToolRequest.__registry__))
+    from agent_comms.tool_declaration import ToolDeclaration
+
+    monkeypatch.setattr(ToolDeclaration, "__registry__", dict(ToolDeclaration.__registry__))
 
     @dataclass(frozen=True, kw_only=True)
     class InspectInboxTool(ToolRequest):

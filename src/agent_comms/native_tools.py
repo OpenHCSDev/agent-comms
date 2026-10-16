@@ -1,8 +1,4 @@
-"""Native tool declarations own presentation and cooperative coding capability.
-
-Pi owns execution and full argument schemas. Unknown extension tools remain
-presentable, without acquiring the CodingTool admission capability.
-"""
+"""Native execution capabilities; shared names and display belong to ToolDeclaration."""
 
 from __future__ import annotations
 
@@ -51,8 +47,8 @@ class NativeRequestTools:
 
 class PathTool:
     @classmethod
-    def detail(cls, arguments: dict[str, Any]) -> object:
-        return arguments.get("path") or arguments.get("file_path")
+    def detail(cls, arguments: dict[str, Any]) -> str:
+        return str(arguments.get("path") or arguments.get("file_path") or "")
 
 
 @dataclass(frozen=True)
@@ -81,6 +77,7 @@ class CodingTool(NativeExecutableTool):
 
 class ReadTool(PathTool, CodingTool):
     acp_kind = "read"
+    label = "Read"
 
     def _parse_resource(self) -> None:
         return None
@@ -91,8 +88,8 @@ class BashTool(CodingTool):
     label = "Run"
 
     @classmethod
-    def detail(cls, arguments: dict[str, Any]) -> object:
-        return arguments.get("command")
+    def detail(cls, arguments: dict[str, Any]) -> str:
+        return str(arguments.get("command") or "")
 
     def _parse_resource(self) -> None:
         return None
@@ -100,6 +97,7 @@ class BashTool(CodingTool):
 
 class EditTool(PathTool, CodingTool):
     acp_kind = "edit"
+    label = "Edit"
 
     @classmethod
     def result_diff(cls, result, ok):
@@ -111,6 +109,7 @@ class EditTool(PathTool, CodingTool):
 
 class WriteTool(PathTool, CodingTool):
     acp_kind = "edit"
+    label = "Write"
 
     def _parse_resource(self) -> FileClaimPath:
         return WritableFileClaim(Path(self.arguments["path"]))
@@ -121,10 +120,10 @@ class GrepTool(ToolDeclaration):
     label = "Search"
 
     @classmethod
-    def detail(cls, arguments: dict[str, Any]) -> object:
+    def detail(cls, arguments: dict[str, Any]) -> str:
         pattern = arguments.get("pattern")
         path = arguments.get("path")
-        return f"{pattern} in {path}" if pattern and path else pattern or path
+        return f"{pattern} in {path}" if pattern and path else str(pattern or path or "")
 
 
 class GlobTool(ToolDeclaration):
@@ -132,5 +131,5 @@ class GlobTool(ToolDeclaration):
     label = "Find"
 
     @classmethod
-    def detail(cls, arguments: dict[str, Any]) -> object:
-        return arguments.get("pattern") or arguments.get("path")
+    def detail(cls, arguments: dict[str, Any]) -> str:
+        return str(arguments.get("pattern") or arguments.get("path") or "")
