@@ -6,7 +6,7 @@ from agent_comms.cli_bridges.shared import (
     ActiveItem, AllTurnsEnded, AppendDraftItem, CompletedItem, DraftAccumulator, FinishedItem,
     FinishedTurn, ParagraphDraft, StartedItem, TextDraft, TurnEnded,
 )
-from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript
 from test_codex_items import _output
 
@@ -114,12 +114,35 @@ def test_time_family_preserves_real_zero_and_unrecorded_completion_fallback(tmp_
         assert row.events[0].timestamp == expected
 
 
-def test_optional_wire_start_preserves_recorded_epoch_zero():
+@pytest.mark.parametrize('wire, state, expected', [
+    ({}, UnrecordedEventTime, 2.0),
+    ({'startedAtMs': None}, UnrecordedEventTime, 2.0),
+    ({'startedAtMs': 0}, RecordedEventTime, 0.0),
+    ({'startedAtMs': 1500}, RecordedEventTime, 1.5),
+])
+def test_wire_start_decoder_selects_time_state(wire, state, expected):
     from agent_comms.cli_bridges.codex_protocol import ItemEntry
 
     entry = ItemEntry(turnId='t', item={'type': 'agentMessage', 'id': 'a', 'text': 'epoch'},
-                      startedAtMs=0, completedAtMs=2000)
-    assert entry.publication().events[0].timestamp == 0.0
+                      completedAtMs=2000, **wire)
+    assert isinstance(entry.started_at, state)
+    assert entry.publication().events[0].timestamp == expected
+
+
+@pytest.mark.parametrize('invalid', [None, True, '0', float('nan'), float('inf')])
+def test_capture_requires_a_real_recorded_timestamp(invalid):
+    with pytest.raises(ValueError, match='finite Unix timestamp'):
+        EventTime.capture(invalid)
+
+
+@pytest.mark.parametrize('invalid', [True, '0', 1.5])
+def test_wire_start_decoder_keeps_strict_integer_input(invalid):
+    from pydantic import ValidationError
+    from agent_comms.cli_bridges.codex_protocol import ItemEntry
+
+    with pytest.raises(ValidationError):
+        ItemEntry(turnId='t', item={'type': 'agentMessage', 'id': 'a', 'text': 'invalid'},
+                  startedAtMs=invalid, completedAtMs=2000)
 
 
 def test_completed_only_sources_do_not_retain_draft_state(tmp_path):
