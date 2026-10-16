@@ -25,6 +25,8 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_states import ActiveGoal
+from .goals import GoalDeadline, NoDeadline
+from .goal_progress import GoalProgress
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
 from .owner_launch import RestartEnvironment
@@ -444,9 +446,12 @@ class CommsSetGoalTool(ToolRequest):
         "start, set, or pursue a goal autonomously."
     )
     text: str = tool_field("Persistent objective to pursue")
+    deadline: GoalDeadline = tool_field("Goal deadline", default_factory=NoDeadline)
 
     def apply(self, comms: Comms) -> JsonObject:
-        goal = comms.goals.update_goal(_executing_thread(), SetGoalAction(text=self.text))
+        goal = comms.goals.update_goal(
+            _executing_thread(), SetGoalAction(text=self.text, deadline=self.deadline)
+        )
         return {
             "goal": goal.to_wire() if goal else None,
             "instruction": (
@@ -470,7 +475,10 @@ class CommsGoalTool(ToolRequest):
     )
     goal_id: str = tool_field("Goal identity provided in the turn context")
     status: type[GoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
-    progress: str = tool_field("Progress summary; blocked requires a nonempty explicit reason")
+    progress: GoalProgress = tool_field(
+        "Progress text or a complete report with stupid, deleted, delivery and next; "
+        "blocked requires a nonempty explicit reason"
+    )
     wait_for: list[str] | None = tool_field(
         "Explicit thread names or @names; required for standby", default=None
     )
@@ -512,7 +520,7 @@ class CommsResumeGoalTool(ToolRequest):
         "request. This does not replace the goal or resume blocked/completed goals."
     )
     goal_id: str = tool_field("Identity of the paused goal to resume")
-    progress: str = tool_field("Progress summary for the resumed goal")
+    progress: GoalProgress = tool_field("Progress text or complete report for the resumed goal")
 
     def apply(self, comms: Comms) -> JsonObject:
         name = _executing_thread()

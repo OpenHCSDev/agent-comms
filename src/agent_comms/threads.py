@@ -295,7 +295,7 @@ class Thread(ThreadProvenance):
             "original_assignment": self.task,
             "current_goal": (None if goal is None else {
                 "text": goal.text, "status": goal.state.declared_name,
-                "progress": goal.progress,
+                "progress": str(goal.progress),
             }),
         }
 

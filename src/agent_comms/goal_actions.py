@@ -23,7 +23,8 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWait, GoalWaits
-from .goals import Goal
+from .goals import Goal, GoalDeadline, NoDeadline
+from .goal_progress import GoalProgress
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -155,7 +156,11 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
 
 @dataclass(frozen=True, kw_only=True)
 class TransitionGoalAction(GoalAction):
-    progress: str | None = None
+    progress: GoalProgress | None = None
+
+    def __post_init__(self) -> None:
+        if self.progress is not None:
+            object.__setattr__(self, "progress", GoalProgress.capture(self.progress))
 
     @abstractmethod
     def next_state(self, ctx: GoalActionContext) -> GoalState: ...
@@ -330,7 +335,9 @@ class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Ru
     def next_state(self, ctx: GoalActionContext) -> GoalState:
         return BlockedGoal(
             required_block_reason(
-                self.block_reason if self.block_reason is not None else self.progress
+                self.block_reason if self.block_reason is not None else (
+                    self.progress.block_reason if self.progress is not None else None
+                )
             )
         )
 
@@ -367,6 +374,7 @@ class ReplacementGoalAction(GoalAction):
 @dataclass(frozen=True, kw_only=True)
 class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
     text: str
+    deadline: GoalDeadline = NoDeadline()
 
     @classmethod
     async def submit_control(cls, observe, invoke, text: str = "") -> dict:
@@ -376,7 +384,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
 
     def change(self, ctx: GoalActionContext) -> Goal:
-        goal = Goal(text=self.text.strip(), id=uuid4().hex, revision=1)
+        goal = Goal(text=self.text.strip(), id=uuid4().hex, revision=1, deadline=self.deadline)
         goal = replace(
             goal,
             mention_source=bind_goal_mentions(

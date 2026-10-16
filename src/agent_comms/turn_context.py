@@ -896,7 +896,7 @@ class GoalSegment(InstructionSegment):
         )
 
     def values(self) -> dict[str, object]:
-        return dict(goal_id=self.goal.id, goal_text=self.goal.text, progress=self.goal.progress)
+        return dict(goal_id=self.goal.id, goal_text=self.goal.text, progress=str(self.goal.progress))
 
 
 @dataclass(frozen=True, kw_only=True)

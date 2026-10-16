@@ -221,7 +221,7 @@ class Goals:
                 f"Dependency wait group ({names}) has no independent worker. "
                 "Standby was released; inspect dependencies and continue useful work."
             )
-            progress = f"{goal.progress}\n\n{note}" if goal.progress else note
+            progress = goal.progress.noted(note)
             self.registry.register(
                 replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
                 snapshot.statuses[canonical],
@@ -295,7 +295,7 @@ class Goals:
                     "Standby was released; inspect messages and UNKNOWN inputs, then "
                     "continue independent work or redelegate. No input was replayed."
                 )
-                progress = f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
+                progress = goal.progress.noted(diagnostic)
                 # Persist the explanation before clearing the wait. A crash
                 # between these writes leaves the active goal in standby;
                 # the periodic closed-wait check can release it later.

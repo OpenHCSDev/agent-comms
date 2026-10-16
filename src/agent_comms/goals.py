@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
+from math import isfinite
 from typing import Literal
 from abc import abstractmethod
 
@@ -11,6 +12,7 @@ from .thread_identity import ThreadIncarnation
 
 from .field_codec import FieldCodec
 from .goal_states import ActiveGoal, GoalState
+from .goal_progress import GoalProgress, TextGoalProgress
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -192,28 +194,55 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
     revision: GoalRevision
 
 
+class GoalDeadline(DeclaredFamily):
+    @abstractmethod
+    def overdue(self, now: float) -> bool: ...
+
+
+@dataclass(frozen=True)
+class NoDeadline(GoalDeadline):
+    def overdue(self, now: float) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class Deadline(GoalDeadline):
+    at: float
+
+    def __post_init__(self) -> None:
+        if type(self.at) not in (int, float) or not isfinite(self.at) or self.at <= 0:
+            raise ValueError("A goal deadline requires a positive finite Unix timestamp.")
+
+    def overdue(self, now: float) -> bool:
+        return now > self.at
+
+
 @dataclass(frozen=True)
 class Goal:
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
 
     text: str
     id: str
-    progress: str = ""
+    progress: GoalProgress = field(default_factory=TextGoalProgress)
     revision: int = 0
     reported_turn: str | None = None
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
+    deadline: GoalDeadline = field(
+        default_factory=NoDeadline, metadata={"wire_omit_default": True}
+    )
 
     def after_failed_turn(self, diagnostic: str) -> Goal:
-        progress = f"{self.progress}\n\n{diagnostic}" if self.progress else diagnostic
-        return self._failure_projection(self.state.after_failed_turn(diagnostic), progress)
+        return self._failure_projection(
+            self.state.after_failed_turn(diagnostic), self.progress.noted(diagnostic)
+        )
 
     def after_unverified_completion(self, diagnostic: str) -> Goal:
         return self._failure_projection(
-            self.state.after_unverified_completion(diagnostic), diagnostic
+            self.state.after_unverified_completion(diagnostic), self.progress.failed(diagnostic)
         )
 
-    def _failure_projection(self, state: GoalState, progress: str) -> Goal:
+    def _failure_projection(self, state: GoalState, progress: GoalProgress) -> Goal:
         if state is self.state:
             return self
         return replace(self, state=state, progress=progress, revision=self.revision + 1)
@@ -222,6 +251,7 @@ class Goal:
         return FieldCodec.encode(self)
 
     def __post_init__(self) -> None:
+        object.__setattr__(self, "progress", GoalProgress.capture(self.progress))
         if not self.text.strip() or not self.id:
             raise ValueError("A goal requires text and an identity.")
         GoalRevision(self.id, self.revision)
