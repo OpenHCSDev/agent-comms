@@ -20,7 +20,7 @@ from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssess
 from agent_comms.execution_states import ExecutionState
 from agent_comms.field_codec import projected
 from agent_comms.typed_table import (
-    Column,
+    Column, GeneratedColumn,
     ForeignKey,
     Index,
     TypedTable,
@@ -65,12 +65,7 @@ class CurrentExecutions(CoordinatorTable, TypedTable):
         if self.pointer_revision < 0:
             raise ValueError("pointer_revision cannot be negative")
 
-    required_active: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={"sql": Column(generated="CASE WHEN execution_id IS NOT NULL THEN 'active' END")},
-    )
+    required_active: str | None = GeneratedColumn(expression="CASE WHEN execution_id IS NOT NULL THEN 'active' END").field()
 
     checks = ("(execution_id IS NULL) = (attempt_ordinal IS NULL)",)
 
@@ -188,135 +183,29 @@ class ExecutionRecord(CoordinatorTable, TypedTable, declared_name="executions"):
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:
             raise ValueError("execution timestamps are inconsistent")
 
-    status: str = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="json_extract(lifecycle, '$.kind')",
-                check="status IN\n      ({execution_names})",
-            ),
-        },
-    )
-    current_attempt_ordinal: int | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="json_extract(lifecycle, '$.ordinal')",
-                check=(
-                    "\n"
+    status: str = GeneratedColumn(expression="json_extract(lifecycle, '$.kind')", check="status IN\n      ({execution_names})").field(snapshot_exclude=True)
+    current_attempt_ordinal: int | None = GeneratedColumn(expression="json_extract(lifecycle, '$.ordinal')", check="\n"
                     "        current_attempt_ordinal IS NULL OR current_attempt_ordin"
                     "al BETWEEN 1 AND max_attempts\n"
-                    "    "
-                ),
-            ),
-        },
-    )
-    required_attempt_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated=(
-                    "CASE\n"
+                    "    ").field(snapshot_exclude=True)
+    required_attempt_kind: str | None = GeneratedColumn(expression="CASE\n"
                     "        WHEN status = 'active' THEN 'active'\n"
                     "        WHEN status = 'completed' THEN 'succeeded'\n"
-                    "    END"
-                )
-            ),
-        },
-    )
-    active_execution_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN status = 'active' THEN execution_id END"),
-        },
-    )
-    active_attempt_ordinal: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN status = 'active' THEN current_attempt_ordinal END"),
-        },
-    )
-    wire_execution_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN origin = 'wire' THEN execution_id END"),
-        },
-    )
-    wire_claim_ordinal: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN origin = 'wire' THEN 0 END"),
-        },
-    )
-    claim_status_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated=(
-                    "CASE\n"
+                    "    END").field(snapshot_exclude=True)
+    active_execution_id: str | None = GeneratedColumn(expression="CASE WHEN status = 'active' THEN execution_id END").field(snapshot_exclude=True)
+    active_attempt_ordinal: int | None = GeneratedColumn(expression="CASE WHEN status = 'active' THEN current_attempt_ordinal END").field(snapshot_exclude=True)
+    wire_execution_id: str | None = GeneratedColumn(expression="CASE WHEN origin = 'wire' THEN execution_id END").field(snapshot_exclude=True)
+    wire_claim_ordinal: int | None = GeneratedColumn(expression="CASE WHEN origin = 'wire' THEN 0 END").field(snapshot_exclude=True)
+    claim_status_kind: str | None = GeneratedColumn(expression="CASE\n"
                     "        WHEN status IN ({engaged_execution_names}) THEN 'engaged"
                     "'\n"
-                    "        ELSE status END"
-                )
-            ),
-        },
-    )
-    deferred_replay_id: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated=(
-                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
+                    "        ELSE status END").field(snapshot_exclude=True)
+    deferred_replay_id: str | None = GeneratedColumn(expression="CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
                     " NULL\n"
-                    "              THEN execution_id END"
-                )
-            ),
-        },
-    )
-    deferred_replay_required: int | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated=(
-                    "CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
+                    "              THEN execution_id END").field(snapshot_exclude=True)
+    deferred_replay_required: int | None = GeneratedColumn(expression="CASE WHEN status = 'deferred' AND current_attempt_ordinal IS NOT"
                     " NULL\n"
-                    "              THEN 1 END"
-                )
-            ),
-        },
-    )
+                    "              THEN 1 END").field(snapshot_exclude=True)
     checks = (
         (
             "(status IN ({unstarted_execution_names}) AND current_attempt_ord"

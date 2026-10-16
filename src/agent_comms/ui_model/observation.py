@@ -65,16 +65,16 @@ class ObservationRequest(ABC):
     """A UI request; each declares how the service receives it."""
 
     @abstractmethod
-    def receive(self, service: ObservationService) -> None: ...
+    def receive(self, service: ReadService) -> None: ...
 
 
 class InterestRequest(ObservationRequest):
     """Changes what is observed; the service observes again."""
 
     @abstractmethod
-    def observation(self, service: ObservationService) -> Observation: ...
+    def observation(self, service: ReadService) -> Observation: ...
 
-    def receive(self, service: ObservationService) -> None:
+    def receive(self, service: ReadService) -> None:
         observation = self.observation(service)
         kind = type(observation)
         service.observations[kind] = observation.for_interest(service.observations.get(kind))
@@ -97,7 +97,7 @@ class Observation(ABC, Generic[InterestT]):
     @abstractmethod
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]: ...
 
-    def after_read(self, service: ObservationService) -> None:
+    def after_read(self, service: ReadService) -> None:
         """Subscribe to completion when this observation has unfinished preparation."""
 
 
@@ -161,7 +161,7 @@ class AwaitedRead(ObservationRequest):
 class ReadRequest(AwaitedRead):
     """A read of Core's stores, served one at a time in arrival order."""
 
-    def receive(self, service: ObservationService) -> None:
+    def receive(self, service: ReadService) -> None:
         service.pending[self.request_id] = self
         service.changed.set()
 
@@ -189,10 +189,10 @@ class OwnerRead(AwaitedRead):
 
     owner: ThreadIncarnation
 
-    def receive(self, service: ObservationService) -> None:
+    def receive(self, service: ReadService) -> None:
         service.owner_reads[self.request_id] = asyncio.ensure_future(self.serve(service))
 
-    async def serve(self, service: ObservationService) -> None:
+    async def serve(self, service: ReadService) -> None:
         try:
             answer = await self.answer(service.comms)
         finally:
@@ -231,7 +231,7 @@ class CancelRead(ObservationRequest):
 
     request_id: int
 
-    def receive(self, service: ObservationService) -> None:
+    def receive(self, service: ReadService) -> None:
         service.pending.pop(self.request_id, None)
         if (asking := service.owner_reads.pop(self.request_id, None)) is not None:
             asking.cancel()
@@ -379,8 +379,8 @@ class ObserveSidebar(InterestRequest):
     show_stopped: bool
     show_archived: bool
 
-    def observation(self, service: ObservationService) -> SidebarReading:
-        return SidebarReading(self, service)
+    def observation(self, service: ReadService) -> SidebarReading:
+        return service.sidebar(self)
 
     def _answer(
         self, revision: WireRevision, read: Callable[[], CoordinationSnapshot]
@@ -429,7 +429,7 @@ class SidebarReading(Observation[ObserveSidebar]):
         self.published: SidebarResult | None = None
         self.preparation: Future[ReplyIndexBatch] | None = None
 
-    def after_read(self, service: ObservationService) -> None:
+    def after_read(self, service: ReadService) -> None:
         preparation = service.comms.views.transcript_reads.preparation
         if preparation is None or preparation is self.preparation:
             return
@@ -439,7 +439,7 @@ class SidebarReading(Observation[ObserveSidebar]):
             lambda _: loop.call_soon_threadsafe(self.prepared, service)
         )
 
-    def prepared(self, service: ObservationService) -> None:
+    def prepared(self, service: ReadService) -> None:
         if service.observations.get(type(self)) is self:
             self.sent = None
             service.observe_again()
@@ -453,7 +453,7 @@ class SidebarReading(Observation[ObserveSidebar]):
             stage = self.stage
             try:
                 result = self.request._answer(revision, lambda: stage.read(
-                    self.request, comms, self.service.bind_viewer(self.request.worktree)))
+                    self.request, comms, self.service.viewer))
             except RouteIndexRebuilding:
                 # Continue bounded preparation, letting the service accept and
                 # serve foreground requests between every bounded unit.
@@ -479,7 +479,7 @@ class SidebarSent:
 
 @dataclass(frozen=True)
 class StopSidebar(ObservationRequest):
-    def receive(self, service: ObservationService) -> None:
+    def receive(self, service: ReadService) -> None:
         service.observations.pop(SidebarReading, None)
 
 
@@ -487,7 +487,7 @@ class StopSidebar(ObservationRequest):
 class StopObserving(ObservationRequest):
     """Views are retiring; finish their outstanding reads without observing more state."""
 
-    def receive(self, service: ObservationService) -> None:
+    def receive(self, service: ReadService) -> None:
         service.observations.clear()
 
 
@@ -495,7 +495,7 @@ class StopObserving(ObservationRequest):
 class ObserveThreads(InterestRequest):
     names: frozenset[str]
 
-    def observation(self, service: ObservationService) -> ThreadReading:
+    def observation(self, service: ReadService) -> ThreadReading:
         return ThreadReading(self)
 
 
@@ -506,7 +506,7 @@ class ObserveViews(InterestRequest):
     threads: frozenset
     channels: frozenset[str]
 
-    def observation(self, service: ObservationService) -> ViewReading:
+    def observation(self, service: ReadService) -> ViewReading:
         return ViewReading(self)
 
 
@@ -516,7 +516,7 @@ class ObserveNotifications(InterestRequest):
 
     reads: frozenset[ReadNotifications]
 
-    def observation(self, service: ObservationService) -> NotificationReading:
+    def observation(self, service: ReadService) -> NotificationReading:
         return NotificationReading(self)
 
 
@@ -599,7 +599,7 @@ class ServiceResult(ABC):
     """What the service sends; each declares how the UI side receives it."""
 
     @abstractmethod
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None: ...
+    def received(self, process: ReadObservationProcess, observed: list[Observed]) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -608,7 +608,7 @@ class Observed(ServiceResult):
 
     revision: WireRevision
 
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+    def received(self, process: ReadObservationProcess, observed: list[Observed]) -> None:
         observed.append(self)
 
 
@@ -617,7 +617,7 @@ class ReadAnswered(ServiceResult):
     request_id: int
     value: object
 
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+    def received(self, process: ReadObservationProcess, observed: list[Observed]) -> None:
         if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
             waiter.set_result(self.value)
 
@@ -632,7 +632,7 @@ class ReadBusy(ServiceResult):
     def title(self) -> str:
         return "History loading"
 
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+    def received(self, process: ReadObservationProcess, observed: list[Observed]) -> None:
         # Keep the same waiter. The service owns waiting for the source and
         # answers this request when its next observation can acquire a read.
         pass
@@ -646,7 +646,7 @@ class ReadRefused(ServiceResult):
     error: Exception
     trace: str
 
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+    def received(self, process: ReadObservationProcess, observed: list[Observed]) -> None:
         if (waiter := process.reads.pop(self.request_id, None)) is not None and not waiter.done():
             self.error.add_note(f"Raised in the comms observation service:\n{self.trace}")
             waiter.set_exception(self.error)
@@ -745,7 +745,7 @@ class ObservationFailed(ServiceResult):
 
     error: str
 
-    def received(self, process: ObservationProcess, observed: list[Observed]) -> None:
+    def received(self, process: ReadObservationProcess, observed: list[Observed]) -> None:
         raise process.ended(self.error)
 
 
@@ -766,30 +766,11 @@ class ObserverDied(CoordinationError):
         super().__init__(f"The comms observer (pid {pid}) {how}" + (f":\n{error}" if error else ""))
 
 
-class HumanViewerBinding:
-    def bind(self, comms: Comms, worktree: str) -> BoundHumanViewer:
-        raise NotImplementedError
-
-
-class UnboundHumanViewer(HumanViewerBinding):
-    def bind(self, comms: Comms, worktree: str) -> BoundHumanViewer:
-        return BoundHumanViewer(comms.messaging.user_identity(worktree))
-
-
-@dataclass(frozen=True, slots=True)
-class BoundHumanViewer(HumanViewerBinding):
-    viewer: Thread
-
-    def bind(self, comms: Comms, worktree: str) -> BoundHumanViewer:
-        return self
-
-
-class ObservationService:
+class ReadService:
     """The child process side: one Comms service, the UI's interest, and what was sent."""
 
     def __init__(self, comms, connection: Connection):
         self.comms = comms
-        self.viewer_binding: HumanViewerBinding = UnboundHumanViewer()
         self.connection = connection
         self.observations: dict[type[Observation], Observation] = {}
         self.changed = asyncio.Event()
@@ -801,10 +782,8 @@ class ObservationService:
         self.owner_reads: dict[int, asyncio.Future] = {}
         self.closed = False
 
-    def bind_viewer(self, worktree: str) -> Thread:
-        """The first sidebar binds its real project; later interests keep that human."""
-        self.viewer_binding = self.viewer_binding.bind(self.comms, worktree)
-        return self.viewer_binding.viewer
+    def sidebar(self, request: ObserveSidebar) -> SidebarReading:
+        raise TypeError('A sidebar requires an observer constructed with its human viewer')
 
     def receive(self) -> None:
         while self.connection.poll():
@@ -902,13 +881,25 @@ class ObservationService:
             self.comms.views.transcript_reads.close()
 
 
-def serve(route: CommsRoute, connection: Connection) -> None:
+class ObservationService(ReadService):
+    """The sidebar capability adds its caller's already bound human."""
+
+    def __init__(self, comms, connection: Connection, viewer: Thread):
+        super().__init__(comms, connection)
+        self.viewer = viewer
+
+    def sidebar(self, request: ObserveSidebar) -> SidebarReading:
+        return SidebarReading(request, self)
+
+
+def serve(route: CommsRoute, connection: Connection, service: type[ReadService],
+          viewers: tuple[Thread, ...]) -> None:
     """Observe the caller's selected route, including its reviewed native package."""
     from agent_comms.comms import wire
 
     try:
         with route.admit_client():
-            asyncio.run(ObservationService(wire(route), connection).run())
+            asyncio.run(service(wire(route), connection, *viewers).run())
     except BaseException:
         try:
             connection.send(ObservationFailed(traceback.format_exc()))
@@ -919,14 +910,16 @@ def serve(route: CommsRoute, connection: Connection) -> None:
         connection.close()
 
 
-class ObservationProcess(AbstractContextManager):
+class ReadObservationProcess(AbstractContextManager):
     """Own reader retirement, awaited reads, the pipe and the joined service, in that order."""
 
+    service = ReadService
+
     @classmethod
-    def awaited(cls, route: CommsRoute) -> Self:
+    def awaited(cls, route: CommsRoute, *viewers: Thread) -> Self:
         """Attach readiness to the process lifetime, not a suspended generator's finalizer."""
         loop = asyncio.get_running_loop()
-        process = cls(route)
+        process = cls(route, *viewers)
         descriptor = process.fileno()
         try:
             loop.add_reader(descriptor, process.results)
@@ -936,7 +929,7 @@ class ObservationProcess(AbstractContextManager):
         process._resources.callback(loop.remove_reader, descriptor)
         return process
 
-    def __init__(self, route: CommsRoute):
+    def __init__(self, route: CommsRoute, *viewers: Thread):
         self._resources = ExitStack()
         self.request_ids = itertools.count(1)
         self.reads: dict[int, asyncio.Future] = {}
@@ -947,7 +940,7 @@ class ObservationProcess(AbstractContextManager):
             self.connection, child = context.Pipe()
             acquisition.enter_context(self.connection)
             with child:
-                self.process = context.Process(target=serve, args=(route, child), daemon=False,
+                self.process = context.Process(target=serve, args=(route, child, self.service, viewers), daemon=False,
                                                name="agent-comms-observation")
                 self.process.start()
             self._resources.callback(self.process.join)
@@ -1031,3 +1024,12 @@ class ObservationProcess(AbstractContextManager):
 
     def close(self) -> None:
         self._resources.close()
+
+
+class ObservationProcess(ReadObservationProcess):
+    """A sidebar observer always starts with its existing human identity."""
+
+    service = ObservationService
+
+    def __init__(self, route: CommsRoute, viewer: Thread):
+        super().__init__(route, viewer)

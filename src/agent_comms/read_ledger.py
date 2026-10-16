@@ -8,9 +8,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
-from .typed_table import Column, Index, TypedStore, TypedTable
+from .typed_table import Column, GeneratedColumn, In, TypedStore, TypedTable
+from .field_codec import JsonShapeFamily, JsonShapeMember, projected
 from .private_path import FileIdentity, FileRevision
-from .read_basis import Conversation, DisplayBasis, DisplayedConversation
+from .read_basis import Conversation, ConversationIdentity, DisplayBasis, DisplayedConversation
 from .sealed import Sealed
 from .thread_identity import ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
@@ -22,10 +23,17 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
+ReadIdentity = tuple[float, ConversationIdentity]
+
+
 @dataclass(frozen=True, slots=True)
 class ConversationKey:
     viewer: ThreadIncarnation
     conversation: Conversation
+
+    @projected(view='wire')
+    def identity(self) -> ReadIdentity:
+        return self.viewer.created_at, self.conversation.identity
 
     def resolved(self, snapshot):
         return type(self)(self.viewer.resolved(snapshot), self.conversation.resolved(snapshot))
@@ -123,12 +131,51 @@ class ReadMask:
         return frozenset(n for state in self.conversations.values() for n in state.sparse)
 
 
+class ReadNotice(DeclaredFamily, JsonShapeFamily, affix='ReadNotice'):
+    def take(self, ledger: ReadLedger) -> ReadNotice:
+        raise NotImplementedError
+
+    def __bool__(self) -> bool:
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, slots=True)
+class NoReadNotice(ReadNotice, JsonShapeMember):
+    value: None = None
+
+    def take(self, ledger: ReadLedger) -> ReadNotice:
+        return self
+
+    def __bool__(self) -> bool:
+        return False
+
+    def __str__(self) -> str:
+        return ''
+
+
+@dataclass(frozen=True, slots=True)
+class ReadMarkerNotice(ReadNotice, JsonShapeMember):
+    value: str
+
+    def take(self, ledger: ReadLedger) -> ReadNotice:
+        return ledger.take_notice(self)
+
+    def __bool__(self) -> bool:
+        return True
+
+    def __str__(self) -> str:
+        return self.value
+
+
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
-    messages: dict[ConversationKey, ReadProgress] = field(default_factory=dict)
-    bus_identity: tuple[int, int] | None = None
-    transcripts: dict[TranscriptKey, int] = field(default_factory=dict)
-    notice: str | None = None
+    messages: dict[ConversationKey, ReadProgress]
+    source: ReadSource
+    transcripts: dict[TranscriptKey, int]
+    notice: ReadNotice
+
+    def transcript_seen(self, viewer, source, inode):
+        return self.transcripts.get(TranscriptKey.capture(viewer, source, inode), 0)
 
     def normalized(self, snapshot):
         messages = {}
@@ -138,7 +185,7 @@ class ReadDocument:
         return replace(self, messages=messages)
 
     def memberships(self, snapshot: RegistryProvenance, source: FileIdentity) -> dict[str, ReadMask]:
-        if self.bus_identity != (source.device, source.inode):
+        if self.source != PresentReadSource(source):
             return {}
         viewers = {}
         for key, state in self.messages.items():
@@ -185,16 +232,13 @@ class ReadTable:
 
 @dataclass(frozen=True)
 class ReadHeaderRow(ReadTable, TypedTable):
-    id: int = field(default=1, metadata={'sql': Column(primary_key=True)})
-    bus_identity: tuple[int, int] | None = None
-    notice: str | None = None
+    source: ReadSource
+    notice: ReadNotice = field(metadata={'sql': Column(nullable=True)})
+    id: int = field(default=1, metadata={'sql': Column(primary_key=True, check='id=1')})
 
     @classmethod
     def current(cls, connection):
-        rows = cls.select(connection)
-        if not rows:
-            return cls()
-        current, = rows
+        current, = cls.select(connection, id=1)
         return current
 
 
@@ -202,54 +246,32 @@ class ReadHeaderRow(ReadTable, TypedTable):
 class ReadMessageRow(ReadTable, TypedTable):
     key: ConversationKey = field(metadata={'sql': Column(primary_key=True)})
     progress: ReadProgress
-    viewer_birth: float = field(init=False, compare=False, repr=False,
-        metadata={'sql': Column(generated="json_extract(key,'$.viewer.created_at')")})
-    target: str = field(init=False, compare=False, repr=False,
-        metadata={'sql': Column(generated="json_extract(key,'$.conversation.target')")})
-    indexes = (Index(('viewer_birth', 'target')),)
+    viewer_birth: float = GeneratedColumn(expression="json_extract(key,'$.viewer.created_at')", index=True).field()
+    identity: ReadIdentity = GeneratedColumn(expression="json_extract(key,'$.identity')", index=True).field()
     without_rowid = True
-
-    def remove(self, connection):
-        key, = self._fields_named(('key',))
-        connection.execute(f'DELETE FROM "{self.declared_name}" WHERE key=?',
-                           (key.encode(self.key),))
 
     @classmethod
     def selected(cls, connection, snapshot, sources):
-        """Decode progress only for the visible conversations and their viewers."""
-        births, conversations = set(), set()
+        """Query exact viewer/conversation identities, including stable alias births."""
+        identities = set()
         for source in sources:
             message = source.message
-            conversations.add(Conversation.from_message(message, snapshot).resolved(snapshot))
+            conversation = Conversation.from_message(message, snapshot)
             names = {recipient.canonical_thread for recipient in source.audience.recipients}
-            names.add(message.target)
+            if conversation.participants:
+                names.add(message.target)
             for name in names:
-                participant = snapshot.threads.get(snapshot.canonical_name(name))
-                if participant is not None:
-                    births.add(participant.created_at)
-        if not births or not conversations:
-            return {}
-        targets = {conversation.target for conversation in conversations}
-        where = ('viewer_birth IN (' + ','.join('?' for _ in births) + ') AND target IN ('
-                 + ','.join('?' for _ in targets) + ')')
-        key_field, progress_field = cls._fields_named(('key', 'progress'))
-        messages = {}
-        for key_value, progress_value in connection.execute(
-            f'SELECT key,progress FROM "{cls.declared_name}" WHERE {where}',
-            (*births, *targets),
-        ):
-            key = key_field.decode(key_value)
-            if key.conversation.resolved(snapshot) in conversations:
-                messages[key] = progress_field.decode(progress_value)
-        return messages
+                viewer = snapshot.participant(name).incarnation
+                identities.add(ConversationKey(viewer, conversation).identity)
+        return {row.key: row.progress for row in cls.select(connection, identity=In(tuple(identities)))}
 
 
 @dataclass(frozen=True)
 class ReadTranscriptRow(ReadTable, TypedTable):
     key: TranscriptKey = field(metadata={'sql': Column(primary_key=True)})
     through: int
-    viewer_name: str = field(init=False, compare=False, repr=False,
-        metadata={'sql': Column(generated="json_extract(key,'$.viewer')", index=True)})
+    viewer_name: str = GeneratedColumn(expression="json_extract(key,'$.viewer')", index=True).field()
+    source_name: str = GeneratedColumn(expression="json_extract(key,'$.source')", index=True).field()
     without_rowid = True
 
 
@@ -262,12 +284,14 @@ class ReadViewers(DeclaredFamily, affix='Viewers'):
 
 
 @dataclass(frozen=True, slots=True)
-class AllViewers(ReadViewers):
+class SelectedViewers(ReadViewers):
+    incarnations: tuple[ThreadIncarnation, ...]
+
     def messages(self, connection):
-        return ReadMessageRow.select(connection)
+        return ReadMessageRow.select(connection, viewer_birth=In(tuple(p.created_at for p in self.incarnations)))
 
     def transcripts(self, connection):
-        return ReadTranscriptRow.select(connection)
+        return ReadTranscriptRow.select(connection, viewer_name=In(tuple(p.name for p in self.incarnations)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,6 +303,17 @@ class OneViewer(ReadViewers):
 
     def transcripts(self, connection):
         return ReadTranscriptRow.select(connection, viewer_name=self.incarnation.name)
+
+
+@dataclass(frozen=True, slots=True)
+class TranscriptViewer(ReadViewers):
+    name: str
+
+    def messages(self, connection):
+        return ()
+
+    def transcripts(self, connection):
+        return ReadTranscriptRow.select(connection, viewer_name=self.name)
 
 
 class ReadRevision(DeclaredFamily, affix='ReadRevision'):
@@ -312,42 +347,32 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
         messages = viewers.messages(connection)
         transcripts = viewers.transcripts(connection)
         return ReadDocument(
-            {row.key: row.progress for row in messages}, header.bus_identity,
+            {row.key: row.progress for row in messages}, header.source,
             {row.key: row.through for row in transcripts}, header.notice,
         )
 
     @contextmanager
-    def reading(self, viewers: ReadViewers):
+    def snapshot(self):
         if not self.path.exists():
-            yield ReadDocument()
-            return
+            raise FileNotFoundError(self.path)
+        with super().snapshot() as connection:
+            yield connection
+
+    @contextmanager
+    def reading(self, viewers: ReadViewers):
         with self.snapshot() as connection:
             yield self._document(connection, viewers)
 
-    def read(self):
-        with self.reading(AllViewers()) as document:
+    def read(self, viewers: ReadViewers):
+        with self.reading(viewers) as document:
             return document
 
-    @classmethod
-    def _replace(cls, connection, document):
-        for row in cls.rows:
-            connection.execute(f'DELETE FROM "{row.declared_name}"')
-        ReadHeaderRow(bus_identity=document.bus_identity, notice=document.notice).insert(connection)
-        for key, progress in document.messages.items():
-            ReadMessageRow(key, progress).insert(connection)
-        for key, through in document.transcripts.items():
-            ReadTranscriptRow(key, through).insert(connection)
-
-    def replace(self, document):
+    def create(self, source: ReadSource, notice: ReadNotice):
+        """Explicit fresh-root/cutover creation, never a reader's fallback."""
+        if self.path.exists():
+            raise FileExistsError(self.path)
         with self.writing() as connection:
-            self._replace(connection, document)
-
-    def _update(self, change):
-        with self.writing() as connection:
-            original = self._document(connection, AllViewers())
-            changed = change(original)
-            if changed is not original:
-                self._replace(connection, changed)
+            ReadHeaderRow(source, notice).insert(connection)
 
     def source_paths(self):
         return self.path, self.path.with_name(self.path.name + '-wal')
@@ -392,16 +417,14 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
         def advance(prefix):
             with self.writing() as connection:
                 header = ReadHeaderRow.current(connection)
-                if header.bus_identity != displayed.bus_identity:
-                    connection.execute(f'DELETE FROM "{ReadMessageRow.declared_name}"')
-                    replace(header, bus_identity=displayed.bus_identity).upsert(connection)
+                source = PresentReadSource(FileIdentity(*displayed.bus_identity))
+                if header.source != source:
+                    ReadMessageRow.delete(connection)
+                    replace(header, source=source).upsert(connection)
                 for item in displayed.conversations:
                     conversation = item.conversation.resolved(snapshot)
                     key = ConversationKey(displayed.viewer_identity.resolved(snapshot), conversation)
-                    retained = tuple(row for row in ReadMessageRow.select(
-                        connection, where='viewer_birth=? AND target=?',
-                        parameters=(key.viewer.created_at, conversation.target),
-                    ) if row.key.resolved(snapshot) == key)
+                    retained = ReadMessageRow.select(connection, identity=key.identity)
                     state = ReadProgress()
                     for row in retained:
                         state = state.merge(row.progress)
@@ -409,7 +432,7 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
                     if len(retained) == 1 and retained[0].key == key and marked == state:
                         continue
                     for row in retained:
-                        row.remove(connection)
+                        ReadMessageRow.delete(connection, key=row.key)
                     ReadMessageRow(key, marked).upsert(connection)
 
         log = WireLog(bus_path)
@@ -424,41 +447,27 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
             # Preserve exact paint even when compaction's disposable index is busy.
             advance(lambda conversation, state: PrefixUnavailable())
 
-    def take_notice(self, shown):
-        if shown is None:
-            return None
-        taken = None
-        def take(document):
-            nonlocal taken
-            if shown is None or document.notice != shown:
-                return document
-            taken = shown
-            return replace(document, notice=None)
-        self._update(take)
-        return taken
-
-    def observations(self, snapshot, source: ReadSource, *, document=None):
-        document = self.read() if document is None else document
-        return source.memberships(document, snapshot)
+    def take_notice(self, shown: ReadMarkerNotice) -> ReadNotice:
+        with self.writing() as connection:
+            header = ReadHeaderRow.current(connection)
+            if header.notice != shown:
+                return NoReadNotice()
+            replace(header, notice=NoReadNotice()).upsert(connection)
+            return shown
 
     def observations_for(self, snapshot, sources, identity: ReadSource):
         """Read only visible conversation rows; never materialize the whole ledger."""
-        if not sources or not self.path.exists():
+        if not sources:
             return {}
         with self.snapshot() as connection:
             header = ReadHeaderRow.current(connection)
             messages = ReadMessageRow.selected(connection, snapshot, sources)
-        return identity.memberships(ReadDocument(messages, header.bus_identity), snapshot)
+        return identity.memberships(ReadDocument(messages, header.source, {}, header.notice), snapshot)
 
-    def membership(self, viewer, snapshot, source: ReadSource, *, document=None):
-        name = snapshot.canonical_name(viewer)
-        participant = snapshot.threads.get(name)
-        if participant is None:
-            return ReadMask()
-        if document is None:
-            with self.reading(OneViewer(participant.incarnation)) as selected:
-                return self.observations(snapshot, source, document=selected).get(name, ReadMask())
-        return self.observations(snapshot, source, document=document).get(name, ReadMask())
+    def membership(self, viewer, snapshot, source: ReadSource):
+        participant = snapshot.participant(viewer)
+        with self.reading(OneViewer(participant.incarnation)) as document:
+            return source.memberships(document, snapshot).get(participant.incarnation.name, ReadMask())
 
     def displayed_recipient(self, message, recipient, snapshot, *, readers):
         name = snapshot.canonical_name(recipient.canonical_thread)
@@ -483,29 +492,26 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
     def remove_threads(self, threads: Sequence[Thread]):
         if not threads:
             return
-        viewers = {thread.incarnation for thread in threads}
-        names = {thread.name for thread in threads}
-        sources = {str(Path(thread.session_file).resolve()) for thread in threads if thread.session_file}
-        def remove(document):
-            messages = {k: v for k, v in document.messages.items() if k.viewer not in viewers}
-            transcripts = {k: v for k, v in document.transcripts.items() if k.source not in sources and k.viewer not in names}
-            return (document if messages == document.messages and transcripts == document.transcripts
-                    else replace(document, messages=messages, transcripts=transcripts))
-        self._update(remove)
+        births = tuple(thread.created_at for thread in threads)
+        names = tuple(thread.name for thread in threads)
+        sources = tuple(str(Path(thread.session_file).resolve()) for thread in threads if thread.session_file)
+        with self.writing() as connection:
+            ReadHeaderRow.current(connection)
+            ReadMessageRow.delete(connection, viewer_birth=In(births))
+            ReadTranscriptRow.delete(connection, viewer_name=In(names))
+            ReadTranscriptRow.delete(connection, source_name=In(sources))
 
-    def transcript_seen(self, viewer, source, inode, *, document=None):
+    def transcript_seen(self, viewer, source, inode):
         key = TranscriptKey.capture(viewer, source, inode)
-        if document is not None:
-            return document.transcripts.get(key, 0)
-        if not self.path.exists():
-            return 0
         with self.snapshot() as connection:
+            ReadHeaderRow.current(connection)
             row = ReadTranscriptRow.one(connection, key=key)
             return row.through if row is not None else 0
 
     def mark_transcript(self, viewer, source, inode, through, size):
         key = TranscriptKey.capture(viewer, source, inode)
         with self.writing() as connection:
+            ReadHeaderRow.current(connection)
             previous = ReadTranscriptRow.one(connection, key=key)
             if previous is not None and previous.through <= size and previous.through >= through:
                 return

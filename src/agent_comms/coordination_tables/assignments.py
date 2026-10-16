@@ -21,7 +21,7 @@ from agent_comms.envelope_claim_transitions import AssignmentBinding
 from agent_comms.field_codec import projected
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
-    Column,
+    Column, GeneratedColumn,
     ForeignKey,
     Index,
     TypedTable,
@@ -187,76 +187,12 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
     def durable_key(self) -> tuple[str, int]:
         return (self.recipient_lookup, self.wire_seq)
 
-    exact_target: str | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="json_extract(lifecycle, '$.decision.exact_target')",
-                check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256",
-            ),
-        },
-    )
-    wake_mode: str = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="({assignment_mode})", check="wake_mode IN ({wake_names})"),
-        },
-    )
-    triage_verdict: str | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="({assignment_verdict})",
-                check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')",
-            ),
-        },
-    )
-    disposition: str = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="json_extract(lifecycle, '$.kind')",
-                check="disposition IN ({assignment_names})",
-            ),
-        },
-    )
-    execution_id: str | None = dataclass_field(
-        init=False,
-        compare=False,
-        repr=False,
-        default=None,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(
-                generated="json_extract(lifecycle, '$.decision.execution_id')",
-            ),
-        },
-    )
-    claim_status_kind: str | None = dataclass_field(
-        init=False,
-        default=None,
-        compare=False,
-        metadata={
-            "snapshot_exclude": True,
-            "sql": Column(generated="CASE WHEN execution_id IS NOT NULL THEN disposition END"),
-        },
-    )
+    exact_target: str | None = GeneratedColumn(expression="json_extract(lifecycle, '$.decision.exact_target')", check="exact_target IS NULL OR length(exact_target) BETWEEN 1 AND 256").field(snapshot_exclude=True)
+    wake_mode: str = GeneratedColumn(expression="({assignment_mode})", check="wake_mode IN ({wake_names})").field(snapshot_exclude=True)
+    triage_verdict: str | None = GeneratedColumn(expression="({assignment_verdict})", check="triage_verdict IS NULL OR triage_verdict IN ('ignore', 'engage')").field(snapshot_exclude=True)
+    disposition: str = GeneratedColumn(expression="json_extract(lifecycle, '$.kind')", check="disposition IN ({assignment_names})").field(snapshot_exclude=True)
+    execution_id: str | None = GeneratedColumn(expression="json_extract(lifecycle, '$.decision.execution_id')").field(snapshot_exclude=True)
+    claim_status_kind: str | None = GeneratedColumn(expression="CASE WHEN execution_id IS NOT NULL THEN disposition END").field(snapshot_exclude=True)
     checks = ("COALESCE(({assignment_binding}), 0)",)
     unique = (("recipient_lookup", "wire_seq"), ("assignment_id", "execution_id"))
     indexes = (Index(("execution_id",), unique=False, where=None),)

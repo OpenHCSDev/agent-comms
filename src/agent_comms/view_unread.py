@@ -408,7 +408,7 @@ class TranscriptReadState(ThreadOwnedState):
             )
 
     def counts(
-        self, viewer: str, sources: Mapping[str, str], *, document: ReadDocument | None = None
+        self, viewer: str, sources: Mapping[str, str], *, document: ReadDocument
     ) -> TranscriptUnread:
         # Counts never wait for native decoding or another in-process reader.
         if self._cancelled.is_set():
@@ -416,7 +416,6 @@ class TranscriptReadState(ThreadOwnedState):
         if not self._lock.acquire(blocking=False):
             raise CoordinationReadUnavailable("Transcript counts are being read")
         try:
-            document = self.reads.read() if document is None else document
             try:
                 return self._counts_locked(viewer, sources, document)
             except sqlite3.DatabaseError as error:
@@ -450,9 +449,7 @@ class TranscriptReadState(ThreadOwnedState):
                     pending.add(name)
                 else:
                     completed[name] = index
-                    seen = self.reads.transcript_seen(
-                        viewer, source, revision.identity.inode, document=document
-                    )
+                    seen = document.transcript_seen(viewer, source, revision.identity.inode)
                     if seen > revision.size:
                         seen = 0  # Only truncation invalidates a cursor beyond the indexed prefix.
                     ends[source] = seen

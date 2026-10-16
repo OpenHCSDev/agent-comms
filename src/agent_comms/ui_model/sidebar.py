@@ -14,6 +14,7 @@ from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ThreadView
+from agent_comms.read_ledger import ReadNotice, NoReadNotice
 from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_presentation import ThreadPresentationStatus
@@ -165,8 +166,8 @@ class SidebarModel:
         return self.snapshot.channel_order if self.snapshot is not None else NameChannelSort
 
     @property
-    def read_marker_notice(self) -> str | None:
-        return self.snapshot.read_marker_notice if self.snapshot is not None else None
+    def read_marker_notice(self) -> ReadNotice:
+        return self.snapshot.read_marker_notice if self.snapshot is not None else NoReadNotice()
 
     @property
     def filters(self) -> tuple[bool, bool] | None:

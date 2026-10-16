@@ -49,7 +49,7 @@ from .goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
-from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, GeneratedColumn, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 
 
 class GoalAttemptError(RuntimeError):
@@ -227,29 +227,9 @@ class AttemptRecord(GoalLedgerTable, TypedTable):
     progress_witness: str | None
     resolution: str | None
 
-    attempt_id: str | None = field(
-        default=None,
-        init=False,
-        compare=False,
-        metadata={"sql": Column(unique=True, generated="json_extract(reservation,'$.attempt_id')")},
-    )
-    goal_id: str | None = field(
-        default=None,
-        init=False,
-        compare=False,
-        metadata={
-            "sql": Column(
-                generated="json_extract(reservation,'$.goal_id')",
-                references=(Generation, "goal_id"),
-            )
-        },
-    )
-    generation: int | None = field(
-        default=None,
-        init=False,
-        compare=False,
-        metadata={"sql": Column(generated="json_extract(reservation,'$.generation')")},
-    )
+    attempt_id: str | None = GeneratedColumn(unique=True, expression="json_extract(reservation,'$.attempt_id')").field()
+    goal_id: str | None = GeneratedColumn(expression="json_extract(reservation,'$.goal_id')", references=(Generation, "goal_id")).field()
+    generation: int | None = GeneratedColumn(expression="json_extract(reservation,'$.generation')").field()
     unique = (("goal_id", "generation"),)
     checks = (f"json_extract(phase,'$.kind') IN {GoalAttemptPhase.sql_choices()}",)
 

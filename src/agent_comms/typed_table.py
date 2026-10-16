@@ -14,7 +14,7 @@ import types
 from abc import abstractmethod
 from collections.abc import Callable, Generator, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack, closing, contextmanager
-from dataclasses import dataclass, fields
+from dataclasses import MISSING, Field, dataclass, field, fields
 from enum import Enum, IntEnum, IntFlag
 from functools import lru_cache
 from pathlib import Path
@@ -247,9 +247,35 @@ class Column:
     references: tuple[type[TypedTable], str] | None = None
     check: str | None = None
     index: bool = False
-    generated: str | None = None
     storage: type[SqlStorage] | None = None
     nullable: bool = False  # SQLite NULL may decode to a mandatory nominal value.
+    writable: ClassVar[bool] = True
+
+    def definition(self) -> str:
+        return ''
+
+    def compile(self, item: Field, annotation: object) -> _Field:
+        return _Field(item.name, item.init, annotation,
+                      _base_type(annotation)[1] or self.nullable,
+                      self.storage or SqlStorage.for_type(annotation), self,
+                      compile_decoder(annotation))
+
+
+@dataclass(frozen=True, kw_only=True)
+class GeneratedColumn(Column):
+    expression: str
+    writable: ClassVar[bool] = False
+
+    def field(self, **metadata: object) -> Field:
+        return field(init=False, compare=False, repr=False, metadata={**metadata, 'sql': self})
+
+    def definition(self) -> str:
+        return f' GENERATED ALWAYS AS ({self.expression}) STORED'
+
+    def compile(self, item: Field, annotation: object) -> _Field:
+        if item.init or item.default is not MISSING or item.default_factory is not MISSING:
+            raise TypeError('A generated column has no constructor field or default')
+        return super().compile(item, annotation)
 
 
 @dataclass(frozen=True)
@@ -302,6 +328,32 @@ class _Field:
         return self.value.decode(None if value is None else self.storage.from_sql(value))
 
 
+class Predicate:
+    def clause(self, item: _Field) -> tuple[str, tuple]:
+        raise NotImplementedError
+
+    @classmethod
+    def capture(cls, value: object) -> Predicate:
+        return value if isinstance(value, cls) else Equal(value)
+
+
+@dataclass(frozen=True)
+class Equal(Predicate):
+    value: object
+
+    def clause(self, item: _Field) -> tuple[str, tuple]:
+        return f'{_identifier(item.name)} IS ?', (item.encode(self.value),)
+
+
+@dataclass(frozen=True)
+class In(Predicate):
+    values: tuple[object, ...]
+
+    def clause(self, item: _Field) -> tuple[str, tuple]:
+        values = tuple(item.encode(value) for value in self.values)
+        return (f'{_identifier(item.name)} IN ({", ".join("?" for _ in values)})', values)
+
+
 def sql_literal(value: str | None | type[DeclaredFamily]) -> str:
     """Quote a declaration-owned SQL constant, never a query parameter."""
     text = FieldCodec.decode(str | None, FieldCodec.encode(value))
@@ -317,18 +369,8 @@ class TypedRow:
         if not cls.__dataclass_params__.frozen:
             raise TypeError("SQLite row declarations must be frozen dataclasses")
         hints = get_type_hints(cls, include_extras=True)
-        return tuple(
-            _Field(
-                item.name,
-                item.init,
-                hints[item.name],
-                _base_type(hints[item.name])[1] or item.metadata.get("sql", Column()).nullable,
-                item.metadata.get("sql", Column()).storage or SqlStorage.for_type(hints[item.name]),
-                item.metadata.get("sql", Column()),
-                compile_decoder(hints[item.name]),
-            )
-            for item in fields(cls)
-        )
+        return tuple(item.metadata.get('sql', Column()).compile(item, hints[item.name])
+                     for item in fields(cls))
 
     @classmethod
     def columns(cls) -> tuple[str, ...]:
@@ -483,8 +525,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             sql = f"{_identifier(item.name)} {item.storage.sql_type}"
             if column.auto_increment:
                 sql += " PRIMARY KEY AUTOINCREMENT"
-            if column.generated is not None:
-                sql += f" GENERATED ALWAYS AS ({column.generated}) STORED"
+            sql += column.definition()
             if not item.nullable or column.primary_key:
                 sql += " NOT NULL"
             if column.unique:
@@ -538,15 +579,20 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
             db.execute(statement)
 
     @classmethod
+    def _where(cls, where: str, parameters: tuple, key: dict[str, object]) -> tuple[str, tuple]:
+        clauses = tuple(Predicate.capture(key[item.name]).clause(item)
+                        for item in cls._fields_named(tuple(key)))
+        if clauses:
+            where = '(' + where + ') AND ' + ' AND '.join(sql for sql, _ in clauses)
+            parameters = (*parameters, *(value for _, values in clauses for value in values))
+        return where, parameters
+
+    @classmethod
     def _query(
         cls, db: sqlite3.Connection, where: str, parameters: tuple,
         order_by: tuple[str, ...], descending: bool, key: dict[str, object]
     ) -> sqlite3.Cursor:
-        selected = cls._fields_named(tuple(key))
-        if selected:
-            where = "(" + where + ") AND " + " AND ".join(
-                f"{_identifier(item.name)} IS ?" for item in selected)
-            parameters = (*parameters, *(item.encode(key[item.name]) for item in selected))
+        where, parameters = cls._where(where, parameters, key)
         cls._fields_named(order_by)
         direction = " DESC" if descending else ""
         return db.execute(
@@ -585,6 +631,12 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return cls.iterate(cls._query(db, where, parameters, order_by, descending, key))
 
     @classmethod
+    def delete(cls, db: sqlite3.Connection, *, where: str = '1', parameters: tuple = (),
+               **key: object) -> sqlite3.Cursor:
+        where, parameters = cls._where(where, parameters, key)
+        return db.execute(f'DELETE FROM {_identifier(cls.declared_name)} WHERE {where}', parameters)
+
+    @classmethod
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
         rows = cls.select(db, **key)
         if len(rows) > 1:
@@ -592,7 +644,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return next(iter(rows), None)
 
     def _insertion(self) -> tuple[str, tuple]:
-        writable = tuple(item for item in self._fields() if item.column.generated is None)
+        writable = tuple(item for item in self._fields() if item.column.writable)
         return (
             f"INSERT INTO {_identifier(self.declared_name)} "
             f"({self._column_list(tuple(item.name for item in writable))}) "
@@ -610,7 +662,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         updates = tuple(
             item.name
             for item in self._fields()
-            if not item.column.primary_key and item.column.generated is None
+            if not item.column.primary_key and item.column.writable
         )
         statement += f" ON CONFLICT ({self._column_list(keys)}) DO "
         statement += (
@@ -633,7 +685,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         selected = cls._fields_named(tuple(changes))
         if not selected:
             raise ValueError(f"Update requires fields for {cls.declared_name}")
-        if any(item.column.generated is not None for item in selected):
+        if any(not item.column.writable for item in selected):
             raise ValueError("Generated columns cannot be updated")
         return db.execute(
             f"UPDATE {_identifier(cls.declared_name)} SET "

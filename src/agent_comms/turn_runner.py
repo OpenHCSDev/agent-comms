@@ -303,10 +303,10 @@ class TurnRunner:
             snapshot = self.comms.registry.snapshot()
             from .read_ledger import ReadSource
             with self.comms.bus.log.certified_read() as source:
-                message = source.delivery(sent_seq).message
+                delivery = source.delivery(sent_seq)
                 identity = ReadSource.from_revision(source.witness.revision)
-            readers = self.comms.bus.reads.observations(snapshot, identity)
-            return any(name != thread_name and mask.contains(message)
+            readers = self.comms.bus.reads.observations_for(snapshot, (delivery,), identity)
+            return any(name != thread_name and mask.contains(delivery.message)
                        for name, mask in readers.items())
         return False
 

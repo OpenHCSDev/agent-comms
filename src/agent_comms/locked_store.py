@@ -61,7 +61,7 @@ class JsonDocument(ABC, Generic[T]):
 
     def _encode(self, value: T) -> Any:
         """Owners with an established external shape may project that encoding."""
-        return FieldCodec.encode(value)
+        return FieldCodec.encode(value, self.record_type)
 
     def read(self) -> T:
         return self._read_unlocked()

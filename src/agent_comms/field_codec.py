@@ -69,11 +69,11 @@ class WireValue(FieldRepresentation):
 
     @classmethod
     def encode(cls, value: WireValue) -> Any:
-        return FieldCodec.encode(value.to_wire())
+        return FieldCodec.encode(value.to_wire(), Any)
 
     @classmethod
     def decode(cls, value: object) -> Self:
-        FieldCodec.encode(value)  # Custom forms still cross the JSON boundary.
+        compile_decoder(Any).decode(value)  # A custom external form is declared opaque JSON.
         return cls.from_wire(value)
 
 

@@ -67,7 +67,7 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
     ) -> dict[str, Any]:
         # The owner decodes once; proxies preserve the owner's error envelope.
         return {"action": FieldCodec.encode(cls), "thread": thread,
-                **FieldCodec.encode(parameters)}
+                **FieldCodec.encode(parameters, dict[str, Any])}
 
     def require_owner(self, snapshot):
         owner = snapshot.require(self.thread)

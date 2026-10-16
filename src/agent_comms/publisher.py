@@ -40,7 +40,8 @@ from .errors import (
 )
 from .mentions import ThreadMention
 from .messages import Message
-from .private_path import FileRevision
+from .private_path import FileIdentity, FileRevision
+from .read_ledger import NoReadNotice, PresentReadSource, ReadLedger
 from .private_registry_guard import _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import StoreLock, _store_lock
@@ -209,6 +210,8 @@ class Publisher:
                 )
             )
             install_private_bus_checkpoint(self.log, _bus_locked=True)
+            ReadLedger(self.log.path.parent).create(
+                PresentReadSource(FileIdentity.from_stat(self.log.path.stat())), NoReadNotice())
             guard.commit_initial()
             return root_id
 

@@ -17,7 +17,7 @@ from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.typed_table import (
-    Column,
+    Column, GeneratedColumn,
     ExactStorage,
     ForeignKey,
     TypedTable,
@@ -106,9 +106,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
         if self.message.message_id != self.expected_message_id:
             raise IntegrityViolationError("expected message id does not match Message authority")
 
-    obligation_intent_required: int | None = dataclass_field(
-        init=False, compare=False, metadata={"sql": Column(generated="1")}
-    )
+    obligation_intent_required: int | None = GeneratedColumn(expression="1").field()
 
     @classmethod
     def references(cls):
@@ -211,9 +209,7 @@ class PublicationReceipts(CoordinatorTable, TypedTable):
         }
     )
     received_at_ms: int = dataclass_field(metadata={"sql": Column(check="received_at_ms >= 0")})
-    obligation_receipt_required: int | None = dataclass_field(
-        init=False, compare=False, metadata={"sql": Column(generated="1")}
-    )
+    obligation_receipt_required: int | None = GeneratedColumn(expression="1").field()
 
     @classmethod
     def references(cls):

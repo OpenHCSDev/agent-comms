@@ -8,7 +8,7 @@ from typing import Type
 
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
-    Column,
+    Column, GeneratedColumn,
     ExactStorage,
     ForeignKey,
     Index,
@@ -103,12 +103,7 @@ def test_new_row_declaration_needs_no_other_edit():
             compare=False,
             metadata={"sql": Column(primary_key=True, auto_increment=True)},
         )
-        label_size: int | None = field(
-            default=None,
-            init=False,
-            compare=False,
-            metadata={"sql": Column(generated="length(label)")},
-        )
+        label_size: int | None = GeneratedColumn(expression="length(label)").field()
 
     @dataclass(frozen=True)
     class Projection(TypedRow):

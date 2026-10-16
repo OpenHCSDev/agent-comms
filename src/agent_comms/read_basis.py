@@ -28,10 +28,17 @@ if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
 
 
+ConversationIdentity = tuple[str, tuple[float, ...]]
+
+
 @dataclass(frozen=True, slots=True)
 class Conversation:
     target: str = ""
     participants: tuple[ThreadIncarnation, ...] = ()
+
+    @property
+    def identity(self) -> ConversationIdentity:
+        return self.target, tuple(sorted(p.created_at for p in self.participants))
 
     def current(self, snapshot: RegistryProvenance) -> bool:
         return all(participant.current(snapshot) for participant in self.participants)

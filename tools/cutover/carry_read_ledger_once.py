@@ -13,7 +13,12 @@ from pathlib import Path
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.field_codec import FieldCodec
 from agent_comms.read_basis import Conversation
-from agent_comms.read_ledger import ConversationKey, ReadDocument, ReadLedger, ReadProgress, TranscriptKey, PrefixUnavailable
+from agent_comms.private_path import FileIdentity
+from agent_comms.read_ledger import (
+    AbsentReadSource, ConversationKey, NoReadNotice, PrefixUnavailable, PresentReadSource,
+    ReadDocument, ReadHeaderRow, ReadLedger, ReadMarkerNotice, ReadMessageRow, ReadProgress,
+    ReadTranscriptRow, TranscriptKey,
+)
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.thread_identity import ThreadIncarnation
 
@@ -55,14 +60,31 @@ def carry(source, destination, registry, index_root):
         viewer, path, inode = FieldCodec.decode(tuple[str, str, int], json.loads(raw))
         key = TranscriptKey.capture(viewer, path, inode)
         transcripts[key] = max(transcripts.get(key, 0), through)
-    document = ReadDocument(messages, old.bus_identity, transcripts, old.notice)
-    ReadLedger(destination.parent).replace(document)
+    source_identity = (AbsentReadSource() if old.bus_identity is None else
+                       PresentReadSource(FileIdentity(*old.bus_identity)))
+    notice = NoReadNotice() if old.notice is None else ReadMarkerNotice(old.notice)
+    document = ReadDocument(messages, source_identity, transcripts, notice)
+    ledger = ReadLedger(destination.parent)
+    ledger.create(source_identity, notice)
+    with ledger.writing() as connection:
+        for key, progress in messages.items():
+            ReadMessageRow(key, progress).insert(connection)
+        for key, through in transcripts.items():
+            ReadTranscriptRow(key, through).insert(connection)
+    # Only this temporary carry tool intentionally materializes every stored row.
+    with ledger.snapshot() as connection:
+        header = ReadHeaderRow.current(connection)
+        exported = ReadDocument(
+            {row.key: row.progress for row in ReadMessageRow.select(connection)}, header.source,
+            {row.key: row.through for row in ReadTranscriptRow.select(connection)}, header.notice,
+        )
+    assert exported == document, 'Canonical carry did not round-trip exactly'
     assert source.read_bytes() == original, 'Original changed during export; output is not installation-ready'
     return {'source_sha256': hashlib.sha256(original).hexdigest(),
             'source_bytes': len(original), 'destination_bytes': destination.stat().st_size,
             'conversations': len(messages), 'sparse_sequences': sum(len(p.sparse) for p in messages.values()),
             'prefixes': sum(bool(p.read_through) for p in messages.values()),
-            'original_unchanged': True}
+            'original_unchanged': True, 'round_trip_equal': True}
 
 
 def main():

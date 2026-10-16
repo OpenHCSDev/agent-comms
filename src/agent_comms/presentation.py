@@ -25,7 +25,7 @@ from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
 from .read_ledger import (ReadLedger, ReadMask, ReadSource, AbsentReadSource,
-                          ReadRevision, AllViewers, OneViewer)
+                          ReadRevision, SelectedViewers, OneViewer, ReadNotice, NoReadNotice)
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
@@ -384,7 +384,8 @@ class DisplaySelection:
         """
         with registry.store.reading() as document, catalog.reading() as channels:
             snapshot = document.snapshot()
-            viewers = OneViewer(snapshot.participant(viewer).incarnation) if viewer is not None else AllViewers()
+            viewers = (OneViewer(snapshot.participant(viewer).incarnation) if viewer is not None else
+                       SelectedViewers(tuple(thread.incarnation for thread in snapshot.threads.values())))
             with reads.reading(viewers) as read_document:
                 selected = cls.capture(snapshot, channels, read_document, viewer, source)
             yield selected
@@ -464,7 +465,7 @@ class BusPresentation:
             *(view.channel.name for view in snapshot.channels),
         }
         snapshot = replace(
-            snapshot, read_marker_notice=self.bus.reads.take_notice(basis.document.notice)
+            snapshot, read_marker_notice=basis.document.notice.take(self.bus.reads)
         )
         return replace(snapshot, unread_pending=frozenset(pending))
 
@@ -776,7 +777,7 @@ class CoordinationSnapshot:
     unread_pending: frozenset[str] = frozenset()
     show_stopped: bool = True
     show_archived: bool = False
-    read_marker_notice: str | None = None
+    read_marker_notice: ReadNotice = NoReadNotice()
 
     @classmethod
     def capture(
@@ -784,7 +785,7 @@ class CoordinationSnapshot:
         agents: AgentActivity, declarations: Mapping[str, Channel],
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
         unread: Mapping[str, int], channel_unread: Mapping[str, int],
-        show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
+        show_stopped: bool, show_archived: bool, read_marker_notice: ReadNotice = NoReadNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
         activities = agents.all_activity(snapshot=registry)

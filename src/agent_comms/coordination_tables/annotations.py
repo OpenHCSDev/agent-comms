@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar
 
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.typed_table import Column, Index, TypedTable, sql_literal
+from agent_comms.typed_table import Column, GeneratedColumn, Index, TypedTable, sql_literal
 from agent_comms.working_memory_questions import SpanQuestion
 from agent_comms.message_reference import MessageReference
 from agent_comms.field_codec import FieldCodec
@@ -19,22 +19,14 @@ class SpanAnnotationsRow(CoordinatorTable, TypedTable):
     created_at_ms: int
     # SQLite NULL requests its original rowid allocation, not a lifecycle state.
     id: int | None = field(default=None, metadata={"sql": Column(primary_key=True, auto_increment=True)})
-    segment_digest: str = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(label, '$.span.segment_sha256')")})
-    offset: int = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(label, '$.span.coordinates.offset')")})
-    length: int = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(label, '$.span.coordinates.length')")})
-    question: type[SpanQuestion] = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(label, '$.question.question')")})
-    question_version: str = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(label, '$.question.sha256')")})
-    classifier: type[Classifier] = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(label, '$.classifier.classifier')")})
-    classifier_pin: str = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(label, '$.classifier.pin')")})
-    label_kind: type[SpanLabel] = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(label, '$.kind')")})
+    segment_digest: str = GeneratedColumn(expression="json_extract(label, '$.span.segment_sha256')").field()
+    offset: int = GeneratedColumn(expression="json_extract(label, '$.span.coordinates.offset')").field()
+    length: int = GeneratedColumn(expression="json_extract(label, '$.span.coordinates.length')").field()
+    question: type[SpanQuestion] = GeneratedColumn(expression="json_extract(label, '$.question.question')").field()
+    question_version: str = GeneratedColumn(expression="json_extract(label, '$.question.sha256')").field()
+    classifier: type[Classifier] = GeneratedColumn(expression="json_extract(label, '$.classifier.classifier')").field()
+    classifier_pin: str = GeneratedColumn(expression="json_extract(label, '$.classifier.pin')").field()
+    label_kind: type[SpanLabel] = GeneratedColumn(expression="json_extract(label, '$.kind')").field()
 
     address: ClassVar[tuple[str, ...]] = (
         "segment_digest", "offset", "length", "question", "question_version", "classifier", "classifier_pin")
@@ -65,23 +57,15 @@ class AnnotationRequestsRow(CoordinatorTable, TypedTable):
     outcome: AnnotationOutcome
     created_at_ms: int
     id: int | None = field(default=None, metadata={"sql": Column(primary_key=True, auto_increment=True)})
-    segment_digest: str = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(request, '$.span.segment_sha256')")})
-    offset: int = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(request, '$.span.coordinates.offset')")})
-    length: int = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(request, '$.span.coordinates.length')")})
-    question: type[SpanQuestion] = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(request, '$.question.question')")})
-    question_version: str = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(request, '$.question.sha256')")})
-    classifier: type[Classifier] = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(request, '$.classifier.classifier')")})
-    classifier_pin: str = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(request, '$.classifier.pin')")})
+    segment_digest: str = GeneratedColumn(expression="json_extract(request, '$.span.segment_sha256')").field()
+    offset: int = GeneratedColumn(expression="json_extract(request, '$.span.coordinates.offset')").field()
+    length: int = GeneratedColumn(expression="json_extract(request, '$.span.coordinates.length')").field()
+    question: type[SpanQuestion] = GeneratedColumn(expression="json_extract(request, '$.question.question')").field()
+    question_version: str = GeneratedColumn(expression="json_extract(request, '$.question.sha256')").field()
+    classifier: type[Classifier] = GeneratedColumn(expression="json_extract(request, '$.classifier.classifier')").field()
+    classifier_pin: str = GeneratedColumn(expression="json_extract(request, '$.classifier.pin')").field()
 
-    grant_reference: MessageReference = field(init=False, compare=False, metadata={"sql": Column(
-        generated="json_extract(request, '$.grant')")})
+    grant_reference: MessageReference = GeneratedColumn(expression="json_extract(request, '$.grant')").field()
 
     unique = (SpanAnnotationsRow.address,)
     indexes = (Index(("grant_reference", "created_at_ms")),)

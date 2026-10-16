@@ -16,14 +16,13 @@ from .input_attempt import (
     InputAttempt,
     MissingInput,
     ReservedInput,
-    SentInput,
     StartedInput,
     StoredInput,
 )
 from .message_reference import MessageReference
 from .messages import Message
 from .threads import Thread
-from .typed_table import Column, Index, TypedStore, TypedTable, sql_literal
+from .typed_table import Column, GeneratedColumn, Index, TypedStore, TypedTable, sql_literal
 
 if TYPE_CHECKING:
     from .channel_input_batch import SingleInputBatch
@@ -167,14 +166,10 @@ class InputDispositionRow(TypedTable):
 
     key: str = field(metadata={"sql": Column(primary_key=True)})
     attempt: StoredInput
-    owner: str = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(attempt,'$.owner')")})
-    turn_id: str | None = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(attempt,'$.turn_id')")})
-    sequence: int | None = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated="json_extract(attempt,'$.sequence')")})
-    unresolved: bool = field(init=False, default=None, compare=False, repr=False, metadata={
-        "sql": Column(generated=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}")})
+    owner: str = GeneratedColumn(expression="json_extract(attempt,'$.owner')").field()
+    turn_id: str | None = GeneratedColumn(expression="json_extract(attempt,'$.turn_id')").field()
+    sequence: int | None = GeneratedColumn(expression="json_extract(attempt,'$.sequence')").field()
+    unresolved: bool = GeneratedColumn(expression=f"json_extract(attempt,'$.kind') IN {_unresolved_kinds()}").field()
     checks = ("key = json_extract(attempt,'$.key')",)
     indexes = (
         Index(("owner", "unresolved")),
