@@ -38,6 +38,7 @@ class ActivityCheckpoint(AppendCheckpoint):
 
 class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
     record_type = ActivityCheckpoint
+    fsync_parent = True
 
     def __init__(self, bus_path: Path):
         super().__init__(bus_path, bus_path.with_name("bus_activity_latest.json"))
@@ -83,7 +84,7 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
                     AppendCheckpoint.fingerprint(stream, source.size), channels, sent)
         opened.remember_append_checkpoint(self, projected)
         with suppress(OSError):
-            self.write(projected, fsync_parent=True)
+            self.write(projected)
         return projected.snapshot
 
 

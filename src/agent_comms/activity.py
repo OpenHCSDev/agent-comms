@@ -271,6 +271,21 @@ class ObservedActivity(ActivityData):
         return self.readiness.presentation(super().presentation(title), busy=self.state.busy)
 
 
+@dataclass(frozen=True, slots=True)
+class ActivitySnapshot:
+    """One inseparable source cut and its visible events, including a partial EOF."""
+
+    checkpoint: ActivityCheckpoint | None = None
+    latest: Mapping[str, Activity] = field(default_factory=dict)
+
+    @property
+    def revision(self) -> FileRevision | None:
+        return self.checkpoint.source if self.checkpoint is not None else None
+
+    def current_at(self, path: Path) -> bool:
+        return self.revision == FileRevision.capture(path)
+
+
 @dataclass(slots=True)
 class ActivityReadState:
     """What a process has read of one activity log: shared by every reader.
@@ -281,8 +296,7 @@ class ActivityReadState:
     cuts; concurrent readers decode without holding it.
     """
 
-    checkpoint: ActivityCheckpoint | None = None
-    latest: dict[str, Activity] = field(default_factory=dict)
+    snapshot: ActivitySnapshot = field(default_factory=ActivitySnapshot)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     _by_path: ClassVar[dict[str, ActivityReadState]] = {}
@@ -304,32 +318,37 @@ class ActivityLog(ThreadOwnedState):
         from .activity_checkpoint import ActivityCheckpointStore
 
         self.checkpoint = ActivityCheckpointStore(
-            store_path.with_name(ActivityCheckpointStore.filename)
+            store_path.with_name(ActivityCheckpointStore.filename), source_path=store_path
         )
         self._stale_after = stale_after
         self._read = ActivityReadState.for_path(store_path)
 
     @contextmanager
     def _writing(self):
-        """The source writer alone persists its derived checkpoint.
+        """Prepare outside the source lock; commit only against the exact cut.
 
-        Reads may fold a newer cut into process-local state, but must never
-        acquire an exclusive document lock or write files. Keep the source
-        lock through checkpoint capture and publication, including rewrites.
+        The transition runs once, under the append lock, after its captured
+        events are proved current. Missing/invalid checkpoints and long suffixes
+        are decoded outside that lock, as is the subsequent projection write.
         """
-        with _store_lock(self._path):
-            before = FileRevision.capture(self._path)
-            # Validate existing source before committing an event: corruption
-            # must fail before append, not masquerade as a failed committed write.
-            self._latest_events()
-            yield
-            if FileRevision.capture(self._path) != before:
-                self._latest_events()
-                checkpoint = self._read.checkpoint
-                if checkpoint is not None:
-                    # A disposable projection failure cannot undo an appended event.
-                    with suppress(OSError):
-                        self.checkpoint.replace(checkpoint)
+        while True:
+            snapshot = self._read_snapshot()
+            with _store_lock(self._path):
+                if not snapshot.current_at(self._path):
+                    continue
+                yield snapshot
+                after = FileRevision.capture(self._path)
+                break
+        if after != snapshot.revision:
+            self._publish_checkpoint()
+
+    def _publish_checkpoint(self) -> None:
+        checkpoint = self._read_snapshot().checkpoint
+        if checkpoint is not None:
+            # Its prefix is validated by the shared publisher; it may lag an
+            # append without claiming those later events or delaying appenders.
+            with suppress(OSError):
+                self.checkpoint.write(checkpoint)
 
     def emit(self, activity: Activity) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
@@ -342,8 +361,10 @@ class ActivityLog(ThreadOwnedState):
         The activity owner supplies the transition. Returning no event leaves
         the log unchanged; an append cannot overtake its own comparison.
         """
-        with self._writing():
-            event = transition(self.current(thread, active=True))
+        with self._writing() as snapshot:
+            event = transition(self._observed(
+                thread, snapshot.latest, active=True, now=time.time()
+            ))
             if event is None:
                 return False
             _append_jsonl(self._path, FieldCodec.encode(event))
@@ -351,7 +372,7 @@ class ActivityLog(ThreadOwnedState):
 
     def current(self, thread: str, *, active: bool = False) -> Activity:
         """Latest activity for one thread; idle when stale or unknown."""
-        return self._observed(thread, self._latest_events(), active=active, now=time.time())
+        return self._observed(thread, self._read_snapshot().latest, active=active, now=time.time())
 
     def _observed(self, thread: str, events: Mapping[str, Activity], *,
                   active: bool, now: float) -> Activity:
@@ -371,26 +392,26 @@ class ActivityLog(ThreadOwnedState):
     def all_current(self, *, active: frozenset[str] = frozenset(),
                     threads: Iterable[str] = ()) -> dict[str, Activity]:
         """Latest activity per thread (idle included for known threads)."""
-        result = self._latest_events()
+        result = self._read_snapshot().latest
         now = time.time()
         return {
             thread: self._observed(thread, result, active=thread in active, now=now)
             for thread in dict.fromkeys((*result, *threads))
         }
 
-    def _latest_events(self) -> Mapping[str, Activity]:
+    def _read_snapshot(self) -> ActivitySnapshot:
         from .activity_checkpoint import ActivityCheckpoint
 
         read = self._read
         while True:
             with read.lock:
                 revision = FileRevision.capture(self._path)
-                started_from = read.checkpoint
-                if revision == (started_from.source if started_from is not None else None):
-                    return read.latest
+                started_from = read.snapshot
+                if revision == started_from.revision:
+                    return started_from
                 checkpoint = None
                 if revision is not None:
-                    checkpoint = started_from if started_from is not None else self.checkpoint.read()
+                    checkpoint = started_from.checkpoint or self.checkpoint.read()
             latest = {}
             captured = None
             if revision is not None:
@@ -434,12 +455,12 @@ class ActivityLog(ThreadOwnedState):
                 except FileNotFoundError:
                     continue
             with read.lock:
-                if read.checkpoint is not started_from:
+                if read.snapshot is not started_from:
                     # Another reader may have published a cut taken before this
                     # one. Reacquire the actual current file, not that older cut.
                     continue
-                read.checkpoint, read.latest = captured, latest
-            return latest
+                read.snapshot = ActivitySnapshot(captured, latest)
+                return read.snapshot
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
         """Append one deletion record per thread with current activity.
@@ -447,18 +468,21 @@ class ActivityLog(ThreadOwnedState):
         Never rewrite this append-only log: every reader then folds the
         record incrementally instead of decoding the whole file again.
         """
-        latest = self._latest_events()
+        latest = self._read_snapshot().latest
         for thread in threads:
             if thread.name in latest:
                 self.emit(Activity(thread.name, ActivityState.DELETED))
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
-        with self._writing():
-            records = [dict(record) for record in _jsonl_records(self._path)]
-            for record in records:
-                if record.get("thread") == old_name:
-                    record["thread"] = new_name
-            _atomic_write_text(
-                self._path,
-                "".join(f"{json.dumps(record)}\n" for record in records),
-            )
+        while True:
+            snapshot = self._read_snapshot()
+            events = (Activity.from_wire(record) for record in _jsonl_records(self._path))
+            renamed = (replace(event, thread=new_name) if event.thread == old_name else event
+                       for event in events)
+            text = "".join(f"{json.dumps(FieldCodec.encode(event))}\n" for event in renamed)
+            with _store_lock(self._path):
+                if not snapshot.current_at(self._path):
+                    continue
+                _atomic_write_text(self._path, text)
+                break
+        self._publish_checkpoint()

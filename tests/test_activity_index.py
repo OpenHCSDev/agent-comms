@@ -21,7 +21,7 @@ def test_appends_parse_only_new_records_and_do_not_mutate_published_snapshots(tm
     path = tmp_path / "activity.jsonl"
     path.write_text("".join(encoded(f"worker-{index % 10}") + "\n" for index in range(3000)))
     reader, writer = ActivityLog(path), ActivityLog(path)
-    previous = reader._latest_events()
+    previous = reader._read_snapshot().latest
     with patch.object(FieldCodec, "decode", wraps=FieldCodec.decode) as parse:
         for _ in range(10):
             reader.all_current()
@@ -193,9 +193,78 @@ def test_source_writers_publish_checkpoint_and_noop_updates_do_not(tmp_path):
     checkpoint = log.checkpoint.read()
     assert checkpoint.source == FileRevision.capture(log._path)
     assert set(checkpoint.latest) == {"renamed", "b"}
-    with patch.object(ActivityCheckpointStore, "replace") as publish:
+    with patch.object(ActivityCheckpointStore, "write") as publish:
         assert not log.update("b", lambda _: None)
         publish.assert_not_called()
+
+
+@pytest.mark.parametrize("prepare", [
+    pytest.param(lambda log: None, id="missing"),
+    pytest.param(lambda log: log.checkpoint.path.write_text("{}"), id="invalid"),
+    pytest.param(lambda log: log.all_current(), id="long-suffix"),
+])
+def test_writer_prepares_and_publishes_outside_source_lock(tmp_path, monkeypatch, prepare):
+    from agent_comms.activity_checkpoint import ActivityCheckpointStore
+    from agent_comms.store_files import _store_lock
+
+    path = tmp_path / "activity.jsonl"
+    path.write_text(encoded("a") + "\n")
+    log = ActivityLog(path)
+    prepare(log)
+    with path.open("a") as stream:
+        stream.write("".join(encoded(f"b-{i % 10}") + "\n" for i in range(5000)))
+
+    def acquire_source():
+        with _store_lock(path, blocking=False):
+            return True
+
+    read = ActivityLog._read_snapshot
+    write = ActivityCheckpointStore._write_unlocked
+    with ThreadPoolExecutor(max_workers=1) as probe:
+        def checked_read(self):
+            assert probe.submit(acquire_source).result(2)
+            return read(self)
+
+        def checked_write(self, text):
+            assert probe.submit(acquire_source).result(2)
+            return write(self, text)
+
+        monkeypatch.setattr(ActivityLog, "_read_snapshot", checked_read)
+        monkeypatch.setattr(ActivityCheckpointStore, "_write_unlocked", checked_write)
+        log.emit(Activity("c", ActivityState.THINKING))
+        assert log.update("c", lambda current: Activity("c", ActivityState.WORKING))
+        log.rename_thread("a", "renamed")
+    assert "renamed" in log.checkpoint.read().latest
+
+
+def test_update_reacquires_changed_cut_before_running_transition(tmp_path, monkeypatch):
+    from contextlib import contextmanager
+    from agent_comms import activity as module
+
+    path = tmp_path / "activity.jsonl"
+    log = ActivityLog(path)
+    log.emit(Activity("a", ActivityState.THINKING, "before"))
+    lock = module._store_lock
+    injected = False
+
+    @contextmanager
+    def competing_write(path):
+        nonlocal injected
+        if not injected:
+            injected = True
+            ActivityLog(path).emit(Activity("a", ActivityState.WORKING, "after"))
+        with lock(path):
+            yield
+
+    seen = []
+    def transition(current):
+        seen.append(current.detail)
+        return Activity("a", ActivityState.THINKING, "committed")
+
+    monkeypatch.setattr(module, "_store_lock", competing_write)
+    assert log.update("a", transition)
+    assert seen == ["after"]
+    assert log.current("a").detail == "committed"
 
 
 def test_cached_activity_still_expires_unless_its_thread_is_active(tmp_path):
