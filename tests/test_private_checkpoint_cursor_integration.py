@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -72,7 +72,7 @@ def _root(tmp_path: Path):
         install_private_response_schema(store)
         install_native_runtime_schema(store)
         install_prompt_binding_schema(store)
-        lookup = ThreadIncarnation("fixture", people[1].created_at).lookup
+        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         store.participants.register(lookup, "alpha", "alpha", committed=True)
         accept_delivery_cohort(comms.bus, root_id, first.seq, store)
     return root, root_id, comms, first, lookup

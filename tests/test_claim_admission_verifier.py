@@ -11,7 +11,7 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms import claim_admission
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
@@ -75,8 +75,8 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     committed=True,
                 )
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-            alice_lookup = ThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
-            bob_lookup = ThreadIncarnation("fixture", comms.registry.require("Bob").created_at).lookup
+            alice_lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
+            bob_lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Bob").created_at).lookup
             assert sealed_cohort_assignments(store, bob_lookup) == ()
             assignment = sealed_cohort_assignments(store, alice_lookup)[0]
             assert type(assignment.lifecycle) is FullPendingAssignment

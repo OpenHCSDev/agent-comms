@@ -12,7 +12,7 @@ import os
 import pytest
 
 from agent_comms import cohort_foreground, coordinated_runtime
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import CompletedAssignment, IgnoredAssignment
 from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 from agent_comms.child_process import ProcessIdentity
@@ -67,7 +67,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         store.participants.register(
-            ThreadIncarnation("fixture", alpha.created_at).lookup, "alpha", "alpha", committed=True
+            RecordedThreadIncarnation("fixture", alpha.created_at).lookup, "alpha", "alpha", committed=True
         )
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
@@ -103,7 +103,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     assert initial.message == message
     expected_n = 1 if target == "beta" else 2
     assert len(initial.audience.recipients) == expected_n
-    lookup = ThreadIncarnation("fixture", recipient[0].created_at).lookup
+    lookup = RecordedThreadIncarnation("fixture", recipient[0].created_at).lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
         db = store.session._connection
         assert (

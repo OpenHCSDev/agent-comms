@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import TYPE_CHECKING, Annotated, Generic, TypeVar
 
 from .errors import RelationViolationError, UnregisteredThreadError
 from .thread_identity import ThreadIncarnation
-from .thread_provenance import ThreadProvenance
+from .thread_provenance import ThreadProvenance, ThreadProvenanceRecord
+
+if TYPE_CHECKING:
+    from .audience_manifest import FrozenRecipient
+    from .registry_document import ArchivedRecipient, RetiredRecipient
 
 Member = TypeVar("Member", bound=ThreadProvenance, covariant=True)
 
@@ -76,7 +80,7 @@ class RegistryNames(Generic[Member]):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class RegistryProvenance(RegistryNames[ThreadProvenance]):
-    threads: dict[str, ThreadProvenance]
+    threads: dict[str, Annotated[ThreadProvenance, ThreadProvenanceRecord]]
     aliases: dict[str, str]
 
     def __post_init__(self) -> None:
@@ -90,6 +94,20 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         """A recorded namespace keeps no removal ledger. A name its own bus
         carries but its captured registry lacks was deleted before capture."""
         return name not in self.threads
+
+    def displayed_recipient_effect(self, reads, message, thread: ThreadProvenance, *, document=None):
+        return reads._displayed_recipient(message, thread, self, document=document)
+
+    def historical_recipient(self, recipient: FrozenRecipient) -> ArchivedRecipient | RetiredRecipient:
+        """Archives select by original name and birth; duplicate births stay distinct."""
+        from .registry_document import ArchivedRecipient, RetiredRecipient
+
+        thread = self.threads.get(self.canonical_name(recipient.canonical_thread))
+        if thread is not None and thread.incarnation.has_recorded_birth and (
+            thread.incarnation.require_recorded().lookup == recipient.recipient_lookup
+        ):
+            return ArchivedRecipient(thread)
+        return RetiredRecipient(recipient.recipient_lookup)
 
     @staticmethod
     def capture(snapshot: RegistryProvenance) -> RegistryProvenance:

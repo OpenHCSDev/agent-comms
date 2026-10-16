@@ -18,7 +18,7 @@ from .goal_states import (
     UnrecordedBlockGoal,
 )
 from .goals import Goal
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
@@ -91,7 +91,7 @@ class GoalWaitTarget:
 
     def __post_init__(self) -> None:
         object.__setattr__(
-            self, "_incarnation", ThreadIncarnation(self.name, self.created_at).require_recorded()
+            self, "_incarnation", RecordedThreadIncarnation(self.name, self.created_at)
         )
 
     def sent(self, original: CommittedDelivery) -> bool:

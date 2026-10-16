@@ -156,7 +156,7 @@ class OrdinaryContextCheck(RuleCheck):
     source: TurnInputSource
     owner: Thread
     goal: Goal | None
-    wait: GoalWait | None
+    wait: GoalWait
     comms: Comms
 
 

@@ -15,7 +15,7 @@ from acp.schema import TextContentBlock
 from agent_comms import backend
 from agent_comms import pi_commands as commands
 from agent_comms import pi_events as pi
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp_failure import RequestFailure
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, QueuePromptRequest, SteerPromptRequest, decode_updates, encode_request
 from agent_comms.child_process import BoundedRun, ExitedOutcome
@@ -227,7 +227,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
         comms = owner._comms
         root_id = owner._private_nk_wire_root_id
         receiver = await Coordination.run_worker(partial(comms.registry.require, session))
-        lookup = ThreadIncarnation("fixture", receiver.created_at).lookup
+        lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
 
         def prepare():
             comms.registry.register(
@@ -326,7 +326,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
     ) as (owner, session):
         comms = owner._comms
         receiver = await Coordination.run_worker(partial(comms.registry.require, session))
-        lookup = ThreadIncarnation("fixture", receiver.created_at).lookup
+        lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
 
         def prepare():
             comms.registry.register(
@@ -409,7 +409,7 @@ async def test_waiting_messages_follow_the_original_on_the_changed_model(
     async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
         comms = owner._comms
         receiver = await Coordination.run_worker(partial(comms.registry.require, session))
-        lookup = ThreadIncarnation("fixture", receiver.created_at).lookup
+        lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
 
         def prepare():
             comms.registry.register(
@@ -545,7 +545,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
     async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
         comms = owner._comms
         receiver = await Coordination.run_worker(partial(comms.registry.require, session))
-        lookup = ThreadIncarnation("fixture", receiver.created_at).lookup
+        lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
         comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
         try:
             first = comms.messaging.send_message("sender", session, "which parser is slow?")

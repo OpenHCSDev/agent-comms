@@ -13,7 +13,7 @@ import threading
 from pathlib import Path
 
 import agent_comms
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
@@ -54,7 +54,7 @@ def main(root: Path) -> None:
     # already-retired production maintenance worker.
     assert index.maintain(rebuild=True, max_bytes=1)
     page = index.page(
-        root_id=root_id, recipient_lookup=ThreadIncarnation("fixture", births["Alice"]).lookup,
+        root_id=root_id, recipient_lookup=RecordedThreadIncarnation("fixture", births["Alice"]).lookup,
         after_seq=0, required_through_seq=message.seq,
     )
     assert len(page.entries) == 1

@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.backend import _maintenance_send_boundary
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
@@ -64,7 +64,7 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     assert starts == [] and not agent.inputs.wake_tasks
     beta = comms.registry.require('beta')
     with Coordination(comms.root / 'coordination.sqlite3') as store:
-        pending = next_sealed_assignment(store, ThreadIncarnation("fixture", beta.created_at).lookup, beta.name)
+        pending = next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name)
         assert pending.wire_seq == post.seq
     assert beta.active_turn is None
 
@@ -81,13 +81,13 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     assert await agent.inputs.drain_inbox('beta') == 1
     assert len(selected) == 1
     with Coordination(comms.root / 'coordination.sqlite3') as store:
-        assert next_sealed_assignment(store, ThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
+        assert next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
     # Selection scheduled just before another drain must still refuse at the
     # effect boundary without consuming that durable assignment.
     another_drain = control.begin(FieldCodec.decode(MaintenanceOperatorField, 'second-cutover'))
     assert await selected[0].run() == another_drain
     with Coordination(comms.root / 'coordination.sqlite3') as store:
-        assert next_sealed_assignment(store, ThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
+        assert next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
     for phase in (PausedPhase, InstallingPhase, ReadyPhase):
         another_drain = control.advance(another_drain, phase)
     agent.inputs.pending_turns['beta'] = [queued]
@@ -115,7 +115,7 @@ async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monke
     assert await agent.inputs.drain_inbox('beta') == 0
     beta = comms.registry.require('beta')
     with Coordination(comms.root / 'coordination.sqlite3') as store:
-        assert next_sealed_assignment(store, ThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
+        assert next_sealed_assignment(store, RecordedThreadIncarnation("fixture", beta.created_at).lookup, beta.name).wire_seq == post.seq
     assert beta.active_turn is None
     if abort:
         assert gate.clear(hold).phase is ReadyPhase

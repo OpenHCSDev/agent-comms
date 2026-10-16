@@ -21,7 +21,8 @@ from agent_comms.goal_failure_observation import FailedTurnObservation, read_fai
 from agent_comms.goal_generation import BlockedGeneration, ReservedGeneration
 from agent_comms.goal_states import BlockedGoal, ModelPause, OwnerPause, PausedGoal
 from agent_comms.goals import Goal
-from agent_comms.thread_identity import ThreadIncarnation, TurnIdentity
+from agent_comms.thread_identity import TurnIdentity
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
     DeletingThreadStatus,
@@ -108,12 +109,12 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
 @pytest.mark.parametrize(
     "mutation",
     [
-        {"identity": TurnIdentity(ThreadIncarnation("other", 10.0), 7)},
-        {"identity": TurnIdentity(ThreadIncarnation("owner", 11.0), 7)},
+        {"identity": TurnIdentity(RecordedThreadIncarnation("other", 10.0), 7)},
+        {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 11.0), 7)},
         {"turn_id": "b" * 32},
         {"admission_generation": 4},
-        {"identity": TurnIdentity(ThreadIncarnation("owner", 10.0), 0)},
-        {"identity": TurnIdentity(ThreadIncarnation("owner", 10.0), 8)},
+        {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 0)},
+        {"identity": TurnIdentity(RecordedThreadIncarnation("owner", 10.0), 8)},
     ],
 )
 def test_mismatched_turn_lease_is_not_bound(bound, mutation):

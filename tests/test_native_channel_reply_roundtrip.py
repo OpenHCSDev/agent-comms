@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.acp import CommsClient
@@ -371,7 +371,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         with comms.bus.log.locked():
             marker = comms.bus.log._private_marker_unlocked()
             pointers = addressed_source_pointers_unlocked(
-                comms.bus.log, marker, ThreadIncarnation("fixture", owner.created_at).lookup
+                comms.bus.log, marker, RecordedThreadIncarnation("fixture", owner.created_at).lookup
             )
         assert reply.message_id in [pointer.message_id for pointer in pointers]
 
@@ -422,7 +422,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             with Coordination(str(comms.root / "coordination.sqlite3")) as store:
                 rejected = read_historical_native_inputs(
                     store, wire_root_id=root_id,
-                    recipient_lookup=ThreadIncarnation("fixture", owner.created_at).lookup, source_seq=reply.seq,
+                    recipient_lookup=RecordedThreadIncarnation("fixture", owner.created_at).lookup, source_seq=reply.seq,
                 )
                 assert len(rejected) == 1 and rejected[0].proves_triage_source(rejected)
                 claim = store.assignments.get(rejected[0].assignment_id)

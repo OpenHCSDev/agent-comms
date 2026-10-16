@@ -8,7 +8,7 @@ import sys
 import time
 
 import acp
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import Comms, wire
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -143,7 +143,7 @@ async def run(stage, package):
                             actual = service.bus.log.message_by_id(reply.message_id)
                             assert actual.sender == child.name and actual.body.strip()
                             history = read_historical_native_inputs(store, wire_root_id=root_id,
-                                recipient_lookup=ThreadIncarnation("fixture", service.registry.require(child.name).created_at).lookup,
+                                recipient_lookup=RecordedThreadIncarnation("fixture", service.registry.require(child.name).created_at).lookup,
                                 source_seq=original.seq)
                             assert len(history) == 2 and all(row.expected_prompt_equality_established for row in history)
                             handling = MessageNotification.window(service.root, service.registry,

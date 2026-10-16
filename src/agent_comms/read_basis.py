@@ -17,7 +17,7 @@ from .channel_targets import is_channel_target
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
 from .store_files import _store_lock
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadIncarnationRecord
 
 if TYPE_CHECKING:
     from .channels import Channel
@@ -52,7 +52,7 @@ class Conversation:
         pairs = FieldCodec.decode(tuple[tuple[str, float], ...], data.pop("participants"))
         return replace(
             FieldCodec.decode(cls, data),
-            participants=tuple(ThreadIncarnation(*pair) for pair in pairs),
+            participants=tuple(ThreadIncarnationRecord.decode(*pair) for pair in pairs),
         )
 
 
@@ -71,7 +71,7 @@ class DisplayBasis:
 
     @property
     def viewer_identity(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.viewer, self.viewer_created_at)
+        return RecordedThreadIncarnation(self.viewer, self.viewer_created_at)
 
     def select(self, sequences: Collection[int]) -> DisplayBasis:
         """Retain painted members of this proof; never introduce new sequences."""

@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_source_page import AddressedPage
 
 from agent_comms.cohort_foreground import _accept_visible_deliveries
@@ -24,7 +24,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         # A subscriber arriving after the original is not a historical recipient.
         case.comms.registry.declare(Thread("late", frozenset({"team"}), worktree=str(tmp_path)))
         sender = case.comms.registry.require("sender")
-        lookup = ThreadIncarnation("fixture", sender.created_at).lookup
+        lookup = RecordedThreadIncarnation("fixture", sender.created_at).lookup
         intent = prepare_fenced_response(
             case.store,
             case.bus,
@@ -120,7 +120,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
             with pytest.raises(RelationViolationError):
                 with case.bus.log.certified_read() as source:
                     source.addressed_page(case.bus.log, AddressedPage.capture(
-                        lookup=ThreadIncarnation("fixture", sender.created_at).lookup))
+                        lookup=RecordedThreadIncarnation("fixture", sender.created_at).lookup))
             assert checkpoint.read_bytes() == saved_index
             return
         # Explicit cold certification must reject a corrupt candidate rather

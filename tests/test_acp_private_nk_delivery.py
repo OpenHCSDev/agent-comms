@@ -13,7 +13,7 @@ import os
 import pytest
 
 from agent_comms import cohort_foreground, coordinated_runtime, native_pi
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
@@ -68,7 +68,7 @@ def _session(tmp_path, *, package=True):
     root_id = comms.messaging.initialize_private_initial_protocol()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
-            ThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
+            RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
     agent = CommsAgent(
         comms,
@@ -132,7 +132,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     session = await agent.new_session(cwd=str(project), mcp_servers=[])
     owner = comms.registry.require(session.session_id)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        participant = store.participants.get(ThreadIncarnation("fixture", owner.created_at).lookup)
+        participant = store.participants.get(RecordedThreadIncarnation("fixture", owner.created_at).lookup)
     assert participant.committed and participant.owner_thread == owner.name
     invoke_tool(
         comms,
@@ -149,7 +149,7 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
     tmp_path, monkeypatch, managed
 ):
     comms, agent, _ = _session(tmp_path)
-    lookup = ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
+    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         before = store.participants.get(lookup)
     assert before.owner_thread == "beta" and before.participant_generation == 1
@@ -182,7 +182,7 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
     tmp_path, monkeypatch, seal_old
 ):
     comms, agent, root_id = _session(tmp_path)
-    lookup = ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
+    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old-before-rename"})
     if seal_old:
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
@@ -222,7 +222,7 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
 
 def test_private_rename_refuses_mismatched_sql_owner_before_registry_mutation(tmp_path):
     comms, _, _ = _session(tmp_path)
-    lookup = ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
+    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, "unexpected", expected_generation=1)
     with pytest.raises(RelationViolationError, match="Private coordinator owner differs"):
@@ -265,7 +265,7 @@ async def test_private_rename_compensates_registry_failure_with_new_old_owner_ge
     tmp_path, monkeypatch
 ):
     comms, _, root_id = _session(tmp_path)
-    lookup = ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
+    lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     original = comms.registry.rename
 
     def fail_before_registry_write(name, new_name):
@@ -695,7 +695,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
     comms.registry.declare(alpha)
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.register(
-            ThreadIncarnation("fixture", alpha.created_at).lookup, "alpha", "alpha", committed=True
+            RecordedThreadIncarnation("fixture", alpha.created_at).lookup, "alpha", "alpha", committed=True
         )
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
@@ -724,7 +724,7 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
             (
                 root_id,
                 original.seq,
-                ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
+                RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
             ),
         ).fetchone()
         assert tuple(receipt) == ("unmentioned_observer", None)

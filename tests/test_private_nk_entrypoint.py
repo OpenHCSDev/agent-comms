@@ -20,7 +20,7 @@ from agent_comms import (
     private_nk_entrypoint,
     worker,
 )
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
@@ -551,7 +551,7 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
     comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
     comms.registry.declare(Thread("late-owner", frozenset(), str(tmp_path)))
     late = comms.registry.require("late-owner")
-    lookup = ThreadIncarnation("fixture", late.created_at).lookup
+    lookup = RecordedThreadIncarnation("fixture", late.created_at).lookup
     message = comms.messaging.send_initial_cohort("sender", "late-owner", "fresh private task")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         participant = store.participants.get(lookup)

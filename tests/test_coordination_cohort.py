@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import (
     DeferredAssignment,
     DeliveredAssignment,
@@ -67,7 +67,7 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
         comms.registry.register(
             Thread(name=name, worktree=str(root), created_at=created_at, tags=frozenset(tags))
         )
-        lookups[name] = ThreadIncarnation("fixture", created_at).lookup
+        lookups[name] = RecordedThreadIncarnation("fixture", created_at).lookup
     coordinator = Coordination(str(root / "coordinator.sqlite"), clock_ms=lambda: 4723)
     install_private_cohort_schema(coordinator)
     for name in ("Alice", "Bob", "Charlie"):

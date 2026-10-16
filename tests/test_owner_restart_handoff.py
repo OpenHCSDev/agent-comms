@@ -48,6 +48,7 @@ def stopped():
         threads={thread.name: thread}, statuses={thread.name: StoppedThreadStatus()},
         last_seen={thread.name: 1.0}, aliases={},
         owner_generations={thread.name: 4}, admission_generations={thread.name: 5},
+        by_lookup={thread.incarnation.lookup: thread},
     )
     return thread, snapshot
 

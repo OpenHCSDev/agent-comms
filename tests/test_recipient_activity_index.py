@@ -37,7 +37,7 @@ def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
     with comms.bus.log.certified_read() as source:
         original = source.delivery(sent.seq)
     snapshot = comms.registry.snapshot()
-    assert FieldCodec.encode(snapshot)["threads"]
+    assert snapshot.threads
     wanted = snapshot.threads["peer-7"]
     lookup = wanted.incarnation.lookup
     recipient = FrozenRecipient(lookup, wanted.name)
@@ -87,10 +87,14 @@ def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path):
     assert renamed.incarnation.lookup == first
     assert FieldCodec.encode(incarnation) == {"name": "worker", "created_at": 1_700_000_000.0}
     deleted = ThreadIncarnation.deleted("worker")
-    historical = ThreadIncarnation("historical", 0.0)
+    historical = UnrecordedThreadIncarnation("historical")
     assert isinstance(incarnation, RecordedThreadIncarnation)
     assert isinstance(deleted, DeletedThreadIncarnation)
     assert isinstance(historical, UnrecordedThreadIncarnation)
+    assert FieldCodec.decode(ThreadIncarnation, FieldCodec.encode(deleted)) == deleted
+    assert FieldCodec.decode(ThreadIncarnation, FieldCodec.encode(historical)) == historical
+    with pytest.raises(ValueError, match="declared member"):
+        FieldCodec.decode(RecordedThreadIncarnation, FieldCodec.encode(historical))
     assert not hasattr(deleted, "lookup") and not hasattr(historical, "lookup")
     with pytest.raises(ValueError, match="positive recorded birth"):
         deleted.require_recorded()
@@ -124,15 +128,16 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
         assert ledger.historical_displayed_recipient(
             SimpleNamespace(seq=7), FrozenRecipient("wrong-lookup", "old"), archived
         ) == ()
-    with pytest.raises(RelationViolationError, match="creation identity is unrecorded"):
-        replace(source, threads={
-            **source.threads,
-            "second": replace(source.threads["second"], created_at=0.0),
-        })
-    unrecorded = replace(recorded, threads={
-        **recorded.threads,
-        "second": replace(recorded.threads["second"], created_at=0.0),
-    })
+    with pytest.raises(ValueError, match="positive recorded birth"):
+        replace(source.threads["second"], created_at=0.0)
+    from agent_comms.thread_provenance import UnrecordedThreadProvenance
+
+    original = recorded.threads["second"]
+    zero = UnrecordedThreadProvenance(
+        name=original.name, tags=original.tags, worktree=original.worktree,
+        created_at=0.0, session_file=original.session_file, title=original.title,
+    )
+    unrecorded = replace(recorded, threads={**recorded.threads, "second": zero})
     assert isinstance(unrecorded.threads["second"].incarnation, UnrecordedThreadIncarnation)
     assert not hasattr(unrecorded.threads["second"].incarnation, "lookup")
 

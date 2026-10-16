@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms import native_pi, native_prompt_send
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.diagnostics import PublicationMeasurements
 from agent_comms.child_process import AttachedChild
 from agent_comms.coordinated_runtime import SelectedExecution
@@ -42,7 +42,7 @@ async def test_pre_send_drift_refuses_all_prompt_bytes(tmp_path, monkeypatch, di
         if drift == "generation":
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 store.participants.advance_generation(
-                    ThreadIncarnation("fixture", owner.created_at).lookup, owner.name, expected_generation=1
+                    RecordedThreadIncarnation("fixture", owner.created_at).lookup, owner.name, expected_generation=1
                 )
         else:
             comms.registry.unregister(owner.name)
@@ -117,7 +117,7 @@ async def test_actual_raw_writes_follow_committed_admission_without_global_exclu
     create = AttachedChild.start
     children = []
     received = tmp_path / "received.json"
-    session = root / "native-sessions" / ThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
+    session = root / "native-sessions" / RecordedThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
 
     async def launch(*args, **kwargs):
         child = await create(
@@ -188,7 +188,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         loop = asyncio.get_running_loop()
         create = AttachedChild.start
         children = []
-        session = root / "native-sessions" / ThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
+        session = root / "native-sessions" / RecordedThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
 
         async def launch(*args, **kwargs):
             child = await create(
@@ -345,7 +345,7 @@ async def test_short_admission_contention_sends_once_after_release(
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
     create = AttachedChild.start
     received = tmp_path / "received.json"
-    session = root / "native-sessions" / ThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
+    session = root / "native-sessions" / RecordedThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
 
     async def launch(*args, **kwargs):
         return await create(
@@ -535,7 +535,7 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
     create = AttachedChild.start
     received = tmp_path / "received.json"
-    session = root / "native-sessions" / ThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
+    session = root / "native-sessions" / RecordedThreadIncarnation("fixture", owner.created_at).lookup / "s.jsonl"
     children = []
 
     async def launch(*_args, **kwargs):

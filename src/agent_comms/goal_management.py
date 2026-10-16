@@ -180,7 +180,7 @@ class Goals:
         with _store_lock(self._wire_lock_path, shared=True):
             return self.registry.goal_history(name, goal_id=goal_id)
 
-    def goal_wait(self, name: str) -> GoalWait | None:
+    def goal_wait(self, name: str) -> GoalWait:
         waits = self.waits
         return waits.for_goal(self.registry.require(name).goal, waits.read())
 
@@ -357,7 +357,7 @@ class Goals:
             if goal is None:
                 return False
             wait = self.waits.for_goal(goal, self.waits.read())
-            if wait is None or wait.owner_created_at != current.created_at:
+            if not wait.owner_matches(current.created_at):
                 return False
             with self.bus.log.certified_read() as source:
                 original = source.delivery(reference.seq)
@@ -365,7 +365,7 @@ class Goals:
                     raise ValueError("Dependency reply source reference changed.")
                 if not wait.matches(original, current.incarnation.require_recorded()):
                     return False
-            return self.waits.clear(goal.id, wait_id=wait.wait_id)
+            return wait.consume_reply(self.waits, goal.id)
 
     def update_goal(
         self,

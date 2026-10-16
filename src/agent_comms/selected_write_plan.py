@@ -35,7 +35,7 @@ from .declared_family import DeclaredFamily
 from .private_path import PrivateDirectoryRole, PrivateFileRole
 from .pi_rpc import unique_fields
 from .message_reference import MessageReference
-from .thread_identity import AdmissionIdentity, ThreadIncarnation
+from .thread_identity import AdmissionIdentity, RecordedThreadIncarnation
 
 _MAX_BYTES = 1024 * 1024
 
@@ -78,7 +78,7 @@ class SelectedWriteIntent(DeclaredFamily, affix="WriteIntent"):
     def binding(self) -> SelectedWriteBinding:
         return SelectedWriteBinding(
             self.root_id, MessageReference(self.source_seq, self.source_message_id),
-            self.claim_id, AdmissionIdentity(ThreadIncarnation(self.owner, self.incarnation), self.admission_epoch),
+            self.claim_id, AdmissionIdentity(RecordedThreadIncarnation(self.owner, self.incarnation), self.admission_epoch),
         )
 
     def require_accepted(self):

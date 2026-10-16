@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms import coordinated_runtime as runtime
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import IdentityConflict, StaleFence
@@ -213,7 +213,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
     admission, owner, session_dir, input_id = bound[0]
     assert owner == "beta" and admission.source_seq == initial.message.seq
     assert admission.source_message_id == initial.message.message_id
-    assert admission.recipient_lookup == ThreadIncarnation("fixture", people[2].created_at).lookup
+    assert admission.recipient_lookup == RecordedThreadIncarnation("fixture", people[2].created_at).lookup
     assert admission.wire_root_id == root_id and admission.attempt_ordinal == 1
     assert input_id == kwargs_seen[0]["input_id"] and session_dir == kwargs_seen[0]["session_dir"]
     assert "selected_claimed_write at most once" in calls[0][1]

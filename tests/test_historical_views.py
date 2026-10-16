@@ -335,8 +335,14 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     with pytest.raises(ValueError, match="Missing required"):
         FieldCodec.decode(ThreadProvenance, raw)
     # Original finite historical timestamps are preserved, never synthesized.
-    zero = replace(recorded, created_at=0.0)
-    assert FieldCodec.decode(ThreadProvenance, FieldCodec.encode(zero)) == zero
+    from agent_comms.thread_provenance import UnrecordedThreadProvenance
+
+    zero = UnrecordedThreadProvenance(
+        name=recorded.name, tags=recorded.tags, worktree=recorded.worktree,
+        created_at=0.0, session_file=recorded.session_file, title=recorded.title,
+    )
+    archived_zero = RegistryProvenance(threads={zero.name: zero}, aliases={})
+    assert FieldCodec.decode(RegistryProvenance, FieldCodec.encode(archived_zero)) == archived_zero
     aliased = RegistryProvenance(threads={"alice": recorded}, aliases={"original-alice": "alice"})
     assert aliased.require("original-alice") is recorded
     with pytest.raises(ValueError):

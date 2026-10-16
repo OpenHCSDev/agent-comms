@@ -34,11 +34,11 @@ class TurnInputSource(ABC):
     def valid_keys(self, text: str) -> bool:
         return len(self.keys) <= 1
 
-    def dependency_current(self, wait: GoalWait | None) -> bool:
+    def dependency_current(self, wait: GoalWait) -> bool:
         return True
 
     @abstractmethod
-    def allows_wait(self, wait: GoalWait | None, comms: Comms,
+    def allows_wait(self, wait: GoalWait, comms: Comms,
                     owner: RecordedThreadIncarnation) -> bool: ...
 
     @abstractmethod
@@ -47,7 +47,7 @@ class TurnInputSource(ABC):
     @abstractmethod
     def display(self, dispositions: InputDispositions, text: str) -> str | None: ...
 
-    def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
+    def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
         return True
 
     def defers_for_goal(self, original: Goal | None, current: Goal | None) -> bool:
@@ -56,25 +56,25 @@ class TurnInputSource(ABC):
 
 class InputDependency(ABC):
     @abstractmethod
-    def current(self, wait: GoalWait | None) -> bool: ...
+    def current(self, wait: GoalWait) -> bool: ...
 
     @abstractmethod
-    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...],
+    def allows(self, wait: GoalWait, comms: Comms, origins: tuple[Message, ...],
                owner: RecordedThreadIncarnation) -> bool: ...
 
     @abstractmethod
-    def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool: ...
+    def consume(self, comms: Comms, canonical: str, wait: GoalWait) -> bool: ...
 
 
 class NoInputDependency(InputDependency):
-    def current(self, wait: GoalWait | None) -> bool:
+    def current(self, wait: GoalWait) -> bool:
         return True
 
-    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...],
+    def allows(self, wait: GoalWait, comms: Comms, origins: tuple[Message, ...],
                owner: RecordedThreadIncarnation) -> bool:
-        return wait is None
+        return wait.allows_routed_input()
 
-    def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
+    def consume(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
         return True
 
 
@@ -82,12 +82,12 @@ class NoInputDependency(InputDependency):
 class CapturedInputDependency(InputDependency):
     wait_id: str
 
-    def current(self, wait: GoalWait | None) -> bool:
-        return wait is not None and wait.wait_id == self.wait_id
+    def current(self, wait: GoalWait) -> bool:
+        return wait.matches_id(self.wait_id)
 
-    def allows(self, wait: GoalWait | None, comms: Comms, origins: tuple[Message, ...],
+    def allows(self, wait: GoalWait, comms: Comms, origins: tuple[Message, ...],
                owner: RecordedThreadIncarnation) -> bool:
-        if wait is None:
+        if wait.allows_routed_input():
             return True
         if not self.current(wait):
             return False
@@ -98,8 +98,8 @@ class CapturedInputDependency(InputDependency):
                     return True
         return False
 
-    def consume(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
-        return wait is None or comms.goals.consume_goal_wait(canonical, wait.wait_id)
+    def consume(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
+        return wait.consume_dependency(comms, canonical)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -144,15 +144,15 @@ class OriginalTurnInput(TurnInputSource):
     def display(self, dispositions: InputDispositions, text: str) -> str | None:
         return self.original_display
 
-    def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait | None) -> bool:
+    def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
         return self.dependency.consume(comms, canonical, wait)
 
-    def dependency_current(self, wait: GoalWait | None) -> bool:
+    def dependency_current(self, wait: GoalWait) -> bool:
         return self.dependency.current(wait)
 
 
 class DirectInput(TurnInputSource):
-    def allows_wait(self, wait: GoalWait | None, comms: Comms,
+    def allows_wait(self, wait: GoalWait, comms: Comms,
                     owner: RecordedThreadIncarnation) -> bool:
         return True
 
@@ -171,9 +171,9 @@ class OwnerOriginalInput(OriginalTurnInput, DirectInput):
 
 
 class RoutedInput(TurnInputSource):
-    def allows_wait(self, wait: GoalWait | None, comms: Comms,
+    def allows_wait(self, wait: GoalWait, comms: Comms,
                     owner: RecordedThreadIncarnation) -> bool:
-        return wait is None
+        return wait.allows_routed_input()
 
     def allows_goal_input(self, goal: Goal | None) -> bool:
         return not self.keys or InactiveGoalPermission().allows(goal)
@@ -200,7 +200,7 @@ class SelectedOriginalInput(RoutedOriginalInput):
 
 
 class DependencyOriginalInput(OriginalTurnInput, DirectInput):
-    def allows_wait(self, wait: GoalWait | None, comms: Comms,
+    def allows_wait(self, wait: GoalWait, comms: Comms,
                     owner: RecordedThreadIncarnation) -> bool:
         return self.dependency.allows(wait, comms, self.origins, owner)
 

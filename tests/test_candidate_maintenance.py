@@ -10,7 +10,7 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms import candidate_maintenance as maintenance
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.store_files import _store_lock
@@ -69,7 +69,7 @@ def test_ordinary_private_send_deferred_index_catches_up_without_wake_authority(
         assert indexed.wait(timeout=5), "deferred checkpoint did not catch up"
         page = WakeCandidateIndex(comms.bus.log).page(
             root_id=root_id,
-            recipient_lookup=ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
+            recipient_lookup=RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
             after_seq=0,
             required_through_seq=message.seq,
         )
@@ -161,7 +161,7 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
         assert index.catch_up_committed_append(hint).caught_up
         page = index.page(
             root_id=root_id,
-            recipient_lookup=ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
+            recipient_lookup=RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
             after_seq=0,
             required_through_seq=comms.bus.log.full_history()[-1].seq,
             limit=100,
@@ -200,7 +200,7 @@ def test_concurrent_ordinary_publication_keeps_maintenance_alive(monkeypatch, tm
     index = WakeCandidateIndex(comms.bus.log)
     assert index._verified_checkpoint(root_id).last_seq == messages[-1].seq
     page = index.page(root_id=root_id,
-                      recipient_lookup=ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
+                      recipient_lookup=RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
                       after_seq=0, required_through_seq=messages[-1].seq, limit=32)
     assert len(page.entries) == 32 and page.has_more
     assert comms.bus.pending_counts("beta") == {"sender": len(messages)}

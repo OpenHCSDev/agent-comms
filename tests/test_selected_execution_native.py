@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict
@@ -242,7 +242,7 @@ async def test_native_full_four_tools_publish_and_release(
             proofs = read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=ThreadIncarnation("fixture", owner.created_at).lookup,
+                recipient_lookup=RecordedThreadIncarnation("fixture", owner.created_at).lookup,
                 source_seq=initial.message.seq,
             )
             assert len(proofs) == 1 + triage
@@ -267,7 +267,7 @@ async def test_native_full_four_tools_publish_and_release(
                     read_historical_native_inputs(
                         store,
                         wire_root_id=root_id,
-                        recipient_lookup=ThreadIncarnation("fixture", owner.created_at).lookup,
+                        recipient_lookup=RecordedThreadIncarnation("fixture", owner.created_at).lookup,
                         source_seq=old_seq,
                     )
                     == ()

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
@@ -27,6 +28,7 @@ from .restart_refusals import (
 from .routing import TurnRouting
 from .thread_identity import AdmissionIdentity, GenerationCounter, OwnerIdentity
 from .thread_presentation import ThreadOwnerBinding
+from .thread_provenance import ThreadProvenance
 from .thread_status import (
     ArchivedThreadStatus,
     StoppedThreadStatus,
@@ -92,14 +94,7 @@ class RegistryDocument(RegistryPresence):
         )
 
     def snapshot(self) -> RegistrySnapshot:
-        return RegistrySnapshot(
-            threads=dict(self.threads),
-            statuses=dict(self.statuses),
-            last_seen=dict(self.last_seen),
-            aliases=dict(self.aliases),
-            owner_generations=dict(self.owners.generations),
-            admission_generations=dict(self.admissions.generations),
-        )
+        return RegistrySnapshot.capture(self)
 
     def entry(self, name: str) -> RegistryEntry:
         thread = self.require(name)
@@ -531,14 +526,51 @@ class RegistryEntry:
         return OwnerIdentity(self.thread.incarnation, self.owner_generation)
 
 
+class RecipientSelection(ABC):
+    """The registry owns the selected recipient's live or retired behavior."""
+
+    @abstractmethod
+    def activity(self, observations, snapshot): ...
+
+    @abstractmethod
+    def read_effect(self, reads, message, snapshot, *, document=None): ...
+
+
 @dataclass(frozen=True, slots=True)
-class RegisteredRecipient:
+class KnownRecipient(RecipientSelection):
+    thread: ThreadProvenance
+
+    def read_effect(self, reads, message, snapshot, *, document=None):
+        return snapshot.displayed_recipient_effect(
+            reads, message, self.thread, document=document
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class RegisteredRecipient(KnownRecipient):
     thread: Thread
 
+    def activity(self, observations, snapshot):
+        return self.thread.execution.observe_recipient(observations, snapshot, self.thread)
+
 
 @dataclass(frozen=True, slots=True)
-class RetiredRecipient:
+class ArchivedRecipient(KnownRecipient):
+    def activity(self, observations, snapshot):
+        raise RelationViolationError("Archived recipients have no live activity")
+
+
+@dataclass(frozen=True, slots=True)
+class RetiredRecipient(RecipientSelection):
     lookup: str
+
+    def activity(self, observations, snapshot):
+        from .agent_activity import UnavailableRecipientActivity
+
+        return UnavailableRecipientActivity()
+
+    def read_effect(self, reads, message, snapshot, *, document=None):
+        return ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -549,21 +581,43 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
-    by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
+    by_lookup: Mapping[str, Thread] = field(repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        # This is a live ownership cut. Archived namespaces use the separate
-        # RegistryProvenance type and do not invent a lookup for duplicate births.
-        indexed: dict[str, Thread] = {}
+        super(RegistrySnapshot, self).__post_init__()
+        seen: set[str] = set()
         for thread in self.threads.values():
-            incarnation = thread.incarnation
-            if not incarnation.has_recorded_birth:
-                raise RelationViolationError("Live registry creation identity is unrecorded.")
-            lookup = incarnation.require_recorded().lookup
-            if lookup in indexed:
+            lookup = thread.incarnation.require_recorded().lookup
+            if lookup in seen:
                 raise RelationViolationError("Registry creation identities collide.")
+            seen.add(lookup)
+            if self.by_lookup.get(lookup) is not thread:
+                raise RelationViolationError("Snapshot lookup index differs from its threads.")
+        if len(seen) != len(self.by_lookup):
+            raise RelationViolationError("Snapshot lookup index includes an unregistered thread.")
+
+    @classmethod
+    def capture(cls, document: RegistryDocument) -> RegistrySnapshot:
+        """One live registry cut owns the index and all its source maps."""
+        indexed: dict[str, Thread] = {}
+        for thread in document.threads.values():
+            incarnation = thread.incarnation.require_recorded()
+            lookup = incarnation.lookup
             indexed[lookup] = thread
-        object.__setattr__(self, "by_lookup", MappingProxyType(indexed))
+        return cls(
+            threads=MappingProxyType(dict(document.threads)),
+            statuses=MappingProxyType(dict(document.statuses)),
+            last_seen=MappingProxyType(dict(document.last_seen)),
+            aliases=MappingProxyType(dict(document.aliases)),
+            owner_generations=MappingProxyType(dict(document.owners.generations)),
+            admission_generations=MappingProxyType(dict(document.admissions.generations)),
+            by_lookup=MappingProxyType(indexed),
+        )
+
+    def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
+        if not reads.human(thread.role):
+            return ()
+        return super().displayed_recipient_effect(reads, message, thread, document=document)
 
     def recipient(
         self, recipient: FrozenRecipient, original: CommittedDelivery

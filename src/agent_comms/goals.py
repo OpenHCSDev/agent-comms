@@ -7,7 +7,7 @@ from typing import Literal
 from abc import abstractmethod
 
 from .declared_family import DeclaredFamily
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 from .field_codec import FieldCodec
 from .goal_states import ActiveGoal, GoalState
@@ -82,11 +82,11 @@ class ResolvedMentionBinding(GoalMentionBinding):
 
     def __post_init__(self):
         super().__post_init__()
-        ThreadIncarnation(self.peer_name, self.peer_created_at)
+        RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
     @property
     def peer(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.peer_name, self.peer_created_at)
+        return RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
     def project(self, registry, owner, goal, source):
         from .relationships import GoalDerivedContact, GoalMentionDiagnostic
@@ -133,7 +133,7 @@ class GoalMentionSource:
 
         GoalRevision(self.goal_id, self.text_revision)
         TextDigest(self.text_digest)
-        ThreadIncarnation(self.owner_name, self.owner_created_at)
+        RecordedThreadIncarnation(self.owner_name, self.owner_created_at)
 
     @property
     def checkpoint(self) -> GoalRevision:
@@ -147,7 +147,7 @@ class GoalMentionSource:
 
     @property
     def incarnation(self) -> ThreadIncarnation:
-        return ThreadIncarnation(self.owner_name, self.owner_created_at)
+        return RecordedThreadIncarnation(self.owner_name, self.owner_created_at)
 
     def matches(self, goal, owner, registry) -> bool:
         if self.goal_id != goal.id or self.text_revision > goal.revision:

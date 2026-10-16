@@ -23,7 +23,7 @@ from .activity import (
 from .declared_family import DeclaredFamily
 from .audience_manifest import FrozenRecipient
 from .errors import RelationViolationError
-from .registry_document import RegisteredRecipient, RegistrySnapshot
+from .registry_document import RegistrySnapshot
 from .routing import TurnRouting
 from .runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from .store_files import _store_lock
@@ -152,10 +152,7 @@ class AgentActivity:
             if lookup in observations:
                 continue
             selected = snapshot.recipient(recipient, original)
-            observations[lookup] = (
-                selected.thread.execution.observe_recipient(self, snapshot, selected.thread)
-                if isinstance(selected, RegisteredRecipient) else UnavailableRecipientActivity()
-            )
+            observations[lookup] = selected.activity(self, snapshot)
         return observations
 
     def _emit_activity(self, activity: Activity) -> None:

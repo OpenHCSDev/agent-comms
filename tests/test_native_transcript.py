@@ -5,7 +5,7 @@ from dataclasses import fields
 
 import pytest
 
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
@@ -165,7 +165,7 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     root = tmp_path / "wire"
     comms = wire(root)
     thread = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
-    lookup = ThreadIncarnation("fixture", thread.created_at).lookup
+    lookup = RecordedThreadIncarnation("fixture", thread.created_at).lookup
     database = root / "coordination.sqlite3"
     with Coordination(str(database)) as store:
         install_native_runtime_schema(store)

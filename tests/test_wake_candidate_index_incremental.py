@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
@@ -59,7 +59,7 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
             )
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    return comms, WakeCandidateIndex(comms.bus.log), root_id, ThreadIncarnation("fixture", 1_700_010_100.0).lookup
+    return comms, WakeCandidateIndex(comms.bus.log), root_id, RecordedThreadIncarnation("fixture", 1_700_010_100.0).lookup
 
 
 def _page(

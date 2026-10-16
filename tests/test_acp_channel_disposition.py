@@ -10,7 +10,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import cohort_foreground
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
 from agent_comms.selected_triage import FullSelectedTriage, IgnoreSelectedTriage
@@ -66,8 +66,8 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
                     )
                 )
 
-            alpha_lookup = ThreadIncarnation("fixture", comms.registry.require("alpha").created_at).lookup
-            beta_lookup = ThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
+            alpha_lookup = RecordedThreadIncarnation("fixture", comms.registry.require("alpha").created_at).lookup
+            beta_lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
             by_source = {}
             for row in rows:
                 by_source.setdefault((row.owner_lookup, source_sequences(row)), []).append(row)
@@ -133,7 +133,7 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
                 read_historical_native_inputs(
                     store,
                     wire_root_id=root_id,
-                    recipient_lookup=ThreadIncarnation("fixture", comms.registry.require("alpha").created_at).lookup,
+                    recipient_lookup=RecordedThreadIncarnation("fixture", comms.registry.require("alpha").created_at).lookup,
                     source_seq=message.seq,
                 )
                 == ()

@@ -18,7 +18,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.claim_admission import (
@@ -97,7 +97,7 @@ def selected_turn():
                     recipient.canonical_thread, committed=True,
                 )
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
-            lookup = ThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
+            lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
             assignment = sealed_cohort_assignments(store, lookup)[0]
             owner, generation = comms.registry.live_owner_with_admission("Alice")
             owner, generation = comms.registry.lease_live_turn_with_admission(

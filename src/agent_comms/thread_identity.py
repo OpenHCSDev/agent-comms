@@ -8,43 +8,45 @@ from __future__ import annotations
 
 import hashlib
 import math
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar
 
 from .errors import RelationViolationError
+from .field_codec import WireValue
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadIncarnation:
+class ThreadIncarnation(WireValue, ABC):
     name: str
     created_at: float
 
-    def __new__(cls, name: str, created_at: float) -> ThreadIncarnation:
-        if cls is ThreadIncarnation and type(created_at) in (int, float):
-            if created_at > 0:
-                return object.__new__(RecordedThreadIncarnation)
-            if created_at == cls.DELETED_BIRTH:
-                return object.__new__(DeletedThreadIncarnation)
-            if created_at == 0:
-                return object.__new__(UnrecordedThreadIncarnation)
-        return object.__new__(cls)
+    def to_wire(self) -> dict[str, str | float]:
+        return {"name": self.name, "created_at": self.created_at}
 
-    # The persisted birth of a deleted participant: its declaration and real
-    # birth are gone, its name stays on the bus. See DeletedThread.
-    DELETED_BIRTH: ClassVar[float] = -1.0
+    @classmethod
+    def schema(cls) -> dict:
+        from .field_codec import FieldCodec
+
+        return FieldCodec.record_schema(ThreadIncarnation)
+
+    @classmethod
+    def from_wire(cls, data: dict) -> ThreadIncarnation:
+        decoded = ThreadIncarnationRecord.decode(data["name"], data["created_at"])
+        if not isinstance(decoded, cls):
+            raise ValueError("Decoded thread birth does not match its declared member")
+        return decoded
+    names_deleted_thread: ClassVar[bool] = False
+    has_recorded_birth: ClassVar[bool] = False
 
     @classmethod
     def deleted(cls, name: str) -> DeletedThreadIncarnation:
-        return DeletedThreadIncarnation(name, cls.DELETED_BIRTH)
-
-    @property
-    def names_deleted_thread(self) -> bool:
-        return isinstance(self, DeletedThreadIncarnation)
+        return DeletedThreadIncarnation(name)
 
     def __post_init__(self) -> None:
         from .field_codec import FieldCodec
@@ -53,17 +55,18 @@ class ThreadIncarnation:
             raise ValueError("Thread incarnation requires a recorded name")
         if not math.isfinite(FieldCodec.decode(float, self.created_at)):
             raise ValueError("Thread incarnation requires a finite birth")
-        if type(self) is ThreadIncarnation:
-            raise ValueError("Thread incarnation requires a declared birth state")
 
-    @property
-    def has_recorded_birth(self) -> bool:
-        return isinstance(self, RecordedThreadIncarnation)
-
+    @abstractmethod
     def require_recorded(self) -> RecordedThreadIncarnation:
-        if not isinstance(self, RecordedThreadIncarnation):
-            raise ValueError("Thread incarnation requires a positive recorded birth")
-        return self
+        """Only the recorded member can expose a lookup capability."""
+
+    @abstractmethod
+    def provenance_type(self):
+        """The archive declaration carrying this recorded birth state."""
+
+    @abstractmethod
+    def renamed(self, name: str) -> ThreadIncarnation:
+        """Retain this member's birth state under an original alias."""
 
     def resolved(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
@@ -91,7 +94,7 @@ class ThreadIncarnation:
     def recorded_names(self, snapshot: RegistryProvenance) -> tuple[ThreadIncarnation, ...]:
         """Original names retained for this exact current incarnation."""
         canonical = self.resolved(snapshot)
-        return (canonical, *(type(self)(alias, canonical.created_at)
+        return (canonical, *(canonical.renamed(alias)
                              for alias, name in snapshot.aliases.items()
                              if name == canonical.name))
 
@@ -99,6 +102,19 @@ class ThreadIncarnation:
 @dataclass(frozen=True)
 class RecordedThreadIncarnation(ThreadIncarnation):
     """Only a positive recorded birth can select a durable lookup."""
+
+    has_recorded_birth: ClassVar[bool] = True
+
+    def require_recorded(self) -> RecordedThreadIncarnation:
+        return self
+
+    def provenance_type(self):
+        from .thread_provenance import ThreadProvenance
+
+        return ThreadProvenance
+
+    def renamed(self, name: str) -> RecordedThreadIncarnation:
+        return RecordedThreadIncarnation(name, self.created_at)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -126,20 +142,53 @@ class RecordedThreadIncarnation(ThreadIncarnation):
 class DeletedThreadIncarnation(ThreadIncarnation):
     """A deleted participant retains only its name, never a lookup capability."""
 
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        if self.created_at != self.DELETED_BIRTH:
-            raise ValueError("Deleted incarnation requires its deleted birth sentinel")
+    created_at: float = field(default=-1.0, init=False)
+    names_deleted_thread: ClassVar[bool] = True
+
+    def require_recorded(self) -> RecordedThreadIncarnation:
+        raise ValueError("Thread incarnation requires a positive recorded birth")
+
+    def provenance_type(self):
+        from .thread_provenance import DeletedThreadProvenance
+
+        return DeletedThreadProvenance
+
+    def renamed(self, name: str) -> DeletedThreadIncarnation:
+        return DeletedThreadIncarnation(name)
 
 
 @dataclass(frozen=True)
 class UnrecordedThreadIncarnation(ThreadIncarnation):
     """Historical zero-birth evidence cannot select a live recipient."""
 
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        if self.created_at != 0:
-            raise ValueError("Unrecorded incarnation requires its zero-birth sentinel")
+    created_at: float = field(default=0.0, init=False)
+
+    def require_recorded(self) -> RecordedThreadIncarnation:
+        raise ValueError("Thread incarnation requires a positive recorded birth")
+
+    def provenance_type(self):
+        from .thread_provenance import UnrecordedThreadProvenance
+
+        return UnrecordedThreadProvenance
+
+    def renamed(self, name: str) -> UnrecordedThreadIncarnation:
+        return UnrecordedThreadIncarnation(name)
+
+
+class ThreadIncarnationRecord:
+    """One explicit boundary decoder for stored birth numbers, never a constructor switch."""
+
+    @staticmethod
+    def decode(name: str, birth: float) -> ThreadIncarnation:
+        from .field_codec import FieldCodec
+
+        name = FieldCodec.decode(str, name)
+        birth = FieldCodec.decode(float, birth)
+        if birth == -1:
+            return DeletedThreadIncarnation(name)
+        if birth == 0:
+            return UnrecordedThreadIncarnation(name)
+        return RecordedThreadIncarnation(name, birth)
 
 
 @dataclass(frozen=True, slots=True)

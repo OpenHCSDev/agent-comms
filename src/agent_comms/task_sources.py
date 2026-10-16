@@ -11,7 +11,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .goals import GoalRevision
 from .message_reference import MessageReference
-from .thread_identity import ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
 from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
@@ -552,7 +552,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
         origin = row.origin.require_human()
         if origin.root_id != original_source.witness.root_id:
             raise RelationViolationError("USER input pin belongs to another wire root")
-        original_author = ThreadIncarnation(origin.author.sender, origin.author.created_at)
+        original_author = RecordedThreadIncarnation(origin.author.sender, origin.author.created_at)
         if original_author.resolved(registry) != self.source_user.resolved(registry):
             raise RelationViolationError("USER input pin differs from its original human author")
         if origin.admission.incarnation.resolved(registry) != self.recipient.resolved(registry):

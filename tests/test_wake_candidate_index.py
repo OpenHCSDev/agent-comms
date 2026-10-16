@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_publication import (
     PRIVATE_WIRE_FIELD,
     public_envelope_digest,
@@ -75,7 +75,7 @@ def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
             )
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    lookup = {name: ThreadIncarnation("fixture", identity).lookup for name, identity in created.items()}
+    lookup = {name: RecordedThreadIncarnation("fixture", identity).lookup for name, identity in created.items()}
     return comms, root_id, lookup
 
 

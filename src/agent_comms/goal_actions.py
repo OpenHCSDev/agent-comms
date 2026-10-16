@@ -22,7 +22,7 @@ from .goal_states import (
     PausedGoal,
     RuntimePause,
 )
-from .goal_waits import GoalWait, GoalWaits
+from .goal_waits import GoalWaits, RecordedGoalWait
 from .goals import Goal
 from .threads import Thread
 
@@ -292,7 +292,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         # progress update must leave this same goal waiting, not runnable.
         reporting_lease = thread.turn_lease
         ctx.goals.waits.record(
-            GoalWait(
+            RecordedGoalWait(
                 goal.id,
                 uuid4().hex,
                 goal.revision,
