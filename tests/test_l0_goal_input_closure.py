@@ -173,7 +173,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
 async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, fake_native_catalog
 ):
     from agent_comms.native_arguments import NativeArguments
 
