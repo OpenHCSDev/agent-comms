@@ -1,5 +1,6 @@
 """Viewer-only presence flags reveal archived threads without reviving owners."""
 
+from agent_comms.tool_caller import NoThreadCaller
 
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
@@ -15,8 +16,8 @@ def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
     comms.messaging.initialize_private_initial_protocol()
     for name in ("active", "stopped", "archived"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))
-    comms.owners.stop("stopped")
-    comms.owners.stop("archived")
+    comms.owners.stop("stopped", caller=NoThreadCaller())
+    comms.owners.stop("archived", caller=NoThreadCaller())
     comms.threads.archive("archived")
     comms.registry.declare(Thread("human", frozenset({"team"}), str(tmp_path), role=ThreadRole.USER))
 

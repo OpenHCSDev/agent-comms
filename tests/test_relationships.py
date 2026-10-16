@@ -1,3 +1,5 @@
+
+from agent_comms.tool_caller import NoThreadCaller
 import json
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import replace
@@ -187,7 +189,7 @@ def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
     original = comms.relationships.edit(
         "owner", RelationshipEdit.decode("add"), "peer", "Unfinished review notes"
     )
-    comms.owners.stop("peer")
+    comms.owners.stop("peer", caller=NoThreadCaller())
     comms.registry.remove("peer")
 
     missing = collaboration_rows(comms)[0]
@@ -215,7 +217,7 @@ def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
 def test_surviving_peer_can_end_unavailable_collaboration(tmp_path):
     comms = setup_wire(tmp_path)
     comms.relationships.edit("owner", RelationshipEdit.decode("add"), "peer", "Work to remember")
-    comms.owners.stop("owner")
+    comms.owners.stop("owner", caller=NoThreadCaller())
     comms.registry.remove("owner")
     row = collaboration_rows(comms, "peer")[0]
     assert (row.target, row.available, row.detail) == ("owner", False, "Work to remember")
@@ -230,7 +232,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     original = comms.relationships.edit(
         "owner", RelationshipEdit.decode("add"), "peer", "Old incarnation's task"
     )
-    comms.owners.stop("peer")
+    comms.owners.stop("peer", caller=NoThreadCaller())
     comms.registry.remove("peer")
     comms.registry.declare(
         Thread("peer", frozenset(), str(tmp_path), created_at=old_peer.created_at + 1)
@@ -262,7 +264,7 @@ def test_deleted_owner_edges_are_not_purged_or_inherited_by_new_owner(tmp_path):
     original = comms.relationships.edit(
         "owner", RelationshipEdit.decode("add"), "peer", "Retained historical declaration"
     )
-    comms.owners.stop("owner")
+    comms.owners.stop("owner", caller=NoThreadCaller())
     comms.registry.remove("owner")
     comms.relationships.edit("origin", RelationshipEdit.decode("add"), "peer", "Independent work")
     comms.registry.declare(
@@ -287,11 +289,10 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
         "owner", RelationshipEdit.decode("add"), "peer", "Review before rename"
     )
     monkeypatch.setenv("AGENT_COMMS_THREAD", "peer")
-    from agent_comms.tool_caller import ThreadCaller
 
     comms.threads.rename_self("reviewer", caller=comms.registry.require('peer').incarnation)
     assert collaboration_rows(comms)[0].target == "reviewer"
-    comms.owners.stop("reviewer")
+    comms.owners.stop("reviewer", caller=NoThreadCaller())
     comms.registry.remove("reviewer")
     comms.relationships.edit("owner", RelationshipEdit.decode("add"), "child")
     row = next(row for row in collaboration_rows(comms) if not row.available)
@@ -318,7 +319,7 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
 
     # Deletion retains the exact current incarnation, but the real roster
     # excludes it even when stopped/archived entries were requested.
-    comms.owners.stop("renamed-peer")
+    comms.owners.stop("renamed-peer", caller=NoThreadCaller())
     comms.registry.begin_delete("renamed-peer")
     retained = comms.registry.require("renamed-peer")
     assert retained.incarnation.current(comms.registry.snapshot())

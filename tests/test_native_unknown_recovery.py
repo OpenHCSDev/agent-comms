@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.tool_caller import NoThreadCaller
+
 import asyncio
 import json
 import multiprocessing
@@ -42,12 +44,12 @@ def unknown_owner(directory, admitted, output, exit_allowed):
 
     native_pi._trusted_package = lambda path: path
     fake, _calls = _fake_model()
+    caller = comms.registry.require("beta").incarnation
 
     async def fail(*args, **kwargs):
         if admitted:
             await fake(*args, **kwargs)
-        os.environ["AGENT_COMMS_THREAD"] = "beta"
-        comms.owners.release("beta")
+        comms.owners.release("beta", caller=caller)
         raise NativePiUnavailable("UNKNOWN before admission receipt")
 
     TrackedTurnSession.execute = fail
@@ -171,7 +173,7 @@ def test_stop_of_previously_released_dead_owner_settles_without_replay(released_
     with Coordination(str(root / "coordination.sqlite3")) as store:
         before_input = input_evidence(store)
         assert store.snapshots.get(execution_id).is_current
-    comms.owners.stop("beta")
+    comms.owners.stop("beta", caller=NoThreadCaller())
     with Coordination(str(root / "coordination.sqlite3")) as store:
         snapshot = store.snapshots.get(execution_id)
         assert not snapshot.is_current

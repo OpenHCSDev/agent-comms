@@ -18,13 +18,11 @@ from agent_comms.messages import InfoKind
 from agent_comms.pi_vocabulary import ServiceTier
 from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
-from agent_comms.private_path import PrivateSocketRole
-from agent_comms.runtime_requests import (
-    ResultRuntimeRequest,
-    RuntimeRequest,
-)
+from agent_comms.runtime_request import ResultRuntimeRequest, RuntimeRequest
+from agent_comms.runtime_socket import RuntimeSocket
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import ToolCaller, NoThreadCaller
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.launch_runtime import LaunchRuntime
@@ -77,7 +75,8 @@ def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, caps
         help = "Test extension through declaration membership"
         amount: int = option("--amount")
 
-        def apply(self, ctx):
+        def apply(self, ctx, *, caller: ToolCaller):
+            assert isinstance(caller, NoThreadCaller)
             return {"amount": self.amount + 1, "root": str(ctx.root)}
 
     comms = Comms(LocalRoute(tmp_path), runtime=LaunchRuntime.current())
@@ -185,10 +184,10 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
             await proxy.request("contract_probe", amount=True)
         with pytest.raises(RuntimeError, match="Unknown fields.*futureExtension"):
             await proxy.request("contract_probe", amount=40, futureExtension=True)
-        with pytest.raises(RuntimeError, match="Unknown runtime request field: kind"):
+        with pytest.raises(RuntimeError, match="Unknown fields.*kind"):
             await proxy.request("contract_probe", amount=40, kind="cancel")
-        with PrivateSocketRole.address(server.path) as address:
-            reader, writer = await asyncio.open_unix_connection(address)
+        with RuntimeSocket(server.path).bound() as destination:
+            reader, writer = await asyncio.open_unix_connection(destination.path)
         try:
             writer.write(b'{"action":"not-a-request","thread":"owner"}\n')
             await writer.drain()

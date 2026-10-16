@@ -636,6 +636,9 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             raise RelationViolationError("Stopping owner was removed") from error
         if current.incarnation != expected.incarnation:
             raise RelationViolationError("Stopping owner incarnation changed")
-        current.require_local_process(expected.require_process())
+        expected.role.require_executable()
+        current.role.require_executable()
+        if current.process_identity != expected.process_identity:
+            raise RelationViolationError("Stopping owner process changed")
         if self.admission_generations[expected.name] != admission:
             raise RelationViolationError("Stopping owner admission changed")

@@ -18,7 +18,7 @@ from pathlib import Path
 from .active_route import resolve_comms_route
 from .native_settings import NativeThreadDefaults
 from .cli_commands import CliCommand
-from .tool_caller import ToolCaller
+from .tool_caller import ToolCaller, ThreadCaller
 from .cli_protocol import CoreError
 from .comms import Comms
 from .owner_restart import StoppedOwnerFailure
@@ -40,6 +40,7 @@ class CliArgumentParser(argparse.ArgumentParser):
 
 def build_parser(settings: NativeThreadDefaults) -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
+    ThreadCaller.add_cli_arguments(parser, required=False, dest="caller")
     parser.add_argument(
         "--root",
         default=None,

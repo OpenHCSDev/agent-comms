@@ -5,6 +5,7 @@ admission, native process, source proof and response publication remain real.
 """
 
 from agent_comms.runtime_socket import RuntimeSocket
+
 from agent_comms.context_segments.doctrine import DoctrineSegment
 import argparse
 import hashlib
@@ -23,12 +24,11 @@ import threading
 from compaction_loopback import LoopbackProvider
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import Comms
-from agent_comms.acp import CommsClient
+from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import decode_updates
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_cutover import StoppedOwnerInstallation
-
-from agent_comms.runtime_requests import SubscribeRuntimeRequest
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.bus_publication import HumanOrigin
@@ -36,7 +36,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.native_runtime_input import NativeRuntimeInput, CurrentNativeCursor
 from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage
-from contextlib import closing, contextmanager
+from contextlib import AsyncExitStack, closing, contextmanager
 from abc import abstractmethod
 import sqlite3
 from agent_comms.declared_family import DeclaredFamily
@@ -593,7 +593,6 @@ async def configured_mixed_routes(arguments):
 
 async def retained_owner():
     """Original installed ACP owner with an explicit saved SelectedExecution."""
-    from agent_comms.acp import CommsAgent
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.private_nk_entrypoint import PrivateNkLaunch
     from agent_comms.native_source_cursor import NativeSourceCursor
@@ -670,24 +669,12 @@ class PromptBindingContention(AdmissionContention, declared_name='binding'):
 
 async def attach(service, name):
     owner = service.registry.require(name)
-    async with asyncio.timeout(30):
-        while not RuntimeSocket.path_for(service.root, owner.pid).exists():
-            assert owner.process_alive
-            await asyncio.sleep(.03)
-        reader, writer = await asyncio.open_unix_connection(
-            RuntimeSocket.path_for(service.root, owner.pid), limit=8 * 1024 * 1024)
-        try:
-            writer.write((json.dumps(SubscribeRuntimeRequest(thread=name).to_wire())+'\n').encode())
-            await writer.drain()
-            while line := await reader.readline():
-                packet = json.loads(line)
-                assert 'error' not in packet, packet
-                if 'ready' in packet:
-                    return
-            raise AssertionError('Worker closed before complete attachment')
-        finally:
-            writer.close()
-            await writer.wait_closed()
+    async with asyncio.timeout(30), AsyncExitStack() as lifetime:
+        client = CommsAgent(service, auto_wake=False)
+        lifetime.push_async_callback(client.shutdown)
+        proxy = RuntimeProxy(client, name, RuntimeSocket.path_for(service.root, owner.pid))
+        lifetime.push_async_callback(proxy.close)
+        await proxy.subscribe()
 
 
 class PublishOriginalsAtStoppedBatch(StoppedOwnerInstallation):

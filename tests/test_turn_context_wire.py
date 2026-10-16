@@ -1,4 +1,6 @@
 """Original sealed messaging survives silent context rows through every projection."""
+
+from agent_comms.tool_caller import NoThreadCaller
 import time
 from dataclasses import replace
 import hashlib
@@ -327,7 +329,7 @@ def test_recorded_context_history_retains_rename_and_original_predecessor(tmp_pa
     latest = ContextCliCommand(thread='Renamed-Alice', diff=True)
     assert latest.encode_result(latest.apply(reopened))['previous_turn'] == FieldCodec.encode(same_turn.turn)
     with pytest.raises(ValueError, match='No preceding recorded turn'):
-        ContextCliCommand(thread='Alice', turn=1, diff=True).apply(reopened)
+        ContextCliCommand(thread='Alice', turn=1, diff=True).apply(reopened, caller=NoThreadCaller())
     with pytest.raises(ValueError, match='outside the original history'):
         replace(future, counter='unrecorded').changed_from_history(history)
     comms.registry.unregister('Renamed-Alice')

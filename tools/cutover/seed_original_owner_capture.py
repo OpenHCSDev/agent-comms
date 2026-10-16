@@ -1,17 +1,21 @@
 """Report-authoring helper and current-runtime replacement fixture."""
 
 from agent_comms.runtime_socket import RuntimeSocket
+
+from agent_comms.tool_caller import NoThreadCaller
+
 import asyncio
+from contextlib import AsyncExitStack
 from dataclasses import replace
 import json
 import os
 from pathlib import Path
 import sys
 
+from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import BlockedGoalAction, ModelInvocable, SetGoalAction
-
-from agent_comms.runtime_requests import SubscribeRuntimeRequest
+from agent_comms.runtime import RuntimeProxy
 from agent_comms.turn_lease import ActiveTurn
 from agent_comms.threads import Thread
 from agent_comms.active_route import LocalRoute
@@ -30,24 +34,13 @@ def author_model_report(service, name, turn):
     service.registry.register(replace(source, active_turn=None))
 
 
-async def ready(root, owner):
-    async with asyncio.timeout(12):
-        while not RuntimeSocket.path_for(root, owner.pid).exists():
-            assert owner.process_alive
-            await asyncio.sleep(.02)
-        reader, writer = await asyncio.open_unix_connection(RuntimeSocket.path_for(root, owner.pid), limit=8*1024*1024)
-        try:
-            writer.write((json.dumps(SubscribeRuntimeRequest(thread=owner.name).to_wire())+'\n').encode())
-            await writer.drain()
-            while line := await reader.readline():
-                packet = json.loads(line)
-                assert 'error' not in packet, packet
-                if 'ready' in packet:
-                    return
-            raise AssertionError('Original worker closed before attachment')
-        finally:
-            writer.close()
-            await writer.wait_closed()
+async def ready(service, owner):
+    async with asyncio.timeout(12), AsyncExitStack() as lifetime:
+        client = CommsAgent(service, auto_wake=False)
+        lifetime.push_async_callback(client.shutdown)
+        proxy = RuntimeProxy(client, owner.name, RuntimeSocket.path_for(service.root, owner.pid))
+        lifetime.push_async_callback(proxy.close)
+        await proxy.subscribe()
 
 
 def runtime_owners(root, package):
@@ -80,14 +73,14 @@ def runtime_owners(root, package):
             os.environ.update(PI_CODING_AGENT_DIR=str(project / 'config'),
                               BATCH_OWNER_CREDENTIAL='private-'+str(index))
             service.owners.start(name, agent_args=('--offline', '--no-tools') if index == 0 else ())
-            asyncio.run(ready(root, service.registry.require(name)))
+            asyncio.run(ready(service, service.registry.require(name)))
         print(json.dumps({'root_id':root_id, 'names':names}), flush=True)
         # The operator replaces workers while this source fixture retains cleanup.
         sys.stdin.readline()
     finally:
         for name in names:
             if name in service.registry.snapshot().threads:
-                service.owners.stop(name)
+                service.owners.stop(name, caller=NoThreadCaller())
 
 
 if __name__ == '__main__':

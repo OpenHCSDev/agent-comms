@@ -1,5 +1,7 @@
 """Actual native Pi receipts for queued and steered channel requests."""
 
+from agent_comms.tool_caller import NoThreadCaller
+
 from agent_comms.queued_input import InitialInput
 import asyncio
 import json
@@ -136,7 +138,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             if case == "goal":
                 comms.goals.update_goal("worker", SetGoalAction(text="Changed goal"))
             elif case == "stop":
-                comms.owners.stop("worker")
+                comms.owners.stop("worker", caller=NoThreadCaller())
                 await agent.sessions.sync_identity("worker")
                 assert warmup_proc is not None and warmup_proc.returncode is not None
             elif case == "reopen":

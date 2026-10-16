@@ -1,5 +1,8 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
 
+from agent_comms.tool_caller import NoThreadCaller
+from stored_inputs import stored_inputs
+
 from agent_comms.runtime_socket import RuntimeSocket
 
 import os
@@ -204,13 +207,36 @@ while True: time.sleep(0.01)
             ObservedProcess(current.process_identity).stop_sync()
 
 
+def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.threads import Thread
+
+    comms = Comms(tmp_path / "wire")
+    declared = comms.registry.declare(Thread("worker", frozenset(), str(tmp_path)))
+    generation = comms.registry.snapshot().admission_generations[declared.name]
+    comms.owners.stop(declared.name, caller=NoThreadCaller())
+    snapshot = comms.registry.snapshot()
+    assert snapshot.statuses[declared.name].stopped
+    assert snapshot.threads[declared.name].process_identity is None
+    assert comms.owners.releases.read()[declared.name].current(snapshot, declared, generation)
+
+    waiting = comms.registry.declare(Thread("waiting", frozenset(), str(tmp_path)))
+    before = comms.registry.snapshot().admission_generations[waiting.name]
+    comms.registry.register(
+        replace(waiting, process_identity=ProcessIdentity.capture(os.getpid())),
+        new_owner=True,
+    )
+    with pytest.raises(RelationViolationError, match="Stopping owner process changed"):
+        comms.registry.snapshot().require_stopping_owner(waiting, before)
+
+
 def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
     comms, child = releasing_owner
     original = comms.registry.require("worker")
     child.force()
     child.reap()
     assert not original.process_alive
-    comms.owners.stop("worker")
+    comms.owners.stop("worker", caller=NoThreadCaller())
     snapshot = comms.registry.snapshot()
     receipt = comms.owners.releases.read()["worker"]
     assert receipt.current(snapshot, original, receipt.before)
@@ -226,7 +252,7 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
         snapshot = comms.registry.snapshot()
         arguments["expected"] = OwnerRestartSelection.capture(snapshot, "worker")
     if mode == "stop":
-        comms.owners.stop("worker")
+        comms.owners.stop("worker", caller=NoThreadCaller())
     else:
         (result,) = comms.owners.restart_owners(
             ["worker"], agent_bin=sys.executable, agent_args=["-c", "print('local')"], **arguments

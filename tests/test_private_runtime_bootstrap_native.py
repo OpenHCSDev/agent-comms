@@ -1,5 +1,7 @@
 """Fresh production bootstrap wakes a real native owner before and after restart."""
 
+from agent_comms.tool_caller import NoThreadCaller
+
 import json
 import os
 import sqlite3
@@ -148,7 +150,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         with sqlite3.connect(comms.root / "coordination.sqlite3") as db:
             (session,) = db.execute("SELECT session_file FROM native_runtime_input").fetchone()
         assert Path(session).is_file()
-        comms.owners.stop("recipient")
+        comms.owners.stop("recipient", caller=NoThreadCaller())
         assert not comms.registry.require("recipient").process_alive
         comms.owners.start("recipient", native=native, launch_runtime=runtime)
         assert comms.registry.require("recipient").process_identity != original.process_identity
@@ -167,7 +169,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         assert len(rows) == 2 and all(entry for _, entry in rows)
         assert len({input_id for input_id, _ in rows}) == 2
     finally:
-        comms.owners.stop("recipient")
+        comms.owners.stop("recipient", caller=NoThreadCaller())
         server.shutdown()
         server.server_close()
         serving.join(timeout=2)

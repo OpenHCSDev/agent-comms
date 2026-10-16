@@ -63,9 +63,12 @@ existing bounded exchange and result decoder rather than copying it.
    restart and ACP startup. Capture actual process identity/liveness before
    retained-owner capture. A socket file is not readiness.
 
-The failed 693f root remains immutable and had zero submitted inputs. Its
-original worker exit cause is not proved; the transcript observer fix is a
-separate repair. Parent core-goal-retry owns that diagnosis. UNKNOWN provider,
-wire and file attempts are not replayed. The old FD success does not accept the
+The failed 693f root remains immutable and had zero submitted inputs. Parent
+core-goal-retry established the startup failure from its terminal traceback:
+transcript replay raised ObserverDied because publication_revision treated a
+RecordedThreadIncarnation as a Thread. Fix 940999d84 addresses that cause.
+Shutdown released the exact owner; the old driver mistook a stale socket for
+readiness. Parent owns the fresh capture/restart acceptance; do not duplicate
+that run. UNKNOWN provider, wire and file attempts are not replayed. The old FD success does not accept the
 JSON replacement. No default installation or successful provider journey is
 claimed by these source edits.

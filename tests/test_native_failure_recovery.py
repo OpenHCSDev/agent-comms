@@ -37,6 +37,7 @@ def failed_owner(directory, output, exit_allowed):
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
     native_pi._trusted_package = lambda path: path
     fake, _calls = _fake_model()
+    caller = comms.registry.require("beta").incarnation
 
     async def old_failure(*args, **kwargs):
         result = await fake(*args, **kwargs)
@@ -61,8 +62,7 @@ def failed_owner(directory, output, exit_allowed):
         # Revoke the real owner before the failure consumer can settle. This
         # leaves the original admitted input unresolved without an obsolete
         # failure hook or a fabricated owner-loss grant.
-        os.environ["AGENT_COMMS_THREAD"] = "beta"
-        comms.owners.release("beta")
+        comms.owners.release("beta", caller=caller)
         raise NativePiUnavailable("released native provider failure")
 
     TrackedTurnSession.execute = old_failure
@@ -258,8 +258,7 @@ def replacement_release(root):
     comms.registry.register(
         replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), new_owner=True
     )
-    os.environ["AGENT_COMMS_THREAD"] = "beta"
-    comms.owners.release("beta")
+    comms.owners.release("beta", caller=owner.incarnation)
 
 
 def test_later_attested_release_still_fences_original_admission(released_failure):
