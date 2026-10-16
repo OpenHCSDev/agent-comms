@@ -566,7 +566,7 @@ def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_pat
 
     def intercept(argv, *, env, **_kwargs):
         assert env["AGENT_COMMS_ROOT"] == str(root)
-        assert NativeThreadDefaults.from_command(argv).binary == LaunchRuntime.current().native_entrypoint
+        assert NativeThreadDefaults.from_arguments(argv).binary == LaunchRuntime.current().native_entrypoint
         with Coordination(str(root / "coordination.sqlite3")) as store:
             participant = store.participants.get(lookup)
             assert participant.committed and participant.owner_thread == "late-owner"

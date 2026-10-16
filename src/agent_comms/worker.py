@@ -110,8 +110,8 @@ def main() -> int:
         prog="agent-comms-agent", description=__doc__,
         epilog="Select an existing owner by its recorded incarnation. Use agent-comms for commands.",
     )
-    NativeThreadDefaults.add_cli_arguments(parser, required=True)
-    parser.add_argument(ThreadIncarnation.value_flag, type=ThreadIncarnation.from_json, required=True)
+    NativeThreadDefaults.add_cli_arguments(parser, required=True, dest="native_settings")
+    ThreadIncarnation.add_cli_arguments(parser, required=True, dest="thread_incarnation")
     namespace = parser.parse_args()
     runtime = LaunchRuntime.running()
     with suppress(KeyboardInterrupt):

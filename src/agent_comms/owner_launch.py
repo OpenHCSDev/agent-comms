@@ -46,7 +46,7 @@ class RetainedOwnerLaunch:
         raw = Path(f"/proc/{process.pid}/environ").read_bytes()
         values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
-        native = NativeThreadDefaults.from_command(command)
+        native = NativeThreadDefaults.from_arguments(command)
         platform.require(process)
         route = environment.get(launch_runtime.RestartEnvironment.owner_key)
         if not route:

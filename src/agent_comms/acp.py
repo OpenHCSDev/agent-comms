@@ -525,7 +525,7 @@ class CommsClient(CommsAgent):
 def main() -> int:
     from .active_route import resolve_comms_route
     runtime = LaunchRuntime.current()
-    native = NativeThreadDefaults.from_cli(sys.argv[1:], NativeThreadDefaults.from_runtime(runtime))
+    native = NativeThreadDefaults.from_arguments(sys.argv[1:], NativeThreadDefaults.from_runtime(runtime))
     with resolve_comms_route().admit_client():
         if "--login" in sys.argv[1:]:
             from .login import run_login

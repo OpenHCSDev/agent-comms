@@ -1,6 +1,8 @@
 """Launch selection has one grammar, then typed consumers and native validation."""
 
+import argparse
 import ast
+import asyncio
 import os
 import re
 import sys
@@ -10,6 +12,7 @@ from native_proof_cases import read_proof_rows
 
 import pytest
 
+from agent_comms import worker
 from agent_comms.native_arguments import (
     NamedOption,
     NativeArguments,
@@ -21,6 +24,10 @@ from test_backend_native_lifecycle import native_backend as native_backend
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.active_route import LocalRoute
 from agent_comms.native_settings import NativeThreadDefaults
+from agent_comms.thread_identity import (
+    ThreadIncarnation, RecordedThreadIncarnation,
+    DeletedThreadIncarnation, UnrecordedThreadIncarnation,
+)
 import dataclasses
 from agent_comms.launch_runtime import LaunchRuntime
 
@@ -39,15 +46,46 @@ def test_unconfigured_launch_has_no_provider_or_model_policy():
 
 def test_native_settings_cli_and_original_command_share_the_declared_codec():
     selected = NativeThreadDefaults(binary="/fixture pi", arguments=("--label", "two words"))
-    assert NativeThreadDefaults.from_cli(selected.cli_arguments, selected) == selected
-    assert NativeThreadDefaults.from_command(("python", "-m", "agent_comms.worker",
-                                             *selected.cli_arguments)) == selected
-    with pytest.raises(ValueError, match="no typed native launch settings"):
-        NativeThreadDefaults.from_command(("python", "-m", "agent_comms.worker"))
+    assert NativeThreadDefaults.from_arguments(selected.cli_arguments, selected) == selected
+    assert NativeThreadDefaults.from_arguments(("python", "-m", "agent_comms.worker",
+                                               *selected.cli_arguments)) == selected
+    assert NativeThreadDefaults.from_arguments((), selected) is selected
+    with pytest.raises(ValueError, match="Missing required --native-settings"):
+        NativeThreadDefaults.from_arguments(("python", "-m", "agent_comms.worker"))
     with pytest.raises(ValueError):
         NativeThreadDefaults.from_json('{"binary":42}')
     with pytest.raises(ValueError):
         NativeThreadDefaults.from_json('{"binary":"/fixture/pi","arguments":[42]}')
+
+
+@pytest.mark.parametrize("record_type,record", [
+    (NativeThreadDefaults, NativeThreadDefaults(binary="/fixture pi", arguments=("two words",))),
+    (ThreadIncarnation, RecordedThreadIncarnation("fixture-owner", 1.0)),
+])
+def test_record_flags_share_required_default_and_strict_json_boundary(record_type, record):
+    assert record_type.from_arguments(record.cli_arguments) == record
+    assert record_type.from_arguments((), record) is record
+    with pytest.raises(ValueError, match="Missing required"):
+        record_type.from_arguments(())
+    with pytest.raises(argparse.ArgumentError):
+        record_type.from_arguments((record_type.value_flag, "not json"), record)
+    parser = argparse.ArgumentParser()
+    record_type.add_cli_arguments(parser, required=True, dest="selected")
+    assert parser.parse_args(record.cli_arguments).selected == record
+    with pytest.raises(SystemExit) as missing:
+        parser.parse_args(())
+    assert missing.value.code == 2
+
+
+@pytest.mark.parametrize("incarnation", [
+    DeletedThreadIncarnation("fixture-owner"), UnrecordedThreadIncarnation("fixture-owner"),
+])
+def test_worker_refuses_nonrecorded_identity_before_runtime_or_route(incarnation):
+    # Generic transport retains all family members; the worker owns live identity admission.
+    decoded = ThreadIncarnation.from_arguments(incarnation.cli_arguments)
+    assert decoded == incarnation
+    with pytest.raises(ValueError, match="recorded"):
+        asyncio.run(worker.run(NativeThreadDefaults(binary="/fixture/pi"), decoded, None))
 
 
 def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments():
