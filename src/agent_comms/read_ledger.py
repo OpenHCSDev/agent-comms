@@ -8,13 +8,14 @@ represent that fact. Delivery cursors remain a separate executor contract.
 from __future__ import annotations
 
 import json
+from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
-from .field_codec import JsonShapeFamily, JsonShapeMember
+from .field_codec import FieldCodec, WireValue
 from .locked_store import LockedStore
 from .private_path import FileIdentity, FileRevision
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
@@ -31,38 +32,72 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class ReadMarkerNotice(DeclaredFamily, JsonShapeFamily, affix="ReadMarkerNotice"):
+class ReadMarkerNotice(DeclaredFamily, WireValue, affix="ReadMarkerNotice"):
     """The ledger's native text/null value, decoded once as a notice state."""
+
+    accepts_null = True
+    external_json_shape = True
+
+    @classmethod
+    def from_wire(cls, raw):
+        match raw:
+            case None:
+                notice = NoReadMarkerNotice()
+            case str():
+                notice = RecordedReadMarkerNotice(raw)
+            case _:
+                raise ValueError("A read-marker notice requires text or null")
+        if not isinstance(notice, cls):
+            raise ValueError("Read-marker notice differs from its declared member")
+        return notice
+
+    @classmethod
+    def schema(cls):
+        return {'anyOf': [member.schema() for member in cls.members_with(cls)]}
+
+    @property
+    @abstractmethod
+    def messages(self) -> tuple[str, ...]: ...
+
+    def messages_since(self, previous: ReadMarkerNotice) -> tuple[str, ...]:
+        return () if self == previous else self.messages
+
+    @abstractmethod
+    def take_from(self, document: ReadDocument) -> tuple[ReadDocument, ReadMarkerNotice]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NoReadMarkerNotice(ReadMarkerNotice):
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(type(None))
+
+    def to_wire(self):
+        return None
 
     @property
     def messages(self) -> tuple[str, ...]:
         return ()
 
-    def messages_since(self, previous: ReadMarkerNotice) -> tuple[str, ...]:
-        return () if self == previous else self.messages
-
-    def take_from(self, document: ReadDocument) -> tuple[ReadDocument, ReadMarkerNotice]:
-        return document, NoReadMarkerNotice()
+    def take_from(self, document):
+        return document, self
 
 
 @dataclass(frozen=True, slots=True)
-class NoReadMarkerNotice(JsonShapeMember, ReadMarkerNotice):
-    value: None = None
-
-
-@dataclass(frozen=True, slots=True)
-class RecordedReadMarkerNotice(JsonShapeMember, ReadMarkerNotice):
+class RecordedReadMarkerNotice(ReadMarkerNotice):
     value: str
+    minimum_length: ClassVar[int] = 1
 
     @classmethod
-    def from_json_value(cls, value):
-        return cls(value) if value else NoReadMarkerNotice()
+    def schema(cls):
+        return {**FieldCodec.value_schema(str), 'minLength': cls.minimum_length}
 
     def __post_init__(self) -> None:
-        from .field_codec import FieldCodec
-
-        if not FieldCodec.decode(str, self.value):
+        if len(self.value) < self.minimum_length:
             raise ValueError("A recorded read-marker notice requires text")
+
+    def to_wire(self):
+        return self.value
 
     @property
     def messages(self) -> tuple[str, ...]:
@@ -187,7 +222,7 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
     def take_notice(self, shown: ReadMarkerNotice) -> ReadMarkerNotice:
         """Clear exactly the shown notice, returning the state this call cleared."""
-        taken = NoReadMarkerNotice()
+        taken: ReadMarkerNotice = NoReadMarkerNotice()
 
         def take(document: ReadDocument) -> ReadDocument:
             nonlocal taken

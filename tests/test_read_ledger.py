@@ -7,8 +7,9 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
-from agent_comms.read_ledger import NoReadMarkerNotice, RecordedReadMarkerNotice
+from agent_comms.read_ledger import NoReadMarkerNotice, ReadDocument, RecordedReadMarkerNotice
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
@@ -22,7 +23,6 @@ def prepared(root):
 def test_conversation_persisted_pairs_decode_once_without_an_encode_round_trip():
     from unittest.mock import patch
 
-    from agent_comms.field_codec import FieldCodec
     from agent_comms.read_basis import Conversation
 
     conversation = Conversation(participants=(RecordedThreadIncarnation("alice", 1.0),))
@@ -66,17 +66,19 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
 
 @pytest.mark.parametrize('raw,expected', [
     (None, NoReadMarkerNotice()),
-    ('', NoReadMarkerNotice()),
     ('Read positions changed', RecordedReadMarkerNotice('Read positions changed')),
 ])
 def test_read_notice_is_chosen_once_at_the_native_boundary(raw, expected):
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.read_ledger import ReadDocument
-
     document = FieldCodec.decode(ReadDocument, {'notice': raw})
     assert document.notice == expected
     assert FieldCodec.decode(ReadDocument, FieldCodec.encode(document)) == document
     assert document.notice.messages_since(document.notice) == ()
+    with pytest.raises(ValueError, match='declared member'):
+        FieldCodec.decode(NoReadMarkerNotice, 'This is a notice')
+    with pytest.raises(ValueError, match='declared member'):
+        FieldCodec.decode(RecordedReadMarkerNotice, None)
+    with pytest.raises(ValueError, match='requires text'):
+        FieldCodec.decode(ReadDocument, {'notice': ''})
     with pytest.raises(ValueError, match='requires text'):
         RecordedReadMarkerNotice('')
 
