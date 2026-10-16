@@ -8,6 +8,10 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .thread_identity import RecordedThreadIncarnation
 
 from .declared_family import DeclaredFamily
 from .native_entries import NativeEntry, SessionEntry
@@ -166,14 +170,12 @@ class NativeTranscript(TranscriptSource):
     def cut(self) -> SessionCut:
         return SessionCut(FileRevision.capture(self.path))
 
-    def publication_revision(self, root: Path, thread):
-        from .bus_publication import stable_thread_lookup
+    def publication_revision(self, root: Path, recipient: RecordedThreadIncarnation):
         from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 
         if not self.path.is_file():
             return PublishedReplyRevision(0, 0)
-        return NativeRuntimeInput.publication_revision(
-            root, self, stable_thread_lookup(thread.created_at))
+        return NativeRuntimeInput.publication_revision(root, self, recipient.lookup)
 
     @contextmanager
     def projection(self, receipts, routes):

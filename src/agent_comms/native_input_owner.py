@@ -10,7 +10,6 @@ import os
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .bus_publication import stable_thread_lookup
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
@@ -22,13 +21,13 @@ from .native_admission_rules import (
     RegistryIdentityCheck,
     RunningTurnRegistryCheck,
 )
-from .registry_document import RegistrySnapshot
 from .reservation_rules import ReservationViolationError
 from .threads import Thread
 from .thread_identity import OwnerIdentity
 
 if TYPE_CHECKING:
     from .registration import Registration
+    from .registry_document import RegistrySnapshot
     from .turn_lease import TurnLeaseFence
 
 
@@ -194,7 +193,7 @@ class ParticipantOwner:
         participant = store.participants.get(lookup)
         if not participant.committed or participant.owner_identity != self.coordinator_identity(lookup):
             raise StaleFence("cohort participant generation changed")
-        if stable_thread_lookup(self.thread.created_at) != lookup:
+        if self.thread.incarnation.lookup != lookup:
             raise StaleFence("cohort participant incarnation changed")
         if self.thread.process_identity != ProcessIdentity.capture(os.getpid()):
             raise StaleFence("cohort recipient is not this live registered owner generation")

@@ -12,7 +12,7 @@ from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import BuiltinChannel, is_channel_target
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
-from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
+from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest, UnreadBeforeRequest
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
@@ -278,7 +278,6 @@ class MessageBus:
         Input preparation may omit this optional supplement on contention;
         inspection waits in its existing resource worker for the actual read.
         """
-        from .bus_publication import stable_thread_lookup
         from .errors import RelationViolationError
         from .private_bus_checkpoint import addressed_source_pointers_unlocked
         from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
@@ -288,7 +287,7 @@ class MessageBus:
             with self.log.certified_read(blocking=blocking) as source:
                 marker = source.marker
                 rows = addressed_source_pointers_unlocked(
-                    self.log, marker, stable_thread_lookup(owner.created_at)
+                    self.log, marker, owner.incarnation.lookup
                 )
         except (BlockingIOError, RelationViolationError):
             # Contention or a checkpoint/source change during the read; any
@@ -297,7 +296,7 @@ class MessageBus:
         if not rows:
             return ()
         first = {
-            stable_thread_lookup(relation.peer.created_at)
+            relation.peer.incarnation.lookup
             for relation in relations
             if relation.relevance.grants(Prioritized)
         }
@@ -377,6 +376,12 @@ class MessageBus:
         return ConversationMessagePageRequest.capture(
             scope, before=before, after=after, limit=limit, max_bytes=max_bytes
         ).read(self.log)
+
+    def conversation_older_unread(
+        self, scope: DMDisplayScope, *, before: int, seen: frozenset[int]
+    ) -> bool:
+        """Ask the scoped offset reader, newest first, stopping at the first unread."""
+        return UnreadBeforeRequest(scope, before, seen).read(self.log)
 
     def last_sent_timestamps(self, *, source: OpenedWireSnapshot | None = None) -> Mapping[str, float]:
         """Reuse the same verified activity source; no second projection or body cache."""

@@ -329,6 +329,8 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
             publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         with pytest.raises(PublicationUncertain):
             resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
+        with pytest.raises(PublicationUncertain):
+            case.witness.resolve_retained(case.store, case.bus)
         assert case.comms.bus.log.latest_sequence() == case.origin_seq
         assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
     finally:
@@ -359,6 +361,9 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
         monkeypatch.undo()
         case.store.close()
         with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
+            completed = case.witness.resolve_retained(reopened, case.bus)
+            assert len(completed) == 1
+            assert completed[0].publication_receipts[0].seq == case.origin_seq + 1
             result = resolve_existing_response(
                 reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
             )

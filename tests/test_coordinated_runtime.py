@@ -19,6 +19,7 @@ import pytest
 
 from agent_comms import coordinated_runtime as runtime
 from agent_comms import coordination_response
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.historical_native_inputs import FullHistoricalNativeInput, TriageHistoricalNativeInput
 from agent_comms.selected_triage import IgnoreSelectedTriage, FullSelectedTriage
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
@@ -28,7 +29,6 @@ from agent_comms.assignment_states import (
     IgnoredAssignment,
     TriagePendingAssignment,
 )
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -339,7 +339,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         ignored = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[1].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
             source_seq=initial.message.seq,
         )
         assert len(ignored) == 1 and isinstance(ignored[0], TriageHistoricalNativeInput)
@@ -371,7 +371,7 @@ async def test_unmentioned_agent_channel_real_sqlite_two_distinct_mocked_decisio
         is None
     )
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookups = {person.name: stable_thread_lookup(person.created_at) for person in people}
+        lookups = {person.name: RecordedThreadIncarnation("fixture", person.created_at).lookup for person in people}
         assert store.participants.get(lookups["alpha"]).pointer.execution_id is None
         assert store.participants.get(lookups["beta"]).pointer.execution_id is None
         assert (
@@ -424,8 +424,8 @@ async def test_initial_no_wake_observer_never_enters_model_or_claim_page(
 def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path, mentioned=True)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        alpha_lookup = stable_thread_lookup(people[1].created_at)
-        beta_lookup = stable_thread_lookup(people[2].created_at)
+        alpha_lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
+        beta_lookup = RecordedThreadIncarnation("fixture", people[2].created_at).lookup
         assert sealed_cohort_assignments(store, alpha_lookup) == ()
         selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
@@ -440,7 +440,7 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
 def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = stable_thread_lookup(people[1].created_at)
+        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(((initial, assignment),), people[1]),)).text
     assert f'"source_seq":{initial.message.seq}' in frame
@@ -455,7 +455,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
 
     root, _root_id, _comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = stable_thread_lookup(people[1].created_at)
+        lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     notification = MessageNotification(
         initial.audience.recipients[0], "Read", "",
@@ -516,7 +516,7 @@ async def test_direct_selected_reply_goes_to_original_sender(tmp_path: Path, mon
         one = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[2].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
             source_seq=initial.message.seq,
         )
         assert len(one) == 1 and isinstance(one[0].execution, FullNativeExecution)
@@ -543,9 +543,7 @@ async def test_explicit_fresh_enrollment_precedes_fake_private_raw_send(
     assert result is not None and result.disposition is CompletedAssignment
     fresh = result.fresh_session
     assert fresh is not None and len(calls) == 1
-    assert fresh.path.parent == root / "native-sessions" / stable_thread_lookup(
-        people[2].created_at
-    )
+    assert fresh.path.parent == root / "native-sessions" / RecordedThreadIncarnation("fixture", people[2].created_at).lookup
     fresh.verify_saved_identity()
     assert len(fresh.path.read_text().splitlines()) == 6
 
@@ -640,7 +638,7 @@ async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    expected_dir = root / "native-sessions" / stable_thread_lookup(people[2].created_at)
+    expected_dir = root / "native-sessions" / RecordedThreadIncarnation("fixture", people[2].created_at).lookup
     real_fsync = fresh_module._fsync_directory
 
     def unknown_parent(path: Path) -> None:
@@ -745,7 +743,7 @@ async def test_repeated_awareness_timeouts_cannot_starve_unrelated_original(
     first_base.mkdir()
     first_root, _first_id, first_comms, first_initial, people = _root(first_base, direct=True)
     with Coordination(str(first_root / "coordination.sqlite3")) as store:
-        assignment = sealed_cohort_assignments(store, stable_thread_lookup(people[2].created_at))[0]
+        assignment = sealed_cohort_assignments(store, RecordedThreadIncarnation("fixture", people[2].created_at).lookup)[0]
     owner = first_comms.registry.require("beta")
     monkeypatch.setattr(OptionalAwarenessProjection, "build_seconds", 0.02)
     entered, release = threading.Event(), threading.Event()
@@ -873,7 +871,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=stable_thread_lookup(people[2].created_at),
+                recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
                 source_seq=initial.message.seq,
             )
             == ()
@@ -885,7 +883,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=stable_thread_lookup(people[2].created_at),
+                recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
                 source_seq=initial.message.seq,
             )
     result = await SelectedExecution(
@@ -897,7 +895,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
         rows = read_historical_native_inputs(
             store,
             wire_root_id=root_id,
-            recipient_lookup=stable_thread_lookup(people[2].created_at),
+            recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
             source_seq=initial.message.seq,
         )
         assert [type(row.execution) for row in rows] == [TriageNativeExecution, FullNativeExecution]
@@ -915,7 +913,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=stable_thread_lookup(people[1].created_at),
+                recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
                 source_seq=initial.message.seq,
             )
             == ()
@@ -928,7 +926,7 @@ async def test_historical_native_input_view_keeps_exact_triage_and_full_events(
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=stable_thread_lookup(people[2].created_at),
+                recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
                 source_seq=initial.message.seq,
             )
 
@@ -937,7 +935,7 @@ async def test_private_raw_send_rejects_renamed_saved_file_before_selected_bind(
     tmp_path: Path, monkeypatch
 ) -> None:
     root, root_id, comms, initial, people = _root(tmp_path, direct=True)
-    lookup = stable_thread_lookup(people[2].created_at)
+    lookup = RecordedThreadIncarnation("fixture", people[2].created_at).lookup
     session_dir = root / "native-sessions" / lookup
     session_dir.mkdir(parents=True, mode=0o700)
     saved = session_dir / "saved.jsonl"
@@ -992,7 +990,7 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=stable_thread_lookup(people[1].created_at),
+                recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
                 source_seq=initial.message.seq,
             )
             == ()
@@ -1016,7 +1014,7 @@ async def test_historical_native_input_view_omits_no_wake_and_reserved_unknown(
             read_historical_native_inputs(
                 store,
                 wire_root_id=root_id,
-                recipient_lookup=stable_thread_lookup(people[2].created_at),
+                recipient_lookup=RecordedThreadIncarnation("fixture", people[2].created_at).lookup,
                 source_seq=initial.message.seq,
             )
             == ()
@@ -1166,7 +1164,7 @@ async def test_owner_generation_revoked_during_native_triage_fails_closed(
     root, root_id, comms, _initial, people = _root(tmp_path)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, _ = _fake_model(decision="IGNORE")
-    lookup = stable_thread_lookup(people[1].created_at)
+    lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
 
     async def revoke(*args, **kwargs):
         result = await runner(*args, **kwargs)
@@ -1737,7 +1735,7 @@ def test_native_runtime_schema_explicit_install_and_drift_fail_closed(tmp_path: 
 async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, monkeypatch) -> None:
     """Page saturation is not an empty inbox; scaffolding is not model authority."""
     root, root_id, comms, _initial, people = _root(tmp_path)
-    lookup = stable_thread_lookup(people[1].created_at)
+    lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
         for number in range(100):
             message = comms.messaging.send_initial_cohort(
@@ -1823,7 +1821,7 @@ async def test_unconfigured_owner_does_not_reserve_or_launch(tmp_path, monkeypat
     assert calls == []
     assert comms.registry.require("beta").active_turn is None
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        pending = sealed_cohort_assignments(store, stable_thread_lookup(owner.created_at))
+        pending = sealed_cohort_assignments(store, RecordedThreadIncarnation("fixture", owner.created_at).lookup)
         assert type(pending[0].lifecycle) is TriagePendingAssignment
 
 
@@ -1866,7 +1864,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     notice_initial = comms.bus.log.read_delivery_cohort(root_id, notice.seq)
     assert all(decision.wake_mode == PassiveWake() for decision in notice_initial.decisions)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = stable_thread_lookup(people[2].created_at)
+        lookup = RecordedThreadIncarnation("fixture", people[2].created_at).lookup
         assert store.participants.get(lookup).pointer.execution_id is None
         assignment = sealed_cohort_assignments(store, lookup)[0]
         assert type(assignment.lifecycle) is FailedAssignment
@@ -1941,7 +1939,7 @@ async def test_transient_provider_failure_retries_two_attempts_then_completes(
     assert len(calls) == 3 + (not direct)
     assert len(full_attempts) == 3 and len(set(full_attempts)) == 3
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        lookup = stable_thread_lookup(people[2].created_at)
+        lookup = RecordedThreadIncarnation("fixture", people[2].created_at).lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
         assert assignment.source == initial.message.reference
         snapshot = store.snapshots.get(assignment.lifecycle.execution_id)

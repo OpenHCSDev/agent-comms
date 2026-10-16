@@ -24,13 +24,11 @@ from functools import partial
 from pathlib import Path
 from typing import Literal, Type
 
-from agent_comms.bus_publication import stable_thread_lookup
 from agent_comms.cohort_schema import assert_cohort_schema
 from agent_comms.coordination_errors import (
     IdentityConflict,
     PublicationActivationBlocked,
     PublicationUncertain,
-    RecoveryBlocked,
     StaleFence,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
@@ -127,6 +125,65 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
             attempt_ordinal=attempt_ordinal,
             dispatched_at_ms=self.dispatched_at_ms,
         )
+
+    @classmethod
+    def resolve_retained(
+        cls, store: Coordination, bus: MessageBus, boundary, *,
+        owner_lookup: str, owner_thread: str, execution_id: str | None = None,
+    ) -> tuple[RecoverySnapshot, ...]:
+        """Finish only frozen responses whose exact keyed bus rows already exist.
+
+        A live owner and a verified released owner share this one response-row
+        resolver; neither path appends a second message or clears a pointer.
+        """
+        _require_bound_stores(bus, store)
+        completed: list[RecoverySnapshot] = []
+        wire_root_id = bus.log._private_marker_unlocked().root_id
+        with store.session.read():
+            execution_ids = tuple(SqlValue.for_annotation(str).read(
+                store.session._connection.execute(
+                    "SELECT DISTINCT i.execution_id FROM publication_intents i "
+                    "JOIN executions e ON e.execution_id=i.execution_id "
+                    "WHERE e.owner_lookup=? AND NOT EXISTS "
+                    "(SELECT 1 FROM publication_receipts r "
+                    "WHERE r.execution_id=i.execution_id "
+                    "AND r.exact_target=i.exact_target) ORDER BY i.execution_id",
+                    (owner_lookup,),
+                )
+            ))
+        for current_id in execution_ids:
+            if execution_id is not None and current_id != execution_id:
+                continue
+            snapshot = store.snapshots.get(current_id)
+            if snapshot.execution.owner_thread != owner_thread:
+                raise StaleFence("retained response belongs to another owner")
+            for frozen in snapshot.publication_intents:
+                if ResponseObligation.response_record(
+                    snapshot.publication_receipts, frozen.exact_target
+                ) is not None:
+                    continue
+                with store.session.transaction() as db:
+                    snapshot = store.snapshots.get(current_id)
+                    _require_cohort_assignments(store, bus, snapshot, wire_root_id)
+                    intent, obligation = snapshot.require_publishing_intent(
+                        frozen.exact_target
+                    )
+                    attempt = snapshot.require_current_attempt()
+                    dispatch = cls.one(
+                        db, execution_id=current_id, exact_target=frozen.exact_target
+                    )
+                    if dispatch is None or not dispatch.matches_attempt(
+                        wire_root_id, current_id, attempt.owner_generation,
+                        attempt.attempt_ordinal, frozen.exact_target,
+                    ):
+                        raise PublicationUncertain("no matching durable append dispatch")
+                    matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
+                    if matched is None:
+                        raise PublicationUncertain("no keyed bus receipt; no resend authorized")
+                    completed.append(
+                        dispatch.complete(store, boundary, snapshot, intent, obligation, matched)
+                    )
+        return tuple(completed)
 
     def complete(
         self, store: Coordination, boundary, snapshot: RecoverySnapshot,
@@ -249,7 +306,7 @@ class LiveResponseOwner(RegistryOwner):
 
     @property
     def recipient_lookup(self) -> str:
-        return stable_thread_lookup(self.thread.created_at)
+        return self.thread.incarnation.lookup
 
     def require_live(self, snapshot: RegistrySnapshot, fence: OwnerFence) -> None:
         self.require_snapshot(snapshot, "response owner turn stopped or changed before publication")
@@ -271,66 +328,18 @@ class LiveResponseOwner(RegistryOwner):
             store_path, partial(self._publish_owned, bus, fence, replies)
         )
 
-    def resolve_retained(self, store: Coordination, bus: MessageBus) -> tuple[RecoverySnapshot, ...]:
-        """Complete saved keyed replies before this owner can start fresh work.
-
-        Only an existing exact bus row may complete its frozen dispatch. Missing
-        or mismatched evidence refuses admission without another append.
-        """
-        _require_bound_stores(bus, store)
-        completed: list[RecoverySnapshot] = []
+    def resolve_retained(
+        self, store: Coordination, bus: MessageBus
+    ) -> tuple[RecoverySnapshot, ...]:
+        """Complete only exact retained replies before this owner starts new work."""
         with store.session.boundary(bus) as boundary:
             self.require_snapshot(
                 boundary.registry, "response owner changed before retained resolution"
             )
-            wire_root_id = bus.log._private_marker_unlocked().root_id
-            with store.session.read():
-                execution_ids = tuple(SqlValue.for_annotation(str).read(
-                    store.session._connection.execute(
-                        "SELECT DISTINCT i.execution_id FROM publication_intents i "
-                        "JOIN executions e ON e.execution_id=i.execution_id "
-                        "WHERE e.owner_lookup=? AND NOT EXISTS "
-                        "(SELECT 1 FROM publication_receipts r "
-                        "WHERE r.execution_id=i.execution_id "
-                        "AND r.exact_target=i.exact_target) ORDER BY i.execution_id",
-                        (self.recipient_lookup,),
-                    )
-                ))
-            for execution_id in execution_ids:
-                snapshot = store.snapshots.get(execution_id)
-                if snapshot.execution.owner_thread != self.thread.name:
-                    raise StaleFence("retained response belongs to another owner")
-                for frozen in snapshot.publication_intents:
-                    if ResponseObligation.response_record(
-                        snapshot.publication_receipts, frozen.exact_target
-                    ) is not None:
-                        continue
-                    with store.session.transaction() as db:
-                        snapshot = store.snapshots.get(execution_id)
-                        _require_cohort_assignments(store, bus, snapshot, wire_root_id)
-                        intent, obligation = snapshot.require_publishing_intent(
-                            frozen.exact_target
-                        )
-                        attempt = snapshot.require_current_attempt()
-                        dispatch = PublicationAppendDispatches.one(
-                            db, execution_id=execution_id, exact_target=frozen.exact_target
-                        )
-                        if dispatch is None or not dispatch.matches_attempt(
-                            wire_root_id, execution_id, attempt.owner_generation,
-                            attempt.attempt_ordinal, frozen.exact_target,
-                        ):
-                            raise PublicationUncertain("no matching durable append dispatch")
-                        matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
-                        if matched is None:
-                            raise PublicationUncertain(
-                                "no keyed bus receipt; no resend authorized"
-                            )
-                        completed.append(
-                            dispatch.complete(
-                                store, boundary, snapshot, intent, obligation, matched
-                            )
-                        )
-        return tuple(completed)
+            return PublicationAppendDispatches.resolve_retained(
+                store, bus, boundary, owner_lookup=self.recipient_lookup,
+                owner_thread=self.thread.name,
+            )
 
     def _publish_owned(
         self, bus: MessageBus, fence: OwnerFence,
@@ -364,14 +373,17 @@ class LiveResponseOwner(RegistryOwner):
 def _require_bound_stores(bus: MessageBus, store: Coordination) -> None:
     if type(bus) is not MessageBus or type(store) is not Coordination:
         raise TypeError("response requires real, explicitly gated bus and coordinator stores")
-    if bus.publisher._private_response_writes is not True:
-        raise PublicationActivationBlocked("private response publication is disabled")
     if (
         store.session.path.name != "coordination.sqlite3"
         or Path(bus.log.path.parent).absolute() != Path(store.session.path.parent).absolute()
         or bus._registry.store.path.absolute() != (bus.log.path.parent / "registry.json").absolute()
     ):
         raise IdentityConflict("response bus and coordinator have different trusted roots")
+
+
+def _require_response_writes(bus: MessageBus) -> None:
+    if bus.publisher._private_response_writes is not True:
+        raise PublicationActivationBlocked("private response publication is disabled")
 
 
 def _require_cohort_assignments(
@@ -483,6 +495,7 @@ def prepare_fenced_response(
     fence plus final backend/death evidence can prepare it.
     """
     _require_bound_stores(bus, store)
+    _require_response_writes(bus)
     if (
         type(fence) is not OwnerFence
         or not (isinstance(message_type, type) and issubclass(message_type, MessageKind))
@@ -585,6 +598,7 @@ def _settle_fenced_response(
     owner_witness: LiveResponseOwner,
 ) -> Applied[RecoverySnapshot] | AlreadyApplied[RecoverySnapshot]:
     _require_bound_stores(bus, store)
+    _require_response_writes(bus)
     if type(fence) is not OwnerFence:
         raise TypeError("response settlement requires an exact owner fence")
     # One registry revision is held through dispatch, append and Tx2. SQL's

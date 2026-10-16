@@ -262,7 +262,6 @@ class ThreadManagement:
         Repeating this operation repairs an interrupted coordinator registration
         without replacing existing owners or importing historical delivery state.
         """
-        from .bus_publication import stable_thread_lookup
         from .coordinator import Coordination
 
         selected = tuple(dict.fromkeys(names))
@@ -275,7 +274,7 @@ class ThreadManagement:
                     for name in selected:
                         thread = self.registry.require(name)
                         store.participants.register(
-                            stable_thread_lookup(thread.created_at),
+                            thread.incarnation.lookup,
                             thread.name,
                             thread.name,
                             committed=True,
@@ -373,8 +372,6 @@ class ThreadManagement:
     def _rename_thread_unlocked(
         self, name: str, new_name: str, *, title: str | None = None
     ) -> RenameThreadResult:
-
-        from .bus_publication import stable_thread_lookup
         from .coordinator import Coordination
 
         before = self.registry.require(name)
@@ -411,7 +408,7 @@ class ThreadManagement:
                 raise ValueError("Private coordinator owner name exceeds its bound.")
             with Coordination(str(coordinator)) as store:
                 try:
-                    person = store.participants.get(stable_thread_lookup(before.created_at))
+                    person = store.participants.get(before.incarnation.lookup)
                 except IdentityConflict as error:
                     if str(error) != "participant aggregate is not registered":
                         raise
