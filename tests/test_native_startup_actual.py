@@ -15,7 +15,7 @@ from agent_comms import backend
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.native_pi import NativePiInputNotSent, NativePiUnavailable
 from agent_comms.native_session_prepare import NativeSessionPreparation
-from agent_comms.native_startup import NativeStartupAdmission
+from agent_comms.native_startup import NativeStartup
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.session_fence import session_writer_fence
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -62,7 +62,7 @@ async def prepare(owner, preparation_type, monkeypatch):
     launch = owner.persistent.custody.child.key[0]
     await owner.force_reopen()
     monkeypatch.setattr(backend, "CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS", 0.05)
-    admission = NativeStartupAdmission(owner.root)
+    admission = NativeStartup(owner.root)
     preparation = preparation_type(
         launch,
         "",

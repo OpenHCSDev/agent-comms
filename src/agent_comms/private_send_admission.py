@@ -28,7 +28,6 @@ from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnRe
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptAdmissionBusy
 from .pi_vocabulary import ThinkingLevel
-from .private_path import FileRevision
 from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
 from .following_inputs import FollowingInputs
@@ -205,9 +204,7 @@ class PrivateSendAdmission:
     def commit(self, store: Coordination, context: NativeContextProof) -> None:
         self.stage.commit(store, self.participant, self.input_id, self.token_digest, context)
 
-    def _admit_once(
-        self, identity: NativeSessionIdentity, selected_runtime_revision: FileRevision | None
-    ) -> None:
+    def _admit_once(self, identity: NativeSessionIdentity) -> None:
         """Commit the exact grant under original fences, then release them.
 
         Stop, rename and maintenance before this grant refuse admission. After
@@ -240,7 +237,7 @@ class PrivateSendAdmission:
                 with self._measurements.operation("coordinator_exclusive"):
                     db = authority.enter_context(store.session.transaction())
                 with self._measurements.operation("selected_source_admission"):
-                    self.session.admit(identity, selected_runtime_revision)
+                    self.session.verify_start(identity)
             except BlockingIOError as error:
                 raise PromptAdmissionBusy("Native admission exclusion is busy") from error
             except sqlite3.OperationalError as error:
@@ -277,7 +274,6 @@ class PrivateSendAdmission:
     def __call__(
         self,
         identity: NativeSessionIdentity,
-        selected_runtime_revision: FileRevision | None = None,
     ) -> Iterator[None]:
         try:
             asyncio.get_running_loop()
@@ -285,5 +281,5 @@ class PrivateSendAdmission:
             pass
         else:
             raise IdentityConflict("native send admission requires the isolated raw writer")
-        self._admit_once(identity, selected_runtime_revision)
+        self._admit_once(identity)
         yield

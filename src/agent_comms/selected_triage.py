@@ -80,7 +80,7 @@ class IgnoreSelectedTriage(SelectedTriage, declared_name="IGNORE"):
         from .selected_result import CoordinatedTurn
 
         await Coordination.run_worker(participant.consume_reply_wait)
-        return await CoordinatedTurn.capture(participant, session, input_id, IgnoredAssignment)
+        return await CoordinatedTurn.capture(participant, input_id, IgnoredAssignment)
 
 
 @dataclass(frozen=True)
@@ -106,7 +106,7 @@ class FullSelectedTriage(SelectedTriage, declared_name="FULL"):
         ).value
         attempt = await SelectedAttempt.engage(participant, created)
         return await attempt.run(execution, session,
-                                 execution.action(session), execution.write_authority)
+                                 execution.action(), execution.write_authority)
 
 
 class SelectedTriageOutcome(DeclaredFamily, affix="TriageOutcome"):
@@ -155,7 +155,7 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
             source_error=self.error,
         ))
 
-        return await CoordinatedTurn.capture(participant, session, input_id, FailedAssignment)
+        return await CoordinatedTurn.capture(participant, input_id, FailedAssignment)
 
 
 class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisionRecord"):

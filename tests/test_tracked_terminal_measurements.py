@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from agent_comms.native_startup import NativeStartupAdmission
+from agent_comms.native_startup import NativeStartup
 from agent_comms.tracked_turn import TrackedTurnSession
 
 
@@ -16,7 +16,7 @@ async def test_acquisition_retirement_measurement_preserves_cleanup_and_failure(
     # The concrete risk is registration before acquisition: resources acquired
     # before a failure/cancel must remain inside the original stack's timing.
     turn = object.__new__(TrackedTurnSession)
-    turn.startup = NativeStartupAdmission(tmp_path)
+    turn.startup = NativeStartup(tmp_path)
     original = RuntimeError("original acquisition failure")
     acquired = asyncio.Event()
     callbacks = []

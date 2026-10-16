@@ -26,7 +26,7 @@ from agent_comms.native_input_record import TriageNativeExecution, FullNativeExe
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
-from agent_comms.native_startup import NativeStartupAdmission
+from agent_comms.native_startup import NativeStartup
 from agent_comms.native_custody import PiSessionChild
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.registration import Registration
@@ -153,7 +153,7 @@ async def main():
                 (SelectedPrompt,('full',)),(SelectedSession,('prepare',)),
                 (SelectedAttempt,('engage','prepare','run')),(SelectedConsideration,('run',)),
                 (SelectedRequest,('reserve',)),(NativePiRpcLaunch,('tracked',)),
-                (NativeStartupAdmission,('acquire','release')),(PiSessionChild,('start','close')),
+                (NativeStartup,('acquire','release')),(PiSessionChild,('start','close')),
                 (TrackedTurnSession,('attest','admit_prompt','committed_input','committed_context','context_proof','next_event')),
                 (PrivateSendAdmission,('reserve','_admit_once','verify','commit')),
                 (Registration,('transition_turn','observe_native_phase','attach_native_session')),

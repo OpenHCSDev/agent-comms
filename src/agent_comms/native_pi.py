@@ -35,7 +35,6 @@ if TYPE_CHECKING:
     from . import pi_events as pi
     from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
     from .selected_tool_broker import NativeToolMode
-    from .fresh_private_session import FreshPrivateSession
     from .selected_session import SelectedSession
     from .turn_failure import TurnFailure
 
@@ -617,13 +616,11 @@ class NativePiRpcLaunch:
 
             if not isinstance(selected_tool_mode, NativeToolMode):
                 raise NativePiUnavailable("Selected tool requires a trusted nominal mode")
-        session.require_launch_tools(selected_tool_mode)
         worktree = Path(worktree).absolute()
         session_dir = Path(session_dir).absolute()
         _durable_private_session_dir(session_dir)
         if not worktree.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        session.require_launch_header()
         # Native SettingsManager and AgentSession own tracked retry/compaction
         # policy. This directory isolates writable resources, not policy copies.
         agent_dir = session_dir / ".native-pi-agent"
@@ -660,12 +657,6 @@ def _read_private_file(path: Path):
     """
     with PrivateEvidenceRead.open(path) as evidence:
         yield from evidence.rows()
-
-
-def _read_private_header(path: Path):
-    """Decode only row one while the source owner verifies every captured byte."""
-    with PrivateEvidenceRead.open(path) as evidence:
-        return evidence.header()
 
 
 class NativeEvidencePrefixChanged(NativePiUnavailable):
@@ -1103,21 +1094,3 @@ def _verify_context(
         if not emitted.corroborates_input(input_id, evidence=evidence):
             raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
         return emitted
-
-
-def _require_reviewed_selected_source_cli() -> None:
-    """Default OFF until copied CLI startup factories are independently fenced."""
-    raise NativePiUnavailable(
-        "Selected first-source CLI builtins are unreviewed; no Pi startup or raw prompt"
-    )
-
-
-def _fresh_selected_revision(
-    fresh: FreshPrivateSession, *, started: bool = False
-) -> FileRevision:
-    """Exact saved inode+revision; not a provider or terminal receipt."""
-    if started:
-        return fresh.verify_selected_startup()
-    fresh.verify_prewrite()
-    info = fresh.path.lstat()
-    return FileRevision.from_stat(info)

@@ -387,17 +387,6 @@ class NativeEvidenceScope(ExitStack):
             self.readers.clear()
 
 
-@dataclass(frozen=True)
-class SelectedFreshMarker(PiPayload):
-    """Saved denial marker only; FreshPrivateSession retains enrollment authority."""
-
-    strict_fields = True
-    schema: Literal[1]
-    thinking_level: str = field(
-        metadata={"wire_name": "thinkingLevel", "wire_choices": ThinkingLevel.selected_names}
-    )
-
-
 @dataclass(frozen=True, kw_only=True)
 class SessionEntry(NativeEntry):
     version: int | None = None
@@ -405,9 +394,6 @@ class SessionEntry(NativeEntry):
     parent_session: str | None = field(default=None, metadata={
         "wire_name": "parentSession", "wire_omit_default": True,
     })
-    selected_fresh: SelectedFreshMarker | None = field(
-        default=None, metadata={"wire_name": "agentCommsSelectedFresh"}
-    )
 
     @classmethod
     def input_evidence(cls, raw: dict) -> NativeEntry:
@@ -538,46 +524,7 @@ class UnknownEntry(NativeEntry):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StartupMetadataEntry(NativeEntry):
-    """Native metadata with strict evidence decoding for startup attestation."""
-
-    @classmethod
-    def read_startup(cls, raw: bytes) -> StartupMetadataEntry:
-        value = json.loads(raw, object_pairs_hook=unique_fields)
-        entry = cls.from_wire(value)
-        # Display readers can project external entries; authority readers require
-        # the entire declared record, with no omitted or unrepresented fields.
-        names = {f.metadata.get("wire_name", f.name) for f in fields(entry) if f.init}
-        if set(value) != names | {entry.wire_tag}:
-            raise ValueError("Native startup metadata fields are incomplete or unexpected")
-        if (
-            entry.id is None
-            or re.fullmatch(r"[0-9a-f]{8}", entry.id) is None
-            or not entry.timestamp
-            or (
-                entry.parent_id is not None
-                and re.fullmatch(
-                    r"[0-9a-f]{8}(?:-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})?",
-                    entry.parent_id,
-                )
-                is None
-            )
-        ):
-            raise ValueError("Native startup metadata identity is invalid")
-        return entry
-
-    @classmethod
-    def wire_member(cls, value):
-        # Unknown saved entries are displayable, but never startup authority.
-        return cls.decode(value.get(cls.wire_tag))
-
-    @abstractmethod
-    def matches_startup(self, model: tuple[str, str], thinking_level: str) -> bool:
-        """Whether this metadata records the configured startup selection."""
-
-
-@dataclass(frozen=True, kw_only=True)
-class ModelChangeEntry(StartupMetadataEntry):
+class ModelChangeEntry(NativeEntry):
     provider: str
     model_id: str = field(metadata={"wire_name": "modelId"})
 
@@ -585,13 +532,7 @@ class ModelChangeEntry(StartupMetadataEntry):
     def model_choice(self) -> tuple[str, str] | None:
         return (self.provider, self.model_id) if self.provider and self.model_id else None
 
-    def matches_startup(self, model: tuple[str, str], thinking_level: str) -> bool:
-        return self.model_choice == model
-
 
 @dataclass(frozen=True, kw_only=True)
-class ThinkingLevelChangeEntry(StartupMetadataEntry):
+class ThinkingLevelChangeEntry(NativeEntry):
     thinking_level: type[ThinkingLevel] = field(metadata={"wire_name": "thinkingLevel"})
-
-    def matches_startup(self, model: tuple[str, str], thinking_level: str) -> bool:
-        return self.thinking_level is ThinkingLevel.decode(thinking_level)

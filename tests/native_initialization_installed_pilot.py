@@ -17,7 +17,7 @@ from uuid import uuid4
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.native_custody import PiSessionChild
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
-from agent_comms.native_startup import NativeStartupAdmission
+from agent_comms.native_startup import NativeStartup
 from agent_comms.selected_session import SelectedSession
 
 
@@ -34,7 +34,7 @@ async def run(root: Path, package: Path) -> dict:
         model="z-ai/glm-5.3-flash",
         thinking_level="off",
     )
-    admission = NativeStartupAdmission(root)
+    admission = NativeStartup(root)
     started = time.monotonic()
     await admission.acquire()
     child = await PiSessionChild.start(
