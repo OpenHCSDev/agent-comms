@@ -12,10 +12,13 @@ from agent_comms.registry_document import RegistryDocument
 from agent_comms.owner_lifecycle import OwnerReleaseStore, OwnerRestartSelection
 from agent_comms.private_path import FileRevision
 from agent_comms.wire_log import WireLog
-from thread_format_retirement import GoalReportMemberRetirement
 
 
 class OwnerReadProjection(DeclaredFamily, affix='Projection'):
+    @classmethod
+    def require_source_runtime(cls) -> None:
+        """Current/recorded reads use their runtime's normal strict declaration."""
+
     @classmethod
     @abstractmethod
     def read(cls, registry, root: Path, name: str, request):
@@ -44,7 +47,15 @@ class LiveOwnerReadProjection(OwnerReadProjection):
 
 class RetiredGoalReportProjection(LiveOwnerReadProjection):
     @classmethod
+    def require_source_runtime(cls) -> None:
+        from thread_format_retirement import GoalReportMemberRetirement
+
+        GoalReportMemberRetirement.require_original_declaration()
+
+    @classmethod
     def project(cls, root: Path, registry_path: Path, document: RegistryDocument) -> dict:
+        from thread_format_retirement import GoalReportMemberRetirement
+
         releases = OwnerReleaseStore(root / 'owner_release_receipts.json')
         with releases.locked():
             acquired = GoalReportMemberRetirement.acquire(

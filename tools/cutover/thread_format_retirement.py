@@ -5,6 +5,7 @@ can produce the target postimage. No ordinary reader accepts the retired field.
 """
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -19,11 +20,24 @@ class GoalReportMemberRetirement:
     registry: RegistryDocument
     releases: dict[str, OwnerReleaseReceipt]
     history: tuple[GoalHistoryEntry, ...]
+    retired_member: ClassVar[str] = 'last_goal_report_turn'
+
+    @classmethod
+    def require_original_declaration(cls) -> None:
+        # This is an explicitly selected one-shot operation, not format discovery.
+        # Its producer must own the actual stored member; no target default or
+        # synthesized property can supply the original report evidence.
+        if cls.retired_member not in FieldCodec.record_schema(Thread)['properties']:
+            raise RelationViolationError(
+                'Goal report retirement requires the retained amended720 Thread declaration; '
+                'use CurrentThreadProjection for a current-format producer'
+            )
 
     @classmethod
     def acquire(cls, registry_path: Path, registry: RegistryDocument,
                 releases: dict[str, OwnerReleaseReceipt]):
         """Caller retains the original registry/release locks throughout use."""
+        cls.require_original_declaration()
         acquired = cls(registry, releases, GoalHistoryStore.acquire_read_only(registry_path))
         acquired.require_preserved()
         return acquired
@@ -61,7 +75,7 @@ class GoalReportMemberRetirement:
     def _postimage(self, thread: Thread) -> dict:
         # Only reachable after all source carriers were validated together.
         target = FieldCodec.encode(thread)
-        del target['last_goal_report_turn']
+        del target[self.retired_member]
         return target
 
     def project(self) -> dict:

@@ -15,6 +15,7 @@ from owner_read_projection import OwnerReadProjection
 def main():
     root, name, projection_name = sys.argv[1:]
     projection = OwnerReadProjection.decode(projection_name)
+    projection.require_source_runtime()
     registry_path = Path(root) / 'registry.json'
     if not registry_path.is_file() or not registry_path.with_name('.registry.json.lock').is_file():
         raise ValueError('Original registry and existing shared lock are required')

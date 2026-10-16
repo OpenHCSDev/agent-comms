@@ -1,10 +1,8 @@
-"""Authored amended720 report producer -> strict current postimage source controls.
+"""Current-format callers never enter the retained amended720 retirement.
 
-Run against the explicitly amended P source declaration, with this owning tool
-family. No installed interpreter, original root, native/provider or live launch.
+The unchanged amended720 controls are preserved at 60fa56ec in Git and exercised
+separately with producer 1c5ac5a8, not relabelled as current Thread controls.
 """
-from dataclasses import replace
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -18,18 +16,15 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import ClearGoalAction, EditGoalAction, SetGoalAction
 from agent_comms.goal_history import GoalHistoryStore
 from agent_comms.owner_lifecycle import OwnerReleaseReceipt
+from agent_comms.registry_document import RegistryDocument
 from agent_comms.threads import Thread
+from original_owner_capture import CurrentTypedCapture, OriginalTypedCapture
+from owner_read_projection import CurrentThreadProjection, RetiredGoalReportProjection
 from thread_format_retirement import GoalReportMemberRetirement
 from seed_original_owner_capture import author_model_report
 
-TARGET_SOURCE = Path(__file__).resolve().parents[1]
-
-
-def authored_report(root):
-    service = Comms(root)
-    service.registry.register(Thread('author', frozenset(), str(root)))
-    author_model_report(service, 'author', 'c7cc88d777b947d99b6f28f9e0b6ef97')
-    return service
+SOURCE = Path(__file__).resolve().parents[1]
+TURN = 'c7cc88d777b947d99b6f28f9e0b6ef97'
 
 
 def files(root):
@@ -38,64 +33,61 @@ def files(root):
 
 
 @pytest.mark.parametrize('disposition', ['reported', 'clear', 'replace', 'edit', 'older_release'])
-def test_report_survives_goal_replacement_and_strict_target_decodes(tmp_path, disposition):
-    service = authored_report(tmp_path / 'authored')
+def test_current_projection_preserves_reports_without_retirement(tmp_path, disposition):
+    service = Comms(tmp_path / 'current')
+    service.registry.register(Thread('author', frozenset(), str(service.root)))
+    author_model_report(service, 'author', TURN)
     first = service.registry.require('author')
-    releases = {first.name: OwnerReleaseReceipt(1, 2, first)}
+    release = OwnerReleaseReceipt(1, 2, first)
     if disposition in ('clear', 'replace', 'older_release'):
         service.goals.update_goal(first.name, ClearGoalAction())
     if disposition in ('replace', 'older_release'):
         service.goals.update_goal(first.name, SetGoalAction(text='A distinct current goal'))
     if disposition == 'edit':
-        service.goals.update_goal(first.name, EditGoalAction(text='Edited by owner, not a model report'))
+        service.goals.update_goal(first.name, EditGoalAction(text='Edited, not a model report'))
     if disposition == 'older_release':
         author_model_report(service, first.name, 'd7cc88d777b947d99b6f28f9e0b6ef97')
     before = files(service.root)
     with service.registry.store.reading() as document:
-        acquired = GoalReportMemberRetirement.acquire(service.registry.store.path, document, releases)
-        packet = acquired.project()
-    assert acquired.history
-    assert any(row.reports_turn(first.last_goal_report_turn) for row in acquired.history)
-    assert 'last_goal_report_turn' not in packet['registry']['threads'][first.name]
-    assert 'last_goal_report_turn' not in packet['releases'][first.name]['thread']
-    # This is an explicit paired SOURCE test, not an installed/runtime overlay.
-    environment = dict(os.environ, PYTHONPATH=str(TARGET_SOURCE / 'src'), PYTHONDONTWRITEBYTECODE='1')
-    result = subprocess.run([
-        sys.executable, '-B', str(TARGET_SOURCE / 'tools/cutover/validate_thread_retirement.py'),
-        str(service.registry.store.path),
-    ], input=json.dumps(packet), text=True, capture_output=True, env=environment)
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout)['goal_history_rows'] == len(acquired.history)
+        history = GoalHistoryStore.acquire_read_only(service.registry.store.path)
+        packet = CurrentThreadProjection.project(service.root, service.registry.store.path, document)
+        assert packet['document'] == FieldCodec.encode(document)
+        assert RegistryDocument.from_wire(packet['document']) == document
+    assert any(row.reports_turn(TURN) for row in history)
+    assert FieldCodec.decode(OwnerReleaseReceipt, FieldCodec.encode(release)) == release
     assert before == files(service.root)
-    # Original full registry continues to refuse the target declaration unchanged.
-    negative = subprocess.run([
-        sys.executable, '-B', '-c',
-        'import json,sys; from agent_comms.registry_document import RegistryDocument; '
-        'RegistryDocument.from_wire(json.load(sys.stdin))',
-    ], input=json.dumps(FieldCodec.encode(acquired.registry)), text=True,
-       capture_output=True, env=environment)
-    assert negative.returncode != 0
-    assert 'last_goal_report_turn' in negative.stderr
 
 
-@pytest.mark.parametrize('defect', ['missing_report', 'pending', 'uncertain', 'incarnation', 'gap', 'baseline'])
-def test_unproved_report_refuses_before_postimage_without_journal_repair(tmp_path, defect):
-    service = authored_report(tmp_path / 'authored')
-    with service.registry.store.reading() as document:
-        acquired = GoalReportMemberRetirement.acquire(service.registry.store.path, document, {})
-    rows = acquired.history
-    if defect == 'missing_report':
-        rows = rows[:1]
-    elif defect in ('pending', 'uncertain'):
-        rows = (*rows[:-1], replace(rows[-1], state=defect))
-    elif defect == 'incarnation':
-        rows = tuple(replace(row, owner_created_at=row.owner_created_at + 1) for row in rows)
-    elif defect == 'gap':
-        rows = (*rows[:-1], replace(rows[-1], kind='observed_gap'))
-    else:
-        rows = (replace(rows[-1], kind='baseline', before=None),)
-    before = files(service.root)
-    # These declared negative witnesses are authored values, never stored rows.
-    with pytest.raises(RelationViolationError):
-        replace(acquired, history=rows).project()
-    assert before == files(service.root)
+def test_current_declaration_cannot_acquire_an_old_member_retirement(tmp_path):
+    # Reject the selected operation before its journal acquisition or carrier access.
+    with pytest.raises(RelationViolationError, match='retained amended720 Thread declaration'):
+        GoalReportMemberRetirement.acquire(tmp_path / 'absent.json', RegistryDocument(), {})
+    assert not tuple(tmp_path.iterdir())
+
+
+def test_capture_requires_explicit_source_projection(tmp_path):
+    with pytest.raises(TypeError, match='projection'):
+        OriginalTypedCapture(tmp_path, Path(sys.executable))
+    assert CurrentTypedCapture(tmp_path, Path(sys.executable)).projection is CurrentThreadProjection
+    assert OriginalTypedCapture(tmp_path, Path(sys.executable),
+                                RetiredGoalReportProjection).projection is RetiredGoalReportProjection
+
+
+@pytest.mark.parametrize('entry,arguments', [
+    ('read_original_owner.py', ('ROOT', 'unused', RetiredGoalReportProjection.declared_name)),
+    ('restart_original_thread_format.py', ('0',)),
+    ('seed_original_owner_capture.py', ('ROOT',)),
+    ('seed_thread_retirement_fixture.py', ('ROOT', 'ROUTE')),
+])
+def test_old_operation_entrypoints_refuse_current_runtime_before_root_access(tmp_path, entry, arguments):
+    root, route = tmp_path / 'must-not-be-created', tmp_path / 'route'
+    replacements = {'ROOT': str(root), 'ROUTE': str(route)}
+    environment = {**os.environ, 'PYTHONDONTWRITEBYTECODE': '1',
+                   'PYTHONPATH': str(SOURCE / 'src')}
+    result = subprocess.run([sys.executable, '-B', str(SOURCE / 'tools/cutover' / entry),
+                             *(replacements.get(value, value) for value in arguments)],
+                            input='', env=environment, capture_output=True, text=True)
+    assert result.returncode != 0
+    assert 'retained amended720 Thread declaration' in result.stderr
+    assert 'AttributeError' not in result.stderr
+    assert not root.exists() and not route.exists()
