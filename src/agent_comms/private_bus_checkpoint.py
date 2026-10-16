@@ -882,16 +882,26 @@ class Addressed(CheckpointTable, TypedTable):
 
     @classmethod
     def observed_after(
-        cls, path: Path, revision: FileRevision, source: FileRevision,
-        marker: WireMetadata, lookup: str, after_seq: int,
-    ) -> bool:
+        cls, bus: WireLog, revision: FileRevision, source: FileRevision,
+        marker_revision: FileRevision, lookup: str, after_seq: int,
+    ) -> tuple[WireMetadata, bool]:
         """Read one recipient's indexed aggregate only at the captured revision.
 
         This observation grants no delivery authority. Concurrent publication
         makes it stale instead of making an absent row authoritative.
         """
-        if FileRevision.capture(path) != revision:
-            raise RelationViolationError("Address observation changed before its read")
+        path = _path(bus.path)
+
+        def require_captured_sources() -> None:
+            if (
+                FileRevision.capture(bus.path) != source
+                or FileRevision.capture(bus.metadata_path) != marker_revision
+                or FileRevision.capture(path) != revision
+            ):
+                raise RelationViolationError("Address observation changed during its read")
+
+        require_captured_sources()
+        marker = bus._private_marker_unlocked()
         with closing(_connect(path, readonly=True)) as db:
             witness = PrefixCertificate.read_witness(db)
             witness.require_marker(marker)
@@ -903,9 +913,8 @@ class Addressed(CheckpointTable, TypedTable):
                 "WHERE lookup=? AND seq>? LIMIT 1",
                 (lookup, after_seq),
             ).fetchone()
-        if FileRevision.capture(path) != revision:
-            raise RelationViolationError("Address observation changed during its read")
-        return row is not None
+        require_captured_sources()
+        return marker, row is not None
 
 
 @dataclass(frozen=True)

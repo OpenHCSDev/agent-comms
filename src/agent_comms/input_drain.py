@@ -223,23 +223,10 @@ class InputObservation:
             raise RelationViolationError("Wire address index has no stable file revision")
         if previous_info.identity != current_info.identity:
             raise RelationViolationError("Wire tail does not extend the settled source")
-        log = self.comms.bus.log
-        metadata = log._private_marker_unlocked()
-        checkpoint = self._tick_paths().checkpoint
-        if (
-            FileRevision.capture(log.path) != current_info
-            or FileRevision.capture(log.metadata_path) != revision.bus[1]
-        ):
-            raise RelationViolationError("Wire source changed after tick capture")
-        addressed = Addressed.observed_after(
-            checkpoint, revision.checkpoint, current_info, metadata, lookup, settled.through_seq,
+        return Addressed.observed_after(
+            self.comms.bus.log, revision.checkpoint, current_info,
+            revision.bus[1], lookup, settled.through_seq,
         )
-        if (
-            FileRevision.capture(log.path) != current_info
-            or FileRevision.capture(log.metadata_path) != revision.bus[1]
-        ):
-            raise RelationViolationError("Wire source changed during address observation")
-        return metadata, addressed
 
 
     def ensure_live_drain(self, session_id: str) -> None:

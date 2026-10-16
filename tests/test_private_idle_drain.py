@@ -601,9 +601,9 @@ async def test_bus_appends_for_other_agents_do_not_wake_an_idle_owner(
     address_reads = []
     observed_after = Addressed.observed_after.__func__
 
-    def measured_address(cls, path, revision, source, marker, lookup, after_seq):
+    def measured_address(cls, bus, revision, source, marker_revision, lookup, after_seq):
         address_reads.append((lookup, after_seq, revision))
-        return observed_after(cls, path, revision, source, marker, lookup, after_seq)
+        return observed_after(cls, bus, revision, source, marker_revision, lookup, after_seq)
 
     monkeypatch.setattr(input_drain.WireWatch, "observations", staticmethod(observations))
     monkeypatch.setattr(Addressed, "observed_after", classmethod(measured_address))

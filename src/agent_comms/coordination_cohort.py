@@ -240,7 +240,7 @@ def accept_delivery_cohort(
     """
     if type(bus) is not MessageBus or type(store) is not Coordination:
         raise TypeError("cohort acceptance requires the actual bus and coordinator stores")
-    # Keep the original certified source current throughout its SQL effect.
+    # Hold the bus read open for the whole SQL write.
     with bus.log.certified_read() as source, store.session.transaction() as db:
         marker = source.marker
         if marker.root_id != wire_root_id:
