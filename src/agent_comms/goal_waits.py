@@ -110,7 +110,7 @@ class RecordedGoalWait(GoalWait):
 
     def project(self, goal: Goal, snapshot: RegistrySnapshot) -> GoalExecution:
         targets = tuple(
-            GoalWaitTarget(target.incarnation.renamed(snapshot.canonical_name(target.name)))
+            GoalWaitTarget(target.incarnation.renamed(snapshot.canonical_name(target.incarnation.name)))
             for target in self.targets
         )
         inactive = tuple(
@@ -132,15 +132,16 @@ class RecordedGoalWait(GoalWait):
 
     def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
         """Join original sender and the actual addressed owner through its source."""
+        if not self.owner_matches(owner.created_at):
+            return False
         return (
-            owner.created_at == self.owner_created_at
-            and original.message.seq > self.after_seq
+            original.message.seq > self.after_seq
             and original.direct_for(owner.lookup)
             and any(target.sent(original) for target in self.targets)
         )
 
     def has_reply(self, bus: WireLog, owner: RecordedThreadIncarnation) -> bool:
-        if owner.created_at != self.owner_created_at:
+        if not self.owner_matches(owner.created_at):
             return False
         return any(
             self.matches(original, owner)
@@ -179,7 +180,7 @@ class GoalInputReview:
                 eligible.append(item)
         return {
             "goal_id": self.goal_id,
-            "wait_for": [target.name for target in self.targets],
+            "wait_for": [target.incarnation.name for target in self.targets],
             "reviewed_inputs": [item["inputId"] for item in eligible],
             "messages": eligible,
             "already_reviewed_inputs": reviewed,
@@ -232,14 +233,23 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
             return NoGoalWait()
         return rows.get(goal.id, NoGoalWait())
 
+    @classmethod
+    def execution(
+        cls, goal: Goal | None, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot
+    ) -> GoalExecution | None:
+        """Project an optional thread goal from its resolved wait state."""
+        if goal is None:
+            return None
+        return cls.for_goal(goal, rows).project(goal, snapshot)
+
     @staticmethod
     def target_has_active_turn(target: GoalWaitTarget, snapshot: RegistrySnapshot) -> bool:
-        canonical = snapshot.canonical_name(target.name)
+        canonical = snapshot.canonical_name(target.incarnation.name)
         thread = snapshot.threads.get(canonical)
         status = snapshot.statuses.get(canonical)
         return bool(
             thread is not None
-            and thread.created_at == target.created_at
+            and target.incarnation.resolved(snapshot) == thread.incarnation
             and status is not None
             and status.running
             and thread.executing
@@ -276,9 +286,9 @@ class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
                 wait = None
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
-                canonical = snapshot.canonical_name(target.name)
+                canonical = snapshot.canonical_name(target.incarnation.name)
                 peer = snapshot.threads.get(canonical)
-                if peer is None or peer.created_at != target.created_at:
+                if peer is None or target.incarnation.resolved(snapshot) != peer.incarnation:
                     continue
                 if canonical == owner:
                     pending.append(owner)

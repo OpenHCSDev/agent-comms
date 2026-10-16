@@ -28,7 +28,7 @@ from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.owner_launch import OwnerRestartSelection
+from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.private_path import PrivateDirectoryRole
 from agent_comms.store_files import _atomic_write_text
 from agent_comms.threads import Thread
@@ -37,9 +37,6 @@ from retained_summary_reset import RuntimeCompactionFiles, RuntimeGoalFiles
 from native_schema_carry import RuntimeNativeFiles
 from runtime_installation import RuntimeInstallation
 from cutover_child import restore_stopped_batch
-from agent_comms.active_route import LocalRoute
-from agent_comms.native_settings import NativeThreadDefaults
-from agent_comms.launch_runtime import LaunchRuntime
 
 
 @dataclass(frozen=True)
@@ -641,7 +638,7 @@ class PublishRetainedSummary(StoppedOwnerInstallation):
         _atomic_write_text(self.receipt, json.dumps(previous, indent=2)+'\n', fsync_parent=True)
 
     def require_selection(self, snapshot, owners):
-        live = {thread.name for thread in snapshot.restart_candidates}
+        live = {thread.name for thread in OwnerRestartRequest().threads(snapshot)}
         if live != {thread.name for thread in owners} or live != {item.name for item in self.audience}:
             raise RuntimeError('Complete original owner audience changed; recapture/review required')
         for selection, original in zip(self.audience, self.originals, strict=True):
@@ -772,9 +769,9 @@ def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_
     if receipt.exists() or receipt.is_symlink() or receipt.with_suffix('.originals').exists():
         raise RuntimeError('Original attempt requires review; never automatically repeat')
     cohort.require_original()
-    service = Comms(LocalRoute(ROOT), runtime=LaunchRuntime.current(), private_initial_writes=False, private_claim_writes=False)
+    service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
     snapshot = service.registry.snapshot()
-    owners = tuple(snapshot.restart_candidates)
+    owners = tuple(OwnerRestartRequest().threads(snapshot))
     if not owners:
         raise RuntimeError('Empty original audience requires review')
     audience = tuple(OwnerRestartSelection.capture(snapshot, thread.name) for thread in owners)

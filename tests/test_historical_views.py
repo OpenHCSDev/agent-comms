@@ -34,6 +34,23 @@ def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
     assert not archive.path.exists()
 
 
+@pytest.mark.parametrize('exists', [False, True])
+def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
+    archive = HistoryArchive(tmp_path / 'bus.jsonl')
+    if exists:
+        archive.path.write_text('[]')
+    with pytest.raises(ValueError, match='catalogue changed'):
+        with archive.read_sources() as sources:
+            assert sources == ()
+            archive.path.write_text('[ ]')
+
+
+def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
+    archive = HistoryArchive(tmp_path / 'bus.jsonl')
+    assert archive.sources() == ()
+    assert not archive.path.exists()
+
+
 def setup(root, count=5):
     comms = Comms(LocalRoute(root), runtime=LaunchRuntime.current())
     comms.registry.declare(Thread("alice", frozenset({"team"}), str(root), created_at=10.0))

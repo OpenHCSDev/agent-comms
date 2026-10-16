@@ -43,9 +43,10 @@ class JsonFlagRecord:
         cls.add_cli_arguments(parser, required=False, dest="record")
         parser.set_defaults(record=default)
         namespace, _ = parser.parse_known_args(arguments)
-        if namespace.record is None:
+        record = namespace.record
+        if record is None:
             raise ValueError(f"Missing required {cls.value_flag}")
-        return namespace.record
+        return record
 
 
 class CliRecord:

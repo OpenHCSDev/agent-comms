@@ -202,6 +202,19 @@ while True: time.sleep(0.01)
             ObservedProcess(current.process_identity).stop_sync()
 
 
+def test_stop_of_crashed_owner_records_exact_release(releasing_owner):
+    comms, child = releasing_owner
+    original = comms.registry.require("worker")
+    child.force()
+    child.reap()
+    assert not original.process_alive
+    comms.owners.stop("worker")
+    snapshot = comms.registry.snapshot()
+    receipt = comms.owners.releases.read()["worker"]
+    assert receipt.current(snapshot, original, receipt.before)
+    assert snapshot.statuses["worker"].stopped
+
+
 @pytest.mark.parametrize("mode", ["restart", "guarded", "stop"])
 def test_released_process_must_exit_before_replacement(releasing_owner, mode):
     comms, child = releasing_owner

@@ -28,13 +28,10 @@ from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.owner_launch import OwnerRestartSelection
+from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.private_path import FileRevision, PrivateFileRole
 from agent_comms.store_files import _atomic_write_text
 from carry_history_provenance import carry
-from agent_comms.active_route import LocalRoute
-from agent_comms.native_settings import NativeThreadDefaults
-from agent_comms.launch_runtime import LaunchRuntime
 
 ROOT = Path('/var/tmp/agent-comms-live-20260927-wzjtqhza')
 ROOT_ID = 'e206f3766e60451a989ca34df0e2a94b'
@@ -363,9 +360,9 @@ def main():
         raise RuntimeError('Original archive audience changed; review actual carry scope')
     if any(Path(source.root).parent != ROOT / 'history' for source in sources):
         raise RuntimeError('Archive source names another root')
-    service = Comms(LocalRoute(ROOT), runtime=LaunchRuntime.current(), private_initial_writes=False, private_claim_writes=False)
+    service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
     snapshot = service.registry.snapshot()
-    owners = tuple(snapshot.restart_candidates)
+    owners = tuple(OwnerRestartRequest().threads(snapshot))
     if not owners:
         raise RuntimeError('Empty original owner audience requires review')
     audience = tuple(OwnerRestartSelection.capture(snapshot, thread.name) for thread in owners)

@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from functools import cached_property
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Callable, ClassVar, TypeVar
 
 from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
@@ -22,31 +22,29 @@ from .field_codec import FieldCodec, FieldRepresentation, WireValue
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
 
+T = TypeVar("T")
+
 
 @dataclass(frozen=True, slots=True)
-class ThreadIncarnation(WireValue, JsonFlagRecord, ABC):
-    name: str
-    created_at: float
+class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     value_flag: ClassVar[str] = "--thread-incarnation"
+    name: str
+
+    @property
+    @abstractmethod
+    def wire_birth(self) -> float:
+        """Only the external spelling of this member's birth evidence."""
 
     def to_wire(self) -> dict[str, str | float]:
-        return {"name": self.name, "created_at": self.created_at}
+        return {"name": self.name, "created_at": self.wire_birth}
 
     @classmethod
     def schema(cls) -> dict:
-        return FieldCodec.record_schema(ThreadIncarnation)
+        return FieldCodec.record_schema(ThreadIncarnationRecord)
 
     @classmethod
     def from_wire(cls, data: dict) -> ThreadIncarnation:
-        declared = {key for _, key in FieldCodec.record_fields(ThreadIncarnation)}
-        if type(data) is not dict or data.keys() != declared:
-            raise TypeError("Thread incarnation requires exactly its declared wire fields")
-        decoded = ThreadIncarnationRecord.decode(data["name"], data["created_at"])
-        if not isinstance(decoded, cls):
-            raise ValueError("Decoded thread birth does not match its declared member")
-        return decoded
-    names_deleted_thread: ClassVar[bool] = False
-    has_recorded_birth: ClassVar[bool] = False
+        return FieldCodec.decode(ThreadIncarnationRecord, data).incarnation()
 
     @classmethod
     def deleted(cls, name: str) -> DeletedThreadIncarnation:
@@ -55,8 +53,6 @@ class ThreadIncarnation(WireValue, JsonFlagRecord, ABC):
     def __post_init__(self) -> None:
         if not FieldCodec.decode(str, self.name):
             raise ValueError("Thread incarnation requires a recorded name")
-        if not math.isfinite(FieldCodec.decode(float, self.created_at)):
-            raise ValueError("Thread incarnation requires a finite birth")
 
     @abstractmethod
     def require_recorded(self) -> RecordedThreadIncarnation:
@@ -77,17 +73,24 @@ class ThreadIncarnation(WireValue, JsonFlagRecord, ABC):
 
     def resolved(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
-        if self.names_deleted_thread or not self.current(snapshot):
+        if not self.current(snapshot):
             return self
         return snapshot.threads[snapshot.canonical_name(self.name)].incarnation
 
     def current(self, snapshot: RegistryProvenance) -> bool:
         thread = snapshot.threads.get(snapshot.canonical_name(self.name))
-        return (
-            thread is None
-            if self.names_deleted_thread
-            else thread is not None and thread.created_at == self.created_at
-        )
+        return thread is not None and thread.incarnation == self.renamed(thread.name)
+
+    def recorded_or(
+        self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
+    ) -> T:
+        return otherwise()
+
+    def selects_lookup(self, lookup: str) -> bool:
+        return False
+
+    def same_publication_birth(self, other: ThreadIncarnation) -> bool:
+        return False
 
     def matches_recorded_name(self, name: str, snapshot: RegistryProvenance) -> bool:
         """Relate a partial stored name to this original current incarnation.
@@ -110,10 +113,29 @@ class ThreadIncarnation(WireValue, JsonFlagRecord, ABC):
 class RecordedThreadIncarnation(ThreadIncarnation):
     """Only a positive recorded birth can select a durable lookup."""
 
-    has_recorded_birth: ClassVar[bool] = True
+    created_at: float
+
+    @property
+    def wire_birth(self) -> float:
+        return self.created_at
+
+    @classmethod
+    def from_wire(cls, data: dict) -> RecordedThreadIncarnation:
+        return ThreadIncarnation.from_wire(data).require_recorded()
 
     def require_recorded(self) -> RecordedThreadIncarnation:
         return self
+
+    def recorded_or(
+        self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
+    ) -> T:
+        return make(self)
+
+    def selects_lookup(self, lookup: str) -> bool:
+        return self.lookup == lookup
+
+    def same_publication_birth(self, other: ThreadIncarnation) -> bool:
+        return self.renamed(other.name) == other
 
     @property
     def birth_description(self) -> str:
@@ -127,18 +149,9 @@ class RecordedThreadIncarnation(ThreadIncarnation):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        self._require_recorded_birth(self.created_at)
-
-    @staticmethod
-    def _require_recorded_birth(created_at: float) -> float:
-        if (
-            isinstance(created_at, bool)
-            or not isinstance(created_at, (int, float))
-            or not math.isfinite(created_at)
-            or created_at <= 0
-        ):
+        birth = FieldCodec.decode(float, self.created_at)
+        if not math.isfinite(birth) or birth <= 0:
             raise ValueError("Thread incarnation requires a positive recorded birth")
-        return float(created_at)
 
     @cached_property
     def lookup(self) -> str:
@@ -151,8 +164,17 @@ class RecordedThreadIncarnation(ThreadIncarnation):
 class DeletedThreadIncarnation(ThreadIncarnation):
     """A deleted participant retains only its name, never a lookup capability."""
 
-    created_at: float = field(default=-1.0, init=False)
-    names_deleted_thread: ClassVar[bool] = True
+    WIRE_BIRTH: ClassVar[float] = -1.0
+
+    @property
+    def wire_birth(self) -> float:
+        return self.WIRE_BIRTH
+
+    def current(self, snapshot: RegistryProvenance) -> bool:
+        return snapshot.canonical_name(self.name) not in snapshot.threads
+
+    def resolved(self, snapshot: RegistryProvenance) -> DeletedThreadIncarnation:
+        return self
 
     def require_recorded(self) -> RecordedThreadIncarnation:
         raise ValueError("Thread incarnation requires a positive recorded birth")
@@ -172,7 +194,11 @@ class DeletedThreadIncarnation(ThreadIncarnation):
 class UnrecordedThreadIncarnation(ThreadIncarnation):
     """Historical zero-birth evidence cannot select a live recipient."""
 
-    created_at: float = field(default=0.0, init=False)
+    WIRE_BIRTH: ClassVar[float] = 0.0
+
+    @property
+    def wire_birth(self) -> float:
+        return self.WIRE_BIRTH
 
     def require_recorded(self) -> RecordedThreadIncarnation:
         raise ValueError("Thread incarnation requires a positive recorded birth")
@@ -207,7 +233,7 @@ class ThreadProvenance:
         return ThreadProvenance
 
     def __post_init__(self) -> None:
-        if self.incarnation.created_at != self.created_at:
+        if self.incarnation.wire_birth != self.created_at:
             raise ValueError("Thread provenance birth differs from its declared state")
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
         if not self.name or not set(self.name) <= allowed:
@@ -254,18 +280,23 @@ class DeletedThreadProvenance(ThreadProvenance):
         return DeletedThreadProvenance
 
 
+@dataclass(frozen=True, slots=True)
 class ThreadIncarnationRecord:
-    """One explicit boundary decoder for stored birth numbers, never a constructor switch."""
+    """The single exact external name/birth record; members own its meaning."""
 
-    @staticmethod
-    def decode(name: str, birth: float) -> ThreadIncarnation:
-        name = FieldCodec.decode(str, name)
-        birth = FieldCodec.decode(float, birth)
-        if birth == -1:
-            return DeletedThreadIncarnation(name)
-        if birth == 0:
-            return UnrecordedThreadIncarnation(name)
-        return RecordedThreadIncarnation(name, birth)
+    name: str
+    created_at: float
+
+    def incarnation(self) -> ThreadIncarnation:
+        if self.created_at == DeletedThreadIncarnation.WIRE_BIRTH:
+            return DeletedThreadIncarnation(self.name)
+        if self.created_at == UnrecordedThreadIncarnation.WIRE_BIRTH:
+            return UnrecordedThreadIncarnation(self.name)
+        return RecordedThreadIncarnation(self.name, self.created_at)
+
+    @classmethod
+    def decode(cls, name: str, birth: float) -> ThreadIncarnation:
+        return FieldCodec.decode(cls, {"name": name, "created_at": birth}).incarnation()
 
 
 class ThreadProvenanceRecord(FieldRepresentation):

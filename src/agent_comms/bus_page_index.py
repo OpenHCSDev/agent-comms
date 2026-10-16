@@ -229,6 +229,34 @@ class BusPageIndex:
     ) -> Generator[BusPageRow, None, None]:
         clauses: list[str] = []
         params: list[object] = []
+        if targets is not None:
+            if not targets:
+                return
+            clauses.append("target IN (" + ",".join("?" for _ in targets) + ")")
+            params.extend(sorted(targets))
+        yield from self._offsets(clauses, params, lower=lower, upper=upper,
+                                 descending=descending, before_offset=before_offset)
+
+    def conversation_offsets(
+        self, first: frozenset[str], second: frozenset[str], *,
+        lower: int | None, upper: int | None, descending: bool,
+        before_offset: int | None = None,
+    ) -> Generator[BusPageRow, None, None]:
+        """Only the captured pair's rows, in the requested sequence order."""
+        if not first or not second:
+            return
+        a, b = sorted(first), sorted(second)
+        qa, qb = ",".join("?" for _ in a), ",".join("?" for _ in b)
+        clauses = [f"((sender IN ({qa}) AND target IN ({qb})) OR "
+                   f"(sender IN ({qb}) AND target IN ({qa})))"]
+        yield from self._offsets(clauses, [*a, *b, *b, *a], lower=lower, upper=upper,
+                                 descending=descending, before_offset=before_offset)
+
+    def _offsets(
+        self, clauses: list[str], params: list[object], *, lower: int | None,
+        upper: int | None, descending: bool, before_offset: int | None,
+    ) -> Generator[BusPageRow, None, None]:
+        """One owner for source bounds, ordering and typed offset decoding."""
         if lower is not None:
             clauses.append("seq > ?")
             params.append(lower)
@@ -238,11 +266,6 @@ class BusPageIndex:
         if before_offset is not None:
             clauses.append("offset < ?")
             params.append(before_offset)
-        if targets is not None:
-            if not targets:
-                return
-            clauses.append("target IN (" + ",".join("?" for _ in targets) + ")")
-            params.extend(sorted(targets))
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         direction = "DESC" if descending else "ASC"
         query = (

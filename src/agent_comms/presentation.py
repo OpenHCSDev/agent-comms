@@ -664,6 +664,15 @@ class ThreadView:
         )
 
     @classmethod
+    def visible_threads(
+        cls, snapshot: RegistrySnapshot, *, show_stopped: bool, show_archived: bool
+    ) -> Iterator[Thread]:
+        return (
+            thread for thread in snapshot.threads.values()
+            if cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+        )
+
+    @classmethod
     def capture(
         cls,
         thread: Thread,
@@ -679,8 +688,7 @@ class ThreadView:
             activity,
             runtime,
             snapshot.seen_at(thread.name),
-            (GoalWaits.for_goal(thread.goal, waits).project(thread.goal, snapshot)
-             if thread.goal is not None else None),
+            GoalWaits.execution(thread.goal, waits, snapshot),
             snapshot.owner_binding(thread.name),
         )
 
@@ -698,9 +706,9 @@ class ThreadView:
     ) -> tuple[ThreadView, ...]:
         selected = None if names is None else {snapshot.canonical_name(name) for name in names}
         threads = tuple(
-            thread for name, thread in snapshot.threads.items()
-            if (selected is None or name in selected)
-            and cls.visible(thread, snapshot, show_stopped=show_stopped, show_archived=show_archived)
+            thread for thread in cls.visible_threads(
+                snapshot, show_stopped=show_stopped, show_archived=show_archived
+            ) if selected is None or thread.name in selected
         )
         if not threads:
             return ()
@@ -777,11 +785,8 @@ class CoordinationSnapshot:
         show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
-        visible = (
-            thread for thread in registry.threads.values()
-            if ThreadView.visible(
-                thread, registry, show_stopped=show_stopped, show_archived=show_archived
-            )
+        visible = ThreadView.visible_threads(
+            registry, show_stopped=show_stopped, show_archived=show_archived
         )
         activities = agents.all_activity(visible, snapshot=registry)
         return cls(

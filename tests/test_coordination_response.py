@@ -208,6 +208,10 @@ def test_original_routes_prepare_together_and_release_one_attempt_only_after_all
             intent, receipt = settled.require_published_evidence(route)
             message = case.bus.log.read_keyed_response(intent)
             assert message.reference == receipt.reference and message.target == route
+            assert message.answers == tuple(
+                assignment.source for assignment in settled.assignments
+                if assignment.lifecycle.exact_target == route
+            )
     finally:
         case.close()
 
@@ -328,6 +332,8 @@ def test_durable_dispatch_barrier_prevents_resend_after_crash_before_append(
             publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
         with pytest.raises(PublicationUncertain):
             resolve_existing_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
+        with pytest.raises(PublicationUncertain):
+            case.witness.resolve_retained(case.store, case.bus)
         assert case.comms.bus.log.latest_sequence() == case.origin_seq
         assert type(case.store.snapshots.get("exec").require_wire_response(case.reply_target).lifecycle) is PublishingResponse
     finally:
@@ -358,6 +364,9 @@ def test_lost_bus_ack_is_read_only_resolved_after_sql_rollback(
         monkeypatch.undo()
         case.store.close()
         with Coordination(str(case.comms.root / "coordination.sqlite3")) as reopened:
+            completed = case.witness.resolve_retained(reopened, case.bus)
+            assert len(completed) == 1
+            assert completed[0].publication_receipts[0].seq == case.origin_seq + 1
             result = resolve_existing_response(
                 reopened, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
             )
@@ -675,9 +684,10 @@ def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
             case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
         )
         response = case.bus.log.read_keyed_response(intent)
-        assert response.answers == (follow_up.reference,)
+        original = case.bus.log.read_delivery_cohort(case.root_id, case.origin_seq)
+        assert response.answers == (original.message.reference, follow_up.reference)
         with case.bus.log.certified_read() as source:
-            replies = tuple(source.replies((follow_up.reference,)))
-        assert [reply.message.reference for reply in replies] == [response.reference]
+            replies = tuple(source.replies((original.message.reference, follow_up.reference)))
+        assert [reply.message.reference for reply in replies] == [response.reference] * 2
     finally:
         case.close()

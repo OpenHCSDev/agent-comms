@@ -282,6 +282,7 @@ class FencedOwnerBatch:
                 self.lifecycle._stop_process(thread, generation)
                 if thread.process_alive:
                     raise RelationViolationError('Owner survived retirement')
+                self.lifecycle._finish_stopped_owner(thread, generation)
                 progress = replace(progress, exited_processes=progress.exited_processes + (launch,))
                 # The next original may need this same lock to release itself.
                 # Capture each retired witness, then release before its stop.
@@ -290,6 +291,13 @@ class FencedOwnerBatch:
                     snapshot = self.lifecycle.registry.snapshot()
                     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch, target.native)
                 progress = replace(progress, retired=progress.retired + (owner,))
+                # The retired owner has the only proof that its attempted input
+                # cannot keep running. Settle through the execution owner before
+                # a replacement can claim work; an unresolved publication blocks
+                # this cutover rather than granting replay or dropping the pointer.
+                from .attempt_recovery import RecoveryMonitorCapability
+
+                RecoveryMonitorCapability.settle_stopped_owner(self.lifecycle.root, thread)
             wire = self.custody.enter_context(self.lifecycle.restart_wire())
             snapshot = self.lifecycle.registry.snapshot()
             owners = progress.retired

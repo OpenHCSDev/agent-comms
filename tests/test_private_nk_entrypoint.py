@@ -355,17 +355,16 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
     monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
-    monkeypatch.setattr(cli, "_emit", lambda _payload: None)
     entered_send = threading.Event()
     release_send = threading.Event()
     exclusive_requested = threading.Event()
     original_send = legacy.messaging.send
     original_flock = active_route.fcntl.flock
 
-    def delayed_send(*args):
+    def delayed_send(*args, **kwargs):
         entered_send.set()
         assert release_send.wait(timeout=5)
-        return original_send(*args)
+        return original_send(*args, **kwargs)
 
     def observed_flock(fd, operation):
         if operation == active_route.fcntl.LOCK_EX:
