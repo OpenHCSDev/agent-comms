@@ -30,7 +30,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
-from agent_comms.messages import Message, MessageKind
+from agent_comms.messages import Message, MessageKind, InfoKind
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
@@ -592,7 +592,7 @@ class DeliveryJournal:
         self.db.close()
 
 class CoreConnection:
-    """Core's CLI owns publication and the watch stream, including its codec."""
+    """Core owns publication; its CLI owns the long-lived watch stream."""
 
     def __init__(self, executable: str, binding: Binding) -> None:
         self.executable = executable
@@ -602,26 +602,10 @@ class CoreConnection:
     def comms(self) -> Comms:
         return Comms(Path(self.binding.root))
 
-    async def send(self, target: str, body: str, kind: str) -> SendResult:
-        child = await asyncio.create_subprocess_exec(
-            self.executable, '--root', self.binding.root, 'send', '--from', self.binding.bus,
-            '--to', target, '--type', kind, '--body', body,
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        try:
-            async with asyncio.timeout(60):
-                stdout, stderr = await child.communicate()
-        finally:
-            await self.join(child)
-        # Publication and display are separate facts. Keep Core's result even
-        # when displaying it fails; the caller must never repeat the send.
-        print(stdout.decode(), end='', flush=True)
-        print(stderr.decode(), end='', file=sys.stderr, flush=True)
-        result = SEND_RESULT.validate_json(stdout)
-        if isinstance(result, CoreError):
-            result.raise_failure('send')
-        if child.returncode:
-            raise RuntimeError(f'Core send exited {child.returncode}; inspect the printed result')
-        return result
+    async def send(self, target: str, body: str, kind: type[MessageKind]) -> SendResult:
+        message_id = await asyncio.to_thread(
+            self.comms.messaging.send, self.binding.bus, target, body, kind)
+        return SendResult(id=message_id)
 
     async def watch(self, state: Path) -> AsyncIterator[tuple[Message, str] | CoreError]:
         with (state / 'watch.stderr.log').open('a') as errors:
@@ -655,8 +639,6 @@ class CoreConnection:
             child.kill()
             await child.wait()
 
-SEND_RESULT = TypeAdapter(SendResult | CoreError.declared_union())
-
 BridgeOptions = TypeVar('BridgeOptions', bound=Options)
 OperationBridge = TypeVar('OperationBridge', bound='CliBridge')
 
@@ -687,17 +669,17 @@ class Operation(ABC, Generic[OperationBridge]):
 class Send(Operation):
     target: str
     body: str
-    kind: str
+    kind: type[MessageKind]
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--to', required=True)
         parser.add_argument('--body', required=True)
-        parser.add_argument('--type', default='info', choices=MessageKind.sendable_names())
+        parser.add_argument('--type', default=FieldCodec.encode(InfoKind), choices=MessageKind.sendable_names())
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Send:
-        send = cls(arguments.to, arguments.body, arguments.type)
+        send = cls(arguments.to, arguments.body, FieldCodec.decode(type[MessageKind], arguments.type))
         del arguments.to, arguments.body, arguments.type
         return send
 

@@ -300,7 +300,7 @@ class SessionLifecycle:
                     session_id=session_id,
                     update=SessionInfoUpdate(
                         session_update="session_info_update",
-                        title=thread.title or name,
+                        title=thread.title,
                         field_meta=await self.metadata(name, session_id=session_id),
                     ),
                 )
