@@ -173,7 +173,7 @@ def test_clear_stopped_uses_acquired_wire_descriptor(tmp_path: Path) -> None:
         assert gate.clear_stopped(receipt, lock.descriptor).phase is ReadyPhase
     assert gate.pending_turn() is None
     with _store_lock(tmp_path / 'unrelated') as other:
-        with pytest.raises(RelationViolationError, match='wire custody changed'):
+        with pytest.raises(RelationViolationError, match='wire lock changed'):
             gate.clear_stopped(gate.begin('new-cutover'), other.descriptor)
 
 

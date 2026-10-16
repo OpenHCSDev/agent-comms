@@ -110,8 +110,9 @@ class MaintenanceState(MaintenanceMarker):
 class MaintenanceBarrier:
     """One root's phase owner; writer and readers use the same durable witness.
 
-    A phase transition takes wire then registry custody. This is cooperative
-    same-UID maintenance control, not authority over old code or hostile clients.
+    A phase transition acquires the wire lock, then the registry lock.
+    This is cooperative same-UID maintenance control, not authority over old code
+    or hostile clients.
     """
 
     def __init__(self, registry_path: Path):
@@ -232,7 +233,7 @@ class MaintenanceBarrier:
         """Clear while the stopped batch holds its original exclusive wire OFD.
 
         Reacquiring the wire by name would deadlock. An unrelated descriptor
-        cannot publish READY while another cutover retains stopped custody.
+        cannot publish READY while another cutover holds the stopped workers' wire lock.
         """
         if type(expected) is not MaintenanceReceipt or expected.phase is not DrainingPhase:
             raise ValueError('Only an acquired draining phase can be cleared')
@@ -241,13 +242,13 @@ class MaintenanceBarrier:
         opened = os.fstat(wire_descriptor)
         named = store_lock_path(self.wire_path).stat()
         if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
-            raise RelationViolationError('Maintenance wire custody changed')
+            raise RelationViolationError('Maintenance wire lock changed')
         fcntl.flock(wire_descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with _store_lock(self.registry_path):
             return self._advance_unlocked(expected, ReadyPhase)
 
     def require_draining_unlocked(self, expected: MaintenanceReceipt) -> None:
-        """Admit only this cutover's captured phase under wire custody."""
+        """Admit only this cutover's captured phase while holding the wire lock."""
         if (type(expected) is not MaintenanceReceipt or expected.phase is not DrainingPhase
                 or self.current_unlocked() != expected):
             raise RelationViolationError('Cutover maintenance phase changed before owner retirement')

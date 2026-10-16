@@ -90,7 +90,7 @@ class MaintainedOwnerCutover(OwnerCutover):
     """Stop an exact fleet while its durable Draining receipt holds new turns.
 
     The publisher acquires maintenance_receipt before polling idle owners. It
-    clears the exact receipt under wire custody after known-safe publication
+    clears the exact receipt under the wire lock after known-safe publication
     (or on a known-safe abort), before any replacement launch. UNKNOWN outcomes
     remain closed for explicit review rather than reopening on exception text.
     """
