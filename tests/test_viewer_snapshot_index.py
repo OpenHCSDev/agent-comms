@@ -1,5 +1,6 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+import asyncio
 import json
 import os
 import sqlite3
@@ -112,7 +113,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
 
 
 @pytest.mark.asyncio
-async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path):
+async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.registry.register(viewer)
@@ -144,6 +145,15 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
     request.receive(service)
     results = []
     original_snapshot = comms.views.viewer_snapshot
+    from agent_comms.bus_route_counts import RouteIndexRebuilding
+    from agent_comms.ui_model.observation import ReadAnswered, ReadRequest
+
+    class ForegroundRead(ReadRequest):
+        def read(self, service_comms):
+            return service_comms.registry.require("bob").name
+
+    monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
+    attempts = []
 
     def complete(*args, **kwargs):
         # The service can finish both stages in one observation. Inspect the
@@ -153,8 +163,19 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
         first = next(value for value in results if isinstance(value, SidebarObserved))
         assert first.snapshot.unread_pending >= {"bob", "#team"}
         assert isinstance(first.derived[0]["#team"].unread, IndexingUnread)
-        assert projection_bytes() == before
-        return original_snapshot(*args, **kwargs)
+        if not attempts:
+            assert projection_bytes() == before
+        else:
+            # The same observer serves actual foreground work between the two
+            # admitted index units, with no append, expiry tick or new request.
+            assert any(isinstance(value, ReadAnswered) and value.request_id == 9976
+                       and value.value == "bob" for value in results)
+        attempts.append(True)
+        try:
+            return original_snapshot(*args, **kwargs)
+        except RouteIndexRebuilding:
+            ForegroundRead(str(comms.root), request_id=9976).receive(service)
+            raise
 
     try:
         with patch.object(comms.views, "viewer_snapshot", side_effect=complete):
@@ -164,6 +185,46 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
         completed = [value for value in results if isinstance(value, SidebarObserved)][-1]
         assert completed.snapshot == expected
         assert completed.snapshot.unread_pending == frozenset()
+        assert len(attempts) == 2
+        assert service.observations[SidebarReading].request is request
+    finally:
+        connection.close()
+        receiver.close()
+        comms.views.transcript_reads.close()
+
+
+@pytest.mark.asyncio
+async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_writer(
+    tmp_path, monkeypatch,
+):
+    from agent_comms.store_files import _store_lock
+
+    comms = wire(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    comms.registry.declare(Thread("sender", frozenset(), str(tmp_path)))
+    for body in ("first", "second"):
+        comms.messaging.send_message("sender", viewer, body)
+    index = BusRouteCounts(comms.bus.log.path)
+    index.prepare()
+    monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
+    receiver, connection = Pipe()
+    service = ObservationService(comms, connection)
+    request = ObserveSidebar(str(tmp_path), True, False)
+    request.receive(service)
+    try:
+        with _store_lock(index.path):
+            await asyncio.wait_for(service.observe(set()), timeout=2)
+        answers = []
+        while receiver.poll():
+            answers.append(receiver.recv())
+        initial = [answer for answer in answers if isinstance(answer, SidebarObserved)]
+        assert len(initial) == 1 and initial[0].snapshot.unread_pending
+        await service.observe(set())
+        while receiver.poll():
+            answers.append(receiver.recv())
+        completed = [answer for answer in answers if isinstance(answer, SidebarObserved)][-1]
+        assert completed.snapshot.unread == {"sender": 2}
+        assert not completed.snapshot.unread_pending
         assert service.observations[SidebarReading].request is request
     finally:
         connection.close()

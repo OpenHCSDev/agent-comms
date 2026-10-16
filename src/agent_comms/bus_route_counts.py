@@ -16,7 +16,7 @@ from contextlib import closing
 from dataclasses import dataclass, field, replace
 from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, NoReturn
 
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
@@ -262,6 +262,9 @@ class RouteIndexState:
 
     complete: ClassVar[bool]
 
+    def defer_read(self, through: int, size: int) -> NoReturn:
+        raise RouteIndexRebuilding(through, size)
+
 
 @dataclass(frozen=True)
 class RouteIndexReady(RouteIndexState):
@@ -273,6 +276,16 @@ class RouteIndexBehind(RouteIndexState):
     complete: ClassVar[bool] = False
     through: int
     size: int
+
+
+@dataclass(frozen=True)
+class RouteIndexBlocked(RouteIndexState):
+    """Another writer owns preparation; no runnable unit was admitted."""
+
+    complete: ClassVar[bool] = False
+
+    def defer_read(self, through: int, size: int) -> NoReturn:
+        raise CoordinationReadUnavailable("Route projection writer is busy")
 
 
 class RouteIndexRebuilding(CoordinationReadUnavailable):
@@ -434,7 +447,7 @@ class BusRouteCounts:
                 RouteSourceRow(1, checkpoint, tail_digest).insert(connection)
                 connection.commit()
         except BlockingIOError:
-            return RouteIndexBehind(offset, size)
+            return RouteIndexBlocked()
         return RouteIndexReady() if through == size else RouteIndexBehind(through, size)
 
 
@@ -463,7 +476,9 @@ class OpenedRouteCounts(BusRouteCounts):
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
     def _acquire(self) -> OpenedRouteCounts:
-        self.sync(self.source.stream, self.source.revision, self._decode, blocking=False)
+        self._preparation = self.sync(
+            self.source.stream, self.source.revision, self._decode, blocking=False
+        )
         super()._acquire()
         try:
             self._appended = self._appended_deliveries()
@@ -491,12 +506,12 @@ class OpenedRouteCounts(BusRouteCounts):
         through = recorded.revision.size if recorded and recorded.revision else 0
         if stream is None:
             if through:
-                raise RouteIndexRebuilding(0, size)
+                self._preparation.defer_read(0, size)
             return ()
         if recorded is not None and not recorded.matches_file(stream):
-            raise RouteIndexRebuilding(0, size)
+            self._preparation.defer_read(0, size)
         if size - through > self.rebuild_bytes:
-            raise RouteIndexRebuilding(through, size)
+            self._preparation.defer_read(through, size)
         if through >= size:
             return ()
         return tuple(self._decoded(stream, through, size, self._decode))

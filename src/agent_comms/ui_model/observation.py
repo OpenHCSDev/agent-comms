@@ -25,19 +25,20 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, field, replace
 from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, Self, TypeVar, final
 
+from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
+from agent_comms.active_route import CommsRoute
+from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
-from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
-from agent_comms.active_route import CommsRoute
 from agent_comms.presentation import WireRevision
 
 if TYPE_CHECKING:
@@ -389,6 +390,8 @@ class ObserveSidebar(InterestRequest):
             snapshot = read(
                 subject, show_stopped=self.show_stopped, show_archived=self.show_archived)
             return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
+        except RouteIndexRebuilding:
+            raise  # A bounded preparation unit finished; runnable work remains.
         except UnreadableHistory.DEFERRED_READS:
             return None  # No new snapshot; keep the original interest for the next observation.
         except StoredHistoryUnreadable as error:
@@ -463,7 +466,13 @@ class SidebarReading(Observation[ObserveSidebar]):
             if not changed and key == self.sent:
                 return
             stage = self.stage
-            result = stage.read(self.request, comms, revision)
+            try:
+                result = stage.read(self.request, comms, revision)
+            except RouteIndexRebuilding:
+                # Continue admitted preparation, letting the service accept and
+                # serve foreground requests between every bounded unit.
+                yield None
+                continue
             if result is None:
                 return
             self.sent = key
