@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -745,7 +745,7 @@ class ThreadView:
             "last_activity": self.activity.timestamp,
             "activity": self.activity.state.value,
             "activity_detail": self.activity.detail,
-            "goal_execution": asdict(self.goal_execution) if self.goal_execution else None,
+            "goal_execution": self.goal_execution.to_wire() if self.goal_execution else None,
             "session_name": self.runtime.session_name if self.runtime else None,
             "context_used": self.runtime.context_used if self.runtime else None,
             "context_size": self.runtime.context_size if self.runtime else None,

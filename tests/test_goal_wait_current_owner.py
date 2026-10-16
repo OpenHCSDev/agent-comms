@@ -23,7 +23,7 @@ def test_graph_uses_only_wait_for_original_owner_goal(tmp_path, change):
     goal = peer.active_goal
     wait = RecordedGoalWait(
         goal.id, "original-wait", goal.revision, 0,
-        (GoalWaitTarget(leaf.name, leaf.created_at),), peer.created_at,
+        (GoalWaitTarget(leaf.incarnation.require_recorded()),), peer.created_at,
         (None,), None, None,
     )
     if change == "later_goal":
@@ -37,7 +37,7 @@ def test_graph_uses_only_wait_for_original_owner_goal(tmp_path, change):
     # The foreign-goal case models a mismatched persisted lookup key. Its row
     # must not become the current goal's dependency graph merely through lookup.
     group = GoalWaits.closed_wait_group(
-        "owner", (GoalWaitTarget(peer.name, peer.created_at),),
+        "owner", (GoalWaitTarget(peer.incarnation.require_recorded()),),
         {goal.id: wait}, comms.registry.snapshot(),
     )
     # The graph reports waiting owners, not terminal leaves without a wait.

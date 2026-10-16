@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import json
 import os
-from dataclasses import asdict, replace
+from dataclasses import replace
 
 import pytest
 
@@ -65,7 +65,7 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
         result = await proxy.request("goal_snapshot")
         assert result == {
             "goal": json.loads(json.dumps(expected_goal.to_wire())),
-            "goalExecution": json.loads(json.dumps(asdict(expected_execution))),
+            "goalExecution": json.loads(json.dumps(expected_execution.to_wire())),
             "_meta": encode_updates(TurnChangedUpdate(comms.registry.require(session).turn_state)),
         }
         assert result["goalExecution"]["state"] == "standby"

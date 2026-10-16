@@ -36,6 +36,9 @@ class ThreadIncarnation(WireValue, ABC):
 
     @classmethod
     def from_wire(cls, data: dict) -> ThreadIncarnation:
+        declared = {key for _, key in FieldCodec.record_fields(ThreadIncarnation)}
+        if type(data) is not dict or data.keys() != declared:
+            raise TypeError("Thread incarnation requires exactly its declared wire fields")
         decoded = ThreadIncarnationRecord.decode(data["name"], data["created_at"])
         if not isinstance(decoded, cls):
             raise ValueError("Decoded thread birth does not match its declared member")
@@ -56,6 +59,11 @@ class ThreadIncarnation(WireValue, ABC):
     @abstractmethod
     def require_recorded(self) -> RecordedThreadIncarnation:
         """Only the recorded member can expose a lookup capability."""
+
+    @property
+    @abstractmethod
+    def birth_description(self) -> str:
+        """Describe recorded or missing birth evidence without inventing a date."""
 
     @abstractmethod
     def provenance_type(self):
@@ -105,6 +113,10 @@ class RecordedThreadIncarnation(ThreadIncarnation):
     def require_recorded(self) -> RecordedThreadIncarnation:
         return self
 
+    @property
+    def birth_description(self) -> str:
+        return f"created {self.created_at}"
+
     def provenance_type(self):
         return ThreadProvenance
 
@@ -143,6 +155,10 @@ class DeletedThreadIncarnation(ThreadIncarnation):
     def require_recorded(self) -> RecordedThreadIncarnation:
         raise ValueError("Thread incarnation requires a positive recorded birth")
 
+    @property
+    def birth_description(self) -> str:
+        return "deleted declaration"
+
     def provenance_type(self):
         return DeletedThreadProvenance
 
@@ -159,6 +175,10 @@ class UnrecordedThreadIncarnation(ThreadIncarnation):
     def require_recorded(self) -> RecordedThreadIncarnation:
         raise ValueError("Thread incarnation requires a positive recorded birth")
 
+    @property
+    def birth_description(self) -> str:
+        return "birth unrecorded"
+
     def provenance_type(self):
         return UnrecordedThreadProvenance
 
@@ -166,7 +186,7 @@ class UnrecordedThreadIncarnation(ThreadIncarnation):
         return UnrecordedThreadIncarnation(name)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class ThreadProvenance:
     """Recorded thread provenance, without process, turn or admission authority."""
 
@@ -174,7 +194,6 @@ class ThreadProvenance:
     tags: frozenset[str]
     worktree: str
     created_at: float = field(metadata={"wire_required": True})
-    _incarnation: ThreadIncarnation = field(init=False, repr=False, compare=False)
     session_file: str | None = None
     title: str | None = None
 
@@ -186,8 +205,7 @@ class ThreadProvenance:
         return ThreadProvenance
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "_incarnation", self.make_incarnation())
-        if self._incarnation.created_at != self.created_at:
+        if self.incarnation.created_at != self.created_at:
             raise ValueError("Thread provenance birth differs from its declared state")
         allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
         if not self.name or not set(self.name) <= allowed:
@@ -208,9 +226,10 @@ class ThreadProvenance:
             }
         )
 
-    @property
+    @cached_property
     def incarnation(self) -> ThreadIncarnation:
-        return self._incarnation
+        """The declaration's birth member, created once and shared by its readers."""
+        return self.make_incarnation()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

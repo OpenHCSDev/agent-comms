@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
@@ -110,7 +110,7 @@ class RecordedGoalWait(GoalWait):
 
     def project(self, goal: Goal, snapshot: RegistrySnapshot) -> GoalExecution:
         targets = tuple(
-            replace(target, name=snapshot.canonical_name(target.name))
+            GoalWaitTarget(target.incarnation.renamed(snapshot.canonical_name(target.name)))
             for target in self.targets
         )
         inactive = tuple(

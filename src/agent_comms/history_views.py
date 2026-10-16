@@ -6,7 +6,7 @@ import logging
 import time
 from collections.abc import Iterable, Mapping, Sequence
 from contextlib import ExitStack
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -558,7 +558,7 @@ class HistoryViews:
                 "is_fork": t.is_fork,
                 "pending": pending[name],
                 "goal_execution": (
-                    asdict(GoalWaits.for_goal(t.goal, waits).project(t.goal, snapshot))
+                    GoalWaits.for_goal(t.goal, waits).project(t.goal, snapshot).to_wire()
                     if t.goal is not None else None
                 ),
                 "activity": activities[name].state.value if name in activities else "idle",
@@ -575,7 +575,7 @@ class HistoryViews:
             "is_fork": t.is_fork,
         }
         execution = self.goals.goal_execution(name)
-        detail["goal_execution"] = asdict(execution) if execution else None
+        detail["goal_execution"] = execution.to_wire() if execution else None
         if include_pending:
             detail["pending"] = self.bus.pending_count(name)
         return detail

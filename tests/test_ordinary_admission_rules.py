@@ -133,7 +133,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
         wait_id="wait",
         revision=0,
         after_seq=0,
-        targets=(GoalWaitTarget(peer.name, peer.created_at),),
+        targets=(GoalWaitTarget(peer.incarnation.require_recorded()),),
         owner_created_at=comms.registry.require("owner").created_at,
         target_turn_generations=(None,),
         report_turn_id=None,

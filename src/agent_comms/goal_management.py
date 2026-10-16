@@ -131,7 +131,7 @@ class Goals:
         if any(target.created_at == thread.created_at for target in resolved):
             raise ValueError("A goal cannot wait for its own thread.")
         targets = tuple(
-            dict.fromkeys(GoalWaitTarget(target.name, target.created_at) for target in resolved)
+            dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
         )
         owners = self.registry.aliases_for(thread.name)
         dispositions = InputDispositions(self.root)

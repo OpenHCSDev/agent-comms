@@ -56,7 +56,7 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
         original = source.delivery(reply.seq)
         assert wait.matches(original, owner.incarnation.require_recorded())
         replacement_wait = replace(
-            wait, targets=(GoalWaitTarget(replacement.name, replacement.created_at),)
+            wait, targets=(GoalWaitTarget(replacement.incarnation.require_recorded()),)
         )
         assert not replacement_wait.matches(original, owner.incarnation.require_recorded())
     assert wait.has_reply(comms.bus.log, owner.incarnation.require_recorded())

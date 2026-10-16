@@ -91,6 +91,15 @@ def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path):
     assert isinstance(incarnation, RecordedThreadIncarnation)
     assert isinstance(deleted, DeletedThreadIncarnation)
     assert isinstance(historical, UnrecordedThreadIncarnation)
+    assert incarnation.birth_description == "created 1700000000.0"
+    assert deleted.birth_description == "deleted declaration"
+    assert historical.birth_description == "birth unrecorded"
+    target = GoalWaitTarget(incarnation)
+    assert (target.name, target.created_at) == ("worker", 1_700_000_000.0)
+    assert FieldCodec.encode(target) == {"name": "worker", "created_at": 1_700_000_000.0}
+    assert FieldCodec.decode(GoalWaitTarget, FieldCodec.encode(target)) == target
+    with pytest.raises(TypeError, match="exactly its declared wire fields"):
+        FieldCodec.decode(GoalWaitTarget, {**target.to_wire(), "lookup": incarnation.lookup})
     assert FieldCodec.decode(ThreadIncarnation, FieldCodec.encode(deleted)) == deleted
     assert FieldCodec.decode(ThreadIncarnation, FieldCodec.encode(historical)) == historical
     with pytest.raises(ValueError, match="declared member"):
@@ -99,7 +108,7 @@ def test_creation_lookup_is_cached_on_the_renamable_incarnation(tmp_path):
     with pytest.raises(ValueError, match="positive recorded birth"):
         deleted.require_recorded()
     with pytest.raises(ValueError, match="positive recorded birth"):
-        GoalWaitTarget("historical", 0.0)
+        GoalWaitTarget(RecordedThreadIncarnation("historical", 0.0))
 
 
 def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_owner(tmp_path):

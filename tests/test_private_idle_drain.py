@@ -416,7 +416,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         monkeypatch.setattr(comms.goals, "recover_closed_goal_wait", recovered.append)
         sender = comms.registry.require("sender")
         agent.inputs.effects.turns.goals.goal_execution_signatures["beta"] = (None, GoalExecution(
-            GoalExecutionState.STANDBY, "goal", (GoalWaitTarget("sender", sender.created_at),),
+            GoalExecutionState.STANDBY, "goal", (GoalWaitTarget(sender.incarnation.require_recorded()),),
         ))
         comms.registry.declare(Thread("unrelated", frozenset(), str(tmp_path)))
         await tick()
