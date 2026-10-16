@@ -8,7 +8,7 @@ from pathlib import Path
 import sys
 import threading
 
-from agent_comms import active_route, cohort_foreground
+from agent_comms import active_route, private_nk_entrypoint
 from agent_comms.child_process import AttachedChild
 from agent_comms.comms import Comms
 
@@ -20,7 +20,7 @@ async def test_route_installer_names_and_waits_for_every_reader(tmp_path: Path, 
     path = tmp_path / 'route-state' / 'active-route.json'
     path.parent.mkdir(mode=0o700)
     # This case exercises the real publisher and kernel locks, not SDK trust.
-    monkeypatch.setattr(cohort_foreground, '_trusted_package', lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, '_trusted_package', lambda _: None)
     script = tmp_path / 'bridge-watcher.py'
     script.write_text(
         'import fcntl, os, sys\n'
