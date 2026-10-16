@@ -292,15 +292,7 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
     _owner, children = catalog_owner
     launch = NativePiRpcLaunch.managed(
         "pi",
-        (
-            "--model",
-            "response-local/fixture",
-            "--offline",
-            "--no-session",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-        ),
+        ('--model', 'response-local/fixture', '--offline', '--no-session', *NativeThreadDefaults.isolation_arguments),
         worktree=native_backend.project,
     )
     # The command result owner needs a session; this probe never opens its child.
@@ -370,9 +362,7 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
         install_event_host(monkeypatch, command, f"{address.scheme}://{address.netloc}",
                            replacement_probe=events, cancelled_session=cancelled_target)
     launch = await Coordination.run_worker(partial(NativePiRpcLaunch.managed,
-        command, ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
-               "--offline", "--no-extensions",
-               "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
+        command, ('--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'),
         worktree=native.project, session_file=created.session_file,
     ))
 

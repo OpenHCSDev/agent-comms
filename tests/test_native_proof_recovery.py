@@ -1,4 +1,5 @@
 """Saved, actual pinned native sessions with indexed proof; loopback provider only."""
+from agent_comms.native_settings import NativeThreadDefaults
 
 import asyncio
 import json
@@ -216,20 +217,7 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
     await NativeSessionPreparation.open(
         owner.persistent,
         "pi",
-        [
-            "--provider",
-            "response-local",
-            "--model",
-            "fixture",
-            "--thinking",
-            "off",
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-        ],
+        ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'],
         worktree=str(owner.project),
         environment=dict(os.environ),
         session_file=str(owner.session),
@@ -243,20 +231,7 @@ async def test_actual_saved_native_recovery_preserves_accepted_and_unknown(
     await NativeSessionPreparation.open(
         owner.persistent,
         "pi",
-        [
-            "--provider",
-            "response-local",
-            "--model",
-            "fixture",
-            "--thinking",
-            "off",
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-        ],
+        ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'],
         worktree=str(owner.project),
         environment=dict(os.environ),
         session_file=str(owner.session),
@@ -333,20 +308,7 @@ async def test_actual_native_bad_proof_refuses_before_any_input(native_backend, 
             await NativeSessionPreparation.open(
                 owner.persistent,
                 "pi",
-                [
-                    "--provider",
-                    "response-local",
-                    "--model",
-                    "fixture",
-                    "--thinking",
-                    "off",
-                    "--offline",
-                    "--no-extensions",
-                    "--no-skills",
-                    "--no-context-files",
-                    "--no-prompt-templates",
-                    "--no-tools",
-                ],
+                ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'],
                 worktree=str(owner.project),
                 environment=dict(os.environ),
                 session_file=str(owner.session),

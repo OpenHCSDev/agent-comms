@@ -169,19 +169,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
         }.items():
             monkeypatch.setenv(key, value)
-        args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--provider",
-            "openrouter",
-            "--model",
-            "z-ai/glm-5.3-flash",
-            "--thinking",
-            "off",
-        ]
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
         from native_event_host import install_event_host
 
         install_event_host(

@@ -126,20 +126,7 @@ async def test_mounted_goal_continues_without_progress_tool(
         worker.start()
         model = "openai-codex/gpt-6-sol" if live else "openrouter/z-ai/glm-5.3-flash"
         provider, model_id = model.split("/", 1)
-        native_args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-            "--provider",
-            provider,
-            "--model",
-            model_id,
-            "--thinking",
-            "high" if compact_tools else "off",
-        ]
+        native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', provider, '--model', model_id, '--thinking', 'high' if compact_tools else 'off']
         if compact_tools:
             native_args.remove("--no-tools")
             native_args.extend(["--tools", "read"])

@@ -95,20 +95,7 @@ async def test_native_channel_input_receipt_and_revocation(case, monkeypatch):
             "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
         }.items():
             monkeypatch.setenv(key, value)
-        args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-            "--provider",
-            "openrouter",
-            "--model",
-            "z-ai/glm-5.3-flash",
-            "--thinking",
-            "off",
-        ]
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
         agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)

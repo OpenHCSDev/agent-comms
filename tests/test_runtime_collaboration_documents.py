@@ -28,7 +28,7 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
     from delivery_owner_fixture import canonical_agent
 
     native = native_backend
-    arguments = ["--provider=response-local", "--model=fixture", "--thinking=off", "--offline", "--no-extensions", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"]
+    arguments = ['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
     agent = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, arguments=tuple(arguments)), auto_wake=False, runtime_enabled=False)

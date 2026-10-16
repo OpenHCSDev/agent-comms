@@ -189,11 +189,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                 "throw new Error('BLOCKED_NONLOCAL_NETWORK');"
                 "return original(url,...rest);};"
             )
-            native_args = [
-                "--offline", "--no-extensions", "--no-skills", "--no-prompt-templates",
-                "--no-context-files", "--no-tools", "--provider", "openrouter",
-                "--model", "z-ai/glm-5.3-flash", "--thinking", "high",
-            ]
+            native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'high']
             if case == "post_compaction_tool_rounds":
                 native_args.remove("--no-tools")
                 native_args.extend(["--tools", "read"])

@@ -118,21 +118,7 @@ async def test_native_tool_use_progress_reaches_channel_before_final(monkeypatch
             "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
         }.items():
             monkeypatch.setenv(key, value)
-        args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--provider",
-            "openrouter",
-            "--model",
-            "z-ai/glm-5.3-flash",
-            "--thinking",
-            "off",
-            "--extension",
-            str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
-        ]
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '--extension', str(Path(__file__).resolve().parents[1] / 'extensions/pi-agent-comms/index.ts')]
         agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
         try:

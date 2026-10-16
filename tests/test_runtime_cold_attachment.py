@@ -32,20 +32,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
-    arguments = [
-        "--provider",
-        "response-local",
-        "--model",
-        "fixture",
-        "--thinking",
-        "off",
-        "--offline",
-        "--no-extensions",
-        "--no-skills",
-        "--no-context-files",
-        "--no-prompt-templates",
-        "--no-tools",
-    ]
+    arguments = ['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools']
     comms.owners.native_defaults = NativeThreadDefaults(binary=comms.owners.native_defaults.binary,
                                                        arguments=tuple(arguments))
     with comms.bus.log.locked():

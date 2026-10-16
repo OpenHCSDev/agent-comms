@@ -37,8 +37,8 @@ class Subscriber:
 
 async def cli(environment, stage, root_args, arguments, native):
     child = await asyncio.create_subprocess_exec(
-        str(Path(sys.executable).with_name('agent-comms')), *root_args, *native.cli_arguments,
-        'invoke', '--tool', 'comms_start', '--arguments', json.dumps(arguments),
+        str(Path(sys.executable).with_name('agent-comms')), *root_args,
+        'start', '--name', arguments['name'], *native.cli_arguments,
         cwd=stage, env=environment, stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -68,8 +68,7 @@ async def main(package, evidence):
             stage.mkdir(mode=0o700)
             project = stage / 'project'
             project.mkdir(mode=0o700)
-            native = NativeThreadDefaults(binary=LaunchRuntime.current().native_entrypoint, arguments=("--offline", "--no-extensions", "--no-skills",
-                                                     "--no-context-files", "--no-tools"))
+            native = NativeThreadDefaults(binary=LaunchRuntime.current().native_entrypoint, arguments=('--offline', *NativeThreadDefaults.isolation_arguments, '--no-tools'))
             comms = Comms(LocalRoute(stage / 'wire'), runtime=LaunchRuntime.current())
             root_id = comms.messaging.initialize_private_initial_protocol()
             comms.registry.declare(Thread('recipient', frozenset({'team'}), str(project),

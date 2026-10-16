@@ -453,23 +453,7 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch):
             environment.setattr(os, "environ", env)
             # The unchanged origin guard has its own retained SDK qualification.
             # These four cases exercise MCP/ACP under that committed policy.
-            args = [
-                "--offline",
-                "--no-extensions",
-                "--no-skills",
-                "--no-prompt-templates",
-                "--no-themes",
-                "--no-context-files",
-                "--no-builtin-tools",
-                "--provider",
-                "openrouter",
-                "--model",
-                "z-ai/glm-5.3-flash",
-                "--thinking",
-                "off",
-                "-e",
-                str(package),
-            ]
+            args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-themes', '--no-builtin-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '-e', str(package)]
             retirement = AsyncExitStack()
             try:
                 selected_comms = Comms(resolve_comms_route(tmp_path / "wire"), runtime=LaunchRuntime.current())

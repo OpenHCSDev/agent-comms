@@ -20,6 +20,14 @@ class NativeThreadDefaults(CliRecord, JsonFlagRecord):
     model: str = "openai-codex/gpt-6.1-sol"
     thinking_level: type[ThinkingLevel] = HighThinkingLevel
     value_flag: ClassVar[str] = "--native-settings"
+    isolation_arguments: ClassVar[tuple[str, ...]] = (
+        "--no-extensions", "--no-skills", "--no-context-files",
+    )
+
+    @classmethod
+    def offline(cls, runtime: LaunchRuntime, *, arguments: tuple[str, ...] = ()) -> NativeThreadDefaults:
+        return cls(binary=runtime.native_entrypoint,
+                   arguments=("--offline", *cls.isolation_arguments, *arguments))
 
     def __post_init__(self) -> None:
         if not self.binary.strip():

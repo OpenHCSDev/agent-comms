@@ -43,17 +43,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
     native = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([
-            "--provider=response-local",
-            "--model=fixture",
-            "--thinking=off",
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-        ])), runtime_enabled=True, auto_wake=False)
+    agent = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'])), runtime_enabled=True, auto_wake=False)
     try:
         child = (await agent.new_session(str(native.project))).session_id
         drain = agent.inputs.drain_tasks.pop(child)

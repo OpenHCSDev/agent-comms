@@ -98,8 +98,7 @@ async def run(arguments):
     (config / "auth.json").write_text(json.dumps({"wait-local": {"type": "api_key", "key": "local-only"}}))
     (config / "settings.json").write_text(json.dumps({"compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
-    native = NativeThreadDefaults(binary=LaunchRuntime.current().native_entrypoint, arguments=("--provider", "wait-local", "--model", "fixture",
-        "--no-extensions", "--no-skills", "--no-context-files"))
+    native = NativeThreadDefaults(binary=LaunchRuntime.current().native_entrypoint, arguments=('--provider', 'wait-local', '--model', 'fixture', *NativeThreadDefaults.isolation_arguments))
     service = Comms(LocalRoute(stage / "wire"), private_initial_writes=True, runtime=LaunchRuntime.current())
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, package)

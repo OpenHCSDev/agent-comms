@@ -100,7 +100,9 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "selected-offline/fixture")
     for name in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(name, raising=False)
-    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=LaunchRuntime.current())
+    runtime = LaunchRuntime.current()
+    native = NativeThreadDefaults.offline(runtime)
+    comms = Comms(LocalRoute(tmp_path / "wire"), runtime=runtime)
     for name in ("sender", "recipient"):
         comms.registry.declare(
             Thread(
@@ -139,7 +141,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         return [message for message in comms.views.full_history() if message.sender == "recipient"]
 
     try:
-        comms.owners.start("recipient")
+        comms.owners.start("recipient", native=native, launch_runtime=runtime)
         until(lambda: len(replies()) == 1 and not comms.registry.require("recipient").executing)
         assert replies()[0].body == "BOOTSTRAP_REPLY_1" and replies()[0].target == "sender"
         original = comms.registry.require("recipient")
@@ -148,7 +150,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         assert Path(session).is_file()
         comms.owners.stop("recipient")
         assert not comms.registry.require("recipient").process_alive
-        comms.owners.start("recipient")
+        comms.owners.start("recipient", native=native, launch_runtime=runtime)
         assert comms.registry.require("recipient").process_identity != original.process_identity
         second = comms.messaging.send_message("sender", "recipient", "BOOTSTRAP_SECOND")
         until(lambda: len(replies()) == 2 and not comms.registry.require("recipient").executing)

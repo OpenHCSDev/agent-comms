@@ -44,6 +44,15 @@ def test_unconfigured_launch_has_no_provider_or_model_policy():
     assert NativeArguments.parse(selected.arguments).model == "user/selected"
 
 
+def test_offline_record_owns_the_shared_isolation_arguments():
+    runtime = LaunchRuntime.current()
+    selected = NativeThreadDefaults.offline(runtime, arguments=("--no-tools",))
+    assert selected.binary == runtime.native_entrypoint
+    assert selected.arguments == ("--offline", *NativeThreadDefaults.isolation_arguments, "--no-tools")
+    assert "--no-context-files" in selected.arguments
+    assert NativeThreadDefaults.from_arguments(selected.cli_arguments) == selected
+
+
 def test_native_settings_cli_and_original_command_share_the_declared_codec():
     selected = NativeThreadDefaults(binary="/fixture pi", arguments=("--label", "two words"))
     assert NativeThreadDefaults.from_arguments(selected.cli_arguments, selected) == selected
@@ -181,18 +190,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
     proof = read_proof_rows(native.session)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     selected_comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, arguments=tuple([
-            "--provider=response-local",
-            "--model=fixture",
-            "--thinking=low",
-            "--thinking=off",
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-        ])), auto_wake=False)
+    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=low', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'])), auto_wake=False)
     router = build_agent_router(owner)
     try:
         async with asyncio.timeout(25):

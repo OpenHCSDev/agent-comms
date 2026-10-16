@@ -21,20 +21,7 @@ async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_bac
     fixture = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     selected_comms = Comms(LocalRoute(fixture.root), runtime=LaunchRuntime.current())
-    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple([
-            "--provider",
-            "response-local",
-            "--model",
-            "fixture",
-            "--thinking",
-            "off",
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-        ])), runtime_enabled=True, auto_wake=False)
+    owner = canonical_agent(selected_comms, native=dataclasses.replace(selected_comms.owners.native_defaults, binary="pi", arguments=tuple(['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools'])), runtime_enabled=True, auto_wake=False)
     updates, permissions = [], []
 
     class Attachment:

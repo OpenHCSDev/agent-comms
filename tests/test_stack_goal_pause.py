@@ -106,20 +106,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
         worker.start()
         model = "openai-codex/gpt-6-sol" if live else "openrouter/z-ai/glm-5.3-flash"
         provider, model_id = model.split("/", 1)
-        native_args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-            "--provider",
-            provider,
-            "--model",
-            model_id,
-            "--thinking",
-            "off",
-        ]
+        native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', provider, '--model', model_id, '--thinking', 'off']
         if model_origin:
             native_args.remove("--no-tools")
             native_args.extend(

@@ -177,20 +177,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
         first_chunk = asyncio.Event()
         started = asyncio.Event()
 
-        native_args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-tools",
-            "--provider",
-            "openrouter",
-            "--model",
-            "z-ai/glm-5.3-flash",
-            "--thinking",
-            "off",
-        ]
+        native_args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-tools', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off']
         if terminal:
             native_args.remove("--no-tools")
             native_args.extend(["--tools", "bash"])

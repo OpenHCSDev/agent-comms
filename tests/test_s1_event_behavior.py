@@ -352,11 +352,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
 
         monkeypatch.setattr(native.provider, "response_chunks", with_progress)
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple([
-            "--provider", "response-local", "--model", "fixture", "--thinking", "off",
-            "--offline", "--no-extensions", "--no-skills", "--no-context-files",
-            "--no-prompt-templates",
-        ])), private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]))
+    owner = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary="pi", arguments=tuple(['--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates'])), private_nk_wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], private_nk_native_package=Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]))
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]

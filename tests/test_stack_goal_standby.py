@@ -174,21 +174,7 @@ async def test_native_goal_standby_then_exact_child_input(monkeypatch, restart, 
             "PATH": str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
         }.items():
             monkeypatch.setenv(key, value)
-        args = [
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--provider",
-            "openrouter",
-            "--model",
-            "z-ai/glm-5.3-flash",
-            "--thinking",
-            "off",
-            "--extension",
-            str(Path(__file__).resolve().parents[1] / "extensions/pi-agent-comms/index.ts"),
-        ]
+        args = ['--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash', '--thinking', 'off', '--extension', str(Path(__file__).resolve().parents[1] / 'extensions/pi-agent-comms/index.ts')]
         comms = Comms(resolve_comms_route(root / "wire"), runtime=LaunchRuntime.current())
         agent = CommsAgent(comms, native=dataclasses.replace(comms.owners.native_defaults, binary=native, arguments=tuple(args)), runtime_enabled=True)
         monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)

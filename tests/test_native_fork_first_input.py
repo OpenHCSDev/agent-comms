@@ -39,7 +39,7 @@ pytest_plugins = ("test_backend_native_lifecycle",)
 
 class OwnerAdmissionCase(DeclaredFamily, affix="Case"):
     @abstractmethod
-    async def create(self, comms): ...
+    async def create(self, comms, native): ...
 
     @abstractmethod
     async def first_input(self, attachment, child): ...
@@ -57,8 +57,9 @@ class OwnerAdmissionCase(DeclaredFamily, affix="Case"):
 class OrdinaryOwnerCase(OwnerAdmissionCase):
     repetitions = 2400
 
-    async def create(self, comms):
-        await asyncio.to_thread(comms.owners.start, "physical-parent")
+    async def create(self, comms, native):
+        await asyncio.to_thread(comms.owners.start, "physical-parent",
+                               native=native, launch_runtime=comms.runtime)
         return comms.registry.require("physical-parent")
 
     async def first_input(self, attachment, child):
@@ -77,7 +78,7 @@ class OrdinaryOwnerCase(OwnerAdmissionCase):
 class ForkOwnerCase(OwnerAdmissionCase):
     repetitions = 900
 
-    async def create(self, comms):
+    async def create(self, comms, native):
         parent = comms.registry.require("physical-parent")
         return await asyncio.to_thread(
             comms.threads.create,
@@ -89,6 +90,7 @@ class ForkOwnerCase(OwnerAdmissionCase):
                 parent="physical-parent",
                 task="hey Boss",
             ),
+            native=native, runtime=comms.runtime,
         )
 
     async def first_input(self, attachment, child):
@@ -178,7 +180,9 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     )
     debug_log = native.project / "runtime-debug.log"
     monkeypatch.setenv("AGENT_COMMS_DEBUG_LOG", str(debug_log))
-    comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
+    runtime = LaunchRuntime.current()
+    launch_native = NativeThreadDefaults.offline(runtime)
+    comms = Comms(LocalRoute(native.root), runtime=runtime)
     comms.registry.declare(
         Thread(
             "physical-parent",
@@ -192,7 +196,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
-    attachment = CommsClient(comms, native=comms.owners.native_defaults, runtime_enabled=True, private_nk_native_package=package, private_nk_wire_root_id=root_id)
+    attachment = CommsClient(comms, native=launch_native, runtime_enabled=True, private_nk_native_package=package, private_nk_wire_root_id=root_id)
     facts = []
 
     class Client:
@@ -203,7 +207,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     child = None
     first_send_started = time.monotonic()
     try:
-        child = await case.create(comms)
+        child = await case.create(comms, launch_native)
         async with asyncio.timeout(15):
             while True:
                 try:

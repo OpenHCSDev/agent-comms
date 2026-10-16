@@ -1,4 +1,5 @@
 """Installed native 429 exhaustion reaches one completed user-visible failure."""
+from agent_comms.native_settings import NativeThreadDefaults
 
 import asyncio
 import json
@@ -78,8 +79,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
     monkeypatch.setenv("PI_REASONING_LEVEL", "off")
 
     launcher = str(Path(__file__).parents[1] / "stack/bin/pi-native")
-    arguments = ["--provider", "limit-offline", "--model", "fixture", "--thinking", "off",
-                 "--no-extensions", "--no-skills", "--no-context-files"]
+    arguments = ['--provider', 'limit-offline', '--model', 'fixture', '--thinking', 'off', *NativeThreadDefaults.isolation_arguments]
     agent = canonical_agent(wired, native=dataclasses.replace(wired.owners.native_defaults, binary=launcher, arguments=tuple(arguments)), runtime_enabled=True)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     route = PrivateNkLaunch(Path(agent._comms.root), agent._configured_root_id(), package, None)

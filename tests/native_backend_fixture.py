@@ -91,9 +91,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
     @staticmethod
     def native_arguments(options=("--no-tools",)):
         """One external native argument declaration for saved/ACP consumers."""
-        return ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
-                "--offline", "--no-extensions", "--no-skills", "--no-context-files",
-                "--no-prompt-templates", *options)
+        return ('--provider', 'response-local', '--model', 'fixture', '--thinking', 'off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', *options)
 
     @asynccontextmanager
     async def open_owner(self, *, runtime_enabled=False, auto_wake=False,

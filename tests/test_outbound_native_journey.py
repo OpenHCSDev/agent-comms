@@ -30,19 +30,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"]).resolve(strict=True)
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
     comms = Comms(LocalRoute(native.root), runtime=LaunchRuntime.current())
-    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, arguments=tuple([
-            "--provider=response-local",
-            "--model=fixture",
-            "--thinking=off",
-            "--offline",
-            "--no-extensions",
-            "--no-skills",
-            "--no-context-files",
-            "--no-prompt-templates",
-            "--no-builtin-tools",
-            "--extension",
-            str(package / "agent-comms-extensions/global-agent-comms/index.mjs"),
-        ])), auto_wake=False, runtime_enabled=True)
+    owner = canonical_agent(comms, native=dataclasses.replace(comms.owners.native_defaults, arguments=tuple(['--provider=response-local', '--model=fixture', '--thinking=off', '--offline', *NativeThreadDefaults.isolation_arguments, '--no-prompt-templates', '--no-builtin-tools', '--extension', str(package / 'agent-comms-extensions/global-agent-comms/index.mjs')])), auto_wake=False, runtime_enabled=True)
     comms.registry.declare(
         Thread(
             "receiver",
