@@ -14,6 +14,7 @@ from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
     EditGoalAction,
@@ -916,7 +917,8 @@ class CommsQueueRestartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolReque
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .restart_queue import enqueue as enqueue_restart
 
-        return {"restart": FieldCodec.encode(enqueue_restart(comms, self.name))}
+        return {"restart": FieldCodec.encode(enqueue_restart(
+            comms, self.name, launch_runtime=LaunchRuntime.current()))}
 
 
 @dataclass(frozen=True, kw_only=True)

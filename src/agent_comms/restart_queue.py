@@ -108,8 +108,7 @@ class RestartTarget:
     agent_bin: str
 
     @classmethod
-    def capture(cls, comms: Comms, source: Mapping[str, str]):
-        selected = LaunchRuntime.current()
+    def capture(cls, comms: Comms, source: Mapping[str, str], selected: LaunchRuntime):
         runtime = RestartEnvironment.inherit(
             comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), selected)
         )
@@ -252,7 +251,7 @@ class RestartQueue:
             yield self.read(path)
 
 
-def enqueue(comms: Comms, name: str) -> QueuedRestart:
+def enqueue(comms: Comms, name: str, *, launch_runtime: LaunchRuntime) -> QueuedRestart:
     if sys.platform != "linux":
         raise ValueError("Queued restarts require Linux inotify and /proc")
     queue = RestartQueue(comms.root / DIRECTORY)
@@ -263,7 +262,7 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         owner.require_restart_owner(status)
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
-        target = RestartTarget.capture(comms, launch.environment)
+        target = RestartTarget.capture(comms, launch.environment, launch_runtime)
         target.require_available(comms)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with queue.locked():
