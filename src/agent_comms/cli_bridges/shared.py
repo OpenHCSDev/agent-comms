@@ -115,6 +115,8 @@ class ThreadOutput:
 @dataclass(frozen=True)
 class TranscriptUpdate(ABC):
     """One change a CLI reports about its thread."""
+    is_status: ClassVar[bool] = False
+
     @abstractmethod
     def publish(self, output: ThreadOutput) -> None: ...
 
@@ -131,6 +133,7 @@ class TranscriptUpdate(ABC):
 
 @dataclass(frozen=True)
 class TurnStarted(TranscriptUpdate):
+    is_status = True
     detail: str = ''
 
     def publish(self, output: ThreadOutput) -> None:
@@ -139,6 +142,8 @@ class TurnStarted(TranscriptUpdate):
 
 @dataclass(frozen=True)
 class TurnEnded(TranscriptUpdate):
+    is_status = True
+
     def publish(self, output: ThreadOutput) -> None:
         output.transcript.end_turn()
         output.status(ActivityState.IDLE)
@@ -147,6 +152,7 @@ class TurnEnded(TranscriptUpdate):
 @dataclass(frozen=True)
 class ActiveItem(TranscriptUpdate):
     """An item the CLI started producing: what it is doing now."""
+    is_status = True
     turn_id: str
     item_id: str
     state: ActivityState

@@ -69,11 +69,12 @@ def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
     assert [row.seq for row in comms.bus.inbox("recipient")] == [messages[2].seq]
     with BusRouteCounts(comms.bus.log.path) as index:
         plan = index.connection.execute(
-            f'EXPLAIN QUERY PLAN SELECT seq FROM "{RouteEntryRow.declared_name}" '
-            "WHERE target=? AND sender=? AND sender_lookup=? AND timestamp>=?",
-            ("recipient", "sender", "source", birth),
+            f'EXPLAIN QUERY PLAN SELECT time_root FROM "{RouteEntryRow.declared_name}" '
+            "WHERE target=? AND sender=? AND sender_lookup=? AND seq<=? "
+            "ORDER BY seq DESC LIMIT 1",
+            ("recipient", "sender", "source", messages[-1].seq),
         ).fetchall()
-    assert any("COVERING INDEX" in row[-1] for row in plan), plan
+    assert any("USING INDEX" in row[-1] and "seq<?" in row[-1] for row in plan), plan
 
 
 @pytest.mark.refactor_guard
