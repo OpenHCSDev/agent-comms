@@ -118,13 +118,14 @@ class OpenedWireSnapshot:
         if self.stream is None:
             return empty()
         access = self.metadata.access
-        with access.open_page_index(Path(self.stream.name)) as index:
+        with BusPageIndex(Path(self.stream.name)) as index:
             try:
-                with access.prepare_page_index(index, self):
+                with index.prepared(self):
                     return read(index)
             except StaleBusPageIndexError:
-                access.repair_page_index(index)
-            with access.prepare_page_index(index, self):
+                access.require_append()
+                index.invalidate()
+            with index.prepared(self):
                 return read(index)
 
     def indexed_records(self, index: BusPageIndex, rows, *, before_offset: int):
