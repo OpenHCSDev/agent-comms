@@ -5,6 +5,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.display_order import NameChannelSort
 from agent_comms.presentation import ListingFilter
+from agent_comms.read_ledger import NoReadMarkerNotice
 from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.ui_model.unread import UnobservedUnread
 from agent_comms.thread_identity import ThreadRole
@@ -50,8 +51,9 @@ def test_stopped_and_archived_are_explicit_view_filters(tmp_path):
 def test_sidebar_observation_owns_unavailable_and_observed_answers(tmp_path):
     model = SidebarModel(lambda flush: flush())
     assert model.channel_order is NameChannelSort
-    assert model.read_marker_notice is None
-    assert isinstance(model.observation.unread_for(lambda snapshot: UnobservedUnread()), UnobservedUnread)
+    assert model.read_marker_notice == NoReadMarkerNotice()
+    assert isinstance(model.observation.channel_unread('#team'), UnobservedUnread)
+    assert isinstance(model.observation.bus_unread('member'), UnobservedUnread)
     with pytest.raises(RuntimeError, match='has not been observed'):
         _ = model.filters
 
@@ -69,7 +71,8 @@ def test_sidebar_observation_owns_unavailable_and_observed_answers(tmp_path):
     failure = ValueError('Sidebar read failed')
     model.clear(failure)
     assert model.threads.rows == model.channels.rows == {}
-    assert isinstance(model.observation.unread_for(lambda snapshot: UnobservedUnread()), UnobservedUnread)
+    assert isinstance(model.observation.channel_unread('#team'), UnobservedUnread)
+    assert isinstance(model.observation.bus_unread('member'), UnobservedUnread)
     with pytest.raises(ValueError) as refused:
         _ = model.filters
     assert refused.value is failure

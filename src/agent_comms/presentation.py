@@ -24,7 +24,7 @@ from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayScope
-from .read_ledger import ReadLedger
+from .read_ledger import NoReadMarkerNotice, ReadLedger, ReadMarkerNotice
 from .runtime_info import AgentRuntimeInfo
 from .store_files import _store_lock
 from .thread_identity import ThreadIncarnation
@@ -775,7 +775,7 @@ class CoordinationSnapshot:
     thread_unread: Mapping[str, int] = field(default_factory=dict)
     unread_pending: frozenset[str] = frozenset()
     filters: ListingFilter = field(default_factory=ListingFilter)
-    read_marker_notice: str | None = None
+    read_marker_notice: ReadMarkerNotice = NoReadMarkerNotice()
 
     @classmethod
     def capture(
@@ -783,7 +783,8 @@ class CoordinationSnapshot:
         agents: AgentActivity, declarations: Mapping[str, Channel],
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
         unread: Mapping[str, int], channel_unread: Mapping[str, int],
-        show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
+        show_stopped: bool, show_archived: bool,
+        read_marker_notice: ReadMarkerNotice = NoReadMarkerNotice(),
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
         activities = agents.all_activity(snapshot=registry)

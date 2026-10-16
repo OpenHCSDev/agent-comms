@@ -52,7 +52,7 @@ class DisplayCheckpoint(AppendCheckpoint):
     semantics: DisplayMetricScope
     activity: dict[str, tuple[float, float]]
     counts: dict[str, int]
-    schema: Literal[3] = field(default=3, kw_only=True)
+    schema: Literal[4] = field(default=4, kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()

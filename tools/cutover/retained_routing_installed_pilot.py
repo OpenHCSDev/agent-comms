@@ -250,7 +250,7 @@ def main():
     service = Comms(stage / 'reader')
     receipt = json.loads((stage / 'carry-receipt.json').read_text())
     acquired = FieldCodec.decode(HistorySource, receipt['recorded_source'])
-    source = service.views.attach_history(root, source_read=acquired)
+    source = service.views.attach_original_history(acquired)
     read = service.transcripts.capture_page_read('alpha', historical_source=source.key)
     page = service.transcripts.bind_page_read('alpha', read.identity).read()
     reference = MessageReference(seed['original']['seq'], seed['original']['id'])

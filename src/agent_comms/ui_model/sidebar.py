@@ -14,6 +14,7 @@ from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
 from agent_comms.presentation import CoordinationSnapshot, ListingFilter, ThreadView
+from agent_comms.read_ledger import NoReadMarkerNotice, ReadMarkerNotice
 from agent_comms.thread_execution import ConversationPreparation, ThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_presentation import ThreadPresentationStatus
@@ -97,8 +98,8 @@ class SidebarObservation(ABC):
     channel_order: type[ChannelSort] = NameChannelSort
 
     @property
-    def read_marker_notice(self) -> str | None:
-        return None
+    def read_marker_notice(self) -> ReadMarkerNotice:
+        return NoReadMarkerNotice()
 
     @property
     def filters(self) -> ListingFilter:
@@ -107,9 +108,10 @@ class SidebarObservation(ABC):
     def require_snapshot(self) -> CoordinationSnapshot:
         self.unavailable()
 
-    def unread_for(
-        self, reader: Callable[[CoordinationSnapshot], UnreadPresentation],
-    ) -> UnreadPresentation:
+    def channel_unread(self, target: str) -> UnreadPresentation:
+        return UnobservedUnread()
+
+    def bus_unread(self, target: str) -> UnreadPresentation:
         return UnobservedUnread()
 
     def thread_row(self, person: ThreadView) -> ThreadRowModel:
@@ -160,8 +162,11 @@ class ObservedSidebar(SidebarObservation):
     def filters(self):
         return self.snapshot.filters
 
-    def unread_for(self, reader):
-        return reader(self.snapshot)
+    def channel_unread(self, target):
+        return UnreadPresentation.for_channel(self.snapshot, target)
+
+    def bus_unread(self, target):
+        return UnreadPresentation.for_bus(self.snapshot, target)
 
     def thread_row(self, person):
         unread = person.thread.execution.prepare_conversation(PersonUnread(person, self.snapshot))

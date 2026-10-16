@@ -7,7 +7,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from enum import StrEnum
 
-from .channel_targets import _TAG_CHARS, BuiltinChannel, Tag
+from .channel_targets import _TAG_CHARS, BuiltinChannel, HistoryTargets, NamedHistoryTargets, Tag
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
@@ -100,11 +100,11 @@ class Channel:
         return self.view is None and self.builtin is None
 
     @property
-    def history_targets(self) -> frozenset[str] | None:
+    def history_targets(self) -> HistoryTargets:
         if self.view is not None:
             return self.view.history_targets
         builtin = self.builtin
-        return builtin.history_targets if builtin is not None else frozenset({self.name})
+        return builtin.history_targets if builtin is not None else NamedHistoryTargets(frozenset({self.name}))
 
     def to_wire(self) -> dict[str, object]:
         return FieldCodec.encode(self)
@@ -164,10 +164,10 @@ class SavedView:
     original_targets: frozenset[str] = frozenset()
 
     @property
-    def history_targets(self) -> frozenset[str]:
+    def history_targets(self) -> NamedHistoryTargets:
         # Original addressed messages remain attached to their immutable target;
         # this is a read projection, never a rewritten message or delivery scope.
-        return self.original_targets | frozenset(f"#{tag}" for tag in self.predicate.tags)
+        return NamedHistoryTargets(self.original_targets | frozenset(f"#{tag}" for tag in self.predicate.tags))
 
     def __post_init__(self) -> None:
         if (

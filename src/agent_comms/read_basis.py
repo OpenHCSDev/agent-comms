@@ -13,7 +13,7 @@ from dataclasses import astuple, dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .channel_targets import is_channel_target
+from .channel_targets import AllHistoryTargets, HistoryTargets, NamedHistoryTargets, is_channel_target
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
 from .store_files import _store_lock
@@ -308,8 +308,8 @@ class MessageDisplayScope(ABC):
 
     @property
     @abstractmethod
-    def index_targets(self) -> frozenset[str] | None:
-        """None means that target alone cannot exclude a candidate."""
+    def index_targets(self) -> HistoryTargets:
+        """The sound target reduction, or the explicit unrestricted member."""
 
     @abstractmethod
     def includes(self, message: Message) -> bool:
@@ -350,8 +350,8 @@ class DMDisplayScope(MessageDisplayScope):
         return message.seq < before and message.seq not in seen and self.inbound(message)
 
     @property
-    def index_targets(self) -> frozenset[str]:
-        return self.first_names | self.second_names
+    def index_targets(self) -> NamedHistoryTargets:
+        return NamedHistoryTargets(self.first_names | self.second_names)
 
     def includes(self, message: Message) -> bool:
         return (message.sender in self.first_names and message.target in self.second_names) or (
@@ -368,8 +368,8 @@ class ListedDeliveries(MessageDisplayScope):
     targets: frozenset[str]
 
     @property
-    def index_targets(self) -> frozenset[str]:
-        return self.targets
+    def index_targets(self) -> NamedHistoryTargets:
+        return NamedHistoryTargets(self.targets)
 
     def includes(self, message: Message) -> bool:
         return message.seq in self.sequences and self.scope.includes(message)
@@ -380,7 +380,7 @@ class ChannelDisplayScope(MessageDisplayScope):
     """One captured local display predicate; it never changes delivery or history ownership."""
 
     channel: str
-    targets: frozenset[str] | None
+    targets: HistoryTargets
     any_mode: bool = False
     participant_names: frozenset[str] = frozenset()
     displayed: DisplayBasis | None = field(default=None, compare=False)
@@ -401,10 +401,10 @@ class ChannelDisplayScope(MessageDisplayScope):
         return cls(channel.name, targets, channel.any_mode, participant_names)
 
     @property
-    def index_targets(self) -> frozenset[str] | None:
+    def index_targets(self) -> HistoryTargets:
         # The existing offset index has no mention column. Any-mode can match
         # sender, DM peer or a mention regardless of target; never drop those rows.
-        return None if self.any_mode else self.targets
+        return AllHistoryTargets() if self.any_mode else self.targets
 
     def require_displayed(self) -> DisplayBasis:
         if self.displayed is None:
@@ -412,7 +412,7 @@ class ChannelDisplayScope(MessageDisplayScope):
         return self.displayed
 
     def includes(self, message: Message) -> bool:
-        if self.targets is None or message.target in self.targets:
+        if self.targets.includes(message.target):
             return True
         if not self.any_mode:
             return False

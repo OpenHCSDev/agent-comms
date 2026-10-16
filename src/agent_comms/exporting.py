@@ -148,11 +148,7 @@ class ChannelScope(WireExportScope):
             raise RelationViolationError(
                 f"Saved view {self.channel!r} has no authoritative wire history."
             )
-        targets = catalog.read().history_targets(self.channel)
-        if targets is None:
-            raise RelationViolationError(
-                f"View {self.channel!r} is an aggregate, not an exportable conversation."
-            )
+        targets = catalog.read().history_targets(self.channel).require_names()
         return ResolvedExportScope(self, lambda message: message.target in targets)
 
 

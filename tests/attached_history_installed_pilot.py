@@ -79,7 +79,7 @@ async def main():
             for alias,name in source.provenance.aliases.items():
                 assert source.provenance.require(alias).incarnation==source.provenance.require(name).incarnation
                 assert any(item.source==source and item.thread.incarnation==source.provenance.require(name).incarnation
-                           for item in comms.views.historical_threads(alias))
+                           for item in comms.views.historical_thread(alias))
         print('111_ORIGINAL_DECLARATIONS_9_SOURCE_SCOPED_ALIASES_RETAINED',flush=True)
         for source in sources:
             from agent_comms.catalog_store import ChannelCatalog

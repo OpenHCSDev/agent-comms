@@ -34,7 +34,10 @@ from .exporting import (
     WireTranscriptExporter,
 )
 from .goal_management import Goals
-from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
+from .historical_views import (
+    ArchiveHistoryViewer, ChannelDisplayHistory, ChannelHistory,
+    DMDisplayHistory, DMHistory, SpecificHistoryViewer,
+)
 from .message_bus import MessageBus
 from .message_page import MessagePage
 from .message_reference import MessageReference
@@ -156,9 +159,15 @@ class HistoryViews:
             max_bytes=max_bytes,
         )
 
-    def attach_history(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
-        """Attach preserved history without admitting any historical execution."""
-        source = self.bus.history.attach(Path(source_root), source_read=source_read)
+    def attach_history(self, source_root: Path) -> HistorySource:
+        """Attach a current-format source without historical execution."""
+        return self._restore_history_channels(self.bus.history.attach(Path(source_root)))
+
+    def attach_original_history(self, source: HistorySource) -> HistorySource:
+        """Attach an acquired original, preserving its validated projection."""
+        return self._restore_history_channels(self.bus.history.attach_original(source))
+
+    def _restore_history_channels(self, source: HistorySource) -> HistorySource:
         catalog = ChannelCatalog(Path(source.root) / ChannelCatalog.filename)
         incoming = catalog.read()
         source_threads = source.provenance.threads
@@ -168,8 +177,11 @@ class HistoryViews:
                 document.restore_missing(incoming, source_threads, existing=existing)
         return source
 
-    def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
-        return self.bus.history.threads(name)
+    def historical_threads(self) -> tuple[HistoricalThread, ...]:
+        return self.bus.history.threads()
+
+    def historical_thread(self, name: str) -> tuple[HistoricalThread, ...]:
+        return self.bus.history.thread(name)
 
     def dm_display_page(
         self,
@@ -200,11 +212,11 @@ class HistoryViews:
         limit: int = 100,
         max_bytes: int = 256 * 1024,
     ) -> MessagePage:
-        viewer = self.messaging.user_identity(worktree).name if worktree is not None else None
+        viewer = (SpecificHistoryViewer(self.messaging.user_identity(worktree).name)
+                  if worktree is not None else ArchiveHistoryViewer())
         if not self.bus.history.sources():
-            return self.presentation.channel_page(
-                target,
-                viewer=viewer,
+            return viewer.channel_page(
+                self.presentation, target,
                 before=before,
                 after=after,
                 limit=limit,
@@ -394,7 +406,7 @@ class HistoryViews:
         for name in declarations:
             targets = catalog.history_targets(name)
             channel_unread[name] = sum(
-                count for target, count in unread.items() if targets is None or target in targets
+                targets.matching_values(unread)
             )
         return CoordinationSnapshot.capture(
             self.root, registry, catalog, self.agents, declarations, sent,

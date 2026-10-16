@@ -255,7 +255,7 @@ def test_original_recorded_projection_is_strict_and_attaches_before_destination_
     observed = FieldCodec.decode(HistorySource, packet)
     assert observed.provenance == RegistryProvenance.capture(old.registry.snapshot())
     observed.require_original(old.root)
-    attached = live.views.attach_history(old.root, source_read=observed)
+    attached = live.views.attach_original_history(observed)
     assert attached.provenance == observed.provenance
     assert (Path(attached.root) / "registry.json").read_bytes() == original
     assert (old.root / "registry.json").read_bytes() == original
@@ -364,7 +364,7 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     before = FieldCodec.encode(source.provenance)
     live.registry.rename("alice", "new-alice")
     assert FieldCodec.encode(source.provenance) == before
-    assert live.views.historical_threads("alice")
+    assert live.views.historical_thread("alice")
 
 
 @pytest.mark.parametrize('changed_resource', ['bus', 'certificate', 'pending'])

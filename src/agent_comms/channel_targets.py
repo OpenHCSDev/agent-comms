@@ -4,8 +4,61 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+from collections.abc import Iterator, Mapping
+
+from .declared_family import DeclaredFamily
 from typing import ClassVar
 from enum import StrEnum
+
+
+class HistoryTargets(DeclaredFamily, affix="HistoryTargets"):
+    """Captured target membership, including an explicit unrestricted member."""
+
+    @abstractmethod
+    def includes(self, target: str) -> bool: ...
+
+    @abstractmethod
+    def matching_values[T](self, values: Mapping[str, T]) -> Iterator[T]: ...
+
+    @abstractmethod
+    def constrain_offsets(self, clauses: list[str], params: list[object]) -> None: ...
+
+    @abstractmethod
+    def require_names(self) -> frozenset[str]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class AllHistoryTargets(HistoryTargets):
+    def includes(self, target):
+        return True
+
+    def matching_values(self, values):
+        return iter(values.values())
+
+    def constrain_offsets(self, clauses, params):
+        pass
+
+    def require_names(self):
+        from .errors import RelationViolationError
+        raise RelationViolationError("An aggregate is not an exportable conversation.")
+
+
+@dataclass(frozen=True, slots=True)
+class NamedHistoryTargets(HistoryTargets):
+    names: frozenset[str]
+
+    def includes(self, target):
+        return target in self.names
+
+    def matching_values(self, values):
+        return (values[target] for target in self.names if target in values)
+
+    def constrain_offsets(self, clauses, params):
+        clauses.append("target IN (" + ",".join("?" for _ in self.names) + ")")
+        params.extend(sorted(self.names))
+
+    def require_names(self):
+        return self.names
 
 
 class BuiltinChannel(StrEnum):
@@ -38,8 +91,8 @@ class BuiltinChannel(StrEnum):
         return self is not self.NONE or not tags
 
     @property
-    def history_targets(self) -> frozenset[str] | None:
-        return None if self.aggregate else frozenset((self.value,))
+    def history_targets(self) -> HistoryTargets:
+        return AllHistoryTargets() if self.aggregate else NamedHistoryTargets(frozenset((self.value,)))
 
 
 class CommandTarget(ABC):

@@ -13,6 +13,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .declared_family import DeclaredFamily
+from .field_codec import JsonShapeFamily, JsonShapeMember
 from .locked_store import LockedStore
 from .private_path import FileIdentity, FileRevision
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation
@@ -28,12 +30,55 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
+class ReadMarkerNotice(DeclaredFamily, JsonShapeFamily, affix="ReadMarkerNotice"):
+    """The ledger's native text/null value, decoded once as a notice state."""
+
+    @property
+    def messages(self) -> tuple[str, ...]:
+        return ()
+
+    def messages_since(self, previous: ReadMarkerNotice) -> tuple[str, ...]:
+        return () if self == previous else self.messages
+
+    def take_from(self, document: ReadDocument) -> tuple[ReadDocument, ReadMarkerNotice]:
+        return document, NoReadMarkerNotice()
+
+
+@dataclass(frozen=True, slots=True)
+class NoReadMarkerNotice(JsonShapeMember, ReadMarkerNotice):
+    value: None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RecordedReadMarkerNotice(JsonShapeMember, ReadMarkerNotice):
+    value: str
+
+    @classmethod
+    def from_json_value(cls, value):
+        return cls(value) if value else NoReadMarkerNotice()
+
+    def __post_init__(self) -> None:
+        from .field_codec import FieldCodec
+
+        if not FieldCodec.decode(str, self.value):
+            raise ValueError("A recorded read-marker notice requires text")
+
+    @property
+    def messages(self) -> tuple[str, ...]:
+        return (self.value,)
+
+    def take_from(self, document):
+        if document.notice != self:
+            return document, NoReadMarkerNotice()
+        return replace(document, notice=NoReadMarkerNotice()), self
+
+
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
     messages: dict[str, tuple[int, ...]] = field(default_factory=dict)
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[str, int] = field(default_factory=dict)
-    notice: str | None = None
+    notice: ReadMarkerNotice = NoReadMarkerNotice()
 
     def seen_sequences(
         self, viewer: str, snapshot: RegistryProvenance, source: FileIdentity | None
@@ -139,16 +184,14 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
         self.update(advance)
 
-    def take_notice(self, shown: str | None) -> str | None:
-        """Clear the stored notice once it has been shown; return it when this call cleared it."""
-        taken = None
+    def take_notice(self, shown: ReadMarkerNotice) -> ReadMarkerNotice:
+        """Clear exactly the shown notice, returning the state this call cleared."""
+        taken = NoReadMarkerNotice()
 
         def take(document: ReadDocument) -> ReadDocument:
             nonlocal taken
-            if shown is None or document.notice != shown:
-                return document
-            taken = shown
-            return replace(document, notice=None)
+            updated, taken = shown.take_from(document)
+            return updated
 
         self.update(take)
         return taken

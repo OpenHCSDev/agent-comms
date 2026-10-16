@@ -177,7 +177,7 @@ class MessageBus:
             if is_channel_target(target):
                 targets = basis.catalog.history_targets(target)
                 return sum(
-                    count for scope, count in counts.items() if targets is None or scope in targets
+                    targets.matching_values(counts)
                 )
             return counts.get(basis.registry.require(target).name, 0)
 

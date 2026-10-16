@@ -32,6 +32,7 @@ from .envelope_claim_transitions import (
 from .errors import (
     RelationViolationError,
 )
+from .channel_targets import AllHistoryTargets
 from .field_codec import FieldCodec
 from .messages import Message
 from .private_path import FileRevision
@@ -206,7 +207,7 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
                     rows = tuple(
                         row for seq in sorted(sequences)
                         for row in index.offsets(lower=seq - 1, upper=seq + 1,
-                                                descending=False, targets=None,
+                                                descending=False, targets=AllHistoryTargets(),
                                                 before_offset=before_offset)
                     )
         except (OSError, sqlite3.DatabaseError, StaleBusPageIndexError, ValueError, TypeError):

@@ -99,7 +99,8 @@ def test_parallel_preparation_commits_each_message_once(tmp_path):
         results = [workers.submit(index) for _ in range(2)]
         assert all(result.result(timeout=10) for result in results)
     with BusPageIndex(comms.bus.log.path) as source:
-        rows = tuple(source.offsets(lower=None, upper=None, descending=False, targets=None))
+        from agent_comms.channel_targets import AllHistoryTargets
+        rows = tuple(source.offsets(lower=None, upper=None, descending=False, targets=AllHistoryTargets()))
         assert [row.seq for row in rows] == [message.seq]
         with pytest.raises(sqlite3.IntegrityError), source.connection:
             rows[0].insert(source.connection)

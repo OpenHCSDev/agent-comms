@@ -582,7 +582,7 @@ class OpenedRouteCounts(BusRouteCounts):
             ))
         return {
             "targets": json.dumps({
-                actor: sorted(self.deliveries[actor].index_targets) for actor in actors
+                actor: sorted(self.deliveries[actor].index_targets.names) for actor in actors
             }),
             "senders": json.dumps(senders), "unrecorded": json.dumps(unrecorded),
             "through": self.source.through,

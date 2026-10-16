@@ -32,7 +32,8 @@ def test_display_metrics_encode_one_viewer_read_set_for_all_channels(tmp_path):
     from agent_comms.field_codec import FieldCodec
     from agent_comms.read_basis import ChannelDisplayScope
 
-    scopes = tuple(ChannelDisplayScope(f"#{n}", frozenset({f"#{n}"})) for n in range(48))
+    from agent_comms.channel_targets import NamedHistoryTargets
+    scopes = tuple(ChannelDisplayScope(f"#{n}", NamedHistoryTargets(frozenset({f"#{n}"}))) for n in range(48))
     seen = frozenset(range(10_000))
     encoded = FieldCodec.encode(DisplayMetricScope(scopes, frozenset({"viewer"}), seen))
     assert set(encoded) == {"scopes", "viewer_names", "seen_sequences"}

@@ -6,7 +6,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from .channel_targets import BuiltinChannel, is_channel_target
+from .channel_targets import AllHistoryTargets, BuiltinChannel, NamedHistoryTargets, is_channel_target
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .messages import Message
@@ -179,17 +179,17 @@ class DeliveryScope(MessageDisplayScope):
         return cls(thread.name, snapshot.aliases, catalog.targets_for(thread.tags))
 
     @property
-    def index_targets(self) -> frozenset[str]:
-        return self.channels | frozenset(
+    def index_targets(self) -> NamedHistoryTargets:
+        return NamedHistoryTargets(self.channels | frozenset(
             name for name in (self.actor, *self.aliases) if self.canonical(name) == self.actor
-        )
+        ))
 
     def includes(self, message: Message) -> bool:
         return self.delivers(message.sender, message.target)
 
     def selection(self, target, snapshot, catalog) -> MessageDisplayScope:
         if target is None:
-            return ChannelDisplayScope(BuiltinChannel.ANY.value, None)
+            return ChannelDisplayScope(BuiltinChannel.ANY.value, AllHistoryTargets())
         if is_channel_target(target):
             return ChannelDisplayScope(target, catalog.history_targets(target))
         peer = snapshot.canonical_name(target)
