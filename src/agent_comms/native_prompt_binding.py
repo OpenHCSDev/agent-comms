@@ -92,10 +92,9 @@ class PromptBinding(NativeInputRecord, TypedTable, PrivateRuntimeSchema):
     )
 
     @classmethod
-    def triggers(cls) -> dict[str, str]:
+    def trigger_bodies(cls) -> dict[str, str]:
         return {
-            f"{cls.declared_name}_{operation.lower()}_guard": f"CREATE TRIGGER {cls.declared_name}_"
-            f"{operation.lower()}_guard "
+            f"{cls.declared_name}_{operation.lower()}_guard": " "
             f"BEFORE {operation} ON {cls.declared_name} "
             "BEGIN SELECT RAISE(ABORT,'prelaunch binding is immutable'); END"
             for operation in ("UPDATE", "DELETE")

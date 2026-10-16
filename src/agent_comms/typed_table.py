@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sqlite3
 import types
 from abc import abstractmethod
@@ -259,6 +258,15 @@ class Index:
     unique: bool = False
     where: str | None = None
 
+    def sql(self, owner: type[TypedTable], name: str, *, if_not_exists: bool = False) -> str:
+        existence = "IF NOT EXISTS " if if_not_exists else ""
+        return (
+            f"CREATE {'UNIQUE ' if self.unique else ''}INDEX "
+            f"{existence}{_identifier(name)} ON {_identifier(owner.declared_name)} "
+            f"({owner._column_list(self.columns)})"
+            + (f" WHERE {self.where}" if self.where else "")
+        )
+
 
 @dataclass(frozen=True)
 class ForeignKey:
@@ -491,7 +499,8 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         return ", ".join(map(_identifier, names))
 
     @classmethod
-    def schema_objects(cls) -> dict[str, str]:
+    def schema_objects(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        existence = "IF NOT EXISTS " if if_not_exists else ""
         definitions = []
         keys = tuple(item.name for item in cls._fields() if item.column.primary_key)
         auto_keys = tuple(item.name for item in cls._fields() if item.column.auto_increment)
@@ -526,7 +535,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         definitions.extend(reference.sql(cls) for reference in cls.references())
         table = _identifier(cls.declared_name)
         statements = {
-            cls.declared_name: f"CREATE TABLE {table} ({', '.join(definitions)}) STRICT"
+            cls.declared_name: f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
             + (", WITHOUT ROWID" if cls.without_rowid else "")
         }
         indexes = cls.indexes + tuple(
@@ -534,36 +543,29 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
         for ordinal, index in enumerate(indexes):
             index_name = f"{cls.declared_name}_{ordinal}_idx"
-            statements[index_name] = (
-                f"CREATE {'UNIQUE ' if index.unique else ''}INDEX "
-                f"{_identifier(index_name)} ON {table} "
-                f"({cls._column_list(index.columns)})"
-                + (f" WHERE {index.where}" if index.where else "")
-            )
-        statements.update(cls.triggers())
+            statements[index_name] = index.sql(cls, index_name, if_not_exists=if_not_exists)
+        statements.update(cls.triggers(if_not_exists=if_not_exists))
         return statements
 
     @classmethod
-    def triggers(cls) -> dict[str, str]:
+    def trigger_bodies(cls) -> dict[str, str]:
+        """Named trigger suffixes, including their leading SQL whitespace."""
         return {}
 
     @classmethod
-    def ddl(cls) -> tuple[str, ...]:
-        return tuple(cls.schema_objects().values())
+    def triggers(cls, *, if_not_exists: bool = False) -> dict[str, str]:
+        existence = "IF NOT EXISTS " if if_not_exists else ""
+        return {name: f"CREATE TRIGGER {existence}{name}{body}"
+                for name, body in cls.trigger_bodies().items()}
+
+    @classmethod
+    def ddl(cls, *, if_not_exists: bool = False) -> tuple[str, ...]:
+        return tuple(cls.schema_objects(if_not_exists=if_not_exists).values())
 
     @classmethod
     def create(cls, db: sqlite3.Connection, *, if_not_exists: bool = False) -> None:
-        """Create the declared schema, optionally admitting concurrent initializers.
-
-        SQLite owns the existence check. Apply its clause only to the CREATE
-        header of our canonical DDL; bodies and schema comparison stay unchanged.
-        """
-        for statement in cls.ddl():
-            if if_not_exists:
-                statement = re.sub(
-                    r"\ACREATE (?:UNIQUE )?(?:TABLE|INDEX|TRIGGER)\b",
-                    r"\g<0> IF NOT EXISTS", statement, count=1,
-                )
+        """Create the declared schema; SQLite owns concurrent existence checks."""
+        for statement in cls.ddl(if_not_exists=if_not_exists):
             db.execute(statement)
 
     @classmethod

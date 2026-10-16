@@ -205,10 +205,10 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
     indexes = (Index(("request_generation",)), Index(("session_id",)))
 
     @classmethod
-    def triggers(cls) -> dict[str, str]:
+    def trigger_bodies(cls) -> dict[str, str]:
         table = cls.declared_name
         return {
-            f"{table}_append": f"""CREATE TRIGGER {table}_append BEFORE INSERT ON {table}
+            f"{table}_append": f""" BEFORE INSERT ON {table}
             WHEN NEW.request_generation < COALESCE((SELECT MAX(request_generation) FROM {table}), 0)
               OR EXISTS(SELECT 1 FROM {table} WHERE request_generation=NEW.request_generation
                         AND (llm_context_digest != NEW.llm_context_digest
@@ -216,7 +216,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
               OR NEW.session_id != (SELECT session_id FROM {table} ORDER BY session_id LIMIT 1)
             BEGIN SELECT RAISE(ABORT,'native proof lineage differs'); END""",
             **{
-                f"{table}_{action.lower()}": f"CREATE TRIGGER {table}_{action.lower()} "
+                f"{table}_{action.lower()}": " "
                 f"BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'native proof is append only'); END"
                 for action in ("UPDATE", "DELETE")
             },
