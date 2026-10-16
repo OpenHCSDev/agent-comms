@@ -19,6 +19,7 @@ from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait
 from .registration import Registration
+from .registry_document import RegistryEntry
 
 if TYPE_CHECKING:
     from .agent_events import GoalChanged
@@ -130,10 +131,9 @@ class Goals:
         from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path, shared=True):
-            self.registry.require(name)
             rows = (
                 InputDispositions(self.root)
-                .unresolved(aliases := self.registry.aliases_for(name))
+                .unresolved(aliases := self.registry.entry(name).entry.names)
                 .unknown(aliases)
             )
             return [row.public() for row in rows]
@@ -149,8 +149,7 @@ class Goals:
         from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path, shared=True):
-            self.registry.require(name)
-            aliases = self.registry.aliases_for(name)
+            aliases = self.registry.entry(name).entry.names
             return (
                 InputDispositions(self.root)
                 .unresolved(aliases)
@@ -166,8 +165,7 @@ class Goals:
         from .input_disposition import InputDispositions
 
         with _store_lock(self._wire_lock_path):
-            self.registry.require(name)
-            aliases = self.registry.aliases_for(name)
+            aliases = self.registry.entry(name).entry.names
             return InputDispositions(self.root).dismiss_historical(
                 aliases, awaiting_keys=awaiting_keys
             )
@@ -191,11 +189,11 @@ class Goals:
         targets = tuple(
             dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
         )
-        owners = self.registry.aliases_for(thread.name)
+        snapshot = self.registry.snapshot()
+        owners = RegistryEntry.names_for(thread, snapshot.aliases)
         dispositions = InputDispositions(self.root)
         unknown = {row.key: row for row in dispositions.unresolved(owners).unknown(owners)}
         eligible = set()
-        snapshot = self.registry.snapshot()
         from .input_attempt import ReservedInput
 
         lookup = thread.incarnation.lookup

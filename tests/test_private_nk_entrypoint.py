@@ -12,14 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import (
-    acp,
-    active_route,
-    cli,
-    cohort_foreground,
-    private_nk_entrypoint,
-    worker,
-)
+from agent_comms import acp, active_route, cli, private_nk_entrypoint, worker
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.launch_runtime import LaunchRuntime, PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
@@ -37,7 +30,7 @@ tmp_path = private_root_fixture
 
 def test_explicit_owner_entrypoint_requires_exact_root_and_package(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     assert PrivateNkLaunch.from_environment(root, {}) is None  # marker alone never enables a worker
     for values in (
         {ROOT_ID_ENV: root_id},
@@ -65,7 +58,7 @@ def test_private_claim_root_keeps_normal_coding_tools(tmp_path, monkeypatch):
     root.mkdir(mode=0o700)
     comms = Comms(root)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     selected = PrivateNkLaunch.from_environment(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
     assert selected is not None
     assert selected.selected_tool_intent is None
@@ -113,7 +106,7 @@ def test_environment_launch_uses_selected_root_not_cwd(tmp_path, monkeypatch):
     def trusted(package: Path):
         seen.append(package)
 
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", trusted)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", trusted)
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(root))
     monkeypatch.setenv(ROOT_ID_ENV, root_id)
     monkeypatch.setenv(PACKAGE_ENV, str(tmp_path))
@@ -134,7 +127,7 @@ def test_thread_observation_does_not_admit_an_untrusted_native_owner(tmp_path, m
     def rejected_package(_package):
         raise PublicationActivationBlocked("Reviewed package differs")
 
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", rejected_package)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", rejected_package)
     name = next(iter(comms.registry.all_threads()))
     observed = wire(root)
     assert observed.views.thread_detail(name, include_pending=False)["name"] == name
@@ -160,7 +153,7 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     )
     route_file.chmod(0o600)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     for name in ("AGENT_COMMS_ROOT", ROOT_ID_ENV, PACKAGE_ENV):
         monkeypatch.delenv(name, raising=False)
     routed = wire()
@@ -183,7 +176,7 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
     root, root_id, _, _, _ = _root(tmp_path)
     route_file = tmp_path / "route-state" / "active-route.json"
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     active_route.publish_active_route(active_route.ActiveRoute(root, root_id, tmp_path))
     comms = wire()
@@ -224,7 +217,7 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     directory.mkdir(mode=0o755)
     route_file = directory / "active-route.json"
     route = active_route.ActiveRoute(root, root_id, tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     for name in ("AGENT_COMMS_ROOT", ROOT_ID_ENV, PACKAGE_ENV):
         monkeypatch.delenv(name, raising=False)
@@ -248,7 +241,7 @@ def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monk
     directory.mkdir(mode=0o700)
     route_file = directory / "active-route.json"
     route = active_route.ActiveRoute(root, root_id, tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     rival = b'{"rival":"preserve these bytes"}\n'
     original_link = os.link
 
@@ -273,7 +266,7 @@ def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_
     route = active_route.ActiveRoute(root, root_id, tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     exclusive_requested = threading.Event()
     original_flock = active_route.fcntl.flock
 
@@ -350,7 +343,7 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
     entered_send = threading.Event()
     release_send = threading.Event()
@@ -406,7 +399,7 @@ def test_route_publication_reports_unknown_after_link(tmp_path, monkeypatch):
     root.mkdir(mode=0o700)
     path = tmp_path / "route-state" / "active-route.json"
     route = active_route.ActiveRoute(root, "a" * 32, tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_preflight", lambda *_: None)
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: None)
     real_fsync = os.fsync
 
     def fail_after_link(fd):
@@ -476,7 +469,7 @@ async def test_private_relative_root_pinned_across_cwd_change_before_wire(
         assert wire(pinned_root).root == root
         raise StopBeforeOwnerAttachmentError
 
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", trust_and_switch)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", trust_and_switch)
     selected = acp if entrypoint == "acp" else worker
     monkeypatch.setattr(selected, "wire", capture_wire)
     with pytest.raises(StopBeforeOwnerAttachmentError):
@@ -521,7 +514,7 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
 
 def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     comms = Comms(root)
     comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
     other = tmp_path / "other"
@@ -547,7 +540,7 @@ def test_explicit_private_worker_handoff_preserves_pinned_root_and_pair(tmp_path
 
 def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_path, monkeypatch):
     root, root_id, comms, _, _ = _root(tmp_path)
-    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     comms.owners.pin_private_nk_launch(root, root_id, tmp_path)
     comms.registry.declare(Thread("late-owner", frozenset(), str(tmp_path)))
     late = comms.registry.require("late-owner")

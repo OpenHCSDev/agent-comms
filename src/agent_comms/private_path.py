@@ -20,6 +20,15 @@ from collections.abc import Iterator
 from .declared_family import DeclaredFamily
 
 
+def fsync_directory(path: Path) -> None:
+    """Make a directory's entries durable without following a final symlink."""
+    descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 @dataclass(frozen=True, slots=True)
 class FileIdentity:
     device: int
