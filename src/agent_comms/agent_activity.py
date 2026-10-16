@@ -131,9 +131,9 @@ class AgentActivity:
         requested = {thread.name: thread for thread in threads}
         if not requested:
             return {}
-        events = self.activity.all_current(
+        events = self.activity.current_for(
+            requested,
             active=frozenset(name for name, thread in requested.items() if thread.executing),
-            threads=requested,
         )
         return {
             name: self._observed(thread, snapshot.owner_identity(name), events[name])

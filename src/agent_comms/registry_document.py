@@ -538,13 +538,12 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
     by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
-    _ambiguous_lookups: frozenset[str] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         # An archive may retain two names with the same birth. Neither may be
         # selected by lookup alone; live publication refuses that snapshot.
         indexed: dict[str, Thread] = {}
-        ambiguous: set[str] = set()
+        collisions: set[str] = set()
         for thread in self.threads.values():
             incarnation = thread.incarnation
             if not incarnation.has_recorded_birth:
@@ -552,28 +551,22 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             lookup = incarnation.require_recorded().lookup
             if lookup in indexed:
                 del indexed[lookup]
-                ambiguous.add(lookup)
-            elif lookup not in ambiguous:
+                collisions.add(lookup)
+            elif lookup not in collisions:
                 indexed[lookup] = thread
         object.__setattr__(self, "by_lookup", MappingProxyType(indexed))
-        object.__setattr__(self, "_ambiguous_lookups", frozenset(ambiguous))
 
     def require_unambiguous_ownership(self) -> None:
-        """Archived collisions stay readable; publication requires unique owners."""
-        if self._ambiguous_lookups:
-            raise RelationViolationError("Registry creation identities collide.")
+        """Archives can be ambiguous; live ownership cannot."""
         if len(self.by_lookup) != len(self.threads):
-            raise RelationViolationError("Registry creation identities are unrecorded.")
+            raise RelationViolationError("Registry creation identities are ambiguous or unrecorded.")
 
-    def thread_for_recipient(self, lookup: str, name: str) -> Thread | None:
-        """Resolve a frozen recipient, including same-birth historical aliases."""
-        canonical = self.canonical_name(name)
-        thread = self.by_lookup.get(lookup)
-        if thread is None and lookup in self._ambiguous_lookups:
-            thread = self.threads.get(canonical)
-            if thread is not None and thread.incarnation.require_recorded().lookup != lookup:
-                return None
-        return thread if thread is not None and thread.name == canonical else None
+    def thread_for_recipient(self, lookup: str, name: str) -> Thread:
+        """Resolve a recorded recipient by its unique creation identity."""
+        thread = self.by_lookup[lookup]
+        if thread.name != self.canonical_name(name):
+            raise RelationViolationError("Frozen recipient name does not match its lookup.")
+        return thread
 
     def retired(self, name: str) -> bool:
         """Removal keeps the name's generations; they are the deletion record."""

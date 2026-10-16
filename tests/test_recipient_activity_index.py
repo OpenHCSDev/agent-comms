@@ -2,6 +2,7 @@
 
 import hashlib
 from dataclasses import replace
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -13,6 +14,7 @@ from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalWaitTarget
+from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import (
     DeletedThreadIncarnation,
     RecordedThreadIncarnation,
@@ -31,6 +33,11 @@ def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
     wanted = snapshot.threads["peer-7"]
     lookup = wanted.incarnation.lookup
     assert snapshot.by_lookup[lookup] is wanted
+    assert snapshot.thread_for_recipient(lookup, wanted.name) is wanted
+    with pytest.raises(KeyError):
+        snapshot.thread_for_recipient("not-a-recipient", wanted.name)
+    with pytest.raises(RelationViolationError, match="recipient name"):
+        snapshot.thread_for_recipient(lookup, "peer-8")
     assert snapshot.by_lookup.get("not-a-recipient") is None
     with patch.object(RecordedThreadIncarnation, "lookup", property(
         lambda self: (_ for _ in ()).throw(AssertionError("rehashing unrelated registry"))
@@ -79,11 +86,18 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     })
     lookup = source.threads["old"].incarnation.lookup
     assert archived.by_lookup.get(lookup) is None
-    assert archived.thread_for_recipient(lookup, "old") is archived.threads["old"]
-    assert archived.thread_for_recipient(lookup, "second") is archived.threads["second"]
-    assert archived.thread_for_recipient(lookup, "missing") is None
-    assert archived.thread_for_recipient("wrong-lookup", "old") is None
-    with pytest.raises(RelationViolationError, match="creation identities collide"):
+    with pytest.raises(KeyError):
+        archived.thread_for_recipient(lookup, "old")
+    ledger = ReadLedger(tmp_path / "archive-reads.json")
+    with patch.object(ReadLedger, "seen_sequences", return_value=frozenset({7})):
+        for name in ("old", "second"):
+            assert ledger.historical_displayed_recipient(
+                SimpleNamespace(seq=7), FrozenRecipient(lookup, name), archived
+            ) == (archived.threads[name].incarnation,)
+        assert ledger.historical_displayed_recipient(
+            SimpleNamespace(seq=7), FrozenRecipient("wrong-lookup", "old"), archived
+        ) == ()
+    with pytest.raises(RelationViolationError, match="creation identities are ambiguous"):
         archived.require_unambiguous_ownership()
     unrecorded = replace(source, threads={
         **source.threads,
@@ -92,7 +106,7 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     assert isinstance(unrecorded.threads["second"].incarnation, UnrecordedThreadIncarnation)
     assert not hasattr(unrecorded.threads["second"].incarnation, "lookup")
     assert lookup in unrecorded.by_lookup
-    with pytest.raises(RelationViolationError, match="creation identities are unrecorded"):
+    with pytest.raises(RelationViolationError, match="creation identities are ambiguous or unrecorded"):
         unrecorded.require_unambiguous_ownership()
 
 
@@ -100,6 +114,6 @@ def test_activity_log_projects_only_requested_threads(tmp_path):
     log = ActivityLog(tmp_path / "activity.jsonl")
     for index in range(10):
         log.emit(Activity(f"peer-{index}", ActivityState.THINKING, "working"))
-    assert set(log.all_current(threads=("peer-7",))) == {"peer-7"}
-    assert log.all_current(threads=()) == {}
+    assert set(log.current_for(("peer-7",))) == {"peer-7"}
+    assert log.current_for(()) == {}
     assert len(log.all_current()) == 10

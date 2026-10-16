@@ -166,14 +166,15 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         Processing, assignment acceptance and a reply cannot grant this fact.
         A reused name with a different creation identity cannot inherit it.
         """
-        thread = snapshot.thread_for_recipient(
-            recipient.recipient_lookup, recipient.canonical_thread
-        )
-        return self._displayed_recipient(
-            message, recipient, snapshot,
-            thread if thread is not None and self.human(thread.role) else None,
-            document=document,
-        )
+        try:
+            thread = snapshot.thread_for_recipient(
+                recipient.recipient_lookup, recipient.canonical_thread
+            )
+        except KeyError:
+            return ()  # A retired lookup has no current human paint witness.
+        if not self.human(thread.role):
+            return ()
+        return self._displayed_recipient(message, thread, snapshot, document=document)
 
     def historical_displayed_recipient(self, message, recipient, snapshot, *, document=None):
         """Read this archive's human paint ledger, never an original CLI ACK.
@@ -183,17 +184,20 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         viewer's incarnation. A same-name destination reader cannot attest a
         different frozen recipient or replace the recorded namespace.
         """
-        return self._displayed_recipient(
-            message, recipient, snapshot,
-            snapshot.thread_for_recipient(recipient.recipient_lookup, recipient.canonical_thread),
-            document=document,
-        )
-
-    def _displayed_recipient(self, message, recipient, snapshot, thread, *, document):
+        # The archived namespace can retain two original names with one birth.
+        # Its paint ledger binds the name and original hash; live selection
+        # remains lookup-only and never guesses an owner for that collision.
+        thread = snapshot.threads.get(snapshot.canonical_name(recipient.canonical_thread))
         if (
-            thread is not None
-            and message.seq in self.seen_sequences(thread.name, snapshot, document=document)
+            thread is None
+            or not thread.incarnation.has_recorded_birth
+            or thread.incarnation.require_recorded().lookup != recipient.recipient_lookup
         ):
+            return ()
+        return self._displayed_recipient(message, thread, snapshot, document=document)
+
+    def _displayed_recipient(self, message, thread, snapshot, *, document):
+        if message.seq in self.seen_sequences(thread.name, snapshot, document=document):
             return (thread.incarnation,)
         return ()
 
