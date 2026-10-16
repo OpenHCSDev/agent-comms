@@ -25,6 +25,7 @@ from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.pi_commands import AgentCommsInspectContext
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.turn_context import ToolCatalogSegment
 
@@ -198,7 +199,7 @@ async def main(output, package, wheel, core_revision):
                 assert digest(source) == before
                 await attachment.shutdown()
                 attachment = None
-                await asyncio.to_thread(comms.owners.stop, name)
+                await asyncio.to_thread(comms.owners.stop, name, caller=NoThreadCaller())
             helpers = [command for command in commands if 'agent_comms.native_fork' in command]
             result['fork_helpers'] = helpers
             assert helpers == [runtime.command('-m', 'agent_comms.native_fork')] * 2
@@ -219,7 +220,7 @@ async def main(output, package, wheel, core_revision):
             try:
                 owner = comms.registry.all_threads().get(name)
                 if owner is not None and owner.process_alive:
-                    await asyncio.to_thread(comms.owners.stop, name)
+                    await asyncio.to_thread(comms.owners.stop, name, caller=NoThreadCaller())
             except BaseException as error:
                 cleanup.append(repr(error))
         result['children_retired'] = all(child.returncode is not None for child in children)
