@@ -916,12 +916,10 @@ MONITOR_FRAME = TypeAdapter(MonitorFrame.declared_union())
 @dataclass(frozen=True)
 class MonitorObservation(TranscriptUpdate):
     frame: MonitorFrame
-    source_session: str
     record: ObservedMonitor
 
     async def observed(self, bridge: LineMonitorBridge) -> None:
-        if self.source_session == bridge.binding.thread:
-            await self.frame.confirm(bridge, self.record)
+        await self.frame.confirm(bridge, self.record)
 
     def publish(self, output: ThreadOutput) -> None:
         """Delivery is not a second conversation item."""
@@ -940,9 +938,11 @@ class LineMonitorBridge(TranscriptBridge[Options]):
 
     async def prepare_delivery(self) -> None:
         print(self.probe.model_dump_json(), flush=True)
-        # A timeout refuses delivery. It never turns missing evidence into success.
-        async with asyncio.timeout(30):
-            await self.monitor_ready.wait()
+        print('Waiting for this session to observe the monitor probe; inbox remains unread.',
+              file=sys.stderr, flush=True)
+        # The harness owns notification scheduling. Missing proof never opens
+        # the inbox; the watch's existing cancellation owns this wait's lifetime.
+        await self.monitor_ready.wait()
 
     def confirm_probe(self, probe: MonitorProbe) -> None:
         if probe == self.probe:
