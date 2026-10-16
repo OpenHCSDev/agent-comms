@@ -8,6 +8,7 @@ import pytest
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import (
     CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification,
+    ForeignAttachment,
 )
 from agent_comms.cli_bridges.shared import (
     Binding, DeliveryJournal, DeliveryRow, MonitorAttemptRow, MonitorPartRow,
@@ -18,16 +19,25 @@ from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 
 
-def notification(line, session='session', record_id='notification-record'):
+def notification(line, record_id='notification-record'):
     return CLAUDE_RECORD.validate_python(dict(
         type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
-        sessionId=session, promptId='prompt', origin=dict(kind='task-notification'),
+        sessionId='session', promptId='prompt', origin=dict(kind='task-notification'),
         message=dict(content='<task-notification><event>'+escape(line)+
                      '</event></task-notification>')))
 
 
+def attachment_notification(line, record_id='notification-record'):
+    return CLAUDE_RECORD.validate_python(dict(
+        type='attachment', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
+        attachment=dict(type='queued_command', commandMode='task-notification',
+            origin=dict(kind='task-notification', producer='session-task'),
+            prompt='<task-notification><event>'+escape(line)+'</event></task-notification>')))
+
+
 @pytest.mark.asyncio
-async def test_parts_require_matching_session_and_complete_exact_body_then_reopen(tmp_path, capsys):
+@pytest.mark.parametrize('record_factory', (notification, attachment_notification))
+async def test_parts_require_complete_exact_body_then_reopen(tmp_path, capsys, record_factory):
     state=tmp_path/'state'
     acknowledgments=[]
     class Core:
@@ -46,12 +56,9 @@ async def test_parts_require_matching_session_and_complete_exact_body_then_reope
         lines=[json.dumps(part,ensure_ascii=False) for part in parts]
         assert len(lines)==7
         assert all(len(line.encode('utf-16-le'))//2 <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
-        for update in notification(lines[0],'different-session').updates(ClaudeSession()):
-            await update.observed(bridge)
-        assert MonitorPartRow.select(journal.db)==[]
         # Out-of-order observations and repeated history must not count twice.
         for number in (6,1,3,1,5,2):
-            for update in notification(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
+            for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(bridge)
         assert not acknowledgments
         assert DeliveryRow.select(journal.db)[0].outcome is EmittedOutcome
@@ -59,11 +66,11 @@ async def test_parts_require_matching_session_and_complete_exact_body_then_reope
         bridge=ClaudeBridge(Options(Watch(),None,None,None,state),binding,journal)
         bridge.core=Core()
         for number in (0,4):
-            for update in notification(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
+            for update in record_factory(lines[number],record_id=f'record-{number}').updates(ClaudeSession()):
                 await update.observed(bridge)
         assert acknowledgments==[message.reference]
         for line in lines:
-            for update in notification(line,record_id='later-overlap').updates(ClaudeSession()):
+            for update in record_factory(line,record_id='later-overlap').updates(ClaudeSession()):
                 await update.observed(bridge)
         assert acknowledgments==[message.reference]
     with closing(DeliveryJournal(state)) as reopened:
@@ -98,6 +105,17 @@ def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails()
             message=dict(content='<task-notification>')))
     assert isinstance(ClaudeMonitorFrame.decode_line('ordinary unrelated monitor event'),ForeignMonitorFrame)
     assert isinstance(ClaudeMonitorFrame.decode_line('"Comms in · old format...(truncated)'),ForeignMonitorFrame)
+
+
+def test_non_task_attachments_and_pending_queue_records_do_not_confirm():
+    record=CLAUDE_RECORD.validate_python(dict(type='attachment', uuid='foreign-record',
+        timestamp='2026-10-16T16:40:05.123Z', attachment=dict(type='queued_command',
+        origin=dict(kind='peer'), prompt='Not a Monitor notification')))
+    assert isinstance(record.attachment, ForeignAttachment)
+    assert record.updates(ClaudeSession())==()
+    queued=CLAUDE_RECORD.validate_python(dict(type='queue-operation', operation='enqueue',
+        sessionId='session', content='<task-notification><event>not yet received</event></task-notification>'))
+    assert queued.updates(ClaudeSession())==()
 
 
 @pytest.mark.asyncio
