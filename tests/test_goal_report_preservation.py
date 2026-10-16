@@ -4,9 +4,6 @@ from pathlib import Path
 import subprocess
 import sys
 
-SOURCE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(SOURCE / 'tools' / 'cutover'))
-
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
@@ -20,6 +17,7 @@ from agent_comms.threads import Thread
 from owner_read_projection import CurrentThreadProjection
 from seed_original_owner_capture import author_model_report
 
+SOURCE = Path(__file__).resolve().parents[1]
 TURN = 'c7cc88d777b947d99b6f28f9e0b6ef97'
 
 

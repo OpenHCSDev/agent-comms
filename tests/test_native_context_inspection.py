@@ -15,7 +15,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.goal_actions import GoalPrecondition, OwnerInvocable, RuntimeInvocable, SetGoalAction, StandbyGoalAction
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
 from agent_comms.task_sources import CurrentTaskScopeSelection, OriginalTaskChange
 from agent_comms.tools import tool_catalog
@@ -27,7 +26,7 @@ pytest_plugins = ("test_backend_native_lifecycle",)
 
 @pytest.mark.parametrize('recorded_readers', [True])
 async def test_original_context_query_preserves_native_journal_and_dispatches_no_prompt(
-    native_backend, recorded_readers=False
+    native_backend, recorded_readers
 ):
     from native_context_reader_journey import read_original_context
 

@@ -88,6 +88,7 @@ include = [
 path = "src/agent_comms/__init__.py"
 
 [tool.pytest.ini_options]
+pythonpath = ["tools/cutover"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]

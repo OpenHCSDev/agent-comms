@@ -578,7 +578,6 @@ def test_backend_publication_preserves_independent_frontend(tmp_path, monkeypatc
     from agent_comms.active_route import ActiveRoute, active_route_path
     from agent_comms.field_codec import FieldCodec
 
-    monkeypatch.syspath_prepend(str(Path(__file__).parents[1] / 'tools/cutover'))
     import publish_retained_summary as publisher
 
     home = tmp_path / 'home'
