@@ -327,7 +327,7 @@ class HistoryViews:
         return ThreadView.roster(
             snapshot,
             self.agents,
-            self.agents.all_activity(snapshot=snapshot),
+            None,
             GoalWaits(self.root / GoalWaits.filename),
             show_stopped=show_stopped,
             show_archived=show_archived,
@@ -360,7 +360,7 @@ class HistoryViews:
         views = ThreadView.roster(
             snapshot,
             self.agents,
-            self.agents.all_activity(snapshot=snapshot),
+            None,
             GoalWaits(self.root / GoalWaits.filename),
             names=names,
             show_stopped=True,
