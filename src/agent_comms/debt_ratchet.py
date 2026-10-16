@@ -5,11 +5,14 @@ from __future__ import annotations
 
 import argparse
 import ast
+import io
 import json
 import subprocess
+import tokenize
 import typing
 from abc import abstractmethod
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
 from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
@@ -92,6 +95,184 @@ class PerFileMeasure(CountedSource):
 
 class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
     """A per-node count, kept separately for each file."""
+
+
+@dataclass(frozen=True)
+class ChangedSource:
+    """One head module and the new-side lines changed by its Git patch."""
+
+    path: str
+    source: bytes
+    lines: frozenset[int]
+
+    @cached_property
+    def tree(self) -> ast.Module:
+        return ast.parse(self.source, self.path)
+
+    @classmethod
+    def read(cls, repo: Path, base: str, head: str, path: str) -> ChangedSource:
+        patch = git(repo, "diff", "--no-renames", "--no-ext-diff", "--no-textconv",
+                    "--no-color", "--unified=0", "--inter-hunk-context=0", base, head, "--", path)
+        lines: set[int] = set()
+        for header in patch.decode().splitlines():
+            if header.startswith("@@ "):
+                # Git owns this hunk header, not the inspected Python source.
+                span = header.split()[2].removeprefix("+").split(",")
+                start = int(span[0])
+                count = int(span[1]) if len(span) == 2 else 1
+                lines.update(range(start, start + count))
+        return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines))
+
+
+class CleanChangedLines:
+    """No occurrence may be written, even when another occurrence is deleted."""
+
+    @staticmethod
+    def site_lines(node: ast.AST) -> range:
+        return range(node.lineno, node.end_lineno + 1)
+
+    @classmethod
+    def count_changed(cls, source: ChangedSource) -> int:
+        return sum(count for node in ast.walk(source.tree)
+                   if (count := cls.occurrences(node))
+                   and not source.lines.isdisjoint(cls.site_lines(node)))
+
+
+class FrozenFieldWrite(CleanChangedLines, PerFileOccurrenceMeasure):
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.Call(func=ast.Attribute(value=ast.Name(id="object"), attr="__setattr__")):
+                return 1
+        return 0
+
+
+class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
+    words: typing.ClassVar[tuple[str, ...]] = ("admission", "admit", "custody", "receipt")
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        match node:
+            case (ast.Name(id=name) | ast.Attribute(attr=name)
+                  | ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name)
+                  | ast.ClassDef(name=name) | ast.arg(arg=name)
+                  | ast.keyword(arg=str(name))):
+                return int(any(word in name.casefold() for word in cls.words))
+        return 0
+
+    @staticmethod
+    def site_lines(node: ast.AST) -> range:
+        line = node.end_lineno if isinstance(node, ast.Attribute) else node.lineno
+        return range(line, line + 1)
+
+    @classmethod
+    def prose_lines(cls, source: bytes, tree: ast.Module) -> frozenset[int]:
+        docstrings: set[int] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                match node.body:
+                    case [ast.Expr(value=ast.Constant(value=str()) as value), *_]:
+                        docstrings.update(range(value.lineno, value.end_lineno + 1))
+        found: set[int] = set()
+        for token in tokenize.tokenize(io.BytesIO(source).readline):
+            if token.type == tokenize.COMMENT or (
+                token.type == tokenize.STRING and token.start[0] in docstrings
+            ):
+                for line, text in enumerate(token.string.splitlines(), token.start[0]):
+                    if any(word in text.casefold() for word in cls.words):
+                        found.add(line)
+        return frozenset(found)
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        tree = ast.parse(source, filename)
+        return sum(cls.occurrences(node) for node in ast.walk(tree)) + len(cls.prose_lines(source, tree))
+
+    @classmethod
+    def count_changed(cls, source: ChangedSource) -> int:
+        return super().count_changed(source) + len(cls.prose_lines(source.source, source.tree) & source.lines)
+
+
+class FunctionLocalImport(PerFileMeasure):
+    """Imports executed inside a function, including nested local classes."""
+
+    class Collector(ast.NodeVisitor):
+        def __init__(self) -> None:
+            self.depth = 0
+            self.found = 0
+
+        def generic_visit(self, node: ast.AST) -> None:
+            nested = isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            self.depth += nested
+            if self.depth and isinstance(node, (ast.Import, ast.ImportFrom)):
+                self.found += 1
+            super().generic_visit(node)
+            self.depth -= nested
+
+    @classmethod
+    def count(cls, source: bytes, filename: str) -> int:
+        collector = cls.Collector()
+        collector.visit(ast.parse(source, filename))
+        return collector.found
+
+
+class LiteralGetattr(PerFileOccurrenceMeasure):
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case ast.Call(func=ast.Name(id="getattr"), args=[_, ast.Constant(value=str()), *_]):
+                return 1
+        return 0
+
+
+class ForeignFieldSpellings(PerFileOccurrenceMeasure):
+    """Literal identifier-spelling rosters used as loop inputs."""
+
+    @staticmethod
+    def occurrences(node: ast.AST) -> int:
+        match node:
+            case (ast.For(iter=ast.Tuple(elts=items))
+                  | ast.AsyncFor(iter=ast.Tuple(elts=items))
+                  | ast.comprehension(iter=ast.Tuple(elts=items))):
+                return int(len(items) > 1 and all(
+                    isinstance(item, ast.Constant) and isinstance(item.value, str)
+                    and item.value.isidentifier() for item in items
+                ))
+        return 0
+
+
+class BroadExceptDefault(PerFileOccurrenceMeasure):
+    @staticmethod
+    def broad(node: ast.AST | None) -> bool:
+        match node:
+            case None | ast.Name(id="Exception" | "BaseException"):
+                return True
+            case ast.Tuple(elts=items):
+                return any(BroadExceptDefault.broad(item) for item in items)
+        return False
+
+    @staticmethod
+    def default(node: ast.AST | None) -> bool:
+        match node:
+            case None | ast.Constant(value=None | False | 0 | ""):
+                return True
+            case ast.List(elts=[]) | ast.Tuple(elts=[]) | ast.Set(elts=[]) | ast.Dict(keys=[]):
+                return True
+        return False
+
+    @classmethod
+    def returns_default(cls, node: ast.AST) -> bool:
+        match node:
+            case ast.Return(value=value):
+                return cls.default(value)
+            case ast.FunctionDef() | ast.AsyncFunctionDef() | ast.ClassDef() | ast.Lambda():
+                return False
+        return any(cls.returns_default(child) for child in ast.iter_child_nodes(node))
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        return int(isinstance(node, ast.ExceptHandler) and cls.broad(node.type)
+                   and any(cls.returns_default(statement) for statement in node.body))
 
 
 class FamilyFlattened(PerFileOccurrenceMeasure):
@@ -693,14 +874,15 @@ class Comparison:
     paths: tuple[str, ...]
     base: dict[str, int]
     head: dict[str, int]
+    introduced: dict[str, int]
 
     @projected(view="report")
     def delta(self) -> dict[str, int]:
         return {name: value - self.base[name] for name, value in self.head.items()}
 
     @property
-    def increased(self) -> bool:
-        return any(value > 0 for value in self.delta.values())
+    def failed(self) -> bool:
+        return any(value > 0 for value in self.delta.values()) or any(self.introduced.values())
 
 
 def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
@@ -722,7 +904,13 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
         measured_base, measured_head = measure.compare(repo, base, head, paths, root)
         before.update(measured_base)
         after.update(measured_head)
-    return Comparison(root, base, head, tuple(sorted(paths)), before, after)
+    introduced = {}
+    strict_measures = Measure.members_with(CleanChangedLines)
+    for path in sorted(paths & python_paths(repo, head, root)):
+        source = ChangedSource.read(repo, base, head, path)
+        for measure in strict_measures:
+            introduced[f"{measure.__name__}:{path}"] = measure.count_changed(source)
+    return Comparison(root, base, head, tuple(sorted(paths)), before, after, introduced)
 
 
 def main() -> int:
@@ -733,7 +921,7 @@ def main() -> int:
     args = parser.parse_args()
     result = compare(Path.cwd(), args.base, args.head, args.root)
     print(json.dumps(FieldCodec.project(result, "report"), indent=2))
-    return int(result.increased)
+    return int(result.failed)
 
 
 if __name__ == "__main__":

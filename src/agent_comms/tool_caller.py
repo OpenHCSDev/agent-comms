@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NoReturn
 
-from .launch_runtime import CallingThreadUnavailable, RestartEnvironment
+from .launch_runtime import CallingThreadUnavailable
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -15,14 +14,8 @@ if TYPE_CHECKING:
 
 class ToolCaller(ABC):
     @classmethod
-    def from_environment(cls, environment: Mapping[str, str]) -> ToolCaller:
-        """Decode the CLI/native process boundary once, never inside a tool."""
-        name = environment.get(RestartEnvironment.owner_key, "")
-        return ThreadCaller(name) if name else NoThreadCaller()
-
-    @classmethod
     def from_actor(cls, actor: str | None) -> ToolCaller:
-        """The context-action boundary already supplies its actor explicitly."""
+        """Each entry boundary (CLI --from, context action) names its actor explicitly."""
         return ThreadCaller(actor) if actor else NoThreadCaller()
 
     @abstractmethod

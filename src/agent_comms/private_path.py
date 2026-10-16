@@ -74,6 +74,13 @@ class FileRevision:
             )
         )
 
+    @staticmethod
+    def source_changed(earlier: FileRevision | None, current: FileRevision | None) -> bool:
+        """A missing source, replacement or truncation does not preserve its cut."""
+        if earlier is None or current is None:
+            return earlier != current
+        return not earlier.holds_cut(current, earlier.size)
+
     def opened_by(self, stream: BinaryIO) -> bool:
         """Whether an opened file still contains this captured byte cut."""
         return self.holds_cut(type(self).from_file(stream), self.size)

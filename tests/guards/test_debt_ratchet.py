@@ -8,6 +8,11 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.debt_ratchet import (
+    BannedVocabulary, BroadExceptDefault, ForeignFieldSpellings,
+    FrozenFieldWrite, FunctionLocalImport, LiteralGetattr,
+)
+
 pytestmark = pytest.mark.refactor_guard
 
 
@@ -498,3 +503,111 @@ def test_stating_a_type_lowers_the_any_count_and_passes(repo: Repository) -> Non
     status, report = repo.compare(base, head)
     assert status == 0
     assert report["delta"][f"AnyAnnotation:{repo.root}/declarations.py"] == -1
+
+
+@pytest.mark.parametrize(("measure", "source"), [
+    (FrozenFieldWrite, 'object.__setattr__(self, "value", 1)\n'),
+    (BannedVocabulary, 'pending_receipt = 1\n'),
+])
+def test_clean_changed_lines_cannot_be_offset_with_a_deletion(repo, measure, source):
+    base = repo.commit({"old.py": source, "new.py": ""})
+    head = repo.commit({"old.py": None, "new.py": source})
+    status, report = repo.compare(base, head)
+    identity = f"{measure.__name__}:{repo.root}/new.py"
+    assert status == 1
+    assert report["delta"][identity] == 1
+    assert report["introduced"][identity] == 1
+
+
+@pytest.mark.parametrize(("measure", "source"), [
+    (FrozenFieldWrite, 'object.__setattr__(self, "value", 1)\n'),
+    (BannedVocabulary, 'pending_receipt = 1\n'),
+])
+def test_unchanged_old_sites_are_not_forced_to_zero(repo, measure, source):
+    base = repo.commit({"old.py": source + "clean = 1\n"})
+    head = repo.commit({"old.py": source + "clean = 2\n"})
+    status, report = repo.compare(base, head)
+    identity = f"{measure.__name__}:{repo.root}/old.py"
+    assert status == 0
+    assert report["head"][identity] == 1
+    assert report["introduced"][identity] == 0
+
+
+def test_git_context_configuration_cannot_mark_unchanged_lines_as_new(repo):
+    repo.git("config", "diff.interHunkContext", "3")
+    base = repo.commit({"names.py": "first = 1\nold_receipt = 1\nlast = 1\n"})
+    head = repo.commit({"names.py": "first = 2\nold_receipt = 1\nlast = 2\n"})
+    status, report = repo.compare(base, head)
+    identity = f"BannedVocabulary:{repo.root}/names.py"
+    assert status == 0
+    assert report["head"][identity] == 1
+    assert report["introduced"][identity] == 0
+
+
+def test_net_reduction_does_not_pay_for_a_new_identifier(repo):
+    base = repo.commit({"names.py": "old_admit = 1\nold_receipt = 2\n"})
+    head = repo.commit({"names.py": "new_custody = 3\n"})
+    status, report = repo.compare(base, head)
+    identity = f"BannedVocabulary:{repo.root}/names.py"
+    assert status == 1
+    assert report["base"][identity] == 2
+    assert report["head"][identity] == 1
+    assert report["introduced"][identity] == 1
+
+
+def test_old_function_name_and_multiline_attribute_have_their_own_lines(repo):
+    base = repo.commit({"names.py": "def old_admit():\n    return (\n        peer\n        .custody\n    )\n"})
+    head = repo.commit({"names.py": "def old_admit():\n    return (\n        other\n        .custody\n    )\n"})
+    status, report = repo.compare(base, head)
+    identity = f"BannedVocabulary:{repo.root}/names.py"
+    assert status == 0
+    assert report["head"][identity] == 2
+    assert report["introduced"][identity] == 0
+
+
+def test_changed_argument_still_changes_a_multiline_frozen_write(repo):
+    base = repo.commit({"owner.py": 'object.__setattr__(\n    self, "value",\n    1,\n)\n'})
+    head = repo.commit({"owner.py": 'object.__setattr__(\n    self, "value",\n    2,\n)\n'})
+    status, report = repo.compare(base, head)
+    identity = f"FrozenFieldWrite:{repo.root}/owner.py"
+    assert status == 1
+    assert report["delta"][identity] == 0
+    assert report["introduced"][identity] == 1
+
+
+def test_vocabulary_includes_identifiers_comments_and_docstring_lines_only():
+    source = b'''"""Receipt and custody share one prose line.\nAdmitted work.\n"""\n# admission\nkey = "admission_generation"\ndef admit_receipt(Custody, **clean):\n    return peer.receipt(Custody, admission=1)\n'''
+    # Three prose lines; function, parameter, attribute, loaded parameter and keyword.
+    assert BannedVocabulary.count(source, "values.py") == 8
+    assert FrozenFieldWrite.count(b'text = "object.__setattr__(x, y, z)"\n', "values.py") == 0
+
+
+def test_changed_prose_fails_but_an_unchanged_disk_key_does_not(repo):
+    original = 'key = "admission_generation"\n# clean wording\n'
+    base = repo.commit({"words.py": original})
+    head = repo.commit({"words.py": original.replace("clean wording", "admission wording")})
+    status, report = repo.compare(base, head)
+    identity = f"BannedVocabulary:{repo.root}/words.py"
+    assert status == 1
+    assert report["head"][identity] == 1
+    assert report["introduced"][identity] == 1
+
+
+def test_local_import_scope_counts_nested_functions_and_classes_once():
+    source = b'''import top\nclass ModuleClass:\n    import top_class\ndef outer():\n    import one\n    class Local:\n        import two\n        def method(self):\n            from package import three\n    async def inner():\n        import four\n'''
+    assert FunctionLocalImport.count(source, "imports.py") == 4
+
+
+def test_literal_getattr_does_not_count_dynamic_names_or_prose():
+    source = b'''getattr(peer, "model")\ngetattr(peer, name)\ntext = "getattr(peer, 'model')"\n'''
+    assert LiteralGetattr.count(source, "read.py") == 1
+
+
+def test_field_spelling_rosters_count_loops_not_declarations():
+    source = b'''fields = ("path", "file_path", "filePath")\nfor key in ("path", "file_path", "filePath"):\n    value = data[key]\nvalue = next(data[key] for key in ("path", "file_path", "filePath") if key in data)\n'''
+    assert ForeignFieldSpellings.count(source, "read.py") == 2
+
+
+def test_broad_handlers_only_count_defaults_returned_by_the_handler():
+    source = b'''def read():\n    try: work()\n    except Exception:\n        return None\n    try: work()\n    except:\n        if condition: return {}\n    try: work()\n    except OSError:\n        return None\n    try: work()\n    except BaseException:\n        raise\n    try: work()\n    except Exception:\n        def helper(): return None\n        raise\n'''
+    assert BroadExceptDefault.count(source, "read.py") == 2
