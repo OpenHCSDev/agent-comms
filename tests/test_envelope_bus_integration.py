@@ -315,11 +315,13 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
     )
     original = comms.registry.require("alice")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alice")
-    result = comms.threads.rename_self("alice-new")
+    from agent_comms.tool_caller import ThreadCaller
+
+    result = comms.threads.rename_self("alice-new", caller=ThreadCaller("alice"))
     assert (result.previous, result.current, result.changed) == ("alice", "alice-new", True)
     for previous, current in (("alice-new", "alice-next"), ("alice-next", "alice-final")):
         monkeypatch.setenv("AGENT_COMMS_THREAD", previous)
-        renamed = comms.threads.rename_self(current)
+        renamed = comms.threads.rename_self(current, caller=ThreadCaller(previous))
         assert (renamed.previous, renamed.current, renamed.changed) == (previous, current, True)
     assert comms.registry.require("alice-final").created_at == original.created_at
     for alias in ("alice", "alice-new", "alice-next"):
@@ -375,10 +377,12 @@ def test_rename_back_to_own_alias_preserves_claim_release(
     )
     assert claimed.claim_transition is not None
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alice")
-    assert comms.threads.rename_self("alice-new").changed
+    from agent_comms.tool_caller import ThreadCaller
+
+    assert comms.threads.rename_self("alice-new", caller=ThreadCaller("alice")).changed
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alice-new")
 
-    assert comms.threads.rename_self("alice").current == "alice"
+    assert comms.threads.rename_self("alice", caller=ThreadCaller("alice-new")).current == "alice"
 
     reopened = Comms(comms.root)
     assert reopened.registry.snapshot().aliases == {"alice-new": "alice"}

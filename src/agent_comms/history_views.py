@@ -345,6 +345,15 @@ class HistoryViews:
             raise StaleRevision("Thread source incarnation changed during presentation")
         return view.presentation.with_sources(captured)
 
+    def require_thread_presentation(self, name: str) -> ThreadPresentation:
+        """A bound caller must still name an available thread, not an anonymous view."""
+        presentation = self.thread_presentation(name)
+        if presentation is None:
+            from .errors import UnregisteredThreadError
+
+            raise UnregisteredThreadError(f"Thread presentation unavailable: {name}")
+        return presentation
+
     def coordination_snapshot(
         self, actor: str = "", *, show_stopped: bool = True, show_archived: bool = False
     ) -> CoordinationSnapshot:

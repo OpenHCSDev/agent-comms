@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms import invoke_tool
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.channels import AllOfMatch, AnyOfMatch, Channel, SavedView, ViewKind, ViewPredicate
 from agent_comms.child_process import ProcessIdentity
@@ -403,7 +404,7 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     monkeypatch.setenv("AGENT_COMMS_THREAD", "other")
     invoke_tool(comms, "comms_tags", {"action": "create", "name": "new"})
     assert "#new" in comms.channels.channels()
-    invoke_tool(comms, "comms_thread_tags", {"add": "new,api", "remove": "ui"})
+    invoke_tool(comms, "comms_thread_tags", {"add": "new,api", "remove": "ui"}, caller=ThreadCaller("other"))
     assert comms.registry.require("other") == replace(
         original, tags=frozenset({"new", "api"}), channel_scope_generation=1
     )

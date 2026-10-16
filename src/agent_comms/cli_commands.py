@@ -683,7 +683,9 @@ class InvokeCliCommand(CliCommand):
     def apply(self, ctx: Comms) -> Any:
         from .tools import invoke_tool
 
-        return invoke_tool(ctx, self.tool, self.arguments)
+        from .tool_caller import ToolCaller
+
+        return invoke_tool(ctx, self.tool, self.arguments, caller=ToolCaller.from_environment(os.environ))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1331,12 +1333,11 @@ class RenameSelfCliCommand(CliCommand, declared_name="rename-self"):
     new_name: str = option("--to")
 
     def apply(self, ctx: Comms) -> Any:
-        rename_result = ctx.threads.rename_self(self.new_name)
-        return {
-            "previous": rename_result.previous,
-            "current": rename_result.current,
-            "changed": rename_result.changed,
-        }
+        from .tools import CommsRenameSelfTool
+        from .tool_caller import ToolCaller
+
+        return CommsRenameSelfTool.invoke(ctx, {"new_name": self.new_name},
+                                         caller=ToolCaller.from_environment(os.environ))
 
 
 @dataclass(frozen=True, kw_only=True)

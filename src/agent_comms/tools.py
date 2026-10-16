@@ -10,7 +10,6 @@ from typing import ClassVar, Literal, Type
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
-from .command import Command
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -27,7 +26,8 @@ from .goal_actions import (
 from .goal_states import ActiveGoal
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
-from .owner_launch import RestartEnvironment
+from .native_tools import NativeExecutableTool, NativeRequestTools
+from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
@@ -76,9 +76,8 @@ def tool_field(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolRequest(Command, DeclaredFamily, affix="Tool"):
+class ToolRequest[Caller: ToolCaller = ToolCaller](NativeRequestTools, NativeExecutableTool):
     family_discriminator = "tool"
-    label: ClassVar[str]
     description: ClassVar[str]
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
@@ -119,18 +118,27 @@ class ToolRequest(Command, DeclaredFamily, affix="Tool"):
         return result
 
     @classmethod
-    def invoke(cls, comms: Comms, arguments: Mapping[str, object]) -> JsonObject:
+    def invoke(cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller = NoThreadCaller()) -> JsonObject:
         if cls.family_discriminator in arguments:
             raise ValueError("Unknown tool argument: tool")
         try:
-            request = cls.from_payload({**arguments, cls.family_discriminator: cls.declared_name})
+            request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
         except (TypeError, ValueError) as error:
             raise ValueError(f"Invalid {cls.declared_name} arguments: {error}") from error
-        return FieldCodec.encode(request.apply(comms))
+        return FieldCodec.encode(caller.invoke(request, comms))
+
+    @abstractmethod
+    def apply(self, comms: Comms, caller: Caller) -> JsonObject: ...
+
+    def apply_without_thread(self: ToolRequest[ToolCaller], comms: Comms, caller: NoThreadCaller) -> JsonObject:
+        return self.apply(comms, caller)
 
 
-def _executing_thread() -> str:
-    return RestartEnvironment.calling_thread()
+class ThreadToolRequest(ToolRequest[ThreadCaller]):
+    """Self-relative requests declare their required caller at the shared boundary."""
+
+    def apply_without_thread(self, comms: Comms, caller: NoThreadCaller) -> JsonObject:
+        return caller.refuse_thread()
 
 
 def _tag_set(value: str) -> frozenset[str]:
@@ -206,7 +214,7 @@ class CommsPinChannelTool(ToolRequest):
     name: str = tool_field("Channel name")
     pinned: bool = tool_field("True to pin; false to unpin")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import PinChannelCliCommand
 
         return PinChannelCliCommand(name=self.name, pinned=self.pinned).apply(comms)
@@ -224,7 +232,7 @@ class CommsPinThreadTool(ToolRequest):
     name: str = tool_field("Member thread name")
     pinned: bool = tool_field("True to pin; false to unpin")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import PinThreadCliCommand
 
         channel = self.channel
@@ -254,11 +262,11 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
         "Optional provider request service tier", default=None
     )
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         """Change this thread's model or another thread's model for future turns."""
-        thread_name = self.thread or _executing_thread()
+        thread_name = caller.subject(self.thread or "")
         original = comms.registry.require(thread_name)
-        if comms.registry.status(thread_name).active and thread_name != _executing_thread():
+        if not caller.may_reconfigure(comms, thread_name):
             raise RelationViolationError(
                 f"{thread_name} is running; change its settings through its own session"
             )
@@ -287,7 +295,7 @@ class CommsSortChannelsTool(ToolRequest):
     )
     order: type[ChannelSort] = tool_field("Channel list order")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         order = comms.channels.set_channel_order(self.order)
         return {"order": FieldCodec.encode(order)}
 
@@ -305,7 +313,7 @@ class CommsTagsTool(ToolRequest):
     disposition: TagDisposition = tool_field("Tagged-thread operation", default_factory=KeepThreadsTagDisposition)
     confirmed: bool = tool_field("Confirm thread archiving or deletion", default=False)
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         tags = self.action.apply(comms.channels, self.name, self.new_name,
                                 disposition=self.disposition, confirmed=self.confirmed)
         return {"tags": sorted(tags)}
@@ -323,9 +331,9 @@ class CommsThreadTagsTool(ToolRequest):
     add: str = tool_field("Comma-separated tags to add", default="")
     remove: str = tool_field("Comma-separated tags to remove", default="")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         thread = comms.channels.update_tags(
-            (self.thread or _executing_thread()),
+            caller.subject(self.thread),
             add=_tag_set(self.add),
             remove=_tag_set(self.remove),
         )
@@ -337,7 +345,7 @@ class CommsChannelsTool(ToolRequest):
     label = "List channels"
     description = "List named tag views and their current member threads; #any includes everyone."
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         return {
             "channels": [view.to_wire() for view in comms.views.channel_views()],
             "views": [
@@ -359,7 +367,7 @@ class CommsSetChannelMetadataTool(ToolRequest):
     parent: str = tool_field("Parent channel; empty clears the parent")
     archived: bool = tool_field("Whether to hide from active presentation")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         parent = self.parent.strip() or None
         return comms.channels.set_channel_metadata(
             self.name, parent=parent, archived=self.archived
@@ -378,7 +386,7 @@ class CommsSetViewTool(ToolRequest):
     match: type[ViewMatch] = tool_field("Tag predicate")
     tags: str = tool_field("One or more comma-separated tags")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         return FieldCodec.encode(
             comms.channels.set_saved_view(
                 SavedView(self.name, self.kind, ViewPredicate(self.match, _tag_set(self.tags)))
@@ -392,11 +400,11 @@ class CommsDeleteViewTool(ToolRequest):
     description = "Delete a saved projection without changing tags, channels, messages, or threads."
     name: str = tool_field("Saved view name")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import DeleteViewCliCommand
 
         DeleteViewCliCommand(name=self.name).apply(comms)
-        return CommsChannelsTool().apply(comms)
+        return CommsChannelsTool().apply(comms, caller)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -406,12 +414,12 @@ class CommsSortChannelTool(ToolRequest):
     name: str = tool_field("Channel name")
     order: type[ThreadSort] = tool_field("Member ordering")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         return comms.channels.set_channel_sort(self.name, self.order).to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetProjectTool(ToolRequest):
+class CommsSetProjectTool(ThreadToolRequest):
     label = "Change Project"
     description = (
         "Change your own persistent project directory and synchronize attached clients."
@@ -421,8 +429,8 @@ class CommsSetProjectTool(ToolRequest):
     )
     path: str = tool_field("New project directory")
 
-    def apply(self, comms: Comms) -> JsonObject:
-        result = comms.threads.set_project_self(self.path)
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        result = comms.threads.set_project(caller.name, self.path)
         return {
             **asdict(result),
             "instruction": (
@@ -437,7 +445,7 @@ class CommsSetProjectTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetGoalTool(ToolRequest):
+class CommsSetGoalTool(ThreadToolRequest):
     label = "Set persistent goal"
     description = (
         "Set or replace your own persistent goal. Use this when the user asks you to "
@@ -445,8 +453,8 @@ class CommsSetGoalTool(ToolRequest):
     )
     text: str = tool_field("Persistent objective to pursue")
 
-    def apply(self, comms: Comms) -> JsonObject:
-        goal = comms.goals.update_goal(_executing_thread(), SetGoalAction(text=self.text))
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        goal = comms.goals.update_goal(caller.name, SetGoalAction(text=self.text))
         return {
             "goal": goal.to_wire() if goal else None,
             "instruction": (
@@ -456,7 +464,7 @@ class CommsSetGoalTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsGoalTool(ToolRequest):
+class CommsGoalTool(ThreadToolRequest):
     label = "Goal progress"
     description = (
         "Update goal progress; complete it or block it when user input is needed. Use "
@@ -479,8 +487,8 @@ class CommsGoalTool(ToolRequest):
         default=None,
     )
 
-    def apply(self, comms: Comms) -> JsonObject:
-        name = _executing_thread()
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        name = caller.name
         command = self.status(
             progress=self.progress,
             **{
@@ -505,7 +513,7 @@ class CommsGoalTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsResumeGoalTool(ToolRequest):
+class CommsResumeGoalTool(ThreadToolRequest):
     label = "Resume paused goal"
     description = (
         "Resume your own paused goal with the same ID only after an explicit user "
@@ -514,8 +522,8 @@ class CommsResumeGoalTool(ToolRequest):
     goal_id: str = tool_field("Identity of the paused goal to resume")
     progress: str = tool_field("Progress summary for the resumed goal")
 
-    def apply(self, comms: Comms) -> JsonObject:
-        name = _executing_thread()
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        name = caller.name
         goal_id = self.goal_id
         current = comms.registry.require(name).goal_for(goal_id)
         if current is None:
@@ -538,7 +546,7 @@ class CommsResumeGoalTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsEditGoalTool(ToolRequest):
+class CommsEditGoalTool(ThreadToolRequest):
     label = "Edit goal text"
     description = (
         "Edit your existing goal text while keeping its identity, status, and progress."
@@ -547,8 +555,8 @@ class CommsEditGoalTool(ToolRequest):
     goal_id: str = tool_field("Identity of the existing goal to edit")
     text: str = tool_field("Revised objective text, including any @mentions")
 
-    def apply(self, comms: Comms) -> JsonObject:
-        name = _executing_thread()
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        name = caller.name
         goal_id = self.goal_id
         current = comms.registry.require(name).require_goal(goal_id)
         goal = comms.goals.update_goal(
@@ -561,14 +569,14 @@ class CommsEditGoalTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsGoalHistoryTool(ToolRequest):
+class CommsGoalHistoryTool(ThreadToolRequest):
     label = "Goal history"
     description = "Read recorded goal revisions and recorded provenance and observation gaps."
     goal_id: str = tool_field("Optional goal ID; omit for this thread's full history", default="")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
         requested = self.goal_id.strip()
-        entries = comms.goals.goal_history(_executing_thread(), goal_id=requested or None)
+        entries = comms.goals.goal_history(caller.name, goal_id=requested or None)
         return {"history": [entry.to_wire() for entry in entries]}
 
 
@@ -581,19 +589,14 @@ class CommsThreadsTool(ToolRequest):
     )
     active_only: bool = tool_field("Exclude stopped threads", default=False)
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import ThreadsCliCommand
 
-        result = ThreadsCliCommand(active_only=self.active_only).apply(comms)
-        presentation = comms.views.thread_presentation(_executing_thread())
-        sent_notifications = (
-            list(presentation.sent_notifications) if presentation is not None else []
-        )
-        return {**result, "sent_notifications": sent_notifications}
+        return caller.listing(comms, ThreadsCliCommand(active_only=self.active_only).apply(comms))
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCollaborationTool(ToolRequest):
+class CommsCollaborationTool(ThreadToolRequest):
     label = "Manage mutual collaboration"
     description = (
         "Create, update or end one mutual contact with another agent. Either "
@@ -605,23 +608,23 @@ class CommsCollaborationTool(ToolRequest):
     peer: str = tool_field("Collaborating agent thread name or alias")
     note: str = tool_field("Short description of ongoing work", default="")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
         relationship = comms.relationships.edit(
-            _executing_thread(), self.action, self.peer, self.note
+            caller.name, self.action, self.peer, self.note
         )
         return {"collaboration": asdict(relationship) if relationship else None}
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCollaborationsTool(ToolRequest):
+class CommsCollaborationsTool(ThreadToolRequest):
     label = "List collaborations"
     description = (
         "Read explicit contacts and goal-derived awareness with provenance, without "
         "changing delivery, work acceptance or owners."
     )
 
-    def apply(self, comms: Comms) -> JsonObject:
-        owner = _executing_thread()
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        owner = caller.name
         contacts = comms.relationships.contacts(owner)
         result: JsonObject = {"collaborations": [asdict(edge) for edge in contacts.explicit]}
         if any(entry.goal_contacts for entry in contacts.visible):
@@ -641,15 +644,13 @@ class CommsCollaborationsTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRenameSelfTool(ToolRequest):
+class CommsRenameSelfTool(ThreadToolRequest):
     label = "Rename Comms Thread"
     description = "Rename your own persistent thread identity; old names remain routing aliases."
     new_name: str = tool_field("Your new thread name")
 
-    def apply(self, comms: Comms) -> JsonObject:
-        from .cli_commands import RenameSelfCliCommand
-
-        return RenameSelfCliCommand(new_name=self.new_name).apply(comms)
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        return asdict(comms.threads.rename_self(self.new_name, caller=caller))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -670,7 +671,7 @@ class CommsSendTool(ToolRequest):
         "Change report fields; required for the change-report kind", default=None
     )
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         message = comms.messaging.send_message(
             self.sender, self.target, self.body, self.type, report=self.report
         )
@@ -682,7 +683,7 @@ class CommsSendTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsAuthoredTaskTool(ToolRequest):
+class CommsAuthoredTaskTool(ThreadToolRequest):
     """One original admitted publication path for authored task declarations."""
     target: str = tool_field("Thread or channel receiving the original declaration", wire_name="to")
     scope: TaskScopeSelection = tool_field(
@@ -697,8 +698,8 @@ class CommsAuthoredTaskTool(ToolRequest):
     @abstractmethod
     def original_body(self, declaration): ...
 
-    def apply(self, comms):
-        owner = comms.registry.require(_executing_thread())
+    def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
+        owner = comms.registry.require(caller.name)
         declaration = self.declaration(owner)
         message = comms.messaging.send_message(
             owner.name, self.target, self.original_body(declaration),
@@ -786,7 +787,7 @@ class CommsInboxTool(ToolRequest):
         "Declared dependencies for standby review", default=None
     )
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         thread = self.thread
         target = self.target
         if target is not None:
@@ -840,7 +841,7 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
     )
     prompt: str | None = tool_field("Initial prompt override", default=None)
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import ForkCliCommand
 
         return ForkCliCommand(name=self.name, parent=self.parent, task=self.task,
@@ -865,7 +866,7 @@ class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     action_order = 20
     name: str = tool_field("Thread name", binding=SubjectBinding)
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import StopCliCommand
 
         return StopCliCommand(name=self.name).apply(comms)
@@ -888,7 +889,7 @@ class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
         return status.allows_owner_start(owner_pid=owner_pid)
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import StartCliCommand
 
         return StartCliCommand(name=self.name).apply(comms)
@@ -907,7 +908,7 @@ class CommsQueueRestartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolReque
     action_order = 22
     name: str = tool_field("Live agent thread", binding=SubjectBinding)
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .restart_queue import enqueue as enqueue_restart
 
         return {"restart": FieldCodec.encode(enqueue_restart(comms, self.name))}
@@ -919,7 +920,7 @@ class CommsRestartQueueTool(ToolRequest):
     description = "Inspect queued, restarted, stale, or uncertain attempts for a thread."
     name: str = tool_field("Agent thread")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .restart_queue import status as restart_status
 
         return {
@@ -933,7 +934,7 @@ class CommsCancelRestartTool(ToolRequest):
     description = "Cancel pending restarts for a thread; cannot undo an attempted restart."
     name: str = tool_field("Agent thread")
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .restart_queue import cancel as cancel_restart
 
         return {
@@ -954,7 +955,7 @@ class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
     def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
         return status.stopped
 
-    def apply(self, comms: Comms) -> JsonObject:
+    def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
         from .cli_commands import ArchiveCliCommand
 
         return ArchiveCliCommand(name=self.name).apply(comms)
@@ -972,8 +973,8 @@ def context_tool_catalog(context: str) -> list[JsonObject]:
     return [tool.schema() for tool in tools]
 
 
-def invoke_tool(comms: Comms, name: str, arguments: Mapping[str, object]) -> JsonObject:
-    return ToolRequest.decode(name).invoke(comms, arguments)
+def invoke_tool(comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller = NoThreadCaller()) -> JsonObject:
+    return ToolRequest.decode(name).invoke(comms, arguments, caller=caller)
 
 
 def invoke_context_tool(
@@ -991,4 +992,4 @@ def invoke_context_tool(
     bound.update(
         (key, binding.resolve(subject, actor)) for key, binding in tool.context_bindings().items()
     )
-    return tool.invoke(comms, bound)
+    return tool.invoke(comms, bound, caller=ToolCaller.from_actor(actor))

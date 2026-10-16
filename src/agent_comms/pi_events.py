@@ -795,7 +795,7 @@ class ToolExecutionEnd(PiEvent):
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .native_tools import NativeTool
+        from .tool_declaration import ToolDeclaration
 
         name = self.tool_name or "tool"
         is_ok = self.is_error is not True
@@ -808,7 +808,7 @@ class ToolExecutionEnd(PiEvent):
             name=name,
             ok=is_ok,
             output=self.result.text(),
-            diff=NativeTool.for_name(name).result_diff(self.result, is_ok),
+            diff=ToolDeclaration.for_name(name).result_diff(self.result, is_ok),
             sent_message=self.result.sent_message(is_ok),
         )
 
@@ -822,13 +822,13 @@ class ToolExecutionStart(PiEvent):
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        from .native_tools import NativeTool
+        from .tool_declaration import ToolDeclaration
 
         name = self.tool_name or "tool"
         tool_id = self.tool_call_id or name
         session.watchdog.prompt_accepted = True
         session.active_tools.add(tool_id)
-        yield NativeTool.start(tool_id, name, self.args or {})
+        yield ToolDeclaration.start(tool_id, name, self.args or {})
 
     @property
     def retry_progress(self) -> bool:
