@@ -57,7 +57,7 @@ class WireAccess(DeclaredFamily, affix="Access"):
     def prepare_page_index(self, index: BusPageIndex, source: OpenedWireSnapshot) -> Iterator[None]:
         self._prepare_index(index, source)
         with index.snapshot():
-            index.require_coverage(source)
+            source.require_page_index_coverage(index)
             yield
 
     @abstractmethod

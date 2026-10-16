@@ -49,6 +49,14 @@ def retained_source(root, count, *, access=ArchivedAccess()):
     return comms.bus
 
 
+def test_absent_wire_has_empty_query_results_without_an_index(tmp_path):
+    bus = Comms(tmp_path).bus
+    assert bus.full_history_page().messages == ()
+    scope = DMDisplayScope(frozenset({'a'}), frozenset({'b'}))
+    assert not bus.conversation_older_unread(scope, before=1, seen=frozenset())
+    assert not (tmp_path / 'bus_page_index.sqlite3').exists()
+
+
 def test_warm_incoming_cursor_reads_only_selected_wire_rows(tmp_path, monkeypatch):
     bus = retained_source(tmp_path, 3000)
     assert bus.incoming_page("b", after=2700, limit=10).newest_seq == 2730

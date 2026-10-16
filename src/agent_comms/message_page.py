@@ -228,9 +228,7 @@ class MessageReadRequest[T](ABC):
             return self.read_opened(source)
 
     def read_opened(self, source: OpenedWireSnapshot) -> T:
-        if source.stream is None:
-            return self.empty()
-        return source.query_page_index(lambda index: self.indexed(index, source))
+        return source.query_page_index(lambda index: self.indexed(index, source), empty=self.empty)
 
     def indexed_records(self, index, source, rows):
         for message, size in source.indexed_records(index, rows, before_offset=source.boundary):

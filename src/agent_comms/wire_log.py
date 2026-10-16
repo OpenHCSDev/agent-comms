@@ -25,7 +25,7 @@ from .bus_publication import (
     unique_wire_object,
 )
 from .bus_source_page import AddressedPage
-from .bus_page_index import BusPageIndex, StaleBusPageIndexError
+from .bus_page_index import BusPageIndex, BusPageSource, StaleBusPageIndexError
 from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
 from .envelope_claim_transitions import (
     ClaimProjection,
@@ -72,10 +72,21 @@ class OpenedWireSnapshot:
         default_factory=dict, init=False, repr=False, compare=False,
     )
 
-    def query_page_index[T](self, read: Callable[[BusPageIndex], T]) -> T:
-        """Prepare/query this cut; repair stale derived offsets, never scan instead."""
+    def require_page_index_coverage(self, index: BusPageIndex) -> None:
+        if self.stream is None or self.revision is None:
+            raise RelationViolationError("Index coverage requires an opened wire source")
+        saved = BusPageSource.one(index.connection, singleton=1)
+        if saved is None:
+            raise StaleBusPageIndexError("Page index has no prepared source")
+        if not saved.covers(self.stream, self.revision):
+            raise StaleBusPageIndexError("Page index does not cover its opened source")
+
+    def query_page_index[T](
+        self, read: Callable[[BusPageIndex], T], *, empty: Callable[[], T]
+    ) -> T:
+        """Prepare/query this cut; source absence and index repair stay owned here."""
         if self.stream is None:
-            raise RelationViolationError("Index query requires an opened wire source")
+            return empty()
         access = self.metadata.access
         with access.open_page_index(Path(self.stream.name)) as index:
             try:
@@ -214,7 +225,7 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
         """Resolve sparse changes through the same prepared index as page reads."""
         if not 0 <= before_offset <= self.boundary:
             raise ValueError("Public read exceeds its opened source cut")
-        if not sequences or self.stream is None:
+        if not sequences:
             return
 
         def read(index):
@@ -226,7 +237,7 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
             )
             return tuple(self.indexed_records(index, rows, before_offset=before_offset))
 
-        yield from self.query_page_index(read)
+        yield from self.query_page_index(read, empty=tuple)
 
 
 @dataclass(frozen=True, slots=True)

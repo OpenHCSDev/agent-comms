@@ -204,12 +204,6 @@ class BusPageIndex:
         source = BusPageSource(replace(revision, size=through), AppendCheckpoint.fingerprint(stream, through))
         return saved, source, offset, tuple(rows)
 
-    def require_coverage(self, opened: OpenedWireSnapshot) -> None:
-        saved = BusPageSource.one(self.connection, singleton=1)
-        if (saved is None or opened.stream is None or opened.revision is None
-                or not saved.covers(opened.stream, opened.revision)):
-            raise StaleBusPageIndexError("Page index does not cover its opened source")
-
     def invalidate(self) -> None:
         """Discard damaged derived coverage; prepare owns the subsequent rebuild."""
         with self.connection:
