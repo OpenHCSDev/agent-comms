@@ -258,7 +258,6 @@ class MessageNotification:
         cls, source, snapshot, reads, document, *, owner_lookup
     ) -> MessageNotification | None:
         """Project a human DM read even though humans have no wake assignment."""
-        from .bus_publication import stable_thread_lookup
         from .channel_targets import is_channel_target
 
         message = source.message
@@ -272,7 +271,7 @@ class MessageNotification:
         target = snapshot.threads.get(name)
         if target is None or not reads.human(target.role):
             return None
-        recipient = FrozenRecipient(stable_thread_lookup(target.created_at), target.name)
+        recipient = FrozenRecipient(target.incarnation.stable_thread_lookup, target.name)
         displayed_to = reads.displayed_recipient(
             message, recipient, snapshot, document=document
         )
@@ -331,11 +330,9 @@ class MessageNotification:
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Project outcomes from the caller's original certified source window."""
-        from .bus_publication import stable_thread_lookup
-
         projected = cls.delivery_window(
             root, registry, sources,
-            owner_lookup=stable_thread_lookup(owner.created_at),
+            owner_lookup=owner.incarnation.stable_thread_lookup,
             assignment_read=assignment_read,
         )
         return tuple(
@@ -709,7 +706,7 @@ class ThreadView:
         runtime = agents.runtime_info.read()
         waits = goal_waits.read()
         if activities is None:
-            activities = agents.all_activity(snapshot=snapshot)
+            activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(
             cls.capture(thread, snapshot, activities[thread.name], runtime.get(thread.name), waits)
             for thread in threads
@@ -780,7 +777,13 @@ class CoordinationSnapshot:
         show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
-        activities = agents.all_activity(snapshot=registry)
+        visible = (
+            thread for thread in registry.threads.values()
+            if ThreadView.visible(
+                thread, registry, show_stopped=show_stopped, show_archived=show_archived
+            )
+        )
+        activities = agents.all_activity(visible, snapshot=registry)
         return cls(
             channels=ChannelView.roster(
                 registry, declarations, catalog.pinned_members(), catalog.list_order,

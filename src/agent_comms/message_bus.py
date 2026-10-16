@@ -277,7 +277,6 @@ class MessageBus:
         Input preparation may omit this optional supplement on contention;
         inspection waits in its existing resource worker for the actual read.
         """
-        from .bus_publication import stable_thread_lookup
         from .errors import RelationViolationError
         from .private_bus_checkpoint import addressed_source_pointers_unlocked
         from .context_segments.awareness import AwarenessSegment, UnavailableAwarenessSegment
@@ -287,7 +286,7 @@ class MessageBus:
             with self.log.certified_read(blocking=blocking) as source:
                 marker = source.marker
                 rows = addressed_source_pointers_unlocked(
-                    self.log, marker, stable_thread_lookup(owner.created_at)
+                    self.log, marker, owner.incarnation.stable_thread_lookup
                 )
         except (BlockingIOError, RelationViolationError):
             # Contention or a checkpoint/source change during the read; any
@@ -296,7 +295,7 @@ class MessageBus:
         if not rows:
             return ()
         first = {
-            stable_thread_lookup(relation.peer.created_at)
+            relation.peer.incarnation.stable_thread_lookup
             for relation in relations
             if relation.relevance.grants(Prioritized)
         }

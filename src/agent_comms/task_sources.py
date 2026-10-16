@@ -503,13 +503,11 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         self.change.require_publication(self, registry, original_source)
 
     def require_wording_publication(self, registry, original_source):
-        from .bus_publication import stable_thread_lookup
-
         delivery, = original_source.references((self.subject,))
         delivery.message.sender_role.require_user()
-        if delivery.audience.sender_lookup != stable_thread_lookup(self.source_user.created_at):
+        if delivery.audience.sender_lookup != self.source_user.stable_thread_lookup:
             raise RelationViolationError("USER pin differs from its original human author")
-        if not delivery.audience.includes_lookup(stable_thread_lookup(self.recipient.created_at)):
+        if not delivery.audience.includes_lookup(self.recipient.stable_thread_lookup):
             raise RelationViolationError("USER pin recipient did not receive its original message")
 
     def user_task_facts(self, message):

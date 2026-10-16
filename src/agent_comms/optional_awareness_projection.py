@@ -32,7 +32,7 @@ from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.coordination_tables.responses import ResponseObligation
 
 from .audience_manifest import FrozenRecipient
-from .bus_publication import CommittedDelivery, stable_thread_lookup
+from .bus_publication import CommittedDelivery
 from .child_process import ProcessIdentity
 from .cohort_schema import (
     COHORT_SCHEMA_VERSION,
@@ -214,7 +214,7 @@ class OptionalAwarenessProjection:
         if turn is None or turn.admission_generation != self.expected_admission_generation:
             raise ProjectionUnavailableError("selected owner turn changed")
         if FrozenRecipient(assignment.recipient_lookup, assignment.recipient) != FrozenRecipient(
-            stable_thread_lookup(owner.created_at),
+            owner.incarnation.stable_thread_lookup,
             owner.name,
         ):
             raise ProjectionUnavailableError("selected recipient changed")

@@ -185,11 +185,9 @@ class ReadLedger(Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         )
 
     def _displayed_recipient(self, message, recipient, snapshot, threads, *, document):
-        from .bus_publication import stable_thread_lookup
-
         for thread in threads:
             if (
-                stable_thread_lookup(thread.created_at) == recipient.recipient_lookup
+                thread.incarnation.stable_thread_lookup == recipient.recipient_lookup
                 and snapshot.canonical_name(recipient.canonical_thread) == thread.name
                 and message.seq in self.seen_sequences(thread.name, snapshot, document=document)
             ):

@@ -216,11 +216,9 @@ class DeliveryScope(MessageDisplayScope):
         The unstamped format matches before a birth is required. An index must
         probe for an assigned stamp; admission must refuse that unproven stamp.
         """
-        from .bus_publication import stable_thread_lookup
-
         yield ""
         if source.has_recorded_birth:
-            yield stable_thread_lookup(source.created_at)
+            yield source.stable_thread_lookup
         else:
             on_unrecorded()
 

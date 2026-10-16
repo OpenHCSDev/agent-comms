@@ -15,7 +15,6 @@ from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
-from .bus_publication import stable_thread_lookup
 from .goal_waits import GoalInputReview, GoalWait, GoalWaits
 from .registration import Registration
 
@@ -141,7 +140,7 @@ class Goals:
         snapshot = self.registry.snapshot()
         from .input_attempt import ReservedInput
 
-        lookup = stable_thread_lookup(thread.created_at)
+        lookup = thread.incarnation.stable_thread_lookup
         # Original certification supplies both sides of the reply. Display ACKs
         # and today's sender aliases cannot admit a different incarnation.
         replies = {

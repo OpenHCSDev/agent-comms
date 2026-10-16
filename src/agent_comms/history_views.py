@@ -313,7 +313,14 @@ class HistoryViews:
             channels,
             catalog.pinned_members(),
             catalog.list_order,
-            self.agents.all_activity(snapshot=snapshot),
+            self.agents.all_activity(
+                (thread for thread in snapshot.threads.values()
+                 if ThreadView.visible(
+                     thread, snapshot, show_stopped=show_stopped,
+                     show_archived=show_archived,
+                 )),
+                snapshot=snapshot,
+            ),
             self.last_sent_timestamps(),
             ChannelActivity.for_views(channels, self.bus.channel_activity()),
             show_stopped=show_stopped,
@@ -538,7 +545,10 @@ class HistoryViews:
             for name, thread in snapshot.threads.items()
             if not active_only or snapshot.statuses[name].active
         }
-        activities = self.agents.all_activity(snapshot=snapshot)
+        activities = self.agents.all_activity(
+            (thread for name, thread in threads.items() if snapshot.statuses[name].active),
+            snapshot=snapshot,
+        )
         pending = self.bus.pending_counts_all(tuple(threads))
         waits = GoalWaits(self.root / GoalWaits.filename).read()
         return [

@@ -16,7 +16,7 @@ from agent_comms.coordination_database import StoreBusy
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
-from .bus_publication import CommittedDelivery, stable_thread_lookup
+from .bus_publication import CommittedDelivery
 from .channel_targets import BuiltinChannel
 from .cohort_schema import assert_cohort_schema
 from .comms import Comms
@@ -80,7 +80,7 @@ def _verify_selected_wake_state(
         raise IdentityConflict("Wake source or owner turn does not match") from error
     if initial.message.reference != admission.source:
         raise IdentityConflict("Wake source message changed")
-    if stable_thread_lookup(owner.created_at) != admission.recipient_lookup:
+    if owner.incarnation.stable_thread_lookup != admission.recipient_lookup:
         raise IdentityConflict("Wake recipient incarnation changed")
     if generation != admission.owner_admission_generation or turn.id != admission.turn_id:
         raise IdentityConflict("Wake source or owner turn does not match")

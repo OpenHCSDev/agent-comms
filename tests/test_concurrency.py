@@ -156,7 +156,8 @@ class TestConcurrentWire:
         )
         comms = wire(root)
         assert set(comms.agents.runtime_info.read()) == set(names)
-        assert set(comms.agents.all_activity()) == set(names)
+        snapshot = comms.registry.snapshot()
+        assert set(comms.agents.all_activity(snapshot.threads.values(), snapshot=snapshot)) == set(names)
         assert {name: comms.ledger.read()[name] for name in names} == {
             name: "ready" for name in names
         }

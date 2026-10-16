@@ -52,7 +52,6 @@ from .acp_extension import (
     encode_updates,
 )
 from .agent_event_updates import AcpEventConsumer
-from .bus_publication import stable_thread_lookup
 from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
@@ -420,7 +419,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             ),
         )
         await _accept_visible_deliveries(
-            bus, wire_root_id, store_path, stable_thread_lookup(owner.created_at), 0,
+            bus, wire_root_id, store_path, owner.incarnation.stable_thread_lookup, 0,
             owner_name=owner.name, acquire_package=execution.validate,
         )
         if self.inputs.owns_execution(session_id, owner):
@@ -433,7 +432,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return 0
         def select(store):
             with store.session.read():
-                participant = store.participants.get(stable_thread_lookup(owner.created_at))
+                participant = store.participants.get(owner.incarnation.stable_thread_lookup)
                 candidate = next_sealed_assignment(
                     store, participant.lookup, owner.name, after_seq=admission_after_seq,
                 )

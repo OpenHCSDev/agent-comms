@@ -127,30 +127,32 @@ class AgentActivity:
         activity = ObservedActivity.acquire(event, owner)
         return participant.execution.project_activity(participant, activity)
 
-    def all_activity(self, *, snapshot: RegistrySnapshot | None = None) -> Mapping[str, ObservedActivity]:
-        snapshot = snapshot or self.registry.snapshot()
+    def all_activity(self, threads: Iterable[Thread], *, snapshot: RegistrySnapshot) -> Mapping[str, ObservedActivity]:
+        requested = {thread.name: thread for thread in threads}
+        if not requested:
+            return {}
         events = self.activity.all_current(
-            active=frozenset(name for name, thread in snapshot.threads.items() if thread.executing),
-            threads=snapshot.threads,
+            active=frozenset(name for name, thread in requested.items() if thread.executing),
+            threads=requested,
         )
         return {
             name: self._observed(thread, snapshot.owner_identity(name), events[name])
-            for name, thread in snapshot.threads.items()
+            for name, thread in requested.items()
         }
 
     def observe_recipients(self, recipients: Iterable[FrozenRecipient], *, snapshot: RegistrySnapshot) -> Mapping[str, RecipientActivity]:
         """Acquire one bounded window's recipients from the original source snapshot."""
-        from .bus_publication import stable_thread_lookup
-
         snapshot.require_unambiguous_ownership()
-        observations: dict[str, RecipientActivity] = {
-            recipient.recipient_lookup: UnavailableRecipientActivity() for recipient in recipients
-        }
-        for thread in snapshot.threads.values():
-            lookup = stable_thread_lookup(thread.created_at)
-            if lookup not in observations:
+        observations: dict[str, RecipientActivity] = {}
+        for recipient in recipients:
+            lookup = recipient.recipient_lookup
+            if lookup in observations:
                 continue
-            observations[lookup] = thread.execution.observe_recipient(self, snapshot, thread)
+            thread = snapshot.thread_for_lookup(lookup)
+            observations[lookup] = (
+                thread.execution.observe_recipient(self, snapshot, thread)
+                if thread is not None else UnavailableRecipientActivity()
+            )
         return observations
 
     def _emit_activity(self, activity: Activity) -> None:

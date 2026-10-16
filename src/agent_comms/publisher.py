@@ -20,7 +20,6 @@ from .bus_publication import (
     CommittedDelivery,
     HumanOrigin,
     initial_sideband,
-    stable_thread_lookup,
 )
 from .channel_targets import BuiltinChannel, is_channel_target
 from .envelope_claim_transitions import (
@@ -405,10 +404,10 @@ class Publisher:
                     and channel.matches(thread.tags)
                 ]
             selected = [snapshot.threads[name] for name in names]
-            lookups = [stable_thread_lookup(thread.created_at) for thread in selected]
+            lookups = [thread.incarnation.stable_thread_lookup for thread in selected]
             if len(set(lookups)) != len(lookups):
                 raise RelationViolationError("Recipient creation identities collide.")
-            sender_lookup = stable_thread_lookup(snapshot.threads[sender].created_at)
+            sender_lookup = snapshot.threads[sender].incarnation.stable_thread_lookup
             if sender_lookup in lookups:
                 raise RelationViolationError("Sender creation identity collides with recipient.")
             stored = self._prepare_message_unlocked(

@@ -28,7 +28,6 @@ from .coordination_errors import CoordinationError, IdentityConflict
 from .drain_failures import drain_failures
 from .coordination_cohort import next_sealed_assignment
 from .coordinator import Coordination
-from .bus_publication import stable_thread_lookup
 from .cursor_owner import CursorOwner
 from .child_process import join_retirement
 from .native_input_owner import RegistryOwner
@@ -426,7 +425,7 @@ class InputObservation:
                     self._indexed_changes_for_owner,
                     settled,
                     revision,
-                    stable_thread_lookup(entry.thread.created_at),
+                    entry.thread.incarnation.stable_thread_lookup,
                 ))
                 if marker.admission_after_seq != settled.admission_after_seq or addressed:
                     return None
@@ -458,7 +457,7 @@ class InputObservation:
         """
         owner = RegistryOwner(thread=entry.thread, admission_generation=entry.admission_generation)
         with store.session.read():
-            participant = store.participants.get(stable_thread_lookup(owner.thread.created_at))
+            participant = store.participants.get(owner.thread.incarnation.stable_thread_lookup)
             pending = next_sealed_assignment(
                 store, participant.lookup, owner.thread.name, after_seq=wire[-1],
             )

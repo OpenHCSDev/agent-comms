@@ -1024,7 +1024,10 @@ async def run(arguments):
         async with asyncio.timeout(90 if arguments.saved_source else 45):
             while True:
                 diagnostics = list((service.root/'diagnostics').glob('*.json'))
-                for activity in service.agents.all_activity().values():
+                snapshot = service.registry.snapshot()
+                for activity in service.agents.all_activity(
+                    snapshot.threads.values(), snapshot=snapshot
+                ).values():
                     activity.readiness.require_available()
                 if diagnostics:
                     observed = json.loads(diagnostics[0].read_text())

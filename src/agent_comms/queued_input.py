@@ -20,7 +20,6 @@ from .errors import RelationViolationError
 from .goals import Goal
 from .image_inputs import ImageInput
 from .assignment_states import DeferredAssignment, DeliveredAssignment
-from .bus_publication import stable_thread_lookup
 from .coordination_cohort import pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleRevision
 from .input_attempt import ACPInputIdText, InputAttempt, ReservedInput
@@ -445,7 +444,7 @@ class DeliveredInput(QueuedInput):
             path = str(comms.root / "coordination.sqlite3")
             with Coordination(path, session_type=ReadNativeCoordinationSession) as store:
                 assignments = store.assignments.recoverable_unbound_deliveries(
-                    stable_thread_lookup(owner.created_at), frozenset(rows),
+                    owner.incarnation.stable_thread_lookup, frozenset(rows),
                 )
             if not assignments:
                 return 0
@@ -474,7 +473,7 @@ class DeliveredInput(QueuedInput):
         if inbox is None or session_id not in inputs.original_sources:
             return
         store_path = inputs.comms.root / "coordination.sqlite3"
-        lookup = stable_thread_lookup(owner.created_at)
+        lookup = owner.incarnation.stable_thread_lookup
 
         def read(store: Coordination):
             with store.session.read():

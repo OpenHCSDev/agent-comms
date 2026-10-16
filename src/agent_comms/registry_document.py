@@ -7,6 +7,7 @@ import time
 from typing import TYPE_CHECKING
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
+from types import MappingProxyType
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -531,6 +532,18 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
     aliases: Mapping[str, str]
     owner_generations: Mapping[str, int]
     admission_generations: Mapping[str, int]
+    _threads_by_lookup: Mapping[str, Thread] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        # A snapshot is immutable; derive this index once from its original thread
+        # incarnations instead of hashing every unrelated thread per DM paint.
+        object.__setattr__(self, "_threads_by_lookup", MappingProxyType({
+            thread.incarnation.stable_thread_lookup: thread
+            for thread in self.threads.values()
+        }))
+
+    def thread_for_lookup(self, lookup: str) -> Thread | None:
+        return self._threads_by_lookup.get(lookup)
 
     def retired(self, name: str) -> bool:
         """Removal keeps the name's generations; they are the deletion record."""

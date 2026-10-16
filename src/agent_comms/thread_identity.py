@@ -43,6 +43,13 @@ class ThreadIncarnation:
             raise ValueError("Thread incarnation requires a finite birth")
 
     @property
+    def stable_thread_lookup(self) -> str:
+        """The durable lookup of this recorded incarnation, across renames."""
+        from .bus_publication import stable_thread_lookup
+
+        return stable_thread_lookup(self.created_at)
+
+    @property
     def has_recorded_birth(self) -> bool:
         return self.created_at > 0
 
