@@ -13,6 +13,7 @@ sys.path.insert(0, str(SOURCE / 'tools' / 'cutover'))
 
 import pytest
 
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
@@ -37,7 +38,9 @@ def files(root):
 @pytest.mark.parametrize('disposition', ['reported', 'clear', 'replace', 'edit', 'older_release'])
 def test_current_projection_preserves_reports_without_retirement(tmp_path, disposition):
     service = Comms(tmp_path / 'current')
-    service.registry.register(Thread('author', frozenset(), str(service.root)))
+    service.registry.register(Thread('author', frozenset(), str(service.root),
+                                    process_identity=ProcessIdentity.capture(os.getpid())),
+                              new_owner=True)
     author_model_report(service, 'author', TURN)
     first = service.registry.require('author')
     release = OwnerReleaseReceipt(1, 2, first)
@@ -50,11 +53,11 @@ def test_current_projection_preserves_reports_without_retirement(tmp_path, dispo
     if disposition == 'older_release':
         author_model_report(service, first.name, 'd7cc88d777b947d99b6f28f9e0b6ef97')
     before = files(service.root)
+    packet = CurrentThreadProjection.read(service.registry, service.root, first.name, None)
     with service.registry.store.reading() as document:
         history = GoalHistoryStore.acquire_read_only(service.registry.store.path)
-        packet = CurrentThreadProjection.project(service.root, service.registry.store.path, document)
-        assert packet['document'] == FieldCodec.encode(document)
-        assert RegistryDocument.from_wire(packet['document']) == document
+        assert packet.document == document
+        assert RegistryDocument.from_wire(FieldCodec.encode(packet)['document']) == document
     assert any(row.reports_turn(TURN) for row in history)
     assert FieldCodec.decode(OwnerReleaseReceipt, FieldCodec.encode(release)) == release
     assert before == files(service.root)
