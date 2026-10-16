@@ -35,14 +35,14 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
         tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
     )
     with pytest.raises(ValueError, match="paused by the owner.*Do not resume"):
-        report.invoke(reopened, {"goal_id": goal.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller("worker"))
+        report.invoke(reopened, {"goal_id": goal.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller(reopened.registry.require('worker').incarnation))
     resume = next(
         tool
         for tool in ToolRequest.members_with(ToolRequest)
         if tool.declared_name == "comms_resume_goal"
     )
     with pytest.raises(ValueError, match="paused by the owner.*Do not resume"):
-        resume.invoke(reopened, {"goal_id": goal.id, "progress": "I should continue"}, caller=ThreadCaller("worker"))
+        resume.invoke(reopened, {"goal_id": goal.id, "progress": "I should continue"}, caller=ThreadCaller(reopened.registry.require('worker').incarnation))
     assert reopened.registry.require("worker").goal == paused
     active = reopened.goals.update_goal(
         "worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable

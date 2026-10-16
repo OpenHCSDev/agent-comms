@@ -259,7 +259,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                 )
                 with pytest.raises(ValueError, match="paused by the owner.*Do not resume"):
                     report.invoke(
-                        comms, {"goal_id": paused.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller("project")
+                        comms, {"goal_id": paused.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller(comms.registry.require('project').incarnation)
                     )
                 assert comms.registry.require("project").goal == paused
                 release.set()

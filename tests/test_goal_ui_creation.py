@@ -67,7 +67,7 @@ async def test_model_goal_has_authority_before_tool_return_and_ui_retry(tmp_path
 
     monkeypatch.setenv("AGENT_COMMS_THREAD", session)
     try:
-        result = invoke_tool(comms, "comms_set_goal", {"text": "Model-authored objective"}, caller=ThreadCaller(session))
+        result = invoke_tool(comms, "comms_set_goal", {"text": "Model-authored objective"}, caller=ThreadCaller(comms.registry.require(session).incarnation))
         goal = FieldCodec.decode(Goal, result["goal"])
         store = comms.goals.open_goal_store()
         assert store.require_generation(goal.id).lifecycle == ReadyGeneration()

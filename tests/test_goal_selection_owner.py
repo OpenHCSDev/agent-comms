@@ -106,7 +106,7 @@ def test_model_edit_and_resume_use_current_goal_selection(selected_goal, monkeyp
     from agent_comms.tool_caller import ThreadCaller
 
     comms, original = selected_goal
-    caller = ThreadCaller("worker")
+    caller = ThreadCaller(comms.registry.require('worker').incarnation)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     edited = CommsEditGoalTool(goal_id=original.id, text="Edited objective").apply(comms, caller)
     current = FieldCodec.decode(Goal, edited["goal"])

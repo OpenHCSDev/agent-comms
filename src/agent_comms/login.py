@@ -6,7 +6,6 @@ import subprocess
 from pathlib import Path
 
 from .native_arguments import NativeArguments
-from .launch_runtime import RestartEnvironment
 
 
 def run_login(provider: str = "") -> int:
@@ -18,7 +17,6 @@ def run_login(provider: str = "") -> int:
         "PI_TASK",
         "PI_PROMPT",
         "PI_WORKTREE",
-        RestartEnvironment.owner_key,
         "AGENT_COMMS_MANAGED",
         "AGENT_COMMS_PROJECT_SOCKET",
         "AGENT_COMMS_PROJECT_REQUEST",

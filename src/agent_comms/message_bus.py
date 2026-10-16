@@ -24,6 +24,7 @@ from .read_basis import (
 )
 from .routing import DeliveryScope
 from .store_files import _store_lock
+from .peer_relevance import Prioritized
 
 if TYPE_CHECKING:
     from .presentation import DisplaySelection
@@ -292,14 +293,12 @@ class MessageBus:
             return (UnavailableAwarenessSegment.capture(),)
         if not rows:
             return ()
-        selected = {relation.peer.incarnation.lookup for relation in relations}
-        rows = tuple(row for row in rows if row.sender_lookup in selected)
-        first = {
-            relation.peer.incarnation.lookup
+        selected = {
+            relation.peer.require_recorded().lookup: relation.relevance.grants(Prioritized)
             for relation in relations
-            if relation.relevance.grants(Prioritized)
         }
-        rows = tuple(sorted(rows, key=lambda row: row.sender_lookup not in first))
+        rows = tuple(sorted((row for row in rows if row.sender_lookup in selected),
+                            key=lambda row: not selected[row.sender_lookup]))
         return (AwarenessSegment.capture(self.log.path, marker.root_id, rows),) if rows else ()
 
     def incoming_page(self, name: str, *, after: int, limit: int = 100) -> MessagePage:

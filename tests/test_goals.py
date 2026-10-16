@@ -29,7 +29,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     comms.threads.set_thread_configuration(comms.registry.require('worker'), model='test/model')
     comms.registry.declare(Thread(name="worker", tags=frozenset(), worktree=str(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
+    comms.threads.rename_self("renamed", caller=comms.registry.require('worker').incarnation)
     restored = wire(tmp_path).registry.require("worker")
     assert restored.goal == goal
     assert restored.model == "test/model"
@@ -39,7 +39,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
         tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
     )
     with pytest.raises(ValueError, match="no longer active"):
-        tool.invoke(comms, {"goal_id": goal.id, "status": "active", "progress": "late update"}, caller=ThreadCaller("worker"))
+        tool.invoke(comms, {"goal_id": goal.id, "status": "active", "progress": "late update"}, caller=ThreadCaller(comms.registry.require('worker').incarnation))
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="New objective"))
     with pytest.raises(ValueError, match="replaced"):
         comms.goals.update_goal(
@@ -69,22 +69,22 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     )
 
     result = resume.invoke(
-        comms, {"goal_id": goal.id, "progress": "Explicitly resumed by the user"}, caller=ThreadCaller("worker")
+        comms, {"goal_id": goal.id, "progress": "Explicitly resumed by the user"}, caller=ThreadCaller(comms.registry.require('worker').incarnation)
     )
     assert result["goal"]["id"] == goal.id
     assert FieldCodec.decode(Goal, result["goal"]).state.declared_name == "active"
     assert comms.registry.require("worker").goal.progress == "Explicitly resumed by the user"
 
     with pytest.raises(ValueError, match="cannot be resumed"):
-        resume.invoke(comms, {"goal_id": goal.id, "progress": "stale duplicate"}, caller=ThreadCaller("worker"))
+        resume.invoke(comms, {"goal_id": goal.id, "progress": "stale duplicate"}, caller=ThreadCaller(comms.registry.require('worker').incarnation))
     comms.goals.update_goal(
         "worker", BlockedGoalAction(block_reason="Need owner input before retry.")
     )
     with pytest.raises(ValueError, match="cannot be resumed"):
-        resume.invoke(comms, {"goal_id": goal.id, "progress": "stale blocked update"}, caller=ThreadCaller("worker"))
+        resume.invoke(comms, {"goal_id": goal.id, "progress": "stale blocked update"}, caller=ThreadCaller(comms.registry.require('worker').incarnation))
     comms.goals.update_goal("worker", SetGoalAction(text="Replacement goal"))
     with pytest.raises(ValueError, match="cannot be resumed"):
-        resume.invoke(comms, {"goal_id": goal.id, "progress": "stale replaced goal"}, caller=ThreadCaller("worker"))
+        resume.invoke(comms, {"goal_id": goal.id, "progress": "stale replaced goal"}, caller=ThreadCaller(comms.registry.require('worker').incarnation))
 
 
 @pytest.mark.parametrize(
@@ -111,7 +111,7 @@ def test_agent_can_set_its_own_persistent_goal(tmp_path, monkeypatch):
         if tool.declared_name == "comms_set_goal"
     )
 
-    result = tool.invoke(comms, {"text": "Verify the autonomous workflow"}, caller=ThreadCaller("worker"))
+    result = tool.invoke(comms, {"text": "Verify the autonomous workflow"}, caller=ThreadCaller(comms.registry.require('worker').incarnation))
 
     goal = comms.registry.require("worker").goal
     assert goal is not None

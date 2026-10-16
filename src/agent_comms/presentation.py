@@ -717,8 +717,7 @@ class ThreadView:
         """The current scheduler's declared dependencies, not goal-text guesses."""
         if self.goal_execution is None:
             return ()
-        return tuple(ThreadIncarnation(target.name, target.created_at)
-                     for target in self.goal_execution.wait_for)
+        return tuple(target.incarnation for target in self.goal_execution.wait_for)
 
     @property
     def presentation(self) -> ThreadPresentation:

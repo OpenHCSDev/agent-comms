@@ -12,8 +12,8 @@ async def test_new_pi_thread_requests_one_concise_title(tmp_path, monkeypatch):
     assert agent._comms.registry.require("project").auto_title_pending
     monkeypatch.setenv("AGENT_COMMS_THREAD", "project")
     with pytest.raises(ValueError, match="concise"):
-        agent._comms.threads.rename_self("hey-boss-can-you-help-me-with-this-entire-first-message", caller=ThreadCaller("project"))
-    agent._comms.threads.rename_self("project-path-sync", caller=ThreadCaller("project"))
+        agent._comms.threads.rename_self("hey-boss-can-you-help-me-with-this-entire-first-message", caller=agent._comms.registry.require('project').incarnation)
+    agent._comms.threads.rename_self("project-path-sync", caller=agent._comms.registry.require('project').incarnation)
     thread = agent._comms.registry.require("project")
     assert thread.name == "project-path-sync" and not thread.auto_title_pending
     await agent.shutdown()

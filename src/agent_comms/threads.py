@@ -124,10 +124,7 @@ class Thread(ThreadProvenance):
         from .runtime_requests import ProjectRuntimeRequest
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
-        from .launch_runtime import RestartEnvironment
-
         return {
-            RestartEnvironment.owner_key: self.name,
             "AGENT_COMMS_ROOT": str(root),
             "PI_PARENT_ID": self.parent or "",
             "AGENT_COMMS_MANAGED": "1",
@@ -471,20 +468,3 @@ class Thread(ThreadProvenance):
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
-
-
-def current_thread() -> Thread:
-    """Declare the current thread from its owner launch environment."""
-    from .launch_runtime import RestartEnvironment
-
-    name = RestartEnvironment.calling_thread()
-    tag_env = os.environ.get("PI_AGENT_TAGS") or os.environ.get("AGENT_COMMS_TAGS", "")
-    tags = frozenset(t.strip() for t in tag_env.split(",") if t.strip())
-    return Thread(
-        name=name,
-        tags=tags,
-        worktree=os.environ.get("PI_WORKTREE", os.getcwd()),
-        parent=os.environ.get("PI_PARENT_ID"),
-        task=os.environ.get("PI_TASK"),
-        process_identity=ProcessIdentity.capture(os.getpid()),
-    )

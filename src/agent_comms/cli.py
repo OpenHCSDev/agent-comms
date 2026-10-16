@@ -16,6 +16,9 @@ from contextlib import ExitStack
 from pathlib import Path
 
 from .cli_commands import CliCommand
+from .tool_caller import ThreadCaller, NoThreadCaller
+from .thread_identity import ThreadIncarnation
+from .active_route import resolve_comms_route
 from .cli_protocol import CoreError
 from .comms import wire
 from .owner_restart import StoppedOwnerFailure
@@ -41,6 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Comms root directory (default $AGENT_COMMS_ROOT, active route, or ~/.agent-comms)",
     )
+    parser.add_argument(ThreadIncarnation.value_flag, type=ThreadCaller.from_json,
+                        dest="caller", default=NoThreadCaller())
     subparsers = parser.add_subparsers(dest="command", required=True)
     for declaration in CliCommand.members_with(CliCommand):
         declaration.add_parser(subparsers)
@@ -52,12 +57,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         with ExitStack() as route_guard:
             args = build_parser().parse_args(argv)
             command = CliCommand.from_namespace(args)
-            from .active_route import resolve_comms_route
-
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.admit_client())
             comms = wire(route)
-            return command.run(comms, sys.stdout)
+            return command.run(comms, sys.stdout, caller=args.caller)
     except KeyboardInterrupt:
         return 130
     except StoppedOwnerFailure as exc:

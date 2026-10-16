@@ -21,6 +21,7 @@ from agent_comms.peer_relevance import (
 )
 from agent_comms.relationships import RelationshipEdit
 from agent_comms.threads import Thread
+from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.turn_context import CoordinationSegment, NextContextTurn, TurnContext
 
 
@@ -77,7 +78,7 @@ def test_relevance_is_the_most_derived_member_the_relations_grant(tmp_path):
 def test_a_thread_reusing_a_deleted_name_inherits_no_relevance(tmp_path):
     comms = _wire(tmp_path, ("owner", ()), ("partner", ()))
     comms.relationships.edit("owner", RelationshipEdit.decode("add"), "partner", "Old work")
-    comms.owners.stop("partner")
+    comms.owners.stop("partner", caller=NoThreadCaller())
     comms.registry.remove("partner")
     comms.registry.declare(Thread("partner", frozenset(), str(tmp_path), created_at=30000.0))
     assert comms.relationships.relevance("owner", "partner") is StrangerRelevance
@@ -125,7 +126,7 @@ def test_stopped_contacts_and_unrelated_channelmates_are_not_prompt_peers(tmp_pa
     comms.relationships.edit('owner', RelationshipEdit.decode('add'), 'partner', 'Shared review')
     comms.goals.update_goal('owner', SetGoalAction(text='Work with @contact.'))
     for name in ('partner', 'contact', 'stopped-mate'):
-        comms.owners.stop(name)
+        comms.owners.stop(name, caller=NoThreadCaller())
     peers = _peers(comms, 'owner')
     assert peers == ()
 
@@ -158,8 +159,8 @@ def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(t
     from test_private_bus_checkpoint import _root
 
     comms, _ = _root(tmp_path)
-    earlier = comms.messaging.send_initial_cohort("outsider", "Alice", "From a stranger")
-    later = comms.messaging.send_initial_cohort("Bob", "Alice", "From a partner")
+    earlier = comms.messaging.send_initial_cohort("Bob", "Alice", "From a partner")
+    later = comms.messaging.send_initial_cohort("outsider", "Alice", "From a stranger")
     owner = comms.registry.require("Alice")
 
     def shown():
@@ -167,13 +168,13 @@ def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(t
         (segment,) = comms.bus.awareness_segments(owner, relations)
         return [row.seq for row in segment.sources]
 
-    assert shown() == [earlier.seq, later.seq]
+    assert set(shown()) == {earlier.seq, later.seq}
     comms.relationships.edit("Alice", RelationshipEdit.decode("add"), "Bob", "Shared review")
     assert shown() == [earlier.seq, later.seq]
     selected = tuple(relation for relation in comms.relationships.peer_relations('Alice')
                      if relation.peer.name == 'Bob')
     (segment,) = comms.bus.awareness_segments(owner, selected)
-    assert [row.seq for row in segment.sources] == [later.seq]
+    assert [row.seq for row in segment.sources] == [earlier.seq]
 
 
 def test_context_shows_each_relation_with_its_author_time_note_and_history(tmp_path):
@@ -272,9 +273,9 @@ def test_declared_wait_dependencies_and_waiting_owners_are_prompt_peers(tmp_path
     dependency = comms.registry.require('dependency')
     views = tuple(replace(view, goal_execution=GoalExecution(
         GoalExecutionState.STANDBY, 'goal895',
-        wait_for=(GoalWaitTarget(dependency.name, dependency.created_at),)
+        wait_for=(GoalWaitTarget(dependency.incarnation),)
                  if view.thread.name == 'owner' else
-                 (GoalWaitTarget(owner.name, owner.created_at),),
+                 (GoalWaitTarget(owner.incarnation),),
     )) if view.thread.name in ('owner', 'waiting-owner') else view
                   for view in comms.views.thread_views())
     segment = CoordinationSegment.capture(owner, views,

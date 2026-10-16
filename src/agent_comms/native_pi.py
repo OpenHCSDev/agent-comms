@@ -40,9 +40,11 @@ from .private_path import (
     FileRevision,
     PrivateDirectoryRole,
     PrivateFileRole,
+    PrivateSocketRole,
     TrustedAncestorRole,
 )
 from .registry_store import RegistryStore
+from .runtime_requests import ProjectRuntimeRequest
 from .selected_session import SavedSelectedSession, SelectedSession
 from .selected_tool_broker import NativeToolMode
 from .thread_identity import ThreadIncarnation
@@ -429,6 +431,17 @@ class NativePiRpcLaunch:
     configuration: RestartEnvironment = field(kw_only=True)
     runtime: LaunchRuntime = field(kw_only=True)
 
+    @contextmanager
+    def bound_arguments(self):
+        """Keep the original socket directory borrowed for this child lifetime."""
+        try:
+            position = self.argv.index(ProjectRuntimeRequest.socket_flag) + 1
+        except ValueError:
+            yield self.argv
+            return
+        with PrivateSocketRole.address(Path(self.argv[position])) as address:
+            yield (*self.argv[:position], str(address), *self.argv[position + 1:])
+
     @classmethod
     def bootstrap(
         cls, cli, arguments, cwd, environment, configuration: RestartEnvironment,
@@ -458,6 +471,8 @@ class NativePiRpcLaunch:
             str(cli.with_name("agent-comms-project-bootstrap.mjs")),
             str(cli),
             *arguments,
+            *(argument for segment in session_context for argument in segment.native_arguments()),
+            *ProjectRuntimeRequest.take_native_arguments(env),
             "--append-system-prompt",
             str(instructions),
             "--append-system-prompt",

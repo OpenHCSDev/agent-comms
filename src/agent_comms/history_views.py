@@ -51,7 +51,6 @@ from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, DMDisplayBasis
 from .store_files import _store_lock
 from .thread_presentation import ThreadPresentation
-from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
@@ -580,11 +579,8 @@ class HistoryViews:
             detail["pending"] = self.bus.pending_count(name)
         return detail
 
-    def poll(self, name: str | None = None) -> Mapping:
-        """One-shot status snapshot: self state plus inbox."""
-        if name is None:
-            me = current_thread()
-            name = me.name
+    def poll(self, name: str) -> Mapping:
+        """One-shot status snapshot for an explicitly selected thread."""
         self.registry.require(name)
         return {
             "thread": self.thread_detail(name),

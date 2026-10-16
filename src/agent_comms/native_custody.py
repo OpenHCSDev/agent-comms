@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
@@ -16,7 +15,6 @@ from .native_pi import NativePiRpcLaunch
 from .native_errors import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
-from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from .session_revision import SessionRevision
@@ -43,13 +41,8 @@ class PiSessionChild:
     async def start(cls, key, attestation):
         launch, _ = key
         with ExitStack() as resources:
-            environment = dict(launch.env)
-            if "AGENT_COMMS_PROJECT_SOCKET" in environment:
-                address = resources.enter_context(PrivateSocketRole.address(
-                    Path(environment["AGENT_COMMS_PROJECT_SOCKET"])
-                ))
-                environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
-            proc = await AttachedChild.start(launch.argv, cwd=str(launch.cwd), env=environment)
+            argv = resources.enter_context(launch.bound_arguments())
+            proc = await AttachedChild.start(argv, cwd=str(launch.cwd), env=launch.env)
             assert proc.stdout is not None and proc.stderr is not None
             return cls(
                 proc,

@@ -321,7 +321,7 @@ class TestThreadOps:
         wired.ledger.merge({"owner": "PR111", "members": ["PR111", "fixer"]}, author="PR111")
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
 
-        result = wired.threads.rename_self("planner", caller=ThreadCaller("PR111"))
+        result = wired.threads.rename_self("planner", caller=wired.registry.require('PR111').incarnation)
 
         assert result.previous == "PR111"
         assert result.current == "planner"
@@ -353,21 +353,21 @@ class TestThreadOps:
     def test_rename_self_rejects_collisions_and_stopped_threads(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         with pytest.raises(RelationViolationError, match="already in use"):
-            wired.threads.rename_self("PR111", caller=ThreadCaller("fixer"))
+            wired.threads.rename_self("PR111", caller=wired.registry.require('fixer').incarnation)
         wired.owners.stop("fixer")
         with pytest.raises(RelationViolationError, match="running"):
-            wired.threads.rename_self("renamed", caller=ThreadCaller("fixer"))
+            wired.threads.rename_self("renamed", caller=wired.registry.require('fixer').incarnation)
 
     def test_rename_self_reclaims_own_alias_but_not_another_owners(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "PR111")
-        assert wired.threads.rename_self("pr17", caller=ThreadCaller("PR111")).current == "pr17"
-        assert wired.threads.rename_self("PR111", caller=ThreadCaller("PR111")).current == "PR111"
+        assert wired.threads.rename_self("pr17", caller=wired.registry.require('PR111').incarnation).current == "pr17"
+        assert wired.threads.rename_self("PR111", caller=wired.registry.require('PR111').incarnation).current == "PR111"
         assert wired.registry.snapshot().aliases == {"pr17": "PR111"}
         assert wired.registry.require("fixer").parent == "PR111"
 
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         with pytest.raises(RelationViolationError, match="already in use"):
-            wired.threads.rename_self("pr17", caller=ThreadCaller("fixer"))
+            wired.threads.rename_self("pr17", caller=wired.registry.require('fixer').incarnation)
 
     def test_managed_rename_normalizes_title_and_proves_owner(self, wired):
         wired.registry.declare(
@@ -425,7 +425,7 @@ class TestThreadOps:
 
     def test_old_alias_cannot_be_reused(self, wired, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
-        wired.threads.rename_self("reviewer", caller=ThreadCaller("fixer"))
+        wired.threads.rename_self("reviewer", caller=wired.registry.require('fixer').incarnation)
         with pytest.raises(RelationViolationError, match="permanent alias"):
             wired.registry.register(Thread(name="fixer", tags=frozenset(), worktree="/tmp/other"))
 

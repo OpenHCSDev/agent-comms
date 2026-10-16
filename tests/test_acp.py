@@ -587,7 +587,7 @@ class TestAgentTurn:
             monkeypatch.setenv("AGENT_COMMS_THREAD", "proj")
             from agent_comms.tool_caller import ThreadCaller
 
-            wired.threads.rename_self("renamed-proj", caller=ThreadCaller("proj"))
+            wired.threads.rename_self("renamed-proj", caller=wired.registry.require('proj').incarnation)
             yield ae.ToolEnd(id="rename", ok=True, output="renamed", name="tool")
             yield ae.StreamSettled()
             yield ae.Done(ok=True, text="renamed")

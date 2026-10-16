@@ -83,7 +83,6 @@ class SelectedSession:
         for name in (
             "PI_PARENT_ID",
             "PI_AGENT_TAGS",
-            RestartEnvironment.owner_key,
             "AGENT_COMMS_TAGS",
             "AGENT_COMMS_SELECTED_TOOL_SOCKET",
             "AGENT_COMMS_SELECTED_TOOL_TOKEN",

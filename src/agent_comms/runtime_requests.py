@@ -16,9 +16,10 @@ from abc import abstractmethod
 from functools import partial
 from .coordinator import Coordination
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Self, ClassVar
 
 from .command import Command
+from .tool_caller import NoThreadCaller
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .private_bus_checkpoint import ContextManifestReference
@@ -102,6 +103,19 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
     must still observe its original registry lease before each project check.
     """
     binding: LiveThreadOwnerBinding
+    socket_flag: ClassVar[str] = "--agent-comms-project-socket"
+    request_flag: ClassVar[str] = "--agent-comms-project-request"
+
+    @classmethod
+    def take_native_arguments(cls, environment: dict[str, str]) -> tuple[str, ...]:
+        """Consume the original captured binding at the native CLI boundary."""
+        socket = environment.pop("AGENT_COMMS_PROJECT_SOCKET", None)
+        request = environment.pop("AGENT_COMMS_PROJECT_REQUEST", None)
+        if socket is None and request is None:
+            return ()
+        if socket is None or request is None:
+            raise ValueError("Native project binding is incomplete")
+        return cls.socket_flag, socket, cls.request_flag, request
 
     @classmethod
     def for_native(cls, snapshot, thread):
@@ -478,5 +492,5 @@ class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeReq
             raise ValueError("Correction belongs to another original context source")
         request = CorrectAnnotationCliCommand(
             label=self.label, answer=self.answer, worktree=self.worktree)
-        corrected = await Coordination.run_worker(partial(request.apply, ctx.server.agent._comms))
+        corrected = await Coordination.run_worker(partial(request.apply, ctx.server.agent._comms, caller=NoThreadCaller()))
         return FieldCodec.encode(corrected)

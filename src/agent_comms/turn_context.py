@@ -413,6 +413,10 @@ class ContextSegment(
     def public_description(self) -> str:
         return self.public_title()
 
+    def native_arguments(self) -> tuple[str, ...]:
+        """Launch capabilities contributed by this segment's declared owner."""
+        return ()
+
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()
 
@@ -877,6 +881,9 @@ class SessionCoordinationSegment(InstructionSegment):
             instruction=instruction, response_instruction=response_instruction,
             owner=owner.incarnation, parent=owner.parent, project=owner.worktree,
         )
+
+    def native_arguments(self) -> tuple[str, ...]:
+        return self.owner.require_recorded().cli_arguments
 
     def values(self) -> dict[str, object]:
         return dict(response_instruction=self.response_instruction.content,

@@ -404,7 +404,7 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     monkeypatch.setenv("AGENT_COMMS_THREAD", "other")
     invoke_tool(comms, "comms_tags", {"action": "create", "name": "new"})
     assert "#new" in comms.channels.channels()
-    invoke_tool(comms, "comms_thread_tags", {"add": "new,api", "remove": "ui"}, caller=ThreadCaller("other"))
+    invoke_tool(comms, "comms_thread_tags", {"add": "new,api", "remove": "ui"}, caller=ThreadCaller(comms.registry.require('other').incarnation))
     assert comms.registry.require("other") == replace(
         original, tags=frozenset({"new", "api"}), channel_scope_generation=1
     )

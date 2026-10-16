@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import multiprocessing
-import os
 import sqlite3
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
@@ -155,7 +154,6 @@ class IndexSlice:
     @classmethod
     def initialize_worker(cls, cancelled: Event) -> None:
         """Bind the parent's cancellation signal, never its agent identity or stores."""
-        os.environ.pop("AGENT_COMMS_THREAD", None)
         cls._worker_cancellation = cancelled
 
     @classmethod

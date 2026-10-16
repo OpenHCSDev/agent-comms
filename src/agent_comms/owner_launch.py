@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import argparse
 import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -13,6 +14,7 @@ from . import launch_runtime
 from .native_arguments import NativeArguments
 from .registry_document import RegistrySnapshot
 from .threads import Thread
+from .thread_identity import ThreadIncarnation
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,8 +36,8 @@ class RetainedOwnerLaunch:
         process = thread.require_process()
         platform = Platform.current()
         platform.require(process)
-        command = Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0", 1)[0]
-        observed_interpreter = os.fsdecode(command)
+        command = [os.fsdecode(value) for value in Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0") if value]
+        observed_interpreter = command[0] if command else ""
         if not observed_interpreter or (
             interpreter is not None and observed_interpreter != interpreter
         ):
@@ -44,12 +46,18 @@ class RetainedOwnerLaunch:
         values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}
         platform.require(process)
-        route = environment.get(launch_runtime.RestartEnvironment.owner_key)
-        if not route or not environment.get(NativeArguments.binary_key):
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument(ThreadIncarnation.value_flag, type=ThreadIncarnation.from_json,
+                            dest="incarnation", required=True)
+        try:
+            selected, _ = parser.parse_known_args(command[1:])
+        except SystemExit as error:
+            raise RelationViolationError("Owner launch has no valid recorded caller") from error
+        if not environment.get(NativeArguments.binary_key):
             raise RelationViolationError("Owner launch configuration cannot be verified")
         # A worker's launch name may have been renamed since exec. The original
         # snapshot owns that relation; a PID or spelling match cannot grant it.
-        if snapshot.owner_identity(route) != snapshot.owner_identity(thread.name):
+        if not selected.incarnation.current(snapshot) or selected.incarnation.resolved(snapshot) != thread.incarnation:
             raise RelationViolationError("Owner launch names another registry incarnation")
         snapshot.require_owner_process(snapshot.owner_identity(thread.name), process)
         result = cls(process, observed_interpreter, environment)

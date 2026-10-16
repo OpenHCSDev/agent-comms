@@ -44,7 +44,7 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     before = comms.registry.snapshot()
     receipt = invoke_tool(
-        comms, "comms_collaboration", {"action": "add", "peer": "peer", "note": "Review"}, caller=ThreadCaller("owner")
+        comms, "comms_collaboration", {"action": "add", "peer": "peer", "note": "Review"}, caller=ThreadCaller(comms.registry.require('owner').incarnation)
     )
     assert receipt["collaboration"]["owner"] == "owner"
     mirror = comms.relationships.collaborations("peer")[0]
@@ -63,9 +63,9 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
         "peer", RelationshipEdit.decode("update"), "owner", "Fixes"
     )
     assert updated.note == "Fixes" and updated.created_at == original.created_at
-    assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller("owner"))["collaborations"][0]["note"] == "Fixes"
+    assert invoke_tool(comms, "comms_collaborations", {}, caller=ThreadCaller(comms.registry.require('owner').incarnation))["collaborations"][0]["note"] == "Fixes"
     monkeypatch.setenv("AGENT_COMMS_THREAD", "peer")
-    invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "owner"}, caller=ThreadCaller("peer"))
+    invoke_tool(comms, "comms_collaboration", {"action": "remove", "peer": "owner"}, caller=ThreadCaller(comms.registry.require('peer').incarnation))
     assert reopened.relationships.collaborations("owner") == ()
     assert reopened.relationships.collaborations("peer") == ()
     assert reopened.relationships.edit("owner", RelationshipEdit.decode("remove"), "peer") is None
@@ -286,7 +286,7 @@ def test_live_alias_resolves_but_deleted_alias_does_not_erase_note(tmp_path, mon
     monkeypatch.setenv("AGENT_COMMS_THREAD", "peer")
     from agent_comms.tool_caller import ThreadCaller
 
-    comms.threads.rename_self("reviewer", caller=ThreadCaller("peer"))
+    comms.threads.rename_self("reviewer", caller=comms.registry.require('peer').incarnation)
     assert collaboration_rows(comms)[0].target == "reviewer"
     comms.owners.stop("reviewer")
     comms.registry.remove("reviewer")

@@ -83,7 +83,7 @@ async def test_experiment_b_new_model_action_uses_real_tool_and_event(owner, mon
         previous = comms.goals.goal_snapshot("worker")
         tool.invoke(
             comms, {"status": "checkpoint", "goal_id": goal.id, "progress": "Evidence recorded"},
-            caller=ThreadCaller("worker")
+            caller=ThreadCaller(comms.registry.require('worker').incarnation)
         )
         event = wire(comms.root).goals.goal_changed("worker", previous)
         assert isinstance(event, GoalChanged)

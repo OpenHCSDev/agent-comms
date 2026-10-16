@@ -31,6 +31,8 @@ from .store_files import _store_lock
 from .thread_identity import AdmissionIdentity, OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
+from .thread_identity import RecordedThreadIncarnation
+from .tool_caller import ToolCaller
 
 _LOG = logging.getLogger(__name__)
 
@@ -322,17 +324,14 @@ class OwnerLifecycle:
                 guard=lambda: self._signal_guard(thread, admission_generation),
             )
 
-    def stop(self, name: str) -> None:
+    def stop(self, name: str, *, caller: ToolCaller) -> None:
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
             if not snapshot.statuses[thread.name].active:
                 return
             if thread.pid == os.getpid():
-                if RestartEnvironment.called_by(
-                    thread.name,
-                    canonicalize=lambda caller: self.registry.require(caller).name,
-                ):
+                if caller.owns_thread(thread, snapshot):
                     self._release_current_owner_unlocked(thread.name)
                 else:
                     self.registry.unregister(thread.name)
@@ -415,7 +414,6 @@ class OwnerLifecycle:
                 )
         env.update(
             {
-                RestartEnvironment.owner_key: thread.name,
                 "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
                 "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
                 "PI_WORKTREE": thread.worktree,
@@ -444,7 +442,8 @@ class OwnerLifecycle:
 
         with owner_process_output(self.root, thread) as output:
             ParentedProcess.launch(
-                (str(launch_runtime.interpreter), "-m", "agent_comms.worker"),
+                (str(launch_runtime.interpreter), "-m", "agent_comms.worker",
+                 *thread.incarnation.cli_arguments),
                 env=env,
                 cwd=thread.worktree,
                 output=output,
@@ -485,13 +484,13 @@ class OwnerLifecycle:
             self._require_same_stop_owner(thread, admission_generation)
             self._retire_owner_unlocked(thread, admission_generation)
 
-    def release(self, name: str) -> None:
-        """Let the calling participant mark itself stopped without signalling."""
-        caller = RestartEnvironment.calling_thread()
+    def release(self, name: str, *, caller: RecordedThreadIncarnation) -> None:
+        """Let the explicitly selected participant retire its own process."""
         with _store_lock(self._wire_lock_path):
-            canonical = self.registry.require(name).name
-            if self.registry.require(caller).name != canonical:
-                raise RelationViolationError(f"Thread {caller!r} cannot release {canonical!r}.")
+            snapshot = self.registry.snapshot()
+            canonical = snapshot.canonical_name(name)
+            if not caller.current(snapshot) or caller.resolved(snapshot) != snapshot.threads[canonical].incarnation:
+                raise RelationViolationError(f"Thread {caller.name!r} cannot release {canonical!r}.")
             self._release_current_owner_unlocked(canonical)
 
     def _release_current_owner_unlocked(self, canonical: str) -> None:
