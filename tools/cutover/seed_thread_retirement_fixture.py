@@ -115,6 +115,7 @@ async def ready(root, owner):
 
 
 def main():
+    GoalReportMemberRetirement.require_original_declaration()
     root, route = map(Path, sys.argv[1:])
     root.mkdir(mode=0o700)
     route.parent.mkdir(mode=0o700)
