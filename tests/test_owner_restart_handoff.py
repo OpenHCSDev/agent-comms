@@ -26,6 +26,9 @@ def test_selected_runtime_stays_pinned_when_current_changes(tmp_path, monkeypatc
     first, second = tmp_path / "first", tmp_path / "second"
     first.mkdir()
     second.mkdir()
+    for prefix in (first, second):
+        (prefix / "bin").mkdir()
+        (prefix / "bin/python").symlink_to(LaunchRuntime.running().interpreter)
     pointer.symlink_to(first)
     selected = LaunchRuntime.current()
     pointer.unlink()
