@@ -112,7 +112,8 @@ class BusPageIndex:
             opened.metadata.access.require_append()
             self.prepare(opened)
         with self.snapshot():
-            opened.require_page_index_coverage(self)
+            if not self.covers(opened):
+                raise StaleBusPageIndexError("Page index does not cover its opened source")
             yield
 
     @contextmanager
@@ -148,7 +149,7 @@ class BusPageIndex:
             saved, source, offset, rows = prepared
             if saved == source:
                 return
-            with self.writing() as db:
+            with self._writing() as db:
                 if BusPageSource.one(db, singleton=1) != saved:
                     continue
                 if offset == 0:
@@ -217,11 +218,11 @@ class BusPageIndex:
 
     def invalidate(self) -> None:
         """Discard damaged derived coverage; prepare owns the subsequent rebuild."""
-        with self.writing() as db:
+        with self._writing() as db:
             BusPageSource.delete(db, singleton=1)
 
     @contextmanager
-    def writing(self):
+    def _writing(self):
         with closing(CoordinationStore.writer(self.path)) as db, db:
             db.execute("PRAGMA synchronous=FULL")
             db.execute("BEGIN IMMEDIATE")
