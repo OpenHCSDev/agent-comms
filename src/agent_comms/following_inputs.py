@@ -13,7 +13,7 @@ from .coordinator import Coordination
 from .owned_send_admission import OwnedSendAdmission
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .thread_identity import AdmissionIdentity, TurnId
-from .turn_input_source import SelectedOriginalInput
+from .turn_input_source import AcceptedFollowingInput, SelectedOriginalInput
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -41,7 +41,7 @@ class FollowingInputs:
     async def open(self, session: TrackedTurnSession) -> None:
         return None
 
-    async def started(self, input_id: str) -> None:
+    async def started(self, input_id: str) -> AcceptedFollowingInput:
         raise AssertionError("A turn without an inbox cannot start a following input")
 
     async def refused(self, input_id: str | None) -> None:
@@ -110,9 +110,11 @@ class OwnerFollowingInputs(FollowingInputs):
             after_seq=session.prompt_send_boundary.following_after_seq,  # type: ignore[union-attr]
         )
 
-    async def started(self, input_id: str) -> None:
+    async def started(self, input_id: str) -> AcceptedFollowingInput:
+        source = self.inputs.following_sources[self.session_id][input_id]
         await self.inputs.input_started(self.session_id, input_id, self.scope)
         await self.ready(self.inputs, self.session_id)
+        return source
 
     async def refused(self, input_id: str | None) -> None:
         await self.inputs.input_refused(self.session_id, input_id)

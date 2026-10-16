@@ -27,8 +27,8 @@ class NothingProduced extends NativeRunState {
         // One decision constructs the state for this refusal. Retryable and
         // terminal states then own disjoint behavior without checking a flag.
         if (!this.owner.tracked) return this;
-        const reason = this.owner.retryReason(message);
-        if (reason === undefined) return this.terminal(message);
+        if (!this.owner.retryable(message)) return this.terminal(message);
+        const reason = message.errorMessage || 'Provider request failed';
         return (this.attempt < RecoveryBudget.attempts
             ? new RefusedNothingProduced(this.owner, this.attempt, reason)
             : new FailedProviderRequest(this.owner, this.attempt, reason)
@@ -43,7 +43,11 @@ class RecoveringNothingProduced extends NothingProduced {
         return super.produced();
     }
     terminal(message) {
-        this.owner.finishRetry(false, message?.errorMessage, this.attempt - 1);
+        // A clean provider stop completes recovery. Whether its text answers
+        // the selected task belongs to Core's TrackedTerminal, not this run.
+        const success = message?.stopReason === 'stop';
+        this.owner.finishRetry(success, success ? undefined :
+            (message?.errorMessage || 'Provider retry closed before completing'), this.attempt - 1);
         return super.terminal();
     }
     close() { this.owner.state = this.terminal(); }
@@ -149,11 +153,6 @@ export class NativeTurnRun {
     }
     get tracked() { return this.inputs.size > 0; }
     get retrying() { return this.state.retrying; }
-    retryReason(message) {
-        if (this.retryable(message)) return message.errorMessage || 'Provider request failed';
-        if (message.stopReason === 'stop') return 'Provider returned no authoritative response';
-        return undefined;
-    }
     include(messages, claims) {
         for (const message of messages) {
             if (message.role === 'user' && claims.has(message.inputId)) this.inputs.add(message.inputId);

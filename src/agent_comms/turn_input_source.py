@@ -209,6 +209,10 @@ class ScheduledOriginalInput(DependencyOriginalInput):
 class FollowingTurnInput(TurnInputSource):
     keys: tuple[str, ...]
 
+    def continue_response(self, response, parts):
+        """An actual following request may revise the turn's automatic answer."""
+        return response.later_input(parts)
+
     def display(self, dispositions: InputDispositions, text: str) -> str:
         row = dispositions.lookup(self.keys[0]) if self.keys else None
         return row.source_text if row is not None and row.exists else text
@@ -234,3 +238,7 @@ class DeliveredFollowingInput(AcceptedFollowingInput):
     """A pending bus message handed to the recipient's running turn."""
 
     origins: tuple[Message, ...]
+
+    def continue_response(self, response, parts):
+        """Background handling has no automatic reply of its own."""
+        return response.notification(parts)
