@@ -34,7 +34,7 @@ from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .restart_refusals import RestartRefusal
 from .private_path import PrivateDirectoryRole
 from .thread_identity import RecordedThreadIncarnation
-from .store_files import _store_lock
+from .store_files import _atomic_write_text, _store_lock
 from .wire_watch import DirectoryWatchSource, WatchSource, WireWatch
 
 DIRECTORY = "owner-restart-queue"
@@ -130,12 +130,16 @@ class RestartTarget:
         if Path(self.agent_bin).is_absolute() and not os.access(self.agent_bin, os.X_OK):
             raise ValueError("Target agent entrypoint is unavailable")
 
+    @property
+    def is_current_watcher(self) -> bool:
+        return self.launch_runtime == LaunchRuntime.running()
+
     def require_watcher(self, comms: Comms) -> None:
         self.require_available(comms)
         current = RestartEnvironment.inherit(
             comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode(), self.launch_runtime)
         )
-        if self.launch_runtime != LaunchRuntime.running() or self.runtime != current:
+        if not self.is_current_watcher or self.runtime != current:
             raise ValueError("Watcher target runtime changed")
 
 
@@ -220,7 +224,7 @@ class RestartQueue:
 
     def save(self, record: QueuedRestart) -> None:
         path = self.active_path(record.selection.identity.incarnation.require_recorded())
-        _save(path, record)
+        _atomic_write_text(path, json.dumps(FieldCodec.encode(record), sort_keys=True), fsync_parent=True)
         if not record.state.active:
             self.move(path, record)
 
@@ -246,24 +250,6 @@ class RestartQueue:
         yield from self.active_for(owner)
         for path in sorted((self.directory / 'settled' / owner.lookup).glob('*.json')):
             yield self.read(path)
-
-
-def _save(path: Path, record: QueuedRestart) -> None:
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        with temporary.open("x", encoding="utf-8") as stream:
-            os.chmod(temporary, 0o600)
-            json.dump(FieldCodec.encode(record), stream, sort_keys=True)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-        directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
-        try:
-            os.fsync(directory)
-        finally:
-            os.close(directory)
-    finally:
-        temporary.unlink(missing_ok=True)
 
 
 def enqueue(comms: Comms, name: str) -> QueuedRestart:
@@ -330,7 +316,7 @@ def step(comms: Comms) -> None:
     with queue.locked():
         initial_records = tuple(queue.active_records())
     for initial in initial_records:
-        if not initial.state.pending or initial.target.launch_runtime != LaunchRuntime.running():
+        if not initial.state.pending or not initial.target.is_current_watcher:
             continue
         with queue.locked():
             current = tuple(queue.active_for(initial.selection.identity.incarnation.require_recorded()))
@@ -414,7 +400,7 @@ async def run(comms: Comms) -> None:
             def release_if_empty():
                 with queue.locked():
                     pending = tuple(record for record in queue.active_records() if record.state.pending)
-                    if any(record.target.launch_runtime == LaunchRuntime.running() for record in pending):
+                    if any(record.target.is_current_watcher for record in pending):
                         return False
                     fcntl.flock(lock, fcntl.LOCK_UN)
                     # Enqueue may have raced this older runtime's watcher. Its
@@ -439,7 +425,7 @@ def main() -> None:
         queue = RestartQueue(comms.root / DIRECTORY)
         with queue.locked():
             for record in queue.active_records():
-                if record.state.pending and record.target.launch_runtime == LaunchRuntime.running():
+                if record.state.pending and record.target.is_current_watcher:
                     queue.save(record.transition(
                         BlockedRestart(reason=f"Watcher failed: {type(exc).__name__}: {exc}")
                     ))

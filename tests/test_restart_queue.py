@@ -24,7 +24,7 @@ from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
 from agent_comms.wire_watch import DirectoryWatchSource, WatchSource, open_wire_watcher
 from explicit_private_owner_installed_journey import Subscriber
-from test_backend_native_lifecycle import native_backend
+from test_backend_native_lifecycle import native_backend as native_backend
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="Linux watcher")
@@ -66,9 +66,13 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
         target = queue.RestartTarget.capture(comms, launch.environment)
-        old_target = replace(
-            target, interpreter=sys.executable,
-            agent_bin=LaunchRuntime.running().native_entrypoint,
+        old_runtime = LaunchRuntime.running()
+        old_target = queue.RestartTarget(
+            str(old_runtime.interpreter),
+            RestartEnvironment.inherit(comms.owners.restart_environment(
+                RestartEnvironment.inherit(os.environ).encode(), old_runtime
+            )),
+            comms.owners.restart_entrypoint(launch.binary, old_runtime),
         )
         assert old_target != target
         old = queue.QueuedRestart(
@@ -90,6 +94,8 @@ async def test_pending_target_is_superseded_without_reading_settled_history(
         request = queue.enqueue(comms, owner.name)
         assert len(reads) == 1
         assert request.state.pending and request.id != old.id
+        await asyncio.wait_for(queue.run(comms), 5)
+        assert watchers == [request.target, request.target]
         states = {record.id: record.state for record in queue.status(comms, owner.name)}
         assert isinstance(states[old.id], queue.StaleRestart)
         assert old.target.interpreter in states[old.id].reason
