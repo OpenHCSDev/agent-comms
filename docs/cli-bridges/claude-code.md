@@ -26,8 +26,11 @@ Monitor(
 ```
 
 Monitor owns notification injection and its duration. The bridge owns its Core
-watch child and joins that child when cancelled. One state-directory lock prevents
-two copies of the replacement monitor from consuming the same inbox.
+watch child and joins that child when cancelled. The shared session lock prevents
+two watchers for the same session, even with different state directories.
+Before reading the inbox, the bridge emits a fresh challenge and waits for that
+challenge in this session's existing transcript subscription. A wrong receiver
+fails after 30 seconds without consuming or acknowledging a message.
 
 ## What is shared
 
@@ -39,9 +42,9 @@ two copies of the replacement monitor from consuming the same inbox.
 - `Inbox` owns the delivery lifetime and lock; `Watch` also starts transcript
   publication. `Send` owns a required target, body and kind. Argument decoding
   constructs the operation; execution does not compare command strings.
-- `LineMonitorBridge` emits one JSON string per stdout line. Newlines and other
-  control characters are escaped reversibly; bodies are not shortened. Ordinary
-  progress goes to stderr. The same class can serve another line-monitor harness.
+- `LineMonitorBridge` emits typed JSON monitor frames for incoming messages,
+  carrying the session, message ID, a fresh token, and complete text. Ordinary
+  send/failure displays remain JSON strings. Progress goes to stderr.
 - `ClaudeBridge` composes `LineMonitorBridge` delivery with `TranscriptBridge`
   publication. Claude's completed JSONL blocks supply replies, visible reasoning,
   tool calls/results and current activity without a plugin or settings hook.
@@ -53,14 +56,20 @@ two copies of the replacement monitor from consuming the same inbox.
 
 ## Delivery limits
 
-A flushed stdout line is recorded as **emitted**, not acknowledged by Claude.
-Codex's API acknowledgment is recorded as **delivered**. These are different
-transport facts; neither establishes that a human saw the terminal.
+A flushed stdout frame is **emitted**, not delivered. Core's bridge watch uses
+explicit acknowledgment: reading the stream never marks its messages read.
+The existing Claude transcript decoder recognizes monitor task notifications.
+Only a complete frame matching the target session, message ID, token and original
+body changes delivery to **delivered** and acknowledges that exact Core message.
+The journal retains the original session record ID and timestamp. Codex and
+OpenCode complete the same shared transition after their API acknowledgment.
+Neither establishes that a human saw the terminal.
 
-An attempted message is recorded before delivery. Unconfirmed attempts remain
-visible and are not automatically replayed. Core advances its own display cursor
-as its watch generator continues; there is still a crash gap before the bridge
-records an emitted message. This is not an exactly-once transport.
+Unconfirmed and emitted attempts remain visible and are not automatically
+replayed. Historical emissions have no new token and remain untouched. Absence
+from the bounded startup window cannot prove a message was never received.
+If Monitor truncates a frame, it is not confirmation and the message stays
+pending. This is not an exactly-once transport.
 
 The monitor reports when its stream ends. It does not restart itself or resend
 failed inputs. A new Monitor reuses the same journal. Failures are surfaced rather

@@ -15,6 +15,7 @@ from contextlib import aclosing, suppress
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar
 
@@ -355,11 +356,15 @@ class Outcome(Enum):
     DELIVERED = 'delivered'
     EMITTED = 'emitted'
 
+    @property
+    def acknowledges(self) -> bool:
+        return self in (Outcome.DELIVERED, Outcome.FILTERED)
+
 @dataclass(frozen=True)
 class DeliveryRow(TypedTable):
     id: str = field(metadata={"sql": Column(primary_key=True)})
     payload: str
-    outcome: Outcome
+    outcome: Outcome = field(metadata={"sql": Column(index=True)})
 
 
 @dataclass(frozen=True)
@@ -434,9 +439,9 @@ class DeliveryJournal:
             evidence.record(self, message)
             DeliveryRow.update(self.db, where="id=?", parameters=(message.message_id,), outcome=outcome)
 
-    def delivered(self, message: Message) -> bool:
+    def acknowledged(self, message: Message) -> bool:
         rows = DeliveryRow.select(self.db, where="id=?", parameters=(message.message_id,))
-        return bool(rows and rows[0].outcome is Outcome.DELIVERED)
+        return bool(rows and rows[0].outcome.acknowledges)
 
     def emitting(self, message: Message) -> str:
         token = secrets.token_hex(24)
@@ -453,11 +458,15 @@ class DeliveryJournal:
         message = Message.from_wire(json.loads(row.payload))
         if notification.text != CliBridge.incoming_text(message):
             raise ValueError('Monitor notification does not match the original message')
+        if row.outcome is Outcome.DELIVERED:
+            return None  # Reopening history preserves the first confirmation record/time.
         return message
 
     def report_unconfirmed(self) -> None:
-        rows = DeliveryRow.column_values(self.db, "id", where="outcome=?",
-                                         parameters=(Outcome.UNCONFIRMED.value,))
+        pending = tuple(outcome.value for outcome in Outcome if not outcome.acknowledges)
+        placeholders = ','.join('?' for _ in pending)
+        rows = DeliveryRow.column_values(self.db, "id", where=f"outcome IN ({placeholders})",
+                                         parameters=pending)
         if rows:
             print(f'Unconfirmed messages retained without replay: {rows}',
                   file=sys.stderr, flush=True)
@@ -471,6 +480,12 @@ class CoreConnection:
     def __init__(self, executable: str, binding: Binding) -> None:
         self.executable = executable
         self.binding = binding
+
+    @cached_property
+    def comms(self):
+        from agent_comms.comms import Comms
+
+        return Comms(Path(self.binding.root))
 
     async def send(self, target: str, body: str, kind: str) -> SendResult:
         child = await asyncio.create_subprocess_exec(
@@ -511,10 +526,7 @@ class CoreConnection:
                 await self.join(child)
 
     async def acknowledge(self, message: Message) -> None:
-        from agent_comms.comms import Comms
-
-        comms = Comms(Path(self.binding.root))
-        await asyncio.to_thread(comms.messaging.acknowledge, self.binding.bus, (message.reference,))
+        await asyncio.to_thread(self.comms.messaging.acknowledge, self.binding.bus, (message.reference,))
 
     @staticmethod
     async def join(child: asyncio.subprocess.Process) -> None:
@@ -664,7 +676,7 @@ class CliBridge(ABC, Generic[BridgeOptions]):
     async def finish_delivery(self, message: Message, outcome: Outcome,
                               evidence: MonitorEvidence = UnrecordedMonitor()) -> None:
         self.journal.finish(message, outcome, evidence)
-        if outcome is Outcome.DELIVERED or outcome is Outcome.FILTERED:
+        if outcome.acknowledges:
             await self.core.acknowledge(message)
 
     async def watch(self) -> None:
@@ -684,7 +696,7 @@ class CliBridge(ABC, Generic[BridgeOptions]):
                     conversation = message.type.conversation_message
                     outcome = Outcome.UNCONFIRMED if conversation else Outcome.FILTERED
                     if not self.journal.begin(message, payload, outcome):
-                        if self.journal.delivered(message):
+                        if self.journal.acknowledged(message):
                             await self.core.acknowledge(message)
                         continue
                     if not conversation:
@@ -720,9 +732,7 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
         """Observe CLI output without submitting inputs or executing tools."""
 
     async def publish_transcript(self) -> None:
-        from agent_comms.comms import Comms
-
-        comms = Comms(Path(self.binding.root))
+        comms = self.core.comms
         output = ThreadOutput(
             await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
         # This subscription can assemble only items whose start it receives.
