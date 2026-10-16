@@ -6,6 +6,8 @@ or owner-control ingress. Historical diagnostics cannot reconstruct a binding.
 
 from __future__ import annotations
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 import hashlib
 import json
 import math
@@ -17,7 +19,6 @@ from typing import TYPE_CHECKING, Literal
 
 from .diagnostics import FailureReason
 from .coordination_database import CoordinationStore
-from .coordination_errors import CoordinationReadUnavailable
 from .field_codec import FieldCodec
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goals import Goal
@@ -248,7 +249,7 @@ def read_failed_turn_projection(
             reason = row.reason.value
     except FailureNotObserved as error:
         return unavailable(str(error))
-    except CoordinationReadUnavailable:
+    except CoordinationReadBusy:
         return unavailable("busy")
     except (sqlite3.Error, OSError, ValueError, TypeError):
         return unavailable("invalid_store")

@@ -8,6 +8,8 @@ claim append or file mutation, and UNKNOWN is never retried automatically.
 
 from __future__ import annotations
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 import asyncio
 import hashlib
 import json
@@ -307,10 +309,10 @@ def verify_sent_full_input(
     try:
         with Coordination(str(store.session.path)) as scoped, scoped.session.read():
             _require_sent_full_input(scoped, admission, owner_name, input_id)
-    except sqlite3.OperationalError as error:
+    except sqlite3.DatabaseError as error:
         try:
             CoordinationReadUnavailable.raise_from(error)
-        except CoordinationReadUnavailable as unavailable:
+        except CoordinationReadBusy as unavailable:
             raise CoordinationBusy() from unavailable
 
 

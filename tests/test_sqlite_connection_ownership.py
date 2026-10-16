@@ -1,5 +1,7 @@
 """SQLite connection and busy policy have one production owner."""
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 import ast
 import asyncio
 import threading
@@ -9,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from agent_comms.coordination_database import CoordinationStore, StoreBusy
-from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordinator import Coordination
 
 PACKAGE = Path(__file__).parents[1] / "src" / "agent_comms"
@@ -108,6 +109,6 @@ async def test_nonwaiting_reader_reports_named_store_busy(tmp_path):
     with (
         Coordination(str(path)) as writer,
         writer.session.transaction(),
-        pytest.raises(CoordinationReadUnavailable),
+        pytest.raises(CoordinationReadBusy),
     ):
         await Coordination.run_read_async(path, read, contention=StoreBusy())

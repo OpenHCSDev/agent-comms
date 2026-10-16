@@ -1,6 +1,8 @@
 """Core's error declaration controls encoding and read-watch recovery."""
 from __future__ import annotations
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 import asyncio
 import json
 import sqlite3
@@ -24,12 +26,11 @@ from agent_comms.cli_bridges.shared import (
 )
 from agent_comms.cli_protocol import CORE_ERROR, FailedCoreError, UnavailableCoreError
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.messages import InfoKind, Message
 
 
 @pytest.mark.parametrize('error,expected', [
-    (CoordinationReadUnavailable('wording does not decide recovery'), UnavailableCoreError),
+    (CoordinationReadBusy('wording does not decide recovery'), UnavailableCoreError),
     (RouteIndexRebuilding(12, 4096), UnavailableCoreError),
     (RuntimeError('database is locked'), FailedCoreError),
     (ValueError('first\nsecond'), FailedCoreError),
@@ -48,7 +49,7 @@ def test_error_keeps_cause_without_using_cause_text_as_policy(capsys):
     try:
         raise ValueError('bad\ninput')
     except ValueError as cause:
-        error = CoordinationReadUnavailable('not ready')
+        error = CoordinationReadBusy('not ready')
         error.__cause__ = cause
     _fail(error)
     decoded = CORE_ERROR.validate_json(capsys.readouterr().out)

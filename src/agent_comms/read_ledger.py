@@ -1,6 +1,8 @@
 """Human read authority: typed conversation identities and compact exact progress."""
 from __future__ import annotations
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 from collections.abc import Callable, Iterable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -479,7 +481,6 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
         if not displayed:
             return
         from .bus_route_counts import BusRouteCounts, OpenedRouteCounts
-        from .coordination_errors import CoordinationReadUnavailable
         from .wire_log import WireLog
 
         def advance(prefix):
@@ -511,7 +512,7 @@ class ReadLedger(Sealed, ThreadOwnedState, TypedStore):
             with BusRouteCounts(bus_path) as index:
                 advance(lambda conversation, state:
                     index.read_prefix(conversation, state, snapshot, displayed.bus_identity))
-        except CoordinationReadUnavailable:
+        except CoordinationReadBusy:
             # Preserve exact paint even when compaction's disposable index is busy.
             advance(lambda conversation, state: PrefixUnavailable())
 

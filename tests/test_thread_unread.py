@@ -1,3 +1,5 @@
+
+from agent_comms.coordination_errors import CoordinationReadBusy
 from native_unread_fixture import counts, transcript_fixture
 from agent_comms.read_ledger import ReadLedger
 import json
@@ -10,7 +12,6 @@ from unittest.mock import patch
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor
@@ -460,7 +461,7 @@ def test_two_processes_indexing_one_growing_transcript_count_each_reply_once(tmp
         while not done and not failures:
             try:
                 counts(state, 'viewer', {'worker': str(source)})
-            except CoordinationReadUnavailable:
+            except CoordinationReadBusy:
                 continue  # The observation owner retries unavailable reads, not fake counts.
             except BaseException as error:
                 failures.append(error)

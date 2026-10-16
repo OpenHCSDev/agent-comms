@@ -1,5 +1,7 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 from tests.read_membership import stored_read_state
 import asyncio
 import json
@@ -15,7 +17,7 @@ from agent_comms.bus_display_index import BusDisplayIndex
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_errors import CoordinationReadUnavailable, StaleRevision
+from agent_comms.coordination_errors import StaleRevision
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.threads import Thread
@@ -540,7 +542,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
             comms.messaging.send_message("renamed-bob", viewer, "during index contention")
             # Use the real SQLite busy result, not a wording-only DatabaseError.
             with patch.object(CoordinationStore, "writer_timeout", 0):
-                with pytest.raises(CoordinationReadUnavailable) as busy:
+                with pytest.raises(CoordinationReadBusy) as busy:
                     wire(tmp_path).bus.pending_counts(viewer)
                 assert busy.value.__cause__.sqlite_errorcode == sqlite3.SQLITE_BUSY
                 await service.observe(set())

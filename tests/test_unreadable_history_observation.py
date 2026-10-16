@@ -4,6 +4,8 @@ No provider input, retry or live bus write. The fixture is a canonical saved
 manifest whose declaration name is intentionally unavailable in this reader.
 """
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 import asyncio
 import json
 import pickle
@@ -14,7 +16,6 @@ import pytest
 
 from agent_comms.context_segments.response import SelectedResponseSegment
 from agent_comms.coordination_errors import (
-    CoordinationReadUnavailable,
     SchemaVersionError,
     StaleRevision,
 )
@@ -93,7 +94,7 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
 
 
 @pytest.mark.parametrize(
-    "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision]
+    "error_type", [SchemaVersionError, CoordinationReadBusy, StaleRevision]
 )
 def test_store_read_only_retains_the_named_busy_state(comms, error_type):
     @dataclass(frozen=True)
@@ -109,7 +110,7 @@ def test_store_read_only_retains_the_named_busy_state(comms, error_type):
             FailingRead(str(comms.root), error).answer(comms)
         return
     answer = FailingRead(str(comms.root), error).answer(comms)
-    if error_type is CoordinationReadUnavailable:
+    if error_type is CoordinationReadBusy:
         assert isinstance(answer, ReadBusy)
         assert answer.title == "History loading"
         assert pickle.loads(pickle.dumps(answer)) == answer
@@ -119,7 +120,7 @@ def test_store_read_only_retains_the_named_busy_state(comms, error_type):
 
 
 @pytest.mark.parametrize(
-    "error_type", [SchemaVersionError, CoordinationReadUnavailable, StaleRevision]
+    "error_type", [SchemaVersionError, CoordinationReadBusy, StaleRevision]
 )
 async def test_owner_reply_preserves_its_own_failure_type(comms, error_type):
     @dataclass(frozen=True)
@@ -139,7 +140,7 @@ async def test_owner_reply_preserves_its_own_failure_type(comms, error_type):
     assert not isinstance(answer.error, UnreadableHistory)
 
 
-@pytest.mark.parametrize("error_type", [CoordinationReadUnavailable, StaleRevision])
+@pytest.mark.parametrize("error_type", [CoordinationReadBusy, StaleRevision])
 def test_sidebar_deferred_read_does_not_replace_its_original_interest(
     comms, monkeypatch, error_type
 ):

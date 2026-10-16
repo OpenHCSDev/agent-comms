@@ -8,6 +8,8 @@ No revision, delta, compaction lifecycle, or publication receipt is projected.
 
 from __future__ import annotations
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 import os
 import sqlite3
 import stat
@@ -28,7 +30,6 @@ from agent_comms.coordination_tables.recovery import ACPClientConnectivity, Owne
 from .attempt_states import AttemptState
 from .coordination_database import CoordinationStore
 from .coordination_errors import (
-    CoordinationReadUnavailable,
     IntegrityViolationError,
     SchemaVersionError,
 )
@@ -346,7 +347,7 @@ def read_recovery_projection(
             ]:
                 return UnavailableRecoveryProjection("invalid_store")
             return RecoverySelection.project(connection, owner_lookup, owner_thread)
-    except CoordinationReadUnavailable:
+    except CoordinationReadBusy:
         return UnavailableRecoveryProjection("busy")
     except (sqlite3.DatabaseError, OSError, ValueError, TypeError):
         return UnavailableRecoveryProjection("invalid_store")

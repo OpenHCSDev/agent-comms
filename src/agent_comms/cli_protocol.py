@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import builtins
-from abc import ABC, abstractmethod
+from abc import ABC
 from graphlib import TopologicalSorter
 from typing import Annotated, ClassVar, Never, Union
 
 from metaclass_registry import AutoRegisterMeta, RegistryConfig
 from pydantic import BaseModel, ConfigDict, Discriminator, Tag, TypeAdapter, computed_field
 
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination_errors import CoordinationReadBusy, ReadErrorBehavior, WaitRead, FailRead
 
 
 class WireModel(BaseModel):
@@ -56,7 +56,7 @@ class TaggedWire(WireModel, ABC, metaclass=RegisteredWireMeta):
         return Annotated[Union[tuple(variants)], Discriminator(tag)]
 
 
-class CoreError(TaggedWire, ABC):
+class CoreError(TaggedWire, ReadErrorBehavior):
     """One-line Core failure; each member owns its source and watch behavior."""
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True,
@@ -81,25 +81,14 @@ class CoreError(TaggedWire, ABC):
     def raise_failure(self, operation: str) -> Never:
         raise RuntimeError(f'Core {operation}: {self.error}')
 
-    @abstractmethod
-    def watch_delay(self) -> float:
-        """Delay another read subscription, or raise for a permanent failure."""
-
-
-class UnavailableCoreError(CoreError):
+class UnavailableCoreError(WaitRead, CoreError):
     wire_tag = 'unavailable'
-    exception_type = CoordinationReadUnavailable
-
-    def watch_delay(self) -> float:
-        return 0.25
+    exception_type = CoordinationReadBusy
 
 
-class FailedCoreError(CoreError):
+class FailedCoreError(FailRead, CoreError):
     wire_tag = 'failed'
     exception_type = BaseException
-
-    def watch_delay(self) -> float:
-        self.raise_failure('watch')
 
 
 CORE_ERROR = TypeAdapter(CoreError.declared_union())

@@ -6,6 +6,8 @@ projections, advances across complete appended rows, and is reset at migration.
 
 from __future__ import annotations
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 import json
 import os
 import sqlite3
@@ -308,10 +310,10 @@ class RouteIndexBlocked(RouteIndexState):
     complete: ClassVar[bool] = False
 
     def defer_read(self, through: int, size: int) -> NoReturn:
-        raise CoordinationReadUnavailable("Route projection writer is busy")
+        raise CoordinationReadBusy("Route projection writer is busy")
 
 
-class RouteIndexRebuilding(CoordinationReadUnavailable):
+class RouteIndexRebuilding(CoordinationReadBusy):
     """The committed index is too far behind this cut to read its remainder."""
 
     def __init__(self, through: int, size: int) -> None:
@@ -336,7 +338,7 @@ class BusRouteCounts(ReadSnapshot):
         """
         try:
             return self._acquire()
-        except sqlite3.OperationalError as error:
+        except sqlite3.DatabaseError as error:
             CoordinationReadUnavailable.raise_from(error)
 
     def _acquire(self) -> BusRouteCounts:
@@ -374,7 +376,7 @@ class BusRouteCounts(ReadSnapshot):
                     'through': progress.read_through, 'maximum': maximum,
                     'sparse': json.dumps(sorted(progress.sparse)),
                 }).fetchone()
-        except sqlite3.OperationalError as error:
+        except sqlite3.DatabaseError as error:
             CoordinationReadUnavailable.raise_from(error)
         return ReadPrefix(*prefix)
 

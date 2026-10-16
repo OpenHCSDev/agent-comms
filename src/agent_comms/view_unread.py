@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 import json
 import multiprocessing
 import os
@@ -251,7 +253,7 @@ class NativeReplyPreparation:
                     expected = self.reads[source][1]
                     if revision is not None and expected.holds_cut(revision, expected.size):
                         update.commit(database)
-        except sqlite3.OperationalError as error:
+        except sqlite3.DatabaseError as error:
             CoordinationReadUnavailable.raise_from(error)
         return batch.last_source
 
@@ -378,7 +380,7 @@ class TranscriptReadState(ThreadOwnedState):
             try:
                 with _store_lock(self.path.parent / "wire", shared=True, blocking=False):
                     self._next_source = preparation.commit(database, revisions)
-            except (BlockingIOError, CoordinationReadUnavailable):
+            except (BlockingIOError, CoordinationReadBusy):
                 pass
             else:
                 self._preparation = None
@@ -414,7 +416,7 @@ class TranscriptReadState(ThreadOwnedState):
         if self._cancelled.is_set():
             raise RuntimeError("Transcript reader is closed")
         if not self._lock.acquire(blocking=False):
-            raise CoordinationReadUnavailable("Transcript counts are being read")
+            raise CoordinationReadBusy("Transcript counts are being read")
         try:
             try:
                 return self._counts_locked(viewer, sources, document)

@@ -1,5 +1,7 @@
 """Presence behavior across persisted lifecycle changes and current UI consumers."""
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 import json
 import os
 import subprocess
@@ -257,7 +259,6 @@ def test_batch_source_rename_keeps_the_original_registry_fence(comms):
 
 
 def test_observed_batch_keeps_source_busy_scoped_to_one_thread(comms, monkeypatch):
-    from agent_comms.coordination_errors import CoordinationReadUnavailable
     from agent_comms.ui_model.observation import ObserveThreads, ThreadReading
 
     comms.messaging.initialize_private_initial_protocol()
@@ -267,7 +268,7 @@ def test_observed_batch_keeps_source_busy_scoped_to_one_thread(comms, monkeypatc
 
     def read(name, **kwargs):
         if name == "alpha":
-            raise CoordinationReadUnavailable("original source deferred")
+            raise CoordinationReadBusy("original source deferred")
         return capture(name, **kwargs)
 
     monkeypatch.setattr(comms.transcripts, "capture_page_window", read)
@@ -279,7 +280,6 @@ def test_observed_batch_keeps_source_busy_scoped_to_one_thread(comms, monkeypatc
 
 
 def test_observed_batch_acquisition_busy_recovers_without_a_new_revision(comms, monkeypatch):
-    from agent_comms.coordination_errors import CoordinationReadUnavailable
     from agent_comms.runtime_info import RuntimeInfoStore
     from agent_comms.ui_model.observation import ObserveThreads, ThreadReading
 
@@ -291,7 +291,7 @@ def test_observed_batch_acquisition_busy_recovers_without_a_new_revision(comms, 
 
     def busy(self):
         calls.append(self.path)
-        raise CoordinationReadUnavailable("shared metadata deferred")
+        raise CoordinationReadBusy("shared metadata deferred")
 
     reading = ThreadReading(ObserveThreads(frozenset({"alpha", "beta"})))
     revision = comms.views.revision()

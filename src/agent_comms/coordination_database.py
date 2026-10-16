@@ -64,7 +64,7 @@ class StoreBusy(StoreContention):
     def reader(self, uri: str) -> sqlite3.Connection:
         try:
             return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=0)
-        except sqlite3.OperationalError as error:
+        except sqlite3.DatabaseError as error:
             CoordinationReadUnavailable.raise_from(error)
 
     def writer(
@@ -152,7 +152,7 @@ class CoordinationStore:
 
     @staticmethod
     def recovering_snapshot(path: Path) -> sqlite3.Connection:
-        """Acquire evidence after SQLite may recover an existing hot journal."""
+        """Read after SQLite may recover an existing hot journal."""
         return RecoveringReadSnapshot().acquire(path)
 
     @staticmethod
@@ -164,7 +164,7 @@ class CoordinationStore:
         try:
             with closing(ReadSnapshot().open(path, contention)) as db:
                 yield db
-        except sqlite3.OperationalError as error:
+        except sqlite3.DatabaseError as error:
             CoordinationReadUnavailable.raise_from(error)
 
     @staticmethod
@@ -180,7 +180,7 @@ class CoordinationStore:
                 finally:
                     if db.in_transaction:
                         db.execute("ROLLBACK")
-        except sqlite3.OperationalError as error:
+        except sqlite3.DatabaseError as error:
             error.add_note(
                 f"SQLite observation store: {path}; "
                 f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"

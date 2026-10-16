@@ -1,5 +1,7 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 from agent_comms import invoke_tool
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import wire
@@ -20,7 +22,6 @@ import pytest
 
 def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_path):  # noqa: F811
     import sqlite3
-    from agent_comms.coordination_errors import CoordinationReadUnavailable
     from agent_comms.recovery_gateway import _snapshot
     from agent_comms.recovery_projection import (
         UnavailableRecoveryProjection, read_recovery_projection,
@@ -38,12 +39,12 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
                 lambda: NotificationAssignment.read(root, (initial,)),
                 lambda: _snapshot(root, database, "beta"),
             ):
-                with pytest.raises(CoordinationReadUnavailable) as unavailable:
+                with pytest.raises(CoordinationReadBusy) as unavailable:
                     read()
                 assert unavailable.value.__cause__.sqlite_errorcode & 0xFF in (
                     sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED,
                 )
-            with pytest.raises(CoordinationReadUnavailable):
+            with pytest.raises(CoordinationReadBusy):
                 with TranscriptRead.publication_source(root):
                     pytest.fail("Busy acquisition reached the native schema decoder")
             assert read_recovery_projection(

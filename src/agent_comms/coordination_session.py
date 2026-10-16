@@ -91,7 +91,7 @@ class CoordinationSession(CoordinationStore):
             finally:
                 if db.in_transaction:
                     db.execute("ROLLBACK")
-        except sqlite3.OperationalError as error:
+        except sqlite3.DatabaseError as error:
             CoordinationReadUnavailable.raise_from(error)
 
 

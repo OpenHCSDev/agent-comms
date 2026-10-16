@@ -15,6 +15,8 @@ rows, and no longer competes with that work for its interpreter lock.
 
 from __future__ import annotations
 
+from agent_comms.coordination_errors import CoordinationReadBusy
+
 import asyncio
 import itertools
 import multiprocessing
@@ -35,7 +37,6 @@ from agent_comms.active_route import CommsRoute
 from agent_comms.bus_route_counts import RouteIndexRebuilding
 from agent_comms.coordination_errors import (
     CoordinationError,
-    CoordinationReadUnavailable,
     StaleRevision,
 )
 from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
@@ -112,7 +113,7 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
 
     # Currentness and contention defer the existing read; they do not show
     # broken saved data.
-    DEFERRED_READS = (CoordinationReadUnavailable, StaleRevision)
+    DEFERRED_READS = (CoordinationReadBusy, StaleRevision)
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, UnreadableHistory) and self.args == other.args
@@ -172,7 +173,7 @@ class ReadRequest(AwaitedRead):
         try:
             self.require_root(comms)
             return ReadAnswered(self.request_id, self.read(comms))
-        except CoordinationReadUnavailable:
+        except CoordinationReadBusy:
             return ReadBusy(self.request_id)
         except (RelationViolationError, UnreadableHistory, StaleRevision) as error:
             return self.refused(error)
