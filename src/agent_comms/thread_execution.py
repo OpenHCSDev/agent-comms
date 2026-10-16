@@ -31,6 +31,10 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         raise RelationViolationError("This participant checks its CLI inbox; it has no native prompt transport.")
 
     @classmethod
+    def require_external(cls) -> None:
+        raise RelationViolationError("Only an external CLI can publish a bridge process.")
+
+    @classmethod
     def prepare_conversation(cls, preparation: ConversationPreparation):
         return preparation.external()
 
@@ -114,6 +118,10 @@ class NativeThreadExecution(ThreadExecution):
 
 
 class ExternalThreadExecution(ThreadExecution):
+    @classmethod
+    def require_external(cls) -> None:
+        pass
+
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:

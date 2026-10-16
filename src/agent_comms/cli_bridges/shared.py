@@ -20,6 +20,7 @@ from pydantic import JsonValue, TypeAdapter
 
 from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_protocol import CORE_ERROR, CoreError, WireModel
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.messages import Message, MessageKind
@@ -332,8 +333,14 @@ class Inbox(Operation[OperationBridge]):
         with (bridge.options.state / 'watch.lock').open('a') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             try:
-                async with asyncio.TaskGroup() as tasks:
-                    self.start(bridge, tasks)
+                from agent_comms.registration import Registration
+
+                registry = await asyncio.to_thread(
+                    Registration, Path(bridge.binding.root) / 'registry.json')
+                # The endpoint, not a particular CLI's record parser, owns presence.
+                with registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid())):
+                    async with asyncio.TaskGroup() as tasks:
+                        self.start(bridge, tasks)
             except ExceptionGroup as error:
                 # Join all tasks, retaining the original single failure's exit policy.
                 if len(error.exceptions) == 1:
