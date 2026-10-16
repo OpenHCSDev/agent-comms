@@ -17,7 +17,8 @@ from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
-from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+from delivery_owner_fixture import canonical_agent
+from test_coordinated_runtime import _root
 
 PACKAGE = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
 pytestmark = pytest.mark.skipif(not PACKAGE, reason="Reviewed prepared native package required")
@@ -61,7 +62,7 @@ class CodingProvider(LoopbackProvider):
 
 @pytest.mark.parametrize("outcome", ["complete", "cancel", "exit"])
 async def test_installed_selected_long_tool_and_uncertain_cleanup(
-    tmp_path, monkeypatch, outcome  # noqa: F811 - pytest injects the imported fixture
+    tmp_path, monkeypatch, outcome
 ):
     package = Path(PACKAGE).resolve(strict=True)
     # The default acceptance crosses the removed whole-turn90 boundary. A shorter
@@ -131,6 +132,12 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
         return child
 
     monkeypatch.setattr(AttachedChild, "start", observe_child)
+    # The declared live owner must have its actual project-request endpoint,
+    # not just a PID in the registry. Keep the whole attempt under basetemp.
+    agent = canonical_agent(comms, auto_wake=False)
+    agent.on_connect(None)
+    agent.sessions.bindings["beta"] = "beta"
+    await agent._runtime.start()
     started = time.monotonic()
     task = asyncio.create_task(
         SelectedExecution(
@@ -216,6 +223,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
         await asyncio.gather(task, return_exceptions=True)
         for child in children:
             await child.stop()
+        await agent.shutdown()
         server.close()
         await server.wait_closed()
         for connection in tuple(connections):
