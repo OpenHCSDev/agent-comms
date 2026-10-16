@@ -96,7 +96,7 @@ class PreflightWait(TurnWait):
                 f"spawn_ms={watchdog.spawn_ms}, session_bytes={session_size})."
             )
         )
-        await session.native.proc.stop()
+        await session.native.shutdown()
         async for event in super().expire(session):
             yield event
 
@@ -109,7 +109,7 @@ class InputStartWait(TurnWait):
         session.output.record_failure(
             failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
         )
-        await session.native.proc.stop()
+        await session.native.shutdown()
         async for event in super().expire(session):
             yield event
 
@@ -284,19 +284,26 @@ class ProgressWatchdog:
         tasks = {read_task, reject_task}
         if finish_task is not None:
             tasks.add(finish_task)
+        forwarding = session.native.forwarding_task
+        observed = tasks | {forwarding} if forwarding is not None else tasks
         wait = self.wait_for(session)
         try:
             with wait.charge(self.clock):
                 done, _ = await asyncio.wait(
-                    tasks, timeout=wait.timeout(), return_when=asyncio.FIRST_COMPLETED
+                    observed, timeout=wait.timeout(), return_when=asyncio.FIRST_COMPLETED
                 )
             if not done:
                 # Let an already-ready pipe continuation retire before expiry;
                 # this does not grant another provider wait or admission.
                 await asyncio.sleep(0)
-                done = {task for task in tasks if task.done()}
+                done = {task for task in observed if task.done()}
             if not done:
                 raise wait.expired(session)
+            if forwarding is not None and forwarding in done:
+                await session.native.shutdown()
+                if not forwarding.cancelled():
+                    forwarding.result()
+                return b""
             if read_task in done:
                 return read_task.result()
             if finish_task is not None and finish_task in done:
