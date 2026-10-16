@@ -319,7 +319,10 @@ class NativeContextProof(NativeContextRecord):
         """
         if self.input_id != input_id:
             return False
-        return self.read_evidence(self.session_file, input_id, evidence=evidence) == self
+        return self.read_evidence(
+            self.session_file, input_id,
+            request_generation=self.request_generation, evidence=evidence,
+        ) == self
 
     @classmethod
     def read_evidence(
@@ -1100,10 +1103,9 @@ def _verify_context(
     except (TypeError, ValueError) as error:
         raise NativePiUnavailable("Native Pi input/context receipt is malformed") from error
     with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
-        proof = NativeContextProof.read_evidence(session_file, input_id, evidence=evidence)
-        if proof != emitted:
+        if not emitted.corroborates_input(input_id, evidence=evidence):
             raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
-        return proof
+        return emitted
 
 
 def _require_reviewed_selected_source_cli() -> None:
