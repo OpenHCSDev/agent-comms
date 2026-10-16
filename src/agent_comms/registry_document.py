@@ -207,6 +207,7 @@ class RegistryDocument(RegistryPresence):
     def prepare_registration(
         self, thread: Thread, status: ThreadStatus, *, new_owner: bool
     ) -> RegistrationChange:
+        status = thread.execution.registered_status(thread, status)
         if thread.name in self.aliases:
             raise RelationViolationError(
                 f"Thread name {thread.name!r} is a permanent alias and cannot be reused."
@@ -285,8 +286,7 @@ class RegistryDocument(RegistryPresence):
         if new_name == canonical:
             return canonical, canonical
         current = self.threads[canonical]
-        if not self.statuses[canonical].running:
-            raise RelationViolationError("Only a running thread can rename itself.")
+        self.statuses[canonical].require_self_rename()
         alias_owner = self.aliases.get(new_name)
         if new_name in self.threads or (alias_owner is not None and alias_owner != canonical):
             raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
@@ -326,7 +326,8 @@ class RegistryDocument(RegistryPresence):
             raise OwnerChangedBeforeFenceRefusal()
         if snapshot.admission_generations[current.name] != expected_admission_generation:
             raise OwnerGenerationChangedRefusal()
-        self.statuses[expected.name] = StoppedThreadStatus()
+        self.statuses[expected.name] = expected.execution.registered_status(
+            expected, StoppedThreadStatus())
         self.admissions.advance(expected.name)
         self.owners.advance(expected.name)
         return self.admissions.generations[expected.name]
@@ -337,8 +338,9 @@ class RegistryDocument(RegistryPresence):
             raise UnregisteredThreadError(f"Thread {name!r} is not registered.")
         if self.statuses[name].active:
             self.owners.advance(name)
-        self.statuses[name] = StoppedThreadStatus()
-        self.threads[name] = replace(self.threads[name], active_turn=None)
+        thread = self.threads[name]
+        self.statuses[name] = thread.execution.registered_status(thread, StoppedThreadStatus())
+        self.threads[name] = replace(thread, active_turn=None)
         self.admissions.advance(name)
 
     def archive(self, name: str) -> None:
