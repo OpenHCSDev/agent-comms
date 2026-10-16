@@ -210,23 +210,25 @@ def test_small_owner_growth_and_exact_threshold_pass(repo: Repository) -> None:
     assert not any(report["delta"].values())
 
 
-def test_class_growth_cannot_be_cancelled_by_another_class(repo: Repository) -> None:
+def test_class_growth_and_shrinkage_remain_independent_observations(repo: Repository) -> None:
     base = repo.commit({"classes.py": owner("Growing", 501) + owner("Shrinking", 600)})
     head = repo.commit({"classes.py": owner("Growing", 502) + owner("Shrinking", 500)})
     status, report = repo.compare(base, head)
-    assert status == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/classes.py::Growing"] == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/classes.py::Shrinking"] == -100
+    assert status == 0
+    assert report["regressions"] == {}
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/classes.py::Growing"] == 1
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/classes.py::Shrinking"] == -100
 
 
 @pytest.mark.parametrize("before", [0, 500])
-def test_new_or_crossing_god_class_is_refused(repo: Repository, before: int) -> None:
+def test_new_or_crossing_class_span_is_not_an_ownership_verdict(repo: Repository, before: int) -> None:
     base = repo.commit({"owners.py": owner("New", before)} if before else {})
     head = repo.commit({"owners.py": owner("New", 501)})
     status, report = repo.compare(base, head)
-    assert status == 1
-    assert report["base"][f"GodClassExcess:{repo.root}/owners.py::New"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/owners.py::New"] == 1
+    assert status == 0
+    assert report["regressions"] == {}
+    assert report["base"][f"ClassSpanExcess:{repo.root}/owners.py::New"] == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/owners.py::New"] == 1
 
 
 def test_class_move_keeps_baseline_and_new_small_owner_is_allowed(repo: Repository) -> None:
@@ -234,19 +236,19 @@ def test_class_move_keeps_baseline_and_new_small_owner_is_allowed(repo: Reposito
     moved = repo.commit({"old.py": None, "new.py": owner("Existing", 501) + owner("NewOwner", 25)})
     status, report = repo.compare(base, moved)
     assert status == 0
-    assert report["base"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/new.py::NewOwner"] == 0
+    assert report["base"][f"ClassSpanExcess:{repo.root}/new.py::Existing"] == 1
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/new.py::Existing"] == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/new.py::NewOwner"] == 0
     grown = repo.commit({"new.py": owner("Existing", 502) + owner("NewOwner", 26)})
-    assert repo.compare(moved, grown)[0] == 1
+    assert repo.compare(moved, grown)[0] == 0
 
 
-def test_moved_class_growth_is_rejected(repo: Repository) -> None:
+def test_moved_class_growth_is_still_reported(repo: Repository) -> None:
     base = repo.commit({"old.py": owner("Existing", 500)})
     head = repo.commit({"old.py": None, "new.py": owner("Existing", 501)})
     status, report = repo.compare(base, head)
-    assert status == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/new.py::Existing"] == 1
+    assert status == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/new.py::Existing"] == 1
 
 
 def test_nested_and_duplicate_named_classes_keep_separate_baselines(repo: Repository) -> None:
@@ -254,9 +256,20 @@ def test_nested_and_duplicate_named_classes_keep_separate_baselines(repo: Reposi
     base = repo.commit({"one.py": nested, "two.py": owner("Inner", 500)})
     head = repo.commit({"one.py": nested, "two.py": owner("Inner", 501)})
     status, report = repo.compare(base, head)
-    assert status == 1
-    assert report["delta"][f"GodClassExcess:{repo.root}/one.py::Outer.Inner"] == 0
-    assert report["delta"][f"GodClassExcess:{repo.root}/two.py::Inner"] == 1
+    assert status == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/one.py::Outer.Inner"] == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/two.py::Inner"] == 1
+
+
+def test_owner_local_action_hook_does_not_fail_on_physical_span(repo: Repository) -> None:
+    original = owner("Button", 501)
+    base = repo.commit({"button.py": original})
+    head = repo.commit({"button.py": original + "\n    def on_click(self):\n        self.action_press()\n"})
+    status, report = repo.compare(base, head)
+    assert status == 0
+    assert report["delta"][f"ClassSpanExcess:{repo.root}/button.py::Button"] == 3
+    assert report["regressions"] == {}
+    assert "measurements" not in report
 
 
 def test_chain_terms_catch_growth_hidden_by_unchanged_chain_count(repo: Repository) -> None:
@@ -352,7 +365,8 @@ class OwnedCodec:
 """})
     status, report = repo.compare(base, head)
     assert status == 1
-    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/boundary.py"] == 3
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/boundary.py"] == 2
+    assert report["head"][f"ForeignNegation:{repo.root}/boundary.py"] == 1
     assert report["head"][f"CodecSubclass:{repo.root}/boundary.py"] == 1
 
 
@@ -391,13 +405,38 @@ class Owner:
 """})
     status, report = repo.compare(base, head)
     assert status == 1
-    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/raw.py"] == 5
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/raw.py"] == 2
+    assert report["head"][f"ForeignNegation:{repo.root}/raw.py"] == 3
+    assert report["regressions"] == {f"ForeignAbsenceProbe:{repo.root}/raw.py": 2}
     result = subprocess.run(
         [sys.executable, "-m", "agent_comms.debt_ratchet", "--root", repo.root,
          "--base", base, "--head", head], cwd=repo.path, capture_output=True, text=True,
         timeout=10, check=False)
     assert result.returncode == 1
-    assert "unresolved nominal binding; kept ForeignAbsenceProbe" in result.stderr
+    assert "unresolved nominal binding; kept ForeignNegation" in result.stderr
+
+
+@pytest.mark.parametrize("annotation", ["EditingMode", "Reactive[EditingMode]"])
+def test_canonical_boolean_and_unresolved_negation_are_not_absence(repo: Repository, annotation: str) -> None:
+    base = repo.commit({"editing.py": f"""
+class EditingMode:
+    accepts_text = True
+class Editor:
+    editing_mode: {annotation}
+"""})
+    head = repo.commit({"editing.py": f"""
+class EditingMode:
+    accepts_text = True
+class Editor:
+    editing_mode: {annotation}
+def read(editor: Editor, unknown):
+    return not editor.editing_mode.accepts_text, not unknown.flag
+"""})
+    status, report = repo.compare(base, head)
+    assert status == 0
+    assert report["head"][f"ForeignAbsenceProbe:{repo.root}/editing.py"] == 0
+    assert report["head"][f"ForeignNegation:{repo.root}/editing.py"] == 2
+    assert report["regressions"] == {}
 
 
 def test_declared_boolean_class_parameter_uses_immutable_external_declarations(repo: Repository) -> None:

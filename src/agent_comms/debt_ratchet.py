@@ -20,7 +20,7 @@ from nominal_refactor_advisor.ast_tools import (
 )
 from nominal_refactor_advisor.product_flow_authority import SourceProductFlowRepository
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
 from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
@@ -30,12 +30,32 @@ from .field_codec import FieldCodec, projected
 from .mro_dispatch import MroDispatch, handles
 
 
+@dataclass(frozen=True)
 class Measure(DeclaredFamily, affix="Measure"):
+    base: dict[str, int]
+    head: dict[str, int]
+
+    @property
+    def delta(self) -> dict[str, int]:
+        return {name: value - self.base[name] for name, value in self.head.items()}
+
+    @property
+    def regressions(self) -> dict[str, int]:
+        return {name: value for name, value in self.delta.items() if value > 0}
+
     @classmethod
     @abstractmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str,
                 declarations: tuple[ParsedModule, ...] = ()):
         """Return independent before/after measurements for this declaration."""
+
+class ObservationalMeasure(Measure):
+    """Shape evidence is visible, but does not establish a competing decision."""
+
+    @property
+    def regressions(self) -> dict[str, int]:
+        return {}
+
 
 class GitMeasure(Measure):
     """Shared Git collection and alignment for declaration-owned snapshots."""
@@ -61,7 +81,7 @@ class GitMeasure(Measure):
             selected = cls.scope(changed, python_paths(repo, ref, root))
             return cls.snapshot([(path, git(repo, "show", f"{ref}:{path}")) for path in sorted(selected)],
                                 root=root, targets=changed, declarations=declarations)
-        return cls.align(snapshot(base), snapshot(head))
+        return cls(*cls.align(snapshot(base), snapshot(head)))
 
 
 class CountedSource(GitMeasure):
@@ -275,8 +295,8 @@ class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileOccurrenceMeas
         return super().count(source, filename) if cls.admits(filename) else 0
 
 
-class GodClassExcess(GitMeasure):
-    """Independent class lines beyond 500, including newly introduced classes."""
+class ClassSpanExcess(ObservationalMeasure, GitMeasure):
+    """Class lines beyond 500: a reading lead, not evidence of split ownership."""
 
     threshold = 500
 
@@ -325,7 +345,7 @@ class GodClassExcess(GitMeasure):
                 matched[identity] = base[previous[0]]
                 consumed.add(previous[0])
             else:
-                # A new declaration must not introduce any god-class excess.
+                # A new declaration has no earlier span to compare.
                 matched[identity] = 0
         current = dict(head)
         for identity in base.keys() - consumed:
@@ -376,8 +396,8 @@ class BooleanChainTerms(PerFileOccurrenceMeasure):
         return 0
 
 
-class ForeignAbsenceProbe(PerFileMeasure):
-    """Keep raw foreign probes; consume NRA's declared binding relationships."""
+class ForeignAttributeProbe(PerFileMeasure):
+    """Share source capture and nominal ownership, not a judgment about syntax."""
 
     @classmethod
     def scope(cls, changed: set[str], present: set[str]) -> set[str]:
@@ -385,13 +405,9 @@ class ForeignAbsenceProbe(PerFileMeasure):
         return present if changed else set()
 
     @staticmethod
+    @abstractmethod
     def attribute(node: ast.AST) -> ast.Attribute | None:
-        match node:
-            case ast.Compare(left=ast.Attribute() as attribute, ops=[ast.Is() | ast.IsNot()], comparators=[ast.Constant(value=None)]):
-                return attribute
-            case ast.UnaryOp(op=ast.Not(), operand=ast.Attribute() as attribute):
-                return attribute
-        return None
+        """Select the syntax measured by this declaration."""
 
     @classmethod
     def snapshot(cls, sources: list[tuple[str, bytes]], *, root: str, targets: set[str],
@@ -428,7 +444,7 @@ class ForeignAbsenceProbe(PerFileMeasure):
                     unresolved = query is None
                 count += 1
                 if unresolved:
-                    print(f"{path}:{node.lineno}: unresolved nominal binding; kept ForeignAbsenceProbe", file=sys.stderr)
+                    print(f"{path}:{node.lineno}: unresolved nominal binding; kept {cls.__name__}", file=sys.stderr)
             counts[f"{cls.__name__}:{path}"] = count
         return counts
 
@@ -436,6 +452,28 @@ class ForeignAbsenceProbe(PerFileMeasure):
     def count(cls, source: bytes, filename: str) -> int:
         return cls.snapshot([(filename, source)], root=str(Path(filename).parent),
                             targets={filename})[f"{cls.__name__}:{filename}"]
+
+
+class ForeignAbsenceProbe(ForeignAttributeProbe):
+    """Explicit foreign None comparisons, not ordinary truth-value negation."""
+
+    @staticmethod
+    def attribute(node: ast.AST) -> ast.Attribute | None:
+        match node:
+            case ast.Compare(left=ast.Attribute() as attribute, ops=[ast.Is() | ast.IsNot()], comparators=[ast.Constant(value=None)]):
+                return attribute
+        return None
+
+
+class ForeignNegation(ObservationalMeasure, ForeignAttributeProbe):
+    """Unproved truth-value queries stay visible without inventing absence."""
+
+    @staticmethod
+    def attribute(node: ast.AST) -> ast.Attribute | None:
+        match node:
+            case ast.UnaryOp(op=ast.Not(), operand=ast.Attribute() as attribute):
+                return attribute
+        return None
 
 
 class CodecSubclass(PerFileOccurrenceMeasure):
@@ -764,16 +802,27 @@ class Comparison:
     base_revision: str
     head_revision: str
     paths: tuple[str, ...]
-    base: dict[str, int]
-    head: dict[str, int]
+    measurements: tuple[Measure, ...] = field(metadata={"report_exclude": True})
+
+    @projected(view="report")
+    def base(self) -> dict[str, int]:
+        return {name: value for measure in self.measurements for name, value in measure.base.items()}
+
+    @projected(view="report")
+    def head(self) -> dict[str, int]:
+        return {name: value for measure in self.measurements for name, value in measure.head.items()}
 
     @projected(view="report")
     def delta(self) -> dict[str, int]:
-        return {name: value - self.base[name] for name, value in self.head.items()}
+        return {name: value for measure in self.measurements for name, value in measure.delta.items()}
+
+    @projected(view="report")
+    def regressions(self) -> dict[str, int]:
+        return {name: value for measure in self.measurements for name, value in measure.regressions.items()}
 
     @property
     def increased(self) -> bool:
-        return any(value > 0 for value in self.delta.values())
+        return bool(self.regressions)
 
 
 def source_modules(sources: list[tuple[str, bytes]], root: str) -> tuple[ParsedModule, ...]:
@@ -801,12 +850,9 @@ def compare(repo: Path, base: str, head: str, root: str,
     }
     paths = touched & (python_paths(repo, base, root) | python_paths(repo, head, root))
 
-    before, after = {}, {}
-    for measure in Measure.members_with(Measure):
-        measured_base, measured_head = measure.compare(repo, base, head, paths, root, declarations)
-        before.update(measured_base)
-        after.update(measured_head)
-    return Comparison(root, base, head, tuple(sorted(paths)), before, after)
+    measurements = tuple(measure.compare(repo, base, head, paths, root, declarations)
+                         for measure in Measure.members_with(Measure))
+    return Comparison(root, base, head, tuple(sorted(paths)), measurements)
 
 
 def main() -> int:
