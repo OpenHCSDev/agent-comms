@@ -145,6 +145,7 @@ def option(
     multiline: bool = False,
     target_bound: bool = False,
     editor_format: Callable[[Any], str] | None = None,
+    field_metadata: dict[type, object] | None = None,
     **parser_options: Any,
 ) -> Any:
     """One field owns its parser, editor and JSON boundary declarations."""
@@ -156,5 +157,7 @@ def option(
     }
     if wire_name is not None:
         metadata["wire_name"] = wire_name
+    if field_metadata is not None:
+        metadata.update(field_metadata)
     return CliOption(default=default, default_factory=default_factory, init=True, repr=True,
                      hash=None, compare=True, metadata=metadata, kw_only=MISSING, doc=None)

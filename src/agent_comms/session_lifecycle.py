@@ -6,12 +6,18 @@ import asyncio
 import os
 import re
 from functools import partial
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 from acp import RequestError
 from acp.schema import (
     AgentCapabilities,
+    ConfigOptionUpdate,
+    SessionConfigOptionSelect,
+    SessionConfigSelectOption,
+    SetSessionConfigOptionResponse,
     CloseSessionResponse,
     Implementation,
     InitializeResponse,
@@ -34,7 +40,11 @@ from .comms import Comms
 from .child_process import join_retirement
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .config_options import SessionConfigOptions
+from .config_options import CatalogConfigOption, CatalogDescription, CatalogSelection, ConfigOptions, InvalidConfigChoice
+from .agent_backend import UseSettings
+from .field_codec import FieldCodec
+from .native_errors import NativePiUnavailable
+from .pi_vocabulary import ThinkingLevel
 from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
@@ -430,3 +440,133 @@ class AttachedSessionLifecycle(SessionLifecycle):
                 {"reason": f"Session load not admitted for {thread.name!r}: {error}"}
             ) from error
         return await self.attach_owner(owner, session_id)
+
+
+class SessionConfigOptions(ConfigOptions):
+    """Add ACP conversion and session publication to the Core catalogs."""
+
+    def __init__(
+        self,
+        comms: Comms,
+        transport: RuntimeServer,
+        sessions: SessionLifecycle,
+        effects: SessionEffects,
+    ):
+        super().__init__(comms)
+        self.transport, self.sessions, self.effects = transport, sessions, effects
+        self.catalog_publish_lock = asyncio.Lock()
+        self.publications: dict[str, ConfigOptionUpdate] = {}
+        # The stored settings each session's owner last saw, to notice a change.
+        # The model and thinking level each running turn currently uses.
+        self.settings_in_use: dict[str, UseSettings] = {}
+
+
+    async def options(self, thread: CatalogSelection) -> list[SessionConfigOptionSelect]:
+        try:
+            descriptions = await self.descriptions(thread)
+        except InvalidConfigChoice as error:
+            raise RequestError.invalid_params({"reason": str(error)}) from error
+        return [self.advertisement(description) for description in descriptions]
+
+    @staticmethod
+    def advertisement(description: CatalogDescription) -> SessionConfigOptionSelect:
+        declaration = description.declaration
+        choices = [SessionConfigSelectOption(value=choice.value, name=choice.label)
+                   for choice in description.choices]
+        selected = description.current_value
+        if selected is None:
+            selected = ""
+            choices.insert(0, SessionConfigSelectOption(value=selected, name="Not configured"))
+        return SessionConfigOptionSelect(
+            id=FieldCodec.encode(declaration),
+            name=declaration.title,
+            description=declaration.description,
+            category=declaration.category,
+            type="select",
+            current_value=selected,
+            options=choices,
+        )
+
+    @asynccontextmanager
+    async def session_options(
+        self, thread_name: str
+    ) -> AsyncIterator[list[SessionConfigOptionSelect]]:
+        """Hold the configuration observation until its consumer supplies it.
+
+        A private new/load/Ready reply does not publish to other subscribers.
+        Its snapshot must not follow a newer broadcast on the same transport.
+        """
+        async with self.catalog_publish_lock:
+            thread = await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
+            yield await self.options(thread)
+
+    async def _publish(self, session_id: str, options: list[SessionConfigOptionSelect]) -> None:
+        """Publish within the original session_options acquisition lifetime."""
+        update = ConfigOptionUpdate(
+            session_update="config_option_update", config_options=options
+        )
+        if self.publications.get(session_id) == update:
+            return
+        if await self.transport.session_update(session_id=session_id, update=update):
+            # Retain exactly what this send supplied, not a later catalog
+            # generation or settings observation acquired during its await.
+            self.publications[session_id] = update
+
+    async def set_option(
+        self, config_id: str, session_id: str, value: str | bool
+    ) -> SetSessionConfigOptionResponse:
+        try:
+            member = CatalogConfigOption.decode(config_id)
+            if not isinstance(value, str):
+                raise ValueError("Expected string setting")
+        except ValueError:
+            raise RequestError.invalid_params(
+                {"reason": f"Unknown session configuration option: {config_id!r}"}
+            ) from None
+        if session_id in self.sessions.proxies:
+            result = await self.sessions.proxies[session_id].request(
+                "set_config_option", config_id=config_id, value=value
+            )
+            return SetSessionConfigOptionResponse.model_validate(result)
+        name = await self.sessions.sync_identity(session_id)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        try:
+            await self.catalog_for(member).change(self, thread, value)
+        except (NativePiUnavailable, InvalidConfigChoice) as error:
+            raise RequestError.invalid_params({"reason": str(error)}) from error
+        await self.effects.turns.close_idle_backend(session_id, thread)
+        await self.use_stored_settings(session_id, name)
+        async with self.session_options(name) as options:
+            await self._publish(session_id, options)
+            return SetSessionConfigOptionResponse(config_options=options)
+
+
+    @staticmethod
+    def stored_settings(thread: Thread) -> UseSettings:
+        return UseSettings(thread.model, ThinkingLevel.optional_name(thread.thinking_level))
+
+    def turn_started(self, session_id: str, thread: Thread) -> None:
+        self.settings_in_use.setdefault(session_id, self.stored_settings(thread))
+
+    async def use_stored_settings(self, session_id: str, name: str) -> None:
+        """A running turn switches at its next model call, whichever process stored the change."""
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        settings = self.stored_settings(thread)
+        if self.settings_in_use.get(session_id, settings) == settings:
+            return
+        inbox = await self.effects.turns.active_backend_inbox(session_id)
+        if inbox is not None:
+            self.settings_in_use[session_id] = settings
+            inbox.put_nowait(settings)
+
+    async def sync_thread(self, session_id: str) -> None:
+        name = await self.sessions.sync_identity(session_id)
+        await self.effects.turns.goals.sync_goal_execution(session_id, name)
+        await self.use_stored_settings(session_id, name)
+        await self.publish_configuration(session_id, name)
+
+    async def publish_configuration(self, session_id: str, thread_name: str) -> None:
+        if self.sessions.client is None and not self.sessions.runtime_enabled:
+            return
+        async with self.session_options(thread_name) as options:
+            await self._publish(session_id, options)

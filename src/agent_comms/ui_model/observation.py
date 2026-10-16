@@ -15,7 +15,7 @@ rows, and no longer competes with that work for its interpreter lock.
 
 from __future__ import annotations
 
-from .runtime_socket import RuntimeSocket
+from ..runtime_socket import RuntimeSocket
 
 import asyncio
 import itertools
