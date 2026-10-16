@@ -99,7 +99,7 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
     # The recorded-protocol launch validates this test's own pinned package;
     # the live runtime route must not leak into the turn.
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
-    route = PrivateNkLaunch(Path(agent._comms.root), agent._configured_root_id(), package, None)
+    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
     monkeypatch.setattr(cohort_foreground, "_preflight",
         lambda root, root_id, pkg, enabled: native_pi._trusted_package(pkg))

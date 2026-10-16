@@ -11,7 +11,7 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager
 from functools import partial
 from dataclasses import dataclass, fields, replace
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
 
 from acp import RequestError
 
@@ -171,7 +171,7 @@ class QueuedInput:
         echo: bool, images: tuple[ImageInput, ...], controller: Any,
         input_id: str | None = None,
         origin: InputOrigin = UnattributedInputOrigin(),
-    ) -> AsyncIterator[tuple[Self, Thread, InputAttempt, ExitStack]]:
+    ) -> AsyncIterator[InputReservation[Self]]:
         """Serialize local queue placement; reserve durable input in a worker."""
         async with AsyncExitStack() as rollback:
             custody = ExitStack()
@@ -189,7 +189,7 @@ class QueuedInput:
                         )
 
                 item, owner, row = await Coordination.run_worker(capture)
-                yield item, owner, row, custody
+                yield InputReservation(item, owner, row, rollback)
 
     def place(
         self, inputs: InputDrain, session_id: str,
@@ -293,6 +293,23 @@ class QueuedInput:
 
     async def not_started(self, inputs: InputDrain) -> None:
         """The turn refused this input or ended before its user start."""
+
+
+ReservedQueuedInput = TypeVar("ReservedQueuedInput", bound=QueuedInput)
+
+
+@dataclass(frozen=True, slots=True)
+class InputReservation(Generic[ReservedQueuedInput]):
+    """A captured input and its rollback until placement takes ownership."""
+
+    item: ReservedQueuedInput
+    owner: Thread
+    source: InputAttempt
+    _rollback: AsyncExitStack
+
+    def release(self) -> AsyncExitStack:
+        """Transfer rollback actions; a new scope may adopt them or discard them."""
+        return self._rollback.pop_all()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -558,11 +575,12 @@ class InitialInput(QueuedInput):
                 prompt=TurnContext.render_segments((request,), images=images).text,
                 echo=display_text is not None, images=images,
                 controller=inputs.runtime.controller.get(), input_id=input_id, origin=origin,
-            ) as (item, _owner, row, custody):
+            ) as reservation:
+                item = reservation.item
                 inputs.queued_inputs.setdefault(session_id, {})[item.input_id] = item
                 resources.push_async_callback(item.finish, inputs, session_id)
-                custody.pop_all()
-            await inputs.emit_input_disposition(session_id, row)
+                reservation.release()
+            await inputs.emit_input_disposition(session_id, reservation.source)
             await inputs.emit_queue_state(session_id)
             await item.dispatch(inputs.effects.turns, session_id, thread_name)
 

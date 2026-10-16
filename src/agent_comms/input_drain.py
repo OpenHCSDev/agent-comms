@@ -526,7 +526,7 @@ class InputObservation:
             if settled is None:
                 return False
             observed = await self._observe_coordination(
-                session_id, self.effects._configured_root_id(), settled.wire, entry,
+                session_id, self.effects.configured_root_id, settled.wire, entry,
             )
             return observed == settled
 
@@ -716,7 +716,7 @@ class InputDrain(InputObservation):
     async def drain_owned_inbox(self, session_id: str) -> int:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
-        private_root = self.effects._configured_root_id()
+        private_root = self.effects.configured_root_id
         pushed = await self._drain_private_if_changed(session_id, private_root)
         WakeScheduleCheck(session_id=session_id, inputs=self).schedule()
         return pushed
@@ -724,9 +724,6 @@ class InputDrain(InputObservation):
     @property
     def background_wakes_disabled(self) -> bool:
         return not self.auto_wake or not self.sessions.runtime_enabled
-
-    async def drain_count(self, session_id: str) -> int:
-        return await self.drain_inbox(session_id)
 
     async def accept_followup(
         self,
@@ -747,15 +744,17 @@ class InputDrain(InputObservation):
             prompt=TurnContext.render_segments((followup,), images=images).text,
             echo=request.defer_display, images=images, controller=controller,
             input_id=request.input_id, origin=request.origin,
-        ) as (item, owner, source, custody):
-            item = request.accepted(item, source, owner)
-            followup = replace(followup, provenance=(*followup.provenance, source.context_provenance()))
+        ) as reservation:
+            item = request.accepted(reservation.item, reservation.source, reservation.owner)
+            followup = replace(followup, provenance=(
+                *followup.provenance, reservation.source.context_provenance(),
+            ))
             rendered = TurnContext.render_segments((followup,), images=images)
             item.place(self, session_id, inbox, InputContent(
                 text=item.prompt, images=tuple(images), contributions=rendered.contributions,
             ))
             request.enqueue_control(inbox, item.input_id)
-            custody.pop_all()
+            reservation.release()
         await request.publish_acceptance(self, session_id)
         return PromptResponse(
             stop_reason="end_turn",

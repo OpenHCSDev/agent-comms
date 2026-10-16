@@ -81,7 +81,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
                  "--no-extensions", "--no-skills", "--no-context-files"]
     agent = canonical_agent(wired, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
-    route = PrivateNkLaunch(Path(agent._comms.root), agent._configured_root_id(), package, None)
+    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
     monkeypatch.setattr(cohort_foreground, "_preflight",
                         lambda root, root_id, pkg, enabled: native_pi._trusted_package(pkg))

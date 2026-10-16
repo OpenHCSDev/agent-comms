@@ -232,7 +232,7 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
 
     agent.sessions.client = Client()
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
-    route = PrivateNkLaunch(Path(agent._comms.root), agent._configured_root_id(), package, None)
+    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package, None)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
     monkeypatch.setattr(cohort_foreground, "_preflight",
                         lambda root, root_id, pkg, enabled: native_pi._trusted_package(pkg))

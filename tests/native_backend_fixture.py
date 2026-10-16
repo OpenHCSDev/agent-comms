@@ -109,10 +109,11 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             async with InitialInput.reserve(
                 agent.inputs, session_id, agent.sessions.require(session_id),
                 text=text, prompt=text, echo=True, images=(), controller=None,
-            ) as (item, _owner, _row, custody):
-                resources.push_async_callback(Coordination.run_worker, custody.pop_all().close)
-            # Native acquisition begins after original wire custody ends, while
-            # the transferred reservation rollback still belongs to this turn.
+            ) as reservation:
+                item = reservation.item
+                resources.push_async_callback(reservation.release().aclose)
+            # Native acquisition begins after the wire reservation ends; its
+            # rollback actions remain with this turn until acquisition finishes.
             turn = OwnedTurn(
                 agent.turns, session_id, agent.sessions.require(session_id), text,
                 original_keys=(item.key,), initial_display_text=text,

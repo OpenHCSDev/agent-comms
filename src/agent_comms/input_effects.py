@@ -24,7 +24,8 @@ class InputEffects(ABC):
     @abstractmethod
     def _private_nk_marker(self) -> str: ...
 
+    @property
     @abstractmethod
-    def _configured_root_id(self) -> str: ...
+    def configured_root_id(self) -> str: ...
 
     _private_nk_native_package: Path | None
