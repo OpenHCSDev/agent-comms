@@ -15,10 +15,11 @@ from agent_comms.transcript_events import (
     NoticeTranscript,
     ThinkingTranscript,
     TranscriptEvent,
+    ToolStartTranscript,
     UserTranscript,
 )
 from .shared import (
-    ActiveItem, FinishedItem, TaggedWire, ToolCall, TranscriptUpdate, TurnEnded,
+    ActiveItem, FinishedItem, TaggedWire, TranscriptUpdate, TurnEnded,
     TurnStarted, WireHeader, WireModel,
 )
 
@@ -26,13 +27,13 @@ from .shared import (
 @dataclass
 class ClaudeSession:
     turn: str = ''
-    tools: dict[str, ToolCall] = field(default_factory=dict)
+    tools: dict[str, ToolStartTranscript] = field(default_factory=dict)
     catching_up: bool = True
 
-    def started(self, call: ToolCall) -> None:
-        self.tools[call.id] = call
+    def started(self, call: ToolStartTranscript) -> None:
+        self.tools[call.tool_call_id] = call
 
-    def result_for(self, tool_id: str) -> ToolCall | None:
+    def result_for(self, tool_id: str) -> ToolStartTranscript | None:
         call = self.tools.pop(tool_id, None)
         if call is None and not self.catching_up:
             raise ValueError(f'Claude result has no tool start: {tool_id}')
@@ -129,9 +130,10 @@ class ToolUse(AssistantBlock):
     input: JsonValue
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        call = ToolCall(self.id, self.name, self.input)
+        call = ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
+                                   raw_input=self.input, timestamp=record.timestamp)
         session.started(call)
-        return (ActiveItem(session.turn, self.id, ActivityState.WORKING, call.title),)
+        return ActiveItem.tool_started(session.turn, self.id, call)
 
 
 class AssistantMessage(WireModel):

@@ -21,13 +21,26 @@ from .bus_publication import stable_thread_lookup
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
-from .transcript_events import TranscriptEvent
+from .transcript_events import ToolStartTranscript, TranscriptEvent
 from .transcript_receipts import TranscriptSource
-from .typed_table import Column, TypedStore, TypedTable
+from .typed_table import Column, Index, TypedStore, TypedTable, sql_literal
 
 
 @dataclass(frozen=True)
-class ExternalItemRow(TypedTable):
+class ExternalToolEvents:
+    """Tool calls lead their CLI item; their original time owns indexed ordering."""
+
+    tool_selector: ClassVar[str] = (
+        f"json_extract(events, '$[0].{ToolStartTranscript.family_discriminator}')"
+        f" = {sql_literal(ToolStartTranscript)}"
+    )
+    tool_at: float = field(init=False, metadata={"sql": Column(
+        generated="coalesce(json_extract(events, '$[0].timestamp'), 0)"
+    )})
+
+
+@dataclass(frozen=True)
+class ExternalItemRow(ExternalToolEvents, TypedTable):
     """One finished CLI item, at the position it took when it finished."""
 
     thread: str = field(metadata={"sql": Column(primary_key=True)})
@@ -36,10 +49,11 @@ class ExternalItemRow(TypedTable):
     seq: int
     events: tuple[TranscriptEvent, ...]
     unique = (("thread", "seq"),)
+    indexes = (Index(("thread", "tool_at", "seq"), where=ExternalToolEvents.tool_selector),)
 
 
 @dataclass(frozen=True)
-class ExternalDraftRow(TypedTable):
+class ExternalDraftRow(ExternalToolEvents, TypedTable):
     """The current CLI item, replaced as it grows and retired at completion."""
 
     thread: str = field(metadata={"sql": Column(primary_key=True)})
@@ -103,6 +117,20 @@ class ExternalTranscriptRead:
             return None
         return ExternalDraftRow.one(self.connection, thread=self.lookup)
 
+    def latest_tool(self):
+        from .tool_activity import NoToolActivity, ToolActivity
+
+        if self.connection is None:
+            return NoToolActivity()
+        rows = ExternalItemRow.select(
+            self.connection, thread=self.lookup,
+            where=ExternalItemRow.tool_selector, order_by=("tool_at", "seq"),
+            descending=True, limit=1,
+        )
+        draft = self.current_draft()
+        events = tuple(event for row in rows for event in row.events)
+        return ToolActivity.from_events(events + (draft.events if draft is not None else ()))
+
     def cut(self) -> ExternalCut:
         if self.connection is None:
             return ExternalCut(0)
@@ -161,6 +189,11 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
         with self.writing() as connection:
             if events and ExternalItemRow.one(connection, **key) is None:
+                draft = ExternalDraftRow.one(connection, **key)
+                if draft is not None:
+                    for original in draft.events:
+                        for call in original.tool_calls:
+                            events = tuple(event.with_tool_start(call) for event in events)
                 ExternalItemRow(seq=self._cut(connection).offset + 1, events=events,
                                 **key).insert(connection)
             connection.execute(
@@ -197,6 +230,10 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     def current_draft(self) -> ExternalDraftRow | None:
         with self.reading() as records:
             return records.current_draft()
+
+    def latest_tool(self):
+        with self.reading() as records:
+            return records.latest_tool()
 
     def cut(self) -> ExternalCut:
         with self.reading() as records:

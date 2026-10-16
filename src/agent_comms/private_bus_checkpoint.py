@@ -397,6 +397,16 @@ class CertifiedSourceRead:
         except (sqlite3.Error, OSError, ValueError, TypeError) as error:
             raise RelationViolationError("Certified initial page is unavailable.") from error
 
+    def latest_sender_sources(self, lookups: tuple[str, ...]):
+        """Capture one original message per sender using the existing sender index."""
+        self.require_current()
+        rows = DeliverySources.read(self.connection.execute(
+            f"SELECT w.* FROM json_each(?) AS sender JOIN {DeliverySources.declared_name} w "
+            f"ON w.seq=(SELECT max(seq) FROM {DeliverySources.declared_name} "
+            "WHERE sender_lookup=sender.value)", (json.dumps(lookups),),
+        ))
+        return self.capture_sources(tuple(rows))
+
     def conversation_frontier(self, lookup: str) -> int:
         """Latest original sender/recipient sequence without reconstructing a delivery."""
         self.require_current()

@@ -10,9 +10,11 @@ from metaclass_registry import RegistryConfig
 from pydantic import ConfigDict, Field, JsonValue
 
 from agent_comms.activity import ActivityState
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TranscriptEvent
+from agent_comms.transcript_events import (
+    AssistantTranscript, ThinkingTranscript, TranscriptEvent, ToolStartTranscript,
+)
 from .shared import (
-    ActiveItem, DraftItem, FinishedItem, TaggedWire, ToolCall, TranscriptUpdate,
+    ActiveItem, DraftItem, FinishedItem, TaggedWire, TranscriptUpdate,
     WireHeader, WireModel,
 )
 
@@ -154,24 +156,37 @@ class ToolState(TaggedWire, ABC):
     @abstractmethod
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
 
-    def call(self, part: ToolPart) -> ToolCall:
-        return ToolCall(part.callID, part.tool,
-                        self.input.model_dump(by_alias=True, exclude_unset=True))
+    def call(self, part: ToolPart) -> ToolStartTranscript:
+        return ToolStartTranscript(
+            tool_call_id=part.callID, tool_name=part.tool,
+            raw_input=self.input.model_dump(by_alias=True, exclude_unset=True),
+        )
+
+    def started_at(self, message: MessageInfo) -> float:
+        return message.time.created / 1000
 
 
 class PendingTool(ToolState):
     wire_tag = 'pending'
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
-        return (ActiveItem(message.id, part.id, ActivityState.WORKING, self.call(part).title),)
+        return ActiveItem.tool_started(
+            message.id, part.id, replace(self.call(part), timestamp=self.started_at(message))
+        )
 
 
-class RunningTool(PendingTool):
+class TimedTool(ToolState, ABC):
+    time: PartTime
+
+    def started_at(self, message: MessageInfo) -> float:
+        return self.time.start / 1000
+
+
+class RunningTool(PendingTool, TimedTool):
     wire_tag = 'running'
 
 
-class EndedTool(ToolState, ABC):
-    time: PartTime
+class EndedTool(TimedTool, ABC):
     ok: ClassVar[bool]
     finished = True
 
@@ -180,8 +195,9 @@ class EndedTool(ToolState, ABC):
     def result(self) -> str: ...
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]:
-        events = tuple(replace(event, timestamp=self.time.start / 1000)
-                       for event in self.call(part).finished(self.result, self.ok))
+        events = replace(self.call(part), timestamp=self.started_at(message)).finished(
+            self.result, self.ok
+        )
         return (FinishedItem(message.id, part.id, events),)
 
 

@@ -17,7 +17,7 @@ import sqlite3
 import sys
 from typing import Annotated, AsyncIterator, ClassVar, Generic, TypeVar, Union
 
-from pydantic import BaseModel, ConfigDict, TypeAdapter, Discriminator, Tag, JsonValue, computed_field
+from pydantic import BaseModel, ConfigDict, TypeAdapter, Discriminator, Tag, computed_field
 from metaclass_registry import AutoRegisterMeta
 from agent_comms.messages import Message, MessageKind
 from agent_comms.child_process import ProcessIdentity
@@ -25,9 +25,7 @@ from agent_comms.thread_identity import ThreadRole
 from agent_comms.activity import ActivityState
 from agent_comms.agent_activity import AgentActivity
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.native_tools import NativeTool
-from agent_comms.tool_results import ToolDiff
-from agent_comms.transcript_events import TranscriptEvent, ToolStartTranscript, ToolEndTranscript
+from agent_comms.transcript_events import TranscriptEvent, ToolStartTranscript
 
 
 class WireModel(BaseModel):
@@ -73,27 +71,6 @@ class SendResult(WireModel):
 
 class WatchDatabaseBusy(RuntimeError):
     """Only a failed Core read stream may be reconnected automatically."""
-
-@dataclass(frozen=True)
-class ToolCall:
-    """A CLI invocation uses the same preview and history as a native tool."""
-    id: str
-    name: str
-    arguments: JsonValue
-
-    @property
-    def title(self) -> str:
-        # Some external tools accept a scalar. Native previews only inspect objects.
-        if isinstance(self.arguments, dict):
-            return NativeTool.start(self.id, self.name, self.arguments).title
-        return self.name
-
-    def finished(self, text: str, ok: bool, *, diff: ToolDiff | None = None) -> tuple[TranscriptEvent, ...]:
-        return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
-                                    raw_input=self.arguments),
-                ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
-                                  text=text, ok=ok, diff=diff))
-
 
 @dataclass(frozen=True)
 class Binding:
@@ -161,6 +138,12 @@ class ActiveItem(TranscriptUpdate):
 
     def publish(self, output: ThreadOutput) -> None:
         output.status(self.state, self.detail)
+
+    @classmethod
+    def tool_started(cls, turn_id: str, item_id: str, call: ToolStartTranscript):
+        """Record the call even when historical status updates are suppressed."""
+        return (DraftItem(turn_id, item_id, (call,)),
+                cls(turn_id, item_id, ActivityState.WORKING, call.title))
 
 
 @dataclass(frozen=True)

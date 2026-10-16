@@ -19,14 +19,14 @@ from pydantic import (
 from agent_comms.activity import ActivityState
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import (
-    AssistantTranscript, ThinkingTranscript, ToolEndTranscript,
+    AssistantTranscript, ThinkingTranscript, ToolEndTranscript, ToolStartTranscript,
     TranscriptEvent, UserTranscript, NoticeTranscript,
 )
 
 
 from .shared import (
     ActiveItem, DraftItem, FinishedItem, RegisteredWireMeta, TranscriptUpdate,
-    TurnEnded, TurnStarted, WireModel, TaggedWire, ToolCall,
+    TurnEnded, TurnStarted, WireModel, TaggedWire,
 )
 
 
@@ -261,6 +261,9 @@ class Item(TaggedWire, ABC):
     def activity_detail(self) -> str:
         return self.doing
 
+    def started(self, turn_id: str, timestamp: float) -> tuple[TranscriptUpdate, ...]:
+        return (ActiveItem(turn_id, self.id, self.activity, self.activity_detail),)
+
 class TextBody(WireModel):
     text: str
 
@@ -319,8 +322,12 @@ class ToolItem(Item, ABC):
     def succeeded(self) -> bool: ...
 
     @property
-    def call(self) -> ToolCall:
-        return ToolCall(self.id, self.tool_name, self.arguments)
+    def call(self) -> ToolStartTranscript:
+        return ToolStartTranscript(tool_call_id=self.id, tool_name=self.tool_name,
+                                   raw_input=self.arguments)
+
+    def started(self, turn_id: str, timestamp: float) -> tuple[TranscriptUpdate, ...]:
+        return ActiveItem.tool_started(turn_id, self.id, replace(self.call, timestamp=timestamp))
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return self.call.finished(self.output, self.succeeded)
@@ -627,7 +634,8 @@ class FileChange(WireModel):
     kind: PatchChange.declared_union()
 
     def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return ToolCall(call_id, 'edit', {'file_path': self.path}).finished(
+        return ToolStartTranscript(tool_call_id=call_id, tool_name='edit',
+                                   raw_input={'file_path': self.path}).finished(
             '', ok, diff=self.kind.patch(self.path, self.diff))
 
 
@@ -715,7 +723,7 @@ class TranscriptNotification(WireModel, ABC, metaclass=RegisteredWireMeta):
     threadId: str
 
     @abstractmethod
-    def apply(self, stream: ItemStream) -> TranscriptUpdate | None: ...
+    def apply(self, stream: ItemStream) -> tuple[TranscriptUpdate, ...]: ...
 
 
 class TurnHeader(WireModel):
@@ -726,20 +734,20 @@ class TurnBegan(TranscriptNotification):
     method = 'turn/started'
     turn: TurnHeader
 
-    def apply(self, stream: ItemStream) -> TranscriptUpdate:
-        return TurnStarted()
+    def apply(self, stream: ItemStream) -> tuple[TranscriptUpdate, ...]:
+        return (TurnStarted(),)
 
 
 class TurnFinished(TranscriptNotification):
     method = 'turn/completed'
     turn: TurnHeader
 
-    def apply(self, stream: ItemStream) -> TranscriptUpdate:
+    def apply(self, stream: ItemStream) -> tuple[TranscriptUpdate, ...]:
         for key in [key for key in stream.started if key[0] == self.turn.id]:
             del stream.started[key]
             stream.drafts.pop(key, None)
             stream.summary_indices.pop(key, None)
-        return TurnEnded()
+        return (TurnEnded(),)
 
 
 class ItemNotification(TranscriptNotification, ABC):
@@ -751,9 +759,9 @@ class Started(ItemNotification):
     item: CodexItem
     startedAtMs: int
 
-    def apply(self, stream: ItemStream) -> TranscriptUpdate:
+    def apply(self, stream: ItemStream) -> tuple[TranscriptUpdate, ...]:
         stream.started[self.turnId, self.item.id] = self.startedAtMs
-        return ActiveItem(self.turnId, self.item.id, self.item.activity, self.item.activity_detail)
+        return self.item.started(self.turnId, self.startedAtMs / 1000)
 
 
 class Completed(ItemNotification):
@@ -761,14 +769,14 @@ class Completed(ItemNotification):
     item: CodexItem
     completedAtMs: int
 
-    def apply(self, stream: ItemStream) -> TranscriptUpdate:
+    def apply(self, stream: ItemStream) -> tuple[TranscriptUpdate, ...]:
         # Completion is authoritative, including after joining mid-item.
         key = self.turnId, self.item.id
         stream.drafts.pop(key, None)
         stream.summary_indices.pop(key, None)
-        return ItemEntry(turnId=self.turnId, item=self.item,
-                         startedAtMs=stream.started.pop((self.turnId, self.item.id), None),
-                         completedAtMs=self.completedAtMs).publication()
+        return (ItemEntry(turnId=self.turnId, item=self.item,
+                          startedAtMs=stream.started.pop((self.turnId, self.item.id), None),
+                          completedAtMs=self.completedAtMs).publication(),)
 
 
 class TextDelta(ItemNotification, ABC):
@@ -779,14 +787,14 @@ class TextDelta(ItemNotification, ABC):
     def append(self, stream: ItemStream, key: tuple[str, str]) -> str:
         return stream.drafts.get(key, '') + self.delta
 
-    def apply(self, stream: ItemStream) -> DraftItem | None:
+    def apply(self, stream: ItemStream) -> tuple[TranscriptUpdate, ...]:
         key = self.turnId, self.itemId
         if key not in stream.started:
             # A suffix received after attaching is not the whole draft.
-            return None
+            return ()
         text = stream.drafts[key] = self.append(stream, key)
-        return DraftItem(self.turnId, self.itemId, (
-            self.transcript_type(text, timestamp=stream.started[key] / 1000),))
+        return (DraftItem(self.turnId, self.itemId, (
+            self.transcript_type(text, timestamp=stream.started[key] / 1000),)),)
 
 
 class AssistantDelta(TextDelta):
@@ -817,13 +825,13 @@ class ItemStream:
         self.drafts: dict[tuple[str, str], str] = {}
         self.summary_indices: dict[tuple[str, str], int] = {}
 
-    def receive(self, notification: RpcNotification) -> TranscriptUpdate | None:
+    def receive(self, notification: RpcNotification) -> tuple[TranscriptUpdate, ...]:
         declarations = TranscriptNotification.__registry_config__.registry_dict
         if notification.method not in declarations:
             # Usage, account, raw/private reasoning and other control
             # events are not transcript content. Known methods declare a type.
-            return None
+            return ()
         event = declarations[notification.method].model_validate(notification.params)
         if event.threadId != self.thread:
-            return None
+            return ()
         return event.apply(self)
