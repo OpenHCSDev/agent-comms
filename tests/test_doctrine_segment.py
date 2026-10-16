@@ -2,7 +2,8 @@
 import time
 import pytest
 
-from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
+from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.owner_launch import RestartEnvironment
 from agent_comms.turn_context import (
     ContextSegment, CoordinationSegment, InstructionFile, NextContextTurn,

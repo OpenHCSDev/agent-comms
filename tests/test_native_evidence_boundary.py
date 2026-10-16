@@ -8,7 +8,8 @@ import pytest
 
 from agent_comms.fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from agent_comms.native_entries import NativeEntry
-from agent_comms.native_pi import NativeContextProof, NativePiRpcLaunch, NativePiUnavailable
+from agent_comms.native_pi import NativeContextProof, NativePiRpcLaunch
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.pi_payloads import TextContent, UnknownContent
 
 

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import backend
-from .native_pi import NativePiUnavailable
+from .native_errors import NativePiUnavailable
 from .coordinator import Coordination
 from .pi_payloads import StateData
 from .session_fence import session_writer_fence

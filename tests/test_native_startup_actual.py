@@ -14,7 +14,8 @@ import pytest
 
 from agent_comms import backend
 from agent_comms.diagnostics import record_terminal_failure
-from agent_comms.native_pi import NativePiInputNotSent, NativePiUnavailable
+from agent_comms.native_pi import NativePiInputNotSent
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.native_startup import NativeStartupAdmission
 from agent_comms.pi_rpc import PiRpcChannel

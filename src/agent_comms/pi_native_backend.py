@@ -280,7 +280,7 @@ class PiNativeBackend(
 
     async def compact(self, thread: Thread, instructions: str | None) -> CompactionOutcome:
         """Ask Pi's own engine to compact through its ``compact`` RPC."""
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
         from .pi_commands import Compact
 
         try:
@@ -364,7 +364,7 @@ class PiNativeBackend(
         ))
 
     async def configure(self, thread: Thread, model: str | None, thinking: str | None) -> tuple[str, str]:
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
         from .pi_commands import SetModel, SetThinkingLevel
         from .pi_vocabulary import ThinkingLevel
 

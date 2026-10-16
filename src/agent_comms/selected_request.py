@@ -9,7 +9,8 @@ from functools import partial
 
 from .coordination_errors import StaleFence
 from .coordinator import Coordination
-from .native_pi import NativePiTerminalFailure, NativePiUnavailable
+from .native_pi import NativePiTerminalFailure
+from .native_errors import NativePiUnavailable
 from .private_send_admission import PrivateSendAdmission
 from .selected_participant import SelectedParticipant
 from .selected_result import publish_native_failure

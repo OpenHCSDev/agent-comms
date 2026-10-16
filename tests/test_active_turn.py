@@ -13,7 +13,7 @@ from agent_comms.activity import (
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.drain_failures import drain_failures
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.threads import Thread
 from agent_comms.thread_presentation import AttentionThreadPresentationStatus
 from agent_comms.turn_phase import (

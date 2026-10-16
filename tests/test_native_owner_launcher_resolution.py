@@ -4,7 +4,8 @@ import pytest
 
 from agent_comms import native_pi, private_nk_entrypoint
 from agent_comms.native_package import NativePackageError
-from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
+from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 

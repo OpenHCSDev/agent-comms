@@ -521,7 +521,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
 async def test_selected_validation_cancellation_joins_before_claim(tmp_path, monkeypatch):
     """Pause real package validation; cancellation cannot escape its worker."""
     from agent_comms.coordinated_runtime import SelectedExecution
-    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.native_errors import NativePiUnavailable
 
     pin = os.environ.get("PI_COMPACTION_TEST_PACKAGE")
     if not pin:

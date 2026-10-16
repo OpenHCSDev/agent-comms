@@ -19,7 +19,7 @@ from .activity import (
 )
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
-from .native_pi import NativePiUnavailable
+from .native_errors import NativePiUnavailable
 
 if TYPE_CHECKING:
     from .comms import Comms

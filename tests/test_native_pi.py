@@ -21,15 +21,8 @@ import pytest
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.child_process import AttachedChild, Platform
 from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.native_pi import (
-    CAPABILITY,
-    NativeContextProof,
-    NativePiPromptRejected,
-    NativePiRpcLaunch,
-    NativePiTerminalFailure,
-    NativePiUnavailable,
-    _trusted_package,
-)
+from agent_comms.native_pi import CAPABILITY, NativeContextProof, NativePiPromptRejected, NativePiRpcLaunch, NativePiTerminalFailure, _trusted_package
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.pi_native_backend import PersistentPiSession
@@ -1097,7 +1090,12 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
 
 def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp_path, monkeypatch):
     from agent_comms import native_pi, private_nk_entrypoint
+    from agent_comms.registration import Registration
+    from agent_comms.threads import Thread
+    from agent_comms.turn_context import TurnContext
 
+    owner = Thread("owner", frozenset(), str(tmp_path), created_at=1.0)
+    Registration(tmp_path / "registry.json").register(owner)
     launch = private_nk_entrypoint.PrivateNkLaunch(tmp_path, "a" * 32, tmp_path / "pi", None)
     monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "current", classmethod(lambda cls: launch))
     verified = []
@@ -1108,7 +1106,9 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
         return cli
 
     monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "validate", lambda self: trusted(self.native_package))
-    monkeypatch.setattr(sys, "argv", ["pi-comms-native", "--mode", "rpc", "--model", "owner/model"])
+    monkeypatch.setattr(sys, "argv", ["pi-comms-native", *owner.incarnation.cli_arguments,
+                                      "--mode", "rpc", "--model", "owner/model"])
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "wrong-environment-owner")
     executed = []
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "canonical"))
     monkeypatch.delenv("AGENT_COMMS_NATIVE_CONFIG_DIR", raising=False)
@@ -1134,6 +1134,8 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
         "owner/model",
         "--append-system-prompt",
         str(native_pi.OWNER_INSTRUCTIONS.resolve()),
+        "--append-system-prompt",
+        TurnContext.render_segments(TurnContext.session_segments(owner)).text,
     ]
     assert environment["AGENT_COMMS_NATIVE_CONFIG_DIR"] == str(tmp_path / "canonical")
     assert "NODE_OPTIONS" not in environment

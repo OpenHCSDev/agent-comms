@@ -7,6 +7,8 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 
 from __future__ import annotations
 
+from .native_session_files import NativeSessionFiles
+
 import threading
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -23,7 +25,8 @@ from .coordination_errors import (
 )
 from .coordinator import Coordination
 from .following_inputs import FollowingInputs
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable, _private_session_dir
+from .native_pi import NativePiRpcLaunch
+from .native_errors import NativePiUnavailable
 from .selected_actions import SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_result import CoordinatedTurn
@@ -90,7 +93,7 @@ class SelectedExecution:
             return
         if not self.opt_in:
             raise PublicationActivationBlocked("coordinated runtime requires explicit activation")
-        _private_session_dir(self.root)
+        NativeSessionFiles.require_private_directory(self.root)
         if type(self.fresh_private_enrollment) is not bool:
             raise IdentityConflict("Fresh private enrollment requires an explicit boolean")
         if self.fresh_private_enrollment and self.session_file is not None:

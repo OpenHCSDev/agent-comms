@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.native_errors import NativePiUnavailable
+
 import asyncio
 import json
 import os
@@ -148,7 +150,7 @@ async def test_actual_raw_writes_follow_committed_admission_without_global_exclu
         return result
 
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
-    with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+    with pytest.raises(StaleFence if revoke else NativePiUnavailable):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
         ).run()
@@ -263,7 +265,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
                 native_package=directory,
             ).run()
         )
-        error = asyncio.CancelledError if "cancel" in mode else native_pi.NativePiUnavailable
+        error = asyncio.CancelledError if "cancel" in mode else NativePiUnavailable
         with pytest.raises(error):
             await asyncio.wait_for(task, timeout=3)
         assert time.monotonic() - start < 3
@@ -394,7 +396,7 @@ async def test_short_admission_contention_sends_once_after_release(
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     # The child intentionally exits after reading the prompt; this tests raw
     # admission only, not a native context or successful model response.
-    with pytest.raises(StaleFence if revoke else native_pi.NativePiUnavailable):
+    with pytest.raises(StaleFence if revoke else NativePiUnavailable):
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
         ).run()
@@ -589,7 +591,7 @@ async def test_actual_native_admission_commits_before_bytes_and_releases_feedbac
     monkeypatch.setattr(native_prompt_send, "_write_fenced", probe)
     # The local child supplies capability+reads prompt then exits without proof;
     # the expected downstream error is NOT a post-write admission failure.
-    with pytest.raises(native_pi.NativePiUnavailable) as caught:
+    with pytest.raises(NativePiUnavailable) as caught:
         await SelectedExecution(
             root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
         ).run()

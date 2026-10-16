@@ -10,7 +10,8 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.child_process import BoundedRun
-from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
+from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 from pi_session_turn import one_turn_events
 

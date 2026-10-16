@@ -47,12 +47,8 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.native_pi import (
-    NativeContextProof,
-    NativePiUnavailable,
-    NativeTurnResult,
-    _fresh_selected_revision,
-)
+from agent_comms.native_pi import NativeContextProof, NativeTurnResult, _fresh_selected_revision
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_source_cursor import NativeSourceCursor
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
@@ -474,7 +470,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
 async def test_unavailable_sent_outcomes_propagate_before_model_start(
     tmp_path: Path, monkeypatch,
 ) -> None:
-    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.native_errors import NativePiUnavailable
     from agent_comms.presentation import MessageNotification
 
     root, root_id, _comms, _initial, _people = _root(tmp_path, direct=True)
@@ -634,21 +630,21 @@ async def test_selected_startup_changed_after_state_denies_before_fake_raw_byte(
 async def test_fresh_creation_fsync_unknown_never_enters_fake_model(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from agent_comms import fresh_private_session as fresh_module
+    from agent_comms.native_session_files import NativeSessionFiles
 
     root, root_id, _comms, _initial, people = _root(tmp_path, direct=True)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
     expected_dir = root / "native-sessions" / stable_thread_lookup(people[2].created_at)
-    real_fsync = fresh_module._fsync_directory
+    real_fsync = NativeSessionFiles.sync_directory
 
     def unknown_parent(path: Path) -> None:
         if path == expected_dir:
             raise OSError("injected fresh file parent fsync UNKNOWN")
         real_fsync(path)
 
-    monkeypatch.setattr(fresh_module, "_fsync_directory", unknown_parent)
+    monkeypatch.setattr(NativeSessionFiles, "sync_directory", staticmethod(unknown_parent))
     with pytest.raises(NativePiUnavailable, match="durability UNKNOWN"):
         await SelectedExecution(
             root=root,

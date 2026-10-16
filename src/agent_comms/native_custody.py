@@ -12,7 +12,8 @@ from typing import TYPE_CHECKING
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .native_attestation import NativeAttestation, PendingAttestation
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_pi import NativePiRpcLaunch
+from .native_errors import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole

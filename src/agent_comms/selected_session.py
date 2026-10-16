@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict, StaleFence
 from .coordinator import Coordination
-from .errors import RelationViolationError
 from .diagnostics import PublicationMeasurements
+from .errors import RelationViolationError
 from .fresh_private_session import FreshPrivateSession, create_fresh_private_session
 from .maintenance_barrier import MaintenanceBarrier
+from .native_errors import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity, SessionIdentityHelper
-from .native_pi import NativePiUnavailable, _session_location
 from .owner_launch import RestartEnvironment
 from .selected_actions import CodingSelectedAction, NoSelectedTools, SelectedAction
 
@@ -31,11 +31,14 @@ class SelectedSession:
     directory is an acquired private launch/tool resource. It is not a claim
     that an already selected saved journal lives in that directory.
     """
+
     directory: Path
     creation: FreshPrivateSession | None = field(default=None, kw_only=True)
     # The owner's native custody for this source. Custody only; it never takes
     # part in the launch key.
-    custody: PersistentPiSession | None = field(default=None, kw_only=True, compare=False, repr=False)
+    custody: PersistentPiSession | None = field(
+        default=None, kw_only=True, compare=False, repr=False
+    )
 
     @property
     def path(self) -> Path | None:
@@ -54,8 +57,9 @@ class SelectedSession:
     def tracked_attestation(self, current):
         return current
 
-    def startup_admission(self, launch, root, boundary, *,
-                          measurements: PublicationMeasurements | None = None):
+    def startup_admission(
+        self, launch, root, boundary, *, measurements: PublicationMeasurements | None = None
+    ):
         from .native_startup import NativeStartupAdmission
 
         return NativeStartupAdmission.for_launch(launch, root=root, measurements=measurements)
@@ -72,11 +76,16 @@ class SelectedSession:
     def require_launch_header(self) -> None:
         pass
 
-    def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
+    def launch_environment(
+        self, agent_dir: Path, original
+    ) -> tuple[dict[str, str], RestartEnvironment]:
         environment = dict(os.environ)
         for name in (
-            "PI_PARENT_ID", "PI_AGENT_TAGS", RestartEnvironment.owner_key,
-            "AGENT_COMMS_TAGS", "AGENT_COMMS_SELECTED_TOOL_SOCKET",
+            "PI_PARENT_ID",
+            "PI_AGENT_TAGS",
+            RestartEnvironment.owner_key,
+            "AGENT_COMMS_TAGS",
+            "AGENT_COMMS_SELECTED_TOOL_SOCKET",
             "AGENT_COMMS_SELECTED_TOOL_TOKEN",
         ):
             environment.pop(name, None)
@@ -87,7 +96,13 @@ class SelectedSession:
 
     def attest(self, identity: NativeSessionIdentity) -> Path:
         # Only an unselected new session uses the originally allocated directory.
-        return _session_location(self.directory, identity.session_file)
+        candidate = identity.session_file
+        if not isinstance(candidate, str) or not candidate:
+            raise NativePiUnavailable("Native Pi omitted its session file")
+        path = Path(candidate)
+        if not path.is_absolute() or path.parent != self.directory or path.suffix != ".jsonl":
+            raise NativePiUnavailable("Native Pi changed its private session location")
+        return path
 
     def admit(self, actual: NativeSessionIdentity, runtime_revision) -> Path:
         # get_state established the generated path before the original writer.
@@ -98,16 +113,20 @@ class SelectedSession:
 
     def continued(self, context) -> SelectedSession:
         self.require_context(context)
-        return SavedSelectedSession(self.directory,
+        return SavedSelectedSession(
+            self.directory,
             identity=NativeSessionIdentity(context.session_id, str(context.session_file)),
-            creation=self.creation, custody=self.custody)
+            creation=self.creation,
+            custody=self.custody,
+        )
 
     @classmethod
     def for_launch(cls, directory: Path, path: Path | None, package: Path) -> SelectedSession:
         if path is None:
             return cls(directory)
-        return SavedSelectedSession(directory,
-            identity=NativeSessionIdentity.locate(package, str(path)))
+        return SavedSelectedSession(
+            directory, identity=NativeSessionIdentity.locate(package, str(path))
+        )
 
     @classmethod
     async def prepare(
@@ -124,6 +143,7 @@ class SelectedSession:
         joined preparation shares that immutable acquisition; standalone
         for_launch remains a separate verified lookup.
         """
+
         def acquire() -> SelectedSession:
             directory = participant.comms.root / "native-sessions" / participant.lookup
             worktree = Path(participant.owner.thread.worktree).absolute()
@@ -140,12 +160,17 @@ class SelectedSession:
                 # and the file is unchanged since; no helper re-reads its history.
                 retained = execution.retained_source(Path(selected).absolute())
                 if retained is not None:
-                    return SavedSelectedSession(directory, identity=retained.identity,
-                                                custody=execution.pi_session)
-                return SavedSelectedSession(directory, custody=execution.pi_session,
-                                            identity=SessionIdentityHelper.locate(
-                    execution.native_package, str(Path(selected).absolute()),
-                ))
+                    return SavedSelectedSession(
+                        directory, identity=retained.identity, custody=execution.pi_session
+                    )
+                return SavedSelectedSession(
+                    directory,
+                    custody=execution.pi_session,
+                    identity=SessionIdentityHelper.locate(
+                        execution.native_package,
+                        str(Path(selected).absolute()),
+                    ),
+                )
             # Original wire→bus→registry→store→journal order spans exclusive file
             # creation, fsync and enrollment. No historical-file coverage inference.
             with (
@@ -167,10 +192,16 @@ class SelectedSession:
                     selected_thinking_level=thinking_level,
                 )
             if thinking_level is not None:
-                return FirstSelectedSession(directory,
-                    identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
-            return EnrolledSelectedSession(directory,
-                identity=NativeSessionIdentity(creation.session_id, str(creation.path)), creation=creation)
+                return FirstSelectedSession(
+                    directory,
+                    identity=NativeSessionIdentity(creation.session_id, str(creation.path)),
+                    creation=creation,
+                )
+            return EnrolledSelectedSession(
+                directory,
+                identity=NativeSessionIdentity(creation.session_id, str(creation.path)),
+                creation=creation,
+            )
 
         return await Coordination.run_worker(acquire)
 
@@ -178,6 +209,7 @@ class SelectedSession:
 @dataclass(frozen=True)
 class SavedSelectedSession(SelectedSession):
     """Continue the exact captured native identity, irrespective of storage parent."""
+
     identity: NativeSessionIdentity = field(kw_only=True)
 
     @property
@@ -240,17 +272,24 @@ class FirstSelectedSession(EnrolledSelectedSession):
     def default_action(self) -> SelectedAction:
         return NoSelectedTools()
 
-    def startup_admission(self, launch, root, boundary, *,
-                          measurements: PublicationMeasurements | None = None):
+    def startup_admission(
+        self, launch, root, boundary, *, measurements: PublicationMeasurements | None = None
+    ):
         from .native_startup import SelectedNativeStartupAdmission
 
-        return SelectedNativeStartupAdmission(root, self.creation, boundary, measurements=measurements)
+        return SelectedNativeStartupAdmission(
+            root, self.creation, boundary, measurements=measurements
+        )
 
     def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
         return (
-            "--thinking", self.creation.selected_thinking_level,
-            "--no-extensions", "--no-skills", "--no-context-files",
-            "--no-prompt-templates", "--no-themes",
+            "--thinking",
+            self.creation.selected_thinking_level,
+            "--no-extensions",
+            "--no-skills",
+            "--no-context-files",
+            "--no-prompt-templates",
+            "--no-themes",
         )
 
     def require_launch_tools(self, mode) -> None:
@@ -261,7 +300,9 @@ class FirstSelectedSession(EnrolledSelectedSession):
         self.creation.verify_selected_startup()
         FreshPrivateSession.require_launch_header(self.path, self.creation.selected_thinking_level)
 
-    def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
+    def launch_environment(
+        self, agent_dir: Path, original
+    ) -> tuple[dict[str, str], RestartEnvironment]:
         # Original selected-source first-start isolation is a distinct leaf
         # capability, not the configuration of ordinary saved continuation.
         if os.name != "posix":
@@ -270,9 +311,14 @@ class FirstSelectedSession(EnrolledSelectedSession):
 
         username = pwd.getpwuid(os.geteuid()).pw_name
         environment = {
-            "HOME": str(agent_dir), "USER": username, "LOGNAME": username,
-            "PATH": os.defpath, "LANG": "C.UTF-8", "TMPDIR": str(self.directory),
-            "PI_OFFLINE": "1", "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
+            "HOME": str(agent_dir),
+            "USER": username,
+            "LOGNAME": username,
+            "PATH": os.defpath,
+            "LANG": "C.UTF-8",
+            "TMPDIR": str(self.directory),
+            "PI_OFFLINE": "1",
+            "AGENT_COMMS_SELECTED_SOURCE_COPY": "1",
         }
         configuration = RestartEnvironment(
             home=str(agent_dir), native_config=agent_dir, agent_directory=agent_dir

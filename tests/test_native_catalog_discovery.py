@@ -11,7 +11,8 @@ from agent_comms import backend
 from agent_comms.child_process import AttachedChild, BoundedRun
 from agent_comms.comms import Comms
 from agent_comms.config_options import ModelConfigOption, ThinkingLevelConfigOption
-from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
+from agent_comms.native_pi import NativePiRpcLaunch
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.pi_commands import SetModel, SetThinkingLevel
 from agent_comms.pi_events import Response
 from agent_comms.pi_native_backend import PersistentPiSession
@@ -100,7 +101,7 @@ async def test_actual_selected_launch_custody_rebuilds_source_and_auth(native_ba
     malformed.write_text("{}\n")
     wrong = SavedSelectedSession(malformed.parent,
         identity=NativeSessionIdentity(created.session_id, str(malformed)))
-    with pytest.raises((ValueError, native_pi.NativePiUnavailable)):
+    with pytest.raises((ValueError, NativePiUnavailable)):
         await Coordination.run_worker(partial(execution.tracked_launch,
             package, worktree=native.project, session=wrong,
             provider="response-local", model="fixture"))

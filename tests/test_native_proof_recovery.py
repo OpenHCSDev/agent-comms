@@ -13,7 +13,8 @@ from typing import get_args, get_type_hints
 
 import pytest
 
-from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativePiUnavailable
+from agent_comms.native_pi import NativeContextJournal, NativeContextProof
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_commands import GetState, Prompt
 from agent_comms.pi_events import ContextCommitted, InputCommitted, Response

@@ -41,7 +41,8 @@ from .turn_context import InputContributionCoordinates
 from .maintenance_barrier import MaintenanceBarrier
 from .native_attestation import AttestationError
 from .native_custody import PiSessionChild
-from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+from .native_pi import NativePiRpcLaunch
+from .native_errors import NativePiUnavailable
 from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartupAdmission
 from .pi_rpc import PiRpcChannel

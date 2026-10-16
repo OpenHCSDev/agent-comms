@@ -7,7 +7,7 @@ from agent_comms.comms import wire
 from agent_comms.config_options import InvalidConfigChoice, ModelConfigOption
 from agent_comms.login import run_login
 from agent_comms.native_arguments import NativeArguments
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.owner_launch import RestartEnvironment
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent

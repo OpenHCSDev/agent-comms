@@ -20,7 +20,8 @@ from agent_comms.coordinated_runtime import SelectedExecution
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
-from agent_comms.native_pi import NativePiTerminalFailure, NativePiUnavailable
+from agent_comms.native_pi import NativePiTerminalFailure
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.wake_candidate_index import WakeCandidateIndex
 from agent_comms.wake_policy import PassiveWake

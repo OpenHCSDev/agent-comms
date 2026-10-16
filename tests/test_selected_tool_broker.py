@@ -1,6 +1,8 @@
 """Provider-free selected-tool contract tests; no native Pi/provider launch."""
 
 from __future__ import annotations
+
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.context_segments.doctrine import DoctrineSegment
 
 import asyncio
@@ -141,7 +143,7 @@ def test_default_off_and_packaged_extension_selection(
             tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode,
             session_context=(DoctrineSegment.capture(),),
         )
-    with pytest.raises(native_pi.NativePiUnavailable, match="nominal"):
+    with pytest.raises(NativePiUnavailable, match="nominal"):
         native_pi.NativePiRpcLaunch.tracked(
             tmp_path,
             worktree=tmp_path,

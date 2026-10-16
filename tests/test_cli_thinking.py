@@ -102,7 +102,7 @@ def test_native_arguments_configured_has_one_default(monkeypatch):
 @pytest.mark.parametrize("overridden", [False, True])
 async def test_session_description_and_change_share_refusal(tmp_path, monkeypatch, overridden):
     import os
-    from agent_comms.native_pi import NativePiUnavailable
+    from agent_comms.native_errors import NativePiUnavailable
     from acp import RequestError
 
     if overridden:

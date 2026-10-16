@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .native_session_files import NativeEvidencePrefixChanged, NativeSessionFiles, PrivateEvidenceRead
+
 import json
 import re
 from contextlib import ExitStack, contextmanager
@@ -118,7 +120,7 @@ class NativeEntry(NativeEntryCoordinates, DeclaredFamily, affix="Entry"):
 
     @staticmethod
     def tracked_users(entries):
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
 
         tracked = {}
         try:
@@ -210,7 +212,7 @@ class NativeEvidenceRead:
         self.entries: tuple[NativeEntry, ...] = ()
 
     def require_path(self, session_file):
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
 
         if self.source.path != session_file:
             raise NativePiUnavailable("Native evidence reader belongs to another source")
@@ -219,9 +221,7 @@ class NativeEvidenceRead:
     @contextmanager
     def open(cls, session_file):
         """One original descriptor and byte-verification lifetime for every read."""
-        from .native_pi import PrivateEvidenceRead, _private_session_dir
-
-        _private_session_dir(session_file.parent)
+        NativeSessionFiles.require_private_directory(session_file.parent)
         with PrivateEvidenceRead.open(session_file) as source:
             evidence = cls(source)
             try:
@@ -287,20 +287,16 @@ class NativeEvidenceRead:
         return self._observe(reverified=True)
 
     def _observe(self, *, reverified: bool):
-        from .native_pi import (
-            NativeEvidencePrefixChanged,
-            NativePiUnavailable,
-            _private_session_dir,
-        )
+        from .native_errors import NativePiUnavailable
 
         try:
-            _private_session_dir(self.source.path.parent)
+            NativeSessionFiles.require_private_directory(self.source.path.parent)
             appended = tuple(self.decode_rows(self.source.rows()))
             entries = self.entries + appended
             if not entries or not isinstance(entries[0], SessionEntry):
                 raise ValueError("Native Pi session header is invalid")
             entries[0].require_header()
-            _private_session_dir(self.source.path.parent)
+            NativeSessionFiles.require_private_directory(self.source.path.parent)
         except NativeEvidencePrefixChanged:
             if reverified:
                 self.close()

@@ -23,14 +23,8 @@ from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .mro_dispatch import MroDispatch, handles
 from .native_attestation import AttestationError, ObservedAttestation
-from .native_pi import (
-    NativeContextProof,
-    NativePiPromptRejected,
-    NativePiRpcLaunch,
-    NativePiUnavailable,
-    NativeTurnResult,
-    _verify_context,
-)
+from .native_pi import NativeContextProof, NativePiPromptRejected, NativePiRpcLaunch, NativeTurnResult, _verify_context
+from .native_errors import NativePiUnavailable
 from .native_prompt_send import PromptSendFailure, send_fenced_prompt
 from .native_entries import NativeEntry
 from .native_startup import NativeStartupAdmission

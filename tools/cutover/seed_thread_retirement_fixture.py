@@ -18,7 +18,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_states import BlockedGoal
 from agent_comms.goals import Goal
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.native_pi import NativePiUnavailable
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_prompt_binding import read_expected_prompt_binding
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.owner_lifecycle import OwnerReleaseReceipt

@@ -260,7 +260,8 @@ class CatalogQuery(NativeQuery):
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .child_process import BoundedRun
-        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .native_pi import NativePiRpcLaunch
+        from .native_errors import NativePiUnavailable
         from .pi_rpc import PiRpcChannel
 
         try:
@@ -288,7 +289,7 @@ class CatalogQuery(NativeQuery):
             raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
 
     async def discover(self, agent_bin: str, arguments: Sequence[str]) -> PiResponseData:
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
 
         async with self.catalog(agent_bin, arguments) as (channel, writer):
             response = await self.exchange(channel, writer)
@@ -343,7 +344,7 @@ class SettingCommand(CatalogQuery):
         The catalog session is in memory. Its normal SetModel/SetThinkingLevel
         semantics cannot change a running turn, a saved transcript or its budget.
         """
-        from .native_pi import NativePiUnavailable
+        from .native_errors import NativePiUnavailable
 
         async with self.catalog(agent_bin, arguments, worktree=worktree) as (channel, writer):
             response = await self.exchange(channel, writer)

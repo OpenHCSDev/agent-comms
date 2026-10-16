@@ -33,11 +33,8 @@ from agent_comms.coordination_errors import IdentityConflict, StaleFence
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
-from agent_comms.native_pi import (
-    NativePiRpcLaunch,
-    NativePiUnavailable,
-    read_tracked_input_digest,
-)
+from agent_comms.native_pi import NativePiRpcLaunch, read_tracked_input_digest
+from agent_comms.native_errors import NativePiUnavailable
 from agent_comms.native_prompt_binding import (
     binding_store_path,
     install_prompt_binding_schema,
