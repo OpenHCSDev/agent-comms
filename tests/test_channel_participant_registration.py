@@ -14,7 +14,7 @@ from agent_comms.threads import Thread
 
 @pytest.mark.asyncio
 async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
     for name in ("sender", "receiver", "stopped-reviewer", "unstarted-reviewer"):
         comms.registry.declare(Thread(name, frozenset({"team"}), str(tmp_path)))

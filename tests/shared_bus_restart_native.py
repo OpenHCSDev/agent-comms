@@ -72,7 +72,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
             source_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     if not continue_existing:
         (project/'batch-values.txt').write_text('PUBLIC_VALUE=17\n')
-    service = Comms(stage/'wire', private_initial_writes=True)
+    service = Comms(stage/'wire', private_initial_writes=True, native=retained.native)
     if continue_existing:
         with service.bus.log.locked():
             root_id = service.bus.log._private_marker_unlocked().root_id
@@ -83,8 +83,6 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
         AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(arguments.package),
-        AGENT_COMMS_AGENT_BIN=str(binary),
-        AGENT_COMMS_AGENT_ARGS=shlex.join(retained.arguments or ()),
         AGENT_COMMS_RUNTIME_ROOT=str(binary.parent),
         VIRTUAL_ENV=str(binary.parent.parent),
         AGENT_COMMS_DEBUG_LOG=str(stage/'acp.log'),
@@ -609,7 +607,7 @@ async def retained_owner():
     NativeSourceCursor._advance_proven = observe_advance
     launch = PrivateNkLaunch.from_environment(Path(os.environ['AGENT_COMMS_ROOT']), os.environ)
     launch.validate()
-    service = Comms(launch.validated_root)
+    service = Comms.for_runtime(launch.validated_root)
     name = os.environ['AGENT_COMMS_THREAD']
     agent = CommsAgent(service, runtime_enabled=True,
         private_nk_wire_root_id=launch.wire_root_id,
@@ -808,7 +806,7 @@ async def run(arguments):
         'type': 'api_key', 'key': 'local-only'}}))
     (config/'settings.json').write_text(json.dumps({'compaction':{'enabled':False},
         'retry':{'enabled':False,'maxRetries':0,'provider':{'maxRetries':0}}}))
-    service = Comms(stage/'wire', private_initial_writes=True)
+    service = Comms.for_runtime(stage/'wire', private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(service.root, root_id, arguments.package)
     env = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),

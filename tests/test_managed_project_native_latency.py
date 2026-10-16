@@ -96,7 +96,7 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
                             "facts": [type(fact).__name__ for fact in facts],
                             "marker": text if "LATENCY_" in text else ""})
 
-    comms = Comms(fixture.root)
+    comms = Comms.for_runtime(fixture.root)
     owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False,
         agent_args=["--offline", "--no-extensions", "--extension", str(extension),
                     "--no-skills", "--no-context-files", "--no-prompt-templates", "--tools", "read"])

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
 from .native_session_files import NativeSessionFiles
 from .native_package import OWNER_INSTRUCTIONS
 from .launch_runtime import LaunchRuntime, RestartEnvironment
@@ -459,7 +460,7 @@ class NativePiRpcLaunch:
         else:
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         allowed = (
-            Path(NativeArguments.owner_launcher(runtime)).resolve(),
+            Path(runtime.native_entrypoint).resolve(),
             stack_launcher.resolve(),
             (package / "dist" / "cli.js").resolve(),
         )

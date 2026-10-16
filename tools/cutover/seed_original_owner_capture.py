@@ -53,7 +53,7 @@ def runtime_owners(root, package):
     from native_backend_fixture import NativeBackendFixture
 
     root.mkdir(mode=0o700)
-    service = Comms(root, private_initial_writes=True)
+    service = Comms.for_runtime(root, private_initial_writes=True)
     root_id = service.messaging.initialize_private_initial_protocol()
     service.owners.pin_private_nk_launch(root, root_id, package)
     os.environ.update(AGENT_COMMS_ROOT=str(root),

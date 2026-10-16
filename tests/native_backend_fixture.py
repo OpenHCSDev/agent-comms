@@ -3,6 +3,8 @@
 import asyncio
 import json
 import os
+import shlex
+import sys
 from pathlib import Path
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
@@ -12,6 +14,7 @@ from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, WhenBusy
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.coordinator import Coordination
@@ -22,6 +25,11 @@ from agent_comms.queued_input import InitialInput
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
+
+
+def native_run_command(native: NativeThreadDefaults) -> str:
+    """One real ACP command declaration for explicit native fixture settings."""
+    return shlex.join((sys.executable, "-m", "agent_comms.acp", *native.cli_arguments))
 
 
 class NativeBackendFixture:
@@ -89,7 +97,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                          native_options=("--no-tools",), client=None):
         """Acquire the real saved ACP owner and attested idle native child."""
         agent = canonical_agent(
-            Comms(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin="pi",
+            Comms.for_runtime(self.root), auto_wake=auto_wake, runtime_enabled=runtime_enabled, agent_bin="pi",
             agent_args=self.native_arguments(native_options),
         )
         agent.on_connect(client)
@@ -233,7 +241,7 @@ async def native_backend_fixture(tmp_path):
             }
         )
     )
-    root_id = Comms(root).messaging.initialize_private_initial_protocol()
+    root_id = Comms.for_runtime(root).messaging.initialize_private_initial_protocol()
     environment = {
         "AGENT_COMMS_ROOT": str(root),
         "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID": root_id,

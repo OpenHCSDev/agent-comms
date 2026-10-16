@@ -10,7 +10,7 @@ from .launch_runtime import RestartEnvironment
 from .native_settings import NativeThreadDefaults
 
 
-def run_login(provider: str = "", *, settings: NativeThreadDefaults = NativeThreadDefaults()) -> int:
+def run_login(provider: str = "", *, settings: NativeThreadDefaults) -> int:
     if provider and not re.fullmatch(r"[a-zA-Z0-9_-]+", provider):
         raise ValueError("Invalid provider identifier")
     env = os.environ.copy()

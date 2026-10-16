@@ -38,7 +38,7 @@ async def retained_native_acp_owner(native_backend, monkeypatch):
     """Actual ACP owner and native producer; only the localhost provider is controlled."""
     native = native_backend
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture")
-    comms = Comms(native.root)
+    comms = Comms.for_runtime(native.root)
     agent = canonical_agent(
         comms,
         agent_bin="pi",
@@ -192,7 +192,7 @@ def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
     assert comms.goals.release_waits_after_terminal_turn(other_fence) == ()
     child_fence = _finish(comms, "child", "child-turn")
     assert comms.goals.release_waits_after_terminal_turn(child_fence) == ("owner",)
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     continued = reopened.registry.require("owner").goal
     assert continued.id == goal.id and continued.state.declared_name == "active"
     assert continued.revision == goal.revision + 2
@@ -254,7 +254,7 @@ def test_progress_write_precedes_wait_clear_on_crash_and_stays_in_standby(tmp_pa
     monkeypatch.setattr(GoalWaits, "clear", crash_before_wait_clear)
     with pytest.raises(OSError, match="injected crash"):
         comms.goals.release_waits_after_terminal_turn(child_fence)
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     assert reopened.registry.require("owner").goal.state.declared_name == "active"
     assert reopened.registry.require("owner").goal.id == goal.id
     assert reopened.goals.goal_execution("owner").state.value == "standby"

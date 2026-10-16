@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.coordinator import Coordination
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
@@ -95,12 +96,11 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
     )
     monkeypatch.setenv("PI_CODING_AGENT_DIR", str(config))
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "selected-offline/fixture")
-    monkeypatch.setenv(
-        "AGENT_COMMS_AGENT_ARGS", "--offline --no-extensions --no-skills --no-context-files"
-    )
     for name in ("PI_PROMPT", "PI_PARENT_ID", "AGENT_COMMS_THREAD"):
         monkeypatch.delenv(name, raising=False)
-    comms = Comms(tmp_path / "wire")
+    comms = Comms(tmp_path / "wire", native=NativeThreadDefaults(
+        binary=NativeThreadDefaults.runtime_binary(), arguments=("--offline", "--no-extensions", "--no-skills", "--no-context-files"),
+    ))
     for name in ("sender", "recipient"):
         comms.registry.declare(
             Thread(

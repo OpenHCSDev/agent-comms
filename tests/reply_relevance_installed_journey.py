@@ -56,7 +56,7 @@ async def run(stage, package):
             settings_hashes[str(original)] = hashlib.sha256(original.read_bytes()).hexdigest()
     # Only the offline canonical fork helper's output directory differs. Workers
     # retain the actual original model/settings/auth/extension environment.
-    service = Comms(stage / 'w')
+    service = Comms.for_runtime(stage / 'w')
     fork = await ForkSessionHelper.run(
         ForkSessionRequest(str(package), str(source_file), source.worktree, str(stage / 'forks')),
         cwd=Path(source.worktree),
@@ -69,7 +69,6 @@ async def run(stage, package):
     environment.update(AGENT_COMMS_ROOT=str(service.root),
         AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
         AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
-        AGENT_COMMS_AGENT_BIN=str(binary),
         AGENT_COMMS_RUNTIME_ROOT=str(binary.parent),
         PATH=str(binary.parent) + os.pathsep + environment.get('PATH', ''),
         VIRTUAL_ENV=str(binary.parent.parent),
@@ -98,7 +97,7 @@ async def run(stage, package):
         'canonical_fork': FieldCodec.encode(fork), 'model': source.model,
         'thinking': source.thinking_level.declared_name, 'worktree': source.worktree,
         'original_task_sha256': hashlib.sha256((source.task or '').encode()).hexdigest(),
-        'original_launch_arguments_sha256': hashlib.sha256(json.dumps(launch.arguments).encode()).hexdigest(),
+        'original_launch_arguments_sha256': hashlib.sha256(json.dumps(launch.native.arguments).encode()).hexdigest(),
         'settings_hashes': settings_hashes, 'public_inputs': 0,
         'original_326_327_replays': 0, 'originals': [], 'proof': {}}
 
@@ -110,9 +109,10 @@ async def run(stage, package):
     persist('canonical-saved-fork-prepared-no-input')
     try:
         await asyncio.to_thread(service.owners.start, child.name,
-                                agent_bin=str(binary), agent_args=launch.arguments)
+                                agent_bin=str(binary), agent_args=launch.native.arguments)
         await attach(service, child.name)
         async with acp.spawn_agent_process(Observation(), sys.executable, '-m', 'agent_comms.acp',
+                                           *service.owners.native_defaults.cli_arguments,
                                            env=environment, cwd=source.worktree) as (client, process):
             await client.initialize(protocol_version=1)
             await client.load_session(cwd=source.worktree, session_id=child.name, mcp_servers=[])

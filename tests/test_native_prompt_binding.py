@@ -70,7 +70,7 @@ def tmp_path(tmp_path_factory):
 def _root(tmp_path: Path):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms.for_runtime(root, private_initial_writes=True)
     people = [
         Thread(
             "sender",

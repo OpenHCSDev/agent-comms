@@ -73,7 +73,7 @@ class VerifiedOwnerLoss:
 
         if store.session.path.name != "coordination.sqlite3":
             raise RecoveryBlocked("native recovery requires the canonical coordination store")
-        comms = Comms(store.session.path.parent)
+        comms = Comms.for_runtime(store.session.path.parent)
         with store.session.boundary(comms.bus) as boundary:
             registry = boundary.registry
             assert_native_runtime_schema(store.session._connection)
@@ -216,7 +216,7 @@ class RecoveryMonitorCapability:
 
         if not (root / "coordination.sqlite3").exists():
             return  # No native coordinator, hence no selected attempt claims.
-        receipt = Comms(root).owners.releases.read().get(owner.name)
+        receipt = Comms.for_runtime(root).owners.releases.read().get(owner.name)
         if receipt is None or receipt.thread.process_identity != owner.process_identity:
             raise RecoveryBlocked("stopped attempt requires the exact exited owner release")
         cls.recover_owner(root, owner)

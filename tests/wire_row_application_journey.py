@@ -23,7 +23,7 @@ from agent_comms.wire_record import WireRecord
 
 def main(root: Path) -> None:
     root.mkdir(mode=0o700, parents=True)
-    comms = Comms(root / "wire")
+    comms = Comms.for_runtime(root / "wire")
     births = {"sender": 17001.0, "Alice": 17002.0}
     for name, birth in births.items():
         comms.registry.declare(Thread(

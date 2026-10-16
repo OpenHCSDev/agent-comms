@@ -46,7 +46,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
     tmp_path, monkeypatch, target, body, decision, expected_calls, expected_k, disposition
 ):
     root = tmp_path / "wire"
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     comms.registry.declare(
         Thread(
             "sender",
@@ -127,7 +127,7 @@ async def test_normal_send_to_existing_foreground_executes_exact_nk(
 
 
 def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     for name in ("sender", "beta"):
         comms.registry.declare(
             Thread(
@@ -153,7 +153,7 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
 
 
 def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     for name in ("sender", "beta"):
         comms.registry.declare(
             Thread(
@@ -177,7 +177,7 @@ def test_unmarked_existing_data_is_not_rewritten_or_appended_by_send(tmp_path):
 
 
 def test_explicitly_disabled_private_writer_refuses(tmp_path):
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     for name in ("sender", "beta"):
         comms.registry.declare(
             Thread(
@@ -189,7 +189,7 @@ def test_explicitly_disabled_private_writer_refuses(tmp_path):
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     before = comms.bus.log.path.read_bytes()
-    disabled = Comms(comms.root, private_initial_writes=False)
+    disabled = Comms.for_runtime(comms.root, private_initial_writes=False)
     with pytest.raises(RelationViolationError, match="Private initial publication is disabled"):
         disabled.messaging.send_message("sender", "beta", "disabled writer")
     meta = json.loads((comms.root / "bus_meta.json").read_text())

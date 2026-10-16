@@ -759,8 +759,8 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
             service_tier=self.service_tier,
         )
         catalogs = ConfigOptions(
-            NativeArguments.configured_binary(NativeThreadDefaults()),
-            NativeArguments.configured(NativeThreadDefaults()),
+            NativeArguments.configured_binary(ctx.owners.native_defaults),
+            NativeArguments.configured(ctx.owners.native_defaults),
             RestartEnvironment.inherit(os.environ),
         )
         asyncio.run(catalogs.validate(candidate))
@@ -1364,7 +1364,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
     prompt: str | None = option("--prompt", default=None, multiline=True)
-    pi_bin: str = option("--pi-bin", default_factory=NativeArguments.owner_launcher)
+    pi_bin: str = option("--pi-bin", default_factory=NativeThreadDefaults.runtime_binary)
     project: str = option("--project", parser_default_factory=os.getcwd)
     model: str = option("--model", parser_default=NativeThreadDefaults.model)
     thinking_level: type[ThinkingLevel] = option(
@@ -1372,7 +1372,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
 
     @classmethod
     def project_bindings(cls, comms, project):
-        defaults = NativeThreadDefaults()
+        defaults = ctx.owners.native_defaults
         return (cls(name='', project=project, model=defaults.model,
                     thinking_level=defaults.thinking_level),)
 

@@ -18,6 +18,7 @@ An explicit ``!agent`` prefix selects the coding turn mode.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import os
 import re
@@ -138,12 +139,16 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         self.annotations = AnnotationWorker(comms, self._runtime, self, AnnotationPolicy.configured())
         self.cursors = CursorPublication(comms, self._runtime, private_nk_wire_root_id)
+        native = comms.owners.native_defaults
+        if agent_bin is not None:
+            native = dataclasses.replace(native, binary=agent_bin)
+        if agent_args is not None:
+            native = dataclasses.replace(native, arguments=tuple(agent_args))
         self.turns = TurnRunner(
             comms,
             self._runtime,
             self,
-            agent_bin=agent_bin,
-            agent_args=agent_args,
+            native=native,
             reply_window=reply_window,
             no_reply_window=no_reply_window,
             reply_quiet=reply_quiet,
@@ -523,13 +528,15 @@ class CommsClient(CommsAgent):
 
 def main() -> int:
     from .active_route import resolve_comms_route
+    from .native_settings import NativeThreadDefaults
 
+    native = NativeThreadDefaults.from_cli(sys.argv[1:])
     with resolve_comms_route().admit_client():
         if "--login" in sys.argv[1:]:
             from .login import run_login
 
             index = sys.argv.index("--login")
-            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "")
+            return run_login(sys.argv[index + 1] if index + 1 < len(sys.argv) else "", settings=native)
         debug_path = os.environ.get("AGENT_COMMS_DEBUG_LOG")
         if debug_path:
             import logging
@@ -545,7 +552,8 @@ def main() -> int:
         from .private_nk_entrypoint import private_nk_from_environment
 
         private_nk = private_nk_from_environment()
-        comms = wire(private_nk.validated_root) if private_nk is not None else wire()
+        comms = Comms.bound(resolve_comms_route(private_nk.validated_root if private_nk is not None else None),
+                            native=native)
         if private_nk is not None:
             comms.owners.pin_private_nk_launch(
                 private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package

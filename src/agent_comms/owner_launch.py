@@ -55,11 +55,3 @@ class RetainedOwnerLaunch:
             raise RelationViolationError("Owner launch names another registry incarnation")
         snapshot.require_owner_process(snapshot.owner_identity(thread.name), process)
         return cls(process, observed_interpreter, environment, native)
-
-    @property
-    def binary(self) -> str:
-        return self.native.binary
-
-    @property
-    def arguments(self) -> tuple[str, ...]:
-        return self.native.arguments

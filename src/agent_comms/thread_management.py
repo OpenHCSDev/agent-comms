@@ -32,7 +32,6 @@ from .importing import ImportFormat, ImportLimits, ImportReceipt
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
-from .native_settings import NativeThreadDefaults
 from .native_session_files import NativeSessionFiles
 from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import OwnerLifecycle
@@ -635,7 +634,10 @@ class ThreadManagement:
 
     def create(self, spec: NewThreadSpec, pi_bin: str | None = None) -> Thread:
         """Prepare the session, then register and launch the thread with its first input."""
-        resolved_bin = NativeArguments.configured_binary(NativeThreadDefaults().for_launch(pi_bin, None))
+        native = self.owners.native_defaults
+        if pi_bin is not None:
+            native = replace(native, binary=pi_bin)
+        resolved_bin = NativeArguments.configured_binary(native)
         runtime = LaunchRuntime.current()
         with spec.prepared(self, resolved_bin, runtime) as child:
             # A new incarnation's inbox already starts at its creation time
@@ -646,7 +648,7 @@ class ThreadManagement:
             try:
                 owned = self.owners._launch_owner_unlocked(
                     replace(child, model=self.resolve_thread_model(child.name)),
-                    resolved_bin, startup_input_key=key, launch_runtime=runtime,
+                    native, startup_input_key=key, launch_runtime=runtime,
                 )
                 if key is not None:
                     InputDispositions(self.root).record(

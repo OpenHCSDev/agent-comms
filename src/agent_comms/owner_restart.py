@@ -16,6 +16,7 @@ from .errors import RelationViolationError
 from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
 from .owner_lifecycle import OwnerRestartSelection
+from .native_settings import NativeThreadDefaults
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
 from .thread_identity import AdmissionIdentity, OwnerIdentity
@@ -36,6 +37,14 @@ class OwnerRestartRequest:
     runtime: RestartEnvironment | None = None
     source_interpreter: str | None = None
     launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.current, kw_only=True)
+
+    def validate(self, defaults: NativeThreadDefaults) -> None:
+        # Refuse invalid overrides before fencing or stopping any original owner.
+        selected = defaults
+        if self.agent_bin is not None:
+            selected = replace(selected, binary=self.agent_bin)
+        if self.agent_args is not None:
+            replace(selected, arguments=self.agent_args)
 
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
         if self.names is None:
@@ -107,10 +116,11 @@ class OwnerRestartHandoff:
 
     def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
         def target(thread, source):
+            native = replace(source.native,
+                binary=lifecycle.restart_entrypoint(source.native.binary, runtime) if self.agent_bin is None else self.agent_bin,
+                arguments=self.agent_args if self.agent_args is not None else source.native.arguments)
             return lifecycle._launch_owner_unlocked(
-                thread, self.agent_bin or lifecycle.restart_entrypoint(source.binary, runtime),
-                self.agent_args if self.agent_args is not None else source.arguments,
-                environment=self.runtime.apply_runtime(source.environment),
+                thread, native, environment=self.runtime.apply_runtime(source.environment),
                 launch_runtime=runtime,
             )
 
@@ -123,8 +133,7 @@ class OwnerRestartHandoff:
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
         return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner_unlocked(
-            thread, source.binary, source.arguments, environment=source.environment,
-            launch_runtime=runtime,
+            thread, source.native, environment=source.environment, launch_runtime=runtime,
         ))
 
     def _launch(self, lifecycle: OwnerLifecycle, launch) -> tuple[OwnerRestartResult, ...]:

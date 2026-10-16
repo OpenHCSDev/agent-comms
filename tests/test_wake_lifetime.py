@@ -14,7 +14,7 @@ from stored_inputs import stored_inputs
 
 
 async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private(tmp_path):
-    comms = Comms(tmp_path)
+    comms = Comms.for_runtime(tmp_path)
     comms.registry.declare(
         Thread(
             "owner",

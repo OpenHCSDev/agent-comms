@@ -56,9 +56,9 @@ def test_running_owner_keeps_its_start_launcher_after_runtime_relink(tmp_path, m
         lambda root, root_id, selected, enabled: native_pi._trusted_package(selected),
     )
     monkeypatch.setattr(native_pi.sys, "executable", str(new.with_name("python")))
-    from agent_comms.native_arguments import NativeArguments
+    from agent_comms.native_settings import NativeThreadDefaults
     monkeypatch.setattr(
-        NativeArguments, "owner_launcher", classmethod(lambda cls, runtime: str(old))
+        LaunchRuntime, "native_entrypoint", property(lambda self: str(old))
     )
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
 

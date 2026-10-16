@@ -13,7 +13,6 @@ import json
 import os
 import sys
 import uuid
-from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar

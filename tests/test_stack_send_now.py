@@ -12,6 +12,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import pytest
+from agent_comms.native_settings import NativeThreadDefaults
+from native_backend_fixture import native_run_command
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
@@ -529,8 +531,6 @@ async def _mounted_send_now(
         "XDG_DATA_HOME": str(root / "data"),
         "XDG_STATE_HOME": str(root / "state"),
         "AGENT_COMMS_ROOT": str(root / "wire"),
-        "AGENT_COMMS_AGENT_BIN": native_bin,
-        "AGENT_COMMS_AGENT_ARGS": shlex.join(native_args),
         "AGENT_COMMS_AGENT_MODELS": "openrouter/z-ai/glm-5.3-flash",
     }.items():
         monkeypatch.setenv(key, value)
@@ -540,7 +540,9 @@ async def _mounted_send_now(
         "name": "Agent Comms",
         "identity": "send-now-test",
         "short_name": "send-now",
-        "run_command": {"*": f"{sys.executable} -m agent_comms.acp"},
+        "run_command": {
+            "*": native_run_command(NativeThreadDefaults(binary=native_bin, arguments=tuple(native_args)))
+        },
         "protocol": "acp",
     }
     gate = threading.Event()

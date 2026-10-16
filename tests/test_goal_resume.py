@@ -110,7 +110,7 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
         "owner", ClearGoalAction(expect=GoalPrecondition(goal_id=replacement["id"]))
     )
     after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     assert any(
         entry.reports_turn("same-assistant-turn")
         for entry in reopened.registry.goal_history("owner")
@@ -285,7 +285,7 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
     saved = comms.registry.require("owner").goal
     assert saved is not None
     real_update = comms.goals.update_goal
-    other = Comms(comms.root)
+    other = Comms.for_runtime(comms.root)
 
     def race(name, action, **kwargs):
         assert isinstance(action, ActiveGoalAction)
@@ -300,7 +300,7 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
         other.goals.update_goal(
             name, prior(expect=GoalPrecondition(goal_id=saved.id), progress="unchanged")
         )
-        now = Comms(comms.root).registry.require(name).goal
+        now = Comms.for_runtime(comms.root).registry.require(name).goal
         assert now is not None
         assert (now.id, now.state.declared_name, now.progress) == (
             saved.id,
@@ -329,7 +329,7 @@ def test_resume_rejects_same_value_aba_across_registry_reopen(comms, monkeypatch
                     progress="stale second resume",
                 ),
             )
-    final = Comms(comms.root).registry.require("owner").goal
+    final = Comms.for_runtime(comms.root).registry.require("owner").goal
     assert (
         final is not None
         and final.state.declared_name == prior.declared_name
@@ -346,18 +346,18 @@ def test_same_value_goal_transition_bumps_durable_revision(comms, monkeypatch):
         "owner", BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="same")
     )
     assert first is not None
-    second = Comms(comms.root).goals.update_goal(
+    second = Comms.for_runtime(comms.root).goals.update_goal(
         "owner", BlockedGoalAction(expect=GoalPrecondition(goal_id=started["id"]), progress="same")
     )
     assert second is not None and second.revision == first.revision + 1
-    assert Comms(comms.root).registry.require("owner").goal == second
+    assert Comms.for_runtime(comms.root).registry.require("owner").goal == second
 
 
 def test_automatic_failure_block_advances_goal_revision(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
     snapshot = comms.registry.require("owner").goal
     assert snapshot is not None
-    newer = Comms(comms.root).goals.update_goal(
+    newer = Comms.for_runtime(comms.root).goals.update_goal(
         "owner",
         ActiveGoalAction(
             expect=GoalPrecondition(goal_id=started["id"]), progress="verified newer step"
@@ -373,7 +373,7 @@ def test_automatic_failure_block_advances_goal_revision(comms, monkeypatch):
     assert blocked is not None and blocked.state.declared_name == "blocked"
     assert blocked.revision == newer.revision + 1
     assert blocked.progress.startswith("verified newer step\n\n")
-    assert Comms(comms.root).registry.require("owner").goal == blocked
+    assert Comms.for_runtime(comms.root).registry.require("owner").goal == blocked
 
 
 def test_automatic_failure_block_preserves_existing_goal_progress(comms, monkeypatch):

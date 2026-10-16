@@ -41,7 +41,7 @@ def tmp_path():
 def _root(tmp_path: Path):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms.for_runtime(root, private_initial_writes=True)
     people = [
         Thread(
             "sender",
@@ -103,7 +103,7 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
     assert second_turn is not None and second_turn.cursor_status == "proven"
     assert len(calls) == 2 and second_turn.input_id != first_turn.input_id
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        current = NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
+        current = NativeSourceCursor(Comms.for_runtime(root).bus, reopened, wire_root_id=root_id).read(
             owner_name="alpha"
         )
         assert current is not None
@@ -166,7 +166,7 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
     assert len(comms.bus.log.path.read_bytes().splitlines()) == first.seq + 1
     monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", original)
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        retained = NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
+        retained = NativeSourceCursor(Comms.for_runtime(root).bus, reopened, wire_root_id=root_id).read(
             owner_name="alpha"
         )
         assert retained is not None and retained.input_id == turn.input_id
@@ -186,7 +186,7 @@ def test_checkpoint_index_rollback_denies_cursor_without_sql_mutation(tmp_path):
         db.execute("DELETE FROM addressed WHERE lookup=? AND seq=?", (lookup, first.seq))
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         with pytest.raises((RelationViolationError, IdentityConflict)):
-            NativeSourceCursor(Comms(root).bus, reopened, wire_root_id=root_id).read(
+            NativeSourceCursor(Comms.for_runtime(root).bus, reopened, wire_root_id=root_id).read(
                 owner_name="alpha"
             )
         assert (

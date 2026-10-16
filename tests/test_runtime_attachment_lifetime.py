@@ -17,7 +17,7 @@ from agent_comms.threads import Thread
 @pytest.mark.parametrize("ending", ["exit", "lease", "process", "root", "close", "cancel"])
 async def test_unsent_attachment_ends_with_actual_lifetime(tmp_path, ending):
     process = ParentedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     comms.registry.declare(
         Thread("cold", frozenset(), str(tmp_path), process_identity=process.identity)
     )
@@ -71,7 +71,7 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
     from agent_comms.acp import CommsAgent
     from acp import RequestError
 
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     thread = Thread("owner", frozenset(), str(tmp_path),
                     process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(thread)

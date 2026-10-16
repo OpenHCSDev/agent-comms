@@ -11,6 +11,7 @@ from pathlib import Path
 from agent_comms.acp import CommsClient
 from agent_comms.child_process import ParentedProcess, Platform
 from agent_comms.comms import Comms
+from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.runtime import socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
@@ -25,7 +26,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     await fixture.run("Parent saved history for cold attachment")
     await fixture.persistent.close()
     fixture.provider.text = "Cold fork first reply received."
-    comms = Comms(fixture.root)
+    comms = Comms.for_runtime(fixture.root)
     package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
     arguments = [
@@ -42,7 +43,8 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         "--no-prompt-templates",
         "--no-tools",
     ]
-    monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", shlex.join(arguments))
+    comms.owners.native_defaults = NativeThreadDefaults(binary=comms.owners.native_defaults.binary,
+                                                       arguments=tuple(arguments))
     with comms.bus.log.locked():
         root_id = comms.bus.log.read_metadata_unlocked().root_id
     comms.owners.pin_private_nk_launch(fixture.root, root_id, package)

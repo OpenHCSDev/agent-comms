@@ -769,7 +769,7 @@ def publish(cohort: ReviewedRetainedSummaryCohort | ReviewedBackendCohort, task_
     if receipt.exists() or receipt.is_symlink() or receipt.with_suffix('.originals').exists():
         raise RuntimeError('Original attempt requires review; never automatically repeat')
     cohort.require_original()
-    service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
+    service = Comms.for_runtime(ROOT, private_initial_writes=False, private_claim_writes=False)
     snapshot = service.registry.snapshot()
     owners = tuple(OwnerRestartRequest().threads(snapshot))
     if not owners:

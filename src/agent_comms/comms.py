@@ -14,6 +14,7 @@ from .history_views import HistoryViews
 from .message_bus import MessageBus
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
+from .native_settings import NativeThreadDefaults
 from .registration import Registration
 from .relationships import ThreadRelationships
 from .thread_management import ThreadManagement
@@ -23,7 +24,8 @@ from .transcripts import Transcripts
 
 class Comms:
     def __init__(
-        self, root: CommsRoute | Path, *, private_initial_writes: bool = True, private_claim_writes: bool = True
+        self, root: CommsRoute | Path, *, private_initial_writes: bool = True, private_claim_writes: bool = True,
+        native: NativeThreadDefaults,
     ) -> None:
         self.route = resolve_comms_route(root)
         if private_initial_writes or private_claim_writes:
@@ -39,7 +41,7 @@ class Comms:
         self.messaging = Messaging(self.root, self.registry, self.bus)
         self.agents = AgentActivity(self.root, self.registry)
         self.ledger = CollaborationLedger(self.root / CollaborationLedger.filename, self.registry)
-        self.owners = OwnerLifecycle(self.root, self.registry, self.bus)
+        self.owners = OwnerLifecycle(self.root, self.registry, self.bus, native=native)
         self.goals = Goals(self.root, self.registry, self.bus)
         self.transcripts = Transcripts(self.root, self.registry, self.bus, self.messaging)
         self.threads = ThreadManagement(
@@ -61,6 +63,17 @@ class Comms:
         )
         self.relationships = ThreadRelationships(self.root, self.registry, self.bus, self.views)
 
+    @classmethod
+    def for_runtime(cls, root: CommsRoute | Path, **options) -> Comms:
+        """Compose an ordinary application entrypoint in its running installation."""
+        return cls(root, native=NativeThreadDefaults.from_runtime(), **options)
+
+    @classmethod
+    def bound(cls, route: CommsRoute, *, native: NativeThreadDefaults) -> Comms:
+        comms = cls(route, native=native)
+        route.bind_owners(comms.owners)
+        return comms
+
     @property
     def root(self) -> Path:
         return self.route.root
@@ -68,7 +81,4 @@ class Comms:
 
 def wire(root: CommsRoute | Path | str | None = None) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
-    route = resolve_comms_route(root)
-    comms = Comms(route)
-    route.bind_owners(comms.owners)
-    return comms
+    return Comms.bound(resolve_comms_route(root), native=NativeThreadDefaults.from_runtime())

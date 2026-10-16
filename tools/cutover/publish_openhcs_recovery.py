@@ -360,7 +360,7 @@ def main():
         raise RuntimeError('Original archive audience changed; review actual carry scope')
     if any(Path(source.root).parent != ROOT / 'history' for source in sources):
         raise RuntimeError('Archive source names another root')
-    service = Comms(ROOT, private_initial_writes=False, private_claim_writes=False)
+    service = Comms.for_runtime(ROOT, private_initial_writes=False, private_claim_writes=False)
     snapshot = service.registry.snapshot()
     owners = tuple(OwnerRestartRequest().threads(snapshot))
     if not owners:

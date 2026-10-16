@@ -16,8 +16,8 @@ from agent_comms.turn_lease import ActiveTurn
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
-    old = Comms(tmp_path / "old")
-    current = Comms(tmp_path / "current")
+    old = Comms.for_runtime(tmp_path / "old")
+    current = Comms.for_runtime(tmp_path / "current")
     live = Thread(
         "live",
         frozenset({"comms"}),
@@ -63,8 +63,8 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
 
 @pytest.mark.parametrize("collision", ["name", "incarnation", "alias"])
 def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
-    old = Comms(tmp_path / "old")
-    current = Comms(tmp_path / "current")
+    old = Comms.for_runtime(tmp_path / "old")
+    current = Comms.for_runtime(tmp_path / "current")
     original = Thread("owner", frozenset(), str(tmp_path))
     current.registry.declare(original)
     good = Thread("good", frozenset(), str(tmp_path))
@@ -85,8 +85,8 @@ def test_restore_conflict_has_no_partial_registry_write(tmp_path, collision):
 
 
 def test_restore_keeps_archived_status(tmp_path):
-    old = Comms(tmp_path / "old")
-    new = Comms(tmp_path / "new")
+    old = Comms.for_runtime(tmp_path / "old")
+    new = Comms.for_runtime(tmp_path / "new")
     thread = Thread("archived", frozenset(), str(tmp_path))
     old.registry.register(thread, ArchivedThreadStatus())
     new.registry.restore_stopped(old.registry.snapshot(), (thread.name,))
@@ -95,8 +95,8 @@ def test_restore_keeps_archived_status(tmp_path):
 
 
 def test_catalog_restore_preserves_current_preferences_and_historical_channels(tmp_path):
-    old = Comms(tmp_path / "old")
-    new = Comms(tmp_path / "new")
+    old = Comms.for_runtime(tmp_path / "old")
+    new = Comms.for_runtime(tmp_path / "new")
     for c in (old, new):
         c.channels.create_tag("comms")
     old.channels.create_tag("nra")
@@ -136,7 +136,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
     from agent_comms.coordination_cohort import accept_delivery_cohort
     from agent_comms.coordinator import Coordination
 
-    old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
+    old, current = Comms.for_runtime(tmp_path / "old"), Comms.for_runtime(tmp_path / "current")
     live = Thread(
         "live",
         frozenset({"comms"}),
@@ -203,7 +203,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
 
 
 def test_public_restoration_does_not_create_coordinator(tmp_path):
-    old, current = Comms(tmp_path / "old"), Comms(tmp_path / "current")
+    old, current = Comms.for_runtime(tmp_path / "old"), Comms.for_runtime(tmp_path / "current")
     old.registry.declare(Thread("missing", frozenset({"comms"}), str(tmp_path)))
     assert current.threads.restore_stopped(old.registry.snapshot(), ("missing",)) == ("missing",)
     assert not (current.root / "coordination.sqlite3").exists()

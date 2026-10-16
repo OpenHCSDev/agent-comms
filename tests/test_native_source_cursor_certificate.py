@@ -39,7 +39,7 @@ def tmp_path():
 def _fresh(tmp_path: Path, count: int = 2):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms.for_runtime(root, private_initial_writes=True)
     comms.registry.declare(
         Thread(
             "sender",

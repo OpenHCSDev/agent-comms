@@ -41,7 +41,7 @@ async def profile_runtime_attachment():
     root = Path(os.environ['AGENT_COMMS_ROOT'])
     target = Path(sys.executable).parent.parent
     assert Path(agent_comms.__file__).is_relative_to(target)
-    service = Comms(root)
+    service = Comms.for_runtime(root)
     package = Path(os.environ['AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE'])
     service.owners.pin_private_nk_launch(root, os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'], package)
     original = service.registry.require('replacement-alpha')
@@ -135,7 +135,7 @@ async def runtime_replacement():
         os.environ.update(AGENT_COMMS_ROOT=str(root),
             AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=original['root_id'],
             AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package))
-        service = Comms(root)
+        service = Comms.for_runtime(root)
         service.owners.pin_private_nk_launch(root, original['root_id'], package)
         names = original['names']
         before = service.registry.snapshot()
@@ -175,7 +175,7 @@ async def runtime_replacement():
             assert current.process_identity != owner.process_identity
             assert replace(current, process_identity=owner.process_identity) == owner
             retained = RetainedOwnerLaunch.capture(current, after, interpreter=str(target / 'bin/python'))
-            assert retained.arguments == launch.arguments
+            assert retained.native.arguments == launch.native.arguments
             assert retained.environment['BATCH_OWNER_CREDENTIAL'] == launch.environment['BATCH_OWNER_CREDENTIAL']
             assert retained.environment['PI_CODING_AGENT_DIR'] == launch.environment['PI_CODING_AGENT_DIR']
             await ready(root, current)

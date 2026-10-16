@@ -262,7 +262,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert bus.read_bytes() == before
     from agent_comms.comms import Comms
 
-    assert Comms(comms.root).bus.log.full_history() == rows
+    assert Comms.for_runtime(comms.root).bus.log.full_history() == rows
     schema = next(tool for tool in tool_catalog() if tool["name"] == "comms_decision")
     assert set(schema["parameters"]["required"]) == {"chosen", "rejected", "to"}
     assert "author" not in schema["parameters"]["properties"]
@@ -388,7 +388,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     assert original.task.chosen in retained.text and original.task.rejected[0] in retained.text
     from agent_comms.comms import Comms
 
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     assert reopened.bus.log.full_history()[1] == corrected
 
 

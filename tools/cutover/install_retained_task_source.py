@@ -71,7 +71,7 @@ def main():
     # These resources contain positions/derivations of the old physical prefix,
     # not input outcomes. Candidate replay explicitly refuses an inode change
     # until the stopped operator retires its disposable database and WAL.
-    candidate = WakeCandidateIndex(Comms(root).bus).path
+    candidate = WakeCandidateIndex(Comms.for_runtime(root).bus).path
     indices = [BusActivityIndex(bus.path).path, *root.glob('bus_display_*.json'),
                candidate, candidate.with_name(candidate.name + '-wal'),
                candidate.with_name(candidate.name + '-shm')]

@@ -39,7 +39,7 @@ def test_original_channel_recipient_reuse_and_new_member_do_not_inherit_old_fact
     assert facts_for(comms, replacement) == ()
 
     second = comms.messaging.send_user_message("#team", "New exact user constraint", worktree=str(tmp_path))
-    reopened = Comms(comms.root)
+    reopened = Comms.for_runtime(comms.root)
     assert [fact.source.reference for fact in facts_for(reopened, replacement)] == [second.reference]
     assert [fact.source.reference for fact in facts_for(reopened, outsider)] == [second.reference]
     assert [fact.source.reference for fact in facts_for(reopened, original)] == [first.reference]

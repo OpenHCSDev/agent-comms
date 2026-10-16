@@ -139,7 +139,7 @@ def test_maintenance_operator_rejects_invalid_external_text(text: object) -> Non
 
 
 def test_phase_owner_is_default_off_and_clear_is_exact(tmp_path: Path) -> None:
-    gate = Comms(tmp_path / 'fresh').owners.maintenance
+    gate = Comms.for_runtime(tmp_path / 'fresh').owners.maintenance
     assert gate.read().phase is ReadyPhase
     hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'operator'))
     assert gate.read() == hold
@@ -162,7 +162,7 @@ def test_only_hold_bound_cutover_may_retire_during_draining(tmp_path: Path) -> N
         def complete(self, stopped):
             raise AssertionError('No process should be stopped by a phase check')
 
-    comms = Comms(tmp_path / 'wire')
+    comms = Comms.for_runtime(tmp_path / 'wire')
     hold = comms.owners.maintenance.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
     cutover = ScratchCutover()
     cutover.maintenance_hold = hold
@@ -225,7 +225,7 @@ def _claim_other_process(registry_path: str, ready: mp.Event, result: mp.Queue) 
 
 
 def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -> None:
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     gate = comms.owners.maintenance
     assert gate.read().phase is ReadyPhase
     comms.registry.declare(
@@ -316,7 +316,7 @@ def test_enabled_witness_damage_never_restores_default_off(tmp_path: Path, fault
 
 async def test_direct_claim_and_bind_denied_after_phase_ack_in_other_process(tmp_path: Path) -> None:
     root = tmp_path / "wire"
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     q: mp.Queue = mp.Queue()
     ready = mp.Event()
     proc = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))
@@ -373,7 +373,7 @@ def test_unknown_parent_fsync_does_not_reopen_admission(
 
 
 def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path) -> None:
-    comms = Comms(tmp_path / "wire")
+    comms = Comms.for_runtime(tmp_path / "wire")
     owner = Thread(
         name="owner",
         tags=frozenset(),
@@ -393,7 +393,7 @@ def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path
 
 def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> None:
     root = tmp_path / "wire"
-    comms = Comms(root)
+    comms = Comms.for_runtime(root)
     q: mp.Queue = mp.Queue()
     ready = mp.Event()
     child = mp.Process(target=_claim_other_process, args=(str(comms.registry.store.path), ready, q))

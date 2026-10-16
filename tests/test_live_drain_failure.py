@@ -33,7 +33,7 @@ async def until(predicate):
 
 def owner_view(comms):
     return next(
-        view for view in Comms(comms.root).views.thread_views() if view.thread.name == "beta"
+        view for view in Comms.for_runtime(comms.root).views.thread_views() if view.thread.name == "beta"
     )
 
 

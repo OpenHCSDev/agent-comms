@@ -9,9 +9,9 @@ from .coordinator import Coordination
 from contextlib import suppress
 
 from .acp import CommsAgent
-from .comms import wire
+from .comms import Comms
+from .active_route import resolve_comms_route
 from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
-from .native_arguments import NativeArguments
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .native_settings import NativeThreadDefaults
 from .child_process import ProcessIdentity
@@ -23,7 +23,8 @@ async def run(settings: NativeThreadDefaults) -> None:
     private_nk = PrivateNkLaunch.current()
     # Fail before wire creation/attach; the check verifies the native package once.
     verified_cli = private_nk.validate() if private_nk is not None else None
-    comms = wire(private_nk.validated_root) if private_nk is not None else wire()
+    comms = Comms.bound(resolve_comms_route(private_nk.validated_root if private_nk is not None else None),
+                        native=settings)
     if private_nk is not None:
         comms.owners.pin_private_nk_launch(
             private_nk.validated_root, private_nk.wire_root_id, private_nk.native_package
@@ -37,8 +38,6 @@ async def run(settings: NativeThreadDefaults) -> None:
         private_nk_native_package=private_nk.native_package if private_nk else None,
         private_selected_tool_intent=private_nk.selected_tool_intent if private_nk else None,
         private_nk_verified_cli=verified_cli,
-        agent_bin=NativeArguments.configured_binary(settings),
-        agent_args=list(settings.arguments),
     )
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()
@@ -117,7 +116,7 @@ def main() -> int:
     launch = private_nk_from_environment()
     if launch is None:
         raise ValueError("Headless execution requires a configured native route")
-    comms = wire(launch.validated_root)
+    comms = Comms.bound(resolve_comms_route(launch.validated_root), native=settings)
     thread = comms.registry.require(name)
     if (thread.process_identity is not None and thread.process_identity.alive()
             and thread.process_identity != ProcessIdentity.capture(os.getpid())):

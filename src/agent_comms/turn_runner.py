@@ -92,8 +92,7 @@ class TurnRunner:
         runtime: RuntimeServer,
         effects: TurnEffects,
         *,
-        agent_bin: str | None,
-        agent_args: list[str] | None,
+        native: NativeThreadDefaults,
         reply_window: float | None,
         no_reply_window: float | None,
         reply_quiet: float | None,
@@ -101,9 +100,8 @@ class TurnRunner:
         self.comms = comms
         self.runtime = runtime
         self.effects = effects
-        settings = NativeThreadDefaults().for_launch(agent_bin, agent_args)
-        self.agent_bin = NativeArguments.configured_binary(settings)
-        self.agent_args = NativeArguments.configured(settings)
+        self.agent_bin = NativeArguments.configured_binary(native)
+        self.agent_args = NativeArguments.configured(native)
         self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
         # One backend per ACP session, of the bound thread's declared kind.
         self.persistent_backends: dict[str, AgentBackend] = {}

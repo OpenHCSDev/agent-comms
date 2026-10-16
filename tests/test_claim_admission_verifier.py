@@ -51,7 +51,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
         parent.mkdir(mode=0o700)
         resource = parent / "module.py"
         resource.write_text("value = 1\n")
-        comms = Comms(root)
+        comms = Comms.for_runtime(root)
         for name, created in (("sender", 17021.0), ("Alice", 17022.0), ("Bob", 17023.0)):
             comms.registry.declare(
                 Thread(
@@ -144,7 +144,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     publish_selected_resource_claim(
                         comms, store, admission, owner.name, ExistingFileClaim(Path(resource))
                     )
-            selected_owner = Comms(root).bus.log.claim_projection()[str(resource)]
+            selected_owner = Comms.for_runtime(root).bus.log.claim_projection()[str(resource)]
             assert selected_owner.admission == admission
             assert selected_owner.resource == str(resource)
             assert (

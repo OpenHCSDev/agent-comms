@@ -38,7 +38,7 @@ def _fresh(tmp_path: Path, *, recipients: int = 1) -> tuple[Comms, WakeCandidate
     tmp_path.mkdir(parents=True, exist_ok=True)
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms.for_runtime(root, private_initial_writes=True)
     comms.registry.declare(
         Thread(
             "sender",
