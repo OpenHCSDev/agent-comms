@@ -21,7 +21,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_launch import RestartEnvironment, RetainedOwnerLaunch
-from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
 from .owner_restart import StoppedOwnerFailure
 from .restart_refusals import RestartRefusal
 from pathlib import Path
@@ -82,14 +82,14 @@ class RestartTarget:
     agent_bin: str
 
     @classmethod
-    def capture(cls, comms: Comms, source: Mapping[str, str]):
+    def capture(cls, comms: Comms, source: NativeThreadDefaults):
         runtime = RestartEnvironment.inherit(
             comms.owners.restart_environment(RestartEnvironment.inherit(os.environ).encode())
         )
         return cls(
             sys.executable,
             runtime,
-            comms.owners.restart_entrypoint(source[NativeArguments.binary_key]),
+            comms.owners.restart_entrypoint(source.binary),
         )
 
     def require_watcher(self, comms: Comms) -> None:
@@ -166,7 +166,7 @@ def enqueue(comms: Comms, name: str) -> QueuedRestart:
         owner.require_restart_owner(status)
         selection = OwnerRestartSelection.capture(snapshot, owner.name)
         launch = RetainedOwnerLaunch.capture(owner, snapshot)
-        target = RestartTarget.capture(comms, launch.environment)
+        target = RestartTarget.capture(comms, launch.native)
         target.require_watcher(comms)
         # Queueing itself never signals or interrupts the owner, even if it is busy.
         with _store_lock(directory / "queue"):

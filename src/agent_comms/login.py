@@ -6,10 +6,11 @@ import subprocess
 from pathlib import Path
 
 from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
 from .owner_launch import RestartEnvironment
 
 
-def run_login(provider: str = "") -> int:
+def run_login(provider: str = "", *, settings: NativeThreadDefaults = NativeThreadDefaults()) -> int:
     if provider and not re.fullmatch(r"[a-zA-Z0-9_-]+", provider):
         raise ValueError("Invalid provider identifier")
     env = os.environ.copy()
@@ -26,7 +27,7 @@ def run_login(provider: str = "") -> int:
         env.pop(key, None)
     env["AGENT_COMMS_LOGIN_PROVIDER"] = provider
     command = [
-        NativeArguments.configured_binary(environment=env),
+        NativeArguments.configured_binary(settings),
         "--no-session",
         "--no-tools",
         "--no-extensions",
