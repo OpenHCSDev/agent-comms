@@ -217,7 +217,7 @@ class ThreadManagement:
             tags,
             str(project),
             session_file=str(session_path),
-            title=snapshot.title or name,
+            title=snapshot.title,
             model=model,
         )
         with _store_lock(self._wire_lock_path):

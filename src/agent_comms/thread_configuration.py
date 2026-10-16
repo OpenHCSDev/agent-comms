@@ -30,6 +30,6 @@ class ThreadConfiguration:
             thread.worktree,
             self.threads.resolve_thread_model(thread.name),
             ThinkingLevel.optional_name(thread.thinking_level),
-            thread.title or thread.name,
+            thread.display_title,
             info.context_reading(),
         )
