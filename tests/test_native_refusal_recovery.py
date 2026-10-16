@@ -90,6 +90,9 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
                 observed['goal'] = wired.goals.update_goal(
                     'proj', SetGoalAction(text='Ship the release'))
                 yield ae.ToolEnd(id='set-goal', name='comms_set_goal', ok=True)
+            if isinstance(event, ae.Done):
+                assert event.ok and event.retry_result.success
+                assert event.retry_result.attempt == 3
             yield event
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
@@ -124,10 +127,54 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
         await agent.shutdown()
 
 
+@pytest.mark.parametrize("reason", ["error", "length", "aborted"])
+async def test_explicit_failed_terminal_is_not_a_missing_final_stop(tmp_path, reason):
+    records = [
+        {"type": "message_start", "message": {"role": "assistant", "content": []}},
+        {"type": "message_end", "message": {
+            "role": "assistant", "stopReason": reason,
+            "errorMessage": "terminated", "content": [],
+        }},
+        *_settled_records(),
+    ]
+    stub = _stub_with(tmp_path, records)
+    observed = [event async for event in one_turn_events(
+        stub, [], "distinct terminal mapping input", str(tmp_path), require_input_id=True,
+    )]
+    done = observed[-1]
+    assert isinstance(done, ae.Done) and not done.ok
+    assert done.reason_code == "model_request_failed"
+    assert done.text == "terminated"
+    assert len([event for event in observed if isinstance(event, ae.Done)]) == 1
+    assert [event.text for event in observed if isinstance(event, ae.Error)] == ["terminated"]
+
+
+async def test_failed_native_retry_end_without_assistant_still_declares_failure(tmp_path):
+    stub = _stub_with(tmp_path, [
+        {"type": "native_retry_end", "success": False, "attempt": 3,
+         "finalError": "terminated before an assistant terminal"},
+        *_settled_records(),
+    ])
+    observed = [event async for event in one_turn_events(
+        stub, [], "distinct retry-end-only input", str(tmp_path), require_input_id=True,
+    )]
+    done = observed[-1]
+    assert isinstance(done, ae.Done) and not done.ok
+    assert done.reason_code == "model_request_failed"
+    assert done.text == "terminated before an assistant terminal"
+    assert [event.text for event in observed if isinstance(event, ae.Error)] == [done.text]
+    assert len([event for event in observed if isinstance(event, ae.Done)]) == 1
+
+
 @pytest.mark.asyncio
 async def test_exhausted_empty_responses_become_typed_provider_failure():
     reason = "Provider returned no authoritative response"
+    from agent_comms.turn_output import TurnOutput
+
+    from agent_comms.turn_failure import ModelRequestFailed
+
     turn = object.__new__(TrackedTurnSession)
+    turn.output = TurnOutput()
     turn.terminal = PendingTrackedTerminal()
     await turn.native_retry_finished(pi_events.NativeRetryEnd.from_wire({
         "type": "native_retry_end",
@@ -136,13 +183,10 @@ async def test_exhausted_empty_responses_become_typed_provider_failure():
         "finalError": reason,
     }))
 
-    from agent_comms.turn_failure import ProviderRetryExhausted
-
     with pytest.raises(native_pi.NativePiTerminalFailure) as caught:
-        turn.terminal.raise_failure(
-            None, "provider", "model", ProviderRetryExhausted(reason)
-        )
+        turn.output.raise_if_failed(None, "provider", "model")
     assert reason in str(caught.value)
+    assert caught.value.failure == ModelRequestFailed(reason)
 
 
 @pytest.mark.asyncio

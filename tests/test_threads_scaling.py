@@ -162,8 +162,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
             return original(row)
 
         monkeypatch.setattr(Message, "from_wire", measured)
-        activity, unread = captured.views.presentation.display_view_metrics(
-            source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names)
+        activity, unread = captured.views.presentation.display_view_metrics(source, basis)
         clocks = captured.bus.last_sent_timestamps(source=source)
         assert clocks["PR111"] == first.timestamp
         assert clocks.get("fixer", 0) < appended.timestamp
@@ -188,13 +187,11 @@ def test_computed_checkpoint_stays_with_the_same_opened_cut(wired, monkeypatch):
             return original(row)
 
         monkeypatch.setattr(Message, "from_wire", measured)
-        first_metrics = wired.views.presentation.display_view_metrics(
-            source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names)
+        first_metrics = wired.views.presentation.display_view_metrics(source, basis)
         first_clocks = wired.bus.last_sent_timestamps(source=source)
         assert first.seq in parsed
         parsed.clear()
-        assert wired.views.presentation.display_view_metrics(
-            source, basis.scopes, basis.scopes, basis.viewer, basis.viewer_names) == first_metrics
+        assert wired.views.presentation.display_view_metrics(source, basis) == first_metrics
         assert wired.bus.last_sent_timestamps(source=source) == first_clocks
         assert parsed == []
 
@@ -218,7 +215,6 @@ def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monk
     from agent_comms.bus_projection import BusAppendIndex
 
     wired.messaging.send_message("PR111", "#base", "checkpoint lock scope")
-    wired.views.viewer_snapshot("/lock-scope-viewer")
     reads, checks = [], []
     read = BusAppendIndex._read
     accepts = AppendCheckpoint.accepts
@@ -242,6 +238,17 @@ def test_checkpoint_reads_and_digests_run_outside_wire_and_bus_locks(wired, monk
     monkeypatch.setattr(AppendCheckpoint, "accepts", observed_accepts)
     wired.views.viewer_snapshot("/lock-scope-viewer")
     assert reads and checks
+    # Later cuts start from the checkpoint each index holds; only a write
+    # still reads the saved file, to keep another process's farther prefix.
+    prepared = []
+    prepare = BusAppendIndex.prepare
+    monkeypatch.setattr(BusAppendIndex, "_read", read)
+    monkeypatch.setattr(
+        BusAppendIndex, "prepare", lambda index: prepared.append(index._held) or prepare(index)
+    )
+    wired.messaging.send_message("PR111", "#base", "later row")
+    wired.views.viewer_snapshot("/lock-scope-viewer")
+    assert prepared and None not in prepared
 
 
 def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix(wired):
@@ -256,7 +263,7 @@ def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix
         )
     wired.messaging.send_message("PR111", "#base", "later source row")
     index.write(first)
-    saved = FieldCodec.decode(ActivityCheckpoint, json.loads(index.path.read_text()))
+    saved = index.prepare()
     assert saved.offset == first.offset
     with bus.open("rb") as stream:
         latest_source = FileRevision.from_stat(os.fstat(stream.fileno()))
@@ -266,7 +273,7 @@ def test_historical_checkpoint_advances_disk_but_cannot_replace_a_farther_prefix
         )
     index.write(latest)
     index.write(first)
-    saved = FieldCodec.decode(ActivityCheckpoint, json.loads(index.path.read_text()))
+    saved = index.prepare()
     assert saved.offset == latest.offset
 
 

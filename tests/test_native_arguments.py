@@ -19,6 +19,16 @@ from test_backend_native_lifecycle import native_backend as native_backend
 from agent_comms.pi_vocabulary import OffThinkingLevel
 
 
+def test_unconfigured_launch_has_no_provider_or_model_policy():
+    arguments = NativeArguments.configured(environment={})
+    assert arguments.argv == ()
+    assert arguments.model is None
+    assert arguments.thinking is None
+    assert NativeArguments.configured(environment={
+        NativeArguments.arguments_key: "--provider user --model selected",
+    }).model == "user/selected"
+
+
 def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments():
     arguments = NativeArguments.parse(
         (

@@ -18,6 +18,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions
+from stored_inputs import insert_inputs, stored_inputs
 
 
 async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkeypatch):
@@ -146,7 +147,6 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             "throw new Error('BLOCKED_NONLOCAL_NETWORK');return original(url,...rest);};"
         )
         for key in (
-            "PI_AGENT_ID",
             "PI_PARENT_ID",
             "PI_TASK",
             "PI_WORKTREE",
@@ -209,20 +209,17 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
                     "admission": admission,
                     "target": "parent",
                     "source_text": f"OLD_UNKNOWN_BODY_{index:04d}:" + "x" * 880,
-                    "turn_id": None,
-                    "native_id": None,
-                    "sent_text": None,
-                    "status": "unknown",
+                    "kind": "reserved",
                 }
                 for index in range(935)
             }
             # Populate the durable ledger once; setup must not perform 935 rewrites.
-            agent.inputs.dispositions.path.write_text(json.dumps({"version": 1, "rows": old_rows}))
+            insert_inputs(agent.inputs.dispositions.root, old_rows)
             full_result = {
                 "messages": [],
                 "acknowledged": 0,
                 "unresolved_inputs": [
-                    row.public() for row in agent.inputs.dispositions.read().rows.values()
+                    row.public() for row in stored_inputs(agent.inputs.dispositions.root).rows.values()
                 ],
             }
             assert 900_000 < len(json.dumps(full_result, indent=2).encode()) < 1_100_000
@@ -265,7 +262,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
             assert len(terminal) == 1 and terminal[0].ok is True
             assert terminal[0].text == "INBOX_INSPECTED_TWICE"
             assert len([event for event in events if isinstance(event, ae.InputStarted)]) == 1
-            saved_rows = agent.inputs.dispositions.read().rows
+            saved_rows = stored_inputs(agent.inputs.dispositions.root).rows
             assert {key: FieldCodec.encode(saved_rows[key]) for key in old_rows} == old_rows
             transcript = Path(comms.registry.require("parent").session_file)
             rows = [json.loads(line) for line in transcript.read_text().splitlines()]

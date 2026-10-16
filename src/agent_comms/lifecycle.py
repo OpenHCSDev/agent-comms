@@ -19,7 +19,7 @@ class LifecycleState(ABC):
         """States reachable by an ordinary transition (including self, if allowed)."""
 
     def may_become(self, nxt: LifecycleState) -> bool:
-        return type(nxt) in self.successors()
+        return isinstance(nxt, self.successors())
 
     @classmethod
     @abstractmethod
@@ -29,6 +29,10 @@ class LifecycleState(ABC):
     @classmethod
     def transition_table(cls) -> dict[str, frozenset[str]]:
         return {
-            member.declared_name: frozenset(state.declared_name for state in member.successors())
+            member.declared_name: frozenset(
+                state.declared_name
+                for successor in member.successors()
+                for state in cls.members_with(successor)
+            )
             for member in cls.members_with(cls)
         }

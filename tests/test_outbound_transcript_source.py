@@ -29,14 +29,13 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
     lookup = stable_thread_lookup(comms.registry.require("beta").created_at)
-    predicate, parameters = "w.wire_seq=?", (initial.message.seq,)
-    original = NotificationAssignment.select(root, predicate, parameters)
+    original = NotificationAssignment.read(root, (initial,)).resolve(root)
     wire_before = comms.bus.log.path.read_bytes()
     assert original
     with Coordination(str(database)) as writer:
-        with writer.session.irreversible_admission():
+        with writer.session.transaction():
             for read in (
-                lambda: NotificationAssignment.select(root, predicate, parameters),
+                lambda: NotificationAssignment.read(root, (initial,)),
                 lambda: _snapshot(root, database, "beta"),
             ):
                 with pytest.raises(CoordinationReadUnavailable) as unavailable:
@@ -50,7 +49,7 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
             assert read_recovery_projection(
                 database, owner_lookup=lookup, owner_thread="beta"
             ) == UnavailableRecoveryProjection("busy")
-    assert NotificationAssignment.select(root, predicate, parameters) == original
+    assert NotificationAssignment.read(root, (initial,)).resolve(root) == original
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
     assert comms.bus.log.path.read_bytes() == wire_before
@@ -149,7 +148,9 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
 
     _path, _root_id, comms, initial, _people = _root(tmp_path, direct=direct)
     owner = comms.registry.snapshot().owner_identity('beta')
-    diagnostic = StoppedDrainDiagnostic(owner, 'NativePiUnavailable', 'Original outcome uncertain')
+    diagnostic = StoppedDrainDiagnostic(
+        owner, 'NativePiUnavailable', 'Original outcome uncertain', recorded_at=1.0
+    )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     notice = next(item for item in comms.views.recent_notifications('sender')
                   if item.recipient=='beta')
@@ -173,7 +174,9 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
 
     root, _root_id, comms, _initial, _people = _root(tmp_path)
     owner = comms.registry.snapshot().owner_identity('beta')
-    diagnostic = StoppedDrainDiagnostic(owner, 'NativePiUnavailable', 'Original uncertain outcome')
+    diagnostic = StoppedDrainDiagnostic(
+        owner, 'NativePiUnavailable', 'Original uncertain outcome', recorded_at=1.0
+    )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     message = comms.messaging.send_user_message('#team', 'Independent saved original',
                                                worktree=str(tmp_path))
@@ -212,7 +215,7 @@ def test_capture_page_window_names_zero_and_nonzero_sent_windows(tmp_path):  # n
 
 def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp_path):  # noqa: F811
     root, _root_id, comms, initial, _people = _root(tmp_path)
-    records = NotificationAssignment.select(root, "w.wire_seq=?", (initial.message.seq,))
+    records = NotificationAssignment.read(root, (initial,)).resolve(root)
     assert records
     projected = tuple(NotificationAssignment.for_deliveries((initial,), records))
     assert projected[0][0] is initial
@@ -234,7 +237,7 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
     source = AssignedTranscriptSource.for_thread(
         comms.root, comms.registry.require("beta"), comms.bus.log
     )
-    original = source.rows("w.seq=?", (reply.seq,))
+    original = tuple(source.rows("w.seq=?", (reply.seq,)))
     lookup = stable_thread_lookup(source.recipient.created_at)
     intent = TurnRouting((initial.message.reference,), MessageRoute("beta", ("sender", "alpha")))
     # A later send can fail; this first committed subset stays a valid relation.
@@ -296,10 +299,10 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     receipts = comms.views.recent_notifications("sender")
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
     assert beta.message.reference == message.reference and beta.state == "Sent"
-    assignments = NotificationAssignment.select(
-        root, "w.wire_seq=? AND w.recipient_lookup=?", (message.seq, lookup)
+    original = next(
+        row.assignment for row in NotificationAssignment.read(root, (initial,)).resolve(root)
+        if row.assignment.recipient_lookup == lookup
     )
-    original = assignments[0].assignment
     # Both views are already open. Later messages move this original beyond the
     # bounded recent-notification window before its handling changes.
     for index in range(6):
@@ -438,9 +441,9 @@ def test_original_page_reuses_captured_frontier_between_admission_fences(tmp_pat
 
     monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
     page = read.read()
-    # Before admission, one bounded page query, and after admission. The original
-    # frontier is already certified: page preparation does not certify it again.
-    assert len(barriers) == 3
+    # One bounded page query and one final freshness check. The retained source
+    # removes the former pre-read identity reconstruction.
+    assert len(barriers) == 2
     assert page.after.receipts == read.identity.receipt_frontier
     assert tuple(event.source for event in page.events) == (initial.message.reference,)
 
@@ -448,14 +451,14 @@ def test_original_page_reuses_captured_frontier_between_admission_fences(tmp_pat
 def test_original_page_rejects_relevant_append_during_preparation(tmp_path, monkeypatch):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     read = comms.transcripts.capture_page_read("beta")
-    prepare = comms.transcripts.thread_transcript_page
+    prepare = comms.transcripts._thread_transcript_page
 
     def append_after_page(*args, **kwargs):
         page = prepare(*args, **kwargs)
         comms.messaging.send_message("sender", "beta", "Original concurrent append")
         return page
 
-    monkeypatch.setattr(comms.transcripts, "thread_transcript_page", append_after_page)
+    monkeypatch.setattr(comms.transcripts, "_thread_transcript_page", append_after_page)
     with pytest.raises(StaleRevision, match="during preparation"):
         read.read()
 

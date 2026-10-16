@@ -75,7 +75,7 @@ class SelectedSession:
     def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
         environment = dict(os.environ)
         for name in (
-            "PI_AGENT_ID", "PI_PARENT_ID", "PI_AGENT_TAGS", "AGENT_COMMS_THREAD",
+            "PI_PARENT_ID", "PI_AGENT_TAGS", RestartEnvironment.owner_key,
             "AGENT_COMMS_TAGS", "AGENT_COMMS_SELECTED_TOOL_SOCKET",
             "AGENT_COMMS_SELECTED_TOOL_TOKEN",
         ):

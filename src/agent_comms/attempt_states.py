@@ -8,17 +8,20 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, replace
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError, RecoveryBlocked
 from .declared_family import DeclaredFamily
 from .lifecycle import LifecycleState
 from .coordination_errors import ResponseAdmissionBlocked
 
+if TYPE_CHECKING:
+    from .coordination_tables.attempts import ReplayFact
+
 
 @dataclass(frozen=True)
 class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
-    def retry_finality(self) -> bool:
+    def permits_retry(self) -> bool:
         return False
 
     terminal: ClassVar[bool] = False
@@ -31,7 +34,7 @@ class AttemptState(DeclaredFamily, LifecycleState, affix="Attempt"):
     has_model_context: ClassVar[bool] = False
 
     def observed(self, phase, *, backend_done: bool, process_dead: bool, progress: bool):
-        if phase is not type(self) and phase not in self.successors():
+        if phase is not type(self) and not issubclass(phase, self.successors()):
             raise IdentityConflict("attempt phase edge is not declared")
         if self.process_dead or self.backend_done:
             # Once either finality fact is recorded, the backend cannot
@@ -93,8 +96,15 @@ class LiveAttempt(AttemptState):
 
 
 class TerminalAttempt(AttemptState):
-    def retry_finality(self) -> bool:
-        return self.failed
+    @property
+    def replay_contribution(self) -> ReplayFact:
+        from .coordination_tables.attempts import ReplayFact
+
+        return ReplayFact.NONE
+
+    @property
+    @abstractmethod
+    def release_wording(self) -> str: ...
 
     @abstractmethod
     def disposition(self, snapshot, attempt): ...
@@ -129,7 +139,7 @@ class PromptStartingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             PromptAcceptedAttempt,
             ProviderUnavailableAttempt,
         )
@@ -142,7 +152,7 @@ class PromptAcceptedAttempt(LiveAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             ModelRunningAttempt,
             ModelStalledAttempt,
         )
@@ -162,7 +172,7 @@ class ModelRunningAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             CompactionAttempt,
             ModelStalledAttempt,
             ProviderUnavailableAttempt,
@@ -178,7 +188,7 @@ class ToolRunningAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             ModelRunningAttempt,
             SettlingAttempt,
         )
@@ -189,7 +199,7 @@ class CompactionAttempt(ContextualAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             ModelRunningAttempt,
             ModelStalledAttempt,
         )
@@ -212,7 +222,7 @@ class SettlingAttempt(ContextualAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             SucceededAttempt,
         )
 
@@ -222,7 +232,7 @@ class ModelStalledAttempt(LiveAttempt):
     def successors(cls):
         return (
             AbortingAttempt,
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
         )
 
 
@@ -230,7 +240,7 @@ class AbortingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             RetryingAttempt,
         )
 
@@ -239,7 +249,7 @@ class RetryingAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             ModelRunningAttempt,
             ModelStalledAttempt,
             PromptStartingAttempt,
@@ -251,12 +261,16 @@ class ProviderUnavailableAttempt(LiveAttempt):
     @classmethod
     def successors(cls):
         return (
-            AttemptFailedAttempt,
+            UnsuccessfulTerminal,
             RetryingAttempt,
         )
 
 
 class SucceededAttempt(TerminalAttempt):
+    @property
+    def release_wording(self) -> str:
+        return "Released files after a completed turn"
+
     def disposition(self, snapshot, attempt):
         from .execution_states import CompletedExecution
         from .obligation_states import SilentResponse
@@ -272,17 +286,50 @@ class SucceededAttempt(TerminalAttempt):
         return ()
 
 
-class AttemptFailedAttempt(TerminalAttempt):
-    def disposition(self, snapshot, attempt):
-        from .execution_states import DeferredExecution, FailedExecution
-        from .obligation_states import DeferredResponse, FailedResponse
-
-        if snapshot.retry_authorized:
-            return DeferredExecution(attempt.attempt_ordinal), DeferredResponse()
-        return FailedExecution(attempt.attempt_ordinal), FailedResponse()
+class UnsuccessfulTerminal(TerminalAttempt):
+    """A terminal attempt that did not succeed, irrespective of retry authority."""
 
     failed = True
+
+    def disposition(self, snapshot, attempt):
+        from .execution_states import FailedExecution
+        from .obligation_states import FailedResponse
+
+        return FailedExecution(attempt.attempt_ordinal), FailedResponse()
 
     @classmethod
     def successors(cls):
         return ()
+
+
+class RetryPredecessor:
+    """A known terminal outcome may precede an independently authorized retry."""
+
+    def permits_retry(self) -> bool:
+        return True
+
+    def disposition(self, snapshot, attempt):
+        from .execution_states import DeferredExecution
+        from .obligation_states import DeferredResponse
+
+        if snapshot.retry_authorized:
+            return DeferredExecution(attempt.attempt_ordinal), DeferredResponse()
+        return super().disposition(snapshot, attempt)
+
+
+class AttemptFailedAttempt(RetryPredecessor, UnsuccessfulTerminal):
+    @property
+    def release_wording(self) -> str:
+        return "Released files after a failed turn"
+
+
+class UnknownOutcomeAttempt(UnsuccessfulTerminal):
+    @property
+    def release_wording(self) -> str:
+        return "Released files after a turn with unknown outcome; read them before editing"
+
+    @property
+    def replay_contribution(self) -> ReplayFact:
+        from .coordination_tables.attempts import ReplayFact
+
+        return ReplayFact.UNKNOWN_EFFECTS

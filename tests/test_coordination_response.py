@@ -233,8 +233,8 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
                 case.store,
                 case.bus,
                 case.fence,
-                intent.payload,
-                timestamp=intent.timestamp,
+                intent.message.body,
+                timestamp=intent.message.timestamp,
                 exact_target=case.reply_target, owner_witness=case.witness,
             ),
             AlreadyApplied,
@@ -554,7 +554,7 @@ def test_direct_registry_stop_in_other_process_waits_for_fenced_bus_and_sql(
         )
         actual_append = case.bus.publisher._publish_keyed_response_unlocked
         env = os.environ.copy()
-        for name in ("PI_AGENT_ID", "PI_PARENT_ID", "PI_AGENT_TAGS", "AGENT_COMMS_THREAD"):
+        for name in ("PI_PARENT_ID", "PI_AGENT_TAGS", "AGENT_COMMS_THREAD"):
             env.pop(name, None)
         env["PYTHONPATH"] = str(Path(__file__).resolve().parents[1] / "src")
 
@@ -636,5 +636,45 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
             )
         assert case.bus.log.latest_sequence() == case.origin_seq
         assert ResponseObligation.response_record(case.store.snapshots.get("exec").publication_intents, case.reply_target) is None
+    finally:
+        case.close()
+
+
+def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
+    from uuid import uuid4
+
+    from agent_comms.input_disposition import InputDispositions
+    from agent_comms.input_origin import WireInputOrigin
+
+    case = _ready(tmp_path, direct=True)
+    try:
+        follow_up = case.comms.messaging.send_message("sender", "owner", "Part 2, mid-turn")
+        lease = case.witness.thread.require_turn_lease()
+        inputs = InputDispositions(case.comms.root)
+        key = inputs.bus_key(follow_up, case.witness.thread)
+        text = "Part 2, mid-turn"
+        assert inputs.record(
+            key, seq=follow_up.seq, owner="owner", admission=lease.admission_generation,
+            target="owner", text=text, origin=WireInputOrigin(case.root_id, follow_up.reference),
+        )
+        native_id = uuid4().hex
+        assert inputs.bind(
+            key, admission=lease.admission_generation, turn_id=lease.turn_id,
+            native_id=native_id, text=text,
+        )
+        assert inputs.started(key, turn_id=lease.turn_id, native_id=native_id, text=text)
+
+        intent = prepare_fenced_response(
+            case.store, case.bus, case.fence, "Answers both",
+            exact_target=case.reply_target, owner_witness=case.witness,
+        ).value
+        publish_fenced_response(
+            case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness
+        )
+        response = case.bus.log.read_keyed_response(intent)
+        assert response.answers == (follow_up.reference,)
+        with case.bus.log.certified_read() as source:
+            replies = tuple(source.replies((follow_up.reference,)))
+        assert [reply.message.reference for reply in replies] == [response.reference]
     finally:
         case.close()

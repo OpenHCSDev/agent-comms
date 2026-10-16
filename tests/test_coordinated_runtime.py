@@ -268,13 +268,14 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         digest = hashlib.sha256((input_id + str(generation)).encode()).hexdigest()
         proof_rows.append(
             {
-                "schema": 1,
+                "schema": 2,
                 "type": "context_committed",
                 "sessionId": session_id,
                 "inputId": input_id,
                 "sessionEntryId": entry_id,
                 "requestGeneration": generation,
                 "llmContextDigest": digest,
+                "committedAtMs": 1_791_964_800_000 + generation,
             }
         )
         proof_file = Path(str(session_file) + ".input-proof")
@@ -305,7 +306,10 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
             await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
         return NativeTurnResult(
             reply,
-            NativeContextProof(input_id, session_id, entry_id, generation, digest, session_file),
+            NativeContextProof(
+                input_id, session_id, entry_id, generation, digest,
+                1_791_964_800_000 + generation, session_file,
+            ),
         )
 
     return fake, calls
@@ -465,40 +469,6 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     assert 'recent_sent_outcomes: [{"source_seq":' in frame
     assert '"state":"Read"' in frame
     assert replace(notification, changed=False).sent_outcome() is None
-
-
-async def test_removed_sent_session_is_context_not_a_model_start_blocker(
-    tmp_path: Path, monkeypatch,
-) -> None:
-    from agent_comms.notification_assignment import RemovedContextProgress
-    from agent_comms.presentation import MessageNotification
-    from agent_comms.selected_participant import SelectedParticipant
-
-    root, root_id, _comms, initial, people = _root(tmp_path, direct=True)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
-    removed = RemovedContextProgress().read_notification(
-        MessageNotification(
-            initial.audience.recipients[0], "Sent", "", message=initial.message, changed=True
-        )
-    )
-    removed_outcome = removed.sent_outcome()
-    assert removed_outcome is not None
-    monkeypatch.setattr(
-        SelectedParticipant,
-        "capture_sent_outcomes",
-        lambda _comms, _owner, _sources, _assignment_read: (removed_outcome,),
-    )
-    runner, calls = _fake_model()
-    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
-
-    outcome = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path, opt_in=True
-    ).run()
-
-    assert outcome is not None
-    assert len(calls) == 1
-    assert '"state":"Removed"' in calls[0][1]
-    assert '"detail":"Recipient session removed"' in calls[0][1]
 
 
 async def test_unavailable_sent_outcomes_propagate_before_model_start(
@@ -1102,7 +1072,8 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(
         return NativeTurnResult(
             '{"decision":"IGNORE"}',
             NativeContextProof(
-                input_id, "fake", "fake", 1, "f" * 64, session.directory / "nonexistent.jsonl"
+                input_id, "fake", "fake", 1, "f" * 64, 1_791_964_800_001,
+                session.directory / "nonexistent.jsonl",
             ),
         )
 

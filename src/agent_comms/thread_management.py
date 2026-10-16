@@ -32,6 +32,7 @@ from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_session_files import NativeSessionFiles
+from .owner_launch import RestartEnvironment
 from .owner_lifecycle import OwnerLifecycle
 from .pi_vocabulary import ServiceTier
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
@@ -248,9 +249,7 @@ class ThreadManagement:
 
     def rename_self(self, new_name: str) -> RenameThreadResult:
         """Rename the caller's own running thread, retaining its old aliases."""
-        caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-        if not caller:
-            raise RelationViolationError("Self rename requires PI_AGENT_ID or AGENT_COMMS_THREAD.")
+        caller = RestartEnvironment.calling_thread()
         with _store_lock(self._wire_lock_path):
             if self.registry.require(caller).auto_title_pending and (
                 len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
@@ -261,10 +260,7 @@ class ThreadManagement:
             )
 
     def set_project_self(self, path: str) -> ProjectChangeResult:
-        caller = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-        if not caller:
-            raise RelationViolationError("Changing your project requires a thread identity.")
-        return self.set_project(caller, path)
+        return self.set_project(RestartEnvironment.calling_thread(), path)
 
     def set_project(self, name: str, path: str) -> ProjectChangeResult:
         """Move one thread's project, preserving its owner and conversation."""
@@ -641,7 +637,7 @@ class ThreadManagement:
                 pi_bin, startup_input_key=key,
             )
             if key is not None:
-                InputDispositions(self.root / InputDispositions.filename).record(
+                InputDispositions(self.root).record(
                     key, seq=None, owner=owned.name, target=owned.name,
                     admission=self.registry.snapshot().admission_generations[owned.name],
                     text=spec.initial_prompt,

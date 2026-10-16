@@ -22,7 +22,7 @@ from .thread_identity import ThreadRole
 from .text_digest import TextDigest
 
 if TYPE_CHECKING:
-    from .input_disposition import InputDocument
+    from .input_disposition import InputDispositions
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
@@ -225,7 +225,7 @@ class RetainedTaskFacts:
         """Describe this exact captured payload, never unrelated bus activity."""
         return TextDigest.of(self.canonical_bytes(FieldCodec.encode(self)).decode())
 
-    def original_input_facts(self, inputs: InputDocument) -> tuple[ExactTaskFact, ...]:
+    def original_input_facts(self, inputs: InputDispositions) -> tuple[ExactTaskFact, ...]:
         """Resolve pins through their original declarations and input owner.
 
         The lookup is local to this read. A pin cannot supply replacement input

@@ -18,6 +18,7 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.input_disposition import InputDispositions
 from delivery_owner_fixture import canonical_agent
+from stored_inputs import stored_inputs
 
 
 async def owner(tmp_path, monkeypatch):
@@ -42,7 +43,7 @@ async def owner(tmp_path, monkeypatch):
 
 
 def disposition_rows(agent):
-    return list(agent.inputs.dispositions.read().rows.values())
+    return list(stored_inputs(agent.inputs.dispositions.root).rows.values())
 
 
 @pytest.mark.asyncio
@@ -129,8 +130,8 @@ async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
         assert current.id == replacement.id and current.state.active
         generation = store.snapshot(replacement.id)
         assert generation.lifecycle == ReadyGeneration() and generation.number == 1
-        reopened = InputDispositions(comms.root / InputDispositions.filename)
-        assert len(reopened.read().unknown(frozenset({"project"}))) == 1
+        reopened = InputDispositions(comms.root)
+        assert len(reopened.unresolved(frozenset({"project"})).unknown(frozenset({"project"}))) == 1
     finally:
         await agent.shutdown()
 

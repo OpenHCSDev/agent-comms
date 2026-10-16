@@ -7,7 +7,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.display_order import ThreadSort
+from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.errors import RelationViolationError
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -104,7 +104,7 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
     old.channels.set_channel_any_mode("#nra", True)
     old.channels.set_channel_pinned("#nra", True)
     old.channels.set_channel_pinned("#all", True)
-    new.channels.set_channel_sort("#comms", ThreadSort.LAST_ACTIVITY)
+    new.channels.set_channel_sort("#comms", LastActivityThreadSort)
     before = new.channels.catalog.read().resolve("#comms")
     old_files = {p: p.read_bytes() for p in old.root.glob("*.json")}
 

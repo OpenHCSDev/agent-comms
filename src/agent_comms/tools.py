@@ -27,6 +27,7 @@ from .goal_actions import (
 from .goal_states import ActiveGoal
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind
+from .owner_launch import RestartEnvironment
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
@@ -129,12 +130,7 @@ class ToolRequest(Command, DeclaredFamily, affix="Tool"):
 
 
 def _executing_thread() -> str:
-    import os
-
-    name = os.environ.get("PI_AGENT_ID") or os.environ.get("AGENT_COMMS_THREAD")
-    if not name:
-        raise ValueError("Goal updates require an executing thread identity.")
-    return name
+    return RestartEnvironment.calling_thread()
 
 
 def _tag_set(value: str) -> frozenset[str]:
@@ -289,11 +285,11 @@ class CommsSortChannelsTool(ToolRequest):
         "Persist channel-list ordering independently of member ordering. Pinned "
         "channels stay first, with built-in channels first within each pin group."
     )
-    order: ChannelSort = tool_field("Channel list order")
+    order: type[ChannelSort] = tool_field("Channel list order")
 
     def apply(self, comms: Comms) -> JsonObject:
         order = comms.channels.set_channel_order(self.order)
-        return {"order": order.value}
+        return {"order": FieldCodec.encode(order)}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -348,7 +344,7 @@ class CommsChannelsTool(ToolRequest):
                 FieldCodec.encode(view)
                 for view in comms.channels.catalog.read().saved_views.values()
             ],
-            "order": comms.channels.catalog.read().list_order.value,
+            "order": FieldCodec.encode(comms.channels.catalog.read().list_order),
         }
 
 
@@ -408,7 +404,7 @@ class CommsSortChannelTool(ToolRequest):
     label = "Sort channel members"
     description = "Persist one channel's member ordering, shared by all attached views."
     name: str = tool_field("Channel name")
-    order: ThreadSort = tool_field("Member ordering")
+    order: type[ThreadSort] = tool_field("Member ordering")
 
     def apply(self, comms: Comms) -> JsonObject:
         return comms.channels.set_channel_sort(self.name, self.order).to_wire()

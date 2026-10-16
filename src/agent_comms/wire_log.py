@@ -43,6 +43,7 @@ from .store_files import (
     _iter_jsonl_stream,
     _store_lock,
     _store_lock_file,
+    _store_read_lock,
     _held_store_source,
 )
 from .wire_metadata import WireMetadata
@@ -88,11 +89,22 @@ class OpenedWireSnapshot:
         """Keep a computed exact-cut value with this existing source resource."""
         if record.source != self.revision:
             raise ValueError("Computed append checkpoint belongs to another source cut")
-        self._append_checkpoints[index] = index.remember(record)
+        index.hold(record)
+        self._append_checkpoints[index] = record
 
     @property
     def boundary(self) -> int:
         return self.revision.size if self.revision is not None else 0
+
+    def tail_bytes(self, max_bytes: int) -> tuple[bytes, int]:
+        """Read trailing bytes from this fixed cut's retained descriptor."""
+        if max_bytes < 0:
+            raise ValueError("tail byte limit must be nonnegative")
+        if self.stream is None:
+            return b"", 0
+        start = max(0, self.boundary - max_bytes)
+        self.stream.seek(start)
+        return self.stream.read(self.boundary - start), start
 
     @staticmethod
     def messages(record: Mapping) -> tuple[Message, ...]:
@@ -190,7 +202,6 @@ class CertifiedOpenedWireSnapshot(OpenedWireSnapshot):
         rows = None
         try:
             with BusPageIndex(Path(self.stream.name), readonly=True) as index:
-                index.connection.execute("BEGIN")
                 saved = BusPageSource.one(index.connection, singleton=1)
                 if saved is not None and saved.covers(self.stream, self.revision):
                     rows = tuple(
@@ -229,8 +240,9 @@ class ConversationSourceWindowRequest:
     limit: int
     ascending: bool
 
-    def capture(self, source, lookup: str) -> ConversationSourceWindow:
-        rows = (
+    def capture(self, source, lookup: str) -> Iterator[CommittedDelivery]:
+        """Copy selected bytes now; decode them only as the consumer advances."""
+        return (
             source.conversation_sources(
                 lookup,
                 self.predicate,
@@ -239,9 +251,16 @@ class ConversationSourceWindowRequest:
                 ascending=self.ascending,
             )
             if self.limit
-            else ()
+            else iter(())
         )
-        return ConversationSourceWindow(self, tuple(rows))
+
+    @classmethod
+    def frontier(cls, log: WireLog, lookup: str) -> int:
+        """Read one conversation high-water without reconstructing a delivery."""
+        if not log.path.exists() and not log.metadata_path.exists():
+            return 0
+        with log.certified_read() as source:
+            return source.conversation_frontier(lookup)
 
     @classmethod
     def capture_many(
@@ -249,20 +268,12 @@ class ConversationSourceWindowRequest:
         log: WireLog,
         lookup: str,
         requests: tuple[ConversationSourceWindowRequest, ...],
-    ) -> tuple[ConversationSourceWindow, ...]:
-        """Capture all requests from the same certified wire cut."""
+    ) -> tuple[Iterator[CommittedDelivery], ...]:
+        """Copy each selection from one source; consumers decode after release."""
         if not log.path.exists() and not log.metadata_path.exists():
-            return tuple(ConversationSourceWindow(request, ()) for request in requests)
+            return tuple(iter(()) for request in requests)
         with log.certified_read() as source:
             return tuple(request.capture(source, lookup) for request in requests)
-
-
-@dataclass(frozen=True, slots=True)
-class ConversationSourceWindow:
-    """One request and its rows from the same certified wire cut."""
-
-    request: ConversationSourceWindowRequest
-    sources: tuple[CommittedDelivery, ...]
 
 
 class WireLog:
@@ -273,7 +284,7 @@ class WireLog:
 
     def register_append_index(self, index: BusAppendIndex[Checkpoint]) -> BusAppendIndex[Checkpoint]:
         """Register one index owner for automatic capture with every opened cut."""
-        if index.bus_path != self.path:
+        if index.source_path != self.path:
             raise ValueError("Append index belongs to another bus")
         if index not in self._append_indexes:
             self._append_indexes.append(index)
@@ -289,8 +300,8 @@ class WireLog:
 
     @contextmanager
     def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
-        """Borrow the original source verified by this canonical lock barrier."""
-        with _store_lock(self.path, blocking=blocking, contention=contention) as lock:
+        """Borrow the original source verified by the canonical reader barrier."""
+        with _store_read_lock(self.path, blocking=blocking, contention=contention) as lock:
             with self._certified_source(lock) as source:
                 yield source
 
@@ -341,9 +352,9 @@ class WireLog:
         source.require_current()
 
     def conversation_sources(self, lookup, predicate, parameters, *, limit, ascending):
-        """Read an original window through its existing canonical barrier."""
+        """Copy a bounded window under the lock; decode after releasing it."""
         request = ConversationSourceWindowRequest(predicate, parameters, limit, ascending)
-        return request.capture_many(self, lookup, (request,))[0].sources
+        return request.capture_many(self, lookup, (request,))[0]
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.
@@ -375,22 +386,11 @@ class WireLog:
             for record in lock.certified_read().context_records(manifest):
                 self._append_private_unlocked(marker, record.to_wire())
 
-    def context_manifests(self, name: str, registry):
-        return tuple(resource.value for resource in self.context_manifest_resources(name, registry))
+    def context_manifest_page(self, name: str, registry, *, cursor=None, previous=()):
+        from .private_bus_checkpoint import RecordedContextManifestSources
 
-    def context_manifest_resources(self, name: str, registry, *, previous=()):
-        """Capture original source and rename membership before decoding.
-
-        The original wire -> bus -> registry order selects the read snapshot;
-        neither physical publication lock survives into its decoder.
-        """
-        with _store_lock(self.path.parent / "wire"):
-            with self.certified_read() as source:
-                snapshot = registry.snapshot()
-                incarnation = snapshot.require(name).incarnation
-                captured = source.marker.access.context_resources(
-                    source, incarnation, snapshot, previous=previous)
-        return tuple(captured)
+        return RecordedContextManifestSources.for_owner(
+            self, name, registry, cursor=cursor, previous=previous)
 
     @contextmanager
     def retained_sources(self, name: str, registry):
@@ -404,13 +404,12 @@ class WireLog:
         from .input_disposition import InputDispositions
         from .retained_task_facts import RetainedTaskFacts
 
-        with _store_lock(self.path.parent / "wire"):
-            with self.certified_read() as source:
-                snapshot = registry.snapshot()
-                owner = snapshot.require(name)
-                inputs = InputDispositions(self.path.parent / InputDispositions.filename).read()
-                captured = source.retained_task_facts(owner.incarnation)
-                export = WireExportBoundary(source.marker.last_seq, time.time())
+        with _store_lock(self.path.parent / "wire", shared=True), self.certified_read() as source:
+            snapshot = registry.snapshot()
+            owner = snapshot.require(name)
+            inputs = InputDispositions(self.path.parent)
+            captured = source.retained_task_facts(owner.incarnation)
+            export = WireExportBoundary(source.marker.last_seq, time.time())
         yield owner, snapshot, RetainedTaskFacts(tuple(captured)), inputs, export
 
     def retained_context(self, name: str, registry):
@@ -587,8 +586,6 @@ class WireLog:
         Caller holds the bus file lock. Absence is NOT authorization to append.
         """
 
-        if type(intent) is not PublicationIntents:
-            raise TypeError("Keyed response requires a validated PublicationIntents.")
         metadata = self._private_marker_unlocked()
         from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
@@ -599,9 +596,8 @@ class WireLog:
 
     def read_keyed_response(self, intent: PublicationIntents) -> Message | None:
         """Read-only exact receipt resolution; never append or repair an absent row."""
-        with _store_lock(self.path):
-            matched, _, _ = self._keyed_receipt_unlocked(intent)
-            return matched
+        with self.certified_read() as source:
+            return source.keyed_receipt(intent)
 
     def prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...]:
         """Read registered index candidates before taking any source locks."""
@@ -614,7 +610,7 @@ class WireLog:
     ):
         """Own one fixed opened inode/byte boundary beyond physical custody."""
         with ExitStack() as resources:
-            with _store_lock(self.path) as lock:
+            with _store_read_lock(self.path) as lock:
                 metadata = (
                     self._private_marker_unlocked()
                     if self.path.exists() or self.metadata_path.exists()
@@ -717,7 +713,7 @@ class WireLog:
 
     def latest_sequence(self) -> int:
         """Return the global high-water sequence without loading message bodies."""
-        with _store_lock(self.path) as lock:
+        with _store_read_lock(self.path) as lock:
             return self._committed_sequence_unlocked(lock)
 
     def _iter_log_unlocked(self) -> Iterator[Message]:
@@ -756,13 +752,12 @@ class WireLog:
 
     @contextmanager
     def verify_before_read_unlocked(self, *, shared: bool = False):
-        """Make every visible opt-in bus row durable before ANY bus-lock reader sees it.
+        """Read a durably certified source, recovering unfinished writes exclusively.
 
-        The marker is fsynced before the first claim send. A failed bus append may
-        leave a complete, visible row: another cooperating process must fsync the
-        opened inode and its directory, then reject incomplete/corrupt rows, before
-        treating either the announcement or the claim as committed. This hook is
-        entered by the shared bus lock, including ordinary inbox/history readers.
+        A final certificate proves its exact bus revision was flushed by the
+        writer. Shared readers verify that certificate without flushing again.
+        Recovery and uncertified sources still flush before accepting visible
+        bytes left by an interrupted append.
         """
         private_marker = self._claim_marker_unlocked()
         if private_marker is None:

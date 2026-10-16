@@ -1,8 +1,8 @@
 """Owner-fenced response publication across the coordinator and bus.
 
 Tx1 freezes an intent without a bus append. For the bounded append/Tx2, acquire
-the shared wire lock, bus lock, registry lock, then SQLite BEGIN IMMEDIATE.
-The registry lock is retained through the fsynced append and SQL terminal
+the shared wire lock, bus lock, registry lock, then the coordinator's exclusive
+write admission. The registry lock is retained through the fsynced append and SQL terminal
 commit; an explicitly witnessed live owner can be checked on that revision.
 A stop before the boundary refuses publication, whereas a concurrent stop
 linearizes after commit. The
@@ -449,6 +449,20 @@ def _require_final_owner(
     return snapshot
 
 
+def _answered_by(bus, metadata, owner: LiveResponseOwner, snapshot, target: str):
+    """The inputs the owner's turn took in that its response to target answers.
+
+    The caller holds the bus lock, so the source is opened under that lock.
+    """
+    from .input_disposition import InputDispositions
+    from .private_bus_checkpoint import opened_private_checkpoint_unlocked
+
+    lease = owner.thread.require_turn_lease()
+    inputs = InputDispositions(bus.log.path.parent).in_turn(lease.turn_id)
+    with opened_private_checkpoint_unlocked(bus.log, metadata) as source:
+        return inputs.answered_by(lease, source, snapshot, target)
+
+
 def prepare_fenced_response(
     store: Coordination,
     bus: MessageBus,
@@ -488,6 +502,7 @@ def prepare_fenced_response(
             obligation = snapshot.require_wire_response(exact_target)
             target = obligation.exact_target
             existing = ResponseObligation.response_record(snapshot.publication_intents, target)
+            answers = _answered_by(bus, metadata, owner_witness, registry_snapshot, target)
             if existing is not None:
                 snapshot.require_existing_preparation(
                     Message(
@@ -495,30 +510,26 @@ def prepare_fenced_response(
                         target,
                         payload,
                         message_type,
-                        timestamp=existing.timestamp if timestamp is None else timestamp,
+                        timestamp=existing.message.timestamp if timestamp is None else timestamp,
                         notice=notice,
+                        answers=answers,
                     )
                 )
                 return AlreadyApplied(existing)
             obligation = snapshot.require_preparation(target)
-            when = time.time() if timestamp is None else timestamp
             candidate = Message(
                 execution.owner_thread,
                 target,
                 payload,
                 message_type,
-                timestamp=when,
+                timestamp=time.time() if timestamp is None else timestamp,
                 notice=notice,
+                answers=answers,
             )
             intent = PublicationIntents(
                 execution_id=execution.execution_id,
-                sender=execution.owner_thread,
                 exact_target=target,
-                message_type=message_type,
-                notice=notice,
-                timestamp=when,
-                payload=payload,
-                payload_digest=hashlib.sha256(payload.encode()).hexdigest(),
+                message=candidate,
                 publication_key=canonical_publication_key(
                     execution.execution_id, target
                 ),

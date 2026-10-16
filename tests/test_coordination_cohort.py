@@ -78,13 +78,8 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
 def _intent(message: Message, execution_id: str = "execution-1") -> PublicationIntents:
     return PublicationIntents(
         execution_id=execution_id,
-        sender=message.sender,
         exact_target=message.target,
-        message_type=message.type,
-        notice=message.notice,
-        timestamp=message.timestamp,
-        payload=message.body,
-        payload_digest=hashlib.sha256(message.body.encode()).hexdigest(),
+        message=message,
         publication_key=canonical_publication_key(execution_id, message.target),
         expected_message_id=message.message_id,
     )

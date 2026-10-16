@@ -151,11 +151,9 @@ class QueuedInput:
     @staticmethod
     def remaining_capacity(inputs: InputDrain, session_id: str) -> int:
         """How many follow-ups the current locked transaction may still place."""
-        document = inputs.dispositions.read()
-        return 32 - sum(
-            not document.all_started(source.keys)
-            for source in inputs.following_sources.get(session_id, {}).values()
-        )
+        sources = tuple(inputs.following_sources.get(session_id, {}).values())
+        document = inputs.dispositions.read(tuple(key for source in sources for key in source.keys))
+        return 32 - sum(not document.all_started(source.keys) for source in sources)
 
     @classmethod
     def require_capacity(cls, inputs: InputDrain, session_id: str) -> None:
@@ -228,7 +226,7 @@ class QueuedInput:
                 snapshot = inputs.comms.registry.snapshot()
                 canonical = snapshot.canonical_name(name)
                 self.require_handoff(
-                    snapshot, canonical, inputs.dispositions.read().lookup(self.key), self.input_id,
+                    snapshot, canonical, inputs.dispositions.lookup(self.key), self.input_id,
                 )
         except RelationViolationError as error:
             raise InputHandoffRefused(str(error)) from error
@@ -333,7 +331,8 @@ class DeliveredInput(QueuedInput):
         canonical = snapshot.canonical_name(name)
         owner = snapshot.threads[canonical]
         context = QueuedInputContext.capture(owner, snapshot.admission_identity(canonical))
-        document = inputs.dispositions.read()
+        document = inputs.dispositions.read(
+            tuple(InputDispositions.bus_key(source.message, owner) for source, _ in pending))
         reserved = []
         for source, assignment in pending:
             message = source.message
@@ -393,7 +392,8 @@ class DeliveredInput(QueuedInput):
             snapshot = inputs.comms.registry.snapshot()
             owner = snapshot.require(inputs.sessions.require(session_id))
             lookup = stable_thread_lookup(owner.created_at)
-            document = inputs.dispositions.read()
+            document = inputs.dispositions.unresolved(
+                inputs.comms.registry.aliases_for(owner.name))
             live_keys = {
                 item.key for item in inputs.queued_inputs.get(session_id, {}).values()
             }
@@ -438,9 +438,10 @@ class DeliveredInput(QueuedInput):
         lookup = stable_thread_lookup(owner.created_at)
 
         def read(store: Coordination):
-            assignments = pending_sealed_assignments(
-                store, lookup, owner.name, after_seq=after_seq
-            )
+            with store.session.read():
+                assignments = pending_sealed_assignments(
+                    store, lookup, owner.name, after_seq=after_seq
+                )
             with bus.log.certified_read() as source:
                 if source.marker.root_id != root_id:
                     raise IdentityConflict("delivered source wire root changed")
@@ -449,7 +450,7 @@ class DeliveredInput(QueuedInput):
                 )))
             return tuple(zip(originals, assignments, strict=True))
 
-        pending = await Coordination.run_async(store_path, read)
+        pending = await Coordination.run_read_async(store_path, read)
         if not pending:
             return
         unplaced: tuple[Self, ...] = ()

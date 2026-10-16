@@ -163,15 +163,14 @@ def read_historical_native_inputs(
                 # Journal alone cannot promote an unrecorded or uncertain input.
                 # The immutable SQL row is already present from the live event;
                 # this check only corroborates its message-bearing context facts.
-                observed = NativeContextProof.read_evidence(
-                    session_file, row.input_id, request_generation=row.request_generation,
-                    evidence=source_reads.for_source(session_file),
+                corroborated = recorded.corroborates_input(
+                    row.input_id, evidence=source_reads.for_source(session_file),
                 )
             except (OSError, ValueError, NativePiUnavailable) as error:
                 raise IdentityConflict("historical native context evidence is unavailable") from error
-            if observed != recorded:
+            if not corroborated:
                 raise IdentityConflict("historical native context differs from live-recorded proof")
-            original_session.require_context(observed)
+            original_session.require_context(recorded)
             binding = read_expected_prompt_binding(store, row.input_id)
             if binding is not None:
                 # A binding must name exactly this reserved input; anything else is

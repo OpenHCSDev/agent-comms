@@ -27,6 +27,7 @@ from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from stored_inputs import stored_inputs
 
 tmp_path = private_root_fixture
 
@@ -245,7 +246,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
                         break
                     await asyncio.sleep(0.05)
         except Exception as error:
-            rows = InputDispositions(comms.root / InputDispositions.filename).read().rows
+            rows = stored_inputs(comms.root).rows
             print(
                 "FIRST_SEND_ERROR",
                 repr(error),

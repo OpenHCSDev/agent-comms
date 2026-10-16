@@ -8,6 +8,7 @@ from agent_comms.cli import main
 from agent_comms.field_codec import FieldCodec
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
@@ -26,7 +27,7 @@ def test_original_retained_source_narrow_export(comms, tmp_path, capsys):
     wording = "Original human constraint λ; preserve UNKNOWN and its source."
     original = comms.messaging.send_user_message(owner.name, wording, worktree=owner.worktree)
     comms.messaging.pin_user_constraint(owner.name, original.reference, worktree=owner.worktree)
-    inputs = InputDispositions(comms.root / InputDispositions.filename)
+    inputs = InputDispositions(comms.root)
     inputs.record("acp:original-unknown", seq=None, owner=owner.name, admission=1,
                   target=owner.name, text="Unpinned original UNKNOWN input; never export/replay")
 
@@ -135,7 +136,7 @@ def original_input_consumer_journey(tmp_path, command):
                     agent.inputs, "beta", text=wording, prompt=wording, echo=True,
                     images=(), controller=Client(), origin=origin, custody=custody)
                 custody.pop_all()
-            originals.append(agent.inputs.dispositions.read().lookup(queued.key))
+            originals.append(stored_inputs(agent.inputs.dispositions.root).lookup(queued.key))
         assert agent.inputs.dispositions.record(
             "neutral-original", seq=None, owner="beta",
             admission=origin.admission.admission_generation, target="beta", text=wording)
@@ -219,7 +220,7 @@ def original_input_consumer_journey(tmp_path, command):
     reopened = Comms(comms.root)
     assert reopened.bus.log.retained_context("renamed-beta", reopened.registry).text() == (
         comms.bus.log.retained_context("renamed-beta", comms.registry).text())
-    assert all(inputs.read().lookup(row.key) == row and row.unresolved for row in originals)
+    assert all(stored_inputs(inputs.root).lookup(row.key) == row and row.unresolved for row in originals)
     return {"original_inputs": 2, "distinct_equal_wording": True, "pins": 3,
             "refusals": 4, "rename_correction_drop_reopen": True,
             "original_input_bytes_preserved": True, "native_inputs": 0,

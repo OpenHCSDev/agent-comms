@@ -31,6 +31,7 @@ from agent_comms.queued_input import QueuedInput, QueuedInputContext
 from agent_comms.runtime import present_session
 from agent_comms.thread_identity import AdmissionIdentity, ThreadIncarnation
 from agent_comms.threads import Thread
+from stored_inputs import stored_inputs
 
 
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, float, int]:
@@ -115,7 +116,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
         isinstance(f, InputDeliveryChangedUpdate) for f in decode_updates(response.field_meta)
     )
     assert exact in agent.inputs.queued_inputs["beta"]
-    assert agent.inputs.dispositions.read().rows["acp:" + exact].declared_name == "reserved"
+    assert stored_inputs(agent.inputs.dispositions.root).rows["acp:" + exact].declared_name == "reserved"
     state = next(
         f
         for f in decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
@@ -140,24 +141,24 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     assert requests[0].input_id != requests[1].input_id
     state = await agent.inputs.queue_state("beta")
     assert [item.input_id for item in state.projection.items] == [request.input_id for request in requests]
-    assert all(row.public_status == "unknown" for row in agent.inputs.dispositions.read().rows.values())
+    assert all(row.public_status == "unknown" for row in stored_inputs(agent.inputs.dispositions.root).rows.values())
     before = inbox.qsize()
     with pytest.raises(RelationViolationError, match="reservation already exists"):
         await agent.prompt(
             "beta", [{"type": "text", "text": "same"}], field_meta=encode_request(requests[0])
         )
     assert inbox.qsize() == before
-    assert len(agent.inputs.dispositions.read().rows) == 2
+    assert len(stored_inputs(agent.inputs.dispositions.root).rows) == 2
     sources = frozenset(f"acp:{request.input_id}" for request in requests)
     assert agent.inputs.input_keys("beta") == sources
-    receipts = agent.inputs.dispositions.path.read_bytes()
+    receipts = stored_inputs(agent.inputs.dispositions.root)
     await agent.inputs.clear_queued_inputs("beta")
     assert not agent.inputs.queued_inputs["beta"]
     assert agent.inputs.input_keys("beta") == sources
-    assert agent.inputs.dispositions.path.read_bytes() == receipts
+    assert stored_inputs(agent.inputs.dispositions.root) == receipts
     await agent.inputs.input_refused("beta", requests[0].input_id)
     assert agent.inputs.input_keys("beta") == frozenset((f"acp:{requests[1].input_id}",))
-    assert agent.inputs.dispositions.path.read_bytes() == receipts
+    assert stored_inputs(agent.inputs.dispositions.root) == receipts
 
 
 @pytest.mark.parametrize("user_text", [["list"], [], {"text": "dict"}, 7, False])
@@ -172,7 +173,7 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     assert error.value.code == -32602
     assert inbox.empty()
     assert not agent.inputs.queued_inputs.get("beta")
-    assert not agent.inputs.dispositions.path.exists()
+    assert not stored_inputs(agent.inputs.dispositions.root).rows
 
 
 @pytest.mark.parametrize(

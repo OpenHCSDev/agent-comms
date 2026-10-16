@@ -7,6 +7,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Iterator, Mapping
+from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 from uuid import uuid4
 
+from .coordination_database import CoordinationStore
 from .typed_table import SQLiteSchemaObject, TypedRow
 from .field_codec import FieldCodec
 from .turn_context import CodexRolloutProvenance
@@ -361,9 +363,7 @@ class OpenCodeImporter(ImportAdapter, format=ImportFormat.OPENCODE):
     ) -> ImportSnapshot:
         if not session_id:
             raise ValueError("OpenCode database imports require --session-id.")
-        with sqlite3.connect(source.resolve().as_uri() + "?mode=ro", uri=True) as db:
-            db.row_factory = sqlite3.Row
-            db.execute("BEGIN")
+        with closing(CoordinationStore.read_snapshot(source)) as db:
             sessions = OpenCodeSession.read(
                 db.execute(
                     "SELECT id,directory,title,revert FROM session WHERE id=?", (session_id,)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from abc import abstractmethod
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
@@ -20,10 +21,7 @@ if TYPE_CHECKING:
     from typing import BinaryIO
 
     from .bus_page_index import BusPageIndex
-    from .private_bus_checkpoint import CertifiedSourceRead, PrefixWitness
-    from .registry_document import RegistrySnapshot
-    from .thread_identity import ThreadIncarnation
-    from .turn_context import ContextManifest
+    from .private_bus_checkpoint import PrefixWitness
     from .wire_log import WireLog
 
 
@@ -56,14 +54,7 @@ class WireAccess(DeclaredFamily, affix="Access"):
     def open_page_index(self, path: Path) -> BusPageIndex: ...
 
     @abstractmethod
-    def prepare_page_index(self, index: BusPageIndex) -> bool: ...
-
-    def context_manifests(self, source: CertifiedSourceRead, incarnation: ThreadIncarnation,
-                          snapshot: RegistrySnapshot) -> Iterator[ContextManifest]:
-        return (resource.value for resource in self.context_resources(source, incarnation, snapshot))
-
-    @abstractmethod
-    def context_resources(self, source, incarnation, snapshot, *, previous=()): ...
+    def prepare_page_index(self, index: BusPageIndex) -> Iterator[bool]: ...
 
 
 @dataclass(frozen=True)
@@ -91,11 +82,11 @@ class WritableAccess(WireAccess):
 
         return BusPageIndex(path)
 
+    @contextmanager
     def prepare_page_index(self, index):
-        return index.sync()
-
-    def context_resources(self, source, incarnation, snapshot, *, previous=()):
-        return source.indexed_context_resources(incarnation, snapshot, previous=previous)
+        ready = index.sync()
+        with index.snapshot():
+            yield ready
 
 
 @dataclass(frozen=True)
@@ -125,15 +116,10 @@ class ArchivedAccess(WireAccess):
 
         return BusPageIndex(path, readonly=True)
 
+    @contextmanager
     def prepare_page_index(self, index):
-        return index.current()
-
-    def context_resources(self, source, incarnation, snapshot, *, previous=()):
-        # Compact turn records require their entry/turn pointer tables. Cutover
-        # rebuilds both tables with the rewritten archived source.
-        return source.indexed_context_resources(
-            incarnation, snapshot, previous=previous
-        )
+        with index.snapshot():
+            yield index.current()
 
 
 @dataclass

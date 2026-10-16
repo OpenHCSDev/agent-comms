@@ -7,7 +7,7 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
-from .activity import ActivityState
+from .activity import Activity, ActivityState
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -37,6 +37,9 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     """
     detail: str = ""
     stall_reason: ClassVar[str] = "model_no_progress"
+    # An excursion (tool, retry, compaction) runs without RPC events; an input
+    # queued behind it cannot start yet, so its start budget waits and the
+    # excursion's own backstop bounds the stall instead.
     pauses_input_clock: ClassVar[bool] = False
     busy: ClassVar[bool] = True
     accepts_prompt: ClassVar[bool] = False
@@ -58,16 +61,17 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def activity_detail(self) -> str:
         return self.detail
 
+    def activity_event(self, thread: str) -> Activity:
+        """Record this phase's declared activity, without observation-only readiness."""
+        return Activity.create(thread, self.activity_state, self.activity_detail)
+
     def project_activity(self, activity):
         """Display this phase while preserving the acquired drain readiness."""
-        return replace(activity, state=self.activity_state, detail=self.activity_detail)
+        return activity.with_status(self.activity_state, self.activity_detail)
 
     def model_wait(self, backstop: float | None) -> float | None:
         """Core's no-event backstop for this phase; None where nothing bounds it here."""
         return backstop
-
-    def described(self, detail: str) -> TurnPhase:
-        return replace(self, detail=detail[:200])
 
     def input_started(self) -> TurnPhase:
         return ModelWaitPhase()
@@ -121,6 +125,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
 
 
 class Excursion(TurnPhase):
+    pauses_input_clock = True
+
     @classmethod
     @abstractmethod
     def starts(cls, event: pi.PiEvent) -> bool:
@@ -134,6 +140,10 @@ class PromptAcceptancePhase(TurnPhase):
 
 class PreparingPhase(TurnPhase):
     label = "Preparing input"
+
+    def project_activity(self, activity):
+        projected = super().project_activity(activity)
+        return projected.readiness.preparing_activity(projected)
 
 
 class IdlePhase(TurnPhase):
@@ -202,7 +212,6 @@ class CompactionPhase(LabeledActivity, StallExempt, Excursion):
     def ends(self, event: pi.PiEvent) -> bool:
         from . import pi_events as pi
         return isinstance(event, pi.CompactionEnd)
-    pauses_input_clock = True
     activity_state = ActivityState.WORKING
     label = "Compacting context"
 
@@ -268,7 +277,7 @@ class ToolRunningPhase(LabeledActivity, Excursion):
 
     def tool_started(self, tool_id: str, title: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)
-        return replace(self, detail="", tools=(*retained, (tool_id, title[:200])))
+        return replace(self, detail="", tools=(*retained, (tool_id, title)))
 
     def tool_ended(self, tool_id: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)

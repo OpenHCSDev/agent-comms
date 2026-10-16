@@ -13,7 +13,10 @@ from agent_comms.channel_management import (
     DeleteExclusiveInactiveThreadsTagDisposition,
 )
 from agent_comms.comms import wire
-from agent_comms.display_order import ChannelSort, ThreadSort
+from agent_comms.display_order import (
+    ChannelSort, CreatedChannelSort, CreatedThreadSort, LastActivityChannelSort,
+    LastActivityThreadSort, LastMessageThreadSort, LastUserInputChannelSort, ThreadSort,
+)
 from agent_comms.errors import RelationViolationError
 from agent_comms.presentation import ThreadView
 from agent_comms.thread_management import ForkSpec
@@ -212,7 +215,7 @@ def test_any_is_non_routable(tmp_path):
 def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path):
     comms = setup_wire(tmp_path)
     comms.channels.create_tag("child")
-    comms.channels.set_channel_sort("ui", ThreadSort.LAST_ACTIVITY)
+    comms.channels.set_channel_sort("ui", LastActivityThreadSort)
     comms.channels.set_channel_pinned("ui", True)
     ui_created = comms.channels.catalog.read().resolve("#ui").created_at
     comms.channels.set_channel_metadata("api", parent="#ui", archived=True)
@@ -236,7 +239,7 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     assert observer.channels.catalog.read().resolve("#api").parent == "#docs"
     assert observer.channels.catalog.read().resolve("#api").archived
     docs = observer.channels.catalog.read().resolve("#docs")
-    assert docs.order is ThreadSort.LAST_ACTIVITY
+    assert docs.order is LastActivityThreadSort
     assert docs.created_at == ui_created
     assert docs.pinned
     assert observer.channels.catalog.read().resolve("#child").parent == "#api"
@@ -277,7 +280,7 @@ def test_deleted_exact_tag_gets_fresh_order_and_creation_on_reuse(tmp_path):
     with patch("agent_comms.channels.time.time", return_value=100):
         comms.channels.create_tag("temporary")
     first = comms.channels.catalog.read().resolve("#temporary")
-    comms.channels.set_channel_sort("temporary", ThreadSort.LAST_ACTIVITY)
+    comms.channels.set_channel_sort("temporary", LastActivityThreadSort)
     comms.channels.delete_tag("temporary")
 
     with patch("agent_comms.channels.time.time", return_value=200):
@@ -285,7 +288,7 @@ def test_deleted_exact_tag_gets_fresh_order_and_creation_on_reuse(tmp_path):
     recreated = wire(tmp_path).channels.catalog.read().resolve("#temporary")
     assert first.created_at == 100
     assert recreated.created_at == 200
-    assert recreated.order is ThreadSort.CREATED
+    assert recreated.order is CreatedThreadSort
 
 
 def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
@@ -397,7 +400,7 @@ def test_channel_metadata_and_saved_views_have_typed_tool_surfaces(tmp_path):
 def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatch):
     comms = setup_wire(tmp_path)
     original = comms.registry.require("other")
-    monkeypatch.setenv("PI_AGENT_ID", "other")
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "other")
     invoke_tool(comms, "comms_tags", {"action": "create", "name": "new"})
     assert "#new" in comms.channels.channels()
     invoke_tool(comms, "comms_thread_tags", {"add": "new,api", "remove": "ui"})
@@ -427,7 +430,7 @@ def test_tag_operations_preserve_owner_and_update_all_views(tmp_path, monkeypatc
     assert comms.registry.status("a") == ArchivedThreadStatus()
 
 
-def test_pending_cache_observes_external_changes_without_rescanning(tmp_path):
+def test_pending_projection_observes_external_changes_without_rescanning(tmp_path):
     comms = setup_wire(tmp_path)
     other = wire(tmp_path)
     comms.messaging.send("other", "#api", "one")
@@ -485,12 +488,12 @@ def test_none_membership_and_independent_channel_order(tmp_path):
     comms.messaging.send("a", "#none", "for untagged agents")
     assert [message.body for message in comms.bus.inbox("other")] == ["for untagged agents"]
     assert not comms.bus.inbox("b")
-    comms.channels.set_channel_sort("#api", ThreadSort.LAST_MESSAGE)
-    comms.channels.set_channel_sort("#none", ThreadSort.LAST_ACTIVITY)
+    comms.channels.set_channel_sort("#api", LastMessageThreadSort)
+    comms.channels.set_channel_sort("#none", LastActivityThreadSort)
     views = {view.channel.name: view for view in wire(tmp_path).views.channel_views()}
-    assert views["#api"].channel.order is ThreadSort.LAST_MESSAGE
-    assert views["#none"].channel.order is ThreadSort.LAST_ACTIVITY
-    assert views["#any"].channel.order is ThreadSort.CREATED
+    assert views["#api"].channel.order is LastMessageThreadSort
+    assert views["#none"].channel.order is LastActivityThreadSort
+    assert views["#any"].channel.order is CreatedThreadSort
     assert views["#api"].members[0] == "a"
     comms.channels.update_tags("other", add=frozenset({"ui"}))
     assert not next(
@@ -516,14 +519,14 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
             if view.channel.builtin is None
         ]
 
-    comms.channels.set_channel_order(ChannelSort.CREATED)
+    comms.channels.set_channel_order(CreatedChannelSort)
     created_names = names(wire(tmp_path))
     assert set(created_names) == {"#api", "#ui", "#alpha", "#zeta"}
     assert created_names.index("#alpha") < created_names.index("#zeta")
-    comms.channels.set_channel_sort("#zeta", ThreadSort.LAST_MESSAGE)
+    comms.channels.set_channel_sort("#zeta", LastMessageThreadSort)
     assert comms.channels.catalog.read().resolve("#zeta").created_at == 200
     comms.agents.set_activity("b", ActivityState.WORKING, "Active in zeta")
-    comms.channels.set_channel_order(ChannelSort.LAST_ACTIVITY)
+    comms.channels.set_channel_order(LastActivityChannelSort)
     assert set(names(comms)[:2]) == {"#ui", "#zeta"}
     comms.messaging.send_user_message("#alpha", "Human input", worktree=str(tmp_path))
     comms.messaging.send("b", "#zeta", "Later agent output")
@@ -532,7 +535,7 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     assert [view.channel.name for view in comms.views.coordination_snapshot("a").channels] == [
         view.channel.name for view in wire(tmp_path).views.coordination_snapshot("b").channels
     ]
-    assert comms.views.coordination_snapshot().channel_order is ChannelSort.LAST_USER_INPUT
+    assert comms.views.coordination_snapshot().channel_order is LastUserInputChannelSort
     # Reading or re-sorting must never redefine a channel's creation time.
     assert comms.channels.catalog.read().resolve("#alpha").created_at == 300
     with patch.object(
@@ -573,7 +576,7 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     assert not comms.views.coordination_snapshot().participants("#api")
 
 
-@pytest.mark.parametrize("order", tuple(ChannelSort))
+@pytest.mark.parametrize("order", ChannelSort.members_with(ChannelSort))
 def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
     comms = setup_wire(tmp_path)
     comms.channels.set_channel_order(order)
@@ -595,7 +598,7 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
     assert [view.channel.name for view in comms.views.channel_views()] == original
 
 
-@pytest.mark.parametrize("order", tuple(ThreadSort))
+@pytest.mark.parametrize("order", ThreadSort.members_with(ThreadSort))
 def test_member_pins_are_persistent_channel_scoped_and_preserve_sort(tmp_path, order):
     comms = setup_wire(tmp_path)
     comms.channels.set_saved_view(

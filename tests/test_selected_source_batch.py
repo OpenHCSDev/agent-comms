@@ -205,7 +205,7 @@ async def test_terminal_triage_failure_records_context_and_fails_its_claims(tmp_
                 reserved = NativeRuntimeInput.one(db, input_id=input_id)
                 reserved.sent_owner_admission_generation.record(reserved, db, 1, session)
             context = NativeContextProof(
-                input_id, session.session_id, "entry", 7, "c" * 64, session.path
+                input_id, session.session_id, "entry", 7, "c" * 64, 1_791_964_800_007, session.path
             )
             settled = stage.fail_decision(store, selected.identity, input_id, token_digest, context)
             assert all(type(row.lifecycle) is FailedAssignment for row in settled)

@@ -24,7 +24,6 @@ from agent_comms.tools import invoke_tool
 
 
 def _goal(comms, monkeypatch):
-    monkeypatch.delenv("PI_AGENT_ID", raising=False)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     comms.registry.declare(Thread(name="owner", tags=frozenset(), worktree="/wt"))
     return invoke_tool(comms, "comms_set_goal", {"text": "keep working"})["goal"]
@@ -49,7 +48,6 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 
 
 def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path):
-    monkeypatch.delenv("PI_AGENT_ID", raising=False)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     comms.registry.declare(
         Thread(
@@ -78,7 +76,6 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
 
 
 def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkeypatch, tmp_path):
-    monkeypatch.delenv("PI_AGENT_ID", raising=False)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     comms.registry.declare(
         Thread(

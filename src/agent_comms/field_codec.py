@@ -330,7 +330,7 @@ class FieldCodec(Sealed):
 
     @classmethod
     def decode(cls, target: type[T], data: object) -> T:
-        return cast(T, cls._decode(target, data))
+        return cast(T, compile_decoder(target).decode(data))
 
     @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
@@ -449,52 +449,14 @@ class FieldCodec(Sealed):
 
     @dataclass(frozen=True)
     class _FieldPlan:
-        """One field's decode decisions, resolved once from its declaration.
-
-        Each way a field decodes is one subclass: the plan builder picks the
-        class from the declaration once, and decoding is that object's own
-        ``decode`` — no per-row re-classification and no kind switch.
-        """
+        """One field's wire key, checks and compiled value decoder."""
 
         name: str
         key: str
         required: bool
         reject_null: bool
         choices: object
-        target: Any
-
-        def decode(self, value: object) -> object:
-            # The nested/annotation path: the target's own decode rules.
-            return FieldCodec.decode(self.target, value)
-
-    @dataclass(frozen=True)
-    class _RepresentationField(_FieldPlan):
-        """A field decoded through its declared representation capability."""
-
-        representation: object
-        accepts_null: bool
-        external_json_shape: bool
-
-        def decode(self, value: object) -> object:
-            if value is None and not self.accepts_null:
-                return FieldCodec.decode(self.target, value)
-            if self.external_json_shape:
-                return self.representation.from_wire(value)
-            return self.representation.decode(value)
-
-    @dataclass(frozen=True)
-    class _ScalarField(_FieldPlan):
-        """A field of an exact JSON primitive declaration."""
-
-        def decode(self, value: object) -> object:
-            return FieldCodec._decode_scalar(self.target, value)
-
-    @dataclass(frozen=True)
-    class _EnumField(_FieldPlan):
-        """A field of an Enum declaration."""
-
-        def decode(self, value: object) -> object:
-            return self.target(value)
+        value: ValueDecoder
 
     @dataclass(frozen=True)
     class _RecordPlan:
@@ -509,42 +471,23 @@ class FieldCodec(Sealed):
     @classmethod
     @lru_cache(maxsize=_declaration_cache_capacity)
     def _record_plan(cls, record: type) -> FieldCodec._RecordPlan:
-        """Resolve every per-row type decision for one record declaration once.
-
-        Declarations are immutable for this process; this is the same
-        declaration-derived derivation as _fields/_types, consumed by the
-        single decode implementation instead of re-classifying each field on
-        every row.
-        """
+        """Resolve every per-row type decision for one record declaration once."""
         declared = cls._fields(record)
         hints = cls._types(record)
         computed = {member.wire_name for member in cls._projections(record, "wire").values()}
-        entries = []
-        for field, key in declared:
-            target, representation = cls._representation(hints[field.name])
-            common = dict(
+        entries = tuple(
+            cls._FieldPlan(
                 name=field.name,
                 key=key,
                 required=bool(field.metadata.get("wire_required")),
                 reject_null=bool(field.metadata.get("wire_nonnull")),
                 choices=field.metadata.get("wire_choices"),
-                target=target,
+                value=compile_decoder(hints[field.name]),
             )
-            if representation is not None:
-                entries.append(cls._RepresentationField(
-                    representation=representation,
-                    accepts_null=representation.accepts_null,
-                    external_json_shape=representation.external_json_shape,
-                    **common,
-                ))
-            elif target in (str, int, bool, float, type(None)):
-                entries.append(cls._ScalarField(**common))
-            elif isinstance(target, type) and issubclass(target, Enum):
-                entries.append(cls._EnumField(**common))
-            else:
-                entries.append(cls._FieldPlan(**common))
+            for field, key in declared
+        )
         return cls._RecordPlan(
-            fields=tuple(entries),
+            fields=entries,
             required_keys=tuple(entry.key for entry in entries if entry.required),
             init_required_keys=tuple(
                 entry.key for entry, (field, _) in zip(entries, declared)
@@ -566,111 +509,6 @@ class FieldCodec(Sealed):
             if isinstance(member, Projected) and member.view == view
         })
 
-    @classmethod
-    def _decode(cls, target: Any, data: Any) -> Any:
-        target, representation = cls._representation(target)
-        if representation is not None and (data is not None or representation.accepts_null):
-            if representation.external_json_shape:
-                # Decode through the representation capability, independently
-                # of the family's public name decoder. Children validate once;
-                # WireValue's pre-validation would traverse each subtree again.
-                return representation.from_wire(data)
-            return representation.decode(data)
-        if (
-            target is str or target is int or target is bool
-            or target is type(None) or target is float
-        ):
-            return cls._decode_scalar(target, data)
-        if target is Any:
-            cls.encode(data)  # still require valid JSON data
-            return data
-        origin, args = get_origin(target), get_args(target)
-        if origin is type and args and issubclass(args[0], DeclaredFamily):
-            if type(data) is not str:
-                raise ValueError("Expected a declared family name.")
-            return args[0].decode(data)
-        if origin is Literal:
-            if any(type(data) is type(value) and data == value for value in args):
-                return data
-            raise ValueError(f"Value does not match {target}")
-        if origin in (Union, types.UnionType):
-            first_error = None
-            try:
-                for alternative in args:
-                    try:
-                        return cls.decode(alternative, data)
-                    except (TypeError, ValueError) as error:
-                        if first_error is None:
-                            first_error = error
-                # Keep the original declaration-owned reason on total failure.
-                raise ValueError(f"Value does not match {target}: {first_error}") from first_error
-            finally:
-                # A swallowed traceback points back to this frame. End that
-                # loan even on success, rather than leaving a cyclic payload
-                # graph for a later UI-thread garbage collection.
-                first_error = None
-        if origin is frozenset:
-            if not isinstance(data, list):
-                raise ValueError("Expected a JSON array.")
-            return frozenset(cls.decode(args[0], item) for item in data)
-        if origin in (list, tuple):
-            if not isinstance(data, list):
-                raise ValueError("Expected a JSON array.")
-            if origin is list:
-                return [cls.decode(args[0], item) for item in data]
-            if len(args) == 2 and args[1] is Ellipsis:
-                return tuple(cls.decode(args[0], item) for item in data)
-            if len(data) != len(args):
-                raise ValueError("Tuple length does not match declaration.")
-            return tuple(cls.decode(kind, item) for kind, item in zip(args, data, strict=True))
-        if origin is dict:
-            if not isinstance(data, dict) or args[0] is not str:
-                raise ValueError("Expected a JSON object with string keys.")
-            return {cls.decode(str, key): cls.decode(args[1], value) for key, value in data.items()}
-        if isinstance(target, type) and issubclass(target, DeclaredFamily):
-            if not isinstance(data, dict):
-                raise ValueError("Expected a family object.")
-            tag = target.family_discriminator
-            name = data.get(tag)
-            if not isinstance(name, str):
-                raise ValueError(f"Expected a string family {tag}.")
-            target = target.decode(name)
-            data = {key: value for key, value in data.items() if key != tag}
-        if isinstance(target, type) and is_dataclass(target):
-            plan = cls._record_plan(target)
-            if not isinstance(data, dict):
-                raise ValueError("Expected a record object.")
-            missing = [key for key in plan.required_keys if key not in data]
-            if missing:
-                raise ValueError(
-                    f"Missing required fields for {target.__name__}: {', '.join(missing)}"
-                )
-            init_missing = [key for key in plan.init_required_keys if key not in data]
-            if init_missing:
-                raise TypeError(
-                    f"Missing required fields for {target.__name__}: {', '.join(init_missing)}"
-                )
-            unknown = data.keys() - plan.accepted_keys
-            if unknown:
-                raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
-            null = plan.reject_null_keys & data.keys()
-            if any(data[key] is None for key in null):
-                raise ValueError(f"Null field for {target.__name__}")
-            values = {}
-            for entry in plan.fields:
-                if entry.key not in data:
-                    continue
-                value = data[entry.key]
-                if entry.choices is not None and value not in entry.choices():
-                    raise ValueError(
-                        f"Field {entry.key} must be one of: {', '.join(entry.choices())}"
-                    )
-                values[entry.name] = entry.decode(value)
-            return target(**values)
-        if isinstance(target, type) and issubclass(target, Enum):
-            return target(data)
-        return cls._decode_scalar(target, data)
-
     @staticmethod
     def _decode_scalar(target: Any, data: Any) -> Any:
         """The original strict scalar boundary, after representation selection.
@@ -684,3 +522,260 @@ class FieldCodec(Sealed):
         if target is float and type(data) in (int, float) and math.isfinite(data):
             return data
         raise ValueError(f"Expected {target}, received {type(data).__name__}")
+
+
+class ValueDecoder(ABC):
+    """One annotation's decode decisions, resolved once from its declaration.
+
+    Each way a value decodes is one subclass. ``compile_decoder`` picks the class
+    from the annotation once; decoding a value is that object's own
+    ``decode``, with no per-value re-classification.
+    """
+
+    __slots__ = ()
+
+    @abstractmethod
+    def decode(self, data: object) -> object: ...
+
+@dataclass(frozen=True, slots=True)
+class _ScalarDecoder(ValueDecoder):
+    target: object
+
+    def decode(self, data):
+        return FieldCodec._decode_scalar(self.target, data)
+
+@dataclass(frozen=True, slots=True)
+class _RepresentedDecoder(ValueDecoder):
+    """A declared representation capability; null without one decodes structurally."""
+
+    representation: type[FieldRepresentation]
+    structural: ValueDecoder
+    accepts_null: bool
+    external_json_shape: bool
+
+    def decode(self, data):
+        representation = self.representation
+        if data is None and not self.accepts_null:
+            return self.structural.decode(data)
+        if self.external_json_shape:
+            # Decode through the representation capability, independently
+            # of the family's public name decoder. Children validate once;
+            # WireValue's pre-validation would traverse each subtree again.
+            return representation.from_wire(data)
+        return representation.decode(data)
+
+@dataclass(frozen=True, slots=True)
+class _AnyDecoder(ValueDecoder):
+    def decode(self, data):
+        FieldCodec.encode(data)  # still require valid JSON data
+        return data
+
+@dataclass(frozen=True, slots=True)
+class _FamilyNameDecoder(ValueDecoder):
+    family: type[DeclaredFamily]
+
+    def decode(self, data):
+        if type(data) is not str:
+            raise ValueError("Expected a declared family name.")
+        return self.family.decode(data)
+
+@dataclass(frozen=True, slots=True)
+class _LiteralDecoder(ValueDecoder):
+    target: object
+    values: tuple[object, ...]
+
+    def decode(self, data):
+        if any(type(data) is type(value) and data == value for value in self.values):
+            return data
+        raise ValueError(f"Value does not match {self.target}")
+
+@dataclass(frozen=True, slots=True)
+class _UnionDecoder(ValueDecoder):
+    target: object
+    alternatives: tuple[ValueDecoder, ...]
+
+    def decode(self, data):
+        first_error = None
+        try:
+            for alternative in self.alternatives:
+                try:
+                    return alternative.decode(data)
+                except (TypeError, ValueError) as error:
+                    if first_error is None:
+                        first_error = error
+            # Keep the original declaration-owned reason on total failure.
+            raise ValueError(
+                f"Value does not match {self.target}: {first_error}"
+            ) from first_error
+        finally:
+            # A swallowed traceback points back to this frame. End that
+            # loan even on success, rather than leaving a cyclic payload
+            # graph for a later UI-thread garbage collection.
+            first_error = None
+
+@dataclass(frozen=True, slots=True)
+class _FrozenSetDecoder(ValueDecoder):
+    item: ValueDecoder
+
+    def decode(self, data):
+        if not isinstance(data, list):
+            raise ValueError("Expected a JSON array.")
+        return frozenset(self.item.decode(value) for value in data)
+
+@dataclass(frozen=True, slots=True)
+class _ListDecoder(ValueDecoder):
+    item: ValueDecoder
+
+    def decode(self, data):
+        if not isinstance(data, list):
+            raise ValueError("Expected a JSON array.")
+        return [self.item.decode(value) for value in data]
+
+@dataclass(frozen=True, slots=True)
+class _VariadicTupleDecoder(ValueDecoder):
+    item: ValueDecoder
+
+    def decode(self, data):
+        if not isinstance(data, list):
+            raise ValueError("Expected a JSON array.")
+        return tuple(self.item.decode(value) for value in data)
+
+@dataclass(frozen=True, slots=True)
+class _FixedTupleDecoder(ValueDecoder):
+    items: tuple[ValueDecoder, ...]
+
+    def decode(self, data):
+        if not isinstance(data, list):
+            raise ValueError("Expected a JSON array.")
+        if len(data) != len(self.items):
+            raise ValueError("Tuple length does not match declaration.")
+        return tuple(item.decode(value) for item, value in zip(self.items, data, strict=True))
+
+@dataclass(frozen=True, slots=True)
+class _DictDecoder(ValueDecoder):
+    string_keys: bool
+    value: ValueDecoder
+
+    def decode(self, data):
+        if not isinstance(data, dict) or not self.string_keys:
+            raise ValueError("Expected a JSON object with string keys.")
+        return {
+            FieldCodec._decode_scalar(str, key): self.value.decode(value)
+            for key, value in data.items()
+        }
+
+@dataclass(frozen=True, slots=True)
+class _FamilyRecordDecoder(ValueDecoder):
+    """The encoded object carries its member's name under the family tag."""
+
+    family: type[DeclaredFamily]
+
+    def decode(self, data):
+        if not isinstance(data, dict):
+            raise ValueError("Expected a family object.")
+        tag = self.family.family_discriminator
+        name = data.get(tag)
+        if not isinstance(name, str):
+            raise ValueError(f"Expected a string family {tag}.")
+        member = self.family.decode(name)
+        return _member_decoder(member).decode(
+            {key: value for key, value in data.items() if key != tag}
+        )
+
+@dataclass(frozen=True, slots=True)
+class _RecordDecoder(ValueDecoder):
+    """A dataclass record. Its plan is looked up at decode time, so a
+    record that contains itself compiles without recursion."""
+
+    record: type
+
+    def decode(self, data):
+        target = self.record
+        plan = FieldCodec._record_plan(target)
+        if not isinstance(data, dict):
+            raise ValueError("Expected a record object.")
+        missing = [key for key in plan.required_keys if key not in data]
+        if missing:
+            raise ValueError(
+                f"Missing required fields for {target.__name__}: {', '.join(missing)}"
+            )
+        init_missing = [key for key in plan.init_required_keys if key not in data]
+        if init_missing:
+            raise TypeError(
+                f"Missing required fields for {target.__name__}: {', '.join(init_missing)}"
+            )
+        unknown = data.keys() - plan.accepted_keys
+        if unknown:
+            raise ValueError(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
+        null = plan.reject_null_keys & data.keys()
+        if any(data[key] is None for key in null):
+            raise ValueError(f"Null field for {target.__name__}")
+        values = {}
+        for entry in plan.fields:
+            if entry.key not in data:
+                continue
+            value = data[entry.key]
+            if entry.choices is not None and value not in entry.choices():
+                raise ValueError(
+                    f"Field {entry.key} must be one of: {', '.join(entry.choices())}"
+                )
+            values[entry.name] = entry.value.decode(value)
+        return target(**values)
+
+@dataclass(frozen=True, slots=True)
+class _EnumDecoder(ValueDecoder):
+    target: object
+
+    def decode(self, data):
+        return self.target(data)
+
+@lru_cache(maxsize=None)
+def compile_decoder(annotation: object) -> ValueDecoder:
+    """Compile one annotation's decoder. Declarations are finite and
+    immutable for this process, so every decoder is built once."""
+    target, representation = FieldCodec._representation(annotation)
+    structural = _structural_decoder(target)
+    if representation is None:
+        return structural
+    return _RepresentedDecoder(
+        representation, structural,
+        representation.accepts_null, representation.external_json_shape,
+    )
+
+def _structural_decoder(target: object) -> ValueDecoder:
+    if (
+        target is str or target is int or target is bool
+        or target is type(None) or target is float
+    ):
+        return _ScalarDecoder(target)
+    if target is Any:
+        return _AnyDecoder()
+    origin, args = get_origin(target), get_args(target)
+    if origin is type and args and issubclass(args[0], DeclaredFamily):
+        return _FamilyNameDecoder(args[0])
+    if origin is Literal:
+        return _LiteralDecoder(target, args)
+    if origin in (Union, types.UnionType):
+        return _UnionDecoder(target, tuple(compile_decoder(item) for item in args))
+    if origin is frozenset:
+        return _FrozenSetDecoder(compile_decoder(args[0]))
+    if origin is list:
+        return _ListDecoder(compile_decoder(args[0]))
+    if origin is tuple:
+        if len(args) == 2 and args[1] is Ellipsis:
+            return _VariadicTupleDecoder(compile_decoder(args[0]))
+        return _FixedTupleDecoder(tuple(compile_decoder(item) for item in args))
+    if origin is dict:
+        return _DictDecoder(args[0] is str, compile_decoder(args[1]))
+    if isinstance(target, type) and issubclass(target, DeclaredFamily):
+        return _FamilyRecordDecoder(target)
+    return _member_decoder(target)
+
+@lru_cache(maxsize=None)
+def _member_decoder(target: object) -> ValueDecoder:
+    """A concrete record, enum or scalar, after any family tag is removed."""
+    if isinstance(target, type) and is_dataclass(target):
+        return _RecordDecoder(target)
+    if isinstance(target, type) and issubclass(target, Enum):
+        return _EnumDecoder(target)
+    return _ScalarDecoder(target)

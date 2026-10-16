@@ -24,6 +24,7 @@ from agent_comms.thread_identity import TurnId
 from agent_comms.threads import Thread
 from agent_comms.transcript_updates import TurnTranscriptUpdate
 from test_backend_native_lifecycle import native_backend as native_backend
+from stored_inputs import stored_inputs
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
@@ -83,6 +84,22 @@ class CompactionAbortCase(CompactionCase):
             ae.AgentInfo(model="model", session_name="saved", context_used=20, context_size=1000),
             ae.Chunk("answer"),
         )
+
+
+class ContextCase(EffectCase):
+    def body(self):
+        return (
+            ae.AgentInfo(model="model", session_name="saved", context_used=20, context_size=1000),
+            ae.ContextInfo(context_used=None, context_size=1000),
+            ae.ContextInfo(context_used=35, context_size=1000),
+            ae.Chunk("answer"),
+        )
+
+    async def assert_effect(self, execution, progress):
+        await super().assert_effect(execution, progress)
+        info = execution.runner.comms.agents.agent_info_of(execution.thread_name)
+        assert (info.model, info.session_name) == ("model", "saved")
+        assert (info.context_used, info.context_size) == (35, 1000)
 
 
 class SettingsCase(EffectCase):
@@ -245,6 +262,35 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
         assert ae.ModelChanged in observed and ae.ThinkingChanged in observed
 
 
+async def test_usage_observation_keeps_metadata_without_reattachment(owner_turn, monkeypatch):
+    execution, progress = owner_turn
+    comms, name = execution.runner.comms, execution.thread_name
+    comms.agents.observe_runtime_info(name, ae.AgentInfo(
+        model="test/model", session_name="saved", context_used=20, context_size=1000,
+    ))
+
+    async def unexpected_metadata(event):
+        pytest.fail("Usage observation invoked native identity/configuration lifecycle")
+
+    monkeypatch.setattr(progress, "before_native_metadata", unexpected_metadata)
+    monkeypatch.setattr(progress, "after_native_metadata", unexpected_metadata)
+
+    class SampledContext(ae.ContextInfo):
+        """Another producer needs no new dispatch or persistence enrollment."""
+
+    await progress.consume(SampledContext(context_used=None, context_size=1000))
+    info = comms.agents.agent_info_of(name)
+    assert (info.model, info.session_name) == ("test/model", "saved")
+    assert (info.context_used, info.context_size) == (None, 1000)
+    await progress.consume(SampledContext(context_used=35, context_size=1000))
+    comms.agents.observe_runtime_info(name, ae.NativeMetadataObservation(
+        model="test/new-model", session_name="renamed",
+    ))
+    info = comms.agents.agent_info_of(name)
+    assert (info.model, info.session_name) == ("test/new-model", "renamed")
+    assert (info.context_used, info.context_size) == (35, 1000)
+
+
 @pytest.mark.parametrize("after_stream", [False, True])
 async def test_transport_error_still_releases_real_wait_once(owner_turn, monkeypatch, after_stream):
     execution, progress = owner_turn
@@ -336,7 +382,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
         assert session.session_id not in owner.inputs.backend_inboxes
         if provider_status == 200:
             assert native.provider.posts == (2 if committed_progress else 1)
-        inputs = InputDispositions(comms.root / InputDispositions.filename).read().rows
+        inputs = stored_inputs(comms.root).rows
         assert len(inputs) == 1 and all(row.has_started for row in inputs.values())
         rows = comms.bus.log.full_history()
         replies = [row for row in rows if row.sender == name]

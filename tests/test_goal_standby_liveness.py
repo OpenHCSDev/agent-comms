@@ -114,7 +114,7 @@ def test_idle_target_refusal_is_side_effect_free(tmp_path):
     _thread(comms, "child", tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Work"))
     assert goal is not None
-    authoritative = ("registry.json", "goal_waits.json", "input_dispositions.json")
+    authoritative = ("registry.json", "goal_waits.json", "input_dispositions.sqlite3")
     before = {
         name: (comms.root / name).read_bytes() if (comms.root / name).exists() else None
         for name in authoritative

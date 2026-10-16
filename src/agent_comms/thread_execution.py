@@ -110,19 +110,20 @@ class NativeThreadExecution(ThreadExecution):
     @classmethod
     def project_activity(cls, thread: Thread, activity):
         """A running native owner displays its current turn phase."""
-        return thread.turn_state.phase.project_activity(activity) if thread.has_process else activity
+        return thread.turn_state.project_activity(activity) if thread.has_process else activity
 
 
 class ExternalThreadExecution(ThreadExecution):
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        if not status.active:
+        # The CLI reports its own activity; between turns it is a participant.
+        if not status.active or ordinary.busy:
             return ordinary
-        alive = thread.process_alive
-        return replace(ordinary, marker="@" if alive else "○",
-                       summary="CLI participant" if alive else "CLI offline",
-                       busy=False)
+        # Only a registered CLI process can be known to have exited.
+        if thread.has_process and not thread.process_alive:
+            return replace(ordinary, marker="○", summary="CLI offline")
+        return replace(ordinary, marker="@", summary="CLI participant")
 
     @classmethod
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):

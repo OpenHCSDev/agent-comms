@@ -13,6 +13,7 @@ from agent_comms.input_attempt import NotSentInput
 from agent_comms.queued_input import DeliveredInput
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
+from stored_inputs import stored_inputs
 
 
 tmp_path = private_root_fixture
@@ -45,7 +46,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
         assert paused.lifecycle.execution_id is None
 
     item, _content = reserved[0]
-    row = agent.inputs.dispositions.read().lookup(item.key)
+    row = stored_inputs(agent.inputs.dispositions.root).lookup(item.key)
     assert not row.has_native_binding
     if native_bound:
         leased = comms.agents.begin_turn(owner.name, "interrupted-turn")
@@ -79,7 +80,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
         assert recovered == 1
         assert isinstance(current.lifecycle, FullPendingAssignment)
         assert tuple(row.assignment_id for row in pending) == (current.assignment_id,)
-        assert isinstance(agent.inputs.dispositions.read().lookup(item.key), NotSentInput)
+        assert isinstance(stored_inputs(agent.inputs.dispositions.root).lookup(item.key), NotSentInput)
 
     assert message.seq == current.wire_seq
     await agent.shutdown()

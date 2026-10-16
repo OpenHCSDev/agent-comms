@@ -196,15 +196,15 @@ class TestHandlers:
     ):
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.agents.set_agent_info(
-            "proj", model="test/model", context_used=38723, context_size=272000
+        agent._comms.agents.observe_runtime_info(
+            "proj", ae.AgentInfo(model="test/model", context_used=38723, context_size=272000)
         )
         reopened = canonical_agent(wire(agent._comms.root))
         assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
-        agent._comms.agents.set_agent_info(
-            "proj", model="test/model", context_used=None, context_size=272000
+        agent._comms.agents.observe_runtime_info(
+            "proj", ae.ContextInfo(context_used=None, context_size=272000)
         )
         assert (
             facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[0].context_usage
@@ -584,7 +584,7 @@ class TestAgentTurn:
 
         async def events(*args, **kwargs):
             yield fake_input_started(args, kwargs)
-            monkeypatch.setenv("PI_AGENT_ID", "proj")
+            monkeypatch.setenv("AGENT_COMMS_THREAD", "proj")
             wired.threads.rename_self("renamed-proj")
             yield ae.ToolEnd(id="rename", ok=True, output="renamed", name="tool")
             yield ae.StreamSettled()
@@ -733,7 +733,7 @@ class TestAgentTurn:
             elif empty_kind == "unfinished_tool":
                 yield ae.ToolStart(id="unfinished", name="read")
             yield ae.StreamSettled()
-            yield ae.AgentInfo(context_used=None, context_size=1000)
+            yield ae.ContextInfo(context_used=None, context_size=1000)
             yield ae.Done(ok=True, text="")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)

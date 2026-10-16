@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+import time
 from contextlib import asynccontextmanager
 from functools import partial
 from collections.abc import Awaitable, Callable
@@ -11,7 +12,11 @@ from typing import TYPE_CHECKING
 
 from acp import RequestError
 
-from .activity import NativeInputDrainDiagnostic, StoppedDrainDiagnostic, UnavailableDrainDiagnostic
+from .activity import (
+    NativeInputDrainDiagnostic,
+    StoppedDrainDiagnostic,
+    UnavailableDrainDiagnostic,
+)
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .native_pi import NativePiUnavailable
@@ -28,13 +33,17 @@ async def drain_failures(
     owner: OwnerIdentity,
     retry: Callable[[], Awaitable[None]],
 ):
-    """Record a recoverable failure and wake the existing observer to try again."""
+    """Record failures; a completed operation recovers its original observation."""
+    observed = await Coordination.run_worker(partial(comms.agents.activity_of, thread))
 
     async def record(kind, error) -> None:
+        diagnostic = kind(
+            owner, type(error).__name__, str(error), recorded_at=time.time()
+        )
         try:
             await Coordination.run_worker(partial(
-                comms.agents.set_drain_diagnostic, thread, owner,
-                kind(owner, type(error).__name__, str(error)), source_error=error,
+                comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
+                source_error=error,
             ))
         finally:
             await retry()
@@ -52,9 +61,15 @@ async def drain_failures(
     except (OSError, ValueError, sqlite3.Error, CoordinationError, RequestError) as error:
         await record(UnavailableDrainDiagnostic, error)
     except Exception as error:
+        diagnostic = StoppedDrainDiagnostic(
+            owner, type(error).__name__, str(error), recorded_at=time.time()
+        )
         await Coordination.run_worker(partial(
-            comms.agents.set_drain_diagnostic, thread, owner,
-            StoppedDrainDiagnostic(owner, type(error).__name__, str(error)),
+            comms.agents.set_drain_diagnostic, thread, owner, diagnostic,
             source_error=error,
         ))
         raise
+    else:
+        await Coordination.run_worker(partial(
+            comms.agents.recover_drain, thread, owner, observed,
+        ))

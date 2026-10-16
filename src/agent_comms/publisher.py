@@ -34,7 +34,6 @@ from .envelope_claim_transitions import (
 )
 from .errors import (
     ClaimEnvelopeUnknownError,
-    HumanAdmissionBlockedError,
     HumanInitialUnknownError,
     RelationViolationError,
     UnregisteredThreadError,
@@ -421,33 +420,7 @@ class Publisher:
                 original_source=source,
             )
             if _human_origin is not None:
-                # The marker reserves a sequence before the row. A crash after
-                # reservation can leave NO row carrying the human message ID.
-                # Never admit another human input while such an UNKNOWN gap is
-                # present, even if another ordinary sender subsequently skips
-                # over that sequence. This intentionally favors safety over
-                # availability until explicit operator reconciliation exists.
-                expected_sequence = 1
-                duplicate = False
-                for previous_sender, previous in source.public_message_references():
-                    if previous.seq != expected_sequence:
-                        raise HumanAdmissionBlockedError(
-                            "Private bus sequence gap has UNKNOWN outcome; "
-                            "human send blocked, do not retry."
-                        )
-                    expected_sequence += 1
-                    duplicate |= (
-                        previous_sender == sender and previous.message_id == stored.message_id
-                    )
-                if metadata.last_seq != expected_sequence - 1:
-                    raise HumanAdmissionBlockedError(
-                        "Private bus sequence reservation has UNKNOWN outcome; "
-                        "human send blocked, do not retry."
-                    )
-                if duplicate:
-                    raise RelationViolationError(
-                        "Human initial ID already exists; inspect its receipt, do not retry."
-                    )
+                source.require_new_human_message(sender, stored.message_id)
             revision = hashlib.sha256(
                 repr(
                     (
@@ -534,7 +507,7 @@ class Publisher:
         matched, previous_sequence, metadata = self.log._keyed_receipt_unlocked(intent)
         if matched is not None:
             return matched
-        message = intent.expected_message
+        message = intent.message
         # A durable exact replay above wins even after registry/route renames.
         sender, target = self._validate_publish_request(
             message, registry_snapshot=registry_snapshot

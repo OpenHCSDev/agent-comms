@@ -144,8 +144,8 @@ class AcpEventConsumer(MroDispatch):
             ),
         )
 
-    @handles(events.AgentInfo)
-    async def on_agent_info(self, event: events.AgentInfo) -> None:
+    @handles(events.ContextInfo)
+    async def on_context_info(self, event: events.ContextInfo) -> None:
         session_id = self.session_id
         client = self.client
         used = event.context_used
